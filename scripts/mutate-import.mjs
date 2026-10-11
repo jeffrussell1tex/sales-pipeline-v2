@@ -7486,7 +7486,7 @@ const mutations = [
     // ── §0.195: the home page says what the app is, under the name Jeff chose ──
     ["home page: the heading says Sales Pipeline Tracker again",
         "src/App.jsx",
-        "margin: '0 0 0.5rem' }}>AcceleRep</h1>",
+        "margin: '0 0 0.5rem' }}>Accelerep</h1>",
         "margin: '0 0 0.5rem' }}>Sales Pipeline Tracker</h1>"],
     ["home page: it no longer says what the app is",
         "src/App.jsx",
@@ -7510,15 +7510,15 @@ const mutations = [
         "gap: '2rem' }}"],
     ["emails: the digest says Sales Pipeline Tracker again",
         "netlify/functions/digest.mjs",
-        "<div class=\"header\"><p class=\"header-title\">AcceleRep</p></div>",
+        "<div class=\"header\"><p class=\"header-title\">Accelerep</p></div>",
         "<div class=\"header\"><p class=\"header-title\">Sales Pipeline Tracker</p></div>"],
     ["emails: the notification header says Sales Pipeline Tracker again",
         "netlify/functions/send-email.mjs",
-        "<p class=\"header-title\">AcceleRep</p>",
+        "<p class=\"header-title\">Accelerep</p>",
         "<p class=\"header-title\">Sales Pipeline Tracker</p>"],
     ["emails: the notification footer names no app",
         "netlify/functions/send-email.mjs",
-        "an account on <a href=\"${appUrl}\">AcceleRep</a>",
+        "an account on <a href=\"${appUrl}\">Accelerep</a>",
         "an account on <a href=\"${appUrl}\">our app</a>"],
     // ── §0.196: one name per member of an org (Jeff, 9 Oct: "Number it", "Yes, Full name wins") ──
     // tests/member-names.test.mjs (the rule run; every writer pinned; THE GUARD); the server is also
@@ -7807,6 +7807,11 @@ const mutations = [
         "netlify/functions/user-role.mjs",
         ".set({ role, profile: { ...(target.profile || {}), userType: role }, updatedAt: new Date() })",
         ".set({ role, name: target.name, profile: { ...(target.profile || {}), userType: role }, updatedAt: new Date() })"],
+    // ── §0.197: the name is spelled as Google, Clerk, the tab and the logo spell it ──
+    ["home page: the heading spells the name AcceleRep again",
+        "src/App.jsx",
+        "margin: '0 0 0.5rem' }}>Accelerep</h1>",
+        "margin: '0 0 0.5rem' }}>AcceleRep</h1>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

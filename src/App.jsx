@@ -1689,7 +1689,7 @@ dbFetch('/.netlify/functions/users?me=true')
                             <path d="M22 40 L45 25 L68 32 L80 20" stroke={T.ok} strokeWidth="4" fill="none" strokeLinecap="round"/>
                             <circle cx="80" cy="20" r="4" fill={T.ok}/>
                         </svg>
-                        <h1 style={{ color: T.surface, fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.5rem' }}>AcceleRep</h1>
+                        <h1 style={{ color: T.surface, fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.5rem' }}>Accelerep</h1>
                         <p style={{ color: T.gold, fontSize: '0.9375rem', lineHeight: 1.6, maxWidth: 460, margin: '0 auto 0.75rem', fontFamily: T.sans }}>CRM and crew-dispatching software for field-service businesses: your sales pipeline, accounts and contacts, quotes, scheduling and dispatch, documents and reports in one place. Connect your Google Calendar to see your meetings beside your deals and tasks.</p>
                         <p style={{ color: T.inkMuted, fontSize: '0.875rem', margin: 0 }}>Sign in to continue</p>
                     </div>

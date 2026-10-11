@@ -206,8 +206,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     Proceed, and on Audience → Publish app.
   - **Branding verified (Jeff's screenshot, 11 Oct):** Google → Branding
     reads "Your branding has been verified and is being shown to users".
-    The App name is "Accelerep" (the screens say "AcceleRep"; Google's
-    check passed with it). Clerk's application name reads "Accelerep" too
+    The App name is "Accelerep" (Google's check passed with it; since
+    §0.197 the app's own screens and emails spell it the same — Jeff, 11
+    Oct: "change it to Accelerep"). Clerk's application name reads "Accelerep" too
     (Jeff's screenshot; both sites' sign-in boxes, read signed out 11 Oct:
     "Sign in to Accelerep"). **Published 11 Oct (Jeff's screenshot):**
     Audience reads "In production", user type External, 1 of the 100-user

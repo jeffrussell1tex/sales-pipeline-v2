@@ -3,12 +3,14 @@
 // Google's branding check (10 Oct, state §0.195) found two things on the Google Auth
 // Platform: the home page did not say what the app is for, and the consent screen's app
 // name did not match it. A signed-out visitor to salespipelinetracker.com saw only "Sales
-// Pipeline Tracker — Sign in to continue". Jeff, 10 Oct: the name is "AcceleRep", and
+// Pipeline Tracker — Sign in to continue". Jeff, 10 Oct: the name is "AcceleRep"; 11 Oct:
+// "change it to Accelerep" (state §0.197), as Google, Clerk, the tab and the logo spell it; and
 // the purpose goes "on the sign-in page". These hold it:
-//   HOME   the signed-out screen names AcceleRep, says what the app does (Google
+//   HOME   the signed-out screen names Accelerep, says what the app does (Google
 //          Calendar included, the one Google data it reads), and links the privacy
 //          policy and the terms, both served from public/
-//   NAME   no screen or email the app sends still says "Sales Pipeline Tracker"
+//   NAME   no screen or email the app sends still says "Sales Pipeline Tracker", or
+//          "AcceleRep" (§0.197)
 //   LAYER  the screen's content sits above .login-page's decorative ::before, so its
 //          links take the click
 import { test } from 'node:test';
@@ -22,8 +24,8 @@ const between = (src, from, to) => { const a = src.indexOf(from); assert.ok(a >=
 const app = read('src/App.jsx');
 const signedOut = between(app, '    if (!clerkUser) {', '    if (!organization) {');
 
-test('HOME: the signed-out screen names AcceleRep and says what the app does', () => {
-    assert.match(signedOut, /<h1 [^>]*>AcceleRep<\/h1>/, 'the heading is the app name Jeff chose');
+test('HOME: the signed-out screen names Accelerep and says what the app does', () => {
+    assert.match(signedOut, /<h1 [^>]*>Accelerep<\/h1>/, 'the heading is the app name Jeff chose');
     assert.ok(signedOut.includes('CRM and crew-dispatching software for field-service businesses'), 'it says what the app is');
     for (const part of ['sales pipeline', 'accounts and contacts', 'quotes', 'scheduling and dispatch', 'documents and reports']) {
         assert.ok(signedOut.includes(part), `it names ${part}`);
@@ -49,21 +51,23 @@ test('LAYER: the content sits above the decorative layer, so its links take the 
     assert.match(read('src/index.css'), /\.login-page::before \{[^}]*position: absolute;/, 'the layer it must sit above');
 });
 
-test('NAME: no screen or email still says "Sales Pipeline Tracker"', () => {
+test('NAME: no screen or email still says "Sales Pipeline Tracker", or spells the name "AcceleRep"', () => {
     const hits = [];
     const walk = (dir) => {
         for (const name of readdirSync(new URL(dir, ROOT))) {
             const rel = dir + name;
             if (statSync(new URL(rel, ROOT)).isDirectory()) { walk(rel + '/'); continue; }
             if (!/\.(jsx?|mjs|html)$/.test(name)) continue;
-            if (read(rel).includes('Sales Pipeline Tracker')) hits.push(rel);
+            const text = read(rel);
+            if (text.includes('Sales Pipeline Tracker')) hits.push(rel);
+            if (text.includes('AcceleRep')) hits.push(rel + ' (AcceleRep)');
         }
     };
     walk('src/'); walk('netlify/functions/');
-    assert.deepEqual(hits, [], 'the old name is gone from every screen and email');
-    assert.ok(read('netlify/functions/send-email.mjs').includes('<p class="header-title">AcceleRep</p>'), "the notification email's header");
-    assert.ok(read('netlify/functions/send-email.mjs').includes('an account on <a href="${appUrl}">AcceleRep</a>'), "the notification email's footer");
-    assert.ok(read('netlify/functions/digest.mjs').includes('<p class="header-title">AcceleRep</p>'), "the digest email's header");
+    assert.deepEqual(hits, [], 'the old name, and the old spelling, are gone from every screen and email');
+    assert.ok(read('netlify/functions/send-email.mjs').includes('<p class="header-title">Accelerep</p>'), "the notification email's header");
+    assert.ok(read('netlify/functions/send-email.mjs').includes('an account on <a href="${appUrl}">Accelerep</a>'), "the notification email's footer");
+    assert.ok(read('netlify/functions/digest.mjs').includes('<p class="header-title">Accelerep</p>'), "the digest email's header");
 });
 
 test('the suites: this file is graded by the harness', () => {
