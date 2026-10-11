@@ -49,7 +49,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      (UKG)", 9 Oct). Read-only first: any other org with two members of one
      name, and any member whose next save would rebuild a taken name from
      their First/Last. Any such pair is renamed by hand in Settings → Users,
-     never by a script.
+     never by a script. **Read 11 Oct (SELECT only), before batch B: no
+     pairs, no such member, no name with stray spaces**. That covered 6
+     orgs and 23 members (the plan's step 0, its three queries).
    - Re-validated against the tree 9 Oct (after batch A). The plan is exact
      to the line and builds on batch A, so batch A is committed first.
      Jeff's answers, 9 Oct:
@@ -223,7 +225,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     - "Your home page does not explain the purpose of your app." It was
       true: a signed-out visitor saw only "Sales Pipeline Tracker — Sign in
       to continue". §0.195 puts the purpose and the privacy and terms links
-      on the sign-in page; it counts from its ship.
+      on the sign-in page; shipped 11 Oct (the thirty-second ship), live
+      on salespipelinetracker.com from 13:36 UTC.
   - **The app name** (Jeff, 10 Oct: "AcceleRep"). Google's App name still
     reads "Sales Pipeline Tracker", and so does Clerk's sign-in box ("Sign
     in to Sales Pipeline Tracker", Clerk's own application name). **Jeff's
@@ -239,7 +242,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- Nothing open. The thirty-first ship (10 Oct, 21:08 UTC: §0.194, the
+- Nothing open. The thirty-second ship (11 Oct, 13:36 UTC: §0.195, the
+  AcceleRep sign-in page), the thirty-first (10 Oct, 21:08 UTC: §0.194, the
   account search fix) and the thirtieth (10 Oct, 15:06 UTC: §0.191, §0.192
   and §0.193, the PROD Closed Lost fix among them) are recorded in the state
   header, as are the twenty-ninth (9 Oct) and the Clerk cleanup after it.
