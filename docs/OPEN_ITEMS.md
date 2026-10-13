@@ -1185,6 +1185,37 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - The five CRM creates (contacts, tasks, activities, accounts, deals)
     answer 500 for an id another org holds. Dispatch creates answer 409
     since §0.166.
+  - **Jeff's decisions for batch 4** (13 Oct; the map — six read-only
+    mappers over every write path — and a census, SELECT 13 Oct: no link
+    in the 17 fields names another org's row; 4 name a row deleted since —
+    1 task account, 1 task contact, 2 deal contacts):
+    - **E1 scope** ("Listed + CRM extras"): the fields above, an
+      activity's `leadId`, and a contact's `managers` and
+      `directReports`; the rest the sweep found is batch 4b, below.
+    - **E2** ("Link the survivor"): a new link to a record merged away
+      links the record it was merged into, as a deal's account does.
+    - **E3** ("Org check only"): a new or changed id must be a live row
+      of the org; a rep may link any record of it (the screens say "an
+      account you can't open"); an id the row already holds is never
+      asked again.
+    - **E4** ("Clear stray links"): an Admin's backup restore clears,
+      on the rows it restored, any link that names no row of the org, and
+      its answer says how many; it never refuses a file over a link.
+- **Batch 4b: the other linked ids with no org check** (the class sweep, 13
+  Oct; read in code, not run). Every reader found looks a stored id up in
+  the org, so a stray acts as a dangling link, not a leak:
+  - dispatch jobs' `assignedTechId`, `coTechIds`, `assignedVehicleId`,
+    `assignedEquipmentIds`, `servicePlanId`, `followUpJobId`,
+    `parentJobId`; vehicles' and technicians' assignments; equipment's
+    `checkedOutToId` and `checkedOutJobId`; customers' `servicePlanId` and
+    `preferredTechId`; plan visits' `planId`; schedule blocks' `techId`;
+  - SPIFF claims' `opportunityId` and `spiffId`; quote line items'
+    `productId`; export runs' `scheduleId`; automations'
+    `assignedToId`; members' `profile.teamId` and pinned reports;
+    settings' teams, crews and quote templates' product ids;
+  - left as they are by design: tasks' `relatedTo` (free text in places),
+    the recommendation log's id (a deal, task or customer by action),
+    deals' `pipelineId` (a settings id, 'default' a sentinel).
 - **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
   later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
