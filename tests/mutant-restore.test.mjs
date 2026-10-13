@@ -9,13 +9,15 @@
 // class itself — a child process that calls process.exit() from inside the run,
 // skipping every finally, whose file must still come back. The source scan pins
 // that the harness goes through the sidecar and never writes a mutant itself.
+// Every write the sidecar makes waits out a moment's Windows lock (12 Oct 2026:
+// two full runs died on one instant failed retry) — writeWithRetry, below.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { withMutant, armRestoreOnExit, pendingMutants } from '../scripts/_mutant.mjs';
+import { withMutant, armRestoreOnExit, pendingMutants, writeWithRetry, WRITE_TRIES, WRITE_WAIT_MS } from '../scripts/_mutant.mjs';
 
 const SIDE_CAR = new URL('../scripts/_mutant.mjs', import.meta.url).href;
 const ORIGINAL = 'const answer = 42;\n';
@@ -114,4 +116,55 @@ test('the harness goes through the sidecar and never writes a mutant itself', ()
     // forbidden is the harness importing or CALLING it.
     assert.doesNotMatch(code, /import \{[^}]*\bwriteFileSync\b/, 'REGRESSION: the harness no longer imports writeFileSync');
     assert.doesNotMatch(code, /^\s*writeFileSync\(/m, 'REGRESSION: no bare write of a mutant or a restore in the harness');
+});
+
+// ── writeWithRetry: a moment's Windows lock is waited out ─────────────────────
+const lockError = (code) => Object.assign(new Error(`${code}: unknown error, open 'target.js'`), { code, errno: -4094, syscall: 'open' });
+const flakyWrite = (failures, code = 'UNKNOWN') => {
+    const calls = [];
+    const write = (file, text) => { calls.push([file, text]); if (calls.length <= failures) throw lockError(code); };
+    return { calls, write };
+};
+
+test('REGRESSION (12 Oct): a lock that clears is waited out — the write lands on a later try, with a pause between tries', () => {
+    const { calls, write } = flakyWrite(2);
+    const started = Date.now();
+    assert.equal(writeWithRetry('target.js', MUTANT, { tries: 5, waitMs: 30, write }), 3, 'the third try wrote it');
+    assert.ok(Date.now() - started >= 50, 'it paused between the tries, not a tight loop');
+    assert.deepEqual(calls, [['target.js', MUTANT], ['target.js', MUTANT], ['target.js', MUTANT]], 'the same file and text each time');
+});
+
+test('a lock that outlasts the tries stops the run — the last lock error is thrown after exactly that many tries', () => {
+    const { calls, write } = flakyWrite(Infinity);
+    assert.throws(() => writeWithRetry('target.js', ORIGINAL, { tries: 4, waitMs: 0, write }), (e) => e.code === 'UNKNOWN');
+    assert.equal(calls.length, 4);
+    assert.ok(WRITE_TRIES * WRITE_WAIT_MS >= 3000 && WRITE_TRIES * WRITE_WAIT_MS <= 10000, 'the harness waits seconds, not milliseconds or minutes');
+});
+
+test('any other error is thrown at once — a missing file is never retried', () => {
+    const { calls, write } = flakyWrite(Infinity, 'ENOENT');
+    assert.throws(() => writeWithRetry('target.js', ORIGINAL, { tries: 5, waitMs: 0, write }), (e) => e.code === 'ENOENT');
+    assert.equal(calls.length, 1);
+});
+
+test('each lock error Windows gives a held file is retried: UNKNOWN, EBUSY, EPERM, EACCES', () => {
+    for (const code of ['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES']) {
+        const { calls, write } = flakyWrite(1, code);
+        assert.equal(writeWithRetry('target.js', ORIGINAL, { tries: 3, waitMs: 0, write }), 2, code);
+        assert.equal(calls.length, 2, code);
+    }
+});
+
+test('every write the sidecar makes goes through the retry: the mutant, the finally\'s restore and the exit hook\'s', () => {
+    const src = readFileSync(new URL('../scripts/_mutant.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const code = src.split('\n').filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+    assert.doesNotMatch(code, /\bwriteFileSync\(/, 'no bare write: each one would die on the first lock');
+    assert.equal(code.split('writeWithRetry(file, original);').length - 1, 2, 'both restores');
+    assert.equal(code.split('writeWithRetry(file, mutated);').length - 1, 1, 'the mutant write');
+    // A real file through the real write: no lock, one try.
+    const { dir, file } = tempFile();
+    try {
+        assert.equal(writeWithRetry(file, MUTANT), 1);
+        assert.equal(readFileSync(file, 'utf8'), MUTANT);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
 });

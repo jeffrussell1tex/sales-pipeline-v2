@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import ActivityRowText from './ActivityRowText';
 import RecordDocuments from '../documents/RecordDocuments';
@@ -7,6 +7,10 @@ import { matchSearch } from '../../utils/searchMatch.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
 import DealPrepPicker from './DealPrepPicker';
 import { parseLocalDate } from '../../utils/dateLocal.js';
+import AccountPicker from './AccountPicker';
+import HiddenLink from './HiddenLink';
+import { parentChoices, parentNote, parentLeftOut, typedParentRefusal } from '../../utils/accountParent.js';
+import { resolveLink, linkRefusal, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 
 // A deal's close date as "Nov 30, 2026"; a value that is not a date shows as it is
 // written. The row read closeDate, which a deal does not have — its close date is
@@ -151,15 +155,8 @@ export default function AccountRail() {
         handleSaveAccount,
         accountModalError, setAccountModalError,
         accountModalSaving,
-        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
+        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode, setEditingTask,
         handleAddActivity,
-        editingAccount, setEditingAccount,
-        editingSubAccount, setEditingSubAccount,
-        parentAccountForSub, setParentAccountForSub,
-        lastCreatedAccountName, setLastCreatedAccountName,
-        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
-        pendingOppFormData, setPendingOppFormData,
-        setEditingOpp, setShowModal,
         escapeBlocked,
         openMeetingPrep,
     } = useApp();
@@ -187,6 +184,10 @@ export default function AccountRail() {
     // Holds the in-progress NEW account while the user peeks at an existing
     // dup via "Open existing", so "← Back" can restore it intact.
     const restoreNewRef = useRef(null);
+    // The parent as the rail opened with it — the stored link and the text the field showed —
+    // taken when the rail seeds the form, never worked out again from the live row: a Save
+    // that never touched the field keeps the link exactly as stored (state §0.198; D1).
+    const seededParentRef = useRef({ id: '', text: '' });
 
     // Seed form when rail opens
     useEffect(() => {
@@ -200,6 +201,7 @@ export default function AccountRail() {
             setRepSearch(snap.repSearch);
             setTerritorySearch(snap.territorySearch);
             setParentSearch(snap.parentSearch);
+            seededParentRef.current = { id: '', text: '' };   // a new account: nothing stored
             setCustomerTypeInput(snap.customerTypeInput);
             setActiveTab(snap.activeTab || 'general');
             setDupWarning(null);
@@ -217,6 +219,7 @@ export default function AccountRail() {
             ? (accounts || []).find(a => a.id === src.parentAccountId)
             : null;
         setParentSearch(parentAcct?.name || '');
+        seededParentRef.current = { id: src.parentAccountId || '', text: parentAcct?.name || '' };
         setActiveTab('general');
         setDupWarning(null);
         setDirty(false);
@@ -252,6 +255,15 @@ export default function AccountRail() {
     const subAccounts = (accounts || []).filter(a =>
         (a.parentAccountId || a.parentId) === accountRailId
     );
+
+    // The accounts this one may stand under (state §0.198; Jeff, 11 Oct — D3: "No self, no
+    // loops, no sites"; D12; D21): not itself, not one of its own sub-accounts or sites, not a
+    // site, not one merged away, not one its own branch would sit below a site under — the
+    // rule accounts.mjs refuses the rest by. Worked out once a list, not on each keystroke.
+    // selfId: the account edited; a new one has none.
+    const selfId = isNew ? null : accountRailId;
+    const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
+    const parentIds = useMemo(() => parentChoices(accounts, selfId, accountsById), [accounts, accountsById, selfId]);
 
     // Prefer the real accountId link; fall back to the legacy company-name match for
     // contacts not yet migrated/backfilled. Keeps the People list correct mid-migration.
@@ -318,6 +330,7 @@ export default function AccountRail() {
 
     const handleSave = async () => {
         setSaveError(null);
+        setAccountModalError?.(null); // the last save's server error never hides this Save's own refusal (§0.198)
         const saveData = {
             ...formData,
             verticalMarket: verticalSearch,
@@ -331,6 +344,34 @@ export default function AccountRail() {
 
         if (!saveData.name?.trim()) { setSaveError('Account name is required.'); return; }
 
+        // The parent (state §0.198; Jeff, 11 Oct — D1: "One match saves, two refuse"; D3): the
+        // row picked; a name typed in full that exactly one account this one may stand under
+        // has, as that account; none when the field is cleared; and a field nobody touched keeps
+        // its stored link — one to an account outside a rep's list, or merged away, too (D12,
+        // D16). Anything else is refused here, saying why: a name typed and not picked was
+        // dropped without a word, and the account saved with no parent.
+        const parentLink = resolveLink({
+            text: parentSearch,
+            heldId: formData.parentAccountId || '',
+            storedId: seededParentRef.current.id,
+            seededText: seededParentRef.current.text,
+            records: accounts || [],
+            eligible: (a) => parentIds.has(a.id),
+        });
+        if (parentLink.refusal) {
+            setSaveError(linkRefusal(parentLink, {
+                field: 'Parent Account',
+                why: () => typedParentRefusal(parentSearch, accounts, selfId, accountsById, saveData.name),
+            }));
+            return;
+        }
+        // A Parent field nobody touched sends no parent at all, so the server keeps the one it
+        // stores: it compares a parent sent with the STORED row, and a rail opened before another
+        // session's move would move the account back — or be refused over a parent merged away
+        // since — on a save that only changed Notes (state §0.198; the server critic, 12 Oct).
+        if (parentLink.how === 'untouched') delete saveData.parentAccountId;
+        else saveData.parentAccountId = parentLink.id || null;
+
         if (isNew && !dupWarning) {
             const dups = checkDuplicate(saveData.name);
             if (dups) { setDupWarning(dups); return; }
@@ -342,8 +383,6 @@ export default function AccountRail() {
             parentAccountForSub: saveData.parentAccountId
                 ? (accounts || []).find(a => a.id === saveData.parentAccountId) || null
                 : null,
-            accountCreatedFromOppForm,
-            pendingOppFormData,
             setOpportunities,
             setContacts,
             setShowAccountModal: (open) => {
@@ -357,11 +396,6 @@ export default function AccountRail() {
                     }
                 }
             },
-            setLastCreatedAccountName,
-            setEditingOpp,
-            setShowModal,
-            setAccountCreatedFromOppForm,
-            setPendingOppFormData,
         });
     };
 
@@ -626,34 +660,38 @@ export default function AccountRail() {
                                 <FieldGroup label="Account Name *" wide>
                                     <TextInput value={formData.name} onChange={v => { hc('name', v); if (dupWarning) setDupWarning(null); }} />
                                 </FieldGroup>
-                                {/* Parent Account — committed chip when selected, typeahead when not */}
+                                {/* Parent Account (state §0.198; Jeff, 11 Oct — D3, D16): the account picked, as a
+                                    chip naming its own parent; a parent the user can't open, said so, with an ×
+                                    that removes it; else the shared picker, holding the row clicked by its id —
+                                    only an account this one may stand under is listed, a name it leaves out says
+                                    why, and there is no Create: a parent is an account that exists. */}
                                 <FieldGroup label="Parent Account" wide>
-                                    {formData.parentAccountId ? (() => {
-                                        const parent = (accounts || []).find(a => a.id === formData.parentAccountId);
+                                    {(() => {
+                                        if (!formData.parentAccountId) return (
+                                            <AccountPicker
+                                                value={parentSearch}
+                                                onChange={v => { setParentSearch(v); setDirty(true); }}
+                                                onSelectAccount={acc => hc('parentAccountId', acc.id)}
+                                                filterFn={a => parentIds.has(a.id)}
+                                                allowCreate={false}
+                                                leftOut={a => parentLeftOut(a, accounts, selfId, accountsById, formData.name)}
+                                                placeholder="Search accounts…"
+                                            />
+                                        );
+                                        const parent = accountsById.get(formData.parentAccountId);
+                                        if (!parent) return (
+                                            <HiddenLink hidden={HIDDEN_ACCOUNT} title="Remove the parent account"
+                                                onRemove={() => { hc('parentAccountId', null); setParentSearch(''); }} />
+                                        );
                                         return (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content' }}>
-                                                <span>{parent?.name || parentSearch}</span>
+                                                <span>{parent.name}<span style={{ color: T.inkMuted }}>{parentNote(parent, accountsById)}</span></span>
                                                 <button type="button"
                                                     onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
                                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
                                             </div>
                                         );
-                                    })() : (
-                                        <Typeahead
-                                            value={parentSearch}
-                                            onChange={v => { setParentSearch(v); if (formData.parentAccountId) hc('parentAccountId', null); }}
-                                            suggestions={(accounts || [])
-                                                .filter(a => a.id !== accountRailId && a.name)
-                                                .map(a => a.name)
-                                                .sort()
-                                            }
-                                            onSelect={v => {
-                                                const selected = (accounts || []).find(a => a.name === v);
-                                                if (selected) { hc('parentAccountId', selected.id); setParentSearch(v); }
-                                            }}
-                                            placeholder="Search accounts…"
-                                        />
-                                    )}
+                                    })()}
                                 </FieldGroup>
                                 <FieldGroup label="Phone">
                                     <TextInput value={formData.phone} onChange={v => hc('phone', v)} type="tel" />
@@ -723,8 +761,12 @@ export default function AccountRail() {
                                 <ReadRow label="Assigned Rep" value={account?.assignedRep} />
                                 <ReadRow label="Territory" value={account?.assignedTerritory} />
                                 {account?.parentAccountId && (() => {
-                                    const parent = (accounts || []).find(a => a.id === account.parentAccountId);
-                                    return parent ? <ReadRow label="Parent Account" value={parent.name} wide /> : null;
+                                    // Its parent, named as the edit chip names it; one the user can't open, said
+                                    // so (D16) — the row was left out, as if the account had no parent.
+                                    const parent = accountsById.get(account.parentAccountId);
+                                    return <ReadRow label="Parent Account" wide value={parent
+                                        ? <>{parent.name}<span style={{ color: T.inkMuted }}>{parentNote(parent, accountsById)}</span></>
+                                        : <span style={{ color: T.inkMuted }}>{HIDDEN_ACCOUNT}</span>} />;
                                 })()}
                                 {account?.doNotContact && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>
@@ -965,12 +1007,12 @@ export default function AccountRail() {
 
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                                onClick={() => { setActivityInitialContext && setActivityInitialContext({ opportunityId: '' }); setShowActivityModal(true); }}
+                                onClick={() => { setActivityInitialContext && setActivityInitialContext({ opportunityId: '', accountId: account?.id || '' }); setShowActivityModal(true); }}
                                 style={{ flex: 1, padding: '8px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Log Activity
                             </button>
                             <button
-                                onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
+                                onClick={() => { setEditingTask && setEditingTask({ accountId: account?.id || '' }); setTaskRailId('new'); setTaskRailMode('new'); }}
                                 style={{ flex: 1, padding: '8px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>

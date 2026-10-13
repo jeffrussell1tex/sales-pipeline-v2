@@ -71,9 +71,10 @@ test('viewingActivity is wired: state, App destructure, context, Escape, body lo
     assert.ok(app.includes("case 'activityDetail': setViewingActivity(null); return;"), 'Escape closes the viewer');
     assert.ok(app.includes('|| coachingNoteModal || viewingActivity || lostReasonModal;'), 'shortcuts stay quiet while the viewer is open (and the lost-reason dialog, §0.193)');
     // The scroll lock and the key handler name no state the rails replaced (§0.190: App's
-    // viewingContact and viewingAccount, and the three modal flags, are gone).
-    assert.ok(app.includes('            viewingTask || viewingActivity ||'), 'the body scroll lock');
-    assert.ok(app.includes('        viewingTask, viewingActivity,'), 'and its deps');
+    // viewingContact and viewingAccount, and the three modal flags, are gone; D20 took
+    // viewingTask, which drew the Tasks tab's task view nothing opened).
+    assert.ok(app.includes('            confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||\n            viewingActivity ||\n'), 'the body scroll lock');
+    assert.ok(app.includes('        confirmModal, blockedDeleteModal, lostReasonModal,\n        viewingActivity,\n'), 'and its deps');
     assert.ok(app.includes('    }, [showModal, showUserModal, showActivityModal, viewingActivity,'), 'the key handler re-binds when it changes');
 });
 

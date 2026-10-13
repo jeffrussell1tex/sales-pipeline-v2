@@ -18,7 +18,6 @@ import DocumentRail from '../documents/DocumentRail';
 import DocumentUploadRail from '../documents/DocumentUploadRail';
 import DocumentLinkPicker from '../documents/DocumentLinkPicker';
 import CsvImportModal from '../modals/CsvImportModal';
-import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
 import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
@@ -83,16 +82,10 @@ export default function ModalLayer() {
     const {
         showModal, setShowModal, editingOpp, setEditingOpp,
         oppModalError, setOppModalError, oppModalSaving, setOppModalSaving,
-        editingAccount, setEditingAccount,
-        editingSubAccount, setEditingSubAccount,
         accountModalError, setAccountModalError, accountModalSaving, setAccountModalSaving,
-        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
-        lastCreatedAccountName, setLastCreatedAccountName,
         lastCreatedRepName, setLastCreatedRepName,
-        parentAccountForSub, setParentAccountForSub,
         editingContact, setEditingContact,
         contactModalError, setContactModalError, contactModalSaving, setContactModalSaving,
-        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
         railStack, setRailStack,
         editingTask, setEditingTask,
@@ -106,7 +99,6 @@ export default function ModalLayer() {
         showCsvImportModal, setShowCsvImportModal, csvImportType,
         showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
-        showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal, spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
         promptModal, setPromptModal,
@@ -122,13 +114,12 @@ export default function ModalLayer() {
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         snoozedDueAlerts, setSnoozedDueAlerts,
         showShortcuts, setShowShortcuts,
-        pendingOppFormData, setPendingOppFormData,
         followUpPrompt, setFollowUpPrompt,
         quickLogOpen, setQuickLogOpen, quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
         // Data
         opportunities, setOpportunities, accounts, setAccounts,
-        contacts, setContacts, tasks, setTasks, activities, setActivities,
+        contacts, setContacts, tasks, setTasks, activities,
         leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
@@ -137,7 +128,6 @@ export default function ModalLayer() {
         loadContacts, loadTasks, loadActivities,
         setActiveTab, activeTab,
         setViewingContact, setViewingAccount,
-        viewingTask, setViewingTask,
         isMobile,
         escapeBlocked,
     } = useApp();
@@ -205,49 +195,8 @@ export default function ModalLayer() {
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
                     saving={oppModalSaving}
-                    lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
                     onLastCreatedRepUsed={() => setLastCreatedRepName(null)}
-                    onSaveNewContact={(data) => {
-                        const newId = 'id_' + crypto.randomUUID();
-                        const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-                        setContacts(prev => [...prev, nc]);
-                        // Inline-created contacts get attached to whatever record the
-                        // picker belongs to. A rejected POST used to leave a contact
-                        // that exists only in this tab's state — it looks saved,
-                        // links fine, and is gone on reload along with the link.
-                        dbWrite('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).then(r => {
-                            if (r.ok || !stillOrg(askedOrg)) return;
-                            setContacts(prev => prev.filter(c => c.id !== newId));
-                            setUndoToast({ error: `Contact not created — ${r.error}` });
-                        });
-                        return nc;
-                    }}
-                    onSaveNewAccount={(data) => {
-                        const newId = 'id_' + crypto.randomUUID();
-                        const na = { ...data, id: newId };
-                        const askedOrg = requestOrg();
-                        setAccounts(prev => [...prev, na]);
-                        // Account twin of the inline contact create above.
-                        dbWrite('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(na)
-                        }).then(r => {
-                            if (r.ok || !stillOrg(askedOrg)) return;
-                            setAccounts(prev => prev.filter(a => a.id !== newId));
-                            setUndoToast({ error: `Account not created — ${r.error}` });
-                        });
-                        return na;
-                    }}
-                    onAddContact={() => {
-                        setContactRailId('new'); setContactRailMode('new');
-                    }}
                     onAddRep={() => {
                         setShowUserModal(true);
                         setEditingUser(null);
@@ -271,8 +220,6 @@ export default function ModalLayer() {
 
             {/* TaskModal replaced by TaskRail */}
 
-
-            {/* ContactModal replaced by ContactRail */}
 
             {/* ViewingAccountPanel replaced by AccountRail */}
 
@@ -636,6 +583,9 @@ export default function ModalLayer() {
                             applyOverwrites(setOpportunities, overwritesBuilt, ow.appliedIds);
                             // The server moved owner ids with the rep names (state §0.193); the app's copy reads them back.
                             if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities(() => {});
+                            // A CSV that named an account: the server kept a linked deal's spelling, or unlinked one
+                            // renamed (§0.198) — the list reads the deals as stored, not as the file sent them.
+                            if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
 
@@ -705,40 +655,6 @@ export default function ModalLayer() {
                             else warning = `The invitations went out, but the team list was not updated — ${rt.error}`;
                         }
                         return { receipt, refusals, warning };
-                    }}
-                />
-            )}
-
-            {showOutlookImportModal && (
-                <OutlookImportModal
-                    contacts={contacts}
-                    opportunities={opportunities}
-                    activities={activities}
-                    onClose={() => { document.activeElement?.blur(); setShowOutlookImportModal(false); }}
-                    onImport={async (newActivities) => {
-                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-                        const activitiesWithIds = newActivities.map((a) => ({
-                            ...a,
-                            id: 'id_' + crypto.randomUUID(),
-                            createdAt: new Date().toISOString()
-                        }));
-                        setActivities([...activities, ...activitiesWithIds]);
-                        // Save all imported activities — await all so we can catch partial failures
-                        const activitySaveResults = await Promise.allSettled(
-                            activitiesWithIds.map(activity =>
-                                dbFetch('/.netlify/functions/activities', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(activity)
-                                })
-                            )
-                        );
-                        if (!stillOrg(askedOrg)) return;
-                        const activityFailed = activitySaveResults.filter(r => r.status === 'rejected').length;
-                        if (activityFailed > 0) {
-                            console.error(`${activityFailed} of ${activitiesWithIds.length} activities failed to save. Try re-importing the failed records.`);
-                        }
-                        setShowOutlookImportModal(false);
                     }}
                 />
             )}

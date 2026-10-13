@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { sentBody, shownRow } from '../utils/leaveOut.js';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -115,11 +116,11 @@ export function useTasks(deps) {
         if (editingTask) {
             const payload = { ...taskData, id: editingTask.id };
             try {
-                const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
                 const data = await res.json();
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
-                setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || payload) : t));
+                setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || shownRow(payload)) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
                 // SMS: task reassigned to a different person
                 if (taskData.assignedTo && editingTask.assignedTo !== taskData.assignedTo) {

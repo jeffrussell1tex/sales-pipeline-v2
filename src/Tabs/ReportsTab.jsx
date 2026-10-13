@@ -6228,10 +6228,13 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             const c = (contacts||[]).find(x => x.id === id);
                                                             return c ? ((c.firstName||'')+' '+(c.lastName||'')).trim() : null;
                                                         }).filter(Boolean);
+                                                        // What it changes and nothing else, merged over the stored row (state
+                                                        // §0.198, as the Kanban's drag): the whole row this report loaded wrote
+                                                        // back another session's save — a deal re-linked, its Site Name reset.
                                                         const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
                                                             method: 'PUT',
                                                             body: JSON.stringify({
-                                                                ...selectedOpp,
+                                                                id:         selectedOpp.id,
                                                                 contactIds: mergedIds,
                                                                 contacts:   contactNamesText(mergedNames),
                                                             }),
@@ -6286,9 +6289,10 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             return cx ? ((cx.firstName||'')+' '+(cx.lastName||'')).trim() : null;
                                                         }).filter(Boolean);
                                                         try {
+                                                            // The contacts alone, as the add path sends them (state §0.198).
                                                             const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
                                                                 method: 'PUT',
-                                                                body: JSON.stringify({ ...selectedOpp, contactIds: merged, contacts: contactNamesText(mergedNames) }),
+                                                                body: JSON.stringify({ id: selectedOpp.id, contactIds: merged, contacts: contactNamesText(mergedNames) }),
                                                             });
                                                             if (res.ok) setLocalContactIds(merged);
                                                         } catch(e) { console.error('Remove contact failed:', e); }

@@ -288,7 +288,7 @@ function migrate(file) {
 }
 
 let total = 0;
-for (const file of FILES) {
+for (const file of FILES.filter((f) => fs.existsSync(path.join(ROOT, f)))) {   // two of §0.136's six were deleted since (D8, 11 Oct 2026): nothing drew them
     const r = migrate(file);
     total += r.edits.length;
     console.log(`\n${file} — ${r.edits.length} replacement(s), ${r.kept.length} kept, ${r.remaining.length} hex left after${r.hasT ? '' : ', import added'}`);

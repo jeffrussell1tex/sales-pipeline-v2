@@ -10,6 +10,10 @@ import { matchSearch } from '../../utils/searchMatch.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
 import { activeDealsOf } from '../../utils/contactDeals.js';
 import DealPrepPicker from './DealPrepPicker';
+import HiddenLink from './HiddenLink';
+import { HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { NO_LINK, contactSeed, contactCompany, linkedAccount, contactLogContext, outOfList } from '../../utils/railLinks.js';
+import { leaveOut } from '../../utils/leaveOut.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -184,13 +188,12 @@ export default function ContactRail() {
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity,
+        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity, setEditingActivity,
         handleSaveContact,
         currentUserId, myProfile,
-        handleAddActivity,
         contactModalError, setContactModalError,
         contactModalSaving,
-        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
+        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode, setEditingTask,
         escapeBlocked,
         openMeetingPrep,
     } = useApp();
@@ -213,6 +216,10 @@ export default function ContactRail() {
     // Snapshot of an in-progress NEW contact, stashed when the user jumps to an
     // existing match via "Open existing" so "← Back" can restore the draft intact.
     const restoreNewRef = useRef(null);
+    // The link the Company field opened with — the contact's stored company and account —
+    // taken when the rail opens or changes mode, never again from the live row (state
+    // §0.198): a Save with the field as it opened keeps it exactly (D1). utils/railLinks.js.
+    const companySeed = useRef(NO_LINK);
 
     // Seed form when rail opens or contact changes
     useEffect(() => {
@@ -223,6 +230,7 @@ export default function ContactRail() {
             restoreNewRef.current = null;
             setFormData(snap.formData);
             setCompanySearch(snap.companySearch || '');
+            companySeed.current = NO_LINK;
             setRepSearch(snap.repSearch || '');
             setPersonaSearch(snap.personaSearch || '');
             setActiveTab(snap.activeTab || 'primary');
@@ -235,6 +243,7 @@ export default function ContactRail() {
         const src = contact || EMPTY_CONTACT;
         setFormData({ ...EMPTY_CONTACT, ...src });
         setCompanySearch(src.company || '');
+        companySeed.current = contactSeed(contact);
         setRepSearch(src.assignedRep || '');
         setPersonaSearch(src.buyerPersona || '');
         setActiveTab('primary');
@@ -314,26 +323,24 @@ export default function ContactRail() {
 
     const handleSave = async () => {
         setSaveError(null);
-        const companyName = (companySearch || '').trim();
-        const selAccount = companyName
-            ? (accounts || []).find(a => (a.name || '').toLowerCase() === companyName.toLowerCase())
-            : null;
-        const origCompany = (contact?.company || '').trim();
-        const changedCompany = companyName.toLowerCase() !== origCompany.toLowerCase();
-        // No free-text companies: block a newly-entered company that isn't a real account.
-        // Don't block edits to a legacy contact whose old company is untouched (the backfill
-        // migrates those). The Company field offers an inline “Create” to make one.
-        if (companyName && !selAccount && (isNew || changedCompany)) {
-            setSaveError(`"${companyName}" isn't a saved account. Pick one from the list, or use “Create” in the Company field.`);
-            return;
-        }
-        const saveData = {
+        setContactModalError?.(null); // the last save's server error never hides this Save's own refusal (§0.198)
+        // A pick is saved as the record picked (state §0.198). Company saves what it shows: the
+        // contact's stored company and link, exactly, when nobody touched it (a legacy company
+        // no account has, a link outside a rep's list); the account it holds while its text
+        // still reads as it; a name typed in full only when one account has it — two refuse,
+        // none refuse (no free-text companies; the field offers Create); nothing when empty.
+        // utils/railLinks.js contactCompany, over resolveLink. A Company nobody touched is left
+        // out of an edit's Save, so the contact's company and link stand as stored — whatever
+        // this rail's lists say of them (the pre-ship round; utils/leaveOut.js).
+        const link = contactCompany({ text: companySearch, heldId: formData.accountId, seed: companySeed.current, accounts });
+        if (link.error) { setSaveError(link.error); return; }
+        const saveData = leaveOut({
             ...formData,
-            company:   companyName ? (selAccount ? selAccount.name : companyName) : '',
-            accountId: companyName ? (selAccount ? selAccount.id : (formData.accountId || '')) : '',
+            company:   link.company,
+            accountId: link.accountId,
             assignedRep: repSearch,
             buyerPersona: personaSearch,
-        };
+        }, !isNew && link.untouched ? ['company', 'accountId'] : []);
 
         // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
@@ -380,9 +387,11 @@ export default function ContactRail() {
         setRailStack([]);
     };
 
-    // Clicking the company chip pushes current to stack and opens the Account rail
-    const handleOpenAccountRail = (companyName) => {
-        const acc = (accounts || []).find(a => a.name === companyName);
+    // Clicking the company chip pushes current to stack and opens the Account rail: the
+    // account the contact is linked to, by id; a contact with no link, the one account its
+    // company names — never the first of two (state §0.198, utils/railLinks.js).
+    const handleOpenAccountRail = () => {
+        const acc = linkedAccount(formData, accounts);
         if (!acc) return;
         setRailStack(prev => [...prev, { type: 'contact', id: contactRailId, mode: contactRailMode }]);
         setAccountRailId(acc.id);
@@ -415,18 +424,16 @@ export default function ContactRail() {
     const [showPrepPick, setShowPrepPick] = useState(false);
     useEffect(() => { setShowPrepPick(false); }, [contactRailId]);
 
+    // Every Log button on this rail — ✉ Email, ☎ Call, a template, ✎ Log, + Log Activity —
+    // opens Log Activity the same way (state §0.198, D19 — Jeff, 11 Oct: "Yes, all the
+    // same"): a new activity with the contact, its account by id (never the first account
+    // of its company's name) and its one open deal (utils/railLinks.js contactLogContext).
     const openCommLog = (type, extra = {}) => {
         if (!contact) return;
-        const acct = contact.company
-            ? (accounts || []).find(a => (a.name || '').toLowerCase() === (contact.company || '').toLowerCase())
-            : null;
+        setEditingActivity && setEditingActivity(null);
         setActivityInitialContext && setActivityInitialContext({
-            type,
-            contactId: contact.id,
-            contactIds: [contact.id],
-            company: contact.company || '',
-            accountId: acct?.id || '',
-            opportunityId: openOpps.length === 1 ? openOpps[0].id : '',
+            ...contactLogContext(contact, openOpps),
+            ...(type ? { type } : {}),
             ...extra,
         });
         setShowActivityModal(true);
@@ -455,6 +462,9 @@ export default function ContactRail() {
 
     const fullName = ((formData.firstName || '') + ' ' + (formData.lastName || '')).trim() || 'New Contact';
     const bg = avatarBg(fullName);
+    // The account the Company chip opens: the contact's link, by id; a contact with no link,
+    // the one account its company names — never the first of two (state §0.198).
+    const chipAccount = linkedAccount(formData, accounts);
 
     // ── Shared field styles ───────────────────────────────────────────────────
     const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' };
@@ -548,7 +558,7 @@ export default function ContactRail() {
                         </a>
                     )}
                     <button
-                        onClick={() => handleAddActivity && handleAddActivity(null, contact.id)}
+                        onClick={() => openCommLog()}
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         ✎ Log
                     </button>
@@ -672,13 +682,21 @@ export default function ContactRail() {
                                     <TextInput value={formData.title} onChange={v => hc('title', v)} placeholder="e.g. Plant Manager" />
                                 </FieldGroup>
                                 <FieldGroup label="Company" wide>
-                                    <AccountPicker
-                                        value={companySearch}
-                                        onChange={v => { setCompanySearch(v); hc('company', v); }}
-                                        onSelectAccount={handleSelectCompany}
-                                        onError={setSaveError}
-                                        placeholder="Type to search accounts…"
-                                    />
+                                    {/* A link the user can't open: the name the contact stores, said so; the ×
+                                        removes it and the picker returns. Untouched, a Save keeps it (state
+                                        §0.198, D16). */}
+                                    {outOfList(formData.accountId, accounts) ? (
+                                        <HiddenLink name={companySearch} hidden={HIDDEN_ACCOUNT} title="Remove the account"
+                                            onRemove={() => { setCompanySearch(''); hc('company', ''); hc('accountId', ''); }} />
+                                    ) : (
+                                        <AccountPicker
+                                            value={companySearch}
+                                            onChange={v => { setCompanySearch(v); hc('company', v); }}
+                                            onSelectAccount={handleSelectCompany}
+                                            onError={setSaveError}
+                                            placeholder="Type to search accounts…"
+                                        />
+                                    )}
                                 </FieldGroup>
                                 <FieldGroup label="Department">
                                     <TextInput value={formData.department} onChange={v => hc('department', v)} />
@@ -690,16 +708,23 @@ export default function ContactRail() {
                         ) : (
                             <div style={grid2}>
                                 <ReadRow label="Title" value={formData.title} />
-                                {/* Company chip — clicking opens Account rail (stack) */}
-                                {formData.company && (
+                                {/* Company chip — opens the account the contact is linked to (stack); a link the
+                                    user can't open says so (D16); a company no one account has, as written */}
+                                {(formData.company || formData.accountId) && (
                                     <div style={{ marginBottom: 10 }}>
                                         <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Company</div>
-                                        <button
-                                            onClick={() => handleOpenAccountRail(formData.company)}
-                                            style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 10px', fontSize: 12, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}
-                                        >
-                                            {formData.company} →
-                                        </button>
+                                        {outOfList(formData.accountId, accounts) ? (
+                                            <HiddenLink name={formData.company} hidden={HIDDEN_ACCOUNT} />
+                                        ) : chipAccount ? (
+                                            <button
+                                                onClick={() => handleOpenAccountRail()}
+                                                style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 10px', fontSize: 12, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}
+                                            >
+                                                {formData.company || chipAccount.name} →
+                                            </button>
+                                        ) : (
+                                            <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.45, wordBreak: 'break-word' }}>{formData.company}</div>
+                                        )}
                                     </div>
                                 )}
                                 <ReadRow label="Department" value={formData.department} />
@@ -972,12 +997,12 @@ export default function ContactRail() {
 
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                                onClick={() => { setActivityInitialContext && setActivityInitialContext({ contactId: contact?.id }); setShowActivityModal(true); }}
+                                onClick={() => openCommLog()}
                                 style={{ flex: 1, padding: '8px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Log Activity
                             </button>
                             <button
-                                onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
+                                onClick={() => { setEditingTask && setEditingTask({ contactId: contact?.id || '' }); setTaskRailId('new'); setTaskRailMode('new'); }}
                                 style={{ flex: 1, padding: '8px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>

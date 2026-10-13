@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
+import { sentBody, shownRow } from '../utils/leaveOut.js';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -145,12 +146,12 @@ export function useOpportunities(deps) {
         if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
             setOppModalSaving(true); setOppModalError(null);
-            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) })
+            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(updatedOpp)) })   // the links nobody touched left out (§0.198)
                 .then(async res => {
                     const data = await res.json();
                     if (!stillOrg(askedOrg)) return;
                     if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
-                    setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || updatedOpp) : opp));
+                    setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || shownRow(updatedOpp)) : opp));
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
                     // SMS: rep reassigned
                     if (enrichedData.salesRep && prevOpp?.salesRep !== enrichedData.salesRep) {
@@ -225,13 +226,16 @@ export function useOpportunities(deps) {
         if (editingOppRef && editingOppRef.id) {
             const updatedOpp = { ...enriched, id: editingOppRef.id };
             const before = opportunities.find(o => o.id === editingOppRef.id);
-            setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? updatedOpp : opp));
-            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) });
+            setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));
+            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(updatedOpp)) });   // as the deal window left it (§0.198)
             if (!stillOrg(askedOrg)) return stopped();
             if (!r.ok) {
                 setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));   // never show what was not stored; nothing else is undone
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };   // the dialog says why; no audit
             }
+            // The list takes the deal as stored — the account and id the server kept (a new
+            // link is named after its account) — never the copy sent (state §0.198).
+            if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id ? r.data.opportunity : o)));
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
             const newId = formData.id || ('id_' + crypto.randomUUID());   // given when the dialog opened: a retry is the same deal
@@ -243,6 +247,7 @@ export function useOpportunities(deps) {
                 setOpportunities(prev => prev.filter(o => o.id !== newId));
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };
             }
+            if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
         }
         setLostReasonModal(null);

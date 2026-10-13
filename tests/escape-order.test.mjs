@@ -199,7 +199,7 @@ const OPEN_AS = {
     activityDetail: '!!viewingActivity', taskRail: '!!taskRailId', activityRail: '!!showActivityModal',
     accountRail: '!!accountRailId', contactRail: '!!contactRailId',
     spiffClaim: '!!(showSpiffClaimModal && spiffClaimContext)', duePopup: '!!taskDuePopup', reminderPopup: '!!taskReminderPopup',
-    draggable: '!!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showOutlookImportModal || showLeadImportModal)',
+    draggable: '!!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showLeadImportModal)',
     shortcuts: 'showShortcuts', quickLog: 'quickLogOpen', meetingPrep: '!!(meetingPrepOpen && meetingPrepEvent)',
     leadModal: 'showLeadModal', merge: '!!(mergeModal || contactMergeModal)',
     search: 'showSearchResults', profile: 'showProfilePanel', notifications: 'showNotifications', notes: '!!notesPopover',
@@ -232,7 +232,6 @@ const LAYERS = {
     undoToast: { name: null, app: 'undoToast' },   // a toast, not a layer over the page: App closes it last
     notesPopover: { name: 'notes', app: 'notesPopover' },
     showCsvImportModal: { name: 'draggable', layer: 'src/components/modals/CsvImportModal.jsx' },
-    showOutlookImportModal: { name: 'draggable', layer: 'src/components/modals/OutlookImportModal.jsx' },
     showLeadModal: { name: 'leadModal', own: 'src/components/modals/LeadModal.jsx' },
     showLeadImportModal: { name: 'draggable', layer: 'src/components/modals/LeadImportModal.jsx' },
     lostReasonModal: { name: 'draggable', layer: 'src/components/modals/LostReasonModal.jsx' },
@@ -477,7 +476,6 @@ test('each new Escape does what the layer\'s own close does, and nothing mid-sav
     for (const f of ['src/components/modals/CsvImportModal.jsx', 'src/components/modals/LeadImportModal.jsx']) {
         assert.ok(read(f).includes("    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));"), `${f}: never mid-import`);
     }
-    assert.ok(read('src/components/modals/OutlookImportModal.jsx').includes("    useEscapeLayer(true, onClose, escapeBlocked('draggable'));"), 'its import is one call');
     assert.ok(read('src/components/modals/MergeReviewModal.jsx').includes("    useEscapeLayer(!!mergeModal, () => { if (!mergeSaving) { setMergeError?.(null); setMergeModal(null); } }, escapeBlocked('merge'));"), 'never mid-merge');
     assert.ok(read('src/components/modals/ContactMergeReviewModal.jsx').includes("    useEscapeLayer(!!contactMergeModal, () => { if (!mergeSaving) { setMergeError?.(null); setContactMergeModal(null); } }, escapeBlocked('merge'));"));
 });

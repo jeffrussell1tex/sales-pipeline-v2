@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../utils/storage';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
 import { rankMatches, capMatches, searchKey } from '../../utils/searchMatch.js';
+import { unarchived } from '../../utils/pickLink.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 export default function QuickLogFab() {
@@ -82,7 +83,8 @@ export default function QuickLogFab() {
                                         setQuickLogForm(f => ({ ...f, contactSearch: q, contactId: '' }));
                                         // Only punctuation typed is no search yet: the matcher reads it as nothing (state §0.194).
                                         if (!searchKey(q)) { setQuickLogContactResults([]); return; }
-                                        setQuickLogContactResults(rankMatches(contacts || [], q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));
+                                        // A contact merged into another is no one's to log against (D12, state §0.198).
+                                        setQuickLogContactResults(rankMatches(unarchived(contacts), q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));
                                     }}
                                     placeholder="Type contact name…"
                                     style={{ ...inputStyle, paddingRight: '2rem' }}

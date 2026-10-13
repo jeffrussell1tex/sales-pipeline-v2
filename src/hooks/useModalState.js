@@ -19,7 +19,6 @@ export function useModalState() {
     const [showCsvImportModal, setShowCsvImportModal] = useOrgBoundState(resets, false);
     const [showLeadImportModal, setShowLeadImportModal] = useOrgBoundState(resets, false);
     const [showLeadModal, setShowLeadModal] = useOrgBoundState(resets, false);
-    const [showOutlookImportModal, setShowOutlookImportModal] = useOrgBoundState(resets, false);
     const [csvImportType, setCsvImportType] = useOrgBoundState(resets, 'contacts');
     const [mergeModal, setMergeModal] = useOrgBoundState(resets, null); // { aId, bId } | null
     const [contactMergeModal, setContactMergeModal] = useOrgBoundState(resets, null); // { aId, bId } | null
@@ -58,8 +57,6 @@ export function useModalState() {
     const [docLinkPickerContext, setDocLinkPickerContext] = useOrgBoundState(resets, null);
 
     const [editingOpp, setEditingOpp] = useOrgBoundState(resets, null);
-    const [editingAccount, setEditingAccount] = useOrgBoundState(resets, null);
-    const [editingSubAccount, setEditingSubAccount] = useOrgBoundState(resets, null);
     const [editingUser, setEditingUser] = useOrgBoundState(resets, null);
     const [editingTask, setEditingTask] = useOrgBoundState(resets, null);
     const [editingContact, setEditingContact] = useOrgBoundState(resets, null);
@@ -70,10 +67,6 @@ export function useModalState() {
     const [viewingActivity, setViewingActivity] = useOrgBoundState(resets, null);
     const [activityInitialContext, setActivityInitialContext] = useOrgBoundState(resets, null);
 
-    const [parentAccountForSub, setParentAccountForSub] = useOrgBoundState(resets, null);
-    const [lastCreatedAccountName, setLastCreatedAccountName] = useOrgBoundState(resets, null);
-    const [accountCreatedFromOppForm, setAccountCreatedFromOppForm] = useOrgBoundState(resets, false);
-    const [pendingOppFormData, setPendingOppFormData] = useOrgBoundState(resets, null);
     const [lastCreatedRepName, setLastCreatedRepName] = useOrgBoundState(resets, null);
 
     const [confirmModal, setConfirmModal] = useOrgBoundState(resets, null);
@@ -111,7 +104,6 @@ export function useModalState() {
         showCsvImportModal, setShowCsvImportModal,
         showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
-        showOutlookImportModal, setShowOutlookImportModal,
         csvImportType, setCsvImportType,
         mergeModal, setMergeModal,
         contactMergeModal, setContactMergeModal,
@@ -128,18 +120,12 @@ export function useModalState() {
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         editingOpp, setEditingOpp,
-        editingAccount, setEditingAccount,
-        editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser,
         editingTask, setEditingTask,
         editingContact, setEditingContact,
         editingActivity, setEditingActivity,
         viewingActivity, setViewingActivity,
         activityInitialContext, setActivityInitialContext,
-        parentAccountForSub, setParentAccountForSub,
-        lastCreatedAccountName, setLastCreatedAccountName,
-        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
-        pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
         confirmModal, setConfirmModal,
         promptModal, setPromptModal,

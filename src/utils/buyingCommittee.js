@@ -14,6 +14,10 @@
 // (Title)" from the modal, "First Last" from Reports), so "already on the deal"
 // compares whole names — the old prefix test hid "Dana Whit" once "Dana
 // Whitaker" was linked. The deal's people are its ids (dealEngagement.js, §0.192).
+// A contact merged into another is never offered (state §0.198, D12: "Yes, hide
+// them"); one already on the deal keeps its chip.
+import { isMergeArchived } from './pickLink.js';
+
 export function contactsToAdd(contacts, search, linked) {
     const q = String(search ?? '').trim().toLowerCase();
     if (!q) return [];
@@ -21,6 +25,7 @@ export function contactsToAdd(contacts, search, linked) {
     return (Array.isArray(contacts) ? contacts : []).filter(c => {
         const name = `${c?.firstName || ''} ${c?.lastName || ''}`.trim();
         if (!name) return false;
+        if (isMergeArchived(c)) return false;
         const hit = name.toLowerCase().includes(q) || String(c?.company || '').toLowerCase().includes(q);
         return hit && !taken.includes(name.toLowerCase());
     });

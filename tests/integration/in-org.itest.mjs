@@ -242,6 +242,31 @@ test('a partial PUT to an activity keeps its linked contacts; a legacy contactId
     assert.equal(row.outcome, 'Connected', 'and the rest stays');
 });
 
+test('§0.198 (the fix review) — a PUT that names neither contact column keeps both as stored: an older activity\'s one contact (an empty list), and a merged contact\'s survivor', async () => {
+    await db.insert(activities).values([
+        { id: 'act_itest_inorg_legacy', orgId: A, type: 'Call', date: '2026-10-02', notes: 'older', contactId: 'cont_itest_inorg', contactIds: [] },
+        { id: 'act_itest_inorg_merged', orgId: A, type: 'Call', date: '2026-10-02', notes: 'merged', contactId: 'cont_itest_inorg_2', contactIds: ['cont_itest_inorg'] },
+    ]);
+    for (const [id, contactId, contactIds] of [['act_itest_inorg_legacy', 'cont_itest_inorg', []], ['act_itest_inorg_merged', 'cont_itest_inorg_2', ['cont_itest_inorg']]]) {
+        const r = await call('activities', WHO.admin, 'PUT', { id, notes: 'edited, contacts left out' });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        const row = await one(activities, id);
+        assert.equal(row.notes, 'edited, contacts left out');
+        assert.deepEqual([row.contactId, row.contactIds], [contactId, contactIds], `${id}: the pair as stored — it was rebuilt from the list`);
+        assert.deepEqual([r.body.activity.contactId, r.body.activity.contactIds], [contactId, contactIds], 'and answered so');
+    }
+});
+
+test("§0.198 (the re-check) — an older activity re-posted as the list read it (a delete's Undo: one contactId, an empty list) keeps its contact", async () => {
+    const r = await call('activities', WHO.admin, 'POST', { id: 'act_itest_inorg_undo', type: 'Call', date: '2026-10-03', notes: 'restored', contactId: 'cont_itest_inorg', contactIds: [] });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const row = await one(activities, 'act_itest_inorg_undo');
+    assert.deepEqual([row.contactId, row.contactIds], ['cont_itest_inorg', ['cont_itest_inorg']], 'it came back with no contact');
+    const none = await call('activities', WHO.admin, 'POST', { id: 'act_itest_inorg_none', type: 'Call', date: '2026-10-03', notes: 'none', contactId: '', contactIds: [] });
+    assert.equal(none.status, 201);
+    assert.deepEqual([(await one(activities, 'act_itest_inorg_none')).contactId, (await one(activities, 'act_itest_inorg_none')).contactIds], [null, []], 'no contact is still none');
+});
+
 // ── 2. SPIFF claims ──────────────────────────────────────────────────────────
 
 test('a rep’s claim is filed in their roster name, pending — whatever rep, status, approval and payment the body names', async () => {

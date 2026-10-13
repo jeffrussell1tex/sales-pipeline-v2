@@ -30,18 +30,35 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **A pick is saved as the record picked: four batches** (Jeff, 11 Oct:
+1. **A pick is saved as the record picked: batches 2–4** (Jeff, 11 Oct:
    "Split into batches"). A read-only map of every linking save (11 Oct, over
-   7e68f26; its central lines re-read by Claude) found the class wider than
-   recorded. Every save that links an account, deal or contact looks the
-   record up again by NAME and takes the first of that name, in any case and
-   any tier, merge-archived rows included. The accounts GET orders by name
-   only (accounts.mjs), so which of two twins comes first is not fixed. Four
-   of the five rails (ContactRail, ActivityRail, TaskRail, the deal window)
-   do it on EVERY save, not only after typing: a notes-only edit can move a
-   contact, activity, task or deal to a same-named twin (UKG's two "Shell -
-   Port Allen": an empty business unit, and the site with 2 contacts, §2.4).
-   An account's Parent takes the first of the name at the click.
+   7e68f26) found that every save linking an account, deal or contact looked
+   the record up again by NAME and took the first of that name, in any case
+   and any tier, merge-archived rows included.
+   - **Batch 1 is DONE (§0.198; guide §18b91).** The five save screens (the
+     contact rail, Log Activity, New Task, the deal window and an account's
+     Parent) save the record picked; a name typed and not picked saves only
+     when exactly one record has it; a field nobody touched keeps its link;
+     a link the user can't open is said, with an × that removes it. The
+     deals endpoint keeps and checks `accountId` — a merged-away one links
+     the account it was merged into — and a merge moves it; a stale list's
+     save never unlinks it. On a single save an account's parent obeys the
+     parent rule and keeps its tier wherever it still fits (D21) — a
+     merge's re-parenting does not run the rule yet (§4.7); a delete's Undo
+     (an Admin's) puts each account it deleted or promoted back as stored —
+     its fields, parent, tier and owner, not its created date (§4.2) — and
+     moves no deal; a sub-account another session moved since is refused.
+     A move or a merge made since §0.198 moves up the
+     deals it would leave on a site — by id; by name only where no other
+     account has the name — to the account above it, except a merge into a
+     site with no live account above it (D22; §4.2's "D22's edges"); deals
+     already on a site stay there until changed by hand (UKG's 6, §2.4) — a
+     delete's Undo moves none.
+     Merge-archived records leave the
+     pickers, and a name
+     only they have names the record each was merged into. The unreachable
+     copies are deleted. What it found and left is filed in §4.2, §4.4,
+     §4.6, §4.7, §4.8 and §6.
    - **Jeff's rules (11 Oct), for every batch:**
      - a name typed in full that matches exactly one account by `searchKey`
        saves as that account, under its own spelling. Two or more are
@@ -49,62 +66,38 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        refused. A field nobody touched keeps its saved link as stored ("One
        match saves, two refuse");
      - merge-archived accounts and contacts leave the pickers. A record
-       already linked to one keeps its link ("Yes, hide them").
-   - **Batch 1 (designing, 11 Oct):**
-     - ContactRail, ActivityRail, TaskRail, the deal window and an
-       account's Parent keep the id picked.
-     - The deals endpoint saves `accountId` (§4.2), and the deal's
-       Contacts-tab Save runs the main Save's checks ("Yes, same batch").
-     - Parent: not itself, not its own sub-accounts, not a site. The tier
-       is recomputed when the parent changes, and the server refuses a bad
-       parent ("No self, no loops, no sites").
-     - New Task -> Account becomes the account picker, with no Create
-       ("No Create on tasks").
-     - Same-named deals read "account · stage" in Log Activity and New Task
-       ("Account · stage").
-     - Log Activity saves what Company shows: a picked deal fills an empty
-       Company, and a cleared Company means no account ("Save what the field
-       shows").
-     - In the deal window, a site's full name typed = picking the site
-       ("Same as clicking the site"). A rep whose site's parent account is
-       outside their list is refused: "'…' is a site of an account you
-       can't open — ask your manager to link it." ("Refuse, name the
-       reason").
-     - An account's "+ Add task" and "+ Log Activity" open with the account
-       picked ("Yes, fill it in").
-     - The unreachable ContactModal, OutlookImportModal and "account created
-       from the deal form" branch are deleted ("Delete them"), and with them
-       the Tasks tab's task view panel (never opened), the deal window's
-       unused New Contact form and props, App's handleAddSubAccount and
-       AccountRail's unused values ("Delete them too").
-     - The server checks a NEW or changed deal account id: this org's, not a
-       site; the deal takes that account's name ("Check it now"). A merge
-       moves deals' account id to the survivor ("Yes, in batch 1").
-     - The deal window's Site Name lists only sites ("Only real sites").
-     - A link the user can't open reads "An account you can't open" (or "A
-       deal you can't open") with an × to remove it, on all five screens
-       ("Say so, allow removing").
-     - Tiers: a moved branch is recomputed, refused if any account would land
-       below a site ("Recompute the branch"); a deleted account's promoted
-       sub-accounts become top-level accounts ("Yes, make them 'account'").
-     - Every Log button on a contact's page fills the contact's account and
-       single open deal, and its "+ Add Task" fills the contact ("Yes, all
-       the same").
+       already linked to one keeps its link ("Yes, hide them");
+     - an account keeps its tier wherever it still fits: account, then
+       business unit, then site; a top-level account is an account; a
+       sub-account ranks above its parent; nothing sits under a site. Only
+       what no longer fits changes, and a move that would put anything below
+       a site is refused ("Keep what fits", D21 — decided after a SELECT of
+       UKG's tiers, 11 Oct: 416 sites stand straight under a top-level
+       account);
+     - a move or a merge moves up the deals it would leave on a site — by
+       id; by name only where no other account has the name — except a
+       merge into a site with no live account above it: a move that makes
+       an account holding deals a site, or a merge into a site, moves those
+       deals up to the account above it, its Site Name the site, in the
+       same write ("Move them up", D22). It moves only what the move or
+       merge would leave on a site: deals already on one stay (§2.4); the
+       rest it leaves are §4.2's "D22's edges".
    - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
    - **Batch 3:** CSV import and merge (§4.7).
    - **Batch 4:** the server refuses linked ids from another org (§4.6).
-   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived,
-     still lists, because the accounts GET does not filter archived rows
-     (SELECT 9 Oct).
+   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
+     (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
+     the Accounts tab and an account's Sub-Accounts still list it, because
+     the accounts GET does not filter archived rows (read in code 11 Oct).
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
 4. **Deal data** (§4.2):
-   - the deal endpoint saving `accountId`;
    - notes appended on the server;
-   - an Undo keeping the row's owner.
+   - a contact's Undo keeping the row's owner (an account's keeps it since
+     §0.198).
 5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
@@ -254,6 +247,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **Reload every open app tab right after each deploy of §0.198** — dev,
+  then prod; they share the database. A tab loaded before the deploy keeps
+  the old screens until it reloads, and they talk to the new functions: the
+  pre-ship audit (12 Oct) found an old deal window's Save now stores the
+  account id it guessed by name (a same-named twin's), and an old account
+  rail's stale parent now moves the account's deals up (D22). Nobody but
+  Jeff uses the app, so these are Jeff's own tabs.
 - Nothing open. The thirty-third ship (11 Oct, 23:42 UTC: §0.196, one name
   per member of an org, and §0.197, the "Accelerep" spelling), the
   thirty-second (11 Oct, 13:36 UTC: §0.195, the AcceleRep sign-in page), the
@@ -335,13 +335,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     is one sub-account of Shell. Merge the empty copy into the real one in
     the app.
     **Keep the site as the survivor** (read 11 Oct, merge.mjs): a merge
-    re-points tasks, activities and dispatch rows by id, but contacts and
-    deals only by name, and both copies share the name. Archive the site
-    and its 2 contacts keep its id and leave the survivor's People list.
+    re-points tasks, activities, dispatch rows and (since §0.198) deals by
+    id, but contacts only by name, and both copies share the name. Archive
+    the site and its 2 contacts keep its id and leave the survivor's People
+    list. Since §0.198 (D22) a merge into a site also moves the deals of the
+    copy merged away — by id, and with no id by the name only these two
+    share — up to Shell, Site Name "Shell - Port Allen". This merge moves
+    none: the copy holds no deal, and no UKG deal is named "Shell - Port
+    Allen" (SELECT 12 Oct).
   - PROD, UKG: "INEOS WL Plastics - Bowie" sits under INEOS Pigments, not
-    "INEOS - WL Plastics" (SELECT 9 Oct). The 6 deals whose account is a
-    site (a designer's SELECT 9 Oct, not re-read) each want the site's
-    parent as the account and the site as the Site Name.
+    "INEOS - WL Plastics" (SELECT 9 Oct). UKG's 6 deals whose account is a
+    site each want the site's parent as the account and the site as the
+    Site Name. SELECT 12 Oct: each holds the site's own id; the sites stand
+    straight under BASF (3), DTE Energy, OxyChem and Shell; 3 are open and
+    3 closed; 2 have no Site Name. §0.198's D22 does not move them — it
+    moves only the deals a move or a merge would leave on a site, and a
+    delete's Undo moves no deal — so they
+    stay until changed by hand (the deal window: pick the site's row in
+    Account, which fills its parent and the Site Name, D5, then Save).
   - DEV (Accelerep Test, org_3BDQ): two names saved twice in two
     spellings, "INEOS"/"Ineos" and "TransMountain"/"Transmountain" (a
     designer's SELECT 9 Oct, not re-read). Merge each pair in the app.
@@ -629,22 +640,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
     AdminView's unsaved-changes guard inside or outside the Settings tab; the
     letter and number shortcuts while a tab layer is open (typing "837" in a
     report's time picker sends "3" to Tasks); one Escape in an inline edit
-    under a menu; Accounts' Filters panel drawn twice; TaskViewRail (never
-    opens); Pipelines' ⋯ menus never closing on an outside click; the
-    shortcuts list above the rails now or later.
+    under a menu; Accounts' Filters panel drawn twice; Pipelines' ⋯ menus
+    never closing on an outside click; the shortcuts list above the rails
+    now or later.
 - **The shortcuts list opens under an open rail or the deal window.** Its z
   is 9998, under every rail and the draggable windows; "?" opened it with a
   contact rail and with a new-task rail open. A z above them, with its place
   in the order, is the fix. §0.189 (b), 8 Oct.
 - **Layers drawn that nothing opens** (tests/open-states.test.mjs records each
   in KNOWN; giving one a way in, or retiring it, updates KNOWN):
-  - nothing sets `showOutlookImportModal` (§0.186 (b));
-  - ContactModal is rendered nowhere: the contact rail replaced it
-    (§0.186 (b)); its contact search still cuts at 8 without a count,
-    named in tests/search-match.test.mjs's G1_ALLOWED until the file goes
-    (§0.194);
-  - TaskViewRail draws on `viewingTask`, which nothing opens: the context's
-    `setViewingTask` opens the task rail (§0.190 (a), 8 Oct);
   - the notes popover: ModalLayer draws it, App's Escape and the order name
     it, and nothing has set `notesPopover` since c3842cf (12 Mar 2026), when
     the side detail panel replaced the pipeline table's notes and comments
@@ -663,8 +667,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   click is that fast. §0.170 (h).
 - **Popovers** (§0.127 / §0.128, as recorded):
   - the three integration row menus are fixed but not portaled;
-  - TasksTab's ContactPicker (a task's contact search) is `position: fixed`
-    and not portaled (§0.194's review, 9 Oct);
   - `menuPlacement` should fold into `popoverPlacement`;
   - the menu card's height allowance is a constant (300);
   - RepPickerPopover and the status picker are not audited.
@@ -688,6 +690,38 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.2 Deals, activities and pipeline
 
+- **A screen loaded before another change saves its old copy of the fields
+  that are not links** (the pre-ship sweep, 12 Oct — older than §0.198,
+  whose pre-ship round leaves only untouched LINKS out). The contact rail
+  sends the whole row: a stale owner (and a rep can re-claim a row unassigned
+  since) and org-chart lists (managers, direct reports) go back. The account
+  rail sends its name — the rename cascade then copies the old name onto the
+  account's deals and contacts — and its owner. The deal window sends every
+  field but its untouched links. The Tasks tab's snooze and Complete send the
+  task row they hold, a merge's moved links with it; Reports' persona edit
+  sends the contact row. Recommended: the same rule as the links (send what
+  changed), or a stale-row check on the server (`updatedAt`). Jeff decides.
+- **After a merge, the merging session does not read its contacts, tasks or
+  activities again** (the pre-ship sweep; older than §0.198): useMerge
+  re-reads accounts and deals (contacts after a contact merge). A contact
+  merge moves deals' and tasks' contact ids on the server; the session's lists
+  keep the old ones. An untouched link is no longer sent back (§0.198's
+  pre-ship round); a touched screen still sends its copy of the rest.
+  Recommended: re-read contacts, tasks and activities after every merge.
+- **A deal with an empty Account text cannot be saved untouched** (the
+  sweep; as in prod): the window asks "Account name is required" even when
+  the deal holds an account id. Minor.
+- **Log Activity from a contact whose account was merged into one the
+  caller's list does not hold** (the sweep): a new activity's untouched
+  Company is refused, and the picker offers Create, which would make the
+  survivor again. Recommended: hold the survivor by id, or say "ask your
+  manager" as `siteOutOfReach` does. A rep cannot link anything to a
+  merged-away account whose survivor is outside her list either, and the
+  "merged" line does not name the survivor (the pre-ship audit).
+- **An activity opened before the accounts list holds its account** shows an
+  empty Company while holding the link; a deal picked then fills it with the
+  deal's account (the sweep; worse in prod, where an untouched Save erased the
+  link). Timing only; how often it happens is unverified.
 - **What the AI score's prompt may name, within an org** (§0.192's review,
   9 Oct). ai-score looks up the deal's and its activities' contacts in the
   org, so for a rep it can name a contact owned by another rep — as it
@@ -707,9 +741,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
     readers fold a duplicate into its survivor (mergedIntoId), the rows stay.
   - A contact rename does not reach a deal's text (an account rename does).
   - ReportsTab's add/remove on "Contacts on this deal" rebuilds the text from
-    the names the viewer's list resolves ("First Last", no title), never
-    updates the app's copy, and KanbanView's stage drag resends the stale
-    row.
+    the names the viewer's list resolves ("First Last", no title) and never
+    updates the app's copy. Since §0.198 it sends the deal's id and its
+    contacts alone — it sent the whole row the report loaded, which
+    re-linked a deal another session had moved to another account and
+    reset its Site Name — as KanbanView's stage drag sends the stage alone.
   - The activities and deal endpoints take contact ids without checking they
     are this org's; every reader looks them up in the org.
 - **Other single-contact and by-name readers of the same class** (§0.192, as
@@ -729,45 +765,170 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `salesRep`, `companyName`, `opportunityName`. A guard like
   tests/deal-fields.test.mjs's, for activities, would hold the class.
 - **The deal form's "+ New Contact" does nothing** (sets a state nothing
-  draws; ModalLayer passes no handler). §0.192, as recorded. Dead beside it
-  in OpportunityModal (read 9 Oct, §0.194): `NestedNewContactForm` (defined,
-  drawn nowhere in the file), `showAccountSuggestions` (set and read
-  nowhere), and the props `onSaveNewAccount`, `onAddContact` and
-  `onOpenNestedAccount` (taken, never used). §0.194 removed
-  `allAccountOptions`, built on every render and never read.
-- **An account's Parent field offers any account** — sites and the
-  account's own sub-accounts included, by bare name (AccountRail's Parent
-  Typeahead leaves out only the account itself) — and the accounts
-  endpoint takes `parentAccountId` as sent, with no tier or cycle check
-  (`sanitize`): a site can become a parent, and an account can be put
-  under one of its own sub-accounts. Read 9 Oct (§0.194's review). **In §1
-  item 1's batch 1** (Jeff, 11 Oct: "No self, no loops, no sites"). Also
-  read 11 Oct: the pick takes the first account of the clicked NAME, the
-  account itself included, so a twin's row can make an account its own
-  parent, and it then leaves the Accounts tab. The tier stays as saved
-  when the parent changes. A typed parent that was not picked is dropped
-  without a word.
-- **The deal window reads two names with no null guard:**
-  `getSitesForAccount`'s `a.name.toLowerCase()` and the Sales Rep list's
-  `u.name.toLowerCase()`. `accounts.name` is NOT NULL in the schema;
-  whether any `settings.users` entry lacks a name was not checked. A row
-  without one would throw while the window draws. Read 9 Oct (§0.194's
-  review).
-- **The deal endpoint never saves `accountId`.** Its sanitize has none, though
-  the form sends one. Accepting it needs a check that the account is this
-  org's. §0.176 (e). **In §1 item 1's batch 1** (Jeff, 11 Oct: "Yes, same
-  batch"): the deal window's fix stores nothing without it.
+  draws; ModalLayer passes no handler). §0.192, as recorded. The dead code
+  beside it — `NestedNewContactForm`, `showAccountSuggestions`, the props
+  `onSaveNewContact`, `onSaveNewAccount`, `onAddContact` and
+  `onOpenNestedAccount`, and ModalLayer's handlers for them — was deleted
+  in §0.198 (D20, 11 Oct). The button and the `nestedModal` state it sets
+  (read nowhere) stay until the button is decided.
+- **The deal window's Sales Rep list reads a name with no null guard**
+  (`u.name.toLowerCase()`). Whether any `settings.users` entry lacks a name
+  was not checked; a row without one would throw while the window draws.
+  Read 9 Oct (§0.194's review). The Site Name lookup's
+  `a.name.toLowerCase()` went in §0.198: sites are found by id.
 - **The account delete guard reads a deal with no `accountId` by name**
-  (useAccounts.js and _openDeals.mjs, read 11 Oct). No deal carries one yet
-  (above), so an open deal on "Shell - Port Allen" blocks deleting EITHER
-  account of that name. Deals saved after batch 1 carry the id; the old ones
-  keep the name rule.
+  (useAccounts.js and _openDeals.mjs, read 11 Oct). 28 of the 85 deals carry
+  none (SELECT 12 Oct: org_3BDQ 23 of 51, UKG 2 of 17, org_3B8T 3 of 3,
+  org_3K6L 0 of 14); the other 57 carry an id, each naming an account of the
+  deal's own name in its org, and the guard reads those by id. A deal with
+  none keeps none until its Account is picked or changed (an untouched Save
+  keeps the link as stored), so an open one named after two accounts would
+  block deleting either; no UKG deal is named "Shell - Port Allen".
+- **A delete's Undo cannot put an account back under a parent deleted or
+  merged away since** (§0.198; an Admin's, and rare). Since §0.198's fix
+  rounds the Undo is a restore: the delete answers its row and each
+  sub-account as stored when its write ran, and the Undo re-sends exactly
+  those — each deleted row and each promoted sub-account with its fields,
+  its parent, its tier and its owner as stored (not the date it was
+  created: below), legacy shapes included (a tier-'account' row under an
+  account, a business unit at the top), and no territory rule met —
+  checked that the tier is one the rule knows, that the parent is a live
+  account of the org, no site, under which no loop forms, and that no
+  account under it would not rank below it. The server honours the mark
+  for an Admin alone, and on a PUT only for a top-level row the body names
+  a parent for (the Undo always names one); one for a row that has a
+  parent now, moved by another session since the delete, is refused 409
+  ("“K” was moved since the delete — not put back."), never run as a move
+  (§0.198's sixth fix round, from the behaviour critic's finding: as a
+  move it overrode that session's move, and D22 could move every deal of
+  the row up). It moves no deal. So a parent that is gone refuses it, and
+  so does a sub-account added under the lifted account since that would
+  not rank below it (a business unit under a business unit, anything under
+  a site; a site under a business unit stands), and the toast reads "Could
+  not restore …", naming the account refused. A row stored before the rule
+  under the lifted account that does not rank above it refuses it too —
+  the Undo put such a row back exactly before §0.198's fifth fix round;
+  none in today's data (SELECT 12 Oct, all 829 accounts: the 13 that do
+  not rank above their parent each stand straight under a top-level
+  account, so no delete lifts one's parent). A refused re-save leaves the
+  Undo taken in part: the deleted row is posted back, the sub-account
+  refused stays where it stands, and the list is read again. Before
+  §0.198 it restored as it was, under a parent id that named no account.
+  Recommended: keep the refusal.
+- **A delete's Undo can put a business unit back under a business unit
+  when the deleted account's own parent is re-tiered before it** (§0.198;
+  the behaviour critic, 12 Oct; rare, an Admin's). The restore checks the
+  parent it puts a row back under for being there, itself, a loop, a site
+  and a merge — not for its tier now. P a business unit under the account
+  G, a site K under P: P deleted, then another session moves G under H (G
+  a business unit now); the Undo posts P back under G as a business unit
+  and K under P as a site — a unit under a unit, four levels deep (201,
+  200). The delete answers no parent's tier, so the restore cannot tell
+  this from UKG's 13 tier-'account' rows straight under an account, which
+  it must put back as stored — a plain rank check would refuse those too.
+  Beside the refusal over a sub-account added since (the item above),
+  which covers the child's side. Recommended: have the delete answer each
+  parent's tier as it stood and the restore refuse when that tier differs
+  now, with an integration test, in its own batch.
+- **A delete's Undo does not put back what the delete re-fitted below the
+  accounts it lifted** (§0.198; the mechanics critic, 12 Oct). The lift
+  re-fits a row stored before the rule under a lifted sub-account (an
+  account under an account becomes a business unit), and the Undo re-sends
+  only the rows the delete took and the sub-accounts it promoted, so that
+  row keeps its new tier. A SELECT of 12 Oct (the critic's): 13 rows stored
+  so misfit, none under a row that itself has a parent, so no delete of
+  today's data meets it.
+  Recommended: keep; or have the delete answer those tiers too and the
+  Undo put them back.
+- **A delete's Undo does not put back an account's created date, its
+  merge mark or its last-edited time** (§0.198; the critics, 12 Oct). The
+  restore re-posts what the account form saves, its parent, tier and owner
+  — not `createdAt`, `mergeArchived`, `mergedIntoId` or `archivedAt` — so
+  every row posted back is dated the Undo (the column's default) and reads
+  as last edited then. §0.198's fifth fix round carried the created date
+  back; the sixth took it out again: the app's driver (`@netlify/neon`
+  loads the CommonJS copy of `@neondatabase/serverless`, which drizzle's
+  type-parser override does not reach) reads a `timestamp without time
+  zone` in the function process's own time zone (state §0.91), so a date
+  read back and written again moves by that zone's offset — on Jeff's
+  machine 5 or 6 hours. The Accounts tab lists merge-archived accounts (§1
+  item 1, "Also seen"), and an Admin may delete one: its Undo brings it
+  back as a live account, offered in the pickers again. Recommended: carry
+  the merge mark on a restore (its survivor checked in the org), or leave
+  merge-archived accounts out of the Accounts tab's delete; carry the
+  created date only as text (the delete answering `created_at::text`, the
+  restore writing it back so) or once the driver's parser is fixed for
+  every read (a wider change — put to Jeff).
+- **A delete's batch can miss a sub-account added inside its own
+  transaction** (§0.198; the server critic, 12 Oct). The batch reads the
+  sub-accounts it answers, deletes, then lifts whatever still names the
+  deleted account — separate statements in one HTTP transaction at the
+  server's default isolation (drizzle's neon-http batch names none), so a
+  sub-account another session commits between the read and the lift is
+  lifted but missing from the answer, and the Undo does not put it back
+  under the restored account. Rare: the window is inside one round trip.
+  Not closed in §0.198: drizzle 0.45 can write the lift as one statement
+  that returns the old parent and tier (`update().from()` over a select of
+  the same rows), but how Postgres re-reads that select under a concurrent
+  write was not proved — the sandbox had no database. Recommended: that
+  one statement, with an integration test, in its own batch.
+- **D22's edges** (§0.198; Jeff, 11 Oct: "Move them up"). A move that makes
+  an account holding deals a site, and a merge into a site, move those
+  deals up to the account above the site, Site Name the site, in the same
+  write; the merge's Undo puts them back. A merge that lifts its survivor
+  to the top level makes it an account, so the deals it takes are not left
+  on a site. A screen loaded before either keeps the lift when it saves.
+  Left:
+  - deals already on a site before §0.198 are moved by nothing — a
+    delete's Undo included: UKG's 6, each on the site's own id (SELECT 12
+    Oct; §2.4);
+  - a deal with no account id is moved by its name only where no other
+    account has the name (UKG's "Shell - Port Allen" twins: neither's by
+    name, unless they are the two merged), so such a deal stays named after
+    the site;
+  - a merge into a site that already stood at the top level (stored before
+    the rule) leaves the deals on the site;
+  - a merge moves the merged-away account's deals, not the survivor's own
+    deals already on the site;
+  - an account edit has no Undo: moving the account back does not move its
+    deals back;
+  - a screen loaded before a merge into a site that has been deleted since
+    is refused 404 when it saves the merged-away id: the walk cannot reach
+    the account above a site that is gone (one into an account deleted
+    since, a site with no account above it, or a site moved since, still
+    saves); and one into a site that has since been renamed AND moved is
+    refused 400 as a site: the walk knows the site the deal was lifted
+    through only by the name the deal's Site Name holds, and an account
+    rename does not reach a deal's Site Name (the lens critic's L9, 12 Oct);
+  - accepted (the lens critic's L6, 12 Oct): a site's id sent directly whose
+    name the deal's Site Name holds, while the account the deal holds is no
+    site, is read as the site the deal was lifted through — the link kept as
+    stored, 200, the rest of the save standing — where until §0.198's third
+    fix round it was refused as a site; the code checks the name, not how
+    the deal came to it;
+  - a deal linked onto a lifted account in the seconds between a delete
+    and its Undo stays on it when the Undo puts the account back as a site:
+    the Undo restores exactly and moves no deal — it cannot tell a deal
+    linked since from one on the site before the delete (§0.198's fifth fix
+    round: placing such a re-save as a move moved every deal of the site
+    up, open or closed, its Site Name overwritten) — so it is changed by
+    hand (the deal window: pick the site's row in Account, D5);
+  - an Admin's marked PUT naming a parent for a top-level account no
+    delete lifted is taken as a restore — only a forged body sends one: the
+    Undo marks only rows its delete lifted — and is written as sent, so a
+    never-deleted top-level account made a site keeps its open deals on the
+    site: a restore runs no D22 (§0.198's fifth fix round). The server
+    cannot tell such a row from one a delete lifted; a server-side "was
+    lifted" marker would, if it is ever seen.
+  Recommended: keep (each is rare, or data from before the rule).
 - **A deal's notes are saved as the whole list.** Two people saving at once
   keep the last list, so a note is dropped. Recommended: a server-side
   append, or a version check. §0.177 (a).
-- **An Undo can change a row's owner.** A re-POST with no owner is stamped
-  with whoever pressed Undo, and an account meets the territory rules again.
-  §0.178 (b).
+- **A contact's Undo can change its owner.** A re-POST with no owner is
+  stamped with whoever pressed Undo. §0.178 (b). Since §0.198 an account's
+  Undo (an Admin's restore) keeps the stored owner — an unassigned account
+  stays unassigned, and one whose owner has left the org since comes back
+  unassigned with no owner name — and meets no territory rule.
 - **The deal PUT's "opportunity updated" email compares the rep's name to
   the caller's Clerk id**, so a rep with that email on is emailed about their
   own edits. §0.176 (c).
@@ -926,8 +1087,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
     Job form saves both.
   - Quote -> job takes the first dispatch customer with the deal's account
     name (invoices.js resolveCustomerForOpp, over an unordered org list in
-    quote-to-job.mjs). Its id-first step cannot apply while deals carry no
-    `accountId` (§4.2).
+    quote-to-job.mjs) unless a customer is linked to the deal's account id.
+    57 of 85 deals carry an `accountId` (SELECT 12 Oct; UKG 15 of 17), so
+    the id step runs for most deals, and finds a customer only where one is
+    linked by `accountId`.
   - New Job's "CRM accounts — not yet in Dispatch" hides an account
     whenever a customer has its name, so one twin vanishes once the other
     is linked. The customer form's "Linked CRM account" select lists bare
@@ -999,8 +1162,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - contacts' `accountId`;
   - activities' `accountId`, `opportunityId` and `contactIds`;
   - tasks' `accountId`, `opportunityId`, `contactId` and `contacts`;
-  - accounts' `parentAccountId` (batch 1 refuses a bad parent);
-  - deals' `contactIds` (batch 1 checks a new or changed `accountId`);
+  - accounts' `parentAccountId` on the bulk POST and PUT (since §0.198 the
+    single POST and PUT refuse a parent the org does not hold);
+  - deals' `contactIds` (since §0.198 a new or changed `accountId` is
+    checked);
   - dispatch customers' `accountId`;
   - dispatch jobs' `customerId`, `locationId`, `accountId` and
     `opportunityId`.
@@ -1009,8 +1174,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     dangling one. §0.166's refusal (tests/foreign-ids.test.mjs) is the
     pattern. Its read-scope check belongs only on an id that differs from
     the stored row's, or a rep's untouched save of a link outside their
-    list is refused. tests/integration/accounts.itest.mjs posts a foreign
-    parent and expects 201; batch 1 rewrites it.
+    list is refused.
   - The five CRM creates (contacts, tasks, activities, accounts, deals)
     answer 500 for an id another org holds. Dispatch creates answer 409
     since §0.166.
@@ -1124,12 +1288,29 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.7 Imports and merge
 
+- **A contact merge leaves activities' `contactIds` and tasks' chips on the
+  merged-away contact** (the pre-ship sweep; older than §0.198). Its
+  `tasks.contactId` and deals' ids move; the arrays do not. An untouched Save
+  no longer puts the old contact back (§0.198's pre-ship round); the rows still
+  name it, and a Save that does change such an activity's contacts writes
+  `contact_id` from the list again — the merged-away contact (the re-check).
+  Belongs with batch 3 (the merge moving contacts' `accountId`).
+- **A CSV overwrite batch empties the Account of a row that names none** while
+  another row names one (partialRows sets the union of the keys a batch
+  sends; the re-check). Every row of a CSV names an Account today, so no screen
+  sends that shape.
+- **A new activity prefilled from a contact or deal on a merged-away account,
+  neither it nor its survivor in a rep's list**, is saved linked to the
+  merged-away account (the sweep). Batch 3's move of contacts' `accountId`
+  on a merge removes the shape.
 - **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
   over 7e68f26):
   - The account import gives a sub-account the first account whose name
     matches the Parent Account cell, in any case and any tier, with
     existing accounts searched before the file's own parents
-    (ModalLayer.jsx). No refusal, and no line on the receipt.
+    (ModalLayer.jsx). No refusal, and no line on the receipt. The accounts
+    bulk POST and PUT take `parentAccountId` and `accountTier` as sent: the
+    parent rule and the tiers run on the single POST and PUT only (§0.198).
   - A conflict is the first existing account of the same name
     (CsvImportModal.jsx), and Overwrite writes onto that one. The row
     shows the name and phone only. A deal's conflict is the first deal with
@@ -1138,11 +1319,35 @@ to add meetings. Nothing in the app adds a meeting to Google:
     caller's list (exact spelling within the file), posts contacts with no
     `accountId`, and its Overwrite changes `company` while keeping the stored
     `accountId`. Deals import with the account name only (the map; not
-    re-read).
-  - An account merge rewrites contacts and deals by NAME and never their
-    `accountId` (merge.mjs; batch 1 moves deals' id, so contacts' is what
-    is left). Its comment says contacts have no account
-    link; `contacts.account_id` exists and AccountRail lists by it.
+    re-read). Since §0.198 the deals bulk POST and PUT refuse another org's
+    account id, and an Overwrite that renames a deal's account, naming no
+    id, unlinks it as a single save does; they still take a site, or an
+    account merged away, as a deal's account. Recommended: the single save's
+    rules on bulk rows (a site refused, a merged-away id followed to the
+    account it was merged into).
+  - An account merge rewrites contacts' account names by name alone, and
+    since §0.198 moves deals' `accountId` to the survivor (D14) — up to the
+    account above it, Site Name the site, when the survivor is a site (D22)
+    — and renames only its own deals and those with no id: a deal with no
+    id is renamed by its name alone, so a same-named twin's id-less deals
+    are renamed too (a twin's deals with an id keep their name). It never
+    moves contacts' `accountId` (merge.mjs). Its comment says contacts have
+    no account link; `contacts.account_id` exists and AccountRail lists by
+    it.
+  - An account merge re-parents the merged-away account's sub-accounts onto
+    the survivor, and lifts the survivor to the merged-away account's parent
+    when it stood under it, with no parent rule and no tier re-fit — but a
+    survivor lifted to the top level is made an account, the only tier that
+    fits there, and the undo puts its tier back (§0.198); its `accountTier`
+    field (the modal's field map) is written unchecked, and the log keeps no
+    other tiers. Merging an account that has sites into a site puts sites
+    under a site; merging a top-level account into a business unit puts its
+    units under a unit (the server critic's probes, 11 Oct). Recommended
+    (batch 3): run placeAccount for each moved child with the survivor as its
+    parent — refusing the merge when anything would sit below a site — re-fit
+    the moved branches in the merge's batch, snapshot the old tiers so the
+    undo puts them back, and fit `accountTier` or take it out of the field
+    map.
 - **Restyle LeadImportModal onto CsvImportModal's chrome,** retiring its old
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
@@ -1154,6 +1359,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **Save on an account rail whose account has left the screen's list creates
+  a second account** (the pre-ship sweep; as in prod — which screen can leave
+  a rail open on a row gone from the list is unverified).
+- **Back from a sub-account's rail to a parent the user can't open** shows an
+  empty rail titled "—" (the sweep; as in prod).
+- **An activity's chip for a contact outside the caller's list reads
+  "Unknown contact"** (the sweep; as in prod) — the task rail says "Contact
+  not in your list" (§0.198).
+- **A task chip with no id** (none stored today, SELECT 12 Oct) is dropped by a
+  Save that changes the task's contacts, as before §0.198 every Save did.
+- **QuickLog's kept draft can save a deal its Opportunity list no longer
+  shows** (the sweep; as in prod), after a pipeline or view change.
 - **The profile panel's Email signature box reads blank once the panel is
   opened.** The avatar's click re-seeds the form without the signature
   (App.jsx seeds it on load). A save then sends none and the stored one is
@@ -1190,13 +1407,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - Recommended: the matcher where a list can be long, and G1
     (tests/search-match.test.mjs) taught to fail a typed filter drawn with
     no cut.
-- **The search fields' keys and blur** (as recorded by §0.194's readers):
-  AccountPicker and the activity rail's Opportunity field never close on
-  blur; no list takes arrow keys, Enter or Escape; Enter in the deal
-  window's Account field submits the form; Escape with the activity rail's
-  list open closes the rail; the four rail Typeahead copies remain.
-  Recommended: one shared, module-scope, portaled field (guide §16), as its
-  own batch.
+- **The search fields' keys** (as recorded by §0.194's readers): no list
+  takes arrow keys, Enter or Escape; Enter in the deal window's Account
+  field submits the form; Escape with the activity rail's list open closes
+  the rail; the four rail Typeahead copies remain. Log Activity's
+  Opportunity list closes on blur since the §0.198 fixes, as the account
+  picker's and the task rail's do. Recommended: one shared, module-scope,
+  portaled field (guide §16), as its own batch.
 - **The duplicate warnings cut at three, unranked and silent** (AccountRail's
   and ContactRail's `dupWarning.slice(0, 3)`); "Open existing" opens the
   first. G1 cannot see a list held in React state, so tests/search-match
@@ -1207,16 +1424,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   ("@smi" would find Ann Smith) — is Jeff's to decide: the mention is read
   out of the note as it is typed, so a looser match keeps the list open
   mid-sentence, where Enter inserts a mention. §0.194.
-- **A rail type-ahead over plain names works every key out on every
-  keystroke** (New Task → Account, an account's Parent field, the activity
-  and task rails' Opportunity fields): a list of names has no row to keep
-  keys with (§0.194). Measured 9 Oct in node on Jeff's machine (median ms a
-  keystroke, synthetic names): 668 accounts 0.17–0.27 (before §0.194:
-  0.02), 5,000 accounts 1.0–2.0 (0.15), 20,000 accounts 4.1–8.2 (0.6); the
-  higher figure when one name in five has an accent. The alternative: a
-  memo of names emptied when the org changes (a one-line hook in App.jsx's
-  org switch, and a test). Recommended: leave it; revisit if an org passes
-  ~10,000 accounts. Jeff's to decide.
 - **The Leads Cockpit's "Search leads…" is a label, not a field** (a
   `<span>` in CockpitView; the Triage view's search is an input). Read
   9 Oct (§0.194's review).
@@ -1231,6 +1438,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
     can create a second account under the name of one another rep owns.
   - Renaming an account to another account's name runs no duplicate
     check (AccountRail checks only a new account).
+- **With Create off, a partly typed name reads as refused beside the row that
+  matches it** (§0.198's pane check, 12 Oct). New Task's Account and an
+  account's Parent show the matching row AND the foot "“pane shell chem” isn't
+  a saved account. Pick one from the list." while the name is only partly
+  typed — true of the text, noisy beside a match. Recommended: draw the foot
+  only when no row is listed, or word it as "keep typing, or pick one".
 - **The Leads Cockpit's "···" button does nothing** (no handler). Give it a
   menu or remove it. §0.191 (9 Oct).
 - **The reminder modal takes the first click on the Reports tab.** §0.140,
@@ -1245,6 +1458,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 5. Design questions (no action until decided)
 
+- **A tab loaded before a deploy** keeps the old screens, which send their
+  saves to the new functions until it reloads (the pre-ship audit, 12 Oct —
+  §2.2 for §0.198's ship). Proposed: `dbFetch` sends the bundle's version;
+  a function refuses, or answers "reload", to a version older than its own,
+  and the page offers the reload. Before paying customers, at the latest.
 - **Quote versions:** Build compares only current against previous.
 - **CRM entity numbering:** accounts are the best candidate. It pays only if
   searchable, on documents and surviving export.
@@ -1257,6 +1475,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **scripts/migrate-blue-era.mjs's summary still counts the two files §0.198
+  deleted** (the pre-ship audit): it skips them, and the line says how many it
+  read. A manual codemod nothing runs; cosmetic.
 - **Local `netlify dev` cannot run the app's AI calls on our key** (found
   8 Oct, read in netlify-cli 27.6.0: `commands/dev/dev.js` and
   `@netlify/ai/dist/bootstrap/main.js`). For a linked site with a deploy, it
@@ -1276,12 +1497,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deleted). A restart with
   `.netlify/functions-serve` cleared served the file. A standing note: after
   editing a function, restart before a pane check of it.
-- **A mislabelled harness entry:** "off-brand sweep: AccountRail's
-  do-not-contact notice is the Tailwind amber wash again" anchors the
-  "Similar account found" warning box (T.warn), not the Do Not Contact
-  notice. Rename it when the file is next edited (read 11 Oct).
-- **TaskRail's `contactNames` is computed and never read** (read 9 Oct,
-  §0.194). A one-line delete.
+- **Unused code left in the files §0.198 edited** (found by its builders;
+  not named by D8 or D20): App's `handleAddAccount`, `handleEditAccount`,
+  `handleEditContact`, `handleEdit` and others; about 60 context names
+  ModalLayer destructures and never reads; TasksTab's `fmtAgo`,
+  `groupByDay` and the `useCallback` import; OpportunityModal's `RoleBadge`
+  and `STAGE_COLORS`; useAccounts' `handleSaveAccount` branch for
+  `editingSubAccount`, which no caller reaches now. Recommended: a
+  class-wide pass with an unused-binding guard (a parse, committed as a
+  test), rather than more of batch 1.
 - **A memory-note amendment for Jeff to approve** (to
   bash-heredoc-backslashes): the Write tool is safe for a backslash before
   `(` or `{`, but turns a backslash, "u" and four hex digits into that

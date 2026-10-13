@@ -3,7 +3,7 @@ import {
     accounts, contacts, tasks, activities, opportunities,
     spiffClaims, dispatchCustomers, dispatchJobs, mergeLog,
 } from '../../db/schema.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 
@@ -152,6 +152,9 @@ export const handler = async (event) => {
             { name: 'activities', table: activities, column: 'accountId', col: activities.accountId },
             { name: 'dispatchCustomers', table: dispatchCustomers, column: 'accountId', col: dispatchCustomers.accountId },
             { name: 'dispatchJobs', table: dispatchJobs, column: 'accountId', col: dispatchJobs.accountId },
+            // A deal keeps the account picked, by id (state §0.198); a merge moves it with the
+            // tasks and activities, and its undo moves it back (D14: "Yes, in batch 1").
+            { name: 'opportunities', table: opportunities, column: 'accountId', col: opportunities.accountId },
         ];
         for (const t of idTargets) {
             const ids = await snapIds(t.table, and(eq(t.col, archivedId), eq(t.table.orgId, orgId)));
@@ -163,17 +166,49 @@ export const handler = async (event) => {
         if (childIds.length) rewrites.push({ table: 'accounts', column: 'parentAccountId', kind: 'id', ids: childIds, oldValue: archivedId, newValue: survivorId });
 
         // name-based references: rewrite each old name value separately so reversal is exact.
+        // A deal carries the account's id since §0.198, so its name is rewritten only where it
+        // is one of the two accounts' — the archived one's (which this batch moves to the
+        // survivor first) or the survivor's — or names no account by id: merging one of two
+        // same-named accounts (UKG's "Shell - Port Allen" twins) no longer renames the other
+        // twin's deals, which would keep that twin's id under the survivor's name.
+        const dealsOfMerge = () => or(isNull(opportunities.accountId), inArray(opportunities.accountId, [archivedId, survivorId]));
         const nameTargets = [
-            { name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account },
+            { name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account, scope: dealsOfMerge },
             { name: 'spiffClaims', table: spiffClaims, column: 'account', col: spiffClaims.account },
             { name: 'contacts', table: contacts, column: 'company', col: contacts.company },
         ];
         for (const t of nameTargets) {
             for (const oldVal of nameOldValues) {
                 if (oldVal == null) continue;
-                const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId)));
+                const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId), ...(t.scope ? [t.scope()] : [])));
                 if (ids.length) rewrites.push({ table: t.name, column: t.column, kind: 'name', ids, oldValue: oldVal, newValue: survName });
             }
+        }
+
+        // D22 (Jeff, 11 Oct: "Move them up"): a merge moves up the deals it would leave on a site —
+        // by id; by name only where no other account has the name — except into a site with no live
+        // account above it. A merge into a site (the
+        // survivor's tier once merged) moves the merged-away account's deals — by its id, or by
+        // its name where a deal has no id and no account but these two has the name — up to the
+        // live account the site stands under, under that account's name, Site Name the site, in
+        // this same batch. The log keeps each one's account, id and Site Name as they were, after
+        // every other rewrite, so the undo puts them back last and exactly. A site with no live
+        // account above it keeps them: there is nothing to move them up to.
+        const survTier = 'accountTier' in resolved ? resolved.accountTier : surv.accountTier;
+        const upId = surv.parentAccountId === archivedId ? (arch.parentAccountId || null) : (surv.parentAccountId || null);
+        const [up] = survTier === 'site' && upId
+            ? await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived }).from(accounts).where(and(eq(accounts.id, upId), eq(accounts.orgId, orgId)))
+            : [];
+        let lifted = [];
+        if (up && up.mergeArchived !== true) {
+            const named = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.name, archName), eq(accounts.orgId, orgId)));
+            const byName = named.every((a) => a.id === archivedId || a.id === survivorId);
+            lifted = await db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account, site: opportunities.site })
+                .from(opportunities)
+                .where(and(eq(opportunities.orgId, orgId), byName
+                    ? or(eq(opportunities.accountId, archivedId), and(isNull(opportunities.accountId), eq(opportunities.account, archName)))
+                    : eq(opportunities.accountId, archivedId)));
+            if (lifted.length) rewrites.push({ table: 'opportunities', column: 'accountId', kind: 'lift', ids: lifted.map((d) => d.id), rows: lifted.map((d) => ({ id: d.id, old: { accountId: d.accountId ?? null, account: d.account ?? null, site: d.site ?? null } })) });
         }
 
         // ── Build the atomic batch ─────────────────────────────────────────────
@@ -184,17 +219,27 @@ export const handler = async (event) => {
         ops.push(db.update(activities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(activities.accountId, archivedId), eq(activities.orgId, orgId))));
         ops.push(db.update(dispatchCustomers).set({ accountId: survivorId, updatedAt: now }).where(and(eq(dispatchCustomers.accountId, archivedId), eq(dispatchCustomers.orgId, orgId))));
         ops.push(db.update(dispatchJobs).set({ accountId: survivorId, updatedAt: now }).where(and(eq(dispatchJobs.accountId, archivedId), eq(dispatchJobs.orgId, orgId))));
+        ops.push(db.update(opportunities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));
         ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));
 
-        ops.push(db.update(opportunities).set({ account: survName, updatedAt: now }).where(and(inArray(opportunities.account, nameOldValues), eq(opportunities.orgId, orgId))));
+        ops.push(db.update(opportunities).set({ account: survName, updatedAt: now }).where(and(inArray(opportunities.account, nameOldValues), eq(opportunities.orgId, orgId), dealsOfMerge())));
         ops.push(db.update(spiffClaims).set({ account: survName, updatedAt: now }).where(and(inArray(spiffClaims.account, nameOldValues), eq(spiffClaims.orgId, orgId))));
         ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId))));
+        // D22: the merged-away account's deals, on a site now, moved up — after the id and name
+        // rewrites above, so this is what they hold.
+        if (lifted.length) ops.push(db.update(opportunities).set({ accountId: up.id, account: up.name, site: survName, updatedAt: now }).where(and(inArray(opportunities.id, lifted.map((d) => d.id)), eq(opportunities.orgId, orgId))));
 
         // Apply resolved field values to the survivor (+ name, + cycle-safe parent).
         const survSet = { ...resolved, name: survName, updatedAt: now };
         if (owner) survSet.ownerId = owner.ownerId;   // the id with the name (§0.193)
         delete survSet.parentAccountId; // never resolved via the field map
         if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;
+        // Lifted to the top level (it stood under the account merged away, which stood at the top),
+        // the survivor is an account — the only tier that fits there (D21) — so the deals it takes
+        // are not left on a site; the undo puts its stored tier back (state §0.198; the server
+        // critic, 12 Oct: a top-level account merged into its own site left the site at the top,
+        // its deals on it).
+        if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';
         ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
 
         // Soft-archive the loser (kept for restore; reports filter mergeArchived=false).
@@ -254,6 +299,12 @@ async function reverseAccountMerge({ body, orgId, userId, headers }) {
     for (const rw of (log.rewrites || [])) {
         const table = TABLE_BY_NAME[rw.table];
         if (!table || !Array.isArray(rw.ids) || rw.ids.length === 0) continue;
+        // D22: each deal a merge into a site moved up, back to the account, id and Site Name it
+        // had — the log's last rewrite, so it is what stands.
+        if (rw.kind === 'lift') {
+            for (const row of (rw.rows || [])) ops.push(db.update(table).set({ accountId: row.old?.accountId ?? null, account: row.old?.account ?? null, site: row.old?.site ?? null }).where(and(eq(table.id, row.id), eq(table.orgId, orgId))));
+            continue;
+        }
         ops.push(db.update(table).set({ [rw.column]: rw.oldValue }).where(and(inArray(table.id, rw.ids), eq(table.orgId, orgId))));
     }
 
@@ -270,6 +321,8 @@ async function reverseAccountMerge({ body, orgId, userId, headers }) {
     // The id went with the name (§0.193) — restored from a snapshot that holds one (a log
     // written before the owner id column keeps the row's current id).
     if ('accountOwner' in (log.resolvedFields || {}) && 'ownerId' in snapS) restore.ownerId = snapS.ownerId ?? null;
+    // A survivor the merge lifted to the top level was made an account (above): its stored tier back.
+    if (snapS.parentAccountId === log.archivedId && !(log.archivedSnapshot || {}).parentAccountId && 'accountTier' in snapS) restore.accountTier = snapS.accountTier ?? null;
     ops.push(db.update(accounts).set(restore).where(and(eq(accounts.id, log.survivorId), eq(accounts.orgId, orgId))));
 
     ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));

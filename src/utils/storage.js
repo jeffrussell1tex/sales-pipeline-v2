@@ -99,13 +99,16 @@ export const refusalOf = async (res) => {
 // …and one that never reached the server.
 export const NETWORK_ERROR = 'Network error — the change was not saved.';
 
-// dbWrite is for write paths that do not need the Response body. It resolves to
-// { ok, status, error } and NEVER throws, so a caller can roll back in one place
-// without a try/catch around every call.
+// dbWrite is for write paths. It resolves to { ok, status, error, data } and NEVER
+// throws, so a caller can roll back in one place without a try/catch around every
+// call. data: what a write that landed answered — its JSON body, a save's stored row —
+// or null; a list takes the server's row, not the copy it sent (state §0.198: the
+// Closed Lost save).
+const bodyOf = async (res) => { try { return await res.json(); } catch { return null; } };
 export const dbWrite = async (url, options) => {
     try {
         const res = await dbFetch(url, options);
-        if (res.ok) return { ok: true, status: res.status, error: null };
+        if (res.ok) return { ok: true, status: res.status, error: null, data: await bodyOf(res) };
         return { ok: false, status: res.status, error: await refusalOf(res) };
     } catch (err) {
         return { ok: false, status: 0, error: NETWORK_ERROR };

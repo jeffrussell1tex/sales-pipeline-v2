@@ -342,8 +342,8 @@ test("the deal window, a site's exact name whose account is not in the list (a r
     assert.equal(none.drawn, true, 'no match at all: the list opens to offer Create');
     assert.equal(open([shell], ' - ', DEAL).drawn, false, 'only punctuation typed: nothing');
     assert.equal(open([shell], 'shell', DEAL).drawn, true);
-    assert.ok(read(PICKER).includes(`{unlisted && <div style={{ padding: '6px 10px', fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>{\`${U('201c')}\${unlisted.name}${U('201d')} is a site ${U('2014')} pick the account it belongs to\`}</div>}`),
-        'the line it draws');
+    assert.ok(read(PICKER).includes("{unlisted && <div style={{ padding: '6px 10px', fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>{leftOut ? leftOut(unlisted) : siteLine(unlisted, accounts)}</div>}"),
+        `the line it draws: why the name is left out — the host's leftOut, else a site of an account the user can't open, or a site under one no deal takes (pickLink.js siteLine, pinned by value in tests/pick-link.test.mjs; Jeff, 11 Oct: "Refuse, name the reason")`);
 });
 
 test('viaParent: a record the picker keeps, a parent outside the list, a parent left out too — none leads anywhere', () => {
@@ -396,17 +396,17 @@ const STICK = (n, bg = "'inherit'", pad = '6px 10px') => `{${n} > 0 && <div ${HO
 test("the account picker draws pickerRows: the deal window's filter and its site rows, each row's parent, the count, a name it cannot offer and Create in view, a site row picking its parent", () => {
     const p = read(PICKER);
     assert.ok(p.includes("import { pickerRows, searchKey } from '../../utils/searchMatch.js';"));
-    assert.ok(p.includes('export default function AccountPicker({ value, onChange, onSelectAccount, onSelectSite, onError, placeholder, filterFn }) {'));
+    assert.ok(p.includes('export default function AccountPicker({ value, onChange, onSelectAccount, onSelectSite, onError, placeholder, filterFn, allowCreate = true, leftOut = null, dropUp = false }) {'));
     assert.ok(p.includes('    const typedKey = searchKey(value);'));
-    assert.ok(p.includes('const byId = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);'), 'one map per accounts change');
+    assert.ok(p.includes('const byId = useMemo(() => new Map(listed.map(a => [a.id, a])), [listed]);'), 'one map per change of the accounts listed (every one but an account merged away, D12)');
     assert.ok(p.includes('    const { shown, more, exact, unlisted } = open && typedKey\n'
-        + '        ? pickerRows(accounts, value, { keep: filterFn, viaParents: !!onSelectSite, byId })\n'
+        + '        ? pickerRows(listed, value, { keep: filterFn, viaParents: !!onSelectSite, byId })\n'
         + '        : { shown: [], more: 0, exact: null, unlisted: null };'), "the host's filter is applied, and a site row offered only to a host that takes one");
     assert.ok(p.includes('    const pick = (acc, via = null) => {\n        onChange(via ? via.name : acc.name);\n        if (via) onSelectSite(acc, via);\n        else if (onSelectAccount) onSelectAccount(acc);\n        setOpen(false);\n    };'),
         'a site row picks its parent, and names itself the site');
     assert.ok(p.includes('{open && !!typedKey && (shown.length > 0 || !exact || !!unlisted) && ('), 'only punctuation typed offers nothing, Create included');
     assert.ok(p.includes('{shown.map(({ account: a, parent, via }) => (\n                        <div key={a.id} onMouseDown={e => e.preventDefault()} onClick={() => pick(a, via)}'));
-    assert.ok(p.includes("{parent && <span style={{ color: T.inkMuted }}>{` · ${a.accountTier === 'site' ? 'site of' : a.accountTier === 'business_unit' ? 'unit of' : 'in'} ${parent.name}`}</span>}"));
+    assert.ok(p.includes("{parent && <span style={{ color: T.inkMuted }}>{` · ${parentLabel(a, parent)}`}</span>}"), 'each unit and site names its parent, in the words pickLink.js parentLabel keeps (pinned by value in tests/pick-link.test.mjs)');
     assert.ok(p.includes(`<div ${HOLD} style={{ position: 'sticky', bottom: 0, background: 'inherit' }}>\n                        ${MORE('more')}\n                        {unlisted && <div`),
         'the count and what follows stay in view at the foot of fifty rows, and a press on them keeps the focus in the field');
     assert.ok(p.includes("</div>}\n                        {!exact && (\n"), 'Create follows, in the same foot');
@@ -419,7 +419,7 @@ test("the account picker draws pickerRows: the deal window's filter and its site
 
 test('the deal window: a site row fills Account with its parent and Site Name with itself; a site is still never the account', () => {
     const m = read('src/components/modals/OpportunityModal.jsx');
-    assert.ok(m.includes("onSelectSite={(site, parent) => { setAccountSearch(parent.name); setFormData(prev => ({ ...prev, account: parent.name, accountId: parent.id, site: site.name })); setSiteSearch(site.name); setShowSiteSuggestions(false); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); }}"));
+    assert.ok(m.includes("onSelectSite={(site, parent) => { setAccountSearch(parent.name); setFormData(prev => ({ ...prev, account: parent.name, accountId: parent.id, site: site.name })); setSiteSearch(site.name); keptSiteRef.current = null; setShowSiteSuggestions(false); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); }}"));
     assert.ok(m.includes("filterFn={(a) => a.accountTier !== 'site'}"), 'the deal window leaves out sites');
 });
 
@@ -431,7 +431,7 @@ test('a list that scrolls keeps its count in view: the line sticks to its foot, 
         assert.equal(count(src, STICK('more')), n, `${f}: every list it draws`);
     }
     assert.ok(between(read('src/components/rails/ActivityRail.jsx'), 'function ContactMultiSelect(', '\n}\n').includes(STICK('more')), "the activity rail's contacts");
-    assert.equal(count(read('src/Tabs/TasksTab.jsx'), STICK('more', 'T.surface', '6px 12px')), 1, "the Tasks tab's contact picker");
+    // The Tasks tab's contact picker went with its task view, which nothing opened (D20, 11 Oct 2026).
     assert.equal(count(read('src/Tabs/ReportsTab.jsx'), STICK('oppsMore', 'T.surface', '6px 12px')), 1, "Reports' deal picker");
     assert.ok(between(read('src/components/documents/atoms.jsx'), 'export function PeopleChooser(', '\n}\n').includes(STICK('more', 'T.surface')), 'the document share picker');
 });
@@ -441,8 +441,8 @@ test("the rails' four type-aheads and two contact lists ask the matcher, while t
     const task = read('src/components/rails/TaskRail.jsx');
     const NONE = '{ shown: [], more: 0 }';
     for (const [file, src, line] of [
-        ['ActivityRail', act, `const { shown, more } = open && (searchKey(value) || !(value || '').trim()) ? matchSearch(suggestions, value) : ${NONE};`],
-        ['TaskRail', task, `const { shown, more } = open ? matchSearch(suggestions, value) : ${NONE};`],
+        ['ActivityRail', act, `const { shown, more } = open && (searchKey(value) || !(value || '').trim()) ? matchSearch(suggestions, value, { text: textOf }) : ${NONE};`],
+        ['TaskRail', task, `const { shown, more } = open ? matchSearch(suggestions, value, { text: textOf }) : ${NONE};`],
         ['AccountRail', read('src/components/rails/AccountRail.jsx'), `const { shown, more } = open ? matchSearch(suggestions, safeVal) : ${NONE};`],
         ['ContactRail', read('src/components/rails/ContactRail.jsx'), `const { shown, more } = open ? matchSearch(suggestions, safeVal) : ${NONE};`]]) {
         const ta = between(src, 'function Typeahead(', '\n}\n');
@@ -451,8 +451,8 @@ test("the rails' four type-aheads and two contact lists ask the matcher, while t
         assert.equal(src.split('function Typeahead(').length - 1, 1, `${file}: one type-ahead`);
     }
     assert.ok(act.includes(`import { matchSearch, searchKey } from '../../utils/searchMatch.js';`));
-    assert.ok(act.includes(`const { shown: suggestions, more } = open ? matchSearch((contacts || []).filter(c => !selected.includes(c.id)), query, { text: nameOf, also: c => [c.company] }) : ${NONE};`));
-    assert.ok(task.includes("const { shown: matched, more } = matchSearch((contacts || []).filter(c => !alreadyIds.has(c.id)), contactSearch, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });"));
+    assert.ok(act.includes(`const { shown: suggestions, more } = open ? matchSearch((contacts || []).filter(c => !selected.includes(c.id) && !isMergeArchived(c)), query, { text: nameOf, also: c => [c.company] }) : ${NONE};`), 'a contact merged away is not offered (D12)');
+    assert.ok(task.includes("const { shown: matched, more } = matchSearch((contacts || []).filter(c => !alreadyIds.has(c.id) && !isMergeArchived(c)), contactSearch, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });"), 'a contact merged away is not offered (D12)');
 });
 
 test("a field that waits for typing waits for a word: the header's search and the quick log read only punctuation as nothing typed", () => {
@@ -472,7 +472,7 @@ test("the header's search, the quick log, the deal window's mentions, Reports, T
     assert.ok(h.includes("const { shown: mC, more: moreC } = matchSearch(contacts, globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });"));
     assert.ok(h.includes('const { shown: mO, more: moreO } = matchSearch(opportunities, globalSearch, { text: o => o.opportunityName || o.account, also: o => [o.account], limit: 5 });'));
     const ql = read('src/components/layout/QuickLogFab.jsx');
-    assert.ok(ql.includes("setQuickLogContactResults(rankMatches(contacts || [], q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));"), 'every match kept, best first');
+    assert.ok(ql.includes("setQuickLogContactResults(rankMatches(unarchived(contacts), q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));"), 'every match kept, best first — of the contacts not merged into another (D12)');
     assert.ok(ql.includes('const { shown: quickLogShown, more: quickLogMore } = capMatches(quickLogContactResults, 6);'), 'six drawn: its box does not scroll');
     assert.ok(ql.includes('{quickLogShown.map((c, idx) => {'));
     const m = read('src/components/modals/OpportunityModal.jsx');
@@ -483,7 +483,7 @@ test("the header's search, the quick log, the deal window's mentions, Reports, T
     assert.ok(r.includes("const { shown: shownOpps, more: oppsMore } = matchSearch(visibleOpps, oppSearch, { text: o => `${o.account || ''} ${o.opportunityName || o.name || ''}` });"));
     assert.ok(!between(r, 'const visibleOpps = (opportunities || []).filter(o => {', '});').includes('oppSearch'), 'the rep\'s deals, not the search: the chosen deal stays while another is sought');
     assert.ok(r.includes('{shownOpps.map(o => ('));
-    assert.ok(read('src/Tabs/TasksTab.jsx').includes("const { shown: filtered, more } = matchSearch(contacts.filter(c => !existingIds.has(c.id)), query, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });"));
+    // (The Tasks tab's contact picker asked it too, until it went with the task view nothing opened: D20.)
     const d = read('src/Tabs/DispatchTab.jsx');
     assert.ok(d.includes('    const byName = { text: x => x.name, limit: 6 };'), 'six a group (Jeff, 9 Oct: "Keep 6 per group")');
     assert.ok(d.includes('const { shown: custMatches, more: custMore } = matchSearch(customers, query, byName);'));
@@ -640,9 +640,8 @@ const SRC = (() => {
 })();
 
 // What G1 finds and is right, each with its reason. A key is the file and the cut.
-const G1_ALLOWED = [
-    ['src/components/modals/ContactModal.jsx', 'filtered.slice(0, 8)', 'never rendered: ContactRail replaced it (ModalLayer.jsx); App.jsx imports it and draws nothing (OPEN_ITEMS §4.1)'],
-];
+// None since D8 (11 Oct 2026) deleted ContactModal, whose contact search was the one cut named here.
+const G1_ALLOWED = [];
 // What G1 cannot see (a list held in React state), named so its sight is not overstated:
 // the duplicate warnings cut a typed name's near matches at three, unranked and silent —
 // recorded in OPEN_ITEMS §4.8, not held by this file.
@@ -720,7 +719,7 @@ test('G2: every caller of the matcher — and of a function that hands its answe
     const callers = files.filter(([, src]) => callsAny(src, counted));
     assert.deepEqual(callers.flatMap(([f, src]) => unannounced(src, counted).map((x) => `${f}:${x}`)), []);
     const direct = callers.filter(([, src]) => callsAny(src, COUNTED)).map(([f]) => f);
-    assert.ok(direct.length >= 12, `the guard read the twelve files that ask the matcher (${direct.length})`);
+    assert.ok(direct.length >= 11, `the guard read the eleven files that ask the matcher (${direct.length}); the contact picker of the Tasks tab went with its task view (D20)`);
     assert.ok(callers.some(([f]) => f === 'src/components/documents/atoms.jsx'), 'and the share picker, through peopleMatching');
 });
 

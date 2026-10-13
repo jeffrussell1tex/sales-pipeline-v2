@@ -12,6 +12,14 @@
 // fails is left registered for the exit hook and rethrown, because a harness
 // that carries on grading with a mutant on disk misgrades every mutant after.
 //
+// Every write goes through writeWithRetry. A lock that Windows holds for a moment
+// on a file just written (a scanner or an indexer: `UNKNOWN` errno -4094, EBUSY,
+// EPERM, EACCES) is waited out — 250 ms between tries, 20 tries, about five
+// seconds — before the run stops. On 12 Oct 2026 two full runs (2,211 entries,
+// two hours each) died at entries 295 and 1025 when the exit hook's one instant
+// retry met the same lock. Any other error, and a lock that outlasts the tries,
+// is thrown as before.
+//
 // Runs must be SYNCHRONOUS (the harness uses execSync): an async run would
 // return a promise and the finally would restore before it settled — that is
 // refused with an error rather than silently graded.
@@ -19,10 +27,34 @@ import { readFileSync, writeFileSync } from 'fs';
 
 const pending = new Map();   // file → original text, for every mutant currently on disk
 
+// The errors a Windows lock gives a write (a held file, not a missing one).
+const TRANSIENT = new Set(['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES']);
+export const WRITE_TRIES = 20;
+export const WRITE_WAIT_MS = 250;
+const pause = (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/**
+ * Write `text` over `file`, trying again while Windows holds the file (TRANSIENT),
+ * `waitMs` apart, at most `tries` times. Returns the number of tries it took; throws
+ * any other error at once, and the last lock error once the tries are spent.
+ * `write` is for the tests.
+ */
+export function writeWithRetry(file, text, { tries = WRITE_TRIES, waitMs = WRITE_WAIT_MS, write = writeFileSync } = {}) {
+    for (let n = 1; ; n++) {
+        try {
+            write(file, text);
+            return n;
+        } catch (e) {
+            if (n >= tries || !TRANSIENT.has(e?.code)) throw e;
+            pause(waitMs);
+        }
+    }
+}
+
 function restoreAll(why) {
     for (const [file, original] of pending) {
         try {
-            writeFileSync(file, original);
+            writeWithRetry(file, original);
             console.error(`mutant: restored ${file} (${why})`);
             pending.delete(file);
         } catch (e) {
@@ -60,7 +92,7 @@ export function withMutant(file, mutated, run) {
     const original = readFileSync(file, 'utf8');
     pending.set(file, original);   // BEFORE the write: a write that throws half-way is still restored
     try {
-        writeFileSync(file, mutated);
+        writeWithRetry(file, mutated);
         const result = run();
         if (result && typeof result.then === 'function') {
             throw new Error('withMutant: run must be synchronous — an async run would be graded after the file was restored');
@@ -68,12 +100,12 @@ export function withMutant(file, mutated, run) {
         return result;
     } finally {
         try {
-            writeFileSync(file, original);
+            writeWithRetry(file, original);
             pending.delete(file);
         } catch (e) {
             // Left in `pending` for the exit hook's second attempt; and thrown, so
             // the caller stops rather than grading the next mutant over this one.
-            console.error(`mutant: restore of ${file} failed: ${e.message} — the exit hook will retry`);
+            console.error(`mutant: restore of ${file} failed after its tries: ${e.message} — the exit hook will retry`);
             throw e;
         }
     }

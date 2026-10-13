@@ -101,6 +101,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            // An older activity holds its one contact in contactId with an empty list, and a delete's
+            // Undo re-posts it as the list read it: that is the one contact, not none — sanitize builds
+            // contactId from the list (§0.198, the re-check). A PUT that sends an empty list still clears.
+            if (Array.isArray(data.contactIds) && !data.contactIds.length && data.contactId) data.contactIds = [data.contactId];
             const newRow = await stampOwnerId(sanitize(data), 'activity', { clerkUserId: userId, orgId });
             const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).returning();
             if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
@@ -123,6 +127,11 @@ export const handler = async (event) => {
             const base = ('contactId' in data && !('contactIds' in data)) ? { ...target, contactIds: undefined } : target;
             const clean = sanitize({ ...base, ...data });
             const { id, ...updateData } = clean;
+            // A body that names neither contact column keeps both as stored, the pair exactly:
+            // sanitize rebuilds contactId from the list, and an older activity holds its one contact
+            // in contactId with an empty list — a Notes-only edit that left the contacts out erased
+            // it (§0.198's pre-ship round: Log Activity leaves untouched contacts out of an edit).
+            if (!('contactIds' in data) && !('contactId' in data)) { delete updateData.contactIds; delete updateData.contactId; }
             // Object-level authorization. Previously selected activities.repName,
             // which is not a column on this table -- the column is `author`. As
             // with contacts.createdBy, db.select({ owner: undefined }) THREW, so

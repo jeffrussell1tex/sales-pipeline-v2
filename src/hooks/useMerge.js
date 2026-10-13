@@ -4,14 +4,14 @@ import { dbFetch } from '../utils/storage';
 // Client side of the duplicate-merge feature. Talks to /duplicates (scan) and
 // /merge (commit + reverse). Keeps the accounts and contacts lists in sync.
 //
-// deps: { setAccounts, loadAccounts, setContacts, loadContacts, addAudit, currentUser }
+// deps: { setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser }
 //   - setAccounts / setContacts : optimistic local update (drop archived, replace survivor)
-//   - loadAccounts / loadContacts : full resync; called as loadX(()=>{}) so the
+//   - loadAccounts / loadContacts / loadOpportunities : full resync; called as loadX(()=>{}) so the
 //                    no-op setDbOffline never throws on a non-ok response
 //   - addAudit     : audit trail
 //   - currentUser  : display name recorded on the merge log (object with .name)
 export function useMerge(deps) {
-    const { setAccounts, loadAccounts, setContacts, loadContacts, addAudit, currentUser } = deps || {};
+    const { setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser } = deps || {};
 
     // Shared across account + contact merges — only one merge modal is open at a time.
     const [mergeSaving, setMergeSaving] = useState(false);
@@ -22,6 +22,12 @@ export function useMerge(deps) {
     };
     const refreshContacts = () => {
         try { loadContacts?.(() => {}); } catch (e) { console.error('Contact refresh failed after merge:', e); }
+    };
+    // An account merge moves the merged-away account's deals to the survivor, by id and by
+    // name, and its undo moves them back (state §0.198, D14): the deals are read again after
+    // each, or a deal saved from the old list would link the merged-away account again.
+    const refreshOpportunities = () => {
+        try { loadOpportunities?.(() => {}); } catch (e) { console.error('Deal refresh failed after merge:', e); }
     };
 
     const performedBy = () => currentUser?.name || currentUser?.fullName || null;
@@ -59,6 +65,7 @@ export function useMerge(deps) {
                 .filter(a => a.id !== payload.archivedId)
                 .map(a => (data.account && a.id === data.account.id) ? data.account : a));
             refreshAccounts();
+            refreshOpportunities();
 
             addAudit?.(
                 'merge', 'account', payload.survivorId,
@@ -87,6 +94,7 @@ export function useMerge(deps) {
             const data = await res.json();
             if (!res.ok) { console.error('Reverse merge failed:', data.error); return false; }
             refreshAccounts();
+            refreshOpportunities();
             return true;
         } catch (err) {
             console.error('Reverse merge failed:', err);

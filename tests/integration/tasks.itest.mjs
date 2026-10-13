@@ -156,6 +156,35 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
     assert.ok(!(await rowOf('task_A_ghost')), 'nothing may be created by a PUT');
 });
 
+// ── Clearing a link ("a pick is saved as the record picked", state §0.198) ─────
+// The task rail sends '' for a cleared Account or Opportunity, and contacts [] with
+// contactId '' once every chip is removed (src/utils/taskLinks.js). The merge must
+// store null: before, the old links survived only because the rail sent the stored
+// ids back. In org A's namespace, which cleanup() deletes; before the rep-GET block,
+// which must stay the suite's first user seed.
+
+test('a PUT that clears the account, the deal and every contact clears them', async () => {
+    const made = await handler(ev(A, 'POST', {
+        id: 'task_A_links', title: 'Linked Task', status: 'Open',
+        accountId: 'acc_itest_site', opportunityId: 'opp_itest_1', contactId: 'ct_itest_1',
+        contacts: [{ id: 'ct_itest_1', name: 'Pat Smith', title: '', primary: true }],
+    }));
+    assert.equal(made.statusCode, 201);
+    let row = await rowOf('task_A_links');
+    assert.equal(row.accountId, 'acc_itest_site', 'precondition: linked to an account');
+    assert.equal(row.opportunityId, 'opp_itest_1', 'precondition: linked to a deal');
+    assert.equal(row.contactId, 'ct_itest_1', 'precondition: linked to a contact');
+    const res = await handler(ev(A, 'PUT', { id: 'task_A_links', title: 'Linked Task', accountId: '', opportunityId: '', contactId: '', contacts: [] }));
+    assert.equal(res.statusCode, 200);
+    row = await rowOf('task_A_links');
+    assert.equal(row.accountId, null, 'a cleared Account is no account');
+    assert.equal(row.opportunityId, null, 'a cleared Opportunity is no deal');
+    assert.equal(row.contactId, null, 'every chip removed is no contact');
+    assert.deepEqual(row.contacts, [], 'and no chips');
+    assert.equal(row.status, 'Open', 'the rest of the row stands');
+    assert.equal(row.title, 'Linked Task');
+});
+
 // ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
 // Permissive policy, ownerId-keyed (18b22): unassigned visible to everyone,
 // owned rows only to their owner, a null caller fails closed to
@@ -199,4 +228,18 @@ test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 di
     const ids = JSON.parse((await handler(asRepRole(ev(B, 'GET')))).body).tasks.map(t => t.id);
     assert.ok(ids.includes('task_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
     assert.ok(!ids.includes('task_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
+});
+
+test('§0.198, the pre-ship round — the task rail leaves its untouched links out of an edit: a title-only PUT keeps a task from before chips as it was — contacts null, its one contactId, its account and deal', async () => {
+    await handler(ev(A, 'POST', { id: 'task_A_leftout', title: 'Legacy', status: 'Open', contactId: 'ct_itest_legacy', accountId: 'acct_itest_l', opportunityId: 'opp_itest_l' }));
+    let row = await rowOf('task_A_leftout');
+    assert.equal(row.contacts, null, 'precondition: no chips, one contactId');
+    const res = await handler(ev(A, 'PUT', { id: 'task_A_leftout', title: 'Legacy, renamed' }));
+    assert.equal(res.statusCode, 200, res.body);
+    row = await rowOf('task_A_leftout');
+    assert.equal(row.title, 'Legacy, renamed');
+    assert.equal(row.contacts, null, 'no chip stored — the rail stored one with no name for a contact its list did not hold');
+    assert.equal(row.contactId, 'ct_itest_legacy');
+    assert.equal(row.accountId, 'acct_itest_l');
+    assert.equal(row.opportunityId, 'opp_itest_l');
 });

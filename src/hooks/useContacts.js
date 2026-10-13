@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { activeDealsOf } from '../utils/contactDeals.js';
+import { sentBody, shownRow } from '../utils/leaveOut.js';
 
 export function useContacts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
@@ -122,11 +123,11 @@ export function useContacts(deps) {
         if (editingContact) {
             const payload = { ...contactData, id: editingContact.id };
             try {
-                const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the Company nobody touched left out (§0.198)
                 const data = await res.json();
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
-                setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
+                setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || shownRow(payload)) : c));
                 addAudit('update', 'contact', editingContact.id, fullName || editingContact.id, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {

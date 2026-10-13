@@ -12,6 +12,9 @@ import { capMatches } from '../../utils/searchMatch.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
 import { storedScore, signalKind } from '../../utils/aiScore.js';
 import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
+import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, isHiddenAccount, HIDDEN_ACCOUNT_WORDS } from '../../utils/dealAccount.js';
+import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { leaveOut, sameList } from '../../utils/leaveOut.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -835,42 +838,6 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Nested new contact form (preserved from original)
-// ─────────────────────────────────────────────────────────────
-function NestedNewContactForm({ firstName, lastName, onSave, onCancel }) {
-    const [form, setForm] = useState({ firstName: firstName || '', lastName: lastName || '', title: '', email: '', phone: '' });
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
-                {[['firstName','First Name'],['lastName','Last Name']].map(([k, lbl]) => (
-                    <div key={k}>
-                        <label style={{ ...ey(), display: 'block', marginBottom: 4 }}>{lbl}</label>
-                        <input value={form[k]} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))}
-                            style={{ width: '100%', padding: '0.5rem 0.625rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, boxSizing: 'border-box', background: T.surface, color: T.ink }}/>
-                    </div>
-                ))}
-            </div>
-            {[['title','Title'],['email','Email'],['phone','Phone']].map(([k, lbl]) => (
-                <div key={k}>
-                    <label style={{ ...ey(), display: 'block', marginBottom: 4 }}>{lbl}</label>
-                    <input value={form[k]} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))}
-                        style={{ width: '100%', padding: '0.5rem 0.625rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, boxSizing: 'border-box', background: T.surface, color: T.ink }}/>
-                </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <GhostBtn onClick={onCancel}>Cancel</GhostBtn>
-                <PrimaryBtn type="button" onClick={() => {
-                    if (form.firstName.trim() || form.lastName.trim()) {
-                        const id = 'id_' + crypto.randomUUID();
-                        onSave({ ...form, id });
-                    }
-                }}>Save Contact</PrimaryBtn>
-            </div>
-        </div>
-    );
-}
-
-// ─────────────────────────────────────────────────────────────
 //  Right Rail — 3 sections (AI, Contacts, Activity)
 // ─────────────────────────────────────────────────────────────
 function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
@@ -1025,9 +992,9 @@ export default function OpportunityModal({
     opportunity, accounts, contacts, settings, pipelines, activePipelineId,
     currentUser, activities, tasks, onSaveActivity, onDeleteActivity,
     onSaveComment, onEditComment, onDeleteComment,
-    onClose, onSave, onSaveNewContact, onSaveNewAccount, onAddContact,
-    lastCreatedAccountName, onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
-    errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
+    onClose, onSave,
+    onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
+    errorMessage, onDismissError, saving, onOpenNestedContact }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
@@ -1074,8 +1041,20 @@ export default function OpportunityModal({
     const [contactSearch, setContactSearch]             = useState('');
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
     const [accountSearch, setAccountSearch]             = useState(opportunity?.account || '');
-    const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
+    // What the Account field opened with, taken once (state §0.198): a Save with the field
+    // as it opened keeps the deal's link exactly as stored (D1) — never worked out again
+    // from the live row, which a note posted from the window replaces.
+    const accountSeed = useRef(dealAccountSeed(opportunity)).current;
+    // The Site Name and the people the window opened with, taken once with it: an edit's Save
+    // leaves out each link nobody touched — the Account (and its Site Name when that is as it
+    // opened too) and the Contacts — so the deal's links stand as stored, whatever this
+    // window's lists say of them (the pre-ship round; utils/leaveOut.js).
+    const linksSeed = useRef({ site: opportunity?.site ?? '', contactIds: [...(opportunity?.contactIds || [])], contacts: opportunity?.contacts ?? '' }).current;
     const [siteSearch, setSiteSearch]                   = useState(opportunity?.site || '');
+    // The Site Name the Account field emptied while its text stopped reading as the account
+    // held — put back when the text reads as that account again, dropped by a pick or a Site Name
+    // typed (state §0.198; utils/dealAccount.js siteAsAccountTyped).
+    const keptSiteRef = useRef(null);
     const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
     const [repSearch, setRepSearch]                     = useState(opportunity?.salesRep || '');
     const [showRepSuggestions, setShowRepSuggestions]   = useState(false);
@@ -1112,14 +1091,6 @@ export default function OpportunityModal({
     const comments = (opportunity?.comments || []).slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const teamMembers = (settings?.users || []).map(u => u.name).filter(Boolean).sort();
 
-    // Auto-populate account when a new one is created
-    useEffect(() => {
-        if (lastCreatedAccountName) {
-            setAccountSearch(lastCreatedAccountName);
-            setFormData(prev => ({ ...prev, account: lastCreatedAccountName }));
-        }
-    }, [lastCreatedAccountName]);
-
     // Auto-populate rep when a new one is created — once (state §0.193). The name was
     // never cleared, so every deal window opened after a "+ New Rep" put that rep in its
     // Sales Rep, and a save reassigned the deal.
@@ -1147,17 +1118,10 @@ export default function OpportunityModal({
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
 
     // ── The chosen account's sites ───────────────────────────
-    const getSitesForAccount = (accountName) => {
-        if (!accountName) return [];
-        const matched = (accounts || []).find(a => a.name.toLowerCase() === accountName.toLowerCase());
-        if (!matched) return [];
-        const directChildren = (accounts || []).filter(a => a.parentAccountId === matched.id);
-        if (matched.parentAccountId) return directChildren;
-        const directSites = directChildren.filter(a => a.accountTier === 'site' || !(accounts || []).some(x => x.parentAccountId === a.id));
-        const bus = directChildren.filter(a => a.accountTier === 'business_unit' || (accounts || []).some(x => x.parentAccountId === a.id));
-        const viaBU = bus.flatMap(bu => (accounts || []).filter(a => a.parentAccountId === bu.id));
-        return [...directSites, ...viaBU];
-    };
+    // By its id, never its name (state §0.198): by name it took the first account of the
+    // name, and of UKG's twins could list the other one's sites. Only accounts whose tier
+    // is 'site', nothing merged away (D15, D12) — utils/dealAccount.js sitesOf.
+    const getSitesForAccount = (accountId) => sitesOf(accounts, accountId);
 
     // ── Field change handler (fully preserved) ───────────────
     const handleChange = (field, value) => {
@@ -1208,14 +1172,25 @@ export default function OpportunityModal({
     const saveDeal = () => {
         const errors = {};
         if (!formData.opportunityName || !formData.opportunityName.trim()) errors.opportunityName = 'Opportunity name is required';
-        // Resolve the account from the picker text (source of truth), so a typed exact
-        // name links correctly and a stale prior selection can't save silently.
+        // The account is the record picked, never the first of its name (state §0.198;
+        // Jeff, 11 Oct: "One match saves, two refuse"). utils/dealAccount.js decides, through
+        // pickLink.js resolveLink: the field as it opened keeps the deal's link exactly as
+        // stored; a row picked is kept while the field still reads as it, so an old pick
+        // under new text never saves silently; a name typed in full is the one account — or
+        // site, its row picked (D5) — the list holds by that name; two, none, or a site of an
+        // account the user can't open (D11) are refused, and the field says why.
         const typedAccount = (accountSearch || '').trim();
         const resolvedAccount = typedAccount
-            ? (accounts || []).find(a => (a.name || '').toLowerCase() === typedAccount.toLowerCase())
+            ? resolveDealAccount({ text: accountSearch, heldId: formData.accountId, seed: accountSeed, accounts })
             : null;
         if (!typedAccount) errors.account = 'Account name is required';
-        else if (!resolvedAccount) errors.account = 'Pick an account from the list, or use “Create” in the Account field';
+        else if (resolvedAccount.error) errors.account = resolvedAccount.error;
+        else if (resolvedAccount.how === 'typed') {
+            // A name typed in full is its row picked: the fields show what is saved.
+            setAccountSearch(resolvedAccount.name);
+            if (resolvedAccount.site != null) setSiteSearch(resolvedAccount.site);
+            setFormData(prev => ({ ...prev, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}) }));
+        }
         if (!formData.salesRep || !formData.salesRep.trim()) errors.salesRep = 'Sales rep is required';
         if (!formData.forecastedCloseDate) errors.forecastedCloseDate = 'Close date is required';
         if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0)
@@ -1227,7 +1202,13 @@ export default function OpportunityModal({
             return;
         }
         setValidationErrors({});
-        onSave({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
+        const accountKept = !!opportunity?.id && resolvedAccount.how === 'untouched';
+        const left = !opportunity?.id ? [] : [
+            ...(accountKept ? ['account', 'accountId'] : []),
+            ...(accountKept && (formData.site ?? '') === linksSeed.site ? ['site'] : []),
+            ...(sameList(selectedContactIds, linksSeed.contactIds) && (formData.contacts ?? '') === linksSeed.contacts ? ['contactIds', 'contacts'] : []),
+        ];
+        onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds }, left));
     };
     const handleSubmit = (e) => { e.preventDefault(); saveDeal(); };
 
@@ -1490,9 +1471,7 @@ export default function OpportunityModal({
                                     selectedContacts={selectedContacts} selectedContactIds={selectedContactIds}
                                     setSelectedContacts={setSelectedContacts} setSelectedContactIds={setSelectedContactIds}
                                     handleChange={handleChange}
-                                    onUpdate={() => {
-                                        onSave({ ...formData, ...(() => { const t=(accountSearch||'').trim(); const r=t ? (accounts||[]).find(a => (a.name||'').toLowerCase()===t.toLowerCase()) : null; return r ? { account: r.name, accountId: r.id } : {}; })(), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
-                                    }}/>
+                                    onUpdate={saveDeal}/>
                             )}
                             {detailTab === 'ai-score' && (
                                 <AiScoreTab opportunity={opportunity} aiScore={aiScore}
@@ -1655,15 +1634,35 @@ export default function OpportunityModal({
                                         {/* Account */}
                                         <div style={{ position: 'relative' }}>
                                             <label style={fieldLabelStyle}>Account *</label>
-                                            <AccountPicker
-                                                value={accountSearch}
-                                                onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '', accountId: '' })); }}
-                                                onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, accountId: acc.id, site: '' })); setSiteSearch(''); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.name); if (sites.length > 0) setShowSiteSuggestions(true); }}
-                                                onSelectSite={(site, parent) => { setAccountSearch(parent.name); setFormData(prev => ({ ...prev, account: parent.name, accountId: parent.id, site: site.name })); setSiteSearch(site.name); setShowSiteSuggestions(false); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); }}
-                                                onError={(msg) => setValidationErrors(prev => { const n = { ...prev }; if (msg) n.account = msg; else delete n.account; return n; })}
-                                                filterFn={(a) => a.accountTier !== 'site'}
-                                                placeholder="Start typing account name…"
-                                            />
+                                            {/* A link to an account the user can't open (D16, Jeff, 11 Oct: "Say so,
+                                                allow removing"): the name the deal stores, said so, and an × that
+                                                removes the link — the field then asks for an account. Untouched, a
+                                                Save keeps it (utils/dealAccount.js). */}
+                                            {isHiddenAccount(formData.accountId, accounts) ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 8px 7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface2, fontSize: 13, color: T.ink, fontFamily: T.sans }}>
+                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {accountSearch ? <>{accountSearch} <span style={{ color: T.inkMuted }}>{HIDDEN_ACCOUNT_WORDS}</span></> : <span style={{ color: T.inkMuted }}>{HIDDEN_ACCOUNT}</span>}
+                                                    </span>
+                                                    <button type="button" title="Remove the account" onClick={() => { setAccountSearch(''); setFormData(prev => ({ ...prev, account: '', accountId: '' })); }}
+                                                        style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+                                                </div>
+                                            ) : (
+                                                // Site Name belongs to the account held: the moment the text stops
+                                                // reading as it, Site Name empties, as a click on another row empties
+                                                // it — so a Site Name typed after the account is the one saved — and
+                                                // comes back when the text reads as that account again, a typo fixed
+                                                // (state §0.198, F5 and G1 as fixed; siteAsAccountTyped; D5: a site
+                                                // typed in full still fills it at Save). A pick drops what was kept.
+                                                <AccountPicker
+                                                    value={accountSearch}
+                                                    onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '', accountId: '' })); const s = siteAsAccountTyped(v, formData, siteSearch, keptSiteRef.current, accountSeed); if (s) { keptSiteRef.current = s.kept; setSiteSearch(s.shown); setFormData(prev => ({ ...prev, site: s.site })); } }}
+                                                    onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, accountId: acc.id, site: '' })); setSiteSearch(''); keptSiteRef.current = null; setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.id); if (sites.length > 0) setShowSiteSuggestions(true); }}
+                                                    onSelectSite={(site, parent) => { setAccountSearch(parent.name); setFormData(prev => ({ ...prev, account: parent.name, accountId: parent.id, site: site.name })); setSiteSearch(site.name); keptSiteRef.current = null; setShowSiteSuggestions(false); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); }}
+                                                    onError={(msg) => setValidationErrors(prev => { const n = { ...prev }; if (msg) n.account = msg; else delete n.account; return n; })}
+                                                    filterFn={(a) => a.accountTier !== 'site'}
+                                                    placeholder="Start typing account name…"
+                                                />
+                                            )}
                                             {validationErrors.account && (
                                                 <div className="opp-field-error" style={{ color: T.danger, fontSize: 11, fontWeight: 600, marginTop: 3, fontFamily: T.sans }}>⚠ {validationErrors.account}</div>
                                             )}
@@ -1672,21 +1671,21 @@ export default function OpportunityModal({
                                         <div style={{ position: 'relative' }}>
                                             <label style={fieldLabelStyle}>Site Name</label>
                                             <input type="text" value={siteSearch}
-                                                onChange={e => { setSiteSearch(e.target.value); handleChange('site', e.target.value); setShowSiteSuggestions(true); }}
+                                                onChange={e => { setSiteSearch(e.target.value); handleChange('site', e.target.value); setShowSiteSuggestions(true); keptSiteRef.current = null; }}
                                                 onFocus={() => setShowSiteSuggestions(true)}
                                                 onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 200)}
                                                 placeholder="Plant / location…"
                                                 autoComplete="off"
                                                 style={inputStyle(false)}/>
                                             {showSiteSuggestions && (() => {
-                                                const available = getSitesForAccount(formData.account);
+                                                const available = getSitesForAccount(heldAccountId(accountSearch, formData));
                                                 const filtered = available.filter(s => !siteSearch || s.name.toLowerCase().includes(siteSearch.toLowerCase()));
                                                 if (filtered.length === 0) return null;
                                                 return (
                                                     <div style={suggestionDropStyle}>
                                                         {filtered.map(s => (
                                                             <div key={s.id} onMouseDown={e => e.preventDefault()}
-                                                                onClick={() => { setSiteSearch(s.name); handleChange('site', s.name); setShowSiteSuggestions(false); }}
+                                                                onClick={() => { setSiteSearch(s.name); handleChange('site', s.name); setShowSiteSuggestions(false); keptSiteRef.current = null; }}
                                                                 style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontFamily: T.sans }}
                                                                 onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1863,7 +1862,7 @@ export default function OpportunityModal({
                                             style={inputStyle(false)}/>
                                         {showContactSuggestions && (
                                             <div style={{ ...suggestionDropStyle, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 3 }}>
-                                                {(contacts || []).filter(c => {
+                                                {unarchived(contacts).filter(c => {
                                                     const fullName = `${c.firstName} ${c.lastName}`;
                                                     // Not one already on the deal — by id (state §0.192); it hid any
                                                     // name another linked name began with ("Dana Whit" / "Dana Whitaker").

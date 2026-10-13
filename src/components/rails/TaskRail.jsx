@@ -6,6 +6,12 @@ import TimeDropdown from '../ui/TimeDropdown';
 import { T } from '../../tokens.js';
 import { matchSearch } from '../../utils/searchMatch.js';
 import { canEditCrm } from '../../utils/roles.js';
+import AccountPicker from './AccountPicker';
+import HiddenLink from './HiddenLink';
+import { dealText, dealSubline, isMergeArchived, HIDDEN_ACCOUNT, HIDDEN_DEAL } from '../../utils/pickLink.js';
+import { outOfList } from '../../utils/railLinks.js';
+import { NO_TASK_SEED, taskSeed, taskLinks, contactChip, chipLabel } from '../../utils/taskLinks.js';
+import { leaveOut } from '../../utils/leaveOut.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -53,9 +59,12 @@ function TextInput({ value, onChange, placeholder, type = 'text', onFocus, onBlu
     );
 }
 
-function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp }) {
+// A type-ahead over names (Assigned To) or over records (Opportunity's deals): textOf(row) is
+// what a row is called and what the search reads, lineOf(row) its grey line, and a pick hands
+// back the row itself, so the record picked is the record saved (state §0.198, D9).
+function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp, textOf = (s) => s, lineOf = null }) {
     const [open, setOpen] = useState(false);
-    const { shown, more } = open ? matchSearch(suggestions, value) : { shown: [], more: 0 };   // ranked while the list is open, the cut announced (state §0.194)
+    const { shown, more } = open ? matchSearch(suggestions, value, { text: textOf }) : { shown: [], more: 0 };   // ranked while the list is open, the cut announced (state §0.194)
     return (
         <div style={{ position: 'relative' }}>
             <TextInput
@@ -74,13 +83,13 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 }}>
                     {shown.map((s, i) => (
-                        <div key={i}
+                        <div key={s?.id || i}
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
                             onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >{s}</div>
+                        >{textOf(s)}{lineOf && lineOf(s) ? <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 1 }}>{lineOf(s)}</div> : null}</div>
                     ))}
                     {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: 'inherit', padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
                 </div>
@@ -144,9 +153,20 @@ export default function TaskRail() {
     const [selectedContacts, setSelectedContacts] = useState([]);
     const contactInputRef = useRef(null);
     const [accountSearch, setAccountSearch] = useState('');
+    // The id each link field holds — the row picked, or the link it opened with — and the
+    // links it opened with, taken once when the rail opens (state §0.198).
+    const [accountHeldId, setAccountHeldId] = useState('');
+    const [oppHeldId,     setOppHeldId]     = useState('');
+    const seedRef = useRef(NO_TASK_SEED);
     const [assignSearch,  setAssignSearch]  = useState('');
     const [dirty,         setDirty]         = useState(false);
     const [saveError,     setSaveError]     = useState(null);
+    // A refused Save says why in the banner at the top of the body, out of sight once the rail
+    // is scrolled down to Account, the last field: each refusal, and the server's, scrolls it
+    // into view — the same words twice too (refusals counts them; state §0.198).
+    const errorRef = useRef(null);
+    const [refusals, setRefusals] = useState(0);
+    const refuse = (why) => { setSaveError(why); setRefusals(n => n + 1); };
     const [newTaskId,     setNewTaskId]     = useState(null);
     const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
     const [completionNotes,  setCompletionNotes]  = useState('');
@@ -157,23 +177,20 @@ export default function TaskRail() {
         if (!isOpen) return;
         const src = isNew ? { ...EMPTY_TASK, ...(editingTask || {}) } : { ...EMPTY_TASK, ...(task || {}) };
         setFormData(src);
-        // Seed typeahead search fields from IDs
-        const relOpp     = src.opportunityId ? (opportunities || []).find(o => o.id === src.opportunityId) : null;
-        const relContact = src.contactId     ? (contacts || []).find(c => c.id === src.contactId)         : null;
-        const relAccount = src.accountId     ? (accounts || []).find(a => a.id === src.accountId)         : null;
-        setOppSearch(relOpp     ? (relOpp.opportunityName || relOpp.account) : '');
+        // The links the rail opens with, taken once (state §0.198): a saved task's stored ids,
+        // or a new task's prefilled ones — an account's own rail (D10), a contact's (D19), a
+        // deal. A field left as it opened keeps its link exactly, even one the user can't open
+        // (D16: the field says so). The contacts: task.contacts[], else a task's one legacy
+        // contactId as its Primary chip. utils/taskLinks.js taskSeed.
+        const opened = taskSeed(src, { editing: !isNew, accounts, opportunities, contacts });
+        seedRef.current = opened.seed;
+        setOppSearch(opened.deal.text);
+        setOppHeldId(opened.deal.id);
         setContactSearch('');
         setShowContactSugg(false);
-        // Seed selectedContacts: prefer task.contacts[], fall back to legacy contactId
-        if (Array.isArray(src.contacts) && src.contacts.length > 0) {
-            setSelectedContacts(src.contacts);
-        } else if (src.contactId) {
-            const c = (contacts || []).find(x => x.id === src.contactId);
-            setSelectedContacts(c ? [{ id: c.id, name: ((c.firstName || '') + ' ' + (c.lastName || '')).trim(), title: c.title || '', primary: true }] : []);
-        } else {
-            setSelectedContacts([]);
-        }
-        setAccountSearch(relAccount ? relAccount.name : '');
+        setSelectedContacts(opened.chips);
+        setAccountSearch(opened.account.text);
+        setAccountHeldId(opened.account.id);
         setAssignSearch(src.assignedTo || '');
         setDirty(false);
         setSaveError(null);
@@ -183,12 +200,14 @@ export default function TaskRail() {
         setNewTaskId(isNew ? ('id_' + crypto.randomUUID()) : null);
     }, [taskRailId, taskRailMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => {
+        if (refusals || taskModalError) errorRef.current?.scrollIntoView?.({ block: 'nearest' });
+    }, [refusals, taskModalError]);
+
     // ── Derived lists ─────────────────────────────────────────────────────────
     const taskTypes  = settings?.taskTypes || ['Call', 'Meeting', 'Email', 'Demo', 'Follow-up'];
     const allRepNames = [...new Set((settings?.users || []).filter(u => u.name).map(u => u.name))].sort();
-    const oppNames   = (opportunities || []).map(o => o.opportunityName || o.account).filter(Boolean);
-    const contactNames = (contacts || []).map(c => ((c.firstName || '') + ' ' + (c.lastName || '')).trim()).filter(Boolean);
-    const accountNames = (accounts || []).map(a => a.name).filter(Boolean);
+    const dealOptions = (opportunities || []).filter(o => !!dealText(o));   // each deal its own row, told apart by "<account> · <stage>" (D9)
 
     // Activities related to this task
     const taskActivities = (activities || []).filter(a => {
@@ -202,6 +221,10 @@ export default function TaskRail() {
     const relOpp     = task?.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
     const relContact = task?.contactId     ? (contacts || []).find(c => c.id === task.contactId)         : null;
     const relAccount = task?.accountId     ? (accounts || []).find(a => a.id === task.accountId)         : null;
+    // A link the caller's list does not hold — another rep's record, or one since deleted: the
+    // view says so (state §0.198, D16: "Say so, allow removing"); Edit offers its ×.
+    const dealHidden    = outOfList(task?.opportunityId, opportunities);
+    const accountHidden = outOfList(task?.accountId, accounts);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const hc = useCallback((field, value) => {
@@ -211,22 +234,39 @@ export default function TaskRail() {
 
     const handleSave = async () => {
         setSaveError(null);
-        if (!formData.title?.trim()) { setSaveError('Task title is required.'); return; }
+        setTaskModalError?.(null); // the last save's server error never hides this Save's own refusal (§0.198)
+        if (!formData.title?.trim()) { refuse('Task title is required.'); return; }
 
-        // Resolve IDs from typeahead search values
-        const selOpp     = (opportunities || []).find(o => (o.opportunityName || o.account) === oppSearch);
-        const selContact = (contacts     || []).find(c => ((c.firstName || '') + ' ' + (c.lastName || '')).trim() === contactSearch);
-        const selAccount = (accounts     || []).find(a => a.name === accountSearch);
+        // A pick is saved as the record picked (state §0.198). Each link field saves what it
+        // shows: the link it opened with when nobody touched it — exactly, even one the user
+        // can't open; the record it holds while its text still reads as it; nothing when it is
+        // empty; a name typed in full only when one record has it — two refuse, none refuse
+        // (the Account offers no Create, D6). The contact follows the chips: every one removed
+        // is no contact. utils/taskLinks.js taskLinks, over resolveLink. An edit's Save leaves out
+        // each link nobody touched — Account, Opportunity, the chips — so the task's links stand as
+        // stored: a chip with no name was stored for a contact the list does not hold, and a
+        // merge's moved links went back (the pre-ship round; utils/leaveOut.js).
+        const links = taskLinks({
+            account: { text: accountSearch, id: accountHeldId },
+            deal:    { text: oppSearch,     id: oppHeldId },
+            seed: seedRef.current, contactText: contactSearch, chips: selectedContacts,
+            accounts, opportunities, contacts,
+        });
+        if (links.error) { refuse(links.error); return; }
 
-        const saveData = {
+        const saveData = leaveOut({
             ...formData,
             id:            isNew ? newTaskId : formData.id,
             assignedTo:    assignSearch,
-            opportunityId: selOpp     ? selOpp.id     : (formData.opportunityId || ''),
-            contacts:      selectedContacts,
-            contactId:     (selectedContacts.find(c => c.primary) || selectedContacts[0])?.id || (selContact ? selContact.id : (formData.contactId || '')),
-            accountId:     selAccount ? selAccount.id : (formData.accountId     || ''),
-        };
+            opportunityId: links.opportunityId,
+            contacts:      links.contacts,
+            contactId:     links.contactId,
+            accountId:     links.accountId,
+        }, isNew ? [] : [
+            ...(links.untouched.account ? ['accountId'] : []),
+            ...(links.untouched.deal ? ['opportunityId'] : []),
+            ...(links.untouched.contacts ? ['contacts', 'contactId'] : []),
+        ]);
 
         const editingTaskForSave = isNew ? null : task;
 
@@ -299,7 +339,7 @@ export default function TaskRail() {
                 notes:         completionNotes.trim(),
                 opportunityId: task.opportunityId || '',
                 contactId:     task.contactId     || '',
-                company:       task.accountId ? (accounts||[]).find(a => a.id === task.accountId)?.name || '' : '',
+                accountId:     task.accountId     || '',   // by id: activities keep no company name (activities.mjs sanitize), so the name sent here was dropped and the activity logged no account
                 addToCalendar: false,
             };
             handleSaveActivity && await handleSaveActivity(activityData, {
@@ -446,7 +486,7 @@ export default function TaskRail() {
 
                 {/* Error */}
                 {(taskModalError || saveError) && (
-                    <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div ref={errorRef} style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>{taskModalError || saveError}</span>
                         <button onClick={() => { setTaskModalError?.(null); setSaveError(null); }} style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
                     </div>
@@ -508,7 +548,12 @@ export default function TaskRail() {
                         <SectionHeading label="Related To" />
                         <div style={grid2}>
                             <FieldGroup label="Opportunity" wide>
-                                <Typeahead value={oppSearch} onChange={setOppSearch} suggestions={oppNames} onSelect={setOppSearch} placeholder="Search opportunities…" />
+                                {/* A link the user can't open: said so, and an × removes it; untouched, a Save keeps
+                                    it (state §0.198, D16). A deal picked is held by its id; each row names its
+                                    account and stage, so two deals of one name are told apart (D9). */}
+                                {outOfList(oppHeldId, opportunities)
+                                    ? <HiddenLink hidden={HIDDEN_DEAL} title="Remove the deal" onRemove={() => { setOppHeldId(''); setDirty(true); }} />
+                                    : <Typeahead value={oppSearch} onChange={v => { setOppSearch(v); setDirty(true); }} suggestions={dealOptions} textOf={dealText} lineOf={dealSubline} onSelect={o => { setOppSearch(dealText(o)); setOppHeldId(o.id); setDirty(true); }} placeholder="Search opportunities…" />}
                             </FieldGroup>
                             {/* Contact — multi-select with chips */}
                             <FieldGroup label="Contact" wide>
@@ -520,7 +565,7 @@ export default function TaskRail() {
                                                 {c.primary && (
                                                     <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: T.warn, background: 'rgba(184,115,51,0.12)', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>Primary</span>
                                                 )}
-                                                <span>{c.name}</span>
+                                                <span>{chipLabel(c, contacts)}</span>
                                                 <button type="button"
                                                     onClick={() => {
                                                         const next = selectedContacts.filter((_, j) => j !== i);
@@ -539,7 +584,7 @@ export default function TaskRail() {
                                         ref={contactInputRef}
                                         type="text"
                                         value={contactSearch}
-                                        onChange={e => { setContactSearch(e.target.value); setShowContactSugg(true); }}
+                                        onChange={e => { setContactSearch(e.target.value); setShowContactSugg(true); setDirty(true); }}
                                         onFocus={() => setShowContactSugg(true)}
                                         onBlur={() => setTimeout(() => setShowContactSugg(false), 200)}
                                         placeholder={selectedContacts.length > 0 ? 'Add another contact…' : 'Search contacts…'}
@@ -547,15 +592,17 @@ export default function TaskRail() {
                                         style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }}
                                     />
                                     {showContactSugg && (() => {
+                                        // A contact merged into another is not offered (state §0.198, D12: "Yes, hide
+                                        // them"); a chip already on the task still names it.
                                         const alreadyIds = new Set(selectedContacts.map(c => c.id));
-                                        const { shown: matched, more } = matchSearch((contacts || []).filter(c => !alreadyIds.has(c.id)), contactSearch, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });
+                                        const { shown: matched, more } = matchSearch((contacts || []).filter(c => !alreadyIds.has(c.id) && !isMergeArchived(c)), contactSearch, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });
                                         return (
                                             <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, marginBottom: 2, maxHeight: 200, overflowY: 'auto', zIndex: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                                                 {matched.map(c => (
                                                     <div key={c.id}
                                                         onMouseDown={e => e.preventDefault()}
                                                         onClick={() => {
-                                                            const newEntry = { id: c.id, name: `${c.firstName || ''} ${c.lastName || ''}`.trim(), title: c.title || '', primary: selectedContacts.length === 0 };
+                                                            const newEntry = contactChip(c, selectedContacts.length === 0);
                                                             setSelectedContacts(prev => [...prev, newEntry]);
                                                             setContactSearch('');
                                                             setDirty(true);
@@ -579,8 +626,14 @@ export default function TaskRail() {
                                     })()}
                                 </div>
                             </FieldGroup>
-                            <FieldGroup label="Account">
-                                <Typeahead value={accountSearch} onChange={setAccountSearch} suggestions={accountNames} onSelect={setAccountSearch} placeholder="Search accounts…" dropUp />
+                            <FieldGroup label="Account" wide>
+                                {/* The shared account picker (D6: "No Create on tasks"): a unit's and a site's row
+                                    names its parent, and a parent's name finds them; a name no account has is
+                                    refused at Save. A row picked is held by its id. A link the user can't open: said
+                                    so, and an × removes it (D16). */}
+                                {outOfList(accountHeldId, accounts)
+                                    ? <HiddenLink hidden={HIDDEN_ACCOUNT} title="Remove the account" onRemove={() => { setAccountHeldId(''); setDirty(true); }} />
+                                    : <AccountPicker value={accountSearch} onChange={v => { setAccountSearch(v); setDirty(true); }} onSelectAccount={a => setAccountHeldId(a.id)} allowCreate={false} dropUp placeholder="Search accounts…" />}
                             </FieldGroup>
                         </div>
                     </div>
@@ -607,13 +660,15 @@ export default function TaskRail() {
                             <ReadRow label="Assigned To" value={task?.assignedTo} />
                         </div>
 
-                        {(relOpp || relContact || relAccount) && (
+                        {(relOpp || relContact || relAccount || dealHidden || accountHidden) && (
                             <>
                                 <SectionHeading label="Related To" />
                                 <div style={grid2}>
                                     {relOpp && <ReadRow label="Opportunity" value={relOpp.opportunityName || relOpp.account} wide />}
+                                    {dealHidden && <ReadRow label="Opportunity" value={<span style={{ color: T.inkMuted }}>{HIDDEN_DEAL}</span>} wide />}
                                     {relContact && <ReadRow label="Contact" value={`${relContact.firstName || ''} ${relContact.lastName || ''}`.trim()} />}
                                     {relAccount && <ReadRow label="Account" value={relAccount.name} />}
+                                    {accountHidden && <ReadRow label="Account" value={<span style={{ color: T.inkMuted }}>{HIDDEN_ACCOUNT}</span>} />}
                                 </div>
                             </>
                         )}

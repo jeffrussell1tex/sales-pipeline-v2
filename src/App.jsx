@@ -26,7 +26,6 @@ import HomeTab from './Tabs/HomeTab';
 import DocumentsTab from './Tabs/DocumentsTab';
 import SettingsTab from './Tabs/SettingsTab';
 import { LeaveGuardModal } from './Tabs/settings/shared/LeaveGuardModal.jsx';
-import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from './components/modals/ContactModal';
 import ViewingBar, { SliceDropdown } from './components/ui/ViewingBar';
 import AppHeader from './components/layout/AppHeader';
 import QuickLogFab from './components/layout/QuickLogFab';
@@ -167,7 +166,6 @@ function App() {
         viewingRep, setViewingRep, viewingTeam, setViewingTeam, viewingTerritory, setViewingTerritory,
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed, accShowAllContacts, setAccShowAllContacts,
-        viewingTask, setViewingTask,
         expandedAccounts, setExpandedAccounts, expandedIndustry, setExpandedIndustry,
         accountsSortDir, setAccountsSortDir, accountsViewMode, setAccountsViewMode, selectedAccounts, setSelectedAccounts,
         contactsSortBy, setContactsSortBy, selectedContacts, setSelectedContacts,
@@ -236,7 +234,7 @@ function App() {
         viewingActivity, setViewingActivity,
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
-        showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        csvImportType, setCsvImportType,
         taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
@@ -244,13 +242,9 @@ function App() {
         documentRailId, setDocumentRailId,
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
-        editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
+        editingOpp, setEditingOpp,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
-        parentAccountForSub, setParentAccountForSub,
-        lastCreatedAccountName, setLastCreatedAccountName,
-        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
-        pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
         confirmModal, setConfirmModal, promptModal, setPromptModal, coachingNoteModal, setCoachingNoteModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover, undoToast, setUndoToast,
@@ -439,7 +433,7 @@ function App() {
     // Duplicate-merge (accounts) — scan + commit + reverse, exposed via context.
     const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge,
         findContactDuplicates, handleContactMerge, reverseContactMerge } =
-        useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, addAudit, currentUser: { name: currentUser } });
+        useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser: { name: currentUser } });
 
     const softDelete = (label, deleteFunc, restoreFunc) => {
         if (undoToast) clearTimeout(undoToast.timerId);
@@ -1024,11 +1018,6 @@ dbFetch('/.netlify/functions/users?me=true')
         setAccountRailMode('new');
     };
 
-    const handleAddSubAccount = (parentAccount) => {
-        setAccountRailId('new');
-        setAccountRailMode('new');
-        setParentAccountForSub(parentAccount);
-    };
     // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
@@ -1573,9 +1562,9 @@ dbFetch('/.netlify/functions/users?me=true')
         const anyOpen = !!(
             showModal || showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
             showCsvImportModal || showLeadImportModal || showLeadModal ||
-            showOutlookImportModal || showSpiffClaimModal ||
+            showSpiffClaimModal ||
             confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||
-            viewingTask || viewingActivity ||
+            viewingActivity ||
             meetingPrepOpen || logFromCalOpen || showCalConfig ||
             quickLogOpen || showNavGuard
         );
@@ -1584,9 +1573,9 @@ dbFetch('/.netlify/functions/users?me=true')
     }, [
         showModal, showActivityModal, showUserModal, showShortcuts, showProfilePanel,
         showCsvImportModal, showLeadImportModal, showLeadModal,
-        showOutlookImportModal, showSpiffClaimModal,
+        showSpiffClaimModal,
         confirmModal, blockedDeleteModal, lostReasonModal,
-        viewingTask, viewingActivity,
+        viewingActivity,
         meetingPrepOpen, logFromCalOpen, showCalConfig,
         quickLogOpen, showNavGuard,
     ]);
@@ -1622,7 +1611,7 @@ dbFetch('/.netlify/functions/users?me=true')
         activityDetail: !!viewingActivity, taskRail: !!taskRailId, activityRail: !!showActivityModal,
         accountRail: !!accountRailId, contactRail: !!contactRailId,
         spiffClaim: !!(showSpiffClaimModal && spiffClaimContext), duePopup: !!taskDuePopup, reminderPopup: !!taskReminderPopup,
-        draggable: !!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showOutlookImportModal || showLeadImportModal),
+        draggable: !!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showLeadImportModal),
         shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
         leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
         search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
@@ -1852,7 +1841,6 @@ dbFetch('/.netlify/functions/users?me=true')
         // Detail panel state
         setViewingContact: openContactRail,
         setViewingAccount: openAccountRail,
-        viewingTask,
         setViewingTask: (t) => { if (t) { setTaskRailId(t.id); setTaskRailMode('view'); } else { setTaskRailId(null); } },
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
@@ -1912,14 +1900,9 @@ dbFetch('/.netlify/functions/users?me=true')
         editingOpp, setEditingOpp,
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
-        editingAccount, setEditingAccount,
-        editingSubAccount, setEditingSubAccount,
         accountModalError, setAccountModalError,
         accountModalSaving, setAccountModalSaving,
-        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
-        lastCreatedAccountName, setLastCreatedAccountName,
         lastCreatedRepName, setLastCreatedRepName,
-        parentAccountForSub, setParentAccountForSub,
         editingContact, setEditingContact,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
@@ -1948,7 +1931,6 @@ dbFetch('/.netlify/functions/users?me=true')
         showCsvImportModal, setShowCsvImportModal,
         showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
-        showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
@@ -1969,7 +1951,6 @@ dbFetch('/.netlify/functions/users?me=true')
         snoozedDueAlerts, setSnoozedDueAlerts,
         showShortcuts, setShowShortcuts,
         csvImportType, setCsvImportType,
-        pendingOppFormData, setPendingOppFormData,
         // QuickLog
         followUpPrompt, setFollowUpPrompt,
         quickLogOpen, setQuickLogOpen,

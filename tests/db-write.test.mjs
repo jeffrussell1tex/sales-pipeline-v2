@@ -3,6 +3,7 @@
 // on { ok: false } rather than in a catch.
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 // dbWrite reads window.__getClerkToken and calls global fetch. Stub both; import
 // after so the module picks up the stubs.
@@ -91,4 +92,30 @@ test('the caller\'s method and body reach fetch unchanged', async () => {
     assert.equal(lastCall.url, '/endpoint');
     assert.equal(lastCall.opts.method, 'PUT');
     assert.equal(lastCall.opts.body, '{"a":1}');
+});
+
+// What a landed write answered (state §0.198): the Closed Lost save puts the server's row
+// in the list, not the copy it sent.
+test('a write that landed hands back its answer — the stored row — and a 2xx with no JSON body is null, not a failure', async () => {
+    respond(200, { opportunity: { id: 'd1', accountId: 'a1' } });
+    const r = await dbWrite('/x', { method: 'PUT', body: '{}' });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.data, { opportunity: { id: 'd1', accountId: 'a1' } });
+    respond(204, undefined);          // .json() rejects
+    const n = await dbWrite('/x', { method: 'DELETE' });
+    assert.equal(n.ok, true, 'a body that is not JSON never turns a landed write into a failure');
+    assert.equal(n.status, 204);
+    assert.equal(n.data, null);
+    assert.equal(n.error, null);
+});
+
+test('a refused write hands back no data — the caller rolls back on ok', async () => {
+    respond(409, { error: 'Taken' });
+    const r = await dbWrite('/x', { method: 'PUT' });
+    assert.equal(r.ok, false);
+    assert.equal('data' in r, false);
+});
+
+test('the suites: this file is graded by the harness', () => {
+    assert.ok(readFileSync(new URL('../scripts/mutate-import.mjs', import.meta.url), 'utf8').includes(' tests/db-write.test.mjs'), 'SUITES runs this file');
 });

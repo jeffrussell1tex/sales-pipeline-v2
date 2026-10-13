@@ -17,8 +17,7 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 const FILES = [
     'src/components/layout/ModalLayer.jsx',
     'src/components/modals/LeadImportModal.jsx',
-    'src/components/modals/OutlookImportModal.jsx',
-    'src/components/modals/ContactModal.jsx',
+    // OutlookImportModal and ContactModal, two of the six, were deleted (D8, 11 Oct 2026): nothing drew them.
     'src/components/modals/UserModal.jsx',
     'src/App.jsx',
     // The meeting prep panel, cut out of App as it was (state §0.185): App's sweep goes with it.
@@ -28,7 +27,7 @@ const FILES = [
 // (a pipeline's stored default colour, the stage pill map, the avatar map).
 const ALLOWED_LINE = /#1c1917|avatarColors = \[|name: 'New Business', color: '#|^\s*\{ bg: '#[0-9a-f]{6}', text: '#|closed(Won|Lost)Color = \{ bg: '#/i;
 
-test('the six blue-era files (and the panel cut out of one) carry no colour literal outside the allowed lines, and each imports the token object', () => {
+test('the blue-era files still here (four of the six — D8 deleted the two nothing drew), and the panel cut out of one, carry no colour literal outside the allowed lines, and each imports the token object', () => {
     for (const f of FILES) {
         const src = code(read(f));
         assert.match(src, /import \{ T \} from '[./]+tokens\.js';/, `${f} imports T`);
@@ -101,4 +100,5 @@ test('the migration script keeps the data palettes by what the line says, never 
     assert.ok(s.includes('const EXCLUDE_PATTERNS = {') && !s.includes('EXCLUDE_LINES'), 'patterns, not line numbers');
     assert.ok(s.includes("const alpha = hex.length === 8 ? hex.slice(6) : null;"), 'an 8-digit hex keeps its own alpha');
     assert.ok(s.includes("const token = e.split ? (role === 'bg' ? 'ink' : 'info') : e.token;"), 'blue by role');
+    assert.ok(s.includes('for (const file of FILES.filter((f) => fs.existsSync(path.join(ROOT, f)))) {'), 'a rerun skips the two files D8 deleted, and keeps them listed as the §0.136 record');
 });

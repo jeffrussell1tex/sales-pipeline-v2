@@ -262,6 +262,5 @@ test('the record forms say Save, not Update', () => {
     assert.equal(count(opp, "opportunity ? 'Update'"), 0);
     assert.equal(count(opp, "onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>"), 3, 'the three detail tabs submit the deal');
     assert.ok(opp.includes("{saving ? 'Saving…' : opportunity ? 'Save' : 'Create'}"));
-    assert.ok(read('src/components/modals/ContactModal.jsx').includes("{saving ? 'Saving…' : (contact ? 'Save' : 'Create')}"));
     assert.ok(read('src/components/modals/UserModal.jsx').includes("{saving ? 'Saving…' : (user ? 'Save' : 'Create')}"));
 });

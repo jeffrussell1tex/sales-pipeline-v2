@@ -164,12 +164,12 @@ test("the window keeps the deal's score — the one it opened with, or the one j
 test("every detail tab's Save saves the deal — none submits the form a detail tab unmounts; a missing field opens the form", () => {
     const m = read('src/components/modals/OpportunityModal.jsx');
     assert.equal(count(m, "document.getElementById('opp-form')"), 0);
-    assert.equal(count(m, 'onUpdate={saveDeal}/>'), 2, 'the History and AI Score tabs');
+    assert.equal(count(m, 'onUpdate={saveDeal}/>'), 3, "the History, Contacts and AI Score tabs — the Contacts tab's Save runs the same checks (D2)");
     assert.ok(m.includes('const handleSubmit = (e) => { e.preventDefault(); saveDeal(); };'), "the form's own Save, the same");
     const save = between(m, 'const saveDeal = () => {', 'const handleSubmit = ');
     const at = save.indexOf('setDetailTab(null);');
     assert.ok(at > save.indexOf('setValidationErrors(errors);') && at < save.indexOf('return;'), 'the errors show where their fields are');
-    assert.ok(save.includes('onSave({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id,'));
+    assert.ok(save.includes('onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id,'));
 });
 
 test('the switch: "Claude scores deals" in Settings → Features & AI, saved as aiScoringEnabled — both halves of settings.mjs, off by default', () => {

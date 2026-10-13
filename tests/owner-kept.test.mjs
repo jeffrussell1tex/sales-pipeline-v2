@@ -141,7 +141,7 @@ test('DIALOG: the Closed Lost save answers the dialog — refused, it says why a
     assert.equal(count(fn, 'return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };'), 2);
     // The edit branch: the stored deal taken before the optimistic write, put back before it answers.
     const cap = fn.indexOf('const before = opportunities.find(o => o.id === editingOppRef.id);');
-    const opt = fn.indexOf('setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? updatedOpp : opp));');
+    const opt = fn.indexOf('setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));');
     const rb = fn.indexOf('setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));');
     const ret = fn.indexOf('return { ok: false, error: `Not saved as Closed Lost');
     assert.ok(cap >= 0 && opt > cap, 'the stored deal is taken before the optimistic write');
@@ -200,7 +200,8 @@ test('DEAL WINDOW: a new rep\'s name is put in once — not in every deal window
     const m = read('src/components/modals/OpportunityModal.jsx');
     const fx = between(m, '// Auto-populate rep when a new one is created', '}, [lastCreatedRepName]);');
     assert.ok(fx.includes('if (onLastCreatedRepUsed) onLastCreatedRepUsed();'));
-    assert.ok(m.includes('lastCreatedAccountName, onAddRep, lastCreatedRepName, onLastCreatedRepUsed,'));
+    assert.ok(m.includes('onAddRep, lastCreatedRepName, onLastCreatedRepUsed,'));
+    assert.ok(!m.includes('lastCreatedAccountName'), 'the created-account name the deal window took is gone with the branch that set it (D8)');
     assert.ok(read('src/components/layout/ModalLayer.jsx').includes('onLastCreatedRepUsed={() => setLastCreatedRepName(null)}'));
 });
 

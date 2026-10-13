@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { opportunities, users } from '../../db/schema.js';
+import { opportunities, users, accounts } from '../../db/schema.js';
 import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 // The read rule, imported directly so a suite that mocks auth.mjs still runs it.
@@ -19,6 +19,8 @@ import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 import { applyStageChanges } from './_stage.mjs';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
+import { bulkAccountLinks } from '../../src/utils/dealAccount.js';
+import { searchKey } from '../../src/utils/searchMatch.js';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -95,6 +97,7 @@ const sanitize = (data) => ({
     pipelineId:         data.pipelineId         || 'default',
     opportunityName:    data.opportunityName     || null,
     account:            data.account             || null,
+    accountId:          data.accountId           || null,
     site:               data.site                || null,
     salesRep:           data.salesRep            || null,
     stage:              data.stage               || 'Discovery',
@@ -133,6 +136,94 @@ const sanitize = (data) => ({
     // window saves the deal it opened — its score too — so a save after a scoring
     // wrote the old score back over the new one.
 });
+
+// ── The deal's account ────────────────────────────────────────────────────────
+
+// A deal keeps the account picked, by id (state §0.198; Jeff, 11 Oct: D2 "Yes, same
+// batch", D13 "Check it now"). sanitize had no accountId: a deal saved from the deal
+// window was linked to its account by NAME alone — both of UKG's "Shell - Port Allen"
+// rows listed it — and a deal moved to another account kept its old id under the new name.
+//
+// A NEW link is checked here, in this org: an id the deal does not already hold must be
+// one of this org's accounts — another org's, or none, is refused (§0.166's rule, 404) —
+// and never a site (a deal's account is never a site, D5); the deal takes that account's
+// own name, so the name shown and the id kept cannot drift. An id the deal already holds
+// is never looked up again, name and all (D13): an untouched save, a site an older Save
+// stored, a closed deal whose account was deleted. Read scope is not asked: the window
+// offers only the caller's own list, and a rep's untouched save of a link outside it must
+// still save. A new id of an account merged into another stands for the account it was
+// merged into (D12, D14): a screen loaded before the merge sends the old id — a Kanban
+// drag, an untouched deal-window Save — and the deal follows the merge to the survivor, in
+// this org, at most MERGE_HOPS merges on; none live is the 404 a missing id gets. A walk that
+// reaches the id the deal already holds is an untouched save, never re-checked (D13): the
+// survivor a merge left the deal on, even one deleted or a site since — and a site whose
+// account the deal holds, where a merge or a move put the deal when its account became that
+// site (D22: "Move them up"), or a site whose name the deal's Site Name holds while the account
+// it holds is no site — the site a D22 lift named it after, wherever that site stands now (D21
+// keeps a site a site when it moves); a same-named site sent directly is kept untouched too
+// (accepted, OPEN_ITEMS §4.2), and one renamed since is refused as a site (filed there). The
+// deal keeps its link as stored (keep). And a save that sends no id while the deal holds one
+// keeps the id and the name: no screen clears a deal's account — the deal window refuses an
+// empty Account — so it is a screen loaded before the deal was linked. Its Site Name is kept
+// too where the Account text it sends is not the stored one — a screen loaded before a D22 lift
+// by name, which renamed the deal — and saved as sent where it is: a deal window opened from a
+// list loaded before another session linked the deal under the same name, its Site Name edited
+// (state §0.198; the critics, 12 Oct).
+const ACCOUNT_NOT_IN_ORG = 'That account is not in your organization — pick one from the list.';
+const ACCOUNT_IS_SITE = 'A site can’t be a deal’s account — pick the account it belongs to.';
+const MERGE_HOPS = 5;
+
+// A single save's link: { id, name } (the account linked — the one named, or the one it was
+// merged into — and its own name), {} (the payload as sent), { keep } (the link as stored:
+// the walk reached the id the deal holds; lifted, its Site Name kept too — through a site whose
+// account it holds, or one whose name its Site Name holds, or no id sent under an Account text
+// that is not the stored one), or { status, error }. storedId: the id the deal holds now (null
+// for a new deal); storedSite, storedName: its Site Name and its account's name now.
+async function accountLink(data, storedId, orgId, storedSite = null, storedName = null) {
+    if (!data || !('accountId' in data)) return {};
+    const id = data.accountId || null;
+    if (!id && storedId) return { keep: true, lifted: 'account' in data && (data.account || null) !== (storedName || null) };
+    if (!id || id === (storedId || null)) return {};
+    if (typeof id !== 'string') return { status: 400, error: ACCOUNT_NOT_IN_ORG };
+    let acct = null;
+    const seen = new Set();
+    for (let next = id; next && !seen.has(next) && seen.size <= MERGE_HOPS;) {
+        if (storedId && next === storedId) return { keep: true };
+        seen.add(next);
+        [acct] = await db.select({
+            id: accounts.id, name: accounts.name, accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,
+            mergeArchived: accounts.mergeArchived, mergedIntoId: accounts.mergedIntoId,
+        }).from(accounts).where(and(eq(accounts.id, next), eq(accounts.orgId, orgId)));
+        next = acct && acct.mergeArchived === true ? acct.mergedIntoId : null;
+    }
+    if (!acct || acct.mergeArchived === true) return { status: 404, error: ACCOUNT_NOT_IN_ORG };
+    if (acct.accountTier === 'site' && storedId && acct.parentAccountId === storedId) return { keep: true, lifted: true };
+    if (acct.accountTier === 'site' && storedId && storedSite && storedSite === acct.name && !(await heldSite(storedId, orgId))) return { keep: true, lifted: true };
+    if (acct.accountTier === 'site') return { status: 400, error: ACCOUNT_IS_SITE };
+    return { id: acct.id, name: acct.name };
+}
+
+// Whether the account a deal holds is a site (one an older Save stored — UKG's 6 deals on a
+// site), read in this org: such a deal was not lifted through the site its Site Name names.
+async function heldSite(storedId, orgId) {
+    const [held] = await db.select({ accountTier: accounts.accountTier }).from(accounts).where(and(eq(accounts.id, storedId), eq(accounts.orgId, orgId)));
+    return held?.accountTier === 'site';
+}
+
+// The account ids a batch names that are not this org's accounts — one read, in this org.
+// held: a bulk overwrite's stored rows by id; an id a deal already holds is not asked again
+// (D13). An import names none today (importRows.js); a batch that names a stray is refused
+// whole, before anything is written.
+async function accountIdsNotInOrg(rows, orgId, held = null) {
+    const fresh = rows.filter((r) => r && r.accountId && r.accountId !== (held?.get(r.id)?.accountId ?? null));
+    const ids = [...new Set(fresh.map((r) => r.accountId))];
+    const asked = ids.filter((id) => typeof id === 'string');
+    const found = asked.length
+        ? await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, asked)))
+        : [];
+    const have = new Set(found.map((r) => r.id));
+    return ids.filter((id) => !have.has(id));
+}
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -195,6 +286,9 @@ export const handler = async (event) => {
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ opportunities: [], inserted: 0, failed: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // An account named by id is one of this org's (accountLink, above).
+                const strays = await accountIdsNotInOrg(data, orgId);
+                if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
@@ -208,7 +302,9 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const newRow = await stampOwnerId(sanitize(data), 'opportunity', { clerkUserId: userId, orgId });
+            const link = await accountLink(data, null, orgId);
+            if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
+            const newRow = await stampOwnerId(sanitize(link.id ? { ...data, account: link.name, accountId: link.id } : data), 'opportunity', { clerkUserId: userId, orgId });
             const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).returning();
 
             // Email: new opportunity created — notify the assigned rep only if
@@ -291,11 +387,20 @@ export const handler = async (event) => {
                         stage:            opportunities.stage,
                         stageHistory:     opportunities.stageHistory,
                         stageChangedDate: opportunities.stageChangedDate,
+                        accountId:        opportunities.accountId,
+                        account:          opportunities.account,
                     })
                     .from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
                 const priors = new Map(priorRows.map(r => [r.id, r]));
-                const staged = applyStageChanges(data, priors, importDate);
+                // An account named by id is one of this org's; one a deal already holds is not
+                // asked again (accountLink, above).
+                const strays = await accountIdsNotInOrg(data, orgId, priors);
+                if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
+                // A row that sends an Account name and no id unlinks its deal when the name is not
+                // the one stored, as a single save does (below) — and the batch's other rows keep
+                // the ids their deals hold (bulkAccountLinks, src/utils/dealAccount.js).
+                const staged = applyStageChanges(bulkAccountLinks(data, priors), priors, importDate);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -350,6 +455,8 @@ export const handler = async (event) => {
                 table: opportunities, entity: 'opportunity', id: data.id, orgId, userId, userRole, headers, row: existing,
             });
             if (forbiddenPut) return forbiddenPut;
+            const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);
+            if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 
@@ -367,6 +474,17 @@ export const handler = async (event) => {
             // salesRep, and merging first would make every PUT look like a
             // reassignment.
             const clean = sanitize({ ...existing, ...data });
+            // The deal's account (accountLink): a new id brings its account's own name — one
+            // merged away, the account it was merged into; an id that leads back to the one the
+            // deal holds (a screen loaded before a merge or a move), and a save sending no id while
+            // the deal holds one, keep the link as stored (its Site Name with it where accountLink
+            // says lifted); a name sent without an id key that reads as another name (searchKey —
+            // not another case or spacing, which the pickers and a CSV's duplicate rule read as the
+            // same) is no longer the linked account's, and the id goes with it.
+            if (link.id) { clean.accountId = link.id; clean.account = link.name; }
+            else if (link.keep) { clean.accountId = existing.accountId; clean.account = existing.account; if (link.lifted) clean.site = existing.site; }
+            else if ('account' in data && !('accountId' in data) && searchKey(clean.account || '') !== searchKey(existing.account || '')) clean.accountId = null;
+            else if ('account' in data && !('accountId' in data) && existing.accountId) clean.account = existing.account;   // the same name in another case or spacing, on a linked deal: the account's own spelling, as stored
             // Reassigning a deal re-keys its ownership; a PUT that never
             // mentioned salesRep leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId, stored: existing });

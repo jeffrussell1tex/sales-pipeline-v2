@@ -217,10 +217,15 @@ export default function KanbanView({
         };
         setOpportunities(prev => prev.map(o => o.id === kanbanDragging.oppId ? newOpp : o));
         // dbFetch returns a Response and does NOT throw on 4xx/5xx.
+        // The drag sends what it changes — the stage, its date and its history — and nothing
+        // else: the server merges a PUT over the stored row, so the rest stays as stored. It sent
+        // the whole row this list holds, and a list loaded before another session's save wrote
+        // that save back: a deal D22 moved up from a site went back onto the site's name with no
+        // id (state §0.198; the critics, 12 Oct).
         dbFetch('/.netlify/functions/opportunities', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newOpp),
+            body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate, stageHistory: newOpp.stageHistory }),
         }).then(res => {
             if (!res.ok) { console.error('Stage change not saved:', res.status); return; }
             if (toStage === 'Closed Won') promptSpiffClaim?.(newOpp);

@@ -27,7 +27,7 @@
 // the setter's name.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { parse } from '@babel/parser';
 
 const ROOT = new URL('../', import.meta.url);
@@ -128,14 +128,11 @@ const rawHandOffs = (src, names) => {
 
 // Drawn, never opened — each with its reason. A recorded one opened, or no longer drawn, fails.
 const KNOWN = {
-    viewingTask: 'TasksTab draws TaskViewRail on it and nothing opens it: the context\'s setViewingTask opens the task rail, and the hook\'s own setter — App\'s — is never called (§0.190\'s found (a))',
-    showOutlookImportModal: 'ModalLayer draws OutlookImportModal on it and nothing opens it (§0.186\'s found (b))',
     notesPopover: 'ModalLayer draws the notes popover on it and nothing has opened it since c3842cf (12 Mar 2026), when the side detail panel replaced the pipeline table\'s notes and comments cells that set it (§0.190\'s found (b))',
 };
 // Hook names App's context gives a meaning of its own, each with the state it stands for
 // and why. An open-state among them is recorded unopened (KNOWN): only App reaches its setter.
 const CONTEXT_OWN = {
-    setViewingTask: { state: 'viewingTask', why: 'the context\'s opens the task rail, as its setViewingContact and setViewingAccount open theirs' },
     setActiveTab: { state: 'activeTab', why: 'the context\'s is navigateTo, the guarded tab switch that asks before leaving unsaved work (§0.170)' },
 };
 
@@ -209,4 +206,89 @@ test('the header\'s search results open the rails — App hands the header the c
     const header = read('src/components/layout/AppHeader.jsx');
     assert.ok(header.includes('if (stillOrg(askedOrg)) setViewingAccount(a);') && header.includes('if (stillOrg(askedOrg)) setViewingContact(c);'), 'what the results call');
     assert.ok(/export default function AppHeader\(\{[\s\S]*?setViewingAccount, setViewingContact,[\s\S]*?\}\) \{/.test(header), 'from its props');
+});
+
+// ── D8 and D20: the copies nothing reached are deleted ──────────────────────
+//
+// Jeff, 11 Oct 2026. D8 ("Delete them (Recommended)"): three copies of a link nobody could
+// make, each matching a record by its name — ContactModal (the contact rail replaced it; App
+// imported it and drew nothing), the Outlook import (ModalLayer drew it on
+// showOutlookImportModal, which nothing set — KNOWN recorded it, §0.186's found (b)), and the
+// deal form's created-account branch (useAccounts reopened the deal window on
+// accountCreatedFromOppForm, which nothing set, and handed it the new account's NAME, which
+// OpportunityModal typed into Account). D20 ("Delete them too (Recommended)"): the Tasks tab's
+// TaskViewRail, drawn on viewingTask, which nothing opened (KNOWN recorded it, §0.190's found
+// (a)) — the state and the pieces only that panel used went with it; the deal window's
+// NestedNewContactForm, showAccountSuggestions and the four props it took and never read
+// (onSaveNewContact, onSaveNewAccount, onAddContact, onOpenNestedAccount), with ModalLayer's
+// handlers that only fed them; App's handleAddSubAccount, which nothing called; and
+// AccountRail's editingAccount, editingSubAccount and parentAccountForSub, taken from the
+// context and never read — nothing else read them either, so the states went too. A name of
+// theirs coming back fails here. The deal window's "+ New Contact" button stays (OPEN_ITEMS).
+const GONE_FILES = ['src/components/modals/ContactModal.jsx', 'src/components/modals/OutlookImportModal.jsx'];
+// Gone from the whole of src.
+const GONE_NAMES = [
+    // D8
+    'ContactModal', 'NestedNewAccountForm', 'OutlookImportModal', 'showOutlookImportModal', 'setShowOutlookImportModal',
+    'accountCreatedFromOppForm', 'setAccountCreatedFromOppForm', 'lastCreatedAccountName', 'setLastCreatedAccountName',
+    'pendingOppFormData', 'setPendingOppFormData',
+    // D20
+    'TaskViewRail', 'viewingTask', 'NestedNewContactForm', 'showAccountSuggestions', 'setShowAccountSuggestions',
+    'onSaveNewContact', 'onSaveNewAccount', 'onOpenNestedAccount', 'handleAddSubAccount',
+    'setEditingAccount', 'setEditingSubAccount', 'setParentAccountForSub',
+];
+// Gone from one file: each is an ordinary name elsewhere — another tab's Avatar, the Contacts
+// tab's onAddContact, the account save's own options (useAccounts' editingAccount).
+const GONE_IN = {
+    'src/Tabs/TasksTab.jsx': ['ContactPicker', 'ContactRowMenu', 'RailField', 'StatusPill', 'TypePill', 'STATUS_STYLES', 'Avatar', 'fmtLongDate'],
+    'src/components/modals/OpportunityModal.jsx': ['onAddContact'],
+    'src/components/layout/ModalLayer.jsx': ['onAddContact'],
+    'src/components/rails/AccountRail.jsx': ['editingAccount', 'editingSubAccount', 'parentAccountForSub'],
+};
+// The names a file binds, reads or hands on — an identifier, a JSX tag or prop, the last part
+// of an import's path — never a comment, a string, a member's property, or an object's key
+// (the account save is still handed `editingAccount: …` as an option).
+const namesIn = (src) => {
+    const out = new Set();
+    walk(parseJsx(src), (n, anc) => {
+        const p = anc[anc.length - 1];
+        if (n.type === 'Identifier' || n.type === 'JSXIdentifier') {
+            if (p && /^(ObjectProperty|ObjectMethod|ClassMethod|ClassProperty)$/.test(p.type) && p.key === n && !p.computed && !p.shorthand) return;
+            if (p && /^(MemberExpression|OptionalMemberExpression)$/.test(p.type) && p.property === n && !p.computed) return;
+            out.add(n.name);
+        }
+        if (n.type === 'ImportDeclaration') out.add(n.source.value.split('/').pop().replace(/\.jsx?$/, ''));
+    });
+    return out;
+};
+const goneOf = (file) => [...GONE_NAMES, ...(GONE_IN[file] || [])];
+const goneIn = (src, file = '') => [...namesIn(src)].filter((n) => goneOf(file).includes(n)).sort();
+
+test('D8 and D20: the copies nothing reached are deleted, and nothing under src names them', () => {
+    for (const f of GONE_FILES) assert.ok(!existsSync(new URL(f, ROOT)), `${f} is deleted`);
+    const files = srcFiles();
+    assert.ok(files.length > 150, `the files walked (${files.length})`);
+    for (const f of Object.keys(GONE_IN)) assert.ok(files.includes(f), `${f} is walked`);
+    const hits = files.map((f) => [f, read(f)])
+        .filter(([f, src]) => goneOf(f).some((n) => src.includes(n)))   // only a file that mentions one is parsed
+        .flatMap(([f, src]) => goneIn(src, f).map((n) => `${f}: ${n}`));
+    assert.deepEqual(hits, [], 'a name of a deleted copy is back: a contact opens in the contact rail, a task in the task rail, and a record is linked by the id picked (D1)');
+});
+
+test('the guard finds the names as they were — an import, a destructure, a prop, a render — and none in a comment, a string, a key or inside another name', () => {
+    const was = `import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from './components/modals/ContactModal';
+function A() { const { accountCreatedFromOppForm } = useApp(); return <>{showOutlookImportModal && <OutlookImportModal />}</>; }`;
+    assert.deepEqual(goneIn(was), ['ContactModal', 'NestedNewAccountForm', 'NestedNewContactForm', 'OutlookImportModal', 'accountCreatedFromOppForm', 'showOutlookImportModal']);
+    const deal = `function O({ onClose, onSaveNewAccount, onAddContact }) { const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
+    return <M onSaveNewContact={(d) => d} onOpenNestedAccount={f} />; }`;
+    assert.deepEqual(goneIn(deal, 'src/components/modals/OpportunityModal.jsx'), ['onAddContact', 'onOpenNestedAccount', 'onSaveNewAccount', 'onSaveNewContact', 'setShowAccountSuggestions', 'showAccountSuggestions']);
+    assert.deepEqual(goneIn(deal, 'src/Tabs/ContactsTab.jsx'), ['onOpenNestedAccount', 'onSaveNewAccount', 'onSaveNewContact', 'setShowAccountSuggestions', 'showAccountSuggestions'], "the Contacts tab's onAddContact is its own");
+    const tab = 'function T() { const { viewingTask } = useApp(); return <div>{viewingTask && <TaskViewRail task={viewingTask} />}<Avatar name="x" /></div>; }';
+    assert.deepEqual(goneIn(tab, 'src/Tabs/TasksTab.jsx'), ['Avatar', 'TaskViewRail', 'viewingTask']);
+    assert.deepEqual(goneIn(tab, 'src/components/modals/OpportunityModal.jsx'), ['TaskViewRail', 'viewingTask'], "another file's Avatar is its own");
+    const rail = 'function R() { const { editingAccount, setEditingAccount } = useApp(); handleSaveAccount(d, { editingAccount: null, parentAccountForSub: p }); return x.editingSubAccount; }';
+    assert.deepEqual(goneIn(rail, 'src/components/rails/AccountRail.jsx'), ['editingAccount', 'setEditingAccount'], 'an option handed by its key, or a property read, is not the context value');
+    assert.deepEqual(goneIn('function R() { handleSaveAccount(d, { editingAccount: isNew ? null : account, editingSubAccount: null }); }', 'src/components/rails/AccountRail.jsx'), []);
+    assert.deepEqual(goneIn('// ContactModal replaced by ContactRail\nconst x = <div>{/* OutlookImportModal */}</div>;\nconst s = "viewingTask";'), [], 'a comment or a string names nothing');
+    assert.deepEqual(goneIn("import ContactRail from '../rails/ContactRail';\nconst setShowContactModal = () => {};\nconst viewingTasks = [];"), [], 'a name that holds one is another name');
 });

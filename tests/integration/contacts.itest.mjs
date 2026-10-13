@@ -363,3 +363,15 @@ test('§0.178 — clear=true is refused while an open deal names a contact, and 
         assert.ok(await contactExists('ct_od_clear_a') && await contactExists('ct_od_clear_b'), 'both still there');
     } finally { await odCleanup(); }
 });
+
+test('§0.198, the pre-ship round — the contact rail leaves an untouched Company out of an edit: a PUT naming neither company nor accountId keeps both, and answers the row as stored', async () => {
+    await handler(ev('POST', { id: 'ct_left_out', firstName: 'Left', lastName: 'Out', company: 'Shell', accountId: 'acct_itest_left' }));
+    const res = await handler(ev('PUT', { id: 'ct_left_out', firstName: 'Left', lastName: 'Out', phone: '555-0100' }));
+    assert.equal(res.statusCode, 200, res.body);
+    const row = await rowOf('ct_left_out');
+    assert.equal(row.phone, '555-0100', 'the field sent is applied');
+    assert.equal(row.company, 'Shell', 'the company not sent stands — never the linked account\'s own name');
+    assert.equal(row.accountId, 'acct_itest_left', 'and its link');
+    const answered = JSON.parse(res.body).contact;
+    assert.deepEqual([answered.company, answered.accountId], ['Shell', 'acct_itest_left'], 'the answer is the row as stored: the list shows it');
+});

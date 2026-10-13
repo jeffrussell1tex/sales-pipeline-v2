@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
+import { sentBody, shownRow } from '../utils/leaveOut.js';
 
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
@@ -122,11 +123,11 @@ export function useActivities(deps) {
         if (editingActivity) {
             const payload = { ...activityData, id: editingActivity.id };
             try {
-                const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
                 const data = await res.json();
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
-                setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
+                setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
                 fireActivityCalendarEvent(payload, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {

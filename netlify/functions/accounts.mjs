@@ -1,16 +1,17 @@
 import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, or, isNull, inArray } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,
 } from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { openDealOfAccount, openDealOfAnyAccount, openDealRefusal, dealLabel } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
+import { placeAccount, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -70,6 +71,57 @@ async function resolveTerritory(orgId, account) {
     return applyTerritoryRules(await loadTerritoryRules(orgId), account);
 }
 
+// ── An account's parent and tier (state §0.198; Jeff, 11 Oct — D3: "No self, no loops, no
+// sites"; D18: "Yes, make them 'account'"; D21: "Keep what fits") ──────────────────────────
+// The rule is the account rail's own (src/utils/accountParent.js placeAccount), run on THIS
+// org's rows: a parent another org holds is not found — the 404 a missing one gets, so
+// nothing leaks — and never on the caller's read scope: a rep keeps a parent she can't open
+// (D1, D16). The bulk paths (a CSV's) store a parent unchecked until batch 3.
+const orgTreeOf = (orgId) => db.select({
+    id: accounts.id, name: accounts.name, parentAccountId: accounts.parentAccountId,
+    accountTier: accounts.accountTier, mergeArchived: accounts.mergeArchived,
+}).from(accounts).where(eq(accounts.orgId, orgId));
+
+// Each account's tier as the rule re-fitted it — the accounts under a moved one (D21) — for
+// this org's rows only, one update a tier: the statements, which the move they follow sends in
+// its own db.batch — all or nothing, as merge.mjs writes (neon-http has no interactive
+// transaction). Written one by one after the move had committed, a failure between left a
+// business unit under a business unit while the screen said the save had failed. A delete's
+// tiers are its own (below): each keyed to the rows as they stand when it runs.
+function tierWrites(orgId, changes) {
+    return [...new Set(changes.map((c) => c.accountTier))].map((tier) => {
+        const ids = changes.filter((c) => c.accountTier === tier).map((c) => c.id);
+        return db.update(accounts).set({ accountTier: tier }).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, ids)));
+    });
+}
+
+// An account below a deleted account's lifted sub-account stands where its tier was worked out
+// (accountParent.js liftedBelow) while its parent is chain[0], that one's parent chain[1], … the
+// last the account the delete removes — read in the statement itself, a subquery of this org's
+// rows a level (state §0.198; the critics, 12 Oct: a delete wrote tiers worked out from a read
+// another session's write had made stale).
+const standsOn = (orgId, [parentId, ...up]) => and(eq(accounts.parentAccountId, parentId), up.length
+    ? inArray(accounts.parentAccountId, db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.id, parentId), standsOn(orgId, up))))
+    : undefined);
+
+// D22 (Jeff, 11 Oct: "Move them up"): a move moves up the deals it would leave on a site — by
+// id; by name only where no other account has the name. When a move makes an account a
+// site (accountParent.js sitesMade), the deals on it — by its id, or by its name where a deal
+// has no id and no other account has the name (UKG's twins: neither's by name) — move up to
+// the account it then stands under, under that account's name, Site Name the site: this
+// org's deals only, in the move's own db.batch, each answering with the deal as written (the
+// screen takes them). An account edit has no Undo: moving the account back does not move its
+// deals back.
+const dealLifts = (orgId, made) => made.map((s) => db.update(opportunities)
+    .set({ accountId: s.parentId, account: s.parentName, site: s.name, updatedAt: new Date() })
+    .where(and(eq(opportunities.orgId, orgId), s.alone
+        ? or(eq(opportunities.accountId, s.id), and(isNull(opportunities.accountId), eq(opportunities.account, s.storedName)))
+        : eq(opportunities.accountId, s.id)))
+    .returning({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account, site: opportunities.site }));
+
+// A parent placeAccount refused: the rail shows the error (useAccounts reads data.error).
+const refusedPlace = (placed, headers) => ({ statusCode: placed.status, headers, body: JSON.stringify({ error: placed.error }) });
+
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -85,6 +137,12 @@ export const handler = async (event) => {
     // alone, which would have granted a new role full write access by default.
     const forbidden = requireWrite(auth, event, headers);
     if (forbidden) return forbidden;
+    // The restore mark (a delete's Undo, below) is honoured for an Admin alone: only an Admin
+    // deletes (the DELETE's role gate), so only an Admin's Undo sends it. Anyone else's marked
+    // write is an ordinary save — the parent rule, the tier that fits, D22's deals moved up — as
+    // if it carried no mark (state §0.198; the critics, 12 Oct: a rep's forged mark put an
+    // account under a site and stored any tier).
+    const mayRestore = userRole === 'Admin';
 
     const sanitize = (d) => ({
         id:                d.id,
@@ -171,9 +229,38 @@ export const handler = async (event) => {
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const territoryAssign = await resolveTerritory(orgId, sanitize(data));
-            // The caller owns what they create unless the payload names someone else.
-            const newRow = await stampOwnerId({ ...sanitize(data), ...(territoryAssign || {}) }, 'account', { clerkUserId: userId, orgId });
+            // Its parent, if it names one, is an account of this org it may stand under, and its
+            // tier is the one the body asks for where that fits under the parent, else the lowest
+            // above it (state §0.198; D3, D21); with no parent nothing is read: a top-level
+            // account. A delete's Undo posts the stored row back marked a restore (D21: "Undo puts
+            // the stored tiers back") — an Admin's alone (mayRestore): its parent and tier exactly
+            // as stored, checked only that the tier is one the rule knows, that the parent is a
+            // live account of THIS org, no site, under which no loop forms, and that no account
+            // under it would not rank below it (restorePlace, over the org's rows whatever the
+            // parent); its owner as stored — the stored owner id where it is a member of THIS
+            // org, else none, never the caller, so a blank owner stays unassigned; an owner id it
+            // drops (another org's, or a member gone since) takes the owner's name with it, since
+            // an unassigned row shows no owner; and no territory rule (the server critic, 12 Oct:
+            // the create's stamp made the Admin who pressed Undo the owner of an unassigned
+            // account, and every rep lost it from their list; the critics, 12 Oct: a restore kept
+            // the name of an owner whose id it dropped). Its created date is not put back: the
+            // column's default, the moment of the Undo, stands — the app's driver reads a
+            // `timestamp without time zone` in the function process's own time zone (state
+            // §0.91), so a date read back and written again moves by that zone's offset (the
+            // behaviour critic, 12 Oct). Nor are its merge mark and its last-edited time
+            // (OPEN_ITEMS §4.2).
+            const asked = sanitize(data);
+            const placed = data.restore === true && mayRestore
+                ? restorePlace(await orgTreeOf(orgId), { selfId: asked.id, selfName: asked.name, parentId: asked.parentAccountId, tier: asked.accountTier })
+                : placeAccount(asked.parentAccountId ? await orgTreeOf(orgId) : [], { selfId: asked.id, selfName: asked.name, parentId: asked.parentAccountId, tier: data.accountTier });
+            if (placed.error) return refusedPlace(placed, headers);
+            const territoryAssign = data.restore === true && mayRestore ? null : await resolveTerritory(orgId, sanitize(data));
+            // The caller owns what they create unless the payload names someone else; a restore
+            // keeps the owner it was stored with.
+            const newRow = data.restore === true && mayRestore
+                ? { ...sanitize(data), ownerId: (await rosterUserById(data.ownerId, orgId))?.id ?? null, accountTier: placed.tiers.get(asked.id) }
+                : await stampOwnerId({ ...sanitize(data), accountTier: placed.tiers.get(asked.id), ...(territoryAssign || {}) }, 'account', { clerkUserId: userId, orgId });
+            if (data.restore === true && mayRestore && data.ownerId && !newRow.ownerId) newRow.accountOwner = null;
             const [inserted] = await db.insert(accounts).values({ ...newRow, orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
@@ -242,16 +329,71 @@ export const handler = async (event) => {
                 table: accounts, entity: 'account', id: clean.id, orgId, userId, userRole, headers, row: prior,
             });
             if (forbiddenPut) return forbiddenPut;
-            const territoryAssignPut = await resolveTerritory(orgId, clean);
+            // A move (state §0.198; D3, D21): a parent this write names that is not the one stored
+            // is an account of this org it may stand under, and the tiers are re-fitted — its own
+            // stored one if it fits there, else the body's if it fits, else the lowest above the
+            // new parent (a cleared parent: an account), so a screen loaded before another
+            // session's move cannot re-tier it; every account under it keeps what still fits.
+            // Refused when any would sit below a site. An account the move makes a site hands its
+            // deals up to the account it then stands under (D22, dealLifts). A parent the write
+            // leaves as stored is not asked about again — a field nobody touched keeps its link
+            // (D1), even one from before this rule — and the tier stays as stored, whatever the
+            // body says: a screen loaded before another session's move sends the old tier. A
+            // delete's Undo marks its re-saves a restore: the parent and tier as stored, exactly,
+            // checked only for the tier, the org, a site and loops — nothing re-fitted, no deal
+            // moved (D21) — honoured for an Admin's write alone (mayRestore), and only when the
+            // body names a parent: the Undo always does, and a mark that names none is an ordinary
+            // save, the stored tier kept (the critics, 12 Oct: it turned any top-level account into
+            // a site). Only a row whose stored parent is none is put back — what a delete lifts: one
+            // that has a parent now (moved by another session since the delete, or never lifted) is
+            // refused (409, movedSinceDelete), never run as a move (the behaviour critic, 12 Oct:
+            // as a move it overrode that session's move, and D22 could move every deal of the row
+            // up, open or closed, its Site Name overwritten). It is
+            // refused (restorePlace, 400) over an account under it that would not rank below the
+            // tier put back — a sub-account another session added since the delete. It moves no
+            // deal: a deal on the account stays where it is — one on a site before the delete
+            // (UKG's deals on sites stay until changed by hand), and one linked onto the lifted
+            // account between the delete and its Undo, which the Undo then puts back on a site
+            // (OPEN_ITEMS §4.2, D22's edges; the critics, 12 Oct: a re-save placed as a move moved
+            // every deal of the site up, open or closed, its Site Name overwritten). A restore
+            // taken meets no territory rule, as the Undo's POST meets none: the row comes back as
+            // stored. After the ownership check: a caller who may not save learns nothing.
+            let retiered = [];
+            let made = [];
+            const marked = data.restore === true && mayRestore && data.parentAccountId;
+            if (marked && prior.parentAccountId) return refusedPlace({ status: 409, error: movedSinceDelete(clean.name) }, headers);
+            const restored = marked
+                ? restorePlace(await orgTreeOf(orgId), { selfId: clean.id, selfName: clean.name, parentId: clean.parentAccountId, tier: clean.accountTier })
+                : null;
+            if (restored) {
+                if (restored.error) return refusedPlace(restored, headers);
+            } else if ((clean.parentAccountId || null) !== (prior.parentAccountId || null)) {
+                const tree = await orgTreeOf(orgId);
+                const placed = placeAccount(tree, { selfId: clean.id, selfName: clean.name, parentId: clean.parentAccountId, tier: data.accountTier, branch: true });
+                if (placed.error) return refusedPlace(placed, headers);
+                clean.accountTier = placed.tiers.get(clean.id);
+                retiered = tierChanges(tree, placed.tiers, clean.id);
+                made = sitesMade(tree, placed.tiers, { selfId: clean.id, selfName: clean.name, parentId: clean.parentAccountId });
+            } else {
+                clean.accountTier = sanitize(prior).accountTier;
+            }
+            const territoryAssignPut = restored ? null : await resolveTerritory(orgId, clean);
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             // Re-key ownership only when the payload actually mentioned the owner.
             // A partial PUT that says nothing about it must not blank it (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'account', orgId, stored: prior });
             if (ownPut.change) mergedPut.ownerId = ownPut.ownerId;
             const { id: _putId, ...updateDataMerged } = mergedPut;
-            const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })
-                .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
-                .returning();
+            // One write: the account; the deals of any account the move made a site, moved up
+            // (D22); the accounts under a moved one, with the tiers the move gave them (D17, D21).
+            const [[upserted], ...lifts] = await db.batch([
+                db.insert(accounts).values({ ...mergedPut, orgId })
+                    .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
+                    .returning(),
+                ...dealLifts(orgId, made),
+                ...tierWrites(orgId, retiered),
+            ]);
+            const liftedDeals = lifts.slice(0, made.length).flat();
             // Cascade rename: opportunities.account and contacts.company are denormalized
             // display labels keyed by accountId. Keep them in sync so a rename never
             // leaves stale names anywhere in the UI or reports.
@@ -263,7 +405,7 @@ export const handler = async (event) => {
                     .where(and(eq(contacts.accountId, upserted.id), eq(contacts.orgId, orgId)));
                 renamed = true;
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ account: upserted, renamed }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ account: upserted, renamed, retiered, liftedDeals }) };
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
@@ -315,18 +457,36 @@ export const handler = async (event) => {
             if (holding) {
                 return openDealRefusal(headers, `This account has an open deal ("${dealLabel(holding)}"). Close the deal, or move it to another account, before deleting.`);
             }
+            // An unknown id used to return success:true. It deleted nothing — and now
+            // nothing is written for it.
+            if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+
+            // Its sub-accounts are lifted to the top level (below): each becomes an account, and
+            // the accounts under them keep what still fits (state §0.198; Jeff, 11 Oct, D18: "Yes,
+            // make them 'account'"; D21). Only a row stored before the rule can need a new tier
+            // below them (a misfit); those are worked out from this org's rows, read first.
+            const tree = await orgTreeOf(orgId);
+            const below = liftedBelow(tree, id);
+
+            // ONE write (db.batch, all or nothing, as merge.mjs writes), every statement keyed to
+            // the rows as they stand when it runs, not as read above (the critics, 12 Oct: when
+            // another session's delete landed between the read and the write, this one wrote the
+            // tiers it had read onto rows moved since, and answered 404): each sub-account as
+            // stored — its parent and its tier, which the answer hands the delete's Undo to put back
+            // exactly (a restore), not the screen's copy of it — read in the batch before the
+            // delete; the delete; each account below a lifted one re-fitted while it still stands
+            // there (standsOn); then the lift itself — one update of every row that still names the
+            // deleted account as its parent: the top level, an account (D18). A delete that takes
+            // nothing — another session's came first, and lifted them itself — writes nothing.
+            // Written apart, a failure between left the children under a deleted parent with their
+            // old tiers while the screen counted the delete as failed (the server critic, 12 Oct).
+            //
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a
             // name once the record is gone.
-            const [deletedRow] = await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning();
-            // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-
-            // Promote children to top-level -- AFTER the gate and AFTER the row is
-            // actually gone.
             //
-            // This UPDATE used to run ABOVE the role gate, which made an attempt
+            // The promotion used to run ABOVE the role gate, which made an attempt
             // destructive on its own: a rep who could not delete an account still
             // detached every sub-account under it, permanently, and left no trace.
             // The audit write sits below the gate the request never reached, so
@@ -334,16 +494,31 @@ export const handler = async (event) => {
             // is not recoverable from the surviving row. Confirmed on dev
             // 24 Aug 2026 -- see 0.24 and FIXTURE_MANIFEST step 15.
             //
-            // Promotion is a CONSEQUENCE of a deletion, so it is now conditional
-            // on one: a 403 and a 404 both return before reaching this, and only a
-            // row that really was removed detaches its children. Ordering after
-            // the delete is safe because parentAccountId is a plain text column
-            // with no foreign key -- no constraint fires in the window between the
-            // two statements.
-            const promoted = await db.update(accounts)
-                .set({ parentAccountId: null })
-                .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))
-                .returning({ id: accounts.id });
+            // Promotion is a CONSEQUENCE of a deletion, so it is conditional on one:
+            // a 403 and a 404 both return before reaching this, and it runs after the
+            // delete in the same batch, so it stands or falls with it.
+            const [storedKids, gone, ...written] = await db.batch([
+                db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier })
+                    .from(accounts).where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId))),
+                db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning(),
+                ...below.map((b) => db.update(accounts).set({ accountTier: b.accountTier })
+                    .where(and(eq(accounts.orgId, orgId), eq(accounts.id, b.id), standsOn(orgId, b.chain)))
+                    .returning({ id: accounts.id, accountTier: accounts.accountTier })),
+                db.update(accounts)
+                    .set({ parentAccountId: null, accountTier: 'account' })
+                    .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))
+                    .returning({ id: accounts.id }),
+            ]);
+            const promoted = written[written.length - 1];
+            const [deletedRow] = gone;
+            // Gone before this write (another session's delete, which lifted its sub-accounts
+            // itself): nothing was written — a 404, as for any id not found.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            const promotedIds = new Set(promoted.map((r) => r.id));
+            const children = storedKids.filter((c) => promotedIds.has(c.id));
+            // What the delete wrote, for the screen: each sub-account it lifted that was not an
+            // account, and each account below whose tier it changed.
+            const retiered = [...children.filter((c) => c.accountTier !== 'account').map((c) => ({ id: c.id, accountTier: 'account' })), ...written.slice(0, -1).flat()];
 
             // Record the detachment. A deletion that silently restructured other
             // rows is exactly the shape this defect had; the count belongs in the
@@ -353,7 +528,9 @@ export const handler = async (event) => {
                 audit.detail += ` \u2014 ${promoted.length} sub-account${promoted.length === 1 ? '' : 's'} promoted to top level`;
             }
             await writeAudit(orgId, audit);
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true, promoted: promoted.length }) };
+            // The deleted row as it was stored, and each sub-account it lifted as it was stored
+            // before (its parent, its tier): the Undo re-sends exactly these (state §0.198).
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, deleted: deletedRow, children, promoted: promoted.length, retiered }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {

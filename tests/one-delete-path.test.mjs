@@ -147,7 +147,7 @@ test('accounts: an account with an open deal is kept; its sub-accounts move to t
     assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('), 'nothing sent before the confirm');
     assert.ok(fn.includes("will move to the top level."), 'the confirm says what happens to the sub-accounts');
     assert.ok(fn.includes('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'), 'the screen promotes them as the server does');
-    assert.ok(fn.includes('body: JSON.stringify({ id: c.id, parentAccountId: c.parentId }),'), 'Undo puts each back under its account');
+    assert.ok(fn.includes('body: JSON.stringify({ id: c.id, parentAccountId: c.parentId, accountTier: c.tier, restore: true }),'), 'Undo puts each back under its account with the tier it had there, marked a restore (§0.198, D21)');
     assert.ok(!src.includes('const handleDeleteAccount = ') && !src.includes('const handleDeleteSubAccount'), 'the old handlers are gone');
 });
 
@@ -228,7 +228,7 @@ test('server: accounts.mjs refuses an account with an open deal — after its ga
     const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");
     const check = del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;');
     assert.ok(check > del.indexOf('if (forbiddenDelete) return forbiddenDelete;'), 'after the Admin gate');
-    assert.ok(check < del.indexOf('const [deletedRow] = await db.delete(accounts)'), 'before the delete');
+    assert.ok(check < del.indexOf('db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning(),'), 'before the delete (one write with its promotion, §0.198)');
     const clear = del.indexOf('const holding = await openDealOfAnyAccount(orgId, everyAccount);');
     assert.ok(clear > 0 && clear < del.indexOf('const deleted = await db.delete(accounts).where(eq(accounts.orgId, orgId))'), 'the clear too');
 });

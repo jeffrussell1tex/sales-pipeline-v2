@@ -36,7 +36,6 @@ export function useUIState() {
     const [contactShowAllDeals, setContactShowAllDeals] = useOrgBoundState(resets, false);
     const [accShowAllClosed, setAccShowAllClosed] = useOrgBoundState(resets, false);
     const [accShowAllContacts, setAccShowAllContacts] = useOrgBoundState(resets, false);
-    const [viewingTask, setViewingTask] = useOrgBoundState(resets, null);
 
     // Tab UI state
     const [expandedAccounts, setExpandedAccounts] = useOrgBoundState(resets, {});
@@ -101,7 +100,6 @@ export function useUIState() {
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
-        viewingTask, setViewingTask,
         expandedAccounts, setExpandedAccounts,
         expandedIndustry, setExpandedIndustry,
         accountsSortDir, setAccountsSortDir,
