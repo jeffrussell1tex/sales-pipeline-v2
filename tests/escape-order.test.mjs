@@ -15,7 +15,9 @@
 // THE GUARD: every layer ModalLayer, the quick log and App render has a place in the order
 // and an Escape — App's handler names it, or its own listener takes it, or it takes it
 // through useEscapeLayer with its own place — and every place in the order is a layer that
-// exists. The order is z order, and each z is the one its file draws.
+// exists. The order is z order, and each z is the one its file draws. A notice is the one
+// exception, and named so: a task completion's notices take no Escape — each holds notes a save
+// refused until its own ✕ (§0.199).
 //
 // And the order is what the page shows (state §0.187): .app-container is a stacking context
 // at z-index 1, so a layer drawn inside it sits under every layer drawn outside it, whatever
@@ -230,6 +232,7 @@ const LAYERS = {
     showUserModal: { name: 'draggable', app: 'showUserModal' },
     showShortcuts: { name: 'shortcuts', app: 'showShortcuts' },
     undoToast: { name: null, app: 'undoToast' },   // a toast, not a layer over the page: App closes it last
+    pressNotices: { name: null, notice: true },   // a task completion's notices (§0.199): not a layer, and no Escape — each holds notes refused until its own ✕
     notesPopover: { name: 'notes', app: 'notesPopover' },
     showCsvImportModal: { name: 'draggable', layer: 'src/components/modals/CsvImportModal.jsx' },
     showLeadModal: { name: 'leadModal', own: 'src/components/modals/LeadModal.jsx' },
@@ -305,6 +308,16 @@ test('THE GUARD: every layer the app renders has a place in the order and an Esc
     assert.deepEqual([...new Set(Object.keys(LAYERS))].filter((k) => !rendered.includes(k)), [], 'a row for a layer no longer rendered');
     const app = read('src/App.jsx');
     const appEscape = between(app, "            if (e.key === 'Escape') {", '\n                return;\n            }');
+    for (const [key, how] of Object.entries(LAYERS)) if (how.notice) {
+        // by any spelling — the state or its setter — in App's Escape or in an Escape layer of ModalLayer's
+        assert.ok(!appEscape.toLowerCase().includes(key.toLowerCase()), `${key}: a notice takes no Escape — it holds notes until its own ✕`);
+        const ml = read('src/components/layout/ModalLayer.jsx');
+        walk(parse(ml, { sourceType: 'module', plugins: ['jsx'] }), (n) => {
+            if (n.type === 'CallExpression' && n.callee.type === 'Identifier' && n.callee.name === 'useEscapeLayer') {
+                assert.ok(!ml.slice(n.start, n.end).toLowerCase().includes(key.toLowerCase()), `${key}: no Escape layer of ModalLayer's takes it`);
+            }
+        });
+    }
     for (const [key, how] of Object.entries(LAYERS)) {
         if (how.name) assert.ok(NAMES.includes(how.name), `${key}: ${how.name} is in the order`);
         if (how.app) {

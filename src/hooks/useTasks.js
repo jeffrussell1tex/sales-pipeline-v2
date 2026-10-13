@@ -179,7 +179,11 @@ export function useTasks(deps) {
 
         // Persist immediately — without this the completion is local-only and
         // reverts on refresh (violates the no-local-only-state rule). On failure,
-        // roll the row back so local state cannot drift from the DB.
+        // roll the row back so local state cannot drift from the DB. It answers
+        // whether it landed — the server's words when refused, none when nothing
+        // answered — for a screen that goes on after it (the task rail's notes,
+        // state §0.199's re-check).
+        let refused;
         try {
             const res = await dbFetch('/.netlify/functions/tasks', {
                 method: 'PUT',
@@ -188,13 +192,15 @@ export function useTasks(deps) {
             });
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Failed to save task');
+            if (!res.ok) { refused = data.error || 'Failed to save task'; throw new Error(refused); }
             setTasks(prev => prev.map(t => t.id === taskId ? (data.task || next) : t));
             addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');
+            return { ok: true };
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
             console.error('Failed to persist task completion:', err);
             setTasks(prev => prev.map(t => t.id === taskId ? current : t));
+            return { ok: false, error: refused };
         }
     };
 

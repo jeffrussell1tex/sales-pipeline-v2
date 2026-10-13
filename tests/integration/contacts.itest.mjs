@@ -64,7 +64,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 
 const { handler } = await import('../../netlify/functions/contacts.mjs');
 const { db } = await import('../../db/index.js');
-const { contacts, users } = await import('../../db/schema.js');
+const { contacts, users, accounts } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 
 const ORG = 'itest_org_contacts';
@@ -92,6 +92,7 @@ const rowOf = async (id) => (await db.select().from(contacts).where(eq(contacts.
 const cleanup = async () => {
     await db.delete(contacts).where(eq(contacts.orgId, ORG));
     await db.delete(users).where(eq(users.orgId, ORG));
+    await db.delete(accounts).where(eq(accounts.orgId, ORG));
 };
 
 before(async () => {
@@ -365,13 +366,16 @@ test('§0.178 — clear=true is refused while an open deal names a contact, and 
 });
 
 test('§0.198, the pre-ship round — the contact rail leaves an untouched Company out of an edit: a PUT naming neither company nor accountId keeps both, and answers the row as stored', async () => {
-    await handler(ev('POST', { id: 'ct_left_out', firstName: 'Left', lastName: 'Out', company: 'Shell', accountId: 'acct_itest_left' }));
+    // The account it links, in this org: a link names a live row of the org (state §0.199).
+    await db.insert(accounts).values({ id: 'itest_org_contacts_acct_left', orgId: ORG, name: 'Shell' });
+    const made = await handler(ev('POST', { id: 'ct_left_out', firstName: 'Left', lastName: 'Out', company: 'Shell', accountId: 'itest_org_contacts_acct_left' }));
+    assert.equal(made.statusCode, 201, made.body);
     const res = await handler(ev('PUT', { id: 'ct_left_out', firstName: 'Left', lastName: 'Out', phone: '555-0100' }));
     assert.equal(res.statusCode, 200, res.body);
     const row = await rowOf('ct_left_out');
     assert.equal(row.phone, '555-0100', 'the field sent is applied');
     assert.equal(row.company, 'Shell', 'the company not sent stands — never the linked account\'s own name');
-    assert.equal(row.accountId, 'acct_itest_left', 'and its link');
+    assert.equal(row.accountId, 'itest_org_contacts_acct_left', 'and its link');
     const answered = JSON.parse(res.body).contact;
-    assert.deepEqual([answered.company, answered.accountId], ['Shell', 'acct_itest_left'], 'the answer is the row as stored: the list shows it');
+    assert.deepEqual([answered.company, answered.accountId], ['Shell', 'itest_org_contacts_acct_left'], 'the answer is the row as stored: the list shows it');
 });

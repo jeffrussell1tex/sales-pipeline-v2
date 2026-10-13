@@ -105,18 +105,18 @@ const hookShape = (src, hook, { lists = ['resets'], reset = 'resetAllOf(resets)'
     assert.ok(c.includes(`import { useOrgBoundState, resetAllOf } from '${from}';`), `${hook}: imports the hook`);
 };
 
-test('useModalState: every value is the org\'s — each modal, rail, confirm, undo and reminder (50), none plain; what the reminders remember (3) apart, which a layer\'s crash keeps', () => {
+test('useModalState: every value is the org\'s — each modal, rail, confirm, undo, notice and reminder (51), none plain; what the reminders remember and a task completion\'s notices (4) apart, which a layer\'s crash keeps', () => {
     const src = read('src/hooks/useModalState.js');
     hookShape(src, 'useModalState', { lists: ['resets', 'remembered'], reset: 'resetAllOf([...resets, ...remembered])', from: './useOrgBoundState.js' });
     assert.ok(code(src).includes('        closeLayers: resetAllOf(resets),'), 'a layer\'s crash closes what is open and keeps what the reminders remember (§0.185)');
     const states = statesOf(src);
-    assert.equal(states.length, 50, 'the three flags of the modals the rails replaced are gone (§0.190), the four of the copies nothing reached (D8), and the three account values nothing read (D20)');
-    assert.deepEqual(states.filter((s) => s.list === 'remembered').map((s) => s.name), ['dismissedDueTodayAlerts', 'snoozedDueAlerts', 'dismissedReminders'],
-        'the alerts dismissed and snoozed, and the reminders fired: a crash that put them back brought every one back, with its chime');
+    assert.equal(states.length, 51, 'the three flags of the modals the rails replaced are gone (§0.190), the four of the copies nothing reached (D8), and the three account values nothing read (D20); a task completion\'s notices came (§0.199)');
+    assert.deepEqual(states.filter((s) => s.list === 'remembered').map((s) => s.name), ['dismissedDueTodayAlerts', 'snoozedDueAlerts', 'dismissedReminders', 'pressNotices'],
+        'the alerts dismissed and snoozed, and the reminders fired: a crash that put them back brought every one back, with its chime; and a task completion\'s notices, whose notes a crash would drop (§0.199)');
     assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), [],
         'a plain useState here outlives a switch — a modal or rail of the last org');
     assert.ok(!/\buseState\b/.test(code(src)), 'no plain useState at all');
-    for (const name of ['contactRailId', 'accountRailId', 'taskRailId', 'documentRailId', 'viewingActivity', 'confirmModal', 'promptModal', 'undoToast', 'settingsOpenPanel', 'editingOpp']) {
+    for (const name of ['contactRailId', 'accountRailId', 'taskRailId', 'documentRailId', 'viewingActivity', 'confirmModal', 'promptModal', 'undoToast', 'pressNotices', 'settingsOpenPanel', 'editingOpp']) {
         assert.ok(states.some((s) => s.name === name && s.bound), `${name} is org-bound`);
     }
 });

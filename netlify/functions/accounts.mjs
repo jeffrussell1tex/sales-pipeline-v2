@@ -11,7 +11,13 @@ import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { openDealOfAccount, openDealOfAnyAccount, openDealRefusal, dealLabel } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
+import { checkBulkLinks, clearStrayLinks } from './_links.mjs';
 import { placeAccount, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';
+
+// A bulk row's parent: a live account of this org, or one of the batch's own (state §0.199). One merged
+// away is refused, as the single save's placeAccount refuses it (§0.198); the rest of the parent rule on
+// the bulk paths is batch 3's (OPEN_ITEMS §4.7).
+const PARENT_LINK = [{ key: 'parentAccountId', kind: 'account', follow: false }];
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -160,7 +166,7 @@ export const handler = async (event) => {
         accountOwner:      d.accountOwner      || null,
         assignedRep:       d.assignedRep       || null,
         assignedTerritory: d.assignedTerritory || null,
-        parentAccountId:   d.parentAccountId   || d.parentId || null,
+        parentAccountId:   d.parentAccountId   || null,   // no legacy `parentId`: the parent stored is the parent checked (§0.199)
         accountTier:       d.accountTier       || (d.parentAccountId ? 'business_unit' : 'account'),
         notes:             d.notes             || null,
         doNotContact:      d.doNotContact      === true ? true : false,
@@ -209,6 +215,12 @@ export const handler = async (event) => {
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ accounts: [], inserted: 0, failed: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // A parent among the batch's own new rows needs no read; an id this org already holds is no new
+                // row (its insert will not land), so a parent naming it is asked as any parent is (state §0.199).
+                const batchIds = data.map(d => d.id);
+                const taken = new Set((await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, batchIds)))).map(r => r.id));
+                const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { also: { kind: 'account', ids: new Set(batchIds.filter(id => !taken.has(id))) } });
+                if (parents.error) return { statusCode: parents.status, headers, body: JSON.stringify({ error: parents.error, field: parents.field, ids: parents.ids }) };
                 // Rules read once for the batch, not once per row.
                 const rules = await loadTerritoryRules(orgId);
                 const rows = data.map(d => {
@@ -221,6 +233,13 @@ export const handler = async (event) => {
                 // stamped with whoever ran it. See stampOwnerIds.
                 const owned = await stampOwnerIds(rows, 'account', { clerkUserId: userId, orgId });
                 const result = await bulkInsert({ table: accounts, rows: owned.rows, orgId });
+                // A row of the batch that did not land leaves no link to it: a parent naming one is cleared
+                // (state §0.199 — the batch's own rows were counted live).
+                if (result.failed.length) {
+                    const swept = await clearStrayLinks(orgId, new Map([[accounts, result.insertedIds]]));
+                    result.linksCleared = swept.cleared;
+                    if (swept.failed.length) result.linksNotChecked = swept.failed;   // said, not left silent
+                }
                 return { statusCode: 201, headers, body: JSON.stringify({
                     ...result,
                     ambiguousOwners: owned.ambiguousOwners,
@@ -261,7 +280,9 @@ export const handler = async (event) => {
                 ? { ...sanitize(data), ownerId: (await rosterUserById(data.ownerId, orgId))?.id ?? null, accountTier: placed.tiers.get(asked.id) }
                 : await stampOwnerId({ ...sanitize(data), accountTier: placed.tiers.get(asked.id), ...(territoryAssign || {}) }, 'account', { clerkUserId: userId, orgId });
             if (data.restore === true && mayRestore && data.ownerId && !newRow.ownerId) newRow.accountOwner = null;
-            const [inserted] = await db.insert(accounts).values({ ...newRow, orgId }).returning();
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
+            const [inserted] = await db.insert(accounts).values({ ...newRow, orgId }).onConflictDoNothing({ target: accounts.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That account id is already in use.' }) };
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -292,6 +313,12 @@ export const handler = async (event) => {
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
                 // The owner id moves with the owner name (state §0.193).
+                // A parent a row names anew is a live account of this org; one the account already holds is
+                // not asked again (state §0.199).
+                const stored = await db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId })
+                    .from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, data.map(d => d.id))));
+                const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });
+                if (parents.error) return { statusCode: parents.status, headers, body: JSON.stringify({ error: parents.error, field: parents.field, ids: parents.ids }) };
                 const keyed = await rekeyBulkOwners(partialRows(data, sanitize), 'account', { table: accounts, orgId });
                 const result = await bulkUpsert({
                     table: accounts,

@@ -5,6 +5,10 @@ import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A customer's CRM account: a live account of this org when a write names it anew (state §0.199).
+const CUSTOMER_LINKS = [{ key: 'accountId', kind: 'account' }];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -231,9 +235,14 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
             }
             // Reuse the number on upsert; never accept one from the client.
-            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber })
+            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId })
                 .from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
+            // Its account, named anew, is one of this org's (state §0.199); the create is an upsert, so one
+            // the customer already holds is not asked again.
+            const linked = await checkLinks(CUSTOMER_LINKS, data, priorCust || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            Object.assign(data, linked.set);
 
             // The number is issued INSIDE the retry, not before it: on a collision
             // the whole read-max-then-insert has to run again, otherwise every
@@ -293,6 +302,16 @@ export const handler = async (event) => {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             const data = JSON.parse(event.body || '{}');
+            // Its account, named anew, is one of this org's; one the customer already holds is not asked
+            // again (state §0.199).
+            if ('accountId' in data) {
+                const [held] = await db.select({ accountId: dispatchCustomers.accountId }).from(dispatchCustomers)
+                    .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
+                if (!held) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                const linked = await checkLinks(CUSTOMER_LINKS, data, held, orgId);
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+                Object.assign(data, linked.set);
+            }
             const updates = { updatedAt: new Date() };
             ['accountId','name','contactName','contactPhone','contactEmail','customerType',
              'billingAddress','billingCity','billingState','billingZip',

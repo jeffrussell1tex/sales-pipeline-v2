@@ -130,6 +130,11 @@ before(async () => {
         assignedTerritory: 'East', phone: '555-0100', notes: 'first notes' });
     await db.insert(contacts).values({ id: 'cont_itest_inorg', orgId: A, firstName: 'Pat', lastName: 'Inorg', email: 'pat@inorg.example',
         phone: '555-0101', company: 'Inorg Industries', accountId: 'acct_itest_inorg' });
+    // The other contacts the activities below link: a link names a live row of the org (state §0.199).
+    await db.insert(contacts).values([
+        { id: 'cont_itest_inorg_2', orgId: A, firstName: 'Sam', lastName: 'Inorg' },
+        { id: 'cont_itest_inorg_9', orgId: A, firstName: 'Nia', lastName: 'Inorg' },
+    ]);
     await db.insert(activities).values({ id: 'act_itest_inorg', orgId: A, type: 'Call', date: '2026-10-01', notes: 'talked pricing',
         opportunityId: 'opp_itest_inorg_karen', contactId: 'cont_itest_inorg', contactIds: ['cont_itest_inorg', 'cont_itest_inorg_2'] });
 

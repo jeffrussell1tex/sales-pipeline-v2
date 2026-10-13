@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
+import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
@@ -5323,7 +5324,7 @@ export default function DispatchTab() {
     // customerId is the FK the server requires; `customer` is only the typed text.
     const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
-        opportunityId: '', needSkills: [], equipCategories: [], requiredVehicleType: '',
+        opportunityId: '', opportunityCopied: false, needSkills: [], equipCategories: [], requiredVehicleType: '',
         servicePlanId: '', planDueDate: '' };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
     // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
@@ -5479,6 +5480,7 @@ export default function DispatchTab() {
             customerId:     row.customerId || '',
             accountId:      row.accountId  || '',
             opportunityId:  row.opportunityId,
+            opportunityCopied: true,   // the won deal's own, copied — not picked: left off if the server refuses it (state §0.199)
             title:          row.title || '',
             address: row.address || '', city: row.city || '',
             state:   row.state   || '', zip:  row.zip  || '',
@@ -5787,10 +5789,21 @@ export default function DispatchTab() {
                 servicePlanId:   newJobForm.servicePlanId || null,
                 planDueDate:     newJobForm.planDueDate   || null,
             };
-            const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await res.json();
+            // The CRM account a job copies from its customer, and the deal a won deal's placeholder copies, are
+            // left off when the server says they name no live record — deleted since (a create asks every link
+            // it names, state §0.199) — and the job is saved without them. A deal the dispatcher picked is
+            // theirs: its refusal, like anything else refused, is said under the form (a retry then makes the
+            // customer again — OPEN_ITEMS §4.4). An org switch stops it: the next POST would carry the new
+            // org's token.
+            let data = null;
+            const { answer, sent } = await saveDroppingRefused(async (body) => {
+                if (!stillOrg(askedOrg)) return undefined;
+                const r = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                data = await r.json();
+                return { ok: r.ok, status: r.status, field: data?.field };
+            }, payload, newJobForm.opportunityCopied ? ['accountId', 'opportunityId'] : ['accountId']);
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data?.error || 'Save failed');
+            if (!answer.ok) throw new Error(data?.error || 'Save failed');
             // Optimistically add to local state
             const saved = data.job || data;
             const optimistic = {
@@ -5798,7 +5811,7 @@ export default function DispatchTab() {
                 title,
                 customerId,
                 locationId,
-                opportunityId:   newJobForm.opportunityId || null,
+                opportunityId:   sent.opportunityId || null,   // the deal it was saved with — none, if it was left off
                 customer:        custName,
                 address:         address || '',
                 needSkills:      newJobForm.needSkills || [],
@@ -6835,7 +6848,7 @@ export default function DispatchTab() {
                                 <div>
                                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Linked Opportunity (optional)</label>
                                     <select value={newJobForm.opportunityId}
-                                        onChange={e => setNewJobForm(f => ({ ...f, opportunityId: e.target.value }))}
+                                        onChange={e => setNewJobForm(f => ({ ...f, opportunityId: e.target.value, opportunityCopied: false }))}
                                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
                                         <option value="">— None —</option>
                                         {(opportunities || []).filter(o => o.stage === 'Closed Won').map(o => (

@@ -21,6 +21,11 @@ import { applyStageChanges } from './_stage.mjs';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
+import { checkLinks, checkBulkLinks } from './_links.mjs';
+
+// The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
+// its account is accountLink's, below).
+const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }];
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -289,10 +294,12 @@ export const handler = async (event) => {
                 // An account named by id is one of this org's (accountLink, above).
                 const strays = await accountIdsNotInOrg(data, orgId);
                 if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
+                const people = await checkBulkLinks(DEAL_LINKS, data, orgId);
+                if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
-                const owned = await stampOwnerIds(data.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
+                const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;
@@ -304,8 +311,13 @@ export const handler = async (event) => {
             }
             const link = await accountLink(data, null, orgId);
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
-            const newRow = await stampOwnerId(sanitize(link.id ? { ...data, account: link.name, accountId: link.id } : data), 'opportunity', { clerkUserId: userId, orgId });
-            const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).returning();
+            const people = await checkLinks(DEAL_LINKS, data, null, orgId);
+            if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
+            const named = { ...data, ...people.set };
+            const newRow = await stampOwnerId(sanitize(link.id ? { ...named, account: link.name, accountId: link.id } : named), 'opportunity', { clerkUserId: userId, orgId });
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
+            const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That deal id is already in use.' }) };
 
             // Email: new opportunity created — notify the assigned rep only if
             // SOMEONE ELSE created it.
@@ -389,6 +401,7 @@ export const handler = async (event) => {
                         stageChangedDate: opportunities.stageChangedDate,
                         accountId:        opportunities.accountId,
                         account:          opportunities.account,
+                        contactIds:       opportunities.contactIds,
                     })
                     .from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
@@ -397,6 +410,11 @@ export const handler = async (event) => {
                 // asked again (accountLink, above).
                 const strays = await accountIdsNotInOrg(data, orgId, priors);
                 if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
+                // Each contact a row names anew is one of this org's; one the deal already holds is not
+                // asked again (state §0.199).
+                const people = await checkBulkLinks(DEAL_LINKS, data, orgId, { held: priors });
+                if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
+                data.splice(0, data.length, ...people.rows);   // the rows as checked: a merged-away contact, its survivor
                 // A row that sends an Account name and no id unlinks its deal when the name is not
                 // the one stored, as a single save does (below) — and the batch's other rows keep
                 // the ids their deals hold (bulkAccountLinks, src/utils/dealAccount.js).
@@ -457,6 +475,11 @@ export const handler = async (event) => {
             if (forbiddenPut) return forbiddenPut;
             const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
+            // Each contact it names anew is one of this org's; one the deal already holds is not asked
+            // again (state §0.199).
+            const people = await checkLinks(DEAL_LINKS, data, existing, orgId);
+            if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
+            Object.assign(data, people.set);
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 

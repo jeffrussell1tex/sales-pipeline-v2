@@ -109,6 +109,11 @@ One commit per verified batch; doc patch in the same commit.
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.
 - `dbFetch` returns the raw `Response` — caller must `.json()`.
+- A link a write stores (an account, contact, deal, lead, customer or
+  location id) must name a live row of the org when the write names it
+  anew: `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92). An id
+  the row already holds is never asked again; a screen that copies a link
+  leaves off one the server refuses (`saveDroppingRefused`).
 
 ## Frontend conventions
 

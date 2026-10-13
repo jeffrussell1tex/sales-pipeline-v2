@@ -12,6 +12,7 @@ import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs, memberNamesOf } from './_lib.mjs';
 // One name per member of an org (state §0.196).
 import { restorableMembers, restoreNotes, droppedErrors } from '../../src/utils/memberName.js';
+import { clearStrayLinks } from './_links.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -283,6 +284,15 @@ export const handler = async (event) => {
                 return out;
             });
 
+            // The rows this restore inserted, by table — a row another org's id kept out is not one — for
+            // the link clean-up after it (state §0.199, E4).
+            const restored = new Map();
+            const keepRestored = (table, rows) => {
+                const ids = restored.get(table) || [];
+                for (const r of rows || []) if (r && r.id) ids.push(r.id);
+                restored.set(table, ids);
+            };
+
             const CHUNK = 50;
             async function upsertChunked(table, rows) {
                 if (!rows || rows.length === 0) return 0;
@@ -293,13 +303,13 @@ export const handler = async (event) => {
                     try {
                         // Use onConflictDoNothing for bulk — safe for seed/restore
                         // since we want existing records preserved and new ones inserted
-                        await db.insert(table).values(chunk).onConflictDoNothing();
+                        keepRestored(table, await db.insert(table).values(chunk).onConflictDoNothing().returning({ id: table.id }));
                         count += chunk.length;
                     } catch {
                         // Bulk failed — fall back row-by-row to skip any single bad record
                         for (const row of chunk) {
                             try {
-                                await db.insert(table).values(row).onConflictDoNothing();
+                                keepRestored(table, await db.insert(table).values(row).onConflictDoNothing().returning({ id: table.id }));
                                 count++;
                             } catch { /* truly bad row — skip silently */ }
                         }
@@ -390,6 +400,18 @@ export const handler = async (event) => {
                 }
             }
 
+            // On the rows it restored, every link that names no row of this org is cleared, and the answer says
+            // how many; a file is never refused over a link (state §0.199, E4: "Clear stray links"). A job's
+            // customer and a quote's deal are required: such rows are counted, not changed.
+            let swept = null;
+            try {
+                swept = await clearStrayLinks(orgId, restored);
+                if (swept.cleared) notes.push(`${swept.cleared} link${swept.cleared === 1 ? '' : 's'} that named no record of this organization ${swept.cleared === 1 ? 'was' : 'were'} cleared.`);
+                if (swept.jobsWithoutCustomer) notes.push(`${swept.jobsWithoutCustomer} job${swept.jobsWithoutCustomer === 1 ? ' names' : 's name'} a customer that is not in this organization — a job's customer can't be cleared, so ${swept.jobsWithoutCustomer === 1 ? 'it was' : 'they were'} left as restored.`);
+                if (swept.quotesWithoutDeal) notes.push(`${swept.quotesWithoutDeal} quote${swept.quotesWithoutDeal === 1 ? ' names' : 's name'} a deal that is not in this organization — a quote's deal can't be cleared, so ${swept.quotesWithoutDeal === 1 ? 'it was' : 'they were'} left as restored.`);
+                if (swept.failed.length) errs.push(`links: not checked on ${swept.failed.join(', ')} — the restore stands, those links as the file had them.`);
+            } catch (e) { errs.push(`links: not checked — ${e?.cause?.message || e?.message}`); }
+
             // Record a synthetic snapshot entry
             const snapId = generateSnapId() + '_import';
             try {
@@ -407,7 +429,13 @@ export const handler = async (event) => {
             } catch { /* non-fatal */ }
             // A restore writes rows into every table it names — the most consequential
             // write an Admin can make, and the one the log must carry (§0.143).
-            await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}` });
+            // The links it cleared and the rows it left are the log's too (§0.143), not only the answer's.
+            const linkDetail = swept ? [
+                swept.cleared ? `${swept.cleared} link${swept.cleared === 1 ? '' : 's'} cleared` : '',
+                swept.jobsWithoutCustomer ? `${swept.jobsWithoutCustomer} job${swept.jobsWithoutCustomer === 1 ? '' : 's'} with a customer not in this org` : '',
+                swept.quotesWithoutDeal ? `${swept.quotesWithoutDeal} quote${swept.quotesWithoutDeal === 1 ? '' : 's'} with a deal not in this org` : '',
+            ].filter(Boolean).join(' · ') : '';
+            await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${linkDetail ? ` · ${linkDetail}` : ''}${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}` });
 
             return {
                 statusCode: errs.length && imported === 0 ? 500 : 200,

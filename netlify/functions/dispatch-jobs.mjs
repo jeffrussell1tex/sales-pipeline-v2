@@ -15,6 +15,16 @@ import { notifyCustomer } from './_customerNotify.mjs';
 // Whose jobs a Technician's are — one definition for every dispatch read (§0.169).
 import { resolveTechnicianId } from './_techScope.mjs';
 import { techOnJob } from './_techJobs.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A job's customer, service location, CRM account and deal: live rows of this org when a write names
+// them anew (state §0.199).
+const JOB_LINKS = [
+    { key: 'customerId', kind: 'customer' },
+    { key: 'locationId', kind: 'location' },
+    { key: 'accountId', kind: 'account' },
+    { key: 'opportunityId', kind: 'deal' },
+];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -299,6 +309,11 @@ export const handler = async (event) => {
             const [priorJob] = await db.select()
                 .from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            // Each link it names anew is one of this org's; the create is an upsert, so one the job
+            // already holds is not asked again (state §0.199).
+            const linked = await checkLinks(JOB_LINKS, data, priorJob || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            Object.assign(data, linked.set);
 
             // jobNumber is issued inside the retry below, so a collision re-reads
             // the maximum instead of retrying with the same losing number.
@@ -444,6 +459,12 @@ export const handler = async (event) => {
 
                 return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
             }
+
+            // Each link it names anew is one of this org's; one the job already holds is not asked again
+            // (state §0.199).
+            const linked = await checkLinks(JOB_LINKS, data, current, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            Object.assign(data, linked.set);
 
             const scalarFields = [
                 // jobNumber deliberately omitted: server-assigned and immutable.

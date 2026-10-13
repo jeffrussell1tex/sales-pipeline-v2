@@ -8,6 +8,8 @@ import { matchSearch } from '../../utils/searchMatch.js';
 import { canEditCrm } from '../../utils/roles.js';
 import AccountPicker from './AccountPicker';
 import HiddenLink from './HiddenLink';
+import { saveDroppingRefused } from '../../utils/linkIds.js';
+import { requestOrg, stillOrg } from '../../utils/storage';
 import { dealText, dealSubline, isMergeArchived, HIDDEN_ACCOUNT, HIDDEN_DEAL } from '../../utils/pickLink.js';
 import { outOfList } from '../../utils/railLinks.js';
 import { NO_TASK_SEED, taskSeed, taskLinks, contactChip, chipLabel } from '../../utils/taskLinks.js';
@@ -16,6 +18,10 @@ import { leaveOut } from '../../utils/leaveOut.js';
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// A refusal's words to end a sentence with: the server's own, or the connection when nothing answered — the
+// full stop the sentence's (state §0.199).
+const said = (words) => { const s = String(words || 'check your connection and try again'); return s.endsWith('.') ? s.slice(0, -1) : s; };
 
 function SectionHeading({ label }) {
     return (
@@ -133,7 +139,7 @@ export default function TaskRail() {
         handleCompleteTask,
         handleSaveActivity,
         setShowActivityModal, setEditingActivity, setActivityInitialContext, setViewingActivity,
-        setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults,
+        setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults, setPressNotices,
         taskModalError, setTaskModalError,
         taskModalSaving,
         userRole,
@@ -170,7 +176,11 @@ export default function TaskRail() {
     const [newTaskId,     setNewTaskId]     = useState(null);
     const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
     const [completionNotes,  setCompletionNotes]  = useState('');
+    const [completionError,  setCompletionError]  = useState('');   // the completion or its notes' activity refused: the prompt stays
     const [completionType,   setCompletionType]   = useState('');
+    const [completing,       setCompleting]       = useState(false);   // a press is out: the prompt's buttons wait
+    const completingRef = useRef(false);   // the same, read at the press — before React has drawn the wait
+    const pressGen = useRef(0);   // the rail's opens: a press touches only the one it began on (§0.199's third re-check)
 
     // Seed form when rail opens
     useEffect(() => {
@@ -195,10 +205,25 @@ export default function TaskRail() {
         setDirty(false);
         setSaveError(null);
         setTaskModalError?.(null);
+        // A completion prompt left by the last task (a refused notes save, then Escape) never opens on this one.
+        setCompletionPrompt(false);
+        setCompletionNotes('');
+        setCompletionError('');
         // Pre-generate the id for a brand-new task so documents can be linked to it in
         // the create form before save (handleSaveTask honors this id). Regenerated per open.
         setNewTaskId(isNew ? ('id_' + crypto.randomUUID()) : null);
     }, [taskRailId, taskRailMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Each open of the rail — another task, a new one, its close — is another rail (state §0.199's third
+    // re-check): a press begun on the last one ends without touching it (confirmComplete's `here`), and the wait
+    // it took is let go here, for the rail now shown. So is the rail's unmount (the fourth re-check): an org switch
+    // remounts it, and so does a crash's recovery — a press begun on this one never reads the new one as its own.
+    useEffect(() => {
+        pressGen.current += 1;
+        completingRef.current = false;
+        setCompleting(false);
+        return () => { pressGen.current += 1; };
+    }, [taskRailId, taskRailMode]);
 
     useEffect(() => {
         if (refusals || taskModalError) errorRef.current?.scrollIntoView?.({ block: 'nearest' });
@@ -320,15 +345,42 @@ export default function TaskRail() {
         // Show inline notes prompt — notes optional
         setCompletionType(task.type || (settings?.taskTypes?.[0]) || 'Call');
         setCompletionNotes('');
+        setCompletionError('');
         setCompletionPrompt(true);
     };
 
-    const handleConfirmComplete = async () => {
+    const confirmComplete = async (mine) => {
         if (!task) return;
+        // The org the press began in: an org switch mid-way stops it — nothing more is sent, and the notes are
+        // never saved in the org switched to (state §0.175; §0.199's fix review).
+        const askedOrg = requestOrg();
+        // The rail's open the press began on (`mine`, handleConfirmComplete's). The rail may move on while a press
+        // is out — Escape, the backdrop, its T key, a follow-up's "+ Add Task", an org switch and back: the press
+        // never touches the task rail then. It ends on its own writes and says only what did not land; a landed
+        // one says nothing and offers no follow-up (state §0.199's third and fourth re-checks).
+        const here = () => pressGen.current === mine;
+        // Said on the prompt the press began on — or, the rail moved on, in a notice of the press's own, kept until
+        // its ✕ or an org switch, with the notes refused and a way to log them: the app's one toast slot is shared,
+        // and a later toast replaced the words, a delete's Undo with them (state §0.199's fifth re-check).
+        const say = (words, refused) => (here() ? setCompletionError(words)
+            : setPressNotices?.((list) => [...list, { id: 'press_' + crypto.randomUUID(), title: task.title || 'A task', words, refused: refused || null }]));
         // 1. Mark task complete — MUST await: this persists to the DB, and
         // closeRail() below unmounts the rail and triggers a task reload. Not
         // awaiting races the PUT against the reload, so the completion is lost.
-        if (handleCompleteTask) await handleCompleteTask(task.id);
+        // Completed, not toggled — and once, by what the bar above reads (`completed`, not the Status: a task set
+        // to Completed in its edit form is completed here): a task already completed — its notes refused below,
+        // then a second press — saves the notes alone. A completion that does not land is said, and the notes
+        // are saved all the same: they record the call, whatever the task's state (Jeff, 13 Oct: "Save them
+        // anyway"; state §0.199's second re-check). Saved, they leave the prompt: a second press completes the
+        // task alone.
+        setCompletionError('');
+        let notDone = null;        // the completion's refusal: its words, '' when nothing answered; null when it landed
+        let notesSaved = false;
+        if (handleCompleteTask && !task.completed) {
+            const done = await handleCompleteTask(task.id, 'Completed');
+            if (!done?.ok) notDone = done?.error || '';
+        }
+        if (!stillOrg(askedOrg)) return;
         // 2. Auto-create activity record if notes provided
         if (completionNotes.trim()) {
             const today = new Date();
@@ -342,20 +394,67 @@ export default function TaskRail() {
                 accountId:     task.accountId     || '',   // by id: activities keep no company name (activities.mjs sanitize), so the name sent here was dropped and the activity logged no account
                 addToCalendar: false,
             };
-            handleSaveActivity && await handleSaveActivity(activityData, {
-                editingActivity: null,
-                currentUser,
-                opportunities,
-                setShowActivityModal: () => {},
-                setFollowUpPrompt,
-                setQuickLogOpen,
-                setQuickLogForm,
-                setQuickLogContactResults,
-            });
+            if (handleSaveActivity) {
+                // The task's links are copied onto the activity: one the server refuses — its record deleted
+                // since (a create asks every link it names, state §0.199) — is left off and the notes are saved
+                // without it. Anything else keeps the prompt, its notes and the error — or, the rail moved on,
+                // is said in the press's notice with the notes.
+                const { answer, sent } = await saveDroppingRefused((body) => (stillOrg(askedOrg) ? handleSaveActivity(body, {
+                    editingActivity: null,
+                    currentUser,
+                    opportunities,
+                    setShowActivityModal: () => {},
+                    // A follow-up is offered for a task completed, on the rail it was completed on: one not
+                    // completed has no next step yet, and its prompt stays up for another press.
+                    setFollowUpPrompt: (prompt) => { if (notDone === null && here()) setFollowUpPrompt(prompt); },
+                    // Not this save's: QuickLog's draft stays (the save's tail emptied it), and the Activity rail's
+                    // wait and banner are that rail's own — quiet (state §0.199's fifth re-check).
+                    setQuickLogOpen: () => {},
+                    setQuickLogForm: () => {},
+                    setQuickLogContactResults: () => {},
+                    quiet: true,
+                }) : undefined), activityData, ['opportunityId', 'contactId', 'accountId']);
+                if (!stillOrg(askedOrg)) return;
+                if (!answer?.ok) {
+                    // On the rail it began on, the prompt keeps the notes for another press; on one moved on since,
+                    // the press's notice carries them, with their links as last sent, to log from it (Jeff, 13 Oct:
+                    // "Show them in the toast").
+                    say(notDone !== null
+                        ? `The task was not completed: ${said(notDone)}. Its notes were not saved: ${said(answer?.error)}.`
+                        : `The task is completed — its notes were not saved: ${said(answer?.error)}.`,
+                        { type: sent.type, notes: sent.notes, opportunityId: sent.opportunityId || '', contactId: sent.contactId || '', accountId: sent.accountId || '' });
+                    return;
+                }
+                notesSaved = true;
+            }
         }
+        if (notDone !== null) {
+            // Not completed: said, and the prompt stays for another press — without the notes, once saved.
+            if (notesSaved && here()) setCompletionNotes('');
+            say(notesSaved
+                ? `Its notes were saved, but the task was not completed: ${said(notDone)}.`
+                : `The task was not completed: ${said(notDone)}.`);
+            return;
+        }
+        // The rail moved on: the task is completed and its notes saved — nothing to close, nothing to say.
+        if (!here()) return;
         setCompletionPrompt(false);
         setCompletionNotes('');
         closeRail();
+    };
+    // One press at a time (state §0.199's second re-check): a press marks the task completed before its write is
+    // answered, so a second press while it was out read the task as completed, skipped the completion and sent
+    // the notes — and a completion then refused was never said. The prompt waits — its buttons, its type and its
+    // notes (what a press clears is then what it sent) — as the Tasks tab's and Home's Complete and the Closed
+    // Lost dialog (§0.193) wait; the rail still closes on Escape and the backdrop (Jeff, 13 Oct: "Let it close"),
+    // and the press then says only what did not land, in a notice of its own (a landed one says nothing). A press
+    // lets go of the wait it took, unless another open of the rail let go of it first (the effect above).
+    const handleConfirmComplete = async () => {
+        if (completingRef.current) return;
+        completingRef.current = true;
+        setCompleting(true);
+        const mine = pressGen.current;
+        try { await confirmComplete(mine); } finally { if (pressGen.current === mine) { completingRef.current = false; setCompleting(false); } }
     };
 
     // ESC to close — the rail's Escape while no layer above it is open (state §0.189): the
@@ -452,7 +551,7 @@ export default function TaskRail() {
 
                         <div style={{ marginBottom: 10 }}>
                             <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Activity Type</label>
-                            <select value={completionType} onChange={e => setCompletionType(e.target.value)}
+                            <select value={completionType} onChange={e => setCompletionType(e.target.value)} disabled={completing}
                                 style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans }}>
                                 {(settings?.taskTypes || ['Call','Meeting','Email','Demo','Follow-up']).map(tt => <option key={tt} value={tt}>{tt}</option>)}
                             </select>
@@ -460,21 +559,27 @@ export default function TaskRail() {
 
                         <div style={{ marginBottom: 14 }}>
                             <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Notes <span style={{ fontWeight: 400, textTransform: 'none', color: T.inkMuted }}>(optional)</span></label>
-                            <textarea value={completionNotes} onChange={e => setCompletionNotes(e.target.value)}
+                            <textarea value={completionNotes} onChange={e => setCompletionNotes(e.target.value)} readOnly={completing}
                                 rows={4} placeholder="What was discussed? Any next steps?"
                                 autoFocus
                                 style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', resize: 'vertical' }}
                             />
                         </div>
 
+                        {completionError && (
+                            <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger }}>
+                                {completionError}
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); }}
-                                style={{ padding: '8px 14px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                                Cancel
+                            <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); setCompletionError(''); }} disabled={completing}
+                                style={{ padding: '8px 14px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: completing ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: completing ? 0.7 : 1 }}>
+                                {completionError && completionNotes.trim() ? 'Discard notes' : 'Cancel'}
                             </button>
-                            <button onClick={handleConfirmComplete}
-                                style={{ flex: 1, padding: '8px 14px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.sans }}>
-                                ✓ Mark Complete
+                            <button onClick={handleConfirmComplete} disabled={completing}
+                                style={{ flex: 1, padding: '8px 14px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 700, cursor: completing ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: completing ? 0.7 : 1 }}>
+                                {completing ? 'Saving…' : completionError && task?.completed ? 'Save notes' : '✓ Mark Complete'}
                             </button>
                         </div>
                     </div>

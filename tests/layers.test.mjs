@@ -32,12 +32,13 @@ const srcFiles = () => {
     return out;
 };
 
-// The four — the confirm and prompt share one class — each found by the line that sets it.
+// The five — the confirm and prompt share one class — each found by the line that sets it.
 const APP_LAYERS = [
     ['src/index.css', 'z-index: 100100;   /* the app\'s confirm and prompt', 'the confirm and prompt dialogs (.modal-overlay)'],
     ['src/components/layout/ModalLayer.jsx', "background: 'rgba(28,25,23,0.55)', zIndex: 100100,", 'the blocked-delete dialog'],
     ['src/components/layout/ModalLayer.jsx', "transform: 'translateX(-50%)', zIndex: 100200,", 'the Undo toast'],
     ['src/components/layout/QuickLogFab.jsx', "left: isMobile ? '0.75rem' : 'auto', zIndex: 100050,", 'the follow-up prompt'],
+    ['src/components/layout/ModalLayer.jsx', "position: 'fixed', left: '1rem', zIndex: 100200,", "a task completion's notices, as the toast (§0.199)"],
 ];
 const Z_RE = /(?:zIndex:\s*|z-index:\s*)(\d+)/g;
 
@@ -52,7 +53,7 @@ const everyZ = () => {
     return out;
 };
 
-test('the four are where this test reads them', () => {
+test('the five are where this test reads them', () => {
     for (const [file, text, what] of APP_LAYERS) assert.equal(read(file).split(text).length - 1, 1, what);
 });
 
@@ -60,7 +61,7 @@ test('THE GUARD — the app\'s dialogs and toasts are above every other layer in
     const all = everyZ();
     const isApp = (z) => APP_LAYERS.some(([file, text]) => z.file === file && z.text.includes(text));
     const app = all.filter(isApp);
-    assert.equal(app.length, APP_LAYERS.length, 'each of the four found once');
+    assert.equal(app.length, APP_LAYERS.length, 'each of the five found once');
     const others = all.filter((z) => !isApp(z));
     const top = others.reduce((m, z) => (z.z > m.z ? z : m), { z: -1 });
     for (const a of app) assert.ok(a.z > top.z, `${a.file}:${a.line} (${a.z}) is not above ${top.file}:${top.line} (${top.z})`);

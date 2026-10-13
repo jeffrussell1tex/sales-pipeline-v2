@@ -10,6 +10,17 @@ import {
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
+import { checkLinks } from './_links.mjs';
+
+// The links an activity stores, each a live row of this org when a write names it anew (state §0.199):
+// its account, deal, lead and contacts — contactIds and its first, contactId, one link between them.
+const ACTIVITY_LINKS = [
+    { key: 'accountId', kind: 'account' },
+    { key: 'opportunityId', kind: 'deal' },
+    { key: 'leadId', kind: 'lead' },
+    { key: 'contactIds', kind: 'contact', shape: 'many', heldFrom: ['contactIds', 'contactId'] },
+    { key: 'contactId', kind: 'contact', heldFrom: ['contactId', 'contactIds'] },
+];
 
 async function rescoreLead(orgId, leadId) {
     if (!leadId) return;
@@ -105,8 +116,13 @@ export const handler = async (event) => {
             // Undo re-posts it as the list read it: that is the one contact, not none — sanitize builds
             // contactId from the list (§0.198, the re-check). A PUT that sends an empty list still clears.
             if (Array.isArray(data.contactIds) && !data.contactIds.length && data.contactId) data.contactIds = [data.contactId];
-            const newRow = await stampOwnerId(sanitize(data), 'activity', { clerkUserId: userId, orgId });
-            const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).returning();
+            // Each link it names is one of this org's (state §0.199).
+            const linked = await checkLinks(ACTIVITY_LINKS, data, null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'activity', { clerkUserId: userId, orgId });
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
+            const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).onConflictDoNothing({ target: activities.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That activity id is already in use.' }) };
             if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
             return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted }) };
         }
@@ -140,6 +156,15 @@ export const handler = async (event) => {
                 table: activities, entity: 'activity', id: data.id, orgId, userId, userRole, headers, row: target,
             });
             if (forbiddenPut) return forbiddenPut;
+            // Each link it names anew is one of this org's; one the activity already holds is not asked
+            // again (state §0.199). A link to a row merged away is stored as its survivor — rebuilt
+            // through sanitize, which derives contactId from the list.
+            const linked = await checkLinks(ACTIVITY_LINKS, data, target, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            if (Object.keys(linked.set).length) {
+                const relinked = sanitize({ ...base, ...data, ...linked.set });
+                for (const k of Object.keys(relinked)) if (k !== 'id' && k in updateData) { clean[k] = relinked[k]; updateData[k] = relinked[k]; }
+            }
             // Changing the author re-keys ownership; a PUT that never mentioned
             // it leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'activity', orgId, stored: target });

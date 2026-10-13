@@ -56,7 +56,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 
 const { handler } = await import('../../netlify/functions/tasks.mjs');
 const { db } = await import('../../db/index.js');
-const { tasks, users } = await import('../../db/schema.js');
+const { tasks, users, accounts, contacts, opportunities } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
@@ -82,10 +82,28 @@ const cleanup = async () => {
     for (const o of [A, B]) {
         await db.delete(tasks).where(eq(tasks.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
+        for (const t of [accounts, contacts, opportunities]) await db.delete(t).where(eq(t.orgId, o));
     }
 };
 
-before(cleanup);
+// The records the tasks below link, in org A: a link names a live row of the org (state §0.199).
+before(async () => {
+    await cleanup();
+    await db.insert(accounts).values([
+        { id: 'itest_tasks_acc_site', orgId: A, name: 'Itest Tasks Site' },
+        { id: 'itest_tasks_acct_l', orgId: A, name: 'Itest Tasks Legacy Co' },
+    ]);
+    await db.insert(contacts).values([
+        { id: 'itest_tasks_ct_1', orgId: A, firstName: 'Jane', lastName: 'Contact' },
+        { id: 'itest_tasks_ct_itest_1', orgId: A, firstName: 'Pat', lastName: 'Smith' },
+        { id: 'itest_tasks_ct_legacy', orgId: A, firstName: 'Lee', lastName: 'Legacy' },
+    ]);
+    await db.insert(opportunities).values([
+        { id: 'itest_tasks_opp_rel_1', orgId: A, opportunityName: 'Itest Tasks Rel', pipelineId: 'default', stage: 'Discovery' },
+        { id: 'itest_tasks_opp_1', orgId: A, opportunityName: 'Itest Tasks Deal', pipelineId: 'default', stage: 'Discovery' },
+        { id: 'itest_tasks_opp_l', orgId: A, opportunityName: 'Itest Tasks Legacy', pipelineId: 'default', stage: 'Discovery' },
+    ]);
+});
 after(cleanup);
 
 test('read isolation — A cannot see B tasks', async () => {
@@ -111,8 +129,8 @@ test('REGRESSION — a partial PUT does not un-complete the task or wipe its fie
     await handler(ev(A, 'POST', {
         id: 'task_A_merge1', title: 'Precious Task', description: 'the details',
         type: 'Call', dueDate: '2026-09-05', assignedTo: 'Someone', priority: 'High',
-        status: 'Open', opportunityId: 'opp_rel_1', relatedTo: 'Acme',
-        contacts: [{ id: 'ct_1', name: 'Jane Contact' }],
+        status: 'Open', opportunityId: 'itest_tasks_opp_rel_1', relatedTo: 'Acme',
+        contacts: [{ id: 'itest_tasks_ct_1', name: 'Jane Contact' }],
     }));
     // Complete it the field-present way.
     const done = await handler(ev(A, 'PUT', {
@@ -134,7 +152,7 @@ test('REGRESSION — a partial PUT does not un-complete the task or wipe its fie
     assert.equal(row.description,   'the details',  'an omitted field must survive a partial PUT');
     assert.equal(row.assignedTo,    'Someone',      'assignment must survive a title-only PUT');
     assert.equal(row.dueDate,       '2026-09-05',   'due date must survive a partial PUT');
-    assert.equal(row.opportunityId, 'opp_rel_1',    'the opportunity link must survive a partial PUT');
+    assert.equal(row.opportunityId, 'itest_tasks_opp_rel_1',    'the opportunity link must survive a partial PUT');
     assert.equal(row.contacts.length, 1,            'linked contacts must survive a partial PUT');
 });
 
@@ -166,14 +184,14 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
 test('a PUT that clears the account, the deal and every contact clears them', async () => {
     const made = await handler(ev(A, 'POST', {
         id: 'task_A_links', title: 'Linked Task', status: 'Open',
-        accountId: 'acc_itest_site', opportunityId: 'opp_itest_1', contactId: 'ct_itest_1',
-        contacts: [{ id: 'ct_itest_1', name: 'Pat Smith', title: '', primary: true }],
+        accountId: 'itest_tasks_acc_site', opportunityId: 'itest_tasks_opp_1', contactId: 'itest_tasks_ct_itest_1',
+        contacts: [{ id: 'itest_tasks_ct_itest_1', name: 'Pat Smith', title: '', primary: true }],
     }));
     assert.equal(made.statusCode, 201);
     let row = await rowOf('task_A_links');
-    assert.equal(row.accountId, 'acc_itest_site', 'precondition: linked to an account');
-    assert.equal(row.opportunityId, 'opp_itest_1', 'precondition: linked to a deal');
-    assert.equal(row.contactId, 'ct_itest_1', 'precondition: linked to a contact');
+    assert.equal(row.accountId, 'itest_tasks_acc_site', 'precondition: linked to an account');
+    assert.equal(row.opportunityId, 'itest_tasks_opp_1', 'precondition: linked to a deal');
+    assert.equal(row.contactId, 'itest_tasks_ct_itest_1', 'precondition: linked to a contact');
     const res = await handler(ev(A, 'PUT', { id: 'task_A_links', title: 'Linked Task', accountId: '', opportunityId: '', contactId: '', contacts: [] }));
     assert.equal(res.statusCode, 200);
     row = await rowOf('task_A_links');
@@ -231,7 +249,7 @@ test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 di
 });
 
 test('§0.198, the pre-ship round — the task rail leaves its untouched links out of an edit: a title-only PUT keeps a task from before chips as it was — contacts null, its one contactId, its account and deal', async () => {
-    await handler(ev(A, 'POST', { id: 'task_A_leftout', title: 'Legacy', status: 'Open', contactId: 'ct_itest_legacy', accountId: 'acct_itest_l', opportunityId: 'opp_itest_l' }));
+    await handler(ev(A, 'POST', { id: 'task_A_leftout', title: 'Legacy', status: 'Open', contactId: 'itest_tasks_ct_legacy', accountId: 'itest_tasks_acct_l', opportunityId: 'itest_tasks_opp_l' }));
     let row = await rowOf('task_A_leftout');
     assert.equal(row.contacts, null, 'precondition: no chips, one contactId');
     const res = await handler(ev(A, 'PUT', { id: 'task_A_leftout', title: 'Legacy, renamed' }));
@@ -239,7 +257,7 @@ test('§0.198, the pre-ship round — the task rail leaves its untouched links o
     row = await rowOf('task_A_leftout');
     assert.equal(row.title, 'Legacy, renamed');
     assert.equal(row.contacts, null, 'no chip stored — the rail stored one with no name for a contact its list did not hold');
-    assert.equal(row.contactId, 'ct_itest_legacy');
-    assert.equal(row.accountId, 'acct_itest_l');
-    assert.equal(row.opportunityId, 'opp_itest_l');
+    assert.equal(row.contactId, 'itest_tasks_ct_legacy');
+    assert.equal(row.accountId, 'itest_tasks_acct_l');
+    assert.equal(row.opportunityId, 'itest_tasks_opp_l');
 });

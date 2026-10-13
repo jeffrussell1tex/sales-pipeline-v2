@@ -11,6 +11,16 @@ import {
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
+import { checkLinks } from './_links.mjs';
+
+// The links a task stores, each a live row of this org when a write names it anew (state §0.199): its
+// account, deal and contacts — the chips and the Primary one, contactId, one link between them.
+const TASK_LINKS = [
+    { key: 'accountId', kind: 'account' },
+    { key: 'opportunityId', kind: 'deal' },
+    { key: 'contacts', kind: 'contact', shape: 'chips', heldFrom: ['contacts', 'contactId'] },
+    { key: 'contactId', kind: 'contact', heldFrom: ['contactId', 'contacts'] },
+];
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -80,8 +90,13 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             // A task created with no assignee belongs to its creator; one
             // assigned from the roster picker belongs to that person.
-            const newRow = await stampOwnerId(sanitize(data), 'task', { clerkUserId: userId, orgId });
-            const [inserted] = await db.insert(tasks).values({ ...newRow, orgId }).returning();
+            // Each link it names is one of this org's (state §0.199).
+            const linked = await checkLinks(TASK_LINKS, data, null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'task', { clerkUserId: userId, orgId });
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
+            const [inserted] = await db.insert(tasks).values({ ...newRow, orgId }).onConflictDoNothing({ target: tasks.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That task id is already in use.' }) };
             return { statusCode: 201, headers, body: JSON.stringify({ task: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -106,6 +121,11 @@ export const handler = async (event) => {
                 table: tasks, entity: 'task', id: data.id, orgId, userId, userRole, headers, row: existing,
             });
             if (forbiddenPut) return forbiddenPut;
+            // Each link it names anew is one of this org's; one the task already holds is not asked again
+            // (state §0.199). A link to a row merged away is stored as its survivor.
+            const linked = await checkLinks(TASK_LINKS, data, existing, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            Object.assign(data, linked.set);
             const wasCompleted = existing?.completed === true;
 
             // The payload is sanitized OVERLAID ON THE STORED ROW (the

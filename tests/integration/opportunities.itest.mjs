@@ -65,7 +65,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 
 const { handler } = await import('../../netlify/functions/opportunities.mjs');
 const { db } = await import('../../db/index.js');
-const { opportunities, users, settings: settingsTable } = await import('../../db/schema.js');
+const { opportunities, users, contacts, settings: settingsTable } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
@@ -91,6 +91,7 @@ const cleanup = async () => {
         await db.delete(opportunities).where(eq(opportunities.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
         await db.delete(settingsTable).where(eq(settingsTable.orgId, o));
+        await db.delete(contacts).where(eq(contacts.orgId, o));
     }
 };
 
@@ -103,6 +104,8 @@ before(async () => {
         { id: REP_A, clerkUserId: 'u_' + A, name: 'Itest Opp Rep', email: 'opp-rep@itest.local', role: 'User', orgId: A },
     ]);
     invalidateRoster();
+    // The contact a deal below links, in org A: a link names a live row of the org (state §0.199).
+    await db.insert(contacts).values({ id: 'itest_opps_ct_1', orgId: A, firstName: 'Itest', lastName: 'Opp Contact' });
 });
 after(cleanup);
 
@@ -134,7 +137,7 @@ test('REGRESSION — a partial PUT updates its fields and preserves the rest', a
         notes: 'precious notes', nextSteps: 'call Tuesday', pipelineId: 'pipe_custom',
         stageHistory: [{ stage: 'Discovery', date: '2026-08-01', author: 'seed' }],
         comments: [{ id: 'c1', text: 'a Team Note', timestamp: '2026-08-02T00:00:00Z' }],
-        contactIds: ['ct_1'],
+        contactIds: ['itest_opps_ct_1'],
     }));
     const res = await handler(ev(A, 'PUT', { id: 'opp_A_merge1', stage: 'Proposal' }));
     assert.equal(res.statusCode, 200);
@@ -148,7 +151,7 @@ test('REGRESSION — a partial PUT updates its fields and preserves the rest', a
     assert.equal(row.pipelineId,      'pipe_custom',    "pipelineId must not reset to 'default'");
     assert.equal(row.stageHistory.length, 1,            'stage history must survive (the field no payload carried)');
     assert.equal(row.comments.length, 1,                'Team Notes must survive a partial PUT');
-    assert.deepEqual(row.contactIds,  ['ct_1'],         'linked contacts must survive a partial PUT');
+    assert.deepEqual(row.contactIds,  ['itest_opps_ct_1'],         'linked contacts must survive a partial PUT');
     assert.equal(row.ownerId, REP_A,  'ownership must survive a PUT that never mentioned salesRep (18b13)');
 });
 

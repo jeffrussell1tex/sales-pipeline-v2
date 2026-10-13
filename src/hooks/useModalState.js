@@ -7,7 +7,9 @@ export function useModalState() {
     // registered in resets, which a crash in a layer puts back too (closeLayers —
     // state §0.185); what the reminders remember — the alerts dismissed and
     // snoozed, the reminders fired — in remembered, which only a switch puts back:
-    // a crash that put them back brought every one back, with its chime.
+    // a crash that put them back brought every one back, with its chime. A task
+    // completion's notices are remembered too: each holds notes a save refused,
+    // kept until its ✕ (state §0.199).
     const resets = [];
     const remembered = [];
     const [showModal, setShowModal] = useOrgBoundState(resets, false);
@@ -91,6 +93,7 @@ export function useModalState() {
     const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useOrgBoundState(remembered, []);
     const [snoozedDueAlerts, setSnoozedDueAlerts] = useOrgBoundState(remembered, {}); // { [taskId]: re-alert-at timestamp (ms) }
     const [dismissedReminders, setDismissedReminders] = useOrgBoundState(remembered, []);
+    const [pressNotices, setPressNotices] = useOrgBoundState(remembered, []);   // a task completion's notices, one per press whose rail moved on (§0.199)
 
     return {
         resetOnOrgSwitch: resetAllOf([...resets, ...remembered]),
@@ -134,6 +137,7 @@ export function useModalState() {
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
+        pressNotices, setPressNotices,
         taskReminderPopup, setTaskReminderPopup,
         taskReminderSnoozeH, setTaskReminderSnoozeH,
         taskReminderSnoozeM, setTaskReminderSnoozeM,

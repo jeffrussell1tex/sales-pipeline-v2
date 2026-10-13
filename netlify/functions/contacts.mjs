@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { crmReadScope } from '../../src/utils/roles.js';
 import {
@@ -11,6 +11,15 @@ import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { openDealNamingContact, openDealNamingAnyContact, openDealRefusal } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
+import { checkLinks, checkBulkLinks, clearStrayLinks } from './_links.mjs';
+
+// The links a contact stores, each a live row of this org when a write names it anew (state §0.199):
+// its account, and the contacts on its org chart.
+const CONTACT_LINKS = [
+    { key: 'accountId', kind: 'account' },
+    { key: 'managers', kind: 'contact', shape: 'chips' },
+    { key: 'directReports', kind: 'contact', shape: 'chips' },
+];
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -98,16 +107,36 @@ export const handler = async (event) => {
                 // _lib.mjs (18b8). The removed onConflictDoNothing() could never
                 // fire: the only unique constraint is the id primary key and every
                 // id is a fresh randomUUID from the client.
-                const owned = await stampOwnerIds(data.map(d => sanitize(d)), 'contact', { clerkUserId: userId, orgId });
+                // Each link a row names is one of this org's — the batch's own new contacts too, on one
+                // another's org chart, and only there (state §0.199): an id this org already holds is no new
+                // row (its insert will not land), so a link to it is asked as any link is. A batch naming a
+                // stray is refused whole.
+                const batchIds = data.map(d => d.id);
+                const taken = new Set((await db.select({ id: contacts.id }).from(contacts).where(and(eq(contacts.orgId, orgId), inArray(contacts.id, batchIds)))).map(r => r.id));
+                const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { also: { kind: 'contact', ids: new Set(batchIds.filter(id => !taken.has(id))) } });
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
+                const owned = await stampOwnerIds(linked.rows.map(d => sanitize(d)), 'contact', { clerkUserId: userId, orgId });
                 const result = await bulkInsert({ table: contacts, rows: owned.rows, orgId });
+                // A row of the batch that did not land leaves no link to it: an org-chart entry naming one is
+                // cleared (state §0.199 — the batch's own rows were counted live).
+                if (result.failed.length) {
+                    const swept = await clearStrayLinks(orgId, new Map([[contacts, result.insertedIds]]));
+                    result.linksCleared = swept.cleared;
+                    if (swept.failed.length) result.linksNotChecked = swept.failed;   // said, not left silent
+                }
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;
                 return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const newRow = await stampOwnerId(sanitize(data), 'contact', { clerkUserId: userId, orgId });
-            const [inserted] = await db.insert(contacts).values({ ...newRow, orgId }).returning();
+            // Each link it names is one of this org's (state §0.199).
+            const linked = await checkLinks(CONTACT_LINKS, data, null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
+            const [inserted] = await db.insert(contacts).values({ ...newRow, orgId }).onConflictDoNothing({ target: contacts.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That contact id is already in use.' }) };
             return { statusCode: 201, headers, body: JSON.stringify({ contact: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -134,7 +163,13 @@ export const handler = async (event) => {
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
                 // The owner id moves with the owner name (state §0.193).
-                const keyed = await rekeyBulkOwners(partialRows(data, sanitize), 'contact', { table: contacts, orgId });
+                // Each link a row names anew is one of this org's; one a contact already holds is not
+                // asked again (state §0.199).
+                const stored = await db.select({ id: contacts.id, accountId: contacts.accountId, managers: contacts.managers, directReports: contacts.directReports })
+                    .from(contacts).where(and(eq(contacts.orgId, orgId), inArray(contacts.id, data.map(d => d.id))));
+                const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
+                const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize), 'contact', { table: contacts, orgId });
                 const result = await bulkUpsert({
                     table: contacts,
                     rows: keyed.rows,
@@ -172,6 +207,12 @@ export const handler = async (event) => {
                 table: contacts, entity: 'contact', id: data.id, orgId, userId, userRole, headers, row: target,
             });
             if (forbiddenPut) return forbiddenPut;
+            // Each link it names anew is one of this org's; one the contact already holds is not asked
+            // again (state §0.199).
+            const linked = await checkLinks(CONTACT_LINKS, data, target, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            Object.assign(clean, linked.set);
+            Object.assign(updateData, linked.set);
             const [upserted] = await db.insert(contacts).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: contacts.id, setWhere: eq(contacts.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();

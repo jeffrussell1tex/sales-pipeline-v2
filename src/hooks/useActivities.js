@@ -3,6 +3,11 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 
+// A quiet save's Activity rail setters (state §0.199's fifth re-check): the task rail's completion notes leave the
+// Activity rail's banner and wait alone — they are that rail's own save's, and a notes save that ended first let go
+// of its Save while its POST was still out: a second press logged the activity twice.
+const QUIET_RAIL = { setActivityModalError: () => {}, setActivityModalSaving: () => {} };
+
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
 
@@ -110,11 +115,18 @@ export function useActivities(deps) {
         }
     };
 
-    const handleSaveActivity = async (
+    // Answers { ok: true } once saved, or the server's refusal — { ok: false, status, error, field } — for a
+    // caller that acts on it (the task rail's completion notes, state §0.199); nothing when it left early (the
+    // connection failed — the error is shown — or the org changed).
+    // `quiet` (the task rail's completion notes) keeps the save off the Activity rail's banner and wait.
+    const handleSaveActivity = async (activityData, ctx) => saveActivity(activityData, ctx,
+        ctx?.quiet ? QUIET_RAIL : { setActivityModalError, setActivityModalSaving });
+    const saveActivity = async (
         activityData,
         { editingActivity, currentUser, opportunities,
           setShowActivityModal, setFollowUpPrompt,
-          setQuickLogOpen, setQuickLogForm, setQuickLogContactResults }
+          setQuickLogOpen, setQuickLogForm, setQuickLogContactResults },
+        { setActivityModalError, setActivityModalSaving },
     ) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setActivityModalError(null);
@@ -126,7 +138,7 @@ export function useActivities(deps) {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
                 const data = await res.json();
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
+                if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
                 fireActivityCalendarEvent(payload, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
@@ -143,7 +155,7 @@ export function useActivities(deps) {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
                 const data = await res.json();
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
+                if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => [...prev, data.activity || newActivity]);
                 fireActivityCalendarEvent(newActivity, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
@@ -167,6 +179,7 @@ export function useActivities(deps) {
         setQuickLogOpen(false);
         setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
         setQuickLogContactResults([]);
+        return { ok: true };
     };
 
     return {

@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../../utils/sto
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { buildOpportunityRow } from '../../utils/importRows';
+import { importPasses, subsAfterParents } from '../../utils/importParents.js';
 import { teamsWithMembers } from '../../utils/teamMembership.js';
 import {
     mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
@@ -106,6 +107,7 @@ export default function ModalLayer() {
         lostReasonModal, setLostReasonModal, completeLostSave,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
+        pressNotices, setPressNotices,
         taskReminderPopup, setTaskReminderPopup,
         taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
         taskDuePopup, setTaskDuePopup,
@@ -328,6 +330,43 @@ export default function ModalLayer() {
                 </div>
             )}
 
+            {/* ── A task completion's notices (state §0.199's fifth re-check) ─────────────────────
+                A press whose task rail moved on says here what did not land, each notice kept until its ✕ or an
+                org switch — the toast above is one slot, and a later toast replaced the words (a delete's Undo
+                too); a layer's crash keeps them (useModalState's remembered). Notes refused show as typed, with
+                "Log these notes": Log Activity, prefilled with them and the links last sent — the notice stays
+                until its ✕ — offered only when nothing it would open under or over is open: Log Activity, the
+                task rail, QuickLog. Bottom-left, clear of the rails' column and the follow-up card (under the
+                header on a phone), newest first. */}
+            {pressNotices && pressNotices.length > 0 && (
+                <div style={{ position: 'fixed', left: '1rem', zIndex: 100200,   // above every rail and modal, as the toast (state §0.177)
+                    ...(isMobile ? { right: '1rem', top: '4.5rem' } : { bottom: '5.5rem', width: '420px' }),
+                    display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                    {[...pressNotices].reverse().map(n => (
+                        <div key={n.id} style={{ background: T.ink, color: T.surface, borderRadius: '10px', padding: '0.75rem 1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: '0.875rem', flex: 1, overflowWrap: 'anywhere' }}>⚠ <strong>{n.title}</strong> — {n.words}</span>
+                                <button onClick={() => setPressNotices(list => list.filter(x => x.id !== n.id))}
+                                    style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem', lineHeight: 1 }}>✕</button>
+                            </div>
+                            {n.refused?.notes && (
+                                <>
+                                    <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.625rem', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '30vh', overflowY: 'auto' }}>
+                                        {n.refused.notes}
+                                    </div>
+                                    <button disabled={showActivityModal || !!taskRailId || quickLogOpen}
+                                        title={showActivityModal || taskRailId || quickLogOpen ? 'Finish what is open first' : undefined}
+                                        onClick={() => { setEditingActivity(null); setActivityInitialContext({ ...n.refused }); setShowActivityModal(true); }}
+                                        style={{ marginTop: '0.5rem', padding: '0.3rem 0.875rem', background: T.surface, color: T.ink, border: 'none', borderRadius: '6px', fontWeight: '700', cursor: showActivityModal || taskRailId || quickLogOpen ? 'not-allowed' : 'pointer', opacity: showActivityModal || taskRailId || quickLogOpen ? 0.6 : 1, fontSize: '0.8125rem', fontFamily: 'inherit' }}>
+                                        Log these notes
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {notesPopover && (() => {
                 const { opp, type, rect } = notesPopover;
                 const popH = 300;
@@ -464,32 +503,27 @@ export default function ModalLayer() {
                         const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
                         const still = () => stillOrg(askedOrg);
 
-                        // Pass 1: new accounts — parents first, then sub-accounts
-                        const parents = newAccounts.filter(a => !a.parentAccount?.trim());
-                        const parentsWithIds = parents.map(a => {
-                            const { parentAccount: _drop, ...rest } = a;
-                            return { ...rest, id: crypto.randomUUID(), parentAccountId: null };
-                        });
-
-                        // Pass 2: new sub-accounts — resolve parentAccountId
-                        const subs = newAccounts.filter(a => a.parentAccount?.trim());
-                        const allAccountsSoFar = [...accounts, ...parentsWithIds];
-                        const subsWithIds = subs.map(a => {
-                            const parentAccountId = allAccountsSoFar.find(
-                                acc => acc.name?.toLowerCase() === a.parentAccount.toLowerCase()
-                            )?.id || null;
-                            const { parentAccount: _drop, ...rest } = a;
-                            return { ...rest, id: crypto.randomUUID(), parentAccountId };
-                        });
-
+                        // Pass 1: the file's top-level accounts. Pass 2: its sub-accounts, each under the parent its
+                        // Parent Account names — a live account, a row of the file, or the account a merged-away one
+                        // was merged into, never the merged-away one (src/utils/importParents.js, state §0.199) — sent
+                        // once the parents have landed: one whose file parent did not save goes with no parent (the
+                        // receipt names the parents lost), never naming a row that is not there — the server refuses
+                        // a request whose parent is no live row of the org.
+                        const { parents: parentsWithIds, subs: subsWithIds } = importPasses(newAccounts, accounts, () => crypto.randomUUID());
                         const allWithIds = [...parentsWithIds, ...subsWithIds];
 
                         if (allWithIds.length > 0) {
                             onProgress(0, totalProgress);
-                            const res = await bulk.postNew('/.netlify/functions/accounts', allWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
+                            const first = await bulk.postNew('/.netlify/functions/accounts', parentsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             // Commit what actually saved before surfacing the failure.
-                            if (res.landed.length > 0) setAccounts(prev => [...prev, ...res.landed]);
+                            if (first.landed.length > 0) setAccounts(prev => [...prev, ...first.landed]);
+                            const second = first.error
+                                ? { landed: [], failed: [], error: null, attempted: 0 }
+                                : await bulk.postNew('/.netlify/functions/accounts', subsAfterParents(subsWithIds, parentsWithIds, first.landed), { onProgress, progressOffset: parentsWithIds.length, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
+                            if (second.landed.length > 0) setAccounts(prev => [...prev, ...second.landed]);
+                            const res = { landed: [...first.landed, ...second.landed], failed: [...first.failed, ...second.failed], error: first.error || second.error, attempted: allWithIds.length };
 
                             // parentAccountId is a plain text column, not a
                             // foreign key, so a sub-account whose parent failed

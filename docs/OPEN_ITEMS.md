@@ -30,7 +30,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **A pick is saved as the record picked: batches 2–4** (Jeff, 11 Oct:
+1. **A pick is saved as the record picked: batches 2, 3 and 4b** (Jeff, 11 Oct:
    "Split into batches"). A read-only map of every linking save (11 Oct, over
    7e68f26) found that every save linking an account, deal or contact looked
    the record up again by NAME and took the first of that name, in any case
@@ -59,6 +59,20 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      only they have names the record each was merged into. The unreachable
      copies are deleted. What it found and left is filed in §4.2, §4.4,
      §4.6, §4.7, §4.8 and §6.
+   - **Batch 4 is DONE (§0.199; guide §18b92).** A link a write names anew
+     — a contact's account and org chart; an activity's account, deal, lead
+     and contacts; a task's account, deal and contacts; a deal's contacts; a
+     bulk account row's parent; a dispatch customer's account; a dispatch
+     job's customer, location, account and deal — must be a live row of the
+     org (any of its records, E3); one merged away links the record it was
+     merged into (E2); an id the row already holds is never asked again. The
+     five CRM creates answer 409 for an id another org holds. An Admin's
+     backup restore clears, on the rows it restored, every link that names
+     no row of the org — a deal's account too — and says how many (E4). A
+     screen that copies a link (a task's completion notes, a dispatch job)
+     leaves off one the server refuses; the accounts CSV import finds a
+     parent among the live accounts. What it found and left is filed in
+     §4.2, §4.4, §4.5, §4.6, §4.7, §4.8 and §6.
    - **Jeff's rules (11 Oct), for every batch:**
      - a name typed in full that matches exactly one account by `searchKey`
        saves as that account, under its own spelling. Two or more are
@@ -84,21 +98,27 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        rest it leaves are §4.2's "D22's edges".
    - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
    - **Batch 3:** CSV import and merge (§4.7).
-   - **Batch 4:** the server refuses linked ids from another org (§4.6).
+   - **Batch 4b:** the other linked ids with no org check (§4.6).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
      (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
      the Accounts tab and an account's Sub-Accounts still list it, because
      the accounts GET does not filter archived rows (read in code 11 Oct).
-2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+2. **Reminder popups for your own tasks only** (§4.5; Jeff decided, 13 Oct:
+   "just dont show the admin her reminders at all", "admin can see her
+   tasks via the task tab", "they dont need a reminder"): the task reminder
+   and due/overdue popups show only the signed-in member's own tasks
+   (unassigned ones as today); an Admin, Manager or Dispatcher sees the
+   others' on the Tasks tab. Small; recommended next, after batch 4.
+3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
-4. **Deal data** (§4.2):
+5. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
      §0.198).
-5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+6. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -694,8 +714,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   account's deals and contacts — and its owner. The deal window sends every
   field but its untouched links. The Tasks tab's snooze and Complete send the
   task row they hold, a merge's moved links with it; Reports' persona edit
-  sends the contact row. Recommended: the same rule as the links (send what
+  sends the contact row. Since §0.199 a stale row naming a link the stored
+  row no longer holds, whose record was deleted since, is refused, and the
+  Tasks tab's Complete and snooze, Home's complete toggle and Reports'
+  contact and persona edits swallow that refusal — a silent roll-back, or
+  nothing (§0.199's review); the task rail's Complete says it (§0.199's
+  re-check). Recommended: the same rule as the links (send what
   changed), or a stale-row check on the server (`updatedAt`). Jeff decides.
+- **An empty value on a task's chips or an activity's list is stored as
+  before batch 4** (§0.199's re-check; read in code): batch 4 asks no link
+  for `''`, and each sanitize stores what it did. A task PUT with
+  `contacts: ''` stores the empty string in the jsonb chips column (tasks.mjs
+  sanitize, `?? null`); an activity PUT with `contactIds: ''` rebuilds the
+  list from the stored `contactId` (activities.mjs sanitize), dropping the
+  other contacts it held. Which screens can send either was not read.
+  Recommended: read `''` as an empty list in both sanitizes.
 - **After a merge, the merging session does not read its contacts, tasks or
   activities again** (the pre-ship sweep; older than §0.198): useMerge
   re-reads accounts and deals (contacts after a contact merge). A contact
@@ -979,6 +1012,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   SPIFF claim edit is authorized by name; the deal form's "Reason Lost" select
   writes a field nothing reads, and the reason dialog's eight categories are
   hard-coded, not the org's "Reasons lost".
+- **Notes a save refused while the task rail still shows them are dropped
+  by a close** (§0.199's sixth re-check; Jeff: "Fix these, then finish" —
+  filed). When the completion's notes save is refused while the press's own
+  rail is shown, the prompt keeps the notes and says why; Escape or the
+  backdrop then closes the rail ("Let it close") and the next open empties
+  the prompt — nothing carries the notes. Had the rail closed a moment
+  earlier, while the save was out, they would have gone to a notice with
+  "Log these notes". Older in kind: before §0.199 a refused notes save lost
+  them with nothing said. Recommended: when the rail closes or moves on with
+  refused notes in its prompt, push them as a notice of the same shape (the
+  generation effect's cleanup, from a ref the refused branch fills).
 - **A save from the activity rail closes QuickLog and empties its draft.**
   `handleSaveActivity`'s tail resets QuickLog's form, though QuickLog saves on
   its own. §0.176 (d).
@@ -1019,6 +1063,40 @@ to add meetings. Nothing in the app adds a meeting to Google:
   leaving the reminder rows out as it does the renewal rows. §0.191 (9 Oct).
   Its 'coverage' resolution branch has no writer (Home's Missing stakeholder
   is client-side); its comment is corrected, the branch kept. §0.192.
+- **A delete's Undo of a record that links a record deleted since is
+  refused, and the record stays deleted** (§0.199; a deal's account since
+  §0.198). An Undo re-posts the row as the list read it, and a create asks
+  every link it names: a contact, task, activity or deal holding a link to a
+  record deleted before its own delete — 2 tasks and 2 deals today (the
+  census, 13 Oct) — comes back "That account is not in your organization —
+  pick one from the list." and is not restored. Contacts deleted together
+  whose org charts name each other refuse each other's Undo, one by one (no
+  screen writes an org chart today). Recommended: an Undo marks its re-post
+  a restore, as an account's does, and the server clears such a link (as a
+  backup restore does) instead of refusing the row; a contacts Undo in one
+  bulk request. Jeff decides.
+- **A link followed to the record it was merged into keeps the name the
+  screen sent** (§0.199, E2): a task's or an org chart's chip keeps its name;
+  a contact's Company text and a deal's Contacts text are not renamed. Only a
+  stale screen sends a merged-away record (the pickers leave them out since
+  §0.198). As the merges leave names; with the first item above.
+- **The link refusal's words fit another org's record, not a deleted one**
+  (§0.199's review): a deleted record is now its common cause — Log Activity
+  from a contact whose account was deleted shows "An account you can't open
+  ×" and, on Save, "That account is not in your organization — pick one
+  from the list." The × is the way out; the words point elsewhere. No screen
+  reads the refusal's `field`, so a banner never names the field.
+  Recommended: "That account is no longer in your organization — remove it
+  (×), or pick one from the list.", the field named, and the deals
+  endpoint's words with them. Jeff decides.
+- **After a backup restore clears an activity's first contact, its
+  `contactId` stays empty** (§0.199): the list keeps the rest, and the
+  mirror is rebuilt from it only when a save names the contacts. Minor.
+- **A task create with no status answers 500** (found by §0.199's
+  integration suite; older): `tasks.status` is NOT NULL (default 'Open') and
+  the create's sanitize writes `null` when none is sent. Every screen sends
+  'Open'; only a hand-made request meets it. Recommended: leave the status
+  out of the insert when none is sent, so the column's default stands.
 
 ### 4.3 Settings
 
@@ -1085,6 +1163,31 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.4 Dispatch
 
+- **Undo of a template a New Job starter applied keeps the template's
+  values** (§0.199's second re-check; older — the base has the same lines;
+  read in code and run on made-up forms). startBridgeJob (a won deal's
+  placeholder) and startPlanVisit (a plan visit) apply the matched template
+  and then store the templated form as `prevForm` (`form = next` before the
+  note), so Undo and the template select's "— None —" put back the same
+  templated form — crew, hours, licence and skills stay, and Create Job
+  saves them — and a switch to a second template builds on the first (the
+  first's skills carry over when the second names none). The comment at
+  `EMPTY_JOB` and state's "Compounding
+  guard" say `prevForm` prevents this; the select's own path stores the
+  right baseline. Recommended: `const before = form;` before applying, and
+  `prevForm: before`, in both starters.
+- **A New Job save refused after it made the customer leaves it, and a
+  retry makes another** (§0.199's re-check; read in code). handleSaveNewJob
+  creates the customer (when none was picked), then the service location
+  (when an address was typed), then the job, and keeps the new ids in
+  locals only: the form still names no customer, so the next press makes a
+  second customer of the same name (and, with an address, a second
+  location). Any failure after the customer is made does it — the
+  location's or the job's; since §0.199 a deal the dispatcher picked from a
+  stale list (deleted elsewhere since) is one, while a won deal's
+  placeholder's copied deal is left off instead. Older than §0.199 for
+  every other failure. Recommended: write the made customer (and location,
+  with the address it was made for) into the form, so a retry reuses them.
 - **Batch 2 of §1 item 1: Dispatch takes the first of a name** (read
   11 Oct over 7e68f26):
   - A won deal's job placeholder finds its account with `a.id ===
@@ -1143,6 +1246,24 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.5 Notifications, email and digests
 
+- **An Admin, Manager or Dispatcher gets the reminder and due/overdue popups
+  for every task in the org** (§0.199's pane check, 13 Oct — Jeff, signed in as
+  himself in Accelerep QA: "several reminders poped up that showed
+  assigned to Karen"; read in code). Both checkers in App.jsx — the
+  reminder popup (`checkReminders`) and the due/overdue popup
+  (`checkDueToday`) — go through the whole task list the session loaded,
+  with no check of whose task it is; for an Admin, Manager or Dispatcher
+  that list is the org's (the tasks GET's read scope, `crmReadScope` →
+  'all'; `canSeeAll` is the write authority, §18b45), so each overdue task
+  of every member pops up, the first with a chime, after each load or org
+  switch. A dismissal is kept in this page's memory only
+  (`useOrgBoundState`: a reload or an org switch forgets it), so
+  dismissing one changes nothing for its owner. A rep loads only their
+  own tasks and unassigned ones. **Jeff decided (13 Oct):** "just dont
+  show the admin her reminders at all" — "admin can see her tasks via the
+  task tab", "they dont need a reminder": both popups for the signed-in
+  member's own tasks only (by owner id, guarded `!!ownerId` — the
+  null === null rule), unassigned tasks as today. §1 item 2.
 - **"View Deal →" in seven older email templates opens Home.** Nothing reads
   `?deal=`. It wants App's `?quote=` pattern, surviving sign-in. §0.158;
   re-read 7 Oct.
@@ -1164,43 +1285,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **Linked ids are stored with no org check: batch 4 of §1 item 1** (the
-  map and its critic, 11 Oct; not re-read line by line). The fields are:
-  - contacts' `accountId`;
-  - activities' `accountId`, `opportunityId` and `contactIds`;
-  - tasks' `accountId`, `opportunityId`, `contactId` and `contacts`;
-  - accounts' `parentAccountId` on the bulk POST and PUT (since §0.198 the
-    single POST and PUT refuse a parent the org does not hold);
-  - deals' `contactIds` (since §0.198 a new or changed `accountId` is
-    checked);
-  - dispatch customers' `accountId`;
-  - dispatch jobs' `customerId`, `locationId`, `accountId` and
-    `opportunityId`.
-  - The readers found all look ids up in the org, so no other org's row was
-    seen to show. A crafted request can still store another org's id, or a
-    dangling one. §0.166's refusal (tests/foreign-ids.test.mjs) is the
-    pattern. Its read-scope check belongs only on an id that differs from
-    the stored row's, or a rep's untouched save of a link outside their
-    list is refused.
-  - The five CRM creates (contacts, tasks, activities, accounts, deals)
-    answer 500 for an id another org holds. Dispatch creates answer 409
-    since §0.166.
-  - **Jeff's decisions for batch 4** (13 Oct; the map — six read-only
-    mappers over every write path — and a census, SELECT 13 Oct: no link
-    in the 17 fields names another org's row; 4 name a row deleted since —
-    1 task account, 1 task contact, 2 deal contacts):
-    - **E1 scope** ("Listed + CRM extras"): the fields above, an
-      activity's `leadId`, and a contact's `managers` and
-      `directReports`; the rest the sweep found is batch 4b, below.
-    - **E2** ("Link the survivor"): a new link to a record merged away
-      links the record it was merged into, as a deal's account does.
-    - **E3** ("Org check only"): a new or changed id must be a live row
-      of the org; a rep may link any record of it (the screens say "an
-      account you can't open"); an id the row already holds is never
-      asked again.
-    - **E4** ("Clear stray links"): an Admin's backup restore clears,
-      on the rows it restored, any link that names no row of the org, and
-      its answer says how many; it never refuses a file over a link.
+- **The task rail offers ✓ Complete and Edit to the Dispatcher and
+  ReadOnly roles** (§0.199's re-check; read in code): its quick-action bar
+  has no role check, while its Delete checks `canEditCrm`; Home opens the
+  rail for every role. The server's `requireWrite` refuses the write (403),
+  and since §0.199 the rail's Complete says the server's words — ReadOnly:
+  "The task was not completed: Forbidden: read-only role"; a Dispatcher:
+  "… Forbidden: a Dispatcher can view CRM records but not change them".
+  Recommended: hide the bar where `canEditCrm` is false, as the Delete is.
 - **Batch 4b: the other linked ids with no org check** (the class sweep, 13
   Oct; read in code, not run). Every reader found looks a stored id up in
   the org, so a stray acts as a dangling link, not a leak:
@@ -1216,6 +1308,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - left as they are by design: tasks' `relatedTo` (free text in places),
     the recommendation log's id (a deal, task or customer by action),
     deals' `pipelineId` (a settings id, 'default' a sentinel).
+  - a backup restore's other links: its clean-up (§0.199) clears batch 4's
+    fields and a deal's account; these fields, and a restored service
+    location's `customerId` (required — to be counted and said, as a job's
+    customer is), stay as the file has them.
+- **The backup restore counts the rows it sent, not those it restored**
+  (§0.199's review; older): a row skipped because this org or another already
+  holds its id is counted, so a second import of the same file reads "N
+  records restored" and restores nothing; the snapshot's record count and
+  the audit row say the same. Since §0.199 each insert answers the ids it
+  wrote. Recommended: count those, and say "N already here" apart. Jeff
+  decides.
 - **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
   later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
@@ -1332,7 +1435,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   no longer puts the old contact back (§0.198's pre-ship round); the rows still
   name it, and a Save that does change such an activity's contacts writes
   `contact_id` from the list again — the merged-away contact (the re-check).
-  Belongs with batch 3 (the merge moving contacts' `accountId`).
+  Since §0.199 a held link is never asked again, so such an id is never
+  followed to its survivor, and a stale whole-row save (a Tasks tab toggle,
+  an activity's contacts re-picked) writes the merged-away id back into the
+  scalar the merge had moved — the pair counts as held (§0.199's review). An
+  account merge leaves contacts' `accountId` on the merged-away account the
+  same way. Belongs with batch 3 (the merge moving contacts' `accountId`).
 - **A CSV overwrite batch empties the Account of a row that names none** while
   another row names one (partialRows sets the union of the keys a batch
   sends; the re-check). Every row of a CSV names an Account today, so no screen
@@ -1345,10 +1453,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   over 7e68f26):
   - The account import gives a sub-account the first account whose name
     matches the Parent Account cell, in any case and any tier, with
-    existing accounts searched before the file's own parents
-    (ModalLayer.jsx). No refusal, and no line on the receipt. The accounts
-    bulk POST and PUT take `parentAccountId` and `accountTier` as sent: the
-    parent rule and the tiers run on the single POST and PUT only (§0.198).
+    existing accounts searched before the file's own parents, a
+    merged-away one's survivor after them (src/utils/importParents.js,
+    §0.199). No refusal, and no line on the receipt. The accounts bulk POST
+    and PUT refuse a parent that is no live account of the org, a
+    merged-away one too (§0.199), but take a site as a parent, and
+    `accountTier`, as sent: the rest of the parent rule and the tiers run on
+    the single POST and PUT only (§0.198).
   - A conflict is the first existing account of the same name
     (CsvImportModal.jsx), and Overwrite writes onto that one. The row
     shows the name and phone only. A deal's conflict is the first deal with
@@ -1397,6 +1508,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **The Leads tab's lead-requests load throws an uncaught rejection on a
+  dropped connection** (§0.199's pane check, 13 Oct — the pane's console
+  showed "Uncaught (in promise) TypeError: Failed to fetch" during a burst
+  of refused connections whose cause it did not keep; read in code). The
+  "Lead claim requests" effect (LeadsTab.jsx) awaits `dbFetch` in an async
+  block with no catch, and `dbFetch` rethrows a network failure. The panel
+  stays empty, as the comment intends for a refused read; nothing else
+  breaks. Older than §0.199. Recommended: a catch that leaves the panel
+  empty, and a sweep for the same shape (an async block around `dbFetch`
+  with no catch).
 - **Save on an account rail whose account has left the screen's list creates
   a second account** (the pre-ship sweep; as in prod — which screen can leave
   a rail open on a row gone from the list is unverified).
@@ -1513,6 +1634,26 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **A harness anchor that a later edit repeats moves its mutant silently**
+  (§0.199: "restore: a scalar naming a row of this org is cleared" — the
+  fixes put the anchor's text into a new clause above its line, the first
+  match moved there, and the entry survived with no STALE). The harness and
+  its pre-run tool mutate the first match; 2406 entries today, several by
+  design on a text that repeats. Recommended: print AMBIGUOUS for an anchor
+  that matches more than once and make each such entry name its line
+  uniquely (a fail once none remain).
+- **An ordering pin of `indexOf` against `indexOf` passes when its first
+  text is gone** (§0.199's pre-run: a mutant deleting the restore's clean-up
+  survived on one; that pin is fixed). About 60 such pins stand in some 35
+  test files; a probe of the whole unit suite (every `indexOf` of an absent
+  code-sized text, logged, 13 Oct) found none vacuous today. Recommended
+  (class-wide): one helper that asserts both texts and their order, every
+  pin through it, and a scan that fails a new bare one.
+- **approval-routing.test.mjs reads "the gauge" to the end of
+  QuotesTab.jsx** (the same probe): it slices to `// ─── Activity log`, a
+  comment its own `code()` strips first, so the slice runs to the file's
+  end — its absence checks read more than the gauge, its presence check
+  less sharply. Recommended: end the slice at the gauge's own last line.
 - **scripts/migrate-blue-era.mjs's summary still counts the two files §0.198
   deleted** (the pre-ship audit): it skips them, and the line says how many it
   read. A manual codemod nothing runs; cosmetic.
