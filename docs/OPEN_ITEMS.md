@@ -247,15 +247,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Reload every open app tab right after each deploy of §0.198** — dev,
-  then prod; they share the database. A tab loaded before the deploy keeps
-  the old screens until it reloads, and they talk to the new functions: the
-  pre-ship audit (12 Oct) found an old deal window's Save now stores the
-  account id it guessed by name (a same-named twin's), and an old account
-  rail's stale parent now moves the account's deals up (D22). Nobody but
-  Jeff uses the app, so these are Jeff's own tabs. Deployed: dev 02:46 UTC,
-  prod 02:50 UTC, 13 Oct — reload any tab opened before then, then strike this.
-- Nothing else open. The thirty-fourth ship (13 Oct, 02:50 UTC: §0.198, a pick
+- Nothing open. The thirty-fourth ship (13 Oct, 02:50 UTC: §0.198, a pick
   saved as the record picked, and an edit leaving untouched links out), the
   thirty-third (11 Oct, 23:42 UTC: §0.196, one name
   per member of an org, and §0.197, the "Accelerep" spelling), the
