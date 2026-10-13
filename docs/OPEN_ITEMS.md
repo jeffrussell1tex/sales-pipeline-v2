@@ -267,8 +267,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- Nothing open. The thirty-fourth ship (13 Oct, 02:50 UTC: §0.198, a pick
-  saved as the record picked, and an edit leaving untouched links out), the
+- **Reload every app tab opened before the thirty-fifth ship** (Deployed: dev
+  20:23 UTC, prod 20:25 UTC, 13 Oct): an older tab keeps the screens from
+  before §0.199 — the task rail's completion and a New Job's copied links
+  among them. Reload, then strike this.
+- Nothing else open. The thirty-fifth ship (13 Oct, 20:25 UTC: §0.199, a
+  link names a live row of this org), the thirty-fourth (13 Oct, 02:50 UTC:
+  §0.198, a pick saved as the record picked, and an edit leaving untouched
+  links out), the
   thirty-third (11 Oct, 23:42 UTC: §0.196, one name
   per member of an org, and §0.197, the "Accelerep" spelling), the
   thirty-second (11 Oct, 13:36 UTC: §0.195, the AcceleRep sign-in page), the
