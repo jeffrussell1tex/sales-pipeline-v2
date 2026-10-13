@@ -711,6 +711,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
   keep the old ones. An untouched link is no longer sent back (§0.198's
   pre-ship round); a touched screen still sends its copy of the rest.
   Recommended: re-read contacts, tasks and activities after every merge.
+- **A lead's Convert opens the deal window empty** (the fix review of §0.198's
+  pre-ship round, 12 Oct — older than §0.198; read in code only, to confirm in
+  the pane as Karen before acting). LeadsTab.jsx's convertLead opens the window
+  with no deal (`setEditingOpp(null); setShowModal(true)`) and hands it the
+  prefill 50 ms later; OpportunityModal takes its fields from `useState`
+  initial values, once, and has no key in ModalLayer.jsx, so the prefill never
+  reaches it — no name, account, rep or revenue from the lead — while the lead
+  is marked Converted at once (`saveLead(…, { status: 'Converted' })`). The rep
+  retypes everything, or closes the window and is left with a converted lead
+  and no deal. Recommended: hand the window its seed in the same handler that
+  opens it (or key the window on its deal), and mark the lead Converted only
+  once the deal is saved. §0.198's state entry names this item.
 - **A deal with an empty Account text cannot be saved untouched** (the
   sweep; as in prod): the window asks "Account name is required" even when
   the deal holds an account id. Minor.
