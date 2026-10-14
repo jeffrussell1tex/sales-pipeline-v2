@@ -7,8 +7,13 @@ import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
 import { checkLinks } from './_links.mjs';
 
-// A customer's CRM account: a live account of this org when a write names it anew (state §0.199).
-const CUSTOMER_LINKS = [{ key: 'accountId', kind: 'account' }];
+// A customer's CRM account: a live account of this org when a write names it anew (state §0.199) — and since
+// §0.201 its service plan and preferred technician.
+const CUSTOMER_LINKS = [
+    { key: 'accountId', kind: 'account' },
+    { key: 'servicePlanId', kind: 'plan' },
+    { key: 'preferredTechId', kind: 'technician' },
+];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -235,11 +240,12 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
             }
             // Reuse the number on upsert; never accept one from the client.
-            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId })
+            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId,
+                servicePlanId: dispatchCustomers.servicePlanId, preferredTechId: dispatchCustomers.preferredTechId })
                 .from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
-            // Its account, named anew, is one of this org's (state §0.199); the create is an upsert, so one
-            // the customer already holds is not asked again.
+            // Its account, plan and preferred technician, named anew, are this org's (state §0.199, §0.201); the
+            // create is an upsert, so one the customer already holds is not asked again.
             const linked = await checkLinks(CUSTOMER_LINKS, data, priorCust || null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             Object.assign(data, linked.set);
@@ -302,10 +308,11 @@ export const handler = async (event) => {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             const data = JSON.parse(event.body || '{}');
-            // Its account, named anew, is one of this org's; one the customer already holds is not asked
-            // again (state §0.199).
-            if ('accountId' in data) {
-                const [held] = await db.select({ accountId: dispatchCustomers.accountId }).from(dispatchCustomers)
+            // Its account, plan and preferred technician, named anew, are this org's; one the customer already
+            // holds is not asked again (state §0.199, §0.201).
+            if (CUSTOMER_LINKS.some((l) => l.key in data)) {
+                const [held] = await db.select({ accountId: dispatchCustomers.accountId, servicePlanId: dispatchCustomers.servicePlanId,
+                    preferredTechId: dispatchCustomers.preferredTechId }).from(dispatchCustomers)
                     .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
                 if (!held) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
                 const linked = await checkLinks(CUSTOMER_LINKS, data, held, orgId);

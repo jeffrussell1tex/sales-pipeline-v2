@@ -67,13 +67,15 @@ mock.module(new URL('../../netlify/functions/send-sms.mjs', import.meta.url).hre
 const { handler: jobs } = await import('../../netlify/functions/dispatch-jobs.mjs');
 const { handler: statusPage } = await import('../../netlify/functions/dispatch-status.mjs');
 const { db } = await import('../../db/index.js');
-const { dispatchJobs, dispatchCustomers, dispatchTechnicians, dispatchJobStatusHistory, settings } = await import('../../db/schema.js');
+const { dispatchJobs, dispatchCustomers, dispatchTechnicians, dispatchEquipment, dispatchJobStatusHistory, settings } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
 const ORG_A = 'itest_notify_A', ORG_B = 'itest_notify_B';
 const CUST_A = 'dcust_itest_notify_a', CUST_B = 'dcust_itest_notify_b';
 const TECH_A = 'tech_itest_notify_a';
+// The units a schedule reserves are org A's: a job's units are asked since state §0.201.
+const EQ_1 = 'eq_itest_notify_1', EQ_2 = 'eq_itest_notify_2';
 const JOB_A = 'job_itest_notify_a', JOB_B = 'job_itest_notify_b';
 
 const call = (method, org, { body, params } = {}) => jobs({
@@ -106,6 +108,7 @@ const cleanup = async () => {
         await db.delete(dispatchJobs).where(eq(dispatchJobs.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
         await db.delete(dispatchTechnicians).where(eq(dispatchTechnicians.orgId, o));
+        await db.delete(dispatchEquipment).where(eq(dispatchEquipment.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
     }
 };
@@ -124,6 +127,10 @@ before(async () => {
     ]);
     await db.insert(dispatchTechnicians).values([
         { id: TECH_A, orgId: ORG_A, firstName: 'Sam', lastName: 'Tech' },
+    ]);
+    await db.insert(dispatchEquipment).values([
+        { id: EQ_1, orgId: ORG_A, name: 'Itest gauge', category: 'diagnostic' },
+        { id: EQ_2, orgId: ORG_A, name: 'Itest lift', category: 'general' },
     ]);
     await db.insert(dispatchJobs).values([
         { id: JOB_A, orgId: ORG_A, customerId: CUST_A, title: 'Furnace <tune-up>', status: 'unscheduled' },
@@ -260,16 +267,16 @@ test('PUT with a null trade / jobType saves (stored as the empty string), instea
 test('assignedEquipmentIds is stored with the schedule and cleared when the job goes back to unscheduled', async () => {
     const r1 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: {
         id: JOB_A, status: 'scheduled', scheduledDate: '2026-10-05', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact',
-        assignedEquipmentIds: ['eq_itest_1', 'eq_itest_2'],
+        assignedEquipmentIds: [EQ_1, EQ_2],
     } }));
     assert.equal(r1.status, 200, JSON.stringify(r1.body));
-    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2']);
-    assert.deepEqual(r1.body.job.assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2'], 'the response carries the reservation');
+    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, [EQ_1, EQ_2]);
+    assert.deepEqual(r1.body.job.assignedEquipmentIds, [EQ_1, EQ_2], 'the response carries the reservation');
 
     // A save that says nothing about equipment leaves the reservation alone.
     const r2 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: { id: JOB_A, title: 'Furnace <tune-up>' } }));
     assert.equal(r2.status, 200);
-    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2']);
+    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, [EQ_1, EQ_2]);
 
     // Back to unscheduled — by any path — releases the units without being asked.
     const r3 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: { id: JOB_A, status: 'unscheduled', assignedTechId: null, coTechIds: [] } }));

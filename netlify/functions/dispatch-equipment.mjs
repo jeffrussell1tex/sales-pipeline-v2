@@ -5,6 +5,11 @@ import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A unit's holder — the technician it is checked out to, and the job: live rows of this org when a write
+// names them anew (state §0.201).
+const EQUIPMENT_LINKS = [{ key: 'checkedOutToId', kind: 'technician' }, { key: 'checkedOutJobId', kind: 'job' }];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -70,6 +75,11 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id)   return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
+            // The create is an upsert: a holder the unit already has is held (state §0.201).
+            const [prior] = await db.select({ id: dispatchEquipment.id, checkedOutToId: dispatchEquipment.checkedOutToId, checkedOutJobId: dispatchEquipment.checkedOutJobId })
+                .from(dispatchEquipment).where(and(eq(dispatchEquipment.id, data.id), eq(dispatchEquipment.orgId, orgId)));
+            const linked = await checkLinks(EQUIPMENT_LINKS, data, prior || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
             const row = {
                 id:                  data.id,
@@ -119,6 +129,17 @@ export const handler = async (event) => {
 
             const data    = JSON.parse(event.body || '{}');
             let updates   = { updatedAt: new Date() };
+
+            // A holder named anew — by a check-out, or an edit — is this org's; one the unit has is held
+            // (state §0.201). A check-in names none: it clears both.
+            const named = action === 'checkin' ? null : data;
+            if (named && EQUIPMENT_LINKS.some((l) => l.key in named)) {
+                const [held] = await db.select({ id: dispatchEquipment.id, checkedOutToId: dispatchEquipment.checkedOutToId, checkedOutJobId: dispatchEquipment.checkedOutJobId })
+                    .from(dispatchEquipment).where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
+                if (!held) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                const linked = await checkLinks(EQUIPMENT_LINKS, named, held, orgId);
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            }
 
             if (action === 'checkout') {
                 // Check out to a tech and/or job

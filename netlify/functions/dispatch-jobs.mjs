@@ -18,12 +18,22 @@ import { techOnJob } from './_techJobs.mjs';
 import { checkLinks } from './_links.mjs';
 
 // A job's customer, service location, CRM account and deal: live rows of this org when a write names
-// them anew (state §0.199).
+// them anew (state §0.199) — and since §0.201 its crew, vehicle, the units reserved for it, its service plan
+// and the jobs it follows up or calls back to (never itself). The lead and the co-technicians are one crew:
+// a lead swap or a drag that only moves a technician the job holds is not asked again.
+const CREW = ['assignedTechId', 'coTechIds'];
 const JOB_LINKS = [
     { key: 'customerId', kind: 'customer' },
     { key: 'locationId', kind: 'location' },
     { key: 'accountId', kind: 'account' },
     { key: 'opportunityId', kind: 'deal' },
+    { key: 'assignedTechId', kind: 'technician', heldFrom: CREW },
+    { key: 'coTechIds', kind: 'technician', shape: 'many', heldFrom: CREW },
+    { key: 'assignedVehicleId', kind: 'vehicle' },
+    { key: 'assignedEquipmentIds', kind: 'equipment', shape: 'many' },
+    { key: 'servicePlanId', kind: 'plan' },
+    { key: 'followUpJobId', kind: 'job', notSelf: true },
+    { key: 'parentJobId', kind: 'job', notSelf: true },
 ];
 
 const headers = {

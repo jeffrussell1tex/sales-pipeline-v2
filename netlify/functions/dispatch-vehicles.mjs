@@ -5,6 +5,10 @@ import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A vehicle's technician: a live technician of this org when a write names one anew (state §0.201).
+const VEHICLE_LINKS = [{ key: 'assignedTechId', kind: 'technician' }];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -73,6 +77,11 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id)   return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
+            // The create is an upsert: a technician the vehicle already holds is held (state §0.201).
+            const [prior] = await db.select({ id: dispatchVehicles.id, assignedTechId: dispatchVehicles.assignedTechId })
+                .from(dispatchVehicles).where(and(eq(dispatchVehicles.id, data.id), eq(dispatchVehicles.orgId, orgId)));
+            const linked = await checkLinks(VEHICLE_LINKS, data, prior || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
             const row = {
                 id:                 data.id,
@@ -122,6 +131,14 @@ export const handler = async (event) => {
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
 
             const data = JSON.parse(event.body || '{}');
+            // Its technician, named anew, is this org's; one it holds is held (state §0.201).
+            if ('assignedTechId' in data) {
+                const [held] = await db.select({ id: dispatchVehicles.id, assignedTechId: dispatchVehicles.assignedTechId })
+                    .from(dispatchVehicles).where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)));
+                if (!held) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                const linked = await checkLinks(VEHICLE_LINKS, data, held, orgId);
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            }
             const updates = { updatedAt: new Date() };
             const fields = [
                 'name','type','make','model','year','licensePlate','vin','color',

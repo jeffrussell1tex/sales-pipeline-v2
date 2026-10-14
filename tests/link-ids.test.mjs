@@ -64,7 +64,8 @@ test('the words name the kind, in the deals endpoint\'s; only accounts and conta
     assert.equal(notInOrg('customer'), 'That customer is not in your organization — pick one from the list.');
     assert.equal(notInOrg('location'), 'That service location is not in your organization — pick one from the list.');
     assert.equal(NOT_AN_ID, 'A link must name a record by its id.');
-    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location']);
+    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job'],
+        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs)");
     assert.deepEqual([...MERGES], ['account', 'contact']);
 });
 
@@ -221,7 +222,7 @@ const SPECS = {
         "    { key: 'contacts', kind: 'contact', shape: 'chips', heldFrom: ['contacts', 'contactId'] },", "    { key: 'contactId', kind: 'contact', heldFrom: ['contactId', 'contacts'] },"],
     opportunities: ["const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }];"],
     accounts: ["const PARENT_LINK = [{ key: 'parentAccountId', kind: 'account', follow: false }];"],
-    'dispatch-customers': ["const CUSTOMER_LINKS = [{ key: 'accountId', kind: 'account' }];"],
+    'dispatch-customers': ['const CUSTOMER_LINKS = [', "    { key: 'accountId', kind: 'account' },"],
     'dispatch-jobs': ['const JOB_LINKS = [', "    { key: 'customerId', kind: 'customer' },", "    { key: 'locationId', kind: 'location' },", "    { key: 'accountId', kind: 'account' },", "    { key: 'opportunityId', kind: 'deal' },"],
 };
 
@@ -238,7 +239,7 @@ test('THE GUARD: each endpoint names its links — the fields batch 4 lists and 
     assert.ok(l.includes('const merges = MERGES.includes(kind);'));
     assert.ok(l.includes('for (const ask of asks) read.set(ask, await liveIdsInOrg(ask.kind, ask.fresh, orgId, { follow: ask.follow }));'), 'each field read as its spec says — a parent not followed');
     assert.equal(count(l, '    if (asked.error) return asked;\n'), 2, 'a value that names no record is refused before any read — one write and a batch');
-    assert.equal(count(l, 'db.select('), 4, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link — nothing reads around them');
+    assert.equal(count(l, 'db.select('), 5, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201) — nothing reads around them');
     const ac = read('netlify/functions/accounts.mjs');
     assert.ok(ac.includes("        parentAccountId:   d.parentAccountId   || null,"), 'the parent stored is the parent checked');
     assert.ok(!ac.includes('d.parentId'), "no legacy `parentId` alias: a parent sent so was stored with no check (the review, server S3)");
@@ -294,8 +295,8 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
     assert.ok(fn('opportunities').includes('const named = { ...data, ...people.set };'), "a new deal's contacts, the survivor of one merged away");
     assert.ok(fn('activities').includes("for (const k of Object.keys(relinked)) if (k !== 'id' && k in updateData) { clean[k] = relinked[k]; updateData[k] = relinked[k]; }"), 'an activity update stores the survivor, contactId with its list');
     const dc = fn('dispatch-customers');
-    assert.ok(dc.includes("if ('accountId' in data) {"), "a customer update naming its account is asked");
-    assert.ok(dc.includes('const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId })'), 'the account the customer holds is read with its number');
+    assert.ok(dc.includes('if (CUSTOMER_LINKS.some((l) => l.key in data)) {'), "a customer update naming its account is asked — or another of its links (§0.201)");
+    assert.ok(dc.includes('const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId,'), 'the account the customer holds is read with its number');
 });
 
 test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anything is written — an overwrite against the stored rows; a create clears, after its insert, a link to its own row that did not land', () => {
@@ -362,7 +363,7 @@ test("THE GUARD: an Admin's restore clears, on the rows it inserted, every link 
     assert.ok(sweep.includes('            const done = await clearField(orgId, table, ids, key, kind, shape, mirrorOf);\n            cleared += done.cleared;\n            carried = done.mirrored;\n'), 'field by field — a mirror\'s ids its list holds carried to the list');
     assert.ok(sweep.includes('        } catch (e) {\n            cleared += carried;\n            carried = 0;\n            failed.push(`${getTableName(table)}.${key}`);\n'),
         'a field that fails is named and the rest go on; a mirror its failed list held is counted here (the fix review, server F4)');
-    assert.ok(sweep.includes('return { cleared, jobsWithoutCustomer, quotesWithoutDeal, failed };'));
+    assert.ok(sweep.includes('return { cleared, jobsWithoutCustomer, quotesWithoutDeal, locationsWithoutCustomer, lineItemsWithoutJob, historyWithoutJob, shelfFailed, failed };'), "batch 4's counts, then Dispatch's (§0.201)");
     assert.ok(sweep.includes("const jobsWithoutCustomer = await countRequired(orgId, restored, dispatchJobs, 'customerId', dispatchCustomers, failed);"), "a job's customer, counted");
     assert.ok(sweep.includes("const quotesWithoutDeal = await countRequired(orgId, restored, quotes, 'opportunityId', opportunities, failed);"), "a quote's deal, counted");
     assert.ok(sweep.includes('sql`NOT EXISTS (SELECT 1 FROM ${parentTable} AS link_parent WHERE link_parent.id = ${table[key]} AND link_parent.org_id = ${orgId})`'), 'a required link, in this org');
@@ -371,7 +372,7 @@ test("THE GUARD: an Admin's restore clears, on the rows it inserted, every link 
     assert.ok(sweep.includes(".where(and(eq(table.orgId, orgId), inArray(table.id, ids), isNotNull(col), sql`${col} <> ''`, sql`NOT ${inOrg(col)}`))"), 'a scalar is cleared only where it names no row of this org');
     assert.ok(sweep.includes("sql`NOT ${inOrg(col)}`,\n                    sql`jsonb_typeof(${list}) = 'array'`, sql`(${list} @> jsonb_build_array(${col}) OR ${list} @> jsonb_build_array(jsonb_build_object('id', ${col})))`));"),
         "a mirror read before its list is cleared: is the same id in the list — a bare id or a chip's (the review, restore S4)");
-    assert.ok(sweep.includes('return { cleared: done.length - mirrored, mirrored };'), 'a mirror its list holds is not counted again: the pair is one link');
+    assert.ok(sweep.includes('return { cleared: done.length - mirrored, mirrored, ids: done.map((r) => r.id) };'), 'a mirror its list holds is not counted again: the pair is one link');
     assert.ok(sweep.includes("const set = table === accounts && key === 'parentAccountId' ? { [key]: null, accountTier: 'account' } : { [key]: null };") && sweep.includes('const done = await db.update(table).set(set)'),
         'an account whose parent is cleared is an account — a top-level account is one (D21; the fix review, server F5)');
     assert.ok(sweep.includes("const el = shape === 'chips' ? sql`(CASE WHEN jsonb_typeof(e) = 'object' THEN e ->> 'id' ELSE e #>> '{}' END)` : sql`(e #>> '{}')`;"), "an entry's id as heldIds reads it — a bare id on an org chart too");
@@ -379,8 +380,8 @@ test("THE GUARD: an Admin's restore clears, on the rows it inserted, every link 
     assert.ok(sweep.includes("const [{ strays }] = await db.select({ strays: sql`coalesce(sum((SELECT count(*) FROM jsonb_array_elements(${col}) e WHERE NOT ${keep})), 0)`.mapWith(Number) })"), "a list's strays, counted");
     assert.ok(sweep.includes('jsonb_agg(x.e ORDER BY x.i)'), 'the entries kept in their order');
     assert.ok(sweep.includes('return { cleared: strays, mirrored: 0 };'), 'the links cleared, one each');
-    assert.ok(sweep.includes('const named = TABLES[kind];'));
-    assert.ok(sweep.includes('const inOrg = (expr) => sql`EXISTS (SELECT 1 FROM ${named} AS link_parent WHERE link_parent.id = ${expr} AND link_parent.org_id = ${orgId})`;'),
+    assert.ok(sweep.includes('const named = SWEPT[kind];'), "batch 4's tables and Dispatch's, and a job's quote (§0.201)");
+    assert.ok(sweep.includes('        : (expr) => sql`EXISTS (SELECT 1 FROM ${named} AS link_parent WHERE link_parent.id = ${expr} AND link_parent.org_id = ${orgId})`;'),
         "the row a link names read apart from the row restored — an account's own parent — the table aliased in the SQL (drizzle's alias() renders bare in a raw template: 42P01)");
     assert.ok(!l.includes('alias('), 'no drizzle alias() in a raw template');
     assert.ok(l.includes([
@@ -404,8 +405,8 @@ test("THE GUARD: an Admin's restore clears, on the rows it inserted, every link 
         "    [dispatchJobs, 'locationId', 'location', 'one'],",
         "    [dispatchJobs, 'accountId', 'account', 'one'],",
         "    [dispatchJobs, 'opportunityId', 'deal', 'one'],",
-        '];',
-    ].join('\n')), "every link batch 4 checks and a deal's account are the restore's to clear — nineteen, each mirror before its list; a job's customer and a quote's deal counted apart");
+        "    [dispatchJobs, 'assignedTechId', 'technician', 'one'],",
+    ].join('\n')), "every link batch 4 checks and a deal's account are the restore's to clear — nineteen, each mirror before its list; a job's customer and a quote's deal counted apart; Dispatch's after them (tests/dispatch-links.test.mjs)");
 });
 
 test('THE GUARD: a screen that copies a link onto a new record leaves off one the server refuses as naming nothing, and saves without it — the task rail\'s completion notes, a dispatch job (the review, screens S1 and S2)', () => {

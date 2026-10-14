@@ -110,10 +110,13 @@ One commit per verified batch; doc patch in the same commit.
   never sufficient.
 - `dbFetch` returns the raw `Response` — caller must `.json()`.
 - A link a write stores (an account, contact, deal, lead, customer or
-  location id) must name a live row of the org when the write names it
-  anew: `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92). An id
-  the row already holds is never asked again; a screen that copies a link
-  leaves off one the server refuses (`saveDroppingRefused`).
+  location id; Dispatch's technician, vehicle, equipment unit, service
+  plan or job id) must name a live row of the org when the write names it
+  anew: `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92,
+  §18b94). An id the row already holds is never asked again; a screen that
+  copies a link leaves off one the server refuses (`saveDroppingRefused`).
+  A technician's login is a member of THIS org, stored as their Clerk id
+  (`techLogin.js`) — never the app id the picker sends.
 
 ## Frontend conventions
 

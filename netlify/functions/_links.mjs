@@ -19,17 +19,22 @@
 // own rows that did not land.
 import { db } from '../../db/index.js';
 import {
-    accounts, contacts, opportunities, leads, tasks, activities, quotes,
-    dispatchCustomers, dispatchServiceLocations, dispatchJobs,
+    accounts, contacts, opportunities, leads, tasks, activities, quotes, users,
+    dispatchCustomers, dispatchServiceLocations, dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory,
+    dispatchTechnicians, dispatchVehicles, dispatchEquipment, dispatchServicePlans,
 } from '../../db/schema.js';
 import { and, eq, getTableName, inArray, isNotNull, sql } from 'drizzle-orm';
 import { MERGES, liveIds, linksAsked, linksDecided, bulkLinksAsked, bulkLinksDecided } from '../../src/utils/linkIds.js';
 
-// The table each kind of link names.
+// The table each kind of link names — Dispatch's since §0.201.
 const TABLES = Object.freeze({
     account: accounts, contact: contacts, deal: opportunities, lead: leads,
     customer: dispatchCustomers, location: dispatchServiceLocations,
+    technician: dispatchTechnicians, vehicle: dispatchVehicles, equipment: dispatchEquipment, plan: dispatchServicePlans, job: dispatchJobs,
 });
+// What only the restore's clean-up names: a job's quote, a quote of the org — and a technician's login, a
+// member's Clerk identity (users.clerk_user_id, never their app id: §0.201), read in clearField.
+const SWEPT = Object.freeze({ ...TABLES, quote: quotes });
 
 // The live row each asked id names in this org (linkIds.js's liveIds): every row it reads — the merge walk's
 // each hop too — is read in this org.
@@ -94,19 +99,44 @@ const RESTORE_LINKS = [
     [dispatchJobs, 'locationId', 'location', 'one'],
     [dispatchJobs, 'accountId', 'account', 'one'],
     [dispatchJobs, 'opportunityId', 'deal', 'one'],
+    // Dispatch's (batch 4b-1, §0.201): a job's crew, vehicle, units, plan, linked jobs and quote; a vehicle's
+    // technician; a technician's vehicle and login; a unit's holder; a customer's plan and preferred
+    // technician. A plan is never in a file, so a restored customer's or job's plan is cleared where this org
+    // does not hold it.
+    [dispatchJobs, 'assignedTechId', 'technician', 'one'],
+    [dispatchJobs, 'coTechIds', 'technician', 'many'],
+    [dispatchJobs, 'assignedVehicleId', 'vehicle', 'one'],
+    [dispatchJobs, 'assignedEquipmentIds', 'equipment', 'many'],
+    [dispatchJobs, 'servicePlanId', 'plan', 'one'],
+    [dispatchJobs, 'followUpJobId', 'job', 'one'],
+    [dispatchJobs, 'parentJobId', 'job', 'one'],
+    [dispatchJobs, 'quoteId', 'quote', 'one'],
+    [dispatchVehicles, 'assignedTechId', 'technician', 'one'],
+    [dispatchTechnicians, 'assignedVehicleId', 'vehicle', 'one'],
+    [dispatchTechnicians, 'userId', 'login', 'one'],
+    [dispatchEquipment, 'checkedOutToId', 'technician', 'one'],
+    [dispatchEquipment, 'checkedOutJobId', 'job', 'one'],
+    [dispatchCustomers, 'servicePlanId', 'plan', 'one'],
+    [dispatchCustomers, 'preferredTechId', 'technician', 'one'],
 ];
 
 // On the rows a write inserted — restored: Map(table → [ids]) — every link that names no row of this org is
 // cleared: a scalar set null; a list's entries that name none dropped, the rest kept in their order (an entry
 // that names no record by its id — a chip with no id, an empty one — is kept). A dispatch job's customer and a
-// quote's deal cannot be cleared (both columns are required): such rows are counted, not changed. A field
-// whose clean-up fails is named and the rest go on. Answers { cleared, jobsWithoutCustomer, quotesWithoutDeal,
-// failed }: cleared the links cleared — a list's stray entries one each, a mirror (an activity's or a task's
+// quote's deal cannot be cleared (both columns are required): such rows are counted, not changed — and since
+// §0.201 a service location's customer, a job line item's and a status-history row's job. A field whose
+// clean-up fails is named and the rest go on. An equipment unit whose holder (technician and job) it
+// cleared, checked out to no one, is back on the shelf: available, no check-out time (shelfFailed: that
+// update failed — the links are cleared, the units still read checked out). Answers { cleared,
+// jobsWithoutCustomer, quotesWithoutDeal, locationsWithoutCustomer, lineItemsWithoutJob, historyWithoutJob,
+// shelfFailed, failed }: cleared the links cleared — a list's stray entries one each, a mirror (an activity's or a task's
 // contactId) only where its list does not hold the same id: the pair is one link.
 export async function clearStrayLinks(orgId, restored) {
     let cleared = 0;
     let carried = 0;   // a mirror's ids its list holds: the list's clean-up counts them — or, if it fails, here
     const failed = [];
+    const unheld = new Set();   // the equipment units whose holder was cleared
+    let shelfFailed = false;    // and could not be put back on the shelf
     for (const [table, key, kind, shape, mirrorOf] of RESTORE_LINKS) {
         const ids = (restored && restored.get(table)) || [];
         if (!ids.length) continue;
@@ -114,6 +144,7 @@ export async function clearStrayLinks(orgId, restored) {
             const done = await clearField(orgId, table, ids, key, kind, shape, mirrorOf);
             cleared += done.cleared;
             carried = done.mirrored;
+            if (table === dispatchEquipment) for (const id of done.ids || []) unheld.add(id);
         } catch (e) {
             cleared += carried;
             carried = 0;
@@ -121,19 +152,35 @@ export async function clearStrayLinks(orgId, restored) {
             console.warn('clearStrayLinks:', getTableName(table), key, e?.cause?.message || e?.message);
         }
     }
+    if (unheld.size) {
+        try {
+            await db.update(dispatchEquipment).set({ status: 'available', checkedOutAt: null })
+                .where(and(eq(dispatchEquipment.orgId, orgId), inArray(dispatchEquipment.id, [...unheld]), eq(dispatchEquipment.status, 'checked_out'),
+                    sql`coalesce(${dispatchEquipment.checkedOutToId}, '') = ''`, sql`coalesce(${dispatchEquipment.checkedOutJobId}, '') = ''`));
+        } catch (e) {
+            shelfFailed = true;
+            console.warn('clearStrayLinks: dispatch_equipment status', e?.cause?.message || e?.message);
+        }
+    }
     const jobsWithoutCustomer = await countRequired(orgId, restored, dispatchJobs, 'customerId', dispatchCustomers, failed);
     const quotesWithoutDeal = await countRequired(orgId, restored, quotes, 'opportunityId', opportunities, failed);
-    return { cleared, jobsWithoutCustomer, quotesWithoutDeal, failed };
+    const locationsWithoutCustomer = await countRequired(orgId, restored, dispatchServiceLocations, 'customerId', dispatchCustomers, failed);
+    const lineItemsWithoutJob = await countRequired(orgId, restored, dispatchJobLineItems, 'jobId', dispatchJobs, failed);
+    const historyWithoutJob = await countRequired(orgId, restored, dispatchJobStatusHistory, 'jobId', dispatchJobs, failed);
+    return { cleared, jobsWithoutCustomer, quotesWithoutDeal, locationsWithoutCustomer, lineItemsWithoutJob, historyWithoutJob, shelfFailed, failed };
 }
 
-// One field of the rows inserted, cleared of what names no row of this org: { cleared, mirrored } — the links
-// cleared, and a mirror's ids its list holds (counted by the list's own clean-up).
+// One field of the rows inserted, cleared of what names no row of this org: { cleared, mirrored, ids } — the
+// links cleared, a mirror's ids its list holds (counted by the list's own clean-up), and a scalar's rows cleared.
 async function clearField(orgId, table, ids, key, kind, shape, mirrorOf) {
     const col = table[key];
-    // The row a link names, read apart from the row restored (an account's own parent): its table
-    // aliased inside the sub-select, where the alias hides the table's own name from the outer row.
-    const named = TABLES[kind];
-    const inOrg = (expr) => sql`EXISTS (SELECT 1 FROM ${named} AS link_parent WHERE link_parent.id = ${expr} AND link_parent.org_id = ${orgId})`;
+    // The row a link names, read apart from the row restored (an account's own parent, a job's own parent job):
+    // its table aliased inside the sub-select, where the alias hides the table's own name from the outer row. A
+    // login names a member of this org by their Clerk identity.
+    const named = SWEPT[kind];
+    const inOrg = kind === 'login'
+        ? (expr) => sql`EXISTS (${db.select({ one: sql`1` }).from(users).where(and(eq(users.orgId, orgId), sql`${users.clerkUserId} = ${expr}`))})`
+        : (expr) => sql`EXISTS (SELECT 1 FROM ${named} AS link_parent WHERE link_parent.id = ${expr} AND link_parent.org_id = ${orgId})`;
     if (shape === 'one') {
         // A mirror is counted only where its list does not hold the same id — read before the list is cleared.
         let mirrored = 0;
@@ -149,7 +196,7 @@ async function clearField(orgId, table, ids, key, kind, shape, mirrorOf) {
         const done = await db.update(table).set(set)
             .where(and(eq(table.orgId, orgId), inArray(table.id, ids), isNotNull(col), sql`${col} <> ''`, sql`NOT ${inOrg(col)}`))
             .returning({ id: table.id });
-        return { cleared: done.length - mirrored, mirrored };
+        return { cleared: done.length - mirrored, mirrored, ids: done.map((r) => r.id) };
     }
     // An entry's id as src/utils/linkIds.js's heldIds reads it: a chip's id, or the entry itself.
     const el = shape === 'chips' ? sql`(CASE WHEN jsonb_typeof(e) = 'object' THEN e ->> 'id' ELSE e #>> '{}' END)` : sql`(e #>> '{}')`;

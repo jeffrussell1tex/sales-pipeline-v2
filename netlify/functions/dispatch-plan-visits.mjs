@@ -7,6 +7,11 @@ import { serverErrorBody, resolveCaller, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
 import { randomUUID } from 'crypto';
 import { isYmd } from '../../src/utils/planVisits.js';
+import { checkLinks } from './_links.mjs';
+
+// The occurrence's customer and plan: live rows of this org (state §0.201 — the customer was checked since
+// §0.110, in words of its own; a plan, never). Every record names both anew: they are its identity.
+const PLAN_VISIT_LINKS = [{ key: 'customerId', kind: 'customer' }, { key: 'planId', kind: 'plan' }];
 
 // What a dispatcher recorded about ONE service-plan occurrence (state §0.110):
 //   skipped  — retired without a job (the customer declined, the unit was
@@ -82,11 +87,13 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'deferredTo must be a YYYY-MM-DD date other than the due date' }) };
             }
 
-            // The customer must be THIS org's. A customerId from another org is a
-            // 404 here, never a row written under the caller's org against it.
+            // The customer and the plan must be THIS org's. One from another org — or one that names nothing — is
+            // a 404 here, never a row written under the caller's org against it.
+            const linked = await checkLinks(PLAN_VISIT_LINKS, data, null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            // The customer's name, for the log; checkLinks asked it.
             const [cust] = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name }).from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));
-            if (!cust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };
 
             const me = await resolveCaller(userId, orgId);
             const row = {
@@ -117,7 +124,7 @@ export const handler = async (event) => {
                     eq(dispatchPlanVisits.planId, data.planId),
                     eq(dispatchPlanVisits.dueDate, data.dueDate),
                 ));
-            await auditAs(orgId, userId, { action: 'dispatch_visit.logged', entityType: 'dispatch_customer', entityId: saved.customerId, entityName: cust.name, detail: `${saved.action} · due ${saved.dueDate}${saved.deferredTo ? ' → ' + saved.deferredTo : ''}${saved.reason ? ' · ' + saved.reason : ''}`.slice(0, 300) });
+            await auditAs(orgId, userId, { action: 'dispatch_visit.logged', entityType: 'dispatch_customer', entityId: saved.customerId, entityName: cust ? cust.name : null, detail: `${saved.action} · due ${saved.dueDate}${saved.deferredTo ? ' → ' + saved.deferredTo : ''}${saved.reason ? ' · ' + saved.reason : ''}`.slice(0, 300) });
             return { statusCode: 201, headers, body: JSON.stringify({ visit: normalise(saved) }) };
         }
 

@@ -5,6 +5,10 @@ import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, getCallerName, auditAs } from './_lib.mjs';
 import { resolveTechnicianId } from './_techScope.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A block's technician: a live technician of this org when a write names one anew (state §0.201).
+const BLOCK_LINKS = [{ key: 'techId', kind: 'technician' }];
 
 // Technician availability exceptions — PTO, sick, training, jury duty and so on.
 // The dispatch_schedule_blocks table was declared in schema.ts but had no
@@ -85,6 +89,15 @@ export const handler = async (event) => {
             if (endDate < data.startDate) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'endDate cannot be before startDate' }) };
             }
+            // The create is an upsert. A block stays with its technician, as the PUT keeps it — a re-POST naming
+            // another is refused, never re-pointed — and a technician named anew is this org's (state §0.201).
+            const [prior] = await db.select({ id: dispatchScheduleBlocks.id, techId: dispatchScheduleBlocks.techId })
+                .from(dispatchScheduleBlocks).where(and(eq(dispatchScheduleBlocks.id, data.id), eq(dispatchScheduleBlocks.orgId, orgId)));
+            if (prior && prior.techId !== data.techId) {
+                return { statusCode: 409, headers, body: JSON.stringify({ error: 'A block stays with its technician — add a new one for another.', field: 'techId' }) };
+            }
+            const linked = await checkLinks(BLOCK_LINKS, data, prior || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
             const row = {
                 id:        data.id,
@@ -108,7 +121,8 @@ export const handler = async (event) => {
                 .onConflictDoUpdate({
                     target: dispatchScheduleBlocks.id,
                     setWhere: eq(dispatchScheduleBlocks.orgId, orgId),
-                    set: { ...row, createdAt: undefined },
+                    // its technician and its author are the first create's (the PUT's rule)
+                    set: { ...row, createdAt: undefined, techId: undefined, createdBy: undefined },
                 });
 
             const [inserted] = await db.select().from(dispatchScheduleBlocks)

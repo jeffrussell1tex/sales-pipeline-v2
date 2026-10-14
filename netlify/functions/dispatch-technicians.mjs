@@ -1,12 +1,43 @@
 import { db } from '../../db/index.js';
-import { dispatchTechnicians } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { dispatchTechnicians, users } from '../../db/schema.js';
+import { eq, and, ne, inArray } from 'drizzle-orm';
 import { verifyAuth, isTechnician } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { checkLinks } from './_links.mjs';
+import { loginAsked, loginDecided } from '../../src/utils/techLogin.js';
 
 const techName = (t) => [t?.firstName, t?.lastName].filter(Boolean).join(' ') || t?.email || 'Technician';
 import { defaultWorkWeek } from '../../src/utils/workWeek.js';
+
+// A technician's vehicle: a live vehicle of this org when a write names it anew (state §0.201).
+const TECH_LINKS = [{ key: 'assignedVehicleId', kind: 'vehicle' }];
+
+// The login a write names (state §0.201): { keep } — the row keeps the one it holds — { userId } to store, or
+// a refusal. A member of THIS org, by their app id (the screen's pick) or their Clerk identity; stored as the
+// Clerk identity a Technician's sign-in is matched against; never one another technician of the org holds.
+async function loginOf(orgId, techId, data, stored) {
+    const asked = loginAsked(data, stored);
+    if (asked.status || asked.keep) return asked;
+    if (asked.clear) return { userId: null };
+    const by = asked.member.by === 'id' ? users.id : users.clerkUserId;
+    const [member] = await db.select({ id: users.id, name: users.name, clerkUserId: users.clerkUserId }).from(users)
+        .where(and(eq(users.orgId, orgId), eq(by, asked.member.value)));
+    const [taken] = member && member.clerkUserId
+        ? await db.select({ firstName: dispatchTechnicians.firstName, lastName: dispatchTechnicians.lastName, email: dispatchTechnicians.email })
+            .from(dispatchTechnicians)
+            .where(and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, member.clerkUserId), ne(dispatchTechnicians.id, techId)))
+        : [];
+    return loginDecided(member || null, taken ? techName(taken) : null);
+}
+
+// The member a login names, by their app id, read in this org — what the screen's picker holds; a create's
+// and an update's answer carry it as the list does (state §0.201).
+async function memberIdOf(orgId, login) {
+    if (!login) return null;
+    const [member] = await db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), eq(users.clerkUserId, login)));
+    return member ? member.id : null;
+}
 
 const headers = {
     'Content-Type': 'application/json',
@@ -20,6 +51,8 @@ function normalise(row) {
         id:               row.id,
         orgId:            row.orgId            ?? row.org_id,
         userId:           row.userId           ?? row.user_id           ?? null,
+        // The member the login names, by their app id — what the screen's picker holds (state §0.201).
+        memberId:         row.memberId         ?? null,
         firstName:        row.firstName        ?? row.first_name        ?? '',
         lastName:         row.lastName         ?? row.last_name         ?? '',
         email:            row.email            ?? null,
@@ -64,10 +97,17 @@ export const handler = async (event) => {
                     // colleagues' phone numbers, pay rates and home locations.
                     ? and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, userId))
                     : eq(dispatchTechnicians.orgId, orgId));
+            // Each login's member, by their app id, read in this org (state §0.201).
+            const logins = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
+            const members = logins.length
+                ? await db.select({ id: users.id, clerkUserId: users.clerkUserId }).from(users)
+                    .where(and(eq(users.orgId, orgId), inArray(users.clerkUserId, logins)))
+                : [];
+            const memberOf = new Map(members.map((m) => [m.clerkUserId, m.id]));
             return {
                 statusCode: 200,
                 headers,
-                body: JSON.stringify({ technicians: rows.map(normalise) }),
+                body: JSON.stringify({ technicians: rows.map((r) => normalise({ ...r, memberId: memberOf.get(r.userId) || null })) }),
             };
         }
 
@@ -78,10 +118,18 @@ export const handler = async (event) => {
             if (!data.firstName) return { statusCode: 400, headers, body: JSON.stringify({ error: 'firstName required' }) };
             if (!data.lastName)  return { statusCode: 400, headers, body: JSON.stringify({ error: 'lastName required' }) };
 
+            // The create is an upsert: what the row already holds is held (state §0.201).
+            const [prior] = await db.select({ id: dispatchTechnicians.id, userId: dispatchTechnicians.userId, assignedVehicleId: dispatchTechnicians.assignedVehicleId })
+                .from(dispatchTechnicians).where(and(eq(dispatchTechnicians.id, data.id), eq(dispatchTechnicians.orgId, orgId)));
+            const linked = await checkLinks(TECH_LINKS, data, prior || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            const login = await loginOf(orgId, data.id, data, prior || null);
+            if (login.status) return { statusCode: login.status, headers, body: JSON.stringify({ error: login.error, field: login.field }) };
+
             const row = {
                 id:               data.id,
                 orgId,
-                userId:           data.userId           ?? null,
+                userId:           login.keep ? (prior ? prior.userId : null) : login.userId,
                 firstName:        data.firstName,
                 lastName:         data.lastName,
                 email:            data.email            ?? null,
@@ -118,7 +166,7 @@ export const handler = async (event) => {
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That technician id is already in use.' }) };
 
             await auditAs(orgId, userId, { action: 'dispatch_technician.created', entityType: 'dispatch_technician', entityId: inserted.id, entityName: techName(inserted), detail: `${inserted.employmentType || 'employee'} · ${inserted.status || 'active'}` });
-            return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise(inserted) }) };
+            return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise({ ...inserted, memberId: await memberIdOf(orgId, inserted.userId) }) }) };
         }
 
         // ── PUT: update technician ────────────────────────────────────────────
@@ -130,8 +178,18 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             const updates = { updatedAt: new Date() };
 
+            // Its vehicle and its login, named anew, are this org's; what it holds is held (state §0.201).
+            const [current] = await db.select({ id: dispatchTechnicians.id, userId: dispatchTechnicians.userId, assignedVehicleId: dispatchTechnicians.assignedVehicleId })
+                .from(dispatchTechnicians).where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
+            if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            const linked = await checkLinks(TECH_LINKS, data, current, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            const login = await loginOf(orgId, id, data, current);
+            if (login.status) return { statusCode: login.status, headers, body: JSON.stringify({ error: login.error, field: login.field }) };
+            if (!login.keep) updates.userId = login.userId;
+
             const fields = [
-                'userId','firstName','lastName','email','phone','employmentType',
+                'firstName','lastName','email','phone','employmentType',
                 'status','homeZip','licenseLevel','laborRate','overtimeRate','assignedVehicleId',
                 'notes','avatarInitials',
             ];
@@ -149,7 +207,7 @@ export const handler = async (event) => {
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, userId, { action: 'dispatch_technician.updated', entityType: 'dispatch_technician', entityId: updated.id, entityName: techName(updated), detail: `${updated.employmentType || 'employee'} · ${updated.status || 'active'}` });
-            return { statusCode: 200, headers, body: JSON.stringify({ technician: normalise(updated) }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ technician: normalise({ ...updated, memberId: await memberIdOf(orgId, updated.userId) }) }) };
         }
 
         // ── DELETE: remove technician ─────────────────────────────────────────

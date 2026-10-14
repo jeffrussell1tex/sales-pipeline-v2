@@ -73,6 +73,18 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      leaves off one the server refuses; the accounts CSV import finds a
      parent among the live accounts. What it found and left is filed in
      §4.2, §4.4, §4.5, §4.6, §4.7, §4.8 and §6.
+   - **Batch 4b-1 is DONE (§0.201; guide §18b94)** (Jeff, 14 Oct: "Three
+     batches, Dispatch first"). Dispatch's links — a job's crew (one link),
+     vehicle, reserved units, service plan, follow-up and parent job (never
+     the job itself); a vehicle's technician; a technician's vehicle and
+     login; an equipment unit's holders; a customer's plan and preferred
+     technician; a plan visit's plan; a time-off block's technician — must
+     be a row of the org when a write names them anew (any row, inactive
+     too: "Any row of the org"). A technician's login is a member of this
+     org, picked on the screen and stored as their Clerk identity — a
+     Technician linked on the screen was never matched at sign-in ("Fix it
+     in 4b-1"). The restore clears them too. What it found and left is
+     filed in §4.2, §4.4 and §4.6.
    - **Jeff's rules (11 Oct), for every batch:**
      - a name typed in full that matches exactly one account by `searchKey`
        saves as that account, under its own spelling. Two or more are
@@ -98,7 +110,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        rest it leaves are §4.2's "D22's edges".
    - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
    - **Batch 3:** CSV import and merge (§4.7).
-   - **Batch 4b:** the other linked ids with no org check (§4.6).
+   - **Batch 4b-2:** the sales links (SPIFF claims' deal and SPIFF, quote
+     line items' product, export runs' schedule, automations' assignee,
+     members' team and pinned reports — §4.6). **Batch 4b-3:** the ids
+     inside settings (teams, territories, crews, quote templates — §4.6).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
      (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
      the Accounts tab and an account's Sub-Accounts still list it, because
@@ -1102,6 +1117,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Recommended: "That account is no longer in your organization — remove it
   (×), or pick one from the list.", the field named, and the deals
   endpoint's words with them. Jeff decides.
+  Since §0.201 Dispatch's too, and for a link the screen chose itself there
+  is no list to pick from: the units Schedule now, a drag and mass
+  scheduling reserve (mass scheduling now keeps the words on screen); a
+  Service Due skip or defer's customer and plan (the visit's words were
+  "Customer not found"); a New Job from Service Due's copied plan.
+  Recommended with the rest: "… is no longer in your organization — reload
+  Dispatch and try again." where the screen picked it.
 - **After a backup restore clears an activity's first contact, its
   `contactId` stays empty** (§0.199): the list keeps the rest, and the
   mirror is rebuilt from it only when a save names the contacts. Minor.
@@ -1256,6 +1278,50 @@ to add meetings. Nothing in the app adds a meeting to Google:
   message. As recorded.
 - **CrewBuilderView's `unscheduledJobs` / `scheduledJobs`** are computed and
   never read. §0.118, as recorded.
+- **Deletes leave Dispatch's links dangling** (§0.201's map, 14 Oct; read in
+  code). A technician delete (API only — no screen offers it) leaves its
+  jobs' crews, vehicles, units, customers' preferred technician and time
+  off naming it — its scheduled jobs then vanish from the day board; a
+  vehicle or unit delete clears nothing; a plan delete refuses only while a
+  customer holds it, not a job or a plan visit; a job delete leaves units
+  checked out to it (no screen checks a unit in). Since §0.201 a link held
+  is never asked again (E3), so such strays stay until changed.
+  Recommended: refuse a technician delete while jobs or blocks name them,
+  and count jobs and visits in the plan delete's refusal. Jeff decides.
+- **The app's own job writes store co-tech and reserved-unit lists as jsonb
+  strings** (guide §18b62.4 unapplied; dispatch-jobs POST and PUT; the
+  restore stores lists since §0.201). Every reader parses both.
+- **Backups carry no Dispatch** (§0.201's map): the export writes no
+  Dispatch section; the restore takes technicians, vehicles, equipment,
+  customers, locations, jobs, line items and history from a hand-built
+  file, never plans, plan visits or time off — so a restored job's or
+  customer's plan is cleared wherever this org lacks it. Whether backups
+  carry Dispatch is its own item.
+- **A re-POST of a job with a partial body resets what it leaves out**
+  (§0.201's map; latent — New Job always mints an id): the create is a
+  full-row upsert.
+- **A customer's plan that names no plan still counts as covered for
+  renewals** (`renewalState`, planVisits.js): its renewal alert runs on the
+  default lead.
+- **Smaller, from §0.201's map:** Settings → Service plans' seed from legacy
+  tiers derives `plan_legacy_<tier>` ids, so a second org's seed of a tier
+  another org seeded is refused ("That plan id is already in use."); a
+  re-run of Settings → Vehicles & equipment's legacy import resets an
+  imported row's technician, holder and status (a full-row upsert); the
+  crew builder prints a technician's vehicle id, not its name; the
+  technician↔vehicle pairing is kept twice
+  (`dispatch_vehicles.assigned_tech_id` and
+  `dispatch_technicians.assigned_vehicle_id`), nothing keeping them in
+  step; the restore stores Tier-1 rows' `ownerId` and a merged record's
+  `mergedIntoId` as the file has them (decide with the restore's other
+  questions).
+- **Older, seen by §0.201's third re-check** (read in code): the Dispatch
+  sub-tab buttons leave the Technicians form with no unsaved-changes
+  prompt, and a save's answer is lost if the user leaves mid-save; a
+  working-hours save from the week view, landing after a technician was
+  opened in Technicians, leaves that draft stale — its next save sends the
+  old week; the discard prompt's confirm button reads "Delete"
+  (confirmDiscard passes danger).
 
 ### 4.5 Notifications, email and digests
 
@@ -1322,25 +1388,36 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "The task was not completed: Forbidden: read-only role"; a Dispatcher:
   "… Forbidden: a Dispatcher can view CRM records but not change them".
   Recommended: hide the bar where `canEditCrm` is false, as the Delete is.
-- **Batch 4b: the other linked ids with no org check** (the class sweep, 13
-  Oct; read in code, not run). Every reader found looks a stored id up in
-  the org, so a stray acts as a dangling link, not a leak:
-  - dispatch jobs' `assignedTechId`, `coTechIds`, `assignedVehicleId`,
-    `assignedEquipmentIds`, `servicePlanId`, `followUpJobId`,
-    `parentJobId`; vehicles' and technicians' assignments; equipment's
-    `checkedOutToId` and `checkedOutJobId`; customers' `servicePlanId` and
-    `preferredTechId`; plan visits' `planId`; schedule blocks' `techId`;
-  - SPIFF claims' `opportunityId` and `spiffId`; quote line items'
-    `productId`; export runs' `scheduleId`; automations'
-    `assignedToId`; members' `profile.teamId` and pinned reports;
-    settings' teams, crews and quote templates' product ids;
+- **Batches 4b-2 and 4b-3: the other linked ids with no org check** (the
+  class sweep, 13 Oct; read in code, not run; Dispatch's done in §0.201).
+  Every reader found looks a stored id up in the org, so a stray acts as a
+  dangling link, not a leak:
+  - 4b-2: SPIFF claims' `opportunityId` and `spiffId`; quote line items'
+    `productId`; export runs' `scheduleId`; automations' `assignedToId`;
+    members' `profile.teamId` and pinned reports;
+  - 4b-3: settings' teams, crews and quote templates' product ids;
   - left as they are by design: tasks' `relatedTo` (free text in places),
     the recommendation log's id (a deal, task or customer by action),
     deals' `pipelineId` (a settings id, 'default' a sentinel).
-  - a backup restore's other links: its clean-up (§0.199) clears batch 4's
-    fields and a deal's account; these fields, and a restored service
-    location's `customerId` (required — to be counted and said, as a job's
-    customer is), stay as the file has them.
+  - a backup restore's other links: its clean-up (§0.199, §0.201) clears
+    batch 4's fields, a deal's account and Dispatch's; these fields stay as
+    the file has them.
+- **One login, one technician — held by a read, not by the database**
+  (§0.201's review; read in code). A technician's login is refused when
+  another technician of the org holds it (409), but the read and the write
+  are two statements and `dispatch_technicians` has no unique index on
+  `(org_id, user_id)`: two saves at the same moment linking one member to
+  two technicians both land. And an Admin's restore checks only that a
+  login is a member's — a file row (or two) holding a login another
+  technician holds lands beside it — and keeps a restored job naming itself
+  as its follow-up or parent (the export has no Dispatch section: only a
+  hand-built file reaches either). The member's sign-in then resolves to
+  whichever row the database returns first (`_techScope.mjs`, no order).
+  Recommended: a SELECT for duplicates (one linked row today), then an
+  additive partial unique index (`WHERE user_id <> ''`) applied to both
+  databases, its 23505 answered as the 409; the restore clearing a login
+  another technician holds, and a job's link to itself. A schema change:
+  Jeff decides.
 - **The backup restore counts the rows it sent, not those it restored**
   (§0.199's review; older): a row skipped because this org or another already
   holds its id is counted, so a second import of the same file reads "N

@@ -44,7 +44,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 
 const { handler } = await import('../../netlify/functions/dispatch-plan-visits.mjs');
 const { db } = await import('../../db/index.js');
-const { dispatchPlanVisits, dispatchCustomers, dispatchTechnicians, dispatchJobs, users, settings } = await import('../../db/schema.js');
+const { dispatchPlanVisits, dispatchCustomers, dispatchServicePlans, dispatchTechnicians, dispatchJobs, users, settings } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { eq } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
@@ -69,6 +69,7 @@ const cleanup = async () => {
         await db.delete(dispatchJobs).where(eq(dispatchJobs.orgId, o));
         await db.delete(dispatchTechnicians).where(eq(dispatchTechnicians.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
+        await db.delete(dispatchServicePlans).where(eq(dispatchServicePlans.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
     }
@@ -77,6 +78,8 @@ const cleanup = async () => {
 before(async () => {
     await assertTestSchema(db);
     await cleanup();
+    // The plan is org A's: a visit's plan is asked since state §0.201 — one no row of the org holds is a 404.
+    await db.insert(dispatchServicePlans).values({ id: PLAN, orgId: ORG_A, name: 'Itest PV plan', cadence: 'quarterly' });
     await db.insert(dispatchCustomers).values([
         { id: CUST_A, orgId: ORG_A, name: 'Itest Plant A', customerType: 'commercial', servicePlanId: PLAN, planStartDate: '2026-01-01' },
         { id: CUST_B, orgId: ORG_B, name: 'Itest Plant B', customerType: 'commercial', servicePlanId: PLAN, planStartDate: '2026-01-01' },

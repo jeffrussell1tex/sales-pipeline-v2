@@ -5,13 +5,16 @@
 // netlify/functions/_links.mjs reads which asked ids are live rows of the org and hands the answer back
 // here; tests/link-ids.test.mjs runs it — the merge walk too (liveIds), its reader handed in.
 //
-// A spec names a write's link fields: [{ key, kind, shape = 'one', heldFrom = [key], follow = true }]
-//   kind      what the id names: account, contact, deal, lead, customer, location (NOUNS)
+// A spec names a write's link fields: [{ key, kind, shape = 'one', heldFrom = [key], follow = true, notSelf }]
+//   kind      what the id names: account, contact, deal, lead, customer, location (NOUNS); and since
+//             §0.201 Dispatch's technician, vehicle, equipment unit, service plan and job
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
 //   follow    a row merged away links its survivor (E2); false — it is not live (an account's parent:
 //             the single save's placeAccount refuses one, §0.198)
+//   notSelf   the link may not name the row it is on (a job's follow-up or parent job — Jeff, 14 Oct:
+//             "Org check, no self-link"): 400, asked only of an id named anew
 // The rule: a link a write NAMES that the row does not already hold must be a live row of this org —
 // a key the body does not name is not asked (the row keeps it); an id the row holds is never asked again
 // (an untouched link stands, even one whose row was deleted since); one merged away is stored as the row it
@@ -19,6 +22,8 @@
 
 export const NOUNS = Object.freeze({
     account: 'account', contact: 'contact', deal: 'deal', lead: 'lead', customer: 'customer', location: 'service location',
+    // Dispatch's (§0.201): none of them is ever merged away
+    technician: 'technician', vehicle: 'vehicle', equipment: 'equipment unit', plan: 'service plan', job: 'job',
 });
 // The kinds a row of which can be merged away (mergeArchived, mergedIntoId).
 export const MERGES = Object.freeze(['account', 'contact']);
@@ -28,6 +33,7 @@ export const MERGE_HOPS = 5;
 
 export const notInOrg = (kind) => `That ${NOUNS[kind]} is not in your organization — pick one from the list.`;
 export const NOT_AN_ID = 'A link must name a record by its id.';
+export const namesItself = (kind) => `A ${NOUNS[kind]} cannot name itself.`;
 
 // The ids a field holds, by its shape. Empty values hold none; a chip with no id holds none.
 export function heldIds(shape, value) {
@@ -93,16 +99,19 @@ const heldBy = (spec, entry, stored) => new Set(stored
 const malformed = (shape, value) => (shape !== 'one' && value != null && value !== '' && !Array.isArray(value))
     || heldIds(shape, value).some((id) => typeof id !== 'string');
 
-// What one write's links ask: { status: 400, error, field } — a value that names no record by its id —
-// or { asks: [{ key, kind, shape, follow, fresh }] }, fresh the ids it names anew (none: nothing to read).
+// What one write's links ask: { status: 400, error, field } — a value that names no record by its id, or
+// a notSelf link naming the row it is on — or { asks: [{ key, kind, shape, follow, fresh }] }, fresh the
+// ids it names anew (none: nothing to read). The row's own id: the stored row's, or a create's body's.
 export function linksAsked(spec, data, stored) {
     const asks = [];
+    const self = (stored && stored.id) || (data && typeof data === 'object' ? data.id : null) || null;
     for (const entry of spec) {
         const { key, kind, shape = 'one', follow = true } = entry;
         if (!data || typeof data !== 'object' || !(key in data)) continue;
         if (malformed(shape, data[key])) return { status: 400, error: NOT_AN_ID, field: key };
         const held = heldBy(spec, entry, stored);
         const fresh = [...new Set(heldIds(shape, data[key]).filter((id) => !held.has(id)))];
+        if (entry.notSelf && self && fresh.includes(self)) return { status: 400, error: namesItself(kind), field: key };
         if (fresh.length) asks.push({ key, kind, shape, follow, fresh });
     }
     return { asks };

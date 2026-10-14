@@ -2396,7 +2396,9 @@ const draftIsDirty = (draft, original) => {
         return Object.entries(draft).some(([k, v]) =>
             !k.startsWith('_') && k !== 'id' && v !== '' && v !== null && v !== false &&
             !(Array.isArray(v) && v.length === 0) &&
-            !(k === 'customerType' || k === 'employmentType' || k === 'status' || k === 'serviceAgreement'));
+            !(k === 'customerType' || k === 'employmentType' || k === 'status' || k === 'serviceAgreement') &&
+            // a new technician's default week is not typed (state §0.201: every untouched '+ New' read unsaved)
+            !(k === 'workingHours' && JSON.stringify(v) === JSON.stringify(defaultWorkWeek())));
     }
     if (!original) return false;
     return Object.keys(draft).some(k => {
@@ -3396,17 +3398,26 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
         // `startNew` clears selectedId and then sets a blank draft. Without this
         // guard the effect fired on that same change, found no matching row, and
         // set the draft back to null — so with a technician selected, "+ New"
-        // produced NO FORM AT ALL. Only reload from a row when not creating.
-        if (draft && draft._isNew) return;
+        // produced NO FORM AT ALL. So a new draft stands while nothing is selected — a technician picked
+        // from the list replaces it (it stood over every pick) — and a draft already that row's stands: a
+        // save puts the server's answer in it (state §0.201).
+        if (draft && ((draft._isNew && selectedId == null) || draft.id === selectedId)) return;
         setDraft(selected ? { ...selected } : null);
         setStatus(null);
     }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    // While a save is out the form holds still and stays on this technician — no field, chip or pick changes it,
+    // and no list pick or '+ New' leaves it — so its answer is this form's, taken whole (state §0.201: a change
+    // typed meanwhile was overwritten, a technician re-opened got its old values back, 'Saved' landed elsewhere).
+    const set = (k, v) => { if (saving) return; setDraft(d => ({ ...d, [k]: v })); };
+    // The hold as it is now, for what a discard prompt runs later: a save begun behind the open prompt (from the
+    // keyboard) let a confirmed pick move the form mid-save.
+    const savingRef = React.useRef(false);
 
     const guarded = (action) => {
+        if (saving) return;
         if (draftIsDirty(draft, (techsRaw || []).find(t => t.id === draft?.id))) {
-            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, action); return; }
+            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, () => { if (!savingRef.current) action(); }); return; }
         }
         action();
     };
@@ -3423,7 +3434,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
         if (!draft || !(draft.firstName || '').trim() || !(draft.lastName || '').trim()) {
             setStatus({ kind: 'err', msg: 'First and last name are required.' }); return;
         }
-        setSaving(true); setStatus(null);
+        setSaving(true); savingRef.current = true; setStatus(null);
         try {
             const body = { ...draft,
                 firstName: draft.firstName.trim(),
@@ -3450,20 +3461,32 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 throw new Error(data.error || ('HTTP ' + res.status));
             }
             const saved = data.technician;
-            if (saved) { onSaved(saved); setSelectedId(saved.id); }
+            // The form takes the server's answer (state §0.201): the login stored is the member's Clerk identity
+            // (the pick sent their app id), the row's updatedAt moved, a create is new no more — the form read as
+            // unsaved after every save. Nothing changed it while the save was out (set, the picker and guarded
+            // hold still), so the answer is this form's.
+            if (saved) { onSaved(saved); setDraft({ ...saved }); setSelectedId(saved.id); }
             setStatus({ kind: 'ok', msg: draft._isNew ? 'Technician created' : 'Saved' });
         } catch (e) {
             setStatus({ kind: 'err', msg: e.message });
         } finally {
-            setSaving(false);
+            setSaving(false); savingRef.current = false;
         }
     };
 
-    const linkedUser = draft && draft.userId ? (users || []).find(u => u.id === draft.userId) : null;
+    // The login is a member's Clerk identity, which the screen never sees; the server says which member it names
+    // (memberId, their app id), and a pick is sent as the member's app id — the server stores their login and
+    // refuses a member not of this org, one not signed in yet, or one another technician holds (state §0.201).
+    // Re-picking the member the row already names restores the row's own login: nothing changed.
+    const linkedUser = draft && draft.memberId ? (users || []).find(u => u.id === draft.memberId) : null;
+
+    // While a save is out the hold is shown: the list and the form dimmed and out of the pointer's reach, a wait
+    // cursor (state §0.201 — it was silent: typing and clicks did nothing, with no sign why).
+    const held = saving ? { opacity: 0.6, pointerEvents: 'none' } : null;
 
     return (
-        <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-            <div style={{ width: 300, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface }}>
+        <div style={{ display: 'flex', height: '100%', overflow: 'hidden', cursor: saving ? 'wait' : undefined }} aria-busy={saving}>
+            <div style={{ width: 300, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface, ...held }}>
                 <div style={{ padding: 12, borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
                     <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search technicians"
                         style={{ ...custInput, padding: '7px 9px', fontSize: 12.5 }}/>
@@ -3488,9 +3511,11 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                             </div>
                             <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(t.employmentType)}</span>
-                                {t.userId
+                                {t.memberId
                                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>app user</span>
-                                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.inkMuted}14`, color: T.inkMuted, fontWeight: 700 }}>no login</span>}
+                                    : t.userId
+                                        ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unknown login</span>
+                                        : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.inkMuted}14`, color: T.inkMuted, fontWeight: 700 }}>no login</span>}
                                 {t.status !== 'active' && (
                                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{labelise(t.status)}</span>
                                 )}
@@ -3509,7 +3534,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                         Select a technician, or create one.
                     </div>
                 ) : (
-                    <div style={{ maxWidth: 620 }}>
+                    <div style={{ maxWidth: 620, ...held }}>
                         <div style={{ fontSize: 20, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif, marginBottom: 16 }}>
                             {draft._isNew ? 'New technician' : `${draft.firstName} ${draft.lastName}`}
                         </div>
@@ -3524,14 +3549,20 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                         </div>
 
                         <CustFieldRow label="Linked app user">
-                            <select value={draft.userId || ''} onChange={e => set('userId', e.target.value)} style={custInput}>
+                            <select value={draft.memberId || (draft.userId ? '__held__' : '')}
+                                onChange={e => { if (saving) return; const v = e.target.value; setDraft(d => { const row = (techsRaw || []).find(t => t.id === d.id);
+                                    return { ...d, userId: v && row && row.memberId === v ? row.userId : v, memberId: v || null }; }); }}
+                                style={custInput}>
                                 <option value="">— No login (subcontractor) —</option>
+                                {draft.userId && !draft.memberId && <option value="__held__">Unknown login — no member of this organization has it</option>}
                                 {(users || []).map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                             </select>
                             <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
                                 {linkedUser
                                     ? 'Signs in to the app. Required for mobile access to their own jobs.'
-                                    : 'Schedulable without an app login — no seat is consumed.'}
+                                    : draft.userId && !draft.memberId
+                                        ? 'No member of your organization has this login, so no one signs in as this technician. Pick a member, or No login to clear it.'
+                                        : 'Schedulable without an app login — no seat is consumed.'}
                             </div>
                         </CustFieldRow>
 
@@ -4677,9 +4708,10 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
 
             <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-                {saving && (
-                    <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono, marginRight: 'auto' }}>
-                        {progress.done}/{progress.total} scheduled{progress.failed ? ` · ${progress.failed} failed` : ''}
+                {/* the run's count, and the first refusal's words, stay once it ends (state §0.201) */}
+                {(saving || progress.failed > 0) && (
+                    <span style={{ fontSize: 12, color: saving ? T.inkMuted : T.danger, fontFamily: T.mono, marginRight: 'auto' }}>
+                        {progress.done}/{progress.total} scheduled{progress.failed ? ` · ${progress.failed} failed${progress.error ? ` — ${progress.error}` : ''}` : ''}
                     </span>
                 )}
                 <button onClick={onCancel} disabled={saving}
@@ -5906,7 +5938,7 @@ export default function DispatchTab() {
             blocks, blockTypes: settings?.dispatchBlockTypes || [],
             fromStr, toStr,
         });
-        setMassProg({ done: 0, total: proposals.length, failed: 0 });
+        setMassProg({ done: 0, total: proposals.length, failed: 0, error: '' });
         setMassPlan({ proposals, skipped, fromStr, toStr });
     };
 
@@ -5915,8 +5947,10 @@ export default function DispatchTab() {
     const confirmMassSchedule = async () => {
         if (!massPlan) return;
         setMassSaving(true);
+        setMassProg({ done: 0, total: massPlan.proposals.length, failed: 0, error: '' });   // a second press counts afresh (state §0.201)
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let done = 0, failed = 0;
+        let firstError = '';   // the server's words for the first job refused (state §0.201) — it said 'HTTP 404'
         const applied = [];
         // Units reserved earlier in this same pass are not offered again (§0.116).
         const reservedThisRun = [];
@@ -5945,14 +5979,19 @@ export default function DispatchTab() {
                         assignedEquipmentIds: pr.assignedEquipment,
                     }),
                 });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    // the job as the panel names it — its title, or its customer's (state §0.201: it read 'A job')
+                    throw new Error(`${pr.job.title || pr.job.customer || 'A job'}: ${data.error || ('HTTP ' + res.status)}`);
+                }
                 applied.push(pr);
                 reservedThisRun.push(...pr.assignedEquipment);
                 done += 1;
             } catch (e) {
                 failed += 1;
+                if (!firstError) firstError = e.message;
             }
-            setMassProg({ done, total: massPlan.proposals.length, failed });
+            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });
         }
         if (!stillOrg(askedOrg)) return;   // no audit row filed in the new org
 
@@ -5976,6 +6015,8 @@ export default function DispatchTab() {
 
         setMassSaving(false);
         if (!failed) setMassPlan(null);
+        // What landed leaves the panel: a second press sends only the jobs still to schedule (state §0.201).
+        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr)) });
     };
 
     // Availability writes. Schedule blocks are dated exceptions; the weekly

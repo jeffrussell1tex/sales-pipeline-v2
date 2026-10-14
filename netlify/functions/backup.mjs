@@ -262,9 +262,13 @@ export const handler = async (event) => {
             // JSONB columns that must be stringified when coming in as arrays/objects
             const JSONB_KEYS = new Set([
                 'serviceZones','skills','certifications','workingHours',
-                'coTechIds','equipmentIds','tags','customFields',
-                'co_tech_ids','equipment_ids','custom_fields',
+                'equipmentIds','tags','customFields',
+                'equipment_ids','custom_fields',
             ]);
+            // Lists of ids the link clean-up reads (state §0.201): stored as the lists they are — stringified,
+            // a list landed as a jsonb string, which the clean-up cannot read — and one a file carries as a
+            // string read back to its list.
+            const ID_LISTS = new Set(['coTechIds', 'assignedEquipmentIds', 'co_tech_ids', 'assigned_equipment_ids']);
 
             // Stamp orgId, coerce timestamps → Date, stringify JSONB arrays/objects
             const stamp = rows => (rows || []).map(r => {
@@ -280,6 +284,10 @@ export const handler = async (event) => {
                     if (k in out && (Array.isArray(out[k]) || (out[k] !== null && typeof out[k] === 'object'))) {
                         out[k] = JSON.stringify(out[k]);
                     }
+                });
+                ID_LISTS.forEach(k => {
+                    if (typeof out[k] !== 'string') return;
+                    try { const list = JSON.parse(out[k]); if (Array.isArray(list)) out[k] = list; } catch { /* kept as the file has it */ }
                 });
                 return out;
             });
@@ -401,15 +409,20 @@ export const handler = async (event) => {
             }
 
             // On the rows it restored, every link that names no row of this org is cleared, and the answer says
-            // how many; a file is never refused over a link (state §0.199, E4: "Clear stray links"). A job's
-            // customer and a quote's deal are required: such rows are counted, not changed.
+            // how many; a file is never refused over a link (state §0.199, E4: "Clear stray links"; Dispatch's
+            // links since §0.201). A job's customer, a quote's deal, a location's customer and a line item's or
+            // a history entry's job are required: such rows are counted, not changed.
             let swept = null;
             try {
                 swept = await clearStrayLinks(orgId, restored);
                 if (swept.cleared) notes.push(`${swept.cleared} link${swept.cleared === 1 ? '' : 's'} that named no record of this organization ${swept.cleared === 1 ? 'was' : 'were'} cleared.`);
                 if (swept.jobsWithoutCustomer) notes.push(`${swept.jobsWithoutCustomer} job${swept.jobsWithoutCustomer === 1 ? ' names' : 's name'} a customer that is not in this organization — a job's customer can't be cleared, so ${swept.jobsWithoutCustomer === 1 ? 'it was' : 'they were'} left as restored.`);
                 if (swept.quotesWithoutDeal) notes.push(`${swept.quotesWithoutDeal} quote${swept.quotesWithoutDeal === 1 ? ' names' : 's name'} a deal that is not in this organization — a quote's deal can't be cleared, so ${swept.quotesWithoutDeal === 1 ? 'it was' : 'they were'} left as restored.`);
+                if (swept.locationsWithoutCustomer) notes.push(`${swept.locationsWithoutCustomer} service location${swept.locationsWithoutCustomer === 1 ? ' names' : 's name'} a customer that is not in this organization — a location's customer can't be cleared, so ${swept.locationsWithoutCustomer === 1 ? 'it was' : 'they were'} left as restored.`);
+                if (swept.lineItemsWithoutJob) notes.push(`${swept.lineItemsWithoutJob} job line item${swept.lineItemsWithoutJob === 1 ? ' names' : 's name'} a job that is not in this organization — a line item's job can't be cleared, so ${swept.lineItemsWithoutJob === 1 ? 'it was' : 'they were'} left as restored.`);
+                if (swept.historyWithoutJob) notes.push(`${swept.historyWithoutJob} status-history entr${swept.historyWithoutJob === 1 ? 'y names' : 'ies name'} a job that is not in this organization — an entry's job can't be cleared, so ${swept.historyWithoutJob === 1 ? 'it was' : 'they were'} left as restored.`);
                 if (swept.failed.length) errs.push(`links: not checked on ${swept.failed.join(', ')} — the restore stands, those links as the file had them.`);
+                if (swept.shelfFailed) errs.push('equipment: the units whose holder was cleared could not be marked available — they show as checked out to no one. Set them to Available in Settings → Dispatch → Vehicles & equipment.');
             } catch (e) { errs.push(`links: not checked — ${e?.cause?.message || e?.message}`); }
 
             // Record a synthetic snapshot entry
@@ -434,6 +447,9 @@ export const handler = async (event) => {
                 swept.cleared ? `${swept.cleared} link${swept.cleared === 1 ? '' : 's'} cleared` : '',
                 swept.jobsWithoutCustomer ? `${swept.jobsWithoutCustomer} job${swept.jobsWithoutCustomer === 1 ? '' : 's'} with a customer not in this org` : '',
                 swept.quotesWithoutDeal ? `${swept.quotesWithoutDeal} quote${swept.quotesWithoutDeal === 1 ? '' : 's'} with a deal not in this org` : '',
+                swept.locationsWithoutCustomer ? `${swept.locationsWithoutCustomer} location${swept.locationsWithoutCustomer === 1 ? '' : 's'} with a customer not in this org` : '',
+                swept.lineItemsWithoutJob ? `${swept.lineItemsWithoutJob} line item${swept.lineItemsWithoutJob === 1 ? '' : 's'} with a job not in this org` : '',
+                swept.historyWithoutJob ? `${swept.historyWithoutJob} history entr${swept.historyWithoutJob === 1 ? 'y' : 'ies'} with a job not in this org` : '',
             ].filter(Boolean).join(' · ') : '';
             await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${linkDetail ? ` · ${linkDetail}` : ''}${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}` });
 
