@@ -4,7 +4,8 @@ import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, Organ
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
-import { isoLocal, todayLocal } from './utils/dateLocal';
+import { todayLocal } from './utils/dateLocal';
+import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
@@ -150,6 +151,14 @@ function App() {
         uiState.resetOnOrgSwitch();
         calState.resetOnOrgSwitch();
     }, [activeOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // The org whose lists a checker or the bell may read (state §0.200): the active org,
+    // its switch run — uiOrgRef moves in the switch's own effects, a switch to no org too —
+    // and its list effect run for it (listsOrgRef, which a switch to no org leaves on the
+    // last org). A checker reads it with the org of its own render: an old interval tick
+    // holds the last. It is not "the lists are this org's": listsOrgRef moves before the
+    // last org's lists are cleared, so in a switch's own commit the lists may still be the
+    // last org's — every reader still asks each row its org (taskAlerts.js alertsMe).
+    const listsOnScreen = (org) => !!org && uiOrgRef.current === org && listsOrgRef.current === org;
 
     // Destructure for use in this component
     const {
@@ -203,10 +212,11 @@ function App() {
     // this org's roster, as users?me=true returned it — the role the server
     // enforces on every request. It was Clerk's user-level metadata, one value for
     // every org a person is in, so an Admin of one org saw an Admin's screens in
-    // every org. Read only while the profile is THIS org's: after the header's
-    // switcher the last org's row stays in state until the new org's answers
-    // (guide §18b55); until then a rep's screens, which open nothing the server
-    // would not refuse.
+    // every org. Read only while the profile is THIS org's: the switch puts the
+    // profile back (useUIState — org-bound), so only the switch's own render still
+    // holds the last org's row, and myProfileOrgId names the last org until the
+    // new org's answer lands (guide §18b55); until then a rep's screens, which
+    // open nothing the server would not refuse.
     const [myProfileOrgId, setMyProfileOrgId] = React.useState(null);
     // Deactivated in the active org (state §0.164): users?me=true answers 403
     // 'deactivated' — the server refuses every request in that org — and the app
@@ -255,6 +265,7 @@ function App() {
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         snoozedDueAlerts, setSnoozedDueAlerts,
         dismissedReminders, setDismissedReminders,
+        snoozedReminders, setSnoozedReminders, taskReminderQueue, setTaskReminderQueue,
         mergeModal, setMergeModal,
         contactMergeModal, setContactMergeModal,
         settingsOpenPanel, setSettingsOpenPanel,
@@ -1273,6 +1284,12 @@ dbFetch('/.netlify/functions/users?me=true')
     // Notification Generation
     useEffect(() => {
         const generateNotifications = () => {
+            // The lists on screen are this org's (state §0.200): after a sign-out or a switch to
+            // no org the last org's lists stay loaded, and a bell made from them showed in the next
+            // org's header. activeOrgId is this render's and stays OUT of the deps — see the
+            // reminder checker below; its task entries ask each row's org, its deal and coaching
+            // entries do not (OPEN_ITEMS §4.5).
+            if (!listsOnScreen(activeOrgId)) { setNotifications(prev => (prev.length ? [] : prev)); return; }
             const newNotifications = [];
             const now = new Date();
             
@@ -1319,23 +1336,9 @@ dbFetch('/.netlify/functions/users?me=true')
                 }
             });
             
-            // Task reminders
-            tasks.forEach(task => {
-                if (!task.completed && task.dueDate) {
-                    const dueDate = new Date(task.dueDate + 'T12:00:00');
-                    const daysUntilDue = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
-                    
-                    if (daysUntilDue === 0) {
-                        newNotifications.push({
-                            id: `task-${task.id}`,
-                            type: 'warning',
-                            message: `Task due today: ${task.title}`,
-                            taskId: task.id,
-                            date: now.toISOString()
-                        });
-                    }
-                }
-            });
+            // Tasks: the member's own and the ones nobody owns, due today or overdue (state §0.200 —
+            // every member's showed, from noon the day before to noon on the due day, never overdue).
+            newNotifications.push(...taskBellEntries(tasks, { now, me: currentUserId, org: activeOrgId }));
             
             // Coaching notes addressed to me that I have not read (state §0.82).
             for (const n of unreadFor(coachingNotes, currentUserId, myProfile?.teamId || null)) {
@@ -1356,99 +1359,69 @@ dbFetch('/.netlify/functions/users?me=true')
         return () => clearInterval(interval);
     }, [opportunities, activities, tasks, coachingNotes, currentUserId, myProfile]);
 
-    // Task reminder popup checker
+    // Task reminder popup checker. A reminder interrupts only the member it is for — their own task
+    // or one nobody owns, the profile known — and only from the active org's list (state §0.200).
+    // Several due in one minute each show in turn, a new one never over the one open, and a snoozed
+    // one comes back through here, re-read in the list as it is then (taskAlerts.js reminderStep).
     useEffect(() => {
         const checkReminders = () => {
-            const now = new Date();
-            const nowDate = isoLocal(now);
-            const nowHour = now.getHours();
-            const nowMin = now.getMinutes();
-            
-            tasks.forEach(task => {
-                if (task.completed || !task.reminderDate || !task.reminderTime) return;
-                if (dismissedReminders.includes(task.id)) return;
-                
-                const rDate = task.reminderDate;
-                const rTime = task.reminderTime;
-                
-                if (rDate !== nowDate) return;
-                
-                // Parse reminder time (could be "9:00 AM", "14:00", etc)
-                let rHour, rMin;
-                const ampmMatch = rTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
-                if (ampmMatch) {
-                    rHour = parseInt(ampmMatch[1]);
-                    rMin = parseInt(ampmMatch[2]);
-                    const isPM = ampmMatch[3].toUpperCase() === 'PM';
-                    if (isPM && rHour !== 12) rHour += 12;
-                    if (!isPM && rHour === 12) rHour = 0;
-                } else {
-                    const parts = rTime.split(':');
-                    rHour = parseInt(parts[0]) || 0;
-                    rMin = parseInt(parts[1]) || 0;
-                }
-                
-                if (nowHour === rHour && Math.abs(nowMin - rMin) <= 1) {
-                    // Fire reminder
-                    setTaskReminderPopup(task);
-                    setDismissedReminders(prev => [...prev, task.id]);
-                    
-                    // Play audio chime
-                    try {
-                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                        const playTone = (freq, start, dur) => {
-                            const osc = ctx.createOscillator();
-                            const gain = ctx.createGain();
-                            osc.connect(gain);
-                            gain.connect(ctx.destination);
-                            osc.type = 'sine';
-                            osc.frequency.value = freq;
-                            gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
-                            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + dur);
-                            osc.start(ctx.currentTime + start);
-                            osc.stop(ctx.currentTime + start + dur);
-                        };
-                        playTone(523, 0, 0.2);
-                        playTone(659, 0.2, 0.2);
-                        playTone(784, 0.4, 0.3);
-                        playTone(784, 0.8, 0.2);
-                        playTone(659, 1.0, 0.2);
-                        playTone(784, 1.2, 0.4);
-                    } catch(e) {}
-                }
-            });
+            // The lists on screen are this org's: never the last org's left loaded after a sign-out
+            // or a switch to no org, nor an old tick's after a switch. activeOrgId is this render's
+            // and stays OUT of the deps, so a switch alone never runs a checker in its own commit,
+            // whose render still holds the last org's lists; a dep that changes with the switch can,
+            // and then each row is asked its org (taskAlerts.js alertsMe).
+            if (!listsOnScreen(activeOrgId)) return;
+            const step = reminderStep({ tasks, now: new Date(), me: currentUserId, org: activeOrgId,
+                fired: dismissedReminders, snoozed: snoozedReminders, open: taskReminderPopup, queue: taskReminderQueue });
+            if (step.fired.length) setDismissedReminders(prev => [...prev, ...step.fired.filter(id => !prev.includes(id))]);
+            if (step.ended.length) setSnoozedReminders(prev => { const left = { ...prev }; for (const id of step.ended) delete left[id]; return left; });
+            if (step.queue !== taskReminderQueue) setTaskReminderQueue(step.queue);
+            if (step.show) setTaskReminderPopup(step.show);
+            if (step.chime) {
+                // Play audio chime
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const playTone = (freq, start, dur) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + dur);
+                        osc.start(ctx.currentTime + start);
+                        osc.stop(ctx.currentTime + start + dur);
+                    };
+                    playTone(523, 0, 0.2);
+                    playTone(659, 0.2, 0.2);
+                    playTone(784, 0.4, 0.3);
+                    playTone(784, 0.8, 0.2);
+                    playTone(659, 1.0, 0.2);
+                    playTone(784, 1.2, 0.4);
+                } catch(e) {}
+            }
         };
         
         checkReminders();
         const interval = setInterval(checkReminders, 30000); // Check every 30 seconds
         return () => clearInterval(interval);
-    }, [tasks, dismissedReminders]);
+    }, [tasks, dismissedReminders, snoozedReminders, taskReminderPopup, taskReminderQueue, currentUserId]);
 
-    // Task due/overdue popup checker.
-    // Alerts for open tasks due today OR overdue (previously due-today only, so a
-    // task that slipped a day went silent). Tasks are NOT marked dismissed when the
-    // popup shows — dismissal/snooze is recorded in ModalLayer when the user acts.
-    // If anything wipes the popup before the user responds, the next tick re-fires it.
+    // Task due/overdue popup checker. Alerts for the member's own open tasks and the ones nobody
+    // owns, due today or overdue, from the active org's list only (state §0.200 — every member's
+    // popped up for an Admin, Manager or Dispatcher). Tasks are NOT marked dismissed when the popup
+    // shows — dismissal/snooze is recorded in ModalLayer when the user acts, and ModalLayer shows the
+    // next queued one that still stands. If anything wipes the popup before the user responds, the
+    // next tick shows the queue's next, or re-fires it (taskAlerts.js dueStep).
     useEffect(() => {
         const checkDueToday = () => {
-            if (taskDuePopup) return; // one alert at a time — never replace an open popup
-            const todayStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-            const nowMs = Date.now();
-            const dueTasks = tasks.filter(task => {
-                if (task.completed) return false;
-                const status = task.status || (task.completed ? 'Completed' : 'Open');
-                if (status === 'Completed') return false;
-                if (!task.dueDate) return false;
-                if (task.dueDate > todayStr) return false; // due today or overdue (YYYY-MM-DD compares safely)
-                if (dismissedDueTodayAlerts.includes(task.id)) return false;
-                const snoozedUntil = snoozedDueAlerts[task.id];
-                if (snoozedUntil && nowMs < snoozedUntil) return false;
-                return true;
-            }).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')); // most overdue first
-            if (dueTasks.length === 0) return;
-            // Queue all due/overdue tasks and show the first one
-            setTaskDueQueue(dueTasks.slice(1));
-            setTaskDuePopup(dueTasks[0]);
+            if (!listsOnScreen(activeOrgId)) return;   // this org's lists only — as the reminder checker
+            const step = dueStep({ tasks, today: todayLocal(), nowMs: Date.now(), me: currentUserId, org: activeOrgId,
+                dismissed: dismissedDueTodayAlerts, snoozed: snoozedDueAlerts, open: taskDuePopup, queue: taskDueQueue });
+            if (step.queue !== taskDueQueue) setTaskDueQueue(step.queue);
+            if (step.show) setTaskDuePopup(step.show);
+            if (!step.chime) return;
             // Play a distinct alert sound (two-tone urgent chime)
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1471,7 +1444,7 @@ dbFetch('/.netlify/functions/users?me=true')
         checkDueToday();
         const interval = setInterval(checkDueToday, 60000);
         return () => clearInterval(interval);
-    }, [tasks, dismissedDueTodayAlerts, snoozedDueAlerts, taskDuePopup]);
+    }, [tasks, dismissedDueTodayAlerts, snoozedDueAlerts, taskDuePopup, taskDueQueue, currentUserId]);
 
     // A crash in a rail or a modal closes every layer and keeps what the reminders
     // remember (state §0.185): the org switch's reset, which the boundary ran, put
@@ -1950,6 +1923,8 @@ dbFetch('/.netlify/functions/users?me=true')
         taskDueSnoozeM, setTaskDueSnoozeM,
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         snoozedDueAlerts, setSnoozedDueAlerts,
+        taskReminderQueue, setTaskReminderQueue,
+        setSnoozedReminders,
         showShortcuts, setShowShortcuts,
         csvImportType, setCsvImportType,
         // QuickLog

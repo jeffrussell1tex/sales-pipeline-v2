@@ -103,22 +103,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
      the Accounts tab and an account's Sub-Accounts still list it, because
      the accounts GET does not filter archived rows (read in code 11 Oct).
-2. **Reminder popups for your own tasks only** (§4.5; Jeff decided, 13 Oct:
-   "just dont show the admin her reminders at all", "admin can see her
-   tasks via the task tab", "they dont need a reminder"): the task reminder
-   and due/overdue popups show only the signed-in member's own tasks
-   (unassigned ones as today); an Admin, Manager or Dispatcher sees the
-   others' on the Tasks tab. Small; recommended next, after batch 4.
-3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
-5. **Deal data** (§4.2):
+4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
      §0.198).
-6. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -708,6 +702,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
   delete). The guide wants inline chrome. §0.136, as recorded.
 - **Log from calendar is dead code.** Its state and two handlers have no
   caller. Wire it or remove it. §0.175 (a).
+- **A popup a checker opens while ModalLayer's crash notice shows is not
+  drawn, and takes the Escape of the layers below it** (§0.200's review,
+  read in code). After a crash in a layer the due checker starts a new
+  round (since §0.185) and the reminder checker shows the next waiting
+  (since §0.200), but LayerBoundary draws its notice in ModalLayer's place
+  until the notice is dismissed; App's Escape finds the popup on top and
+  leaves it to the popup's own Escape, which is not mounted — the
+  shortcuts, notes, search, profile and notification panels do not close on
+  Escape meanwhile. Recommended: hold both checkers while the boundary shows
+  its notice.
 
 ### 4.2 Deals, activities and pipeline
 
@@ -1252,24 +1256,40 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.5 Notifications, email and digests
 
-- **An Admin, Manager or Dispatcher gets the reminder and due/overdue popups
-  for every task in the org** (§0.199's pane check, 13 Oct — Jeff, signed in as
-  himself in Accelerep QA: "several reminders poped up that showed
-  assigned to Karen"; read in code). Both checkers in App.jsx — the
-  reminder popup (`checkReminders`) and the due/overdue popup
-  (`checkDueToday`) — go through the whole task list the session loaded,
-  with no check of whose task it is; for an Admin, Manager or Dispatcher
-  that list is the org's (the tasks GET's read scope, `crmReadScope` →
-  'all'; `canSeeAll` is the write authority, §18b45), so each overdue task
-  of every member pops up, the first with a chime, after each load or org
-  switch. A dismissal is kept in this page's memory only
-  (`useOrgBoundState`: a reload or an org switch forgets it), so
-  dismissing one changes nothing for its owner. A rep loads only their
-  own tasks and unassigned ones. **Jeff decided (13 Oct):** "just dont
-  show the admin her reminders at all" — "admin can see her tasks via the
-  task tab", "they dont need a reminder": both popups for the signed-in
-  member's own tasks only (by owner id, guarded `!!ownerId` — the
-  null === null rule), unassigned tasks as today. §1 item 2.
+- **Home's "On Your Plate" and greeting counts, and the phone's Tasks badge,
+  count the whole org's tasks for an Admin** (§0.200's map, read in code;
+  Jeff, 13 Oct: "File them"). Home reads `visibleTasks` — for an Admin every
+  task of the org, for a Manager the Viewing bar's scope — and says "N
+  overdue · N on your plate today"; the phone's bottom-nav Tasks badge counts
+  overdue `visibleTasks` (App.jsx). The desktop header's Tasks and mention
+  badges (AppHeader's `overdueTaskCount`, `mentionCount`) are never passed by
+  App, so they never draw. Recommended: count the member's own and nobody's
+  (`alertsMe`, guide §18b93) where the words say "your", and wire or remove
+  the desktop badges.
+- **No screen sets a task reminder** (§0.200's review, read in code; Jeff,
+  13 Oct: "File it for later"). The reminder popup fires on a task's
+  `reminderDate` and `reminderTime`; the window that set them (TaskModal) is
+  gone, and no rail, form, import or job writes them — only a direct API
+  write or an older row (none open, SELECT 13 Oct). §0.200's reminder rules
+  are proven by tests/task-alerts.test.mjs and a pane check on made-up rows.
+  Decide: a reminder field on the task rail, or retire the popup. With it:
+  the server's task text fires at the due time (`task-reminders.mjs`), the
+  popup at the reminder time; and a Technician's own tasks never pop up (the
+  tasks GET returns a Technician none) while the text reaches them.
+- **The bell's deal entries go to an Admin or Dispatcher for every deal of
+  the org** (stale, closing within 7 days, close date passed; a Manager's
+  the org's or their reps') — the class §0.200 closed for tasks; and in a
+  switch's own commit, when another of the bell's inputs changes with the
+  switch (a profile answer landing then), its deal and coaching entries are
+  made from the last org's lists for one render: the badge's count only
+  (§0.200's review, read in code; its task entries ask each row's org). A
+  task entry does nothing when clicked (only a deal entry switches tabs).
+  Recommended: decide whose deals alert whom, and ask each deal and note row
+  its org.
+- **A task popup's dismissal or snooze lives in the page's memory only**: a
+  reload pops everything still due again, and an org switch forgets them
+  (§0.200 keeps it so — Jeff: "Forget on a switch" for the reminder's
+  snooze and queue). Read 13 Oct.
 - **"View Deal →" in seven older email templates opens Home.** Nothing reads
   `?deal=`. It wants App's `?quote=` pattern, surviving sign-in. §0.158;
   re-read 7 Oct.
@@ -1432,6 +1452,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
     then the app's copy (guide §18b63.3).
   - "Client `managedReps` narrowing is the only Manager scoping": the server
     narrows a Manager's deals too (`dealVisibleTo`, §0.155).
+- **A late users?me answer from the last org can set the profile after a
+  switch to no org** (across orgs; §0.200's review, read in code; §18b55).
+  The answer is checked against `prevOrgIdRef`, which the list effect moves
+  only with an org active (it returns first with none) and only after
+  `waitForToken`; an answer from org A landing then sets A's row as the
+  profile, and a switch from no org to B runs no reset — A's row stands
+  until B's answer lands (its role is not read: `myProfileOrgId` names A). The
+  alerts stay safe: an id of org A matches no row of another org (`alertsMe`).
+  A sign-in ends in a page load (clerk-js, as recorded), so a second member
+  never inherits it. Recommended: drop an answer when
+  `uiOrgRef.current !== meOrgId`.
 
 ### 4.7 Imports and merge
 

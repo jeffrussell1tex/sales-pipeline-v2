@@ -477,7 +477,8 @@ test('each new Escape does what the layer\'s own close does, and nothing mid-sav
     assert.ok(ml.includes("    useEscapeLayer(!!blockedDeleteModal, () => setBlockedDeleteModal(null), escapeBlocked('blockedDelete'));"), 'the notice closes');
     assert.ok(ml.includes("    useEscapeLayer(!!(showSpiffClaimModal && spiffClaimContext), () => { if (!spiffClaimBusy) closeClaimModal(); }, escapeBlocked('spiffClaim'));"), 'a claim being submitted stays');
     assert.ok(ml.includes("    useEscapeLayer(!!taskDuePopup, dismissDueAlert, escapeBlocked('duePopup'));"), 'the due reminder is dismissed, the next one shows');
-    assert.ok(ml.includes("    useEscapeLayer(!!taskReminderPopup, () => setTaskReminderPopup(null), escapeBlocked('reminderPopup'));"));
+    assert.ok(ml.includes("    useEscapeLayer(!!taskReminderPopup, showNextReminder, escapeBlocked('reminderPopup'));"), 'the reminder closes and the next waiting that still stands shows, as its Dismiss and backdrop do (§0.200)');
+    assert.equal(ml.split('onClick={showNextReminder}').length - 1, 2, 'the backdrop and Dismiss: one close, the Escape\'s');
     assert.equal(ml.split('onClick={dismissDueAlert}').length - 1, 2, 'the backdrop and Dismiss: one dismissal, the Escape\'s');
     assert.equal(ml.split('const closeClaimModal = () =>').length - 1, 1, 'one close for the claim, the Escape\'s and the buttons\'');
     const ql = read('src/components/layout/QuickLogFab.jsx');

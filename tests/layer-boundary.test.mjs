@@ -162,24 +162,26 @@ test('useModalState, run: a crash\'s closeLayers closes every layer and keeps wh
         seen.push({
             rail: m.contactRailId, due: m.taskDuePopup && m.taskDuePopup.id, queued: m.taskDueQueue.length,
             dismissed: m.dismissedDueTodayAlerts, snoozed: Object.keys(m.snoozedDueAlerts), fired: m.dismissedReminders,
+            waiting: m.taskReminderQueue.map((t) => t.id), back: Object.keys(m.snoozedReminders),
         });
         if (step === 0) {
             step = 1;   // a rail open, a due-task reminder up with one queued; one dismissed, one snoozed, one fired
             m.setContactRailId('ctc_qa_1'); m.setTaskDuePopup({ id: 'tsk_due' }); m.setTaskDueQueue([{ id: 'tsk_next' }]);
             m.setDismissedDueTodayAlerts(['tsk_dismissed']); m.setSnoozedDueAlerts({ tsk_snoozed: 1 }); m.setDismissedReminders(['tsk_fired']);
+            m.setTaskReminderQueue([{ id: 'tsk_waiting' }]); m.setSnoozedReminders({ tsk_back: 1 });   // a reminder waiting its turn, one snoozed (§0.200)
         } else if (step === 1) { step = 2; m.closeLayers(); }          // a crash in a layer
         else if (step === 2) { step = 3; m.resetOnOrgSwitch(); }       // an org switch
         return null;
     }
     renderToString(createElement(Probe));
-    const remembered = { dismissed: ['tsk_dismissed'], snoozed: ['tsk_snoozed'], fired: ['tsk_fired'] };
-    const nothing = { dismissed: [], snoozed: [], fired: [] };
+    const remembered = { dismissed: ['tsk_dismissed'], snoozed: ['tsk_snoozed'], fired: ['tsk_fired'], waiting: ['tsk_waiting'], back: ['tsk_back'] };
+    const nothing = { dismissed: [], snoozed: [], fired: [], waiting: [], back: [] };
     assert.deepEqual(seen, [
         { rail: null, due: null, queued: 0, ...nothing },
         { rail: 'ctc_qa_1', due: 'tsk_due', queued: 1, ...remembered },
         { rail: null, due: null, queued: 0, ...remembered },
         { rail: null, due: null, queued: 0, ...nothing },
-    ], 'the crash closes the rail and the reminder and keeps what was dismissed, snoozed and fired; the switch puts back both');
+    ], 'the crash closes the rail and the reminder and keeps what was dismissed, snoozed and fired, and the reminders waiting their turn and snoozed — come due at a minute that has passed (§0.200); the switch puts back both');
 });
 
 test('the meeting prep panel is a component of its own — it reads only what it binds, draws nothing when closed, and takes what it shows from the app\'s context', () => {

@@ -126,6 +126,9 @@ One commit per verified batch; doc patch in the same commit.
 - Popovers: `getBoundingClientRect()` + `position: fixed`, rendered through
   `createPortal(…, document.body)` — an ancestor with a `transform` (a hover
   lift) traps a fixed box inside it (guide §16, the menu rule; state §0.128).
+- A task alert (a popup, the bell) interrupts only the member it is for:
+  their own task or one nobody owns, by owner id, once the profile is known,
+  from the active org's lists (`src/utils/taskAlerts.js`, guide §18b93).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

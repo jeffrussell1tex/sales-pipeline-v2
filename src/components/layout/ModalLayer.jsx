@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../../utils/storage';
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
+import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
 import { buildOpportunityRow } from '../../utils/importRows';
 import { importPasses, subsAfterParents } from '../../utils/importParents.js';
 import { teamsWithMembers } from '../../utils/teamMembership.js';
@@ -108,7 +109,7 @@ export default function ModalLayer() {
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
         pressNotices, setPressNotices,
-        taskReminderPopup, setTaskReminderPopup,
+        taskReminderPopup, setTaskReminderPopup, taskReminderQueue, setTaskReminderQueue, setSnoozedReminders,
         taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
         taskDuePopup, setTaskDuePopup,
         taskDueQueue, setTaskDueQueue,
@@ -122,6 +123,7 @@ export default function ModalLayer() {
         // Data
         opportunities, setOpportunities, accounts, setAccounts,
         contacts, setContacts, tasks, setTasks, activities,
+        currentUserId, activeOrgId,
         leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
@@ -146,17 +148,29 @@ export default function ModalLayer() {
         return r;
     };
 
+    // Who an alert is for and what still stands, as App's checkers read it (state §0.200): a
+    // queued alert shows only while it still stands in the list as it is now — one completed,
+    // reassigned or dismissed since is skipped, and its title and notes show as they are now.
+    const alertWho = { me: currentUserId, org: activeOrgId };
+    const dueNow = () => ({ today: todayLocal(), nowMs: Date.now(), ...alertWho, dismissed: dismissedDueTodayAlerts, snoozed: snoozedDueAlerts });
+    const showNextDue = () => {
+        const { task, rest } = nextStanding(taskDueQueue, tasks, (t) => dueStands(t, dueNow()));
+        setTaskDuePopup(task);
+        setTaskDueQueue(rest);
+    };
+    // The task reminder's close — Dismiss, its backdrop, its Escape, Open Task, Snooze: the
+    // next reminder waiting its turn shows, while it still stands.
+    const showNextReminder = () => {
+        const { task, rest } = nextStanding(taskReminderQueue, tasks, (t) => reminderStands(t, alertWho));
+        setTaskReminderPopup(task);
+        setTaskReminderQueue(rest);
+    };
     // The due-task reminder's Dismiss — its button, its backdrop and its Escape. Closing
     // without acting counts as dismissing the current alert, or the checker would re-fire
-    // it on the next tick; the next one queued shows.
+    // it on the next tick; the next one queued that still stands shows.
     const dismissDueAlert = () => {
         if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
-        if (taskDueQueue.length > 0) {
-            setTaskDuePopup(taskDueQueue[0]);
-            setTaskDueQueue(prev => prev.slice(1));
-        } else {
-            setTaskDuePopup(null);
-        }
+        showNextDue();
     };
     const closeClaimModal = () => { setSpiffClaimError(null); setSpiffClaimBusy(null); setShowSpiffClaimModal(false); };
     // The layers drawn here that had no Escape take their own (state §0.186), each while no
@@ -165,7 +179,10 @@ export default function ModalLayer() {
     useEscapeLayer(!!blockedDeleteModal, () => setBlockedDeleteModal(null), escapeBlocked('blockedDelete'));
     useEscapeLayer(!!(showSpiffClaimModal && spiffClaimContext), () => { if (!spiffClaimBusy) closeClaimModal(); }, escapeBlocked('spiffClaim'));
     useEscapeLayer(!!taskDuePopup, dismissDueAlert, escapeBlocked('duePopup'));
-    useEscapeLayer(!!taskReminderPopup, () => setTaskReminderPopup(null), escapeBlocked('reminderPopup'));
+    useEscapeLayer(!!taskReminderPopup, showNextReminder, escapeBlocked('reminderPopup'));
+    // How many waiting still stand — each popup's "+N more" and "Dismiss · Next (N)" (state §0.200).
+    const reminderWaiting = taskReminderPopup ? standingCount(taskReminderQueue, tasks, (t) => reminderStands(t, alertWho)) : 0;
+    const dueWaiting = taskDuePopup ? standingCount(taskDueQueue, tasks, (t) => dueStands(t, dueNow())) : 0;
 
     return (
         <>
@@ -839,7 +856,7 @@ export default function ModalLayer() {
             {/* Task Reminder Popup */}
             {taskReminderPopup && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}
-                    onClick={() => setTaskReminderPopup(null)}
+                    onClick={showNextReminder}
                 >
                     <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '12px', padding: '0', width: isMobile ? '100%' : '420px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}
@@ -850,6 +867,7 @@ export default function ModalLayer() {
                                 <div style={{ fontWeight: '700', fontSize: '1rem', color: T.surface }}>Task Reminder</div>
                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>
                                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {reminderWaiting > 0 && <span style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>+{reminderWaiting} more</span>}
                                 </div>
                             </div>
                         </div>
@@ -899,11 +917,13 @@ export default function ModalLayer() {
                                         const task = taskReminderPopup;
                                         const ms = (taskReminderSnoozeH * 60 + taskReminderSnoozeM) * 60 * 1000;
                                         if (ms <= 0) return;
-                                        setTaskReminderPopup(null);
-                                        // Back after the snooze only in this org (state §0.175): it
-                                        // showed the last org's task over the new org's screen.
-                                        const askedOrg = requestOrg();
-                                        setTimeout(() => { if (stillOrg(askedOrg)) setTaskReminderPopup(task); }, ms);
+                                        // A re-alert-at time, as the due alert's snooze (state §0.200): App's
+                                        // checker brings it back once it runs out — only while the task still
+                                        // stands, and in turn behind a reminder open. A timer showed the copy
+                                        // snoozed, over the one open, completed or reassigned since or not;
+                                        // an org switch clears it (it showed the last org's task — §0.175).
+                                        setSnoozedReminders(prev => ({ ...prev, [task.id]: Date.now() + ms }));
+                                        showNextReminder();
                                     }}
                                     style={{ padding:'4px 14px', background:T.warn, color:T.surface, border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
@@ -913,7 +933,7 @@ export default function ModalLayer() {
                                 <button
                                     onClick={() => {
                                         const task = taskReminderPopup;
-                                        setTaskReminderPopup(null);
+                                        showNextReminder();
                                         setActiveTab('tasks');
                                         const askedOrg = requestOrg();
                                         setTimeout(() => {
@@ -927,11 +947,11 @@ export default function ModalLayer() {
                                     onMouseLeave={e => e.target.style.background = T.ink}
                                 >Open Task</button>
                                 <button
-                                    onClick={() => setTaskReminderPopup(null)}
+                                    onClick={showNextReminder}
                                     style={{ flex: 1, padding: '0.625rem 1rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                     onMouseEnter={e => { e.target.style.background = T.surface2; e.target.style.color = T.inkMid; }}
                                     onMouseLeave={e => { e.target.style.background = T.surface; e.target.style.color = T.inkMid; }}
-                                >Dismiss</button>
+                                >{reminderWaiting > 0 ? `Dismiss · Next (${reminderWaiting})` : 'Dismiss'}</button>
                             </div>
                         </div>
                     </div>
@@ -953,7 +973,7 @@ export default function ModalLayer() {
                                 <div style={{ fontWeight: '800', fontSize: '1rem', color: T.surface, letterSpacing: '-0.01em' }}>{taskDuePopup.dueDate && taskDuePopup.dueDate < [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') ? 'Task Overdue' : 'Task Due Today'}</div>
                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginTop: '1px' }}>
                                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                                    {taskDueQueue.length > 0 && <span style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>+{taskDueQueue.length} more</span>}
+                                    {dueWaiting > 0 && <span style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>+{dueWaiting} more</span>}
                                 </div>
                             </div>
                         </div>
@@ -1017,7 +1037,7 @@ export default function ModalLayer() {
                                         // it when the snooze elapses (robust across re-renders, unlike a
                                         // setTimeout, which also could not re-fire a pre-dismissed task).
                                         setSnoozedDueAlerts(prev => ({ ...prev, [task.id]: Date.now() + ms }));
-                                        if (taskDueQueue.length > 0) { setTaskDuePopup(taskDueQueue[0]); setTaskDueQueue(prev => prev.slice(1)); } else { setTaskDuePopup(null); }
+                                        showNextDue();
                                     }}
                                     style={{ padding:'4px 14px', background:T.warn, color:T.surface, border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
@@ -1030,12 +1050,7 @@ export default function ModalLayer() {
                                     onClick={() => {
                                         const task = taskDuePopup;
                                         setDismissedDueTodayAlerts(prev => prev.includes(task.id) ? prev : [...prev, task.id]);
-                                        if (taskDueQueue.length > 0) {
-                                            setTaskDuePopup(taskDueQueue[0]);
-                                            setTaskDueQueue(prev => prev.slice(1));
-                                        } else {
-                                            setTaskDuePopup(null);
-                                        }
+                                        showNextDue();
                                         setActiveTab('tasks');
                                         const askedOrg = requestOrg();
                                         setTimeout(() => { if (!stillOrg(askedOrg)) return; setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
@@ -1049,7 +1064,7 @@ export default function ModalLayer() {
                                     style={{ flex: 1, padding: '0.7rem 1rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                     onMouseEnter={e => { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.inkMid; }}
                                     onMouseLeave={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.inkMid; }}
-                                >{taskDueQueue.length > 0 ? `Dismiss · Next (${taskDueQueue.length})` : 'Dismiss'}</button>
+                                >{dueWaiting > 0 ? `Dismiss · Next (${dueWaiting})` : 'Dismiss'}</button>
                             </div>
                         </div>
                     </div>

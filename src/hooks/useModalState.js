@@ -9,7 +9,9 @@ export function useModalState() {
     // snoozed, the reminders fired — in remembered, which only a switch puts back:
     // a crash that put them back brought every one back, with its chime. A task
     // completion's notices are remembered too: each holds notes a save refused,
-    // kept until its ✕ (state §0.199).
+    // kept until its ✕ (state §0.199). So are the reminders snoozed and those come
+    // due and waiting their turn: each came due at a minute that has passed, and
+    // nothing would bring it back (state §0.200).
     const resets = [];
     const remembered = [];
     const [showModal, setShowModal] = useOrgBoundState(resets, false);
@@ -93,6 +95,8 @@ export function useModalState() {
     const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useOrgBoundState(remembered, []);
     const [snoozedDueAlerts, setSnoozedDueAlerts] = useOrgBoundState(remembered, {}); // { [taskId]: re-alert-at timestamp (ms) }
     const [dismissedReminders, setDismissedReminders] = useOrgBoundState(remembered, []);
+    const [snoozedReminders, setSnoozedReminders] = useOrgBoundState(remembered, {}); // { [taskId]: re-alert-at timestamp (ms) } — back through App's checker (§0.200)
+    const [taskReminderQueue, setTaskReminderQueue] = useOrgBoundState(remembered, []); // reminders come due, waiting their turn behind the one open (§0.200)
     const [pressNotices, setPressNotices] = useOrgBoundState(remembered, []);   // a task completion's notices, one per press whose rail moved on (§0.199)
 
     return {
@@ -148,5 +152,7 @@ export function useModalState() {
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         snoozedDueAlerts, setSnoozedDueAlerts,
         dismissedReminders, setDismissedReminders,
+        snoozedReminders, setSnoozedReminders,
+        taskReminderQueue, setTaskReminderQueue,
     };
 }
