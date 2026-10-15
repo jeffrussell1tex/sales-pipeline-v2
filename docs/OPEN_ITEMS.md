@@ -149,8 +149,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        (ListView.jsx:332, `|| 1`) groups their deals by calendar quarter
        (corrected 15 Oct: an earlier line here said no company moves;
        the list does — the per-year pass's critic); every stored
-       figure is a whole-dollar number, each year equal to its quarters;
-       Karen's Home card should read Q1 FY2027, $100K. Built in, not
+       figure is a whole-dollar number, each year equal to its quarters.
+       Built in, not
        asked: switching Quarters ↔ Months changes no saved figure (months
        start as each quarter split three ways until saved); the board and
        the server both refuse figures that do not add up; figures saved
@@ -170,16 +170,27 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        plan is never read for another year; a new year reads "No quota
        set" until set; past quarters read their own year's plan ("—"
        where none); every quota reader names its year; today's figures
-       carry no year and are entered once as FY2027's plan (Accelerep QA's
-       two reps in the browser check); the board offers last year, this
+       carry no year and are entered once as the current fiscal year's
+       plan (Accelerep QA's two reps in the browser check — FY2026 under
+       the January default, so Karen's Home card should read Q4 FY2026,
+       $175K); the board offers last year, this
        year and next; All Time and custom dates show no quota.
      - Jeff's answers (15 Oct): past years' plans — "Admins and
        Managers", as this year's; quarters follow each company's Fiscal
        year setting on every screen, the Pipeline list included ("The
        fiscal year is set by the admin in settings under the company tab |
        fiscal year. Quarters should follow whatever is set there for that
-       company") — one reader of the setting, a company that never saved
-       one reading what the page shows (October); Accelerep Test's one
+       company") — one reader of the setting on every screen and job; a
+       company that never set one starts on January 1, the Admin changing
+       it if necessary, and companies need not agree (Jeff, 15 Oct: "the
+       two instances dont have to agree. It should default to Jan 1 as
+       fiscal year start and then the admin can change it if necessary";
+       an earlier line here said October). So UKG, Accelerep QA,
+       Accelerep and one other (no start saved; read as October by every
+       screen but the Pipeline list today) move to calendar quarters on
+       Home, Reports and the Sales Manager tab — October 2026 becomes Q4
+       FY2026 — unless an Admin sets their start; Accelerep Test and one
+       other saved October and do not move. Accelerep Test's one
        rep's figures left as they are ("Leave it" — his quota reads "No
        quota set" until entered).
    - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
