@@ -326,7 +326,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     unless an `org_id` sweep is planned before the cutover.
   - Jeff, 30 Sep: "there are no live users". Whether any existing data is
     kept, or the start is clean, is his to confirm.
-  - Second question: should dev and prod keep sharing one Neon branch?
+  - Second question: should dev and prod keep sharing one Neon branch? (Its
+    own item below, since 15 Oct.)
   - Source: §9, as recorded.
 - **One login, one technician, held by the database** (§0.201's review; Jeff,
   14 Oct: "Do it before selling" — the others offered were "Do it next" and
@@ -350,6 +351,38 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     as the 409 the read gives; the restore clearing a login another
     technician holds, and a job's link to itself. A schema change on the
     shared database: Jeff confirms the apply step.
+- **A scalability check** (Jeff, 15 Oct: "how many users it can support").
+  Not measured. The likely limits are the app's design, not its user count:
+  - screens that load a whole list into the browser — the list hooks for
+    tasks, deals, contacts and accounts read whole lists (whether the server
+    pages any of them is not yet checked);
+  - the six scheduled jobs, each sweeping every org — a run grows with orgs
+    and data against Netlify's time limit for a function;
+  - plan limits and cost — Clerk (monthly active users; members per org, the
+    item above), Netlify (function calls), Neon (compute, connections),
+    Anthropic (AI requests per minute), Resend and Twilio (sending).
+  - The work: set targets (orgs, users per org, records per org, peak users at
+    once); a read-only scalability map first — every server call's query
+    (paged, or a whole table?), every list screen, each scheduled job's work
+    per run — ranked by risk; then, on a staging copy (a Neon branch and a
+    Netlify branch deploy — never the shared database, never UKG), a
+    data-volume test (one org filled to the targets, every screen and call
+    timed), a load test (k6 or Artillery), and the scheduled jobs timed
+    against many orgs.
+  - Moving to AWS or Azure first: not recommended (15 Oct). Netlify's
+    functions and Neon already run on AWS, the limits above move with the
+    app, and the stack stays portable (Postgres behind Drizzle, plain Node
+    handlers, Clerk anywhere). Revisit on a concrete trigger: a customer's
+    requirement, cost, or a platform limit no redesign avoids.
+- **Separate the dev and prod databases** (Jeff, 15 Oct). Both sites share
+  one Neon `main`, so a dev test, a bad migration or a seed reaches
+  production data — UKG's included, Jeff's real work data. Recommended: prod
+  keeps `main`; dev moves to a Neon branch of its own (a branch copies the
+  data as it stands), dev's `NETLIFY_DATABASE_URL` pointed at it; a schema
+  change then applies to dev first and prod after. Decide with the Clerk
+  Production move above (its new org ids orphan rows either way). Before
+  customers, also: confirm a point-in-time restore works (Neon offers it; not
+  yet tried), and add error tracking and alerts.
 - **New customer onboarding flow; billing integration.** §9, as recorded.
 
 ### 2.4 Decisions
