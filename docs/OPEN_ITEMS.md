@@ -110,10 +110,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        rest it leaves are §4.2's "D22's edges".
    - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
    - **Batch 3:** CSV import and merge (§4.7).
-   - **Batch 4b-2:** the sales links (SPIFF claims' deal and SPIFF, quote
-     line items' product, export runs' schedule, automations' assignee,
-     members' team and pinned reports — §4.6). **Batch 4b-3:** the ids
-     inside settings (teams, territories, crews, quote templates — §4.6).
+   - **Batch 4b-2a, next (Jeff, 15 Oct: "Small batch first"):** the members
+     endpoint. A save never takes the login link (`clerkUserId`) from the
+     request — it keeps the stored one, and a create stores none; a save
+     naming no member of this org answers 404 and creates nothing; a Manager
+     cannot save an Admin's row (403), as delete already refuses; the member
+     form stops re-sending team, pins and login (§4.6, "A Manager can change
+     an Admin's member row").
+   - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
+     §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
+     assignee, members' team and pinned reports; export runs stop taking a
+     schedule. With them: a Delete button on each SPIFF claim and a clear
+     Active / Inactive control on each SPIFF (Jeff, 15 Oct), and the
+     restore's silent row skip.
+   - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
+     quote templates) and a service plan's visit template (§4.6).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
      (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
      the Accounts tab and an account's Sub-Accounts still list it, because
@@ -1190,6 +1201,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
   the create's sanitize writes `null` when none is sent. Every screen sends
   'Open'; only a hand-made request meets it. Recommended: leave the status
   out of the insert when none is sent, so the column's default stands.
+- **Quotes: the server prices from the line's own list price** (the 4b-2
+  map, 15 Oct; read in code): every line is priced from the body's
+  `listPrice`, type and unit, the approval tier reads only the discount, and
+  `products.minPrice` is never enforced — a rep can lower a line's list
+  price at 0% discount and never need approval. Whether reps may set a list
+  price is Jeff's call; once a line's product is checked (4b-2) the server
+  could price from the catalog.
+- **Quotes: the server takes two lines of one product** (the editor refuses
+  a second; the version compare and the analytics assume one per product).
+  No screen makes them; refusing them is quote-shape integrity, not tenancy.
 
 ### 4.3 Settings
 
@@ -1435,6 +1456,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.174 (d).
 - **Imported leads fire no `lead.created` webhook or automation.** If that
   matters, it needs a batched dispatch. As recorded.
+- **A quote's email shows every line as 1 × list price** (the 4b-2 map, 15
+  Oct; read in code, not run — customers see it). quote-email.mjs reads
+  `li.qty` and `li.unitPrice`, which no line stores (a line holds
+  `quantity`, `listPrice` and `discountPct` — QuotesTab.jsx), so each
+  emailed line reads quantity 1 at list price, its discount ignored, beside
+  the quote's real total. The fix reads a line as QuotesTab's calcLineTotals
+  does.
+- **The `spiff.claimed` webhook is offered and never sent** (webhooks.mjs;
+  WebhooksDetail.jsx — the 4b-2 map): spiff-claims.mjs never calls
+  dispatchWebhook, as opportunities.mjs does for deals. A subscriber gets
+  nothing.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
@@ -1447,19 +1479,76 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "… Forbidden: a Dispatcher can view CRM records but not change them".
   Recommended: hide the bar where `canEditCrm` is false, as the Delete is.
 - **Batches 4b-2 and 4b-3: the other linked ids with no org check** (the
-  class sweep, 13 Oct; read in code, not run; Dispatch's done in §0.201).
-  Every reader found looks a stored id up in the org, so a stray acts as a
-  dangling link, not a leak:
-  - 4b-2: SPIFF claims' `opportunityId` and `spiffId`; quote line items'
-    `productId`; export runs' `scheduleId`; automations' `assignedToId`;
-    members' `profile.teamId` and pinned reports;
-  - 4b-3: settings' teams, crews and quote templates' product ids;
+  class sweep, 13 Oct; mapped again 15 Oct over 079b2bd — four readers and a
+  critic, read in code; Dispatch's done in §0.201). Every reader found looks
+  a stored id up in the org, so a stray acts as a dangling link, not a leak.
+  The census (SELECT only, counts only, 15 Oct): no field names another
+  org's row; 1 of 8 SPIFF claims names a SPIFF removed since — Accelerep
+  QA's "Pane check SPIFF §0.169" (Jeff: demo data, "you can dump any non
+  matching spiff"; he removes it with the claim Delete button once it ships;
+  Claude deletes nothing).
+  - 4b-2 (Jeff's decisions, 15 Oct): SPIFF claims' `opportunityId` (a deal)
+    and `spiffId` (an entry of the org's SPIFF list); quote lines'
+    `productId`; automations' create-task `assignedToId` (a member);
+    members' `profile.teamId` (an entry of the org's teams) and pinned
+    reports. Any record or entry of this org counts, inactive ones too, and
+    anything else is refused, naming the field ("Any of this org's,
+    refuse"); a link a row holds is never asked again. Pins are written only
+    by the member's own Pin: an Admin's or Manager's member save stops taking
+    them, and the Sales Manager tab's saves send only what they change ("Send
+    only what changed"). A claim save that clears its SPIFF or rep answers
+    400 (a 500 today), and a claim id this org does not hold answers 404 on
+    every save (an Admin's or Manager's save created one); the rest of the
+    claim rules filed ("(1) and (2) now, file (3)"). SPIFF claims, quotes and
+    export runs answer 409 for an id another org holds; export runs store no
+    schedule — no screen sends one and nothing runs schedules ("Fix these 3,
+    file the rest"). The restore converts every date column of a table it
+    restores and says how many rows a table could not restore — today it
+    drops them silently (a member who changed team, an approved or sent
+    quote, merged accounts and contacts, scored leads) — and clears, counted,
+    a quote line's unknown product (the line kept), a member's unknown team
+    (with its joined date) and unknown pins ("Fix both in 4b-2"). Added by
+    Jeff: a Delete button on each SPIFF claim (Admins and Managers; the
+    server already deletes, audited) and a clear Active / Inactive control on
+    each SPIFF ("Clear Active / Inactive control"). The browser check may add
+    a test SPIFF, product, team and rule in Accelerep QA, file a claim as
+    Karen and approve it after its SPIFF goes inactive; Claude deletes
+    nothing and writes nothing in UKG ("Yes, in QA only").
+  - 4b-3: settings' teams, crews and quote templates' product ids, and a
+    service plan's `visitTemplateId` (an entry of the org's job templates —
+    found by the 15 Oct critic, in no list).
   - left as they are by design: tasks' `relatedTo` (free text in places),
     the recommendation log's id (a deal, task or customer by action),
     deals' `pipelineId` (a settings id, 'default' a sentinel).
   - a backup restore's other links: its clean-up (§0.199, §0.201) clears
     batch 4's fields, a deal's account and Dispatch's; these fields stay as
     the file has them.
+- **Creates that crash on an id another org holds — the rest of the class**
+  (the 4b-2 map, 15 Oct; read in code; Jeff: "file the rest" — one class
+  batch with a scan test). The products, saved-reports, coaching-notes,
+  lead-requests, recommendation-log, audit-log, export-dsr and
+  export-schedules creates answer 500 for a client id another org holds,
+  where batch 4's creates answer 409 (guide §18b92 rule 5); export-schedules'
+  and export-dsr's PUT crash reading the upsert's empty answer. With them,
+  the Export page: export-schedules' PUT builds the full row from the body
+  (a fourth breach of CLAUDE.md's sanitize rule — every Edit blanks
+  `createdBy` and `lastError` and re-enables a paused schedule), and
+  nothing runs a scheduled export (netlify.toml has no runner).
+- **Two jobs write the whole `settings.extra` back with no lock**
+  (score-leads-batch.mjs, integration-requests.mjs; the 4b-2 map): one
+  running beside an Admin's settings save can put back an older SPIFF or
+  team list. The timing is not verified.
+- **A restore keeps a restored member's login link and role from the file**
+  (restorableMembers, memberName.js; backup.mjs — the 4b-2 map's critic):
+  an Admin's restore gives the file's role to any Clerk identity in it that
+  is, or later becomes, a member with no row here. Global ids limit it.
+  Decide with 4b-2a's identity rule.
+- **Automations: a deactivated assignee, and the rule save** (the 4b-2 map):
+  the engine assigns a rule's tasks by id to a deactivated member while the
+  rule editor shows that assignee as gone; the rule PUT has none of the
+  create's checks — `actions: []` is taken, `null` is a 500 (NOT NULL),
+  and the trigger is never checked against the list (the engine fails
+  closed).
 - **The backup restore counts the rows it sent, not those it restored**
   (§0.199's review; older): a row skipped because this org or another already
   holds its id is counted, so a second import of the same file reads "N
@@ -1531,10 +1620,30 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Nothing writes `profile.managedReps`.** A Manager is narrowed only where a
   row holds it, and none does; `managedReps` lives in Clerk's publicMetadata.
   Who a Manager manages needs a home that is written. §0.159 / §0.163.
+- **A Manager can change an Admin's member row — enough to lock the Admin
+  out or, in steps, become Admin** (the 4b-2 map, 15 Oct; read in code, not
+  run; within one org). The users PUT checks no target role, though DELETE
+  and deactivate do (§0.165), and it writes the `clerkUserId` the body
+  sends (users.mjs sanitize; the upsert's set). A Manager's save of an
+  Admin's row naming another login unlinks the Admin, whose sign-in then
+  finds no row and reads as a rep. With the Admin row's email moved to the
+  Manager's own and the Manager's own row unlinked, the first load links the
+  Admin row by email and keeps its role (the ?me link). And a PUT naming an
+  id this org does not hold inserts a member ('Unnamed User',
+  `<id>@placeholder.local`), so a screen loaded before a delete brings the
+  member back. Batch 4b-2a (Jeff, 15 Oct: "Small batch first") — §1 item 1.
 - **The users PUT lets a Manager write any org user's profile,** forecast
   calls included. This is the existing quota behaviour, not widened, and was
-  noted only. §0.84, as recorded.
-- **A SPIFF claim's amount is the client's figure.** §0.169 (c).
+  noted only. §0.84, as recorded. An Admin's row: the item above (4b-2a).
+- **A SPIFF claim's amount is the client's figure.** §0.169 (c). And the
+  rest of what a claim trusts (the 4b-2 map, 15 Oct; Jeff: "file (3)"):
+  the server takes the body's amount, multiplier, deal name and ARR; it
+  does not require the rep's own Closed Won deal, an active SPIFF, or one
+  not already claimed on that deal; a rep may re-point their pending
+  claim's deal and SPIFF. Also: the claims list throws on a claim with no
+  amount, says only Admins approve (Managers can too), keeps its own copy
+  after an approve, and lists the whole org's claims to a Manager; an
+  account merge renames a same-named twin account's claims' account text.
 - **`spiff_claims` has no owner id;** claims match by roster name. A schema
   change, Jeff's go (§2.4). §0.169 (d).
 - **Stored ids and identity** (§0.166):
