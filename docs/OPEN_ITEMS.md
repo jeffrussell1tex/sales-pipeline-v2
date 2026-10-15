@@ -276,12 +276,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Reload every app tab opened before the thirty-sixth ship** (Deployed: dev
-  12:56 UTC, prod 12:59 UTC, 14 Oct — it covers the thirty-fifth's, 13 Oct
-  20:25 UTC, too): an older tab keeps the screens from before §0.199 and
-  §0.200 — the task rail's completion, a New Job's copied links and the task
-  popups among them. Reload, then strike this.
-- Nothing else open. The thirty-sixth ship (14 Oct, 12:59 UTC: §0.200, a
+- **Reload every app tab opened before the thirty-seventh ship** (Deployed:
+  dev 01:27 UTC, prod 01:30 UTC, 15 Oct — it covers the thirty-sixth's, 14
+  Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older
+  tab keeps the screens from before §0.199, §0.200 and §0.201 — the task
+  rail's completion, a New Job's copied links, the task popups and the
+  Technicians form's login picker among them. Reload, then strike this.
+- Nothing else open. The thirty-seventh ship (15 Oct, 01:30 UTC: §0.201,
+  Dispatch's links name live rows of this org — batch 4b-1), the
+  thirty-sixth (14 Oct, 12:59 UTC: §0.200, a
   task alert interrupts only the member it is for), the thirty-fifth (13 Oct,
   20:25 UTC: §0.199, a link names a live row of this org), the thirty-fourth
   (13 Oct, 02:50 UTC:
