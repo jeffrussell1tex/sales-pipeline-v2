@@ -144,9 +144,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      - The design pass (15 Oct, read in code at ff79995: three mappers, a
        designer and a critic) and the census (SELECT, counts only, 15
        Oct): every org has a settings row; UKG, Accelerep QA, Accelerep
-       and one other store no fiscal start, which every reader but the
-       list view's `|| 1` already reads as October — so October becomes
-       the one default and no company's quarters move; every stored
+       and one other store no fiscal start, which the Fiscal year page
+       and every reader but the Pipeline list read as October — the list
+       (ListView.jsx:332, `|| 1`) groups their deals by calendar quarter
+       (corrected 15 Oct: an earlier line here said no company moves;
+       the list does — the per-year pass's critic); every stored
        figure is a whole-dollar number, each year equal to its quarters;
        Karen's Home card should read Q1 FY2027, $100K. Built in, not
        asked: switching Quarters ↔ Months changes no saved figure (months
@@ -162,6 +164,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        reason as Home, fixed with it ("Yes, with Home"); the Fiscal year
        page's made-up "Reporting adjustments" card removed ("Remove
        it"), its side panel's invented counts filed.
+     - The per-year design pass (15 Oct, read in code at 67a898f: a
+       fiscal-year mapper, a designer and a critic). Each Sales Rep has
+       one plan per fiscal year (`profile.quotaPlans`, keyed by year); a
+       plan is never read for another year; a new year reads "No quota
+       set" until set; past quarters read their own year's plan ("—"
+       where none); every quota reader names its year; today's figures
+       carry no year and are entered once as FY2027's plan (Accelerep QA's
+       two reps in the browser check); the board offers last year, this
+       year and next; All Time and custom dates show no quota.
+     - Jeff's answers (15 Oct): past years' plans — "Admins and
+       Managers", as this year's; quarters follow each company's Fiscal
+       year setting on every screen, the Pipeline list included ("The
+       fiscal year is set by the admin in settings under the company tab |
+       fiscal year. Quarters should follow whatever is set there for that
+       company") — one reader of the setting, a company that never saved
+       one reading what the page shows (October); Accelerep Test's one
+       rep's figures left as they are ("Leave it" — his quota reads "No
+       quota set" until entered).
    - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
      §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
      assignee, members' team and pinned reports; export runs stop taking a
