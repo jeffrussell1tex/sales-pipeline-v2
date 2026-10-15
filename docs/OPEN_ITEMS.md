@@ -311,13 +311,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Reload every app tab opened before the thirty-seventh ship** (Deployed:
-  dev 01:27 UTC, prod 01:30 UTC, 15 Oct — it covers the thirty-sixth's, 14
-  Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older
-  tab keeps the screens from before §0.199, §0.200 and §0.201 — the task
-  rail's completion, a New Job's copied links, the task popups and the
-  Technicians form's login picker among them. Reload, then strike this.
-- Nothing else open. The thirty-seventh ship (15 Oct, 01:30 UTC: §0.201,
+- **Reload every app tab opened before the thirty-eighth ship** (Deployed:
+  dev 17:56 UTC, prod 17:59 UTC, 15 Oct — it covers the thirty-seventh's,
+  15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the
+  thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps the screens
+  from before §0.199, §0.200, §0.201 and §0.202 — the task rail's
+  completion, a New Job's copied links, the task popups, the Technicians
+  form's login picker, the member profile page's save and the Sales
+  Manager tab's quota switch among them. Reload, then strike this.
+- Nothing else open. The thirty-eighth ship (15 Oct, 17:59 UTC: §0.202, a
+  member's save changes a member this org holds — batch 4b-2a), the
+  thirty-seventh (15 Oct, 01:30 UTC: §0.201,
   Dispatch's links name live rows of this org — batch 4b-1), the
   thirty-sixth (14 Oct, 12:59 UTC: §0.200, a
   task alert interrupts only the member it is for), the thirty-fifth (13 Oct,
