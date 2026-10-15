@@ -141,6 +141,27 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      UKG has no quota set; the three reps with quotas (Accelerep QA 2,
      Accelerep Test 1) already follow the rule. Jeff first chose a small
      fix of the switch ("Small batch next"); this replaces it. Then 4b-2.
+     - The design pass (15 Oct, read in code at ff79995: three mappers, a
+       designer and a critic) and the census (SELECT, counts only, 15
+       Oct): every org has a settings row; UKG, Accelerep QA, Accelerep
+       and one other store no fiscal start, which every reader but the
+       list view's `|| 1` already reads as October — so October becomes
+       the one default and no company's quarters move; every stored
+       figure is a whole-dollar number, each year equal to its quarters;
+       Karen's Home card should read Q1 FY2027, $100K. Built in, not
+       asked: switching Quarters ↔ Months changes no saved figure (months
+       start as each quarter split three ways until saved); the board and
+       the server both refuse figures that do not add up; figures saved
+       before the rule read as today and are flagged; whole dollars; the
+       Quarters / Months choice on Settings → Company → Fiscal year.
+     - Jeff's decisions (15 Oct): "Admins and Managers" set quotas, as
+       today (a Manager can set any Sales Rep's — the server cannot narrow
+       a Manager to their team); "Per-year plans now" — each fiscal year
+       its own plan, and past quarters read their own year's (the design
+       is re-run for it); a rep's own quota in Reports, $0 for the same
+       reason as Home, fixed with it ("Yes, with Home"); the Fiscal year
+       page's made-up "Reporting adjustments" card removed ("Remove
+       it"), its side panel's invented counts filed.
    - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
      §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
      assignee, members' team and pinned reports; export runs stop taking a
