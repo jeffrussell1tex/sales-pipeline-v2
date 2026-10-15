@@ -41,7 +41,10 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
         setUserModalError(null);
         setUserModalSaving(true);
         if (editingUser) {
-            const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
+            // Not what the form only shows (team, territory and vertical are Team Builder's), nor what is not its
+            // own (the member's pins, the login link): sent as loaded, they undid a change made since (state §0.202).
+            const { team: _t, teamId: _ti, territory: _tr, vertical: _v, pinnedReports: _p, clerkUserId: _c, ...fields } = userData;
+            const payload = { ...fields, id: editingUser.id, email: userData.email || editingUser.email || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/users', {
                     method: 'PUT',

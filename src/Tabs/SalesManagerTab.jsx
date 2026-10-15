@@ -467,13 +467,18 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                     {Object.keys(quotaDrafts).length > 0 && (
                         <DraftActions label="Save quotas" busy={busy} onSave={saveQuotas} onCancel={cancelQuotas}/>
                     )}
-                    <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
+                    {/* The org's quota mode — every member's row — is an Admin's to switch (state §0.202;
+                        Jeff, 15 Oct: "Admins only"): a Manager's save reaches only a Sales Rep's row. */}
+                    {!isAdmin && (
+                        <span style={{ fontSize:10, fontWeight:700, color:T.inkMid, fontFamily:T.sans }}>{quotaMode==='annual'?'Annual quotas':'Quarterly quotas'}</span>
+                    )}
+                    {isAdmin && <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
                         {['annual','quarterly'].map(t => (
                             <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
                                 {t==='annual'?'Annual':'Quarterly'}
                             </button>
                         ))}
-                    </div>
+                    </div>}
                 </div>
             </div>
 
@@ -787,7 +792,12 @@ export default function SalesManagerTab() {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user),
             });
             if (!res.ok) {
-                setSaveState({ status: 'error', msg: res.status === 403
+                // The server's words, naming the member (state §0.202): one removed
+                // since the screen loaded answers 404, a row a Manager cannot change 403.
+                const d = await res.json().catch(() => ({}));
+                setSaveState({ status: 'error', msg: d.error
+                    ? `Not saved \u2014 ${user.name || 'a member'}: ${d.error}`
+                    : res.status === 403
                     ? `Not saved \u2014 only Admins can change ${label}.`
                     : `Not saved \u2014 the server returned ${res.status}. Your ${label} changes are not stored.` });
                 return false;
@@ -818,6 +828,7 @@ export default function SalesManagerTab() {
     // Annual / Quarterly: one click, saved at once for every rep it changes (a
     // single action, not a form). The same fix: the reps as in state now.
     const setAllQuotaMode = async (mode) => {
+        if (!isAdmin) return;   // an Admin's (state §0.202)
         const askedOrg = requestOrg();
         const toSave = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && u.quotaType !== mode).map(u => ({ ...u, quotaType: mode }));
         // Sequential, not a forEach of un-awaited promises: this can be every rep in

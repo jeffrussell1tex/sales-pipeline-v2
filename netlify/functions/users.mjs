@@ -158,6 +158,19 @@ export const handler = async (event) => {
     // an Admin names one above Sales Rep (state §0.163).
     const withRole = (clean, known) => (known ? { ...clean, role: known } : clean);
 
+    // An address another member of this org holds (users_org_email_uq) — Postgres
+    // unique_violation, SQLSTATE 23505, read off the driver's error: drizzle wraps
+    // it (err.cause), and the wrapper's message is the SQL, which names "email" on
+    // every users write — so any failure whose text said "unique" read as a taken
+    // address (state §0.202; _lib.mjs's isUniqueViolation reads the same way).
+    // Every save answers it alike: 409, field email.
+    const isEmailTaken = (err) => {
+        const pg = err?.cause || err;
+        const unique = err?.code === '23505' || pg?.code === '23505' || /duplicate key value violates unique constraint/i.test(pg?.message || '');
+        return unique && /email/i.test([pg?.constraint, pg?.detail, pg?.message].filter(Boolean).join(' '));
+    };
+    const EMAIL_TAKEN = 'A user with that email address already exists in this organization. Please use a different email.';
+
     // The one-name refusal (state §0.196): the screens show `error`; `field` says which.
     const nameTaken = (message) => ({ statusCode: 409, headers, body: JSON.stringify({ error: message, field: 'name', code: 'NAME_TAKEN' }) });
 
@@ -232,12 +245,31 @@ export const handler = async (event) => {
     // so overlaying the incoming body on the flattened row gives exact
     // field-present semantics: a key sent is applied (including an explicit '' or
     // null, which is how TeamsDetail:351 clears a team), a key omitted keeps its
-    // stored value. Unknown id -> nothing to merge, and the upsert still inserts.
+    // stored value. Unknown id -> nothing to merge (the PUT answers 404 first).
+    // The login link and the status are the stored ones, whatever the body says
+    // (state §0.202): a save naming another link unlinked the member — an Admin
+    // then read as a rep — and a status sent as 'Invited' switched a deactivated
+    // member back on at their first sign-in. A row is linked by a sign-in (GET
+    // ?me, by the invited email; PUT ?me pins the caller's own), an Admin's Clerk
+    // sync (users-sync.mjs, by email) or an Admin's restore — never by a save's
+    // body. Its status is set by Deactivate / Reactivate (the PUT's access branch),
+    // an invitation and the first sign-in. And its access (`active`) is the stored
+    // one unless the save IS the Deactivate / Reactivate request — the member and
+    // `active`, nothing else (Jeff, 15 Oct: "Server keeps access"): a whole row
+    // sent as loaded — the Sales Manager tab's saves, the profile page's before
+    // §0.202 — switched a member deactivated since back on, or deactivated one who
+    // had joined since.
+    const isAccessChange = (data) => 'active' in data && Object.keys(data).every((k) => k === 'id' || k === 'active');
     const mergeForUpdate = async (data) => {
         const [existing] = await db.select().from(users)
             .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
-        if (!existing) return data;
-        return { ...flatten(existing), ...data };
+        if (!existing) return { ...data, clerkUserId: null, status: null };
+        return {
+            ...flatten(existing), ...data,
+            clerkUserId: existing.clerkUserId || null,
+            status:      existing.profile?.status || null,
+            active:      isAccessChange(data) ? data.active : existing.active,
+        };
     };
 
     // ── GET ?me=true — any authenticated user can fetch their own record ──────
@@ -385,22 +417,28 @@ export const handler = async (event) => {
             const selfNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);
             if (selfNameTaken) return nameTaken(selfNameTaken);
             const { id, ...updateData } = clean;
-            let upsertResult;
+            // Update-only (state §0.202), the Clerk link pinned — a self-save must
+            // never orphan it. It tried an insert first: the caller's id is read
+            // through a 30 s cache, so a member an Admin had just removed came
+            // back, as a rep, on their next preference toggle.
+            let saved;
             try {
-                // Include orgId so the row is properly scoped to this tenant, and
-                // pin the Clerk link -- a self-save must never orphan it.
-                const [ins] = await db.insert(users).values({ ...clean, clerkUserId: userId, orgId }).returning();
-                upsertResult = ins;
-            } catch {
-                const [upd] = await db
+                [saved] = await db
                     .update(users)
                     .set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)))
                     .returning();
-                upsertResult = upd;
+            } catch (err) {
+                // An address another member holds, said as every save says it (state
+                // §0.202) — it was a 500, "Internal server error" on the profile panel.
+                if (isEmailTaken(err)) return { statusCode: 409, headers, body: JSON.stringify({ error: EMAIL_TAKEN, field: 'email' }) };
+                throw err;
             }
             invalidateRoster(orgId);
-            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(upsertResult) }) };
+            if (!saved) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'You are no longer a member of this organization\'s roster. Reload the page.' }) };
+            }
+            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(saved) }) };
         } catch (err) {
             console.error('Users /me PUT error:', err.message);
             return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };
@@ -526,14 +564,19 @@ export const handler = async (event) => {
         // inviting a user and immediately assigning them a record resolves against
         // the pre-write roster, finds no match, and stamps NULL — an UNASSIGNED
         // record, which by policy is editable org-wide.
-        const upsertUser = async (clean) => {
+        const upsertUser = async (clean, { updateOnly = false } = {}) => {
             // An EXISTING row's role is never changed here — a create that names
             // an id already in the org, or a PUT: the role on the row is what the
             // server enforces (state §0.163), and user-role.mjs, Admin-only, is
             // the one path that changes it. A new row is inserted with its role.
+            // A PUT is update-only (state §0.202): a member removed while the save
+            // was out is not inserted again — it answers no row.
             const { id, role: _keepStoredRole, ...updateData } = clean;
             try {
-                const [row] = await db
+                const [row] = updateOnly
+                    ? await db.update(users).set({ ...updateData, updatedAt: new Date() })
+                        .where(and(eq(users.id, id), eq(users.orgId, orgId))).returning()
+                    : await db
                     .insert(users)
                     .values({ ...clean, orgId })
                     .onConflictDoUpdate({
@@ -544,15 +587,8 @@ export const handler = async (event) => {
                 invalidateRoster(orgId);
                 return row;
             } catch (err) {
-                // Postgres unique_violation = code 23505
-                // The Neon serverless driver may surface the constraint info in
-                // err.message, err.detail, err.constraint, or err.cause — check all.
-                const errStr = [err.message, err.detail, err.constraint, err.cause?.message]
-                    .filter(Boolean).join(' ').toLowerCase();
-                const isUniqueViolation = err.code === '23505' || errStr.includes('unique');
-                const isEmailField = errStr.includes('email');
-                if (isUniqueViolation && isEmailField) {
-                    const dupErr = new Error('A user with that email address already exists in this organization. Please use a different email.');
+                if (isEmailTaken(err)) {
+                    const dupErr = new Error(EMAIL_TAKEN);
                     dupErr.code = 'EMAIL_DUPLICATE';
                     throw dupErr;
                 }
@@ -686,6 +722,21 @@ export const handler = async (event) => {
                     const newRow = !roster.some((u) => u.email === email);   // the row lookup below: this org, the exact address
                     const rowName = givenName ? (nameRefusal(roster, givenName) ? null : givenName) : firstFreeName(roster, numbered(localPart));
                     if (newRow && !rowName) { errors.push({ email, error: nameTakenMessage(givenName || localPart) }); continue; }
+                    // A Manager's invitation to an address a member of this org already
+                    // holds only resends a Sales Rep's open invitation (state §0.202 —
+                    // Jeff, 15 Oct: "Close both in 4b-2a"). The row keeps its role and is
+                    // marked Invited below, so re-inviting a deactivated member switched
+                    // them back on at their first sign-in — an Admin's row as an Admin —
+                    // and an address moved onto a Manager's row not yet joined handed its
+                    // role to whoever had it. Asked before Clerk is called.
+                    if (userRole !== 'Admin') {
+                        const [held] = await db.select({ role: users.role, clerkUserId: users.clerkUserId, profile: users.profile }).from(users)
+                            .where(and(eq(users.email, email), eq(users.orgId, orgId)));
+                        if (held && !(isOpenInvitationRow(held) && held.role === 'User')) {
+                            errors.push({ email, error: 'Only an Admin can invite an address a member of this organization already holds. A Manager can only resend a Sales Rep\'s open invitation.' });
+                            continue;
+                        }
+                    }
 
                     try {
                         // 1. Revoke any existing pending invitation for this email so the
@@ -815,7 +866,12 @@ export const handler = async (event) => {
             // another org's (it answered 500 when the id was held there). An id
             // naming this org's member is refused above (§0.164); any other is ignored.
             try {
-                const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);
+                // No login link, status or access from the body (state §0.202): a
+                // create named any Clerk identity, a member to be, and a status
+                // 'Deactivated' or `active` false kept them out once linked — a
+                // deactivation, an Admin's (§0.164). A member starts on. A sign-in by
+                // the row's email, or an Admin's Clerk sync, links it.
+                const clean = withRole(sanitize({ ...data, status: null, active: true, id: newUserId(), clerkUserId: null }), createRole);
                 // One name per member of an org (state §0.196): a name another member
                 // holds is refused — the Admin chose it and is told.
                 const newNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name);
@@ -842,8 +898,31 @@ export const handler = async (event) => {
         // ── PUT (update) ──────────────────────────────────────────────────────
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body || '{}');
-            if (!data.id) {
+            if (!data.id || typeof data.id !== 'string') {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            }
+            // Access is true or false (state §0.202): a value Postgres reads as false —
+            // "false", 0, "off" — was stored as a deactivation the access branch below
+            // never saw (it asks `!== false`), so a Manager could switch a rep off and
+            // an Admin themselves.
+            if ('active' in data && typeof data.active !== 'boolean') {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'active must be true or false.' }) };
+            }
+            // A save changes a member this org holds and never creates one (state
+            // §0.202): an unknown id was inserted as 'Unnamed User' — a screen loaded
+            // before a delete brought the member back. And a Manager's save reaches
+            // only a Sales Rep's row (Jeff, 15 Oct: "Close both in 4b-2a"), as a
+            // Manager adds and invites only reps (§0.163) and delete and deactivate
+            // are an Admin's (§0.164, §0.165): an Admin's row it could unlink, or
+            // move the email of; a Manager's or Dispatcher's not yet joined it could
+            // re-address, and the invitation then gave that role to whoever it chose.
+            const [target] = await db.select({ role: users.role }).from(users)
+                .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
+            if (!target) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'That member is not in your organization — they may have been removed. Reload and try again.' }) };
+            }
+            if (userRole !== 'Admin' && target.role !== 'User') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can change a member who is not a Sales Rep.' }) };
             }
             try {
                 // Role is preserved, never taken from the body: the role on the row
@@ -862,7 +941,9 @@ export const handler = async (event) => {
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
                 const prevTeam = before?.profile?.teamId || null, nextTeam = clean.profile?.teamId || null;
                 if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;
-                // ACCESS (state §0.164 — Jeff: "Deactivated means no access").
+                // ACCESS (state §0.164 — Jeff: "Deactivated means no access"). Only
+                // the Deactivate / Reactivate request reaches here with a change: the
+                // merge keeps the stored `active` for any other save (§0.202).
                 // Deactivating takes away every right in this org, so it is an
                 // Admin's to give and take back — and never your own (a lockout).
                 // The status says WHY a row is off, so the first-load link can tell
@@ -882,9 +963,9 @@ export const handler = async (event) => {
                 // checks, so a Manager's deactivate is still the 403 it was.
                 const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);
                 if (putNameTaken) return nameTaken(putNameTaken);
-                const result = await upsertUser(clean);
+                const result = await upsertUser(clean, { updateOnly: true });
                 if (!result) {
-                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'That member is not in your organization — they may have been removed. Reload and try again.' }) };
                 }
                 await writeAudit(orgId, 'user.updated', result.id, result.name, userId, await getCallerName(userId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(result) }) };

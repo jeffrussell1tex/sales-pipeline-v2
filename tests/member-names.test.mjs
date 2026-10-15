@@ -285,13 +285,12 @@ test('users.mjs: the self PUT, the Admin/Manager PUT and the create decide the n
         'const clean = withRole(',
         '            const selfNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);',
         '            if (selfNameTaken) return nameTaken(selfNameTaken);',
-        'db.insert(users).values({ ...clean, clerkUserId: userId, orgId })',
-        '.set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })');
+        '.set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })');   // update-only (state §0.202)
 
     const create = between(u, "            const createRole = data.userType || data.role || 'User';", "        if (event.httpMethod === 'PUT') {");
     order(create,
         '                if (taken) {',
-        '                const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);',
+        '                const clean = withRole(sanitize({ ...data, status: null, active: true, id: newUserId(), clerkUserId: null }), createRole);',
         '                const newNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name);',
         '                if (newNameTaken) return nameTaken(newNameTaken);',
         '                const result = await upsertUser(clean);');
@@ -301,7 +300,7 @@ test('users.mjs: the self PUT, the Admin/Manager PUT and the create decide the n
         "                    clean.profile = { ...clean.profile, status:",
         '                const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);',
         '                if (putNameTaken) return nameTaken(putNameTaken);',
-        '                const result = await upsertUser(clean);');
+        '                const result = await upsertUser(clean, { updateOnly: true });');
 });
 
 test('users.mjs: an invitation\'s name is decided before Clerk is called — a given name taken is refused, none given is the address\'s front part numbered, and each row joins the names the batch checks', () => {
@@ -487,7 +486,9 @@ export const usersWrites = (file, src) => {
 };
 // Each decided through memberName.js (the test below names the decider of each).
 const LISTED = ['_lib.mjs ensureRosterRow .values', 'backup.mjs handler value', 'users-sync.mjs handler .set', 'users-sync.mjs handler .values',
-    'users.mjs handler .set', 'users.mjs handler .values', 'users.mjs upsertUser .onConflictDoUpdate set', 'users.mjs upsertUser .values'];
+    'users.mjs handler .set', 'users.mjs upsertUser .onConflictDoUpdate set',   // the self-save's insert went (state §0.202)
+    'users.mjs upsertUser .set',   // the PUT's update-only write (state §0.202) — its name decided above it (putNameTaken)
+    'users.mjs upsertUser .values'];
 
 test('THE GUARD: every write of a name to the users table is a listed site, and each decides the name through memberName.js', () => {
     const dir = new URL('netlify/functions/', ROOT);

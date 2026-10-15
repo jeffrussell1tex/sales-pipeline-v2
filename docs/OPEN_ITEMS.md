@@ -110,13 +110,37 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        rest it leaves are §4.2's "D22's edges".
    - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
    - **Batch 3:** CSV import and merge (§4.7).
-   - **Batch 4b-2a, next (Jeff, 15 Oct: "Small batch first"):** the members
-     endpoint. A save never takes the login link (`clerkUserId`) from the
-     request — it keeps the stored one, and a create stores none; a save
-     naming no member of this org answers 404 and creates nothing; a Manager
-     cannot save an Admin's row (403), as delete already refuses; the member
-     form stops re-sending team, pins and login (§4.6, "A Manager can change
-     an Admin's member row").
+   - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
+     batch first"). A member's save never takes the login link, the status
+     or the access from the request — access changes only by the
+     Deactivate / Reactivate request; a Manager's save reaches only a Sales
+     Rep's row; a save naming no member of this org answers 404 and creates
+     nothing; a Manager's invitation to an address a member holds only
+     resends a Sales Rep's open invitation; the Annual / Quarterly switch is
+     an Admin's. What it found and left is filed in §4.6 and §6.
+   - **Quotas: a yearly quota broken into quarters or months, next** (Jeff,
+     15 Oct: "A rep has an annual quota that is broken down into 4
+     quarters … It may ramp up into the year. the 4 quarters of quota do
+     need to add up to their annual quota number", "some companies may do
+     monthly quotas that add up to an annual number"; then "Yes, per
+     company", "Quarters and the year", "Next, before 4b-2", and the rep's
+     Home card in it). Each company breaks its reps' yearly quotas into
+     quarters or months (an Admin's setting); each rep's periods may ramp
+     and must add up to the year — the board shows what is left to allocate
+     and saves only when they add up; quarters and months follow the fiscal
+     year; months are entered, and attainment is shown by quarter and year.
+     It replaces the Annual / Quarterly switch (found in §0.202's browser
+     check): "Annual" keeps only the year and splits it into equal quarters,
+     "Quarterly" only the quarters, nothing checks they add up, and the
+     switch saves every member's whole record one at a time (6 took 5.6 s
+     locally), says nothing while it runs, and starts another run on each
+     click — Jeff's clicks in Accelerep QA made about 50 saves in 20 s (the
+     audit log) and left the modes mixed. With it: a rep's Home quota card
+     reads $0 of $0 (Home reads the member directory, names only for a rep;
+     Karen's row holds $500,000). The census (SELECT, counts only, 15 Oct):
+     UKG has no quota set; the three reps with quotas (Accelerep QA 2,
+     Accelerep Test 1) already follow the rule. Jeff first chose a small
+     fix of the switch ("Small batch next"); this replaces it. Then 4b-2.
    - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
      §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
      assignee, members' team and pinned reports; export runs stop taking a
@@ -1542,7 +1566,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (restorableMembers, memberName.js; backup.mjs — the 4b-2 map's critic):
   an Admin's restore gives the file's role to any Clerk identity in it that
   is, or later becomes, a member with no row here. Global ids limit it.
-  Decide with 4b-2a's identity rule.
+  §0.202's rule: no save links a row — a sign-in, an Admin's Clerk sync or
+  an Admin's restore does, and the restore's is this item.
 - **Automations: a deactivated assignee, and the rule save** (the 4b-2 map):
   the engine assigns a rule's tasks by id to a deactivated member while the
   rule editor shows that assignee as gone; the rule PUT has none of the
@@ -1620,21 +1645,27 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Nothing writes `profile.managedReps`.** A Manager is narrowed only where a
   row holds it, and none does; `managedReps` lives in Clerk's publicMetadata.
   Who a Manager manages needs a home that is written. §0.159 / §0.163.
-- **A Manager can change an Admin's member row — enough to lock the Admin
-  out or, in steps, become Admin** (the 4b-2 map, 15 Oct; read in code, not
-  run; within one org). The users PUT checks no target role, though DELETE
-  and deactivate do (§0.165), and it writes the `clerkUserId` the body
-  sends (users.mjs sanitize; the upsert's set). A Manager's save of an
-  Admin's row naming another login unlinks the Admin, whose sign-in then
-  finds no row and reads as a rep. With the Admin row's email moved to the
-  Manager's own and the Manager's own row unlinked, the first load links the
-  Admin row by email and keeps its role (the ?me link). And a PUT naming an
-  id this org does not hold inserts a member ('Unnamed User',
-  `<id>@placeholder.local`), so a screen loaded before a delete brings the
-  member back. Batch 4b-2a (Jeff, 15 Oct: "Small batch first") — §1 item 1.
+- **Members' email addresses compare by exact case** (the 4b-2a re-check,
+  15 Oct; read in code; older). A create stores the address as typed
+  (users.mjs sanitize trims only) and `users_org_email_uq` is
+  case-sensitive; the invitation lowercases, and its existing-row lookup,
+  the GET ?me link and §0.202's re-invitation check compare exactly — only
+  revoke-invite compares by lower(). A row stored with capitals is missed:
+  an invitation of the lowercase form makes a second row for the person,
+  and the capitalised row is never linked by a sign-in. No role changes
+  hands (the missed row is never written). Recommended: a read-only census,
+  then store addresses lowercased or compare by lower().
+- **A member's save racing a Deactivate can undo it** (the 4b-2a re-check,
+  15 Oct; read in code, not run). The users PUT reads the row (the merge),
+  reads it again (`before`) and writes: an Admin's Deactivate landing
+  between the merge's read and an unrelated save's write is overwritten by
+  the merge's copy of `active`; one landing between the two reads takes the
+  unrelated save through the access branch as a reactivation. One request's
+  window. The lost-update class of the settings.extra item above.
 - **The users PUT lets a Manager write any org user's profile,** forecast
   calls included. This is the existing quota behaviour, not widened, and was
-  noted only. §0.84, as recorded. An Admin's row: the item above (4b-2a).
+  noted only. §0.84, as recorded. Since §0.202 a Manager's save reaches
+  only a Sales Rep's row, and never its login, status or access.
 - **A SPIFF claim's amount is the client's figure.** §0.169 (c). And the
   rest of what a claim trusts (the 4b-2 map, 15 Oct; Jeff: "file (3)"):
   the server takes the body's amount, multiplier, deal name and ARR; it
@@ -1902,6 +1933,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **A bare pin passes when a later edit repeats its line** (§0.202: the
+  re-invitation check's `if (userRole !== 'Admin') {` was the text an older
+  pin held for the access branch's refusal, which then passed with the
+  refusal removed — a full harness run would have printed it SURVIVED; that
+  pin now carries its words). Kin of the harness-anchor item above.
+  Recommended: a scan over the unit pins on a file a batch edits that flags
+  a pinned literal occurring more than once.
+- **The member form's edit path has no caller** (useUserHandlers.js
+  `handleEditUser` is exported through App.jsx's context and nothing calls
+  it; §0.202 changed what it sends). Remove it, or give it a screen.
 - **A harness anchor that a later edit repeats moves its mutant silently**
   (§0.199: "restore: a scalar naming a row of this org is cleared" — the
   fixes put the anchor's text into a new clause above its line, the first

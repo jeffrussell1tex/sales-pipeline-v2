@@ -929,7 +929,12 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // loaded, so a new team kept the old id — the one coaching notes and
             // the digest read — and comparing with the page's first copy of the
             // member would keep an id that was already wrong.
-            const toSave = { ...form, teamId: teamIdNamed(settings.teams, form.team) };
+            // Not access (state §0.202 — Jeff, 15 Oct: "Fix in 4b-2a"): the form held
+            // `active` and the status as loaded, so a save made after the member
+            // accepted deactivated them (or switched a deactivated one back on).
+            // Deactivate / Reactivate change access; a sign-in links the login.
+            const { active: _active, status: _status, clerkUserId: _login, ...edited } = form;
+            const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
             const d = await resp.json().catch(() => ({}));

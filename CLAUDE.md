@@ -93,6 +93,11 @@ One commit per verified batch; doc patch in the same commit.
 - Managers: server-side `canSeeAll` hands them the whole org; client
   `managedReps` narrowing is the only Manager scoping. Do not delete the
   Manager branch of `isRepVisible`.
+- A member's save never carries the login link, status or access: the
+  server keeps the stored ones, and `active` changes only by the
+  `{ id, active }` request; a Manager's save reaches only a Sales Rep's
+  row; a save naming no member of this org is a 404 (`users.mjs`, guide
+  §18b95).
 
 ## Endpoint and data invariants
 

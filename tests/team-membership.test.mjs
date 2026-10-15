@@ -104,7 +104,7 @@ test('the import adds its new members to their teams\' lists after the last requ
 test('a team changed on the profile moves the member\'s teamId with the name — on every save', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
-    assert.ok(profile.includes('const toSave = { ...form, teamId: teamIdNamed(settings.teams, form.team) };'),
+    assert.ok(profile.includes('const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };'),   // `edited`: the form less access and login (state §0.202)
         'REGRESSION: a new team keeps the old teamId — coaching notes and the digest read it');
     assert.ok(!profile.includes('form.team !== user.team'), 'never compared with the page\'s first copy of the member — an id already wrong would be kept');
     assert.ok(profile.includes('body:JSON.stringify(toSave) });'));

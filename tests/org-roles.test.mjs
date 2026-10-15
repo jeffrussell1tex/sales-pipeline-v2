@@ -143,7 +143,8 @@ test('a deactivated row has no access in its org: verifyAuth refuses it with a c
 test('only an Admin deactivates or reactivates, never themselves; the status says why a row is off; the first-load link keeps a deactivated row off', () => {
     const u = code(read('netlify/functions/users.mjs'));
     assert.ok(u.includes('                if (before && wasActive !== nowActive) {'));
-    assert.ok(u.includes("                    if (userRole !== 'Admin') {"), 'REGRESSION: a Manager takes access away');
+    // With its words: the bare line is also the Manager's re-invitation check's (state §0.202).
+    assert.ok(u.includes("                    if (userRole !== 'Admin') {\n                        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can deactivate or reactivate a member.' }) };"), 'REGRESSION: a Manager takes access away');
     assert.ok(u.includes('                    if (!nowActive && before.clerkUserId && before.clerkUserId === userId) {'), 'REGRESSION: an Admin deactivates themselves — a lockout');
     assert.ok(u.includes("                    clean.profile = { ...clean.profile, status: nowActive ? (before.clerkUserId ? 'Active' : 'Invited') : 'Deactivated' };"));
     assert.ok(u.includes("                    const stillOff = row.profile?.status === 'Deactivated';"));
@@ -207,6 +208,6 @@ test('a create never overwrites a row: an id already in the org answers 409 — 
     const guard = u.indexOf('                if (taken) {');
     assert.ok(guard > 0, 'REGRESSION: a create naming an existing id overwrites the row again');
     assert.ok(u.slice(guard, guard + 220).includes("return { statusCode: 409, headers, body: JSON.stringify({ error: 'That member already exists — edit them instead.' }) };"));
-    const upsert = u.indexOf('const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);');
+    const upsert = u.indexOf('const clean = withRole(sanitize({ ...data, status: null, active: true, id: newUserId(), clerkUserId: null }), createRole);');
     assert.ok(upsert > 0 && guard < upsert, 'before the upsert — whose id the server mints (§0.166)');
 });
