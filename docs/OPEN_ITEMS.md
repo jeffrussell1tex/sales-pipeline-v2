@@ -84,7 +84,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      org, picked on the screen and stored as their Clerk identity — a
      Technician linked on the screen was never matched at sign-in ("Fix it
      in 4b-1"). The restore clears them too. What it found and left is
-     filed in §4.2, §4.4 and §4.6.
+     filed in §2.3, §4.2 and §4.4.
    - **Jeff's rules (11 Oct), for every batch:**
      - a name typed in full that matches exactly one account by `searchKey`
        saves as that account, under its own spelling. Two or more are
@@ -328,6 +328,28 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     kept, or the start is clean, is his to confirm.
   - Second question: should dev and prod keep sharing one Neon branch?
   - Source: §9, as recorded.
+- **One login, one technician, held by the database** (§0.201's review; Jeff,
+  14 Oct: "Do it before selling" — the others offered were "Do it next" and
+  "Leave it as is").
+  - The rule is a read before the save (`loginOf`,
+    dispatch-technicians.mjs): `dispatch_technicians` has no unique index on
+    `(org_id, user_id)`, so two saves at the same moment linking one member
+    to two technicians both land.
+  - An Admin's restore checks only that a login is a member's: a hand-built
+    file can land a technician holding a login another technician holds, and
+    keeps a restored job naming itself as its follow-up or parent. The app's
+    export has no Dispatch section, so only a hand-built file reaches either.
+  - Then the member's sign-in resolves to whichever row the database returns
+    first (`_techScope.mjs`, no order): their jobs may be another
+    technician's, or none — within the org only.
+  - Today: one linked technician across every org (the census, 14 Oct), so no
+    duplicate.
+  - The work, a batch of its own: a read-only SELECT for duplicates; an
+    additive partial unique index (`WHERE user_id <> ''`) applied by an apply
+    script to the shared database and the test database; its 23505 answered
+    as the 409 the read gives; the restore clearing a login another
+    technician holds, and a job's link to itself. A schema change on the
+    shared database: Jeff confirms the apply step.
 - **New customer onboarding flow; billing integration.** §9, as recorded.
 
 ### 2.4 Decisions
@@ -1405,22 +1427,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - a backup restore's other links: its clean-up (§0.199, §0.201) clears
     batch 4's fields, a deal's account and Dispatch's; these fields stay as
     the file has them.
-- **One login, one technician — held by a read, not by the database**
-  (§0.201's review; read in code). A technician's login is refused when
-  another technician of the org holds it (409), but the read and the write
-  are two statements and `dispatch_technicians` has no unique index on
-  `(org_id, user_id)`: two saves at the same moment linking one member to
-  two technicians both land. And an Admin's restore checks only that a
-  login is a member's — a file row (or two) holding a login another
-  technician holds lands beside it — and keeps a restored job naming itself
-  as its follow-up or parent (the export has no Dispatch section: only a
-  hand-built file reaches either). The member's sign-in then resolves to
-  whichever row the database returns first (`_techScope.mjs`, no order).
-  Recommended: a SELECT for duplicates (one linked row today), then an
-  additive partial unique index (`WHERE user_id <> ''`) applied to both
-  databases, its 23505 answered as the 409; the restore clearing a login
-  another technician holds, and a job's link to itself. A schema change:
-  Jeff decides.
 - **The backup restore counts the rows it sent, not those it restored**
   (§0.199's review; older): a row skipped because this org or another already
   holds its id is counted, so a second import of the same file reads "N
