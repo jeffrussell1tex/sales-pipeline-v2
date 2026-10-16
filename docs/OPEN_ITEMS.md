@@ -129,12 +129,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      A company's quarters come from its own fiscal start on every screen
      and job, January when none is saved. The Annual / Quarterly switch is
      gone. What it found and left is filed in §2.2, §4.2, §4.5 and §4.6.
-   - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
-     §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
-     assignee, members' team and pinned reports; export runs stop taking a
-     schedule. With them: a Delete button on each SPIFF claim and a clear
-     Active / Inactive control on each SPIFF (Jeff, 15 Oct), and the
-     restore's silent row skip.
+   - **Batch 4b-2, the sales links — in two, next** (Jeff, 16 Oct: "Two
+     batches"; the decisions of 15 and 16 Oct in §4.6). The census (SELECT,
+     counts only, 16 Oct): no stored link names another org's record or
+     nothing — 44 quote lines, every member's team and pin, the one rule
+     assignee (blank) — and Accelerep QA's one claim, whose SPIFF was
+     removed, is already approved.
+     - **4b-2b, the records, first:** SPIFF claims' deal and SPIFF, export
+       runs (no schedule; 409), quote lines' product (409), automations'
+       create-task assignee; a claim's Approve / Reject sends only what it
+       changes; the claim Delete button and the SPIFF Active / Inactive
+       control; a claim with no amount reads a dash, not a crash; a quote
+       line that is no line, or lines that are no list, refused (400);
+       Reject no longer red.
+     - **4b-2c, the members and the restore, then:** members' team and
+       pinned reports, the forecast call sending only what it changes, and
+       the restore — every date column, refused rows said, "records
+       restored" counting only rows written (the rest "already here"), and
+       the clean-up of quote lines' products, teams and pins.
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
@@ -1531,6 +1543,38 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
+- **A Manager can put a Sales Rep on any team through the API** (the 4b-2
+  re-map, 16 Oct; read in code, not run). Every screen that sets a team is
+  in Settings, which only Admins open, but the users PUT, the create and
+  the invitation take a Manager's team id; the team brings its coaching
+  notes from that day on (users.mjs; _coaching.mjs). Jeff, 16 Oct: "No,
+  leave it".
+- **A Pin can be undone by a whole-profile save racing it** (the 4b-2
+  design, 16 Oct; read in code). From 4b-2c pins are written only by the
+  member's own Pin, and every other save keeps the pins its merge read — a
+  Pin landing between that read and the write is put back. The quota plans
+  take their stored value at write time (`keepQuotaPlans`, §0.203); the
+  same would close this. Jeff, 16 Oct: "Not now, file it".
+- **Found by the 4b-2 re-map** (15–16 Oct; read in code, not run; Jeff, 16
+  Oct: "file the rest"):
+  - Home's coaching block never shows a rep their team's notes — Home reads
+    the member list, whose copy for a rep carries no team (HomeTab.jsx; the
+    quota batch's `myProfileHere` is the pattern).
+  - The Teams page hides a member whose team was deleted: under no team and
+    not under Unassigned (TeamsDetail.jsx).
+  - The member profile page derives the team by name on every save, which
+    can clear a valid team and its joined date (UsersDetail.jsx).
+  - A forecast call sends the rep's whole calls map, so one manager's call
+    can put back another's for a different quarter (forecastCall.js).
+  - A 51st Pin does nothing, and a pin of a deleted report can never be
+    unpinned (users.mjs; ReportsTab.jsx).
+  - The settings PUT keeps a SPIFF list of any shape (settings.mjs) — for
+    4b-3's list.
+  - The claims GET answers every role, Technician, Dispatcher and Read-only
+    included (spiff-claims.mjs).
+  - The restore double-encodes the lists of a hand-made Dispatch file
+    (backup.mjs, JSONB_KEYS).
+  - Stale comments in teamMembership.js and _selfProfile.mjs.
 - **The task rail offers ✓ Complete and Edit to the Dispatcher and
   ReadOnly roles** (§0.199's re-check; read in code): its quick-action bar
   has no role check, while its Delete checks `canEditCrm`; Home opens the
@@ -1575,6 +1619,22 @@ to add meetings. Nothing in the app adds a meeting to Google:
     a test SPIFF, product, team and rule in Accelerep QA, file a claim as
     Karen and approve it after its SPIFF goes inactive; Claude deletes
     nothing and writes nothing in UKG ("Yes, in QA only").
+  - The re-map (15–16 Oct, read in code over the quota batch: four mappers,
+    a designer and two critics) and Jeff's answers (16 Oct): two batches,
+    4b-2b then 4b-2c ("Two batches"); a claim's Approve / Reject sends only
+    its id, the new status and who approved it and when ("Yes, send only
+    the change" — the whole claim as loaded could put a stale copy back); a
+    claim with no amount reads a dash instead of taking the Sales Manager
+    tab down ("Guard it now"; none stored); a quote line that is no line,
+    or lines that are no list, answer 400 — today a 500, or every line of a
+    Draft wiped ("Refuse with a 400"; none stored); the restore's "records
+    restored" counts only rows it wrote, and the rest are said apart ("Fix
+    both" — the item below); the claims list's Reject loses its red fill,
+    red being for delete ("Fix Reject's colour, file the rest"). Not done:
+    a Manager setting a rep's team ("No, leave it") and pins kept at write
+    time ("Not now, file it") — both below. The census found no stray to
+    keep (the design's D10), and QA's removed-SPIFF claim is approved
+    already, so the held link is proved in the itest (D4).
   - 4b-3: settings' teams, crews and quote templates' product ids, and a
     service plan's `visitTemplateId` (an entry of the org's job templates —
     found by the 15 Oct critic, in no list).
@@ -1617,8 +1677,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   holds its id is counted, so a second import of the same file reads "N
   records restored" and restores nothing; the snapshot's record count and
   the audit row say the same. Since §0.199 each insert answers the ids it
-  wrote. Recommended: count those, and say "N already here" apart. Jeff
-  decides.
+  wrote. Recommended: count those, and say "N already here" apart. Jeff,
+  16 Oct: "Fix both" — batch 4b-2c.
 - **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
   later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
