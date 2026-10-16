@@ -167,10 +167,20 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        own batch next").
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
-   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
-     (SELECT 9 Oct). Since §0.198 the pickers leave the archived one out;
-     the Accounts tab and an account's Sub-Accounts still list it, because
-     the accounts GET does not filter archived rows (read in code 11 Oct).
+   - **Then, a merged-away account leaves the Accounts tab** (Jeff, 16 Oct,
+     after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
+     but both still show on the account list" — SELECT from 20:20 UTC: "Resinall,
+     Inc." stored merged, `merge_archived` true, archived 20:18:01 UTC, its
+     audit "merged in · 0 references repointed"). Also seen: "Evonik -
+     Lafayette", two sites, one of them merge-archived (SELECT 9 Oct). Since
+     §0.198 the pickers leave the archived one out; the Accounts tab and an
+     account's Sub-Accounts still list it, because the accounts GET does not
+     filter archived rows (read in code 11 Oct; again 16 Oct: the GET selects
+     every account of the org, the tab filters none). Jeff, 16 Oct: "Hide
+     them" — merged-away accounts leave the Accounts tab and Sub-Accounts,
+     the record kept (its Undo and the links that resolve through it
+     unchanged); "Right after 4b-2c" — a batch of its own, the Contacts tab
+     checked for the same gap with it.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
