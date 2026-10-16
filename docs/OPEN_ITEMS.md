@@ -302,25 +302,25 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **UKG's fiscal year starts in October, but no start is saved** (SELECT,
   15 Oct 22:41 UTC: `fiscal_year_start` null — Jeff's October pick on the
   old Fiscal year page changed nothing, as October was already shown, and
-  saved nothing). Since §0.203 a company with no saved start reads January,
-  so after the ship UKG's screens and scheduled reports read Q4 FY2026 and
-  a January year. Jeff: open UKG's Settings → Company → Fiscal year — it
-  now reads "Not set — January" — pick October, Save; then strike this.
-- **Ship §0.203 to dev and prod in one sitting.** Until prod ships, prod's
-  old report-deliveries job (jobs run on prod only) reads October for a
-  dev org with no saved start (Accelerep QA among them) while that org's
-  Reports read January — a scheduled "This FY" or quarter report would
-  cover other dates than the screen. No stored figure is at risk either
-  way. Reload any app tab opened before the deploys.
-- **Reload every app tab opened before the thirty-eighth ship** (Deployed:
-  dev 17:56 UTC, prod 17:59 UTC, 15 Oct — it covers the thirty-seventh's,
-  15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the
-  thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps the screens
-  from before §0.199, §0.200, §0.201 and §0.202 — the task rail's
-  completion, a New Job's copied links, the task popups, the Technicians
-  form's login picker, the member profile page's save and the Sales
-  Manager tab's quota switch among them. Reload, then strike this.
-- Nothing else open. The thirty-eighth ship (15 Oct, 17:59 UTC: §0.202, a
+  saved nothing). Since §0.203 — shipped 16 Oct 03:28 UTC — a company with
+  no saved start reads January, so UKG's screens and scheduled reports now
+  read Q4 FY2026 and a January year. Jeff: open UKG's Settings → Company →
+  Fiscal year — it now reads "Not set — January" — pick October, Save;
+  then strike this.
+- **Reload every app tab opened before the thirty-ninth ship** (Deployed:
+  dev 03:26 UTC, prod 03:28 UTC, 16 Oct — it covers the thirty-eighth's,
+  15 Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the
+  thirty-sixth's, 14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25
+  UTC, too): an older tab keeps the screens from before §0.199, §0.200,
+  §0.201, §0.202 and §0.203 — the task rail's completion, a New Job's
+  copied links, the task popups, the Technicians form's login picker, the
+  member profile page's save, the Sales Manager tab's quota board and the
+  Fiscal year page among them; an older tab's Save quotas answers 200 and
+  stores no quota (the server keeps the stored figures). Reload, then
+  strike this.
+- Nothing else open. The thirty-ninth ship (16 Oct, 03:28 UTC: §0.203, a
+  Sales Rep's quota is a plan per fiscal year — the quota batch; dev and
+  prod in one sitting), the thirty-eighth (15 Oct, 17:59 UTC: §0.202, a
   member's save changes a member this org holds — batch 4b-2a), the
   thirty-seventh (15 Oct, 01:30 UTC: §0.201,
   Dispatch's links name live rows of this org — batch 4b-1), the
