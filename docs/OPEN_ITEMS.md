@@ -315,26 +315,23 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **UKG's fiscal year starts in October, but no start is saved** (SELECT,
-  15 Oct 22:41 UTC: `fiscal_year_start` null — Jeff's October pick on the
-  old Fiscal year page changed nothing, as October was already shown, and
-  saved nothing). Since §0.203 — shipped 16 Oct 03:28 UTC — a company with
-  no saved start reads January, so UKG's screens and scheduled reports now
-  read Q4 FY2026 and a January year. Jeff: open UKG's Settings → Company →
-  Fiscal year — it now reads "Not set — January" — pick October, Save;
-  then strike this.
-- **Reload every app tab opened before the thirty-ninth ship** (Deployed:
-  dev 03:26 UTC, prod 03:28 UTC, 16 Oct — it covers the thirty-eighth's,
-  15 Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the
-  thirty-sixth's, 14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25
-  UTC, too): an older tab keeps the screens from before §0.199, §0.200,
-  §0.201, §0.202 and §0.203 — the task rail's completion, a New Job's
-  copied links, the task popups, the Technicians form's login picker, the
-  member profile page's save, the Sales Manager tab's quota board and the
+- **Reload every app tab opened before the fortieth ship** (Deployed: dev
+  15:00 UTC, prod 15:03 UTC, 16 Oct — it covers the thirty-ninth's, 16 Oct
+  03:28 UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the thirty-seventh's,
+  15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the
+  thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps the screens
+  from before §0.199, §0.200, §0.201, §0.202, §0.203 and §0.204 — the task
+  rail's completion, a New Job's copied links, the task popups, the
+  Technicians form's login picker, the member profile page's save, the
+  Sales Manager tab's quota board, claims list and SPIFF board, and the
   Fiscal year page among them; an older tab's Save quotas answers 200 and
-  stores no quota (the server keeps the stored figures). Reload, then
-  strike this.
-- Nothing else open. The thirty-ninth ship (16 Oct, 03:28 UTC: §0.203, a
+  stores no quota (the server keeps the stored figures), and its claim
+  Approve still re-sends the whole claim as loaded (a stale copy can put
+  back what another save changed — what §0.204's Approve no longer does).
+  Reload, then strike this.
+- Nothing else open. The fortieth ship (16 Oct, 15:03 UTC: §0.204, a sales
+  record's links name live rows or entries of this org — batch 4b-2b; dev
+  and prod in one sitting), the thirty-ninth (16 Oct, 03:28 UTC: §0.203, a
   Sales Rep's quota is a plan per fiscal year — the quota batch; dev and
   prod in one sitting), the thirty-eighth (15 Oct, 17:59 UTC: §0.202, a
   member's save changes a member this org holds — batch 4b-2a), the
