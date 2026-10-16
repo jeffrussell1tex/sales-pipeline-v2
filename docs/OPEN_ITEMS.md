@@ -150,7 +150,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        pinned reports, the forecast call sending only what it changes, and
        the restore — every date column, refused rows said, "records
        restored" counting only rows written (the rest "already here"), and
-       the clean-up of quote lines' products, teams and pins.
+       the clean-up of quote lines' products, teams and pins. Re-mapped 16
+       Oct over 3226ad8 (three mappers, a designer and two critics; read in
+       code). Jeff's answers, 16 Oct: the import window shows the restore's
+       answer — today it closes as the answer lands, so no count, error or
+       note is ever seen ("Fold it in"; the two §4.3 items on that window
+       with it); a backup snapshot's id made unique — minted per minute and
+       shared by every org, a second backup in the same minute answers 500
+       and an import's snapshot row is lost, its audit entry naming an id
+       another org may hold ("Fix now"); the member profile page's
+       whole-row save filed for its own batch, next ("File it, own batch
+       next" — §4.3); a restored member's login link and role kept filed
+       ("Keep it filed, named" — §4.6).
+     - **Then, the member profile page sends only what changed** (§4.3's
+       "Two saves PUT a member's whole cached row"; Jeff, 16 Oct: "File it,
+       own batch next").
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived
@@ -1333,7 +1347,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   First/Last rebuild the old name), or, since §0.196, refused when another
   member holds the old name by then. SalesManagerTab shows "the server
   returned 409" without the server's words. Recommended: partial PUTs, as
-  the Teams page and the profile panel send. Read 11 Oct (§0.196).
+  the Teams page and the profile panel send. Read 11 Oct (§0.196). The
+  4b-2c re-map (16 Oct, read in code): the profile page also re-sends the
+  member's forecast calls and own preferences as loaded, so an Admin's save
+  there puts back a Manager's call or the member's own change made since the
+  page opened, and it derives the team by name (§4.6). Jeff, 16 Oct: the
+  forecast save sends only what it changes in batch 4b-2c ("Send only what
+  changed"); the profile page stops sending pins in 4b-2c and sends only
+  what changed in its own batch, next ("File it, own batch next").
 - **The Settings → Users profile page after a save:** its title band and
   crumb read the member as the page opened, so a rename shows the old name
   until the page is left; "Save changes" stays (the form is compared with that
@@ -1343,13 +1364,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   updated."** The restore inserts with `onConflictDoNothing`: a record whose
   id is already there is left as it is. Recommended: reword it ("… are left
   as they are") with the backup page's next pass, not in §0.196. Read 11 Oct
-  (§0.196).
+  (§0.196). Jeff, 16 Oct: in batch 4b-2c, with the window showing the
+  restore's answer ("Fold it in").
 - **A restore that drops every member row and imports nothing else reads
   only "Import failed".** Since §0.196 a member row with no usable id or
   email is dropped and reported in `errors`; backup.mjs then answers 500,
   and BackupDetail shows `data.error` only. Before, such a hand-edited file
   imported. Recommended: show `data.errors` when the answer is not OK (one
   line), with the backup page's next pass. Read 11 Oct (§0.196's review).
+  The 4b-2c re-map (16 Oct, read in code, not seen): the window never shows
+  any answer — on success it closes in the render that sets it. Jeff, 16
+  Oct: shown in batch 4b-2c ("Fold it in").
 
 ### 4.4 Dispatch
 
@@ -1689,7 +1714,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   an Admin's restore gives the file's role to any Clerk identity in it that
   is, or later becomes, a member with no row here. Global ids limit it.
   §0.202's rule: no save links a row — a sign-in, an Admin's Clerk sync or
-  an Admin's restore does, and the restore's is this item.
+  an Admin's restore does, and the restore's is this item. The 4b-2c
+  re-map (16 Oct): from that batch the restore lands rows it dropped
+  silently — every member who ever joined a team among them — so more
+  members reach this. Jeff, 16 Oct: "Keep it filed, named".
 - **Automations: a deactivated assignee, and the rule save** (the 4b-2 map):
   the engine assigns a rule's tasks by id to a deactivated member while the
   rule editor shows that assignee as gone; the rule PUT has none of the
