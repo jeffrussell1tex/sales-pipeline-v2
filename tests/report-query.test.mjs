@@ -202,7 +202,7 @@ test('the builder is wired to the engine: sources and charts from the module, fi
     assert.ok(s.includes("import ReportChart from '../components/ReportChart.jsx';"));
     assert.ok(s.includes('        const SOURCES = REPORT_SOURCES;') && s.includes('        const CHART_TYPES = REPORT_CHARTS;'));
     assert.ok(!s.includes("'Quotes'") && !s.includes("id:'heatmap'"), 'no source the tab does not hold, no chart the component does not draw');
-    assert.ok(s.includes('    const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 });'));
+    assert.ok(s.includes('    const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) });'));
     assert.ok(s.includes("<button onClick={()=>{setBuilderResult(runBuilder());setBuilderDirty(false);setBuilderRendered(true);}}"), 'Update preview RUNS the query');
     assert.ok(s.includes('<ReportChart result={builderResult} chartType={builderChart}/>'));
     assert.ok(s.includes('            const fields = fieldsFor(builderSource);'), 'the fields are the source\'s');
@@ -222,7 +222,7 @@ test('a saved report OPENS into the builder and saves back to its own row; the n
     assert.ok(s.includes("const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };"), 'the library card opens a builder report');
     assert.ok(s.includes("onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>"), 'and the card is wired to it');
     assert.ok(!s.includes('opening it is not wired yet'));
-    assert.ok(s.includes("        setEditingReportId(r.id);") && s.includes("        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));"), 'opening runs the saved definition (the filters and the custom bounds with it since §0.139)');
+    assert.ok(s.includes("        setEditingReportId(r.id);") && s.includes("        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) }));"), 'opening runs the saved definition (the filters and the custom bounds with it since §0.139)');
     assert.ok(s.includes("                method: existingId ? 'PUT' : 'POST',"), 'a reopened report saves in place');
     assert.ok(s.includes("onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod, from: builderPeriod==='custom' ? builderFrom : '', to: builderPeriod==='custom' ? builderTo : '', where: builderWhere },"), 'the save carries the id, the name, the period and (§0.139) the filters');
     assert.ok(s.includes('setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]);'), 'the library updates in place');

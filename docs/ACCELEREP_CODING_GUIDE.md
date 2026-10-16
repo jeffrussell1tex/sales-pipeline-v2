@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 13, 2026 · rules current through **§18b95** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 13, 2026 · rules current through **§18b96** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -573,20 +573,33 @@ Three details that are not optional:
 
 ## 13. Quota / User Fields
 
-Quota data lives on **user rows in the DB**, not in the settings blob.
+A Sales Rep's quota is a **plan per fiscal year on their member row**: `profile.quotaPlans`, keyed by the year as text —
+`{ "2026": { annual, quarters: [q1, q2, q3, q4], months: [12 figures] | null } }` (state §0.203; the rule is §18b96).
+Whole dollars; the quarters add up to the year, and where the company plans by month each quarter is its three
+months' sum. Whether a company enters quarters or months is `settings.extra.quotaPeriods` ('quarters' when absent),
+chosen on Settings → Company → Fiscal year. The pure rules are `src/utils/quotaPlan.js`.
 
 ```js
-// updateRepField in SalesManagerTab — persists immediately to /users
-dbFetch('/.netlify/functions/users', {
+// the Sales Manager tab's board — one request for the whole save (sendQuotas)
+dbFetch('/.netlify/functions/users?quotas=true', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updatedUser),
+    body: JSON.stringify({ fiscalYear: planYear, breakdown: quotaBreakdown, members }),   // members: [{ id, annual, periods }]
 });
 ```
 
-Fields: `annualQuota`, `q1Quota`, `q2Quota`, `q3Quota`, `q4Quota`, `quotaType` ('annual' | 'quarterly').
-
-The `AnalyticsDashboard` must read quota from per-rep user fields, not from the global `settings.quotaData` blob. Reading from the blob caused $0 remaining quota bugs.
+- **One writer:** `PUT /users?quotas=true` — Admins and Managers, Sales Reps only, the company's own breakdown, a year
+  within two of this one; the whole save refused when any rep's figures do not add up; one year merged into the
+  stored plans; the rows as written answered.
+- **Every other save keeps the plans as stored:** the merge (`storedQuota`) and, at write time, `keepQuotaPlans`
+  (`_lib.mjs`) on every write of a member's whole profile.
+- **Every reader names the year:** `userQuotaFor(u, period, fiscalYear)` and `teamQuotaFor(users, period, slice,
+  fiscalYear)` (`pipelineReport.js`), `quotaPlanOf(member, fy)`. A year with no plan reads 0 — said as "No quota
+  set" or a dash, never "0%" or "of $0".
+- **A member's own plans:** a non-Admin's copy of the member list carries none, so Home and Reports read the member's
+  own row (`myProfileHere`, `withOwnPlans`).
+- The old keys (`annualQuota`, `q1Quota`…`q4Quota`, `quotaType`) are read by no screen; every save keeps them as
+  stored. Never read a quota from the `settings.quotaData` blob — it caused $0 remaining-quota bugs.
 
 ---
 
@@ -4147,3 +4160,15 @@ through `dbFetch`.
 5. **One test for a taken email** (`isEmailTaken`): the driver's 23505 on the email, read off `err.cause` — drizzle's wrapper's message is the SQL, which names "email" on every users write — and answered alike by every save, the member's own included: 409, field email.
 6. **A new line must not satisfy an older pin.** The re-invitation check's `if (userRole !== 'Admin') {` was the bare text an older pin held for the access branch's refusal, which then passed with the refusal gone (the harness would have printed it SURVIVED). Pin a refusal with its words, and scan the pins on a file a batch edits for a literal that now occurs twice (OPEN_ITEMS §6).
 7. **The guard.** tests/member-identity.test.mjs pins the merge, the create, every mention of `sanitize` in users.mjs (each says where its link comes from), the PUT's order, both update-only writes, the email test, the re-invitation and the three screens; tests/integration/member-identity.itest.mjs proves each against the test database (`itest_mident_A/B`) — each test of new behaviour run alone against the old users.mjs fails on its own rule; org B as seeded. Two harness entries — the PUT and `upsertUser` re-inserting a member removed while the save was out — are a race no itest stages; a pin alone catches them.
+
+## 18b96. A Rep's Quota Is One Plan Per Fiscal Year — Its Periods Add Up To The Year, One Writer Checks And Stores It, Every Other Save Keeps It, Every Reader Names The Year; A Company's Quarters Come From Its Own Fiscal Start (hard rule)
+
+**Origin (§0.203, 15 Oct 2026 — OPEN_ITEMS §1, the quota batch; Jeff, 15 Oct: "A rep has an annual quota that is broken down into 4 quarters … the 4 quarters of quota do need to add up to their annual quota number", "some companies may do monthly quotas that add up to an annual number", then "Yes, per company", "Quarters and the year", "Admins and Managers", "Per-year plans now", "Yes, with Home", "Quarters should follow whatever is set there for that company", "It should default to Jan 1 as fiscal year start and then the admin can change it if necessary", "Fix in this batch").** The Sales Manager tab kept, per member, a yearly figure or four quarters under an Annual / Quarterly mode, nothing checking they added up and no year on any figure — last year's ramp became this year's; its switch saved every member's whole row one at a time. Home and Reports read a rep's own quota from a member list that hides it ($0). Each screen and job read the company's fiscal start its own way — October here, January there — and three kept their own quarter arithmetic. Kin: §18b95 (a member's save), CLAUDE.md's sanitize rule, §0.170 (the app's copy follows the save), §18b20 (a test is not a mutation).
+
+1. **One plan per rep per fiscal year** (`profile.quotaPlans[year]`): never read for another year; a new year reads "No quota set" until one is set; a past quarter is measured against its own year's plan; All Time and custom dates have none.
+2. **The periods add up to the year, in whole dollars** — four quarters, or twelve months where the company plans by month (an Admin's setting); months are entered, attainment is shown by quarter and year. The board shows what is left to allocate; the board and the server both refuse figures that do not add up, naming the rep and the gap, and refuse the whole save, so no rep is half-saved.
+3. **One writer checks, names the year and stores:** `PUT /users?quotas=true` — Admins and Managers; Sales Reps only; the company's breakdown (409 when a board's is stale); a year within two of this one; one year merged into the stored plans in one statement; each change audited.
+4. **Every other save keeps the plans** — the merge's `storedQuota` over any body, a create storing none, and at write time `keepQuotaPlans` on every write of a member's whole profile (the PUT, the create's conflict, the member's own save, the first sign-in's link, a re-invitation, a role change): a save that read the row before a quota save landed does not put the old plans back.
+5. **Every reader names the year:** `userQuotaFor(u, period, fy)`, `teamQuotaFor(users, period, slice, fy)`, `quotaPlanOf(member, fy)`. **No quota is said** — "No quota set" or a dash, never "0%" or "of $0", and never red. **A member's own figures come from their own row** (`myProfileHere`, `withOwnPlans`).
+6. **One reader of a company's fiscal start:** `fiscalStartOf` (`quarters.js`) — January when none is saved, each company its own; quarters and years from `quarterOf` / `currentQuarter` / `fiscalRange`, never a screen's own arithmetic. The Fiscal year page names no month until one is saved, so January can be saved too.
+7. **The guards.** tests/quota-plan.test.mjs: the rules on made-up plans; THE GUARD over src and the functions — every `userQuotaFor` / `teamQuotaFor` / `quotaPlanOf` call names its year, read past comments, trailing commas, calls through an object and optional calls, under its own name; THE GUARD over the fiscal start — every read of `fiscalYearStart` is `fiscalStartOf`'s but a short allowlist of lines that store, select or show it, and no quarter arithmetic on the start outside quarters.js and reportPeriod.js; pins at every site (App's quarter copies, the deal window's close quarter, Reports' own-plan sites, every whole-profile write). tests/integration/quota-plans.itest.mjs proves the endpoint against the test database (`itest_quota_A/B`), a stale whole-profile write keeping a newer plan among it.

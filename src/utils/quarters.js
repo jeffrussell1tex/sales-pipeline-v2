@@ -62,6 +62,20 @@ export function quarterEndDate(fiscalYear, q, fiscalStart) {
     return new Date(start.getFullYear(), start.getMonth() + 3, 0);
 }
 
+// A company's fiscal-year start month (1–12), read one way on every screen and job (state §0.203 — Jeff, 15 Oct:
+// "The fiscal year is set by the admin in settings under the company tab | fiscal year. Quarters should follow
+// whatever is set there for that company", and "It should default to Jan 1 as fiscal year start and then the
+// admin can change it if necessary"). The setting is stored as text ('10') or not at all; anything but a month
+// 1–12 is January, the calendar year. Every site parsed it itself — the Fiscal year page and most screens falling
+// back to October, the Pipeline list to January — so one company's quarters differed between screens.
+export function fiscalStartOf(value) {
+    const n = parseInt(value, 10);
+    return n >= 1 && n <= 12 ? n : 1;
+}
+
+// The calendar month (1–12) of fiscal month k (1–12) — the quota board's month labels.
+export const fiscalMonthOf = (k, fiscalStart) => ((fiscalStart - 1) + (k - 1)) % 12 + 1;
+
 export function quarterRange(fiscalYear, q, fiscalStart) {
     const start = quarterStartDate(fiscalYear, q, fiscalStart);
     const end   = quarterEndDate(fiscalYear, q, fiscalStart);

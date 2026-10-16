@@ -1,9 +1,9 @@
 import { db } from '../../db/index.js';
-import { users } from '../../db/schema.js';
-import { eq, asc, and, sql } from 'drizzle-orm';
+import { users, settings as settingsTable } from '../../db/schema.js';
+import { eq, asc, and, sql, inArray } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow, isOpenInvitationRow, memberNamesOf } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow, isOpenInvitationRow, memberNamesOf, keepQuotaPlans } from './_lib.mjs';
 import { pickSelfEditable } from './_selfProfile.mjs';
 import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
@@ -14,6 +14,10 @@ import { crmReadScope } from '../../src/utils/roles.js';
 import { INVITE_EXPIRY_DAYS, DEFAULT_INVITE_EXPIRY_DAYS } from '../../src/utils/inviteExpiry.js';
 // One name per member of an org (state §0.196): every write of users.name here decides through it.
 import { nameRefusal, firstFreeName, numbered, nameTakenMessage } from '../../src/utils/memberName.js';
+// A Sales Rep's quota plan per fiscal year (state §0.203): one rule for the board and this writer.
+import { QUOTA_PERIODS, QUOTA_KEYS, cleanQuotaPeriods, cleanQuotaPlans, storedQuota, checkQuotaSave, quotaRefusal, planFromSave, samePlan, quotaYearAllowed } from '../../src/utils/quotaPlan.js';
+import { fiscalStartOf } from '../../src/utils/quarters.js';
+import { currentFiscalYear } from '../../src/utils/reportPeriod.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -145,6 +149,9 @@ export const handler = async (event) => {
             q3Quota:       data.q3Quota       ?? null,
             q4Quota:       data.q4Quota       ?? null,
             quotaType:     data.quotaType     || null,
+            // A plan per fiscal year (state §0.203) — { "2026": { annual, quarters, months } };
+            // only PUT ?quotas=true writes it, and the merge keeps it as stored for every other save.
+            quotaPlans:    cleanQuotaPlans(data.quotaPlans),
             // Forecast calls per fiscal quarter — { '2026-Q4': { commit, bestCase } }
             // (state §0.84). The ledger's Commit used to arrive as `commit`, a key
             // this builder never carried, so it was 0 again on every refresh.
@@ -269,6 +276,13 @@ export const handler = async (event) => {
             clerkUserId: existing.clerkUserId || null,
             status:      existing.profile?.status || null,
             active:      isAccessChange(data) ? data.active : existing.active,
+            // The quota figures are the stored ones (state §0.203): PUT ?quotas=true is
+            // their one writer, and checks they add up. A whole row sent as loaded — the
+            // profile page, a forecast call, an old tab's Save quotas — put back figures
+            // saved since, and a hand-written body could store figures that do not add up.
+            // The write itself takes the plans the row holds when it lands (keepQuotaPlans):
+            // a quota save between this read and that write is kept.
+            ...storedQuota(existing.profile),
         };
     };
 
@@ -336,16 +350,19 @@ export const handler = async (event) => {
                     // on — an invited row (status Invited) is the one turned on here.
                     const stillOff = row.profile?.status === 'Deactivated';
                     try {
-                        await db.update(users)
+                        const [linked] = await db.update(users)
                             .set({
                                 clerkUserId: userId,
                                 role:        linkRole,
                                 active:      !stillOff,
-                                profile:     { ...(row.profile || {}), status: stillOff ? 'Deactivated' : 'Active', userType: linkRole },
+                                profile:     keepQuotaPlans({ ...(row.profile || {}), status: stillOff ? 'Deactivated' : 'Active', userType: linkRole }),
                                 updatedAt:   new Date(),
                             })
-                            .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
-                        row = { ...row, clerkUserId: userId, role: linkRole, active: !stillOff };
+                            .where(and(eq(users.id, row.id), eq(users.orgId, orgId)))
+                            .returning();
+                        // The row as stored (state §0.203): the copy read before the write
+                        // answered plans a quota save had replaced since, and the old status.
+                        row = linked || { ...row, clerkUserId: userId, role: linkRole, active: !stillOff };
                         // The caller cache keys on clerkUserId and has just been proved
                         // wrong by this very write: it holds a 30s 'no roster row' answer
                         // for this identity, which fails CLOSED — the user would own
@@ -425,7 +442,7 @@ export const handler = async (event) => {
             try {
                 [saved] = await db
                     .update(users)
-                    .set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })
+                    .set({ ...updateData, profile: keepQuotaPlans(updateData.profile), clerkUserId: userId, updatedAt: new Date() })
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)))
                     .returning();
             } catch (err) {
@@ -571,17 +588,18 @@ export const handler = async (event) => {
             // the one path that changes it. A new row is inserted with its role.
             // A PUT is update-only (state §0.202): a member removed while the save
             // was out is not inserted again — it answers no row.
+            // The quota plans are the row's when the write lands (keepQuotaPlans, state §0.203).
             const { id, role: _keepStoredRole, ...updateData } = clean;
             try {
                 const [row] = updateOnly
-                    ? await db.update(users).set({ ...updateData, updatedAt: new Date() })
+                    ? await db.update(users).set({ ...updateData, profile: keepQuotaPlans(updateData.profile), updatedAt: new Date() })
                         .where(and(eq(users.id, id), eq(users.orgId, orgId))).returning()
                     : await db
                     .insert(users)
                     .values({ ...clean, orgId })
                     .onConflictDoUpdate({
                         target: users.id, setWhere: eq(users.orgId, orgId),
-                        set: { ...updateData, updatedAt: new Date() },
+                        set: { ...updateData, profile: keepQuotaPlans(updateData.profile), updatedAt: new Date() },
                     })
                     .returning();
                 invalidateRoster(orgId);
@@ -780,7 +798,7 @@ export const handler = async (event) => {
                             const mergedProfile = { ...(existingRow.profile || {}), status: 'Invited' };
                             const [row] = await db
                                 .update(users)
-                                .set({ profile: mergedProfile, updatedAt: new Date() })
+                                .set({ profile: keepQuotaPlans(mergedProfile), updatedAt: new Date() })
                                 .where(and(eq(users.id, existingRow.id), eq(users.orgId, orgId)))
                                 .returning();
                             results.push(flatten(row || existingRow));
@@ -866,6 +884,8 @@ export const handler = async (event) => {
             // another org's (it answered 500 when the id was held there). An id
             // naming this org's member is refused above (§0.164); any other is ignored.
             try {
+                // No quota from the body either (state §0.203): PUT ?quotas=true sets it, checked.
+                for (const k of QUOTA_KEYS) delete data[k];
                 // No login link, status or access from the body (state §0.202): a
                 // create named any Clerk identity, a member to be, and a status
                 // 'Deactivated' or `active` false kept them out once linked — a
@@ -893,6 +913,102 @@ export const handler = async (event) => {
                 }
                 throw err;
             }
+        }
+
+        // ── PUT ?quotas=true — a fiscal year's quota plans for Sales Reps (state §0.203) ──
+        // Jeff, 15 Oct: a rep's yearly quota is broken into the company's periods —
+        // quarters, or months — which may ramp and must add up to the year; each fiscal
+        // year has its own plan ("Per-year plans now"); Admins and Managers set them
+        // ("Admins and Managers", the gate above). The one writer of a member's quota:
+        // every other save keeps the stored figures (the merge). One request for the
+        // board's whole save, refused whole when any member's figures do not add up.
+        if (event.httpMethod === 'PUT' && event.queryStringParameters?.quotas === 'true') {
+            const body = JSON.parse(event.body || '{}');
+            const members = Array.isArray(body.members) ? body.members : null;
+            const memberIds = members ? members.map((m) => m?.id) : [];
+            if (!members || !members.length || members.length > 500
+                || memberIds.some((mid) => typeof mid !== 'string' || !mid) || new Set(memberIds).size !== memberIds.length) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Send each member\'s id and quota, once.' }) };
+            }
+            const fy = body.fiscalYear;
+            if (!Number.isInteger(fy)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Name the fiscal year these quotas are for.' }) };
+            }
+            if (!QUOTA_PERIODS.includes(body.breakdown)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Quota periods are quarters or months.' }) };
+            }
+            // The company's own setting decides — this org's row only (none: quarters, a January year).
+            const [quotaSettings] = await db.select({ extra: settingsTable.extra, fiscalYearStart: settingsTable.fiscalYearStart })
+                .from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
+            const breakdown = cleanQuotaPeriods(quotaSettings?.extra?.quotaPeriods);
+            if (body.breakdown !== breakdown) {
+                return { statusCode: 409, headers, body: JSON.stringify({ error: `This company now sets quotas by ${breakdown === 'months' ? 'month' : 'quarter'}. Reload the page to see its board.` }) };
+            }
+            const thisYear = currentFiscalYear(fiscalStartOf(quotaSettings?.fiscalYearStart));
+            if (!quotaYearAllowed(fy, thisYear)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: `FY${fy} is outside the years quotas can be set for (FY${thisYear - 2}–FY${thisYear + 2}).` }) };
+            }
+            const quotaRows = await db.select().from(users).where(and(eq(users.orgId, orgId), inArray(users.id, memberIds)));
+            const rowById = new Map(quotaRows.map((r) => [r.id, r]));
+            const notHere = memberIds.filter((mid) => !rowById.has(mid)).length;
+            if (notHere) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: `${notHere === 1 ? 'One of these members is' : `${notHere} of these members are`} not in your organization — they may have been removed. Reload and try again.` }) };
+            }
+            for (const r of quotaRows) {
+                if (r.role !== 'User') {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: `${r.name} is not a Sales Rep — quotas are set for Sales Reps.` }) };
+                }
+                if (r.profile != null && (typeof r.profile !== 'object' || Array.isArray(r.profile))) {
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: `${r.name}'s record could not be read — nothing was saved.` }) };
+                }
+            }
+            const year = String(fy);
+            const changes = [];
+            for (const m of members) {
+                const r = rowById.get(m.id);
+                const check = checkQuotaSave({ breakdown, annual: m.annual, periods: m.periods });
+                if (check) return { statusCode: 400, headers, body: JSON.stringify({ error: quotaRefusal(r.name, fy, check, breakdown) }) };
+                const stored = cleanQuotaPlans(r.profile?.quotaPlans)?.[year] || null;
+                const plan = planFromSave(breakdown, m.annual, m.periods, stored);
+                if (!stored || !samePlan(stored, plan)) changes.push({ r, plan });
+            }
+            // One year merged into the stored plans: every other year and every other
+            // profile key kept (a top-level || would replace the whole map).
+            const written = changes.length ? (await db.batch(changes.map(({ r, plan }) => db.update(users)
+                .set({
+                    profile: sql`coalesce(${users.profile}, '{}'::jsonb) || jsonb_build_object('quotaPlans', (case when jsonb_typeof(${users.profile}->'quotaPlans') = 'object' then ${users.profile}->'quotaPlans' else '{}'::jsonb end) || jsonb_build_object(${year}::text, ${JSON.stringify(plan)}::jsonb))`,
+                    updatedAt: new Date(),
+                })
+                .where(and(eq(users.id, r.id), eq(users.orgId, orgId), sql`jsonb_typeof(coalesce(${users.profile}, '{}'::jsonb)) = 'object'`))
+                .returning()))).flat() : [];
+            invalidateRoster(orgId);
+            const writtenById = new Map(written.map((w) => [w.id, w]));
+            const removed = changes.filter(({ r }) => !writtenById.has(r.id)).map(({ r }) => r.id);
+            if (written.length) {
+                // Every change's audit row in one insert, then each streamed in turn (state §0.203).
+                // An insert-and-stream per member could outlast the function when an org's audit
+                // destination hung — 4 s a member: the plans were in, the later members' audit rows
+                // were not. In turn, not at once: each delivery counts on the last one's state.
+                const setBy = await getCallerName(userId, orgId);
+                const at = new Date();
+                const audited = changes.filter(({ r }) => writtenById.has(r.id));
+                try {
+                    const auditRows = await db.insert(auditLog).values(audited.map(({ r, plan }, i) => ({
+                        id:         'audit_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 7),
+                        orgId,
+                        action:     'user.quota_set',
+                        entityType: 'user',
+                        entityId:   String(r.id),
+                        entityName: `${r.name} — FY${fy} $${plan.annual.toLocaleString('en-US')}`,
+                        userId:     userId || null,
+                        userName:   setBy  || null,
+                        timestamp:  at,
+                    }))).returning();
+                    for (const row of auditRows) await streamAudit(orgId, row);   // state §0.87
+                } catch (e) { console.warn('quota audit error:', e.message); }
+            }
+            const answer = quotaRows.filter((r) => !removed.includes(r.id)).map((r) => flatten(writtenById.get(r.id) || r));
+            return { statusCode: 200, headers, body: JSON.stringify({ users: answer, removed }) };
         }
 
         // ── PUT (update) ──────────────────────────────────────────────────────

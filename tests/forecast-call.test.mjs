@@ -167,7 +167,8 @@ test('Home: the quota is the quarter\'s own figure and closed is won by close da
     const home = read('src/Tabs/HomeTab.jsx');
     assert.ok(home.includes("import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';"));
     assert.ok(home.includes("import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';"));
-    assert.ok(home.includes('const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`);'));
+    assert.ok(home.includes('const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`, todayQk?.fiscalYear);'), 'this quarter of THIS fiscal year\'s plan (state §0.203)');
+    assert.ok(home.includes('    const myUserObj      = myProfileHere;'), 'the member\'s own row for this org — a rep\'s member list is names only, so the card read $0');
     assert.doesNotMatch(home, /myAnnualQuota\s*\/\s*4/, 'annual ÷ 4 (a quarterly plan read $0)');
     assert.ok(home.includes("o.stage === 'Closed Won' && closeDayInRange(o, quarterStart, quarterEnd)"));
     assert.doesNotMatch(home, /\['Negotiation','Closing'/, 'a typed stage list naming stages no deal is in');

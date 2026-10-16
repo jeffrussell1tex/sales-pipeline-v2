@@ -117,8 +117,8 @@ for (const [tz, marker] of [['America/Chicago', 'Chicago'], ['Asia/Tokyo', 'Toky
 const smt = readFileSync(new URL('../src/Tabs/SalesManagerTab.jsx', import.meta.url), 'utf8');
 
 test('SalesManagerTab takes its quarter from quarters.js with the org fiscal start, not the calendar', () => {
-    assert.match(smt, /import \{ currentQuarter \} from '\.\.\/utils\/quarters';/);
-    assert.match(smt, /const fiscalStart = parseInt\(settings\?\.fiscalYearStart\) \|\| 10;/, 'the App.jsx / HomeTab / ReportsTab default');
+    assert.match(smt, /import \{ currentQuarter, fiscalStartOf, fiscalMonthOf \} from '\.\.\/utils\/quarters';/);
+    assert.match(smt, /const fiscalStart = fiscalStartOf\(settings\?\.fiscalYearStart\);/, 'the one reader of the company\'s start (state §0.203) — January when none is set');
     assert.match(smt, /const curQ\s+= currentQuarter\(fiscalStart\);/);
     assert.match(smt, /const weeksLeft = curQ\.weeksLeft;/);
     assert.match(smt, /const qLabel\s+= curQ\.label;/);
@@ -134,7 +134,7 @@ test('Closed and Quota are quarter-to-date: won by close day inside the quarter,
     assert.match(smt, /function buildRepStats\(rep, opportunities, activities, tasks, period\)/, 'the stats take the quarter');
     assert.match(smt, /const wonInQ\s+= wonOpps\.filter\(o => closeDayInRange\(o, period\.from, period\.to\)\);/);
     assert.match(smt, /const closedArr\s+= wonInQ\.reduce/, 'closed sums the in-quarter wins, not every win ever');
-    assert.match(smt, /const quota\s+= userQuotaFor\(rep, `Q\$\{period\.q\}`\);/, "this quarter's quota, not the annual figure");
+    assert.match(smt, /const quota\s+= userQuotaFor\(rep, `Q\$\{period\.q\}`, period\.fiscalYear\);/, "this quarter of THIS fiscal year's plan (state §0.203), not the annual figure");
     assert.doesNotMatch(smt, /rep\.annualQuota \|\| 0/, 'the old annual-or-summed-quarterlies block');
     assert.match(smt, /buildRepStats\(rep, opportunities, activities, tasks, curQ\)/, 'the memo hands the current quarter in');
     assert.match(smt, /\[visibleReps, opportunities, activities, tasks, curQ\.key\]/, 'and re-runs when the quarter turns');
@@ -142,12 +142,13 @@ test('Closed and Quota are quarter-to-date: won by close day inside the quarter,
     assert.ok(smt.indexOf('const curQ      = currentQuarter(fiscalStart);') < smt.indexOf('const repStats = useMemo('), 'curQ is declared above repStats');
 });
 
-test('the Administration board keeps the annual quota and measures fiscal-year-to-date against it', () => {
+test('the Administration board shows a fiscal year\'s plan and measures that year to date against it', () => {
     assert.match(smt, /import \{ fiscalRange \} from '\.\.\/utils\/reportPeriod';/);
-    assert.match(smt, /const fyRange\s+= fiscalRange\(curQ\.fiscalYear, 'FY', fiscalStart\);/);
+    assert.match(smt, /const planYear  = quotaYear \?\? curQ\.fiscalYear;/, 'this year until another is picked (state §0.203)');
+    assert.match(smt, /const fyRange   = fiscalRange\(planYear, 'FY', fiscalStart\);/, 'the board\'s year, not always this one');
     assert.match(smt, /fyRange=\{fyRange\}/, 'passed to AdminTab');
     const bars = smt.match(/closeDayInRange\(o, fyRange\.from, fyRange\.to\)/g) || [];
-    assert.equal(bars.length, 2, 'both the territory rows and the unassigned rows');
+    assert.equal(bars.length, 1, 'one reader for every row — wonOf, the territory rows and the rows with none alike');
     assert.match(smt, /<div>FY attainment<\/div>/, 'the column says which year it measures');
     assert.doesNotMatch(smt, /o\.stage==='Closed Won'&&\(o\.salesRep===u\.name\|\|o\.assignedTo===u\.name\)\)\.reduce/, 'an all-time won sum on the board');
 });

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { quarterOf, quarterRange, groupByQuarter } from '../utils/quarters';
+import { quarterOf, quarterRange, groupByQuarter, fiscalStartOf } from '../utils/quarters';
 import { todayLocal } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
@@ -329,7 +329,7 @@ function StatStrip({ sum, activeGroup, fiscalStart }) {
 export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode = false, selectedOpps = [], setSelectedOpps }) {
     const { canSeeAll, calculateDealHealth, settings } = useApp();
     const toggleSelect = (id) => setSelectedOpps && setSelectedOpps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-    const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;
+    const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
 
     // The tab decides what the list shows. Its "All open" default already
     // excludes closed deals when no stage filter is set; when the Filter popover

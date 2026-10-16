@@ -35,7 +35,7 @@ const len = (v) => (Array.isArray(v) ? v.length : 0);
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const countOrNull = (n, one, many) => (n > 0 ? plural(n, one, many) : null);
 
-/** "FY starts October 1", or null when the org has never set it (consumers assume October). */
+/** "FY starts October 1", or null when the company has never set it (every screen then reads January — quarters.js fiscalStartOf, state §0.203 — but the company did not choose it). */
 export function fiscalYearDetail(fiscalYearStart) {
     const m = parseInt(fiscalYearStart, 10);
     return m >= 1 && m <= 12 ? `FY starts ${MONTHS[m - 1]} 1` : null;

@@ -135,20 +135,22 @@ test('the view never carries the ciphertext, and the status is computed from the
 
 // ── the wiring ───────────────────────────────────────────────────────────────
 
-test('all four audit write sites stream the inserted row after the insert', () => {
+test('every audit write site streams the inserted rows after the insert', () => {
     const lib = code(read('netlify/functions/_lib.mjs'));
     assert.ok(lib.includes("import { streamAudit } from './_auditStream.mjs';"));
     assert.ok(lib.includes('}).returning();\n        await streamAudit(orgId, row);'), '_lib.writeAudit');
     const users = code(read('netlify/functions/users.mjs'));
     assert.ok(users.includes("import { streamAudit } from './_auditStream.mjs';"));
-    assert.ok(users.includes('await streamAudit(orgId, row);'), 'users.mjs writer');
+    assert.ok(users.includes('}).returning();\n        await streamAudit(orgId, row);'), 'users.mjs writer');
+    // The quota writer's rows (state §0.203): one insert for the save, then each row streamed.
+    assert.ok(users.includes('}))).returning();\n                    for (const row of auditRows) await streamAudit(orgId, row);'), 'users.mjs quota writer');
     const al = code(read('netlify/functions/audit-log.mjs'));
     assert.ok(al.includes('await streamAudit(orgId, inserted);'), 'audit-log POST');
     const sync = code(read('netlify/functions/users-sync.mjs'));
     assert.ok(sync.includes('await streamAudit(orgId, row);'), 'users-sync');
-    // Every audit_log insert in the functions directory is one of these four.
-    const inserts = ['netlify/functions/_lib.mjs', 'netlify/functions/users.mjs', 'netlify/functions/audit-log.mjs', 'netlify/functions/users-sync.mjs'];
-    for (const f of inserts) assert.equal((code(read(f)).match(/db\.insert\(auditLog\)/g) || []).length, 1, f);
+    // Every audit_log insert in the functions directory is one of these five.
+    const inserts = [['netlify/functions/_lib.mjs', 1], ['netlify/functions/users.mjs', 2], ['netlify/functions/audit-log.mjs', 1], ['netlify/functions/users-sync.mjs', 1]];
+    for (const [f, n] of inserts) assert.equal((code(read(f)).match(/db\.insert\(auditLog\)/g) || []).length, n, f);
 });
 
 test('the delivery module never throws, filters paused destinations, times each attempt, and does not import _lib', () => {

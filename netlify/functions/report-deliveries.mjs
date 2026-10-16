@@ -35,6 +35,7 @@ import { sendSlackToOrg } from './send-slack.mjs';
 import { withHeartbeat } from './_heartbeat.mjs';
 import { writeAudit } from './_lib.mjs';
 import { runReport } from '../../src/utils/reportQuery.js';
+import { fiscalStartOf } from '../../src/utils/quarters.js';
 import {
     cleanDelivery, deliveryDue, deliveryHasChannel, deliveryTable, deliveryHtmlTable, slackBlocksForReport, periodLabel,
 } from '../../src/utils/reportDelivery.js';
@@ -74,7 +75,7 @@ export async function loadReportData(orgId, owner) {
     return {
         opportunities: opps, accounts: accts, leads: lds, activities: acts,
         settings: { ...(srow?.extra || {}), fiscalYearStart: srow?.fiscalYearStart || '' },
-        fiscalStart: parseInt(srow?.fiscalYearStart) || 10,
+        fiscalStart: fiscalStartOf(srow?.fiscalYearStart),
     };
 }
 

@@ -7,6 +7,11 @@ import { T } from '../shared/tokens.js';
 import { CField, CSelect, CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { MONTHS_SHORT, MONTHS_FULL, QUARTER_COLORS, QUARTER_INKS } from './constants.js';
+import { fiscalStartOf, currentQuarter } from '../../../utils/quarters.js';
+import { fiscalRange } from '../../../utils/reportPeriod.js';
+import { isoLocal } from '../../../utils/dateLocal.js';
+import { cleanQuotaPeriods } from '../../../utils/quotaPlan.js';
+import { fiscalYearDetail } from '../../../utils/settingsCards.js';
 
 const FiscalRibbon = ({ startMonth }) => {
     const quarters = [];
@@ -45,27 +50,50 @@ const FiscalRibbon = ({ startMonth }) => {
 };
 
 export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
-    const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
-    const [startMonth, setStartMonth] = useState(savedStart);
-    const [dirty, setDirty]   = useState(false);
+    // The month every screen reads (state §0.203): January when none is set — it showed
+    // October, so picking October changed nothing and saved nothing.
+    const savedStart = fiscalStartOf(settings?.fiscalYearStart) - 1; // DB is 1-indexed, UI is 0-indexed
+    const startNeverSet = fiscalYearDetail(settings?.fiscalYearStart) === null;   // the Settings card's own test: no month 1–12 saved
+    // How each rep's yearly quota is broken down — quarters or months (state §0.203).
+    const savedPeriods = cleanQuotaPeriods(settings?.quotaPeriods);
+    // With no month saved the select names none (state §0.203): it showed January — the month
+    // every screen then reads — and January could not be saved, picking the month shown being no change.
+    const savedPick = startNeverSet ? null : savedStart;
+    // A pick is held only once made (undefined until then, and again after a save): the page
+    // follows this org's saved settings — a copy taken at open went stale when they were read
+    // again, and the page then showed one month and saved the old one as a change.
+    const [picked, setPicked] = useState(undefined);
+    const [pickedPeriods, setPickedPeriods] = useState(undefined);
+    const startMonth = picked ?? savedPick;
+    const shownStart = startMonth ?? savedStart;   // what the page draws: January until a month is picked
+    const periods = pickedPeriods ?? savedPeriods;
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
+    // Unsaved is what differs from the saved settings — a pick back to them is no change.
+    const startChanged = picked !== undefined && picked !== savedPick;
+    const periodsChanged = pickedPeriods !== undefined && pickedPeriods !== savedPeriods;
+    const dirty = startChanged || periodsChanged;
 
-    const handleCancel = () => { setStartMonth(savedStart); setDirty(false); };
+    const handleCancel = () => { setPicked(undefined); setPickedPeriods(undefined); };
     const handleSave = async () => {
+        // Only what changed (Jeff, 15 Oct: "Send only what changed"): a page opened before
+        // another Admin's change must not put the old value back.
+        const payload = {};
+        if (startChanged) payload.fiscalYearStart = startMonth + 1; // 0-indexed UI to the 1-indexed DB (matches AppContext)
+        if (periodsChanged) payload.quotaPeriods = periods;
+        if (!Object.keys(payload).length) return;
         setSaving(true);
-        const dbValue = startMonth + 1; // convert 0-indexed UI to 1-indexed DB (matches AppContext)
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false)
             // OUTSIDE the try — so a 403 cleared the flag and reported success.
             // putSettings throws on non-2xx; the rethrow lets the navigation
             // guard know the save did not land.
-            await putSettings({ fiscalYearStart: dbValue });
+            await putSettings(payload);
             // The app's copy follows the save (state §0.170): set before it, a
             // refused save moved every quarter in the app anyway, until a reload.
-            setSettings(prev => ({ ...prev, fiscalYearStart: dbValue }));
+            setSettings(prev => ({ ...prev, ...payload }));
+            setPicked(undefined); setPickedPeriods(undefined);   // the page follows the saved settings again
             setSaveError('');
-            setDirty(false);
         } catch (e) {
             setSaveError(e.message);
             setSaving(false);
@@ -77,28 +105,23 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);
 
-    // Compute current period display
-    const now = new Date();
-    const calYear = now.getFullYear();
-    const fyEndMonth = (startMonth + 11) % 12;
-    const fyEndYear  = startMonth <= fyEndMonth ? calYear : calYear + 1;
-    const fyStartYear = startMonth > now.getMonth() ? calYear - 1 : calYear;
-    const fyLabel = `FY${String(fyStartYear + 1).slice(-2)}`;
-    const currentQ = Math.floor(((now.getMonth() - startMonth + 12) % 12) / 3) + 1;
-    const qStartM  = (startMonth + (currentQ - 1) * 3) % 12;
-    const qEndM    = (qStartM + 2) % 12;
-    const nextQStartM = (qStartM + 3) % 12;
-    const nextQDate = new Date(calYear, nextQStartM, 1);
-    const fyEndDate = new Date(fyEndYear, fyEndMonth + 1, 0);
-    const daysToNextQ = Math.round((nextQDate - now) / 86400000);
-    const daysToFYEnd = Math.round((fyEndDate - now) / 86400000);
+    // The current period from quarters.js, the reader every screen uses (state §0.203).
+    const fiscalStart = shownStart + 1;
+    const cq = currentQuarter(fiscalStart);
+    const fy = fiscalRange(cq.fiscalYear, 'FY', fiscalStart);
+    const day = (iso) => new Date(iso + 'T12:00:00');
+    const short = (iso) => `${MONTHS_SHORT[day(iso).getMonth()]} ${day(iso).getDate()}`;
+    // At noon, as `day`: from midnight, a spring-forward on the way read a day short.
+    const nextQStart = new Date(day(cq.to).getFullYear(), day(cq.to).getMonth(), day(cq.to).getDate() + 1, 12);
+    const daysTo = (d) => Math.round((d - day(isoLocal(new Date()))) / 86400000);
+    const savedQ = currentQuarter(savedStart + 1);
 
     return (
         <DetailPageChrome
             error={saveError}
             crumb="Fiscal year" title="Fiscal year"
             subtitle="Quarter starts and fiscal year alignment"
-            statusDetail={`Q1 starts ${MONTHS_SHORT[startMonth]} 1`}
+            statusDetail={`Q1 starts ${MONTHS_SHORT[shownStart]} 1`}
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >
@@ -108,21 +131,35 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
                     <CSectionCard title="Fiscal calendar" description={'Choose the month your fiscal year begins. Pipeline, forecast, and every report that says "this quarter" or "this FY" derives from this setting.'}>
                         <div style={{ display:'flex', gap:20, alignItems:'flex-start', marginBottom:24, flexWrap:'wrap' }}>
                             <CField label="Fiscal year starts">
-                                <CSelect value={String(startMonth)} onChange={v => { setStartMonth(parseInt(v)); setDirty(true); }}
-                                    options={MONTHS_FULL.map((m, i) => ({ value:String(i), label:m }))}/>
+                                <CSelect value={startMonth === null ? '' : String(startMonth)} onChange={v => setPicked(v === '' ? undefined : parseInt(v, 10))}
+                                    options={[...(startNeverSet ? [{ value:'', label:'Not set — January' }] : []), ...MONTHS_FULL.map((m, i) => ({ value:String(i), label:m }))]}/>
                             </CField>
                         </div>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:10, fontFamily:T.sans }}>Current quarter map · Calendar {calYear}</div>
-                        <FiscalRibbon startMonth={startMonth}/>
+                        {startNeverSet && !startChanged && (
+                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:-12, marginBottom:16, fontFamily:T.sans }}>
+                                Not set yet — every screen reads a January start until you save a month.
+                            </div>
+                        )}
+                        {startChanged && (shownStart === savedStart ? (
+                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:-12, marginBottom:16, fontFamily:T.sans }}>
+                                Saving records {MONTHS_FULL[shownStart]} — every screen reads it already, so nothing moves.
+                            </div>
+                        ) : (
+                            <div style={{ fontSize:11.5, color:T.warn, marginTop:-12, marginBottom:16, fontFamily:T.sans }}>
+                                Quota plans are kept by fiscal year. Moving the start changes which months each year's plan covers, and today becomes {cq.label} (it is {savedQ.label} now).
+                            </div>
+                        ))}
+                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:10, fontFamily:T.sans }}>Current quarter map · Calendar {new Date().getFullYear()}</div>
+                        <FiscalRibbon startMonth={shownStart}/>
                     </CSectionCard>
 
                     <CSectionCard title="Current period" description={"What Accelerep considers 'today' for every fiscal calculation."}>
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
                             {[
-                                { k:'Current fiscal year', v:fyLabel,              sub:`${MONTHS_SHORT[startMonth]} 1, ${fyStartYear} → ${MONTHS_SHORT[fyEndMonth]} ${fyEndDate.getDate()}, ${fyEndYear}` },
-                                { k:'Current quarter',     v:`Q${currentQ} ${fyLabel}`, sub:`${MONTHS_SHORT[qStartM]}–${MONTHS_SHORT[qEndM]}` },
-                                { k:'Next quarter start',  v:MONTHS_SHORT[nextQStartM]+' 1', sub:`in ${daysToNextQ} days` },
-                                { k:'Fiscal year-end',     v:`${MONTHS_SHORT[fyEndMonth]} ${fyEndDate.getDate()}`, sub:`in ${daysToFYEnd} days` },
+                                { k:'Current fiscal year', v:`FY${cq.fiscalYear}`, sub:`${short(fy.from)}, ${fy.from.slice(0,4)} → ${short(fy.to)}, ${fy.to.slice(0,4)}` },
+                                { k:'Current quarter',     v:cq.label,               sub:`${short(cq.from)} – ${short(cq.to)}` },
+                                { k:'Next quarter start',  v:`${MONTHS_SHORT[nextQStart.getMonth()]} 1`, sub:`in ${daysTo(nextQStart)} days` },
+                                { k:'Fiscal year-end',     v:short(fy.to),           sub:`in ${daysTo(day(fy.to))} days` },
                             ].map((c, i) => (
                                 <div key={i} style={{ padding:'12px 14px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
                                     <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4, fontFamily:T.sans }}>{c.k}</div>
@@ -133,20 +170,16 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
                         </div>
                     </CSectionCard>
 
-                    <CSectionCard title="Reporting adjustments" description="Advanced — how weeks and months roll up inside a quarter. Default 3-4-4 is standard for retail; 4-4-5 is common for financial services.">
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-                            {[
-                                { k:'3-4-4', on:true,  hint:'Standard calendar-month quarter' },
-                                { k:'4-4-5', on:false, hint:'13-week quarter, weekly alignment' },
-                                { k:'4-5-4', on:false, hint:'Retail 4-5-4 calendar' },
-                            ].map((o, i) => (
-                                <div key={i} style={{ padding:'12px 14px', border:`1.5px solid ${o.on ? T.goldInk : T.border}`, borderRadius:T.r, background: o.on ? 'rgba(200,185,154,0.12)' : T.surface, position:'relative' }}>
-                                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.serif }}>{o.k}</div>
-                                    <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{o.hint}</div>
-                                    {o.on && <div style={{ position:'absolute', top:8, right:10, fontSize:10, fontWeight:700, color:T.goldInk, letterSpacing:0.4, fontFamily:T.sans }}>● ACTIVE</div>}
-                                </div>
-                            ))}
-                        </div>
+                    <CSectionCard title="Quota periods" description="How each rep's yearly quota is broken down on the Sales Manager tab. Each rep's periods may ramp and must add up to their yearly quota; attainment is shown by quarter and year.">
+                        <CField label="Break yearly quotas into">
+                            <CSelect value={periods} onChange={v => setPickedPeriods(cleanQuotaPeriods(v))}
+                                options={[{ value:'quarters', label:'Quarters (4 a year)' }, { value:'months', label:'Months (12 a year)' }]}/>
+                        </CField>
+                        {periodsChanged && (
+                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:8, fontFamily:T.sans }}>
+                                Switching changes no saved figure. {periods === 'months' ? 'Each rep\'s months start as their quarters split three ways until saved.' : 'Each rep\'s quarters stay as saved.'}
+                            </div>
+                        )}
                     </CSectionCard>
                 </div>
 

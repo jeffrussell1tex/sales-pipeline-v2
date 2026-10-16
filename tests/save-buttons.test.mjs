@@ -116,7 +116,7 @@ const AFTER_SAVE = [
     ['salesProcess/LeadScoringDetail.jsx',      'putSettings({ leadScoring: cfg })',          'setSettings(prev => ({ ...prev, leadScoring: cfg }));'],
     ['salesProcess/LeadVisibilityDetail.jsx',   'putSettings(patch)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
     ['company/CompanyProfileDetail.jsx',        'putSettings(patch)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
-    ['company/FiscalYearDetail.jsx',            'putSettings({ fiscalYearStart: dbValue })',  'setSettings(prev => ({ ...prev, fiscalYearStart: dbValue }));'],
+    ['company/FiscalYearDetail.jsx',            'putSettings(payload)',                       'setSettings(prev => ({ ...prev, ...payload }));'],   // only what changed (state §0.203)
     ['dispatch/DispatchSkillsDetail.jsx',       'putSettings(payload)',                       'setSettings(prev => ({ ...prev, ...payload }));'],
     ['dispatch/DispatchCrewsDetail.jsx',        'putSettings({ dispatchCrews: crews })',      'setSettings(prev => ({ ...prev, dispatchCrews: crews }));'],
     ['dispatch/DispatchJobTemplatesDetail.jsx', 'putSettings({ dispatchJobTemplates: clean })', 'setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));'],
@@ -216,17 +216,17 @@ test('every way out of a tab asks first on a page with unsaved edits — the gua
 test('Sales Manager: quotas, the commission plan and the SPIFF board are drafts until their card\'s Save', () => {
     const s = code(read('src/Tabs/SalesManagerTab.jsx'));
     assert.ok(!/onBlur=\{[^}]*save(Tiers|Spiffs)/.test(s) && !/commit(Tiers|Spiffs|Annual)|applyTiers|applySpiffs/.test(s), 'nothing saves on blur or as typed');
-    const card = between(s, 'function QuotaRepCard(', 'return null;');
-    assert.ok(!/updateRepField|onBlur=\{e=>commit/.test(card), 'a quota input saves nothing');
-    assert.ok(card.includes("const shown = (field) => (draft && field in draft) ? draft[field] : (u[field] != null ? String(u[field]) : '');"));
+    const row = between(s, 'function QuotaRow(', '\n}\n');
+    assert.ok(!/updateRepField|dbFetch|onBlur/.test(row), 'a quota input saves nothing');
+    assert.ok(s.includes('    const rowOf = (u) => quotaDraftRow(u, planYear, breakdown, quotaDrafts[u.id]);'), 'a row shows the draft, else the year\'s plan (state §0.203)');
     for (const [label, save, cancel] of [['Save quotas', 'saveQuotas', 'cancelQuotas'], ['Save plan', 'saveCommission', 'cancelCommission'], ['Save SPIFFs', 'saveSpiffBoard', 'cancelSpiffBoard']]) {
         assert.ok(s.includes(`<DraftActions label="${label}" busy={busy} onSave={${save}} onCancel={${cancel}}/>`), label);
     }
     assert.ok(s.includes("{canEditIncentives && <button onClick={()=>editSpiffs([...spiffList,{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}])}"),
         '"+ Add SPIFF" adds to the draft — it put a blank, active $0 SPIFF live');
     assert.ok(s.includes("if (spiffsDraft.some(sp => !String(sp.name || '').trim())) throw refuse('give every SPIFF a name.');"), 'a SPIFF goes live only with a name');
-    assert.ok(s.includes("if (isNaN(n) || n < 0) throw refuse(`${rep.name}'s quota must be a number, 0 or more.`);"),
-        'a quota is a number, 0 or more — refused before anything is saved');
+    assert.ok(s.includes('            if (check) throw refuse(quotaRefusal(rep.name, planYear, check, quotaBreakdown));'),
+        'whole dollars that add up to the year — refused before anything is saved (state §0.203)');
 });
 
 test('Sales Manager: the drafts are the page\'s — kept across sub-tabs, dropped on an org switch, saved by the leave guard', () => {
@@ -240,7 +240,7 @@ test('Sales Manager: the drafts are the page\'s — kept across sub-tabs, droppe
     const all = between(page, 'const saveAdminDrafts = async () => {', '};');
     assert.ok(all.includes('await saveQuotas();') && all.includes('await saveCommission();') && all.includes('await saveSpiffBoard();'));
     assert.ok(/if \(!await saveExtra\(\{ quotaData \}, 'commission tiers'\)\) throw new Error/.test(page), 'a refused save throws');
-    assert.ok(/if \(!await saveUser\(user, 'quotas'\)\) throw new Error/.test(page));
+    assert.ok(page.includes("        if (!res.ok) throw res.status < 500 && answer.error ? refuse(answer.error) : unsure(`The server returned ${res.status} — reload the page to see whether the quotas were saved.`);"), 'a refused quota save throws');
 });
 
 test('Sales Manager: a rep is read from state, not out of a state updater — the save was skipped when React ran it later', () => {
@@ -249,9 +249,7 @@ test('Sales Manager: a rep is read from state, not out of a state updater — th
     assert.ok(upd.includes('const rep = (settings.users || []).find(u => u.id === userId);'));
     assert.ok(!/let updatedUser|updatedUser = updatedUsers/.test(s), 'no value smuggled out of an updater');
     before(upd, "if (!await saveUser({ ...rep, [field]: value }, 'forecast call')) return false;", 'setSettings(prev =>', 'the copy follows the save');
-    const mode = between(s, 'const setAllQuotaMode = async (mode) => {', '\n    };');
-    assert.ok(mode.includes("const toSave = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && u.quotaType !== mode)"));
-    assert.ok(!/let toSave/.test(mode));
+    assert.ok(!s.includes('setAllQuotaMode'), 'the Annual / Quarterly switch is gone: a plan per fiscal year, one checked save (state §0.203)');
 });
 
 // ── one word for saving ────────────────────────────────────────────────────

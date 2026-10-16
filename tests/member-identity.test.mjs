@@ -46,7 +46,8 @@ test('the merge keeps the stored login link, status and access, whatever the bod
         '            ...flatten(existing), ...data,',
         '            clerkUserId: existing.clerkUserId || null,',
         '            status:      existing.profile?.status || null,',
-        '            active:      isAccessChange(data) ? data.active : existing.active,');
+        '            active:      isAccessChange(data) ? data.active : existing.active,',
+        '            ...storedQuota(existing.profile),');   // the quota too (state §0.203)
 });
 
 test('a create stores no login link, status or access — a member starts on; a sign-in by its email, or an Admin\'s sync, links it', () => {
@@ -93,7 +94,7 @@ test('upsertUser\'s update-only mode is an update of this org\'s row — never a
     const up = between(U(), '        const upsertUser = async (clean, { updateOnly = false } = {}) => {', "        if (event.httpMethod === 'POST') {");
     order(up,
         '                const [row] = updateOnly',
-        '                    ? await db.update(users).set({ ...updateData, updatedAt: new Date() })',
+        '                    ? await db.update(users).set({ ...updateData, profile: keepQuotaPlans(updateData.profile), updatedAt: new Date() })',
         '                        .where(and(eq(users.id, id), eq(users.orgId, orgId))).returning()',
         '                    : await db',
         '                    .insert(users)',
@@ -121,7 +122,7 @@ test('the member\'s own save is update-only: a row removed since the caller cach
         '            let saved;',
         '                [saved] = await db',
         '                    .update(users)',
-        '                    .set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })',
+        '                    .set({ ...updateData, profile: keepQuotaPlans(updateData.profile), clerkUserId: userId, updatedAt: new Date() })',
         '                    .where(and(eq(users.id, data.id), eq(users.orgId, orgId)))',
         "                if (isEmailTaken(err)) return { statusCode: 409, headers, body: JSON.stringify({ error: EMAIL_TAKEN, field: 'email' }) };",
         '                throw err;',
@@ -163,17 +164,9 @@ test('the member profile page (Settings → Users) sends what it edits — never
     assert.ok(!/JSON\.stringify\(\{?\s*\.\.\.form/.test(profile), 'the form as loaded is never what is sent');
 });
 
-test('the Sales Manager tab: the Annual / Quarterly switch is an Admin\'s, and a refused save shows the server\'s words, naming the member', () => {
+test('the Sales Manager tab: no Annual / Quarterly switch saves every member any more (state §0.203), and a refused save shows the server\'s words, naming the member', () => {
     const m = code(read('src/Tabs/SalesManagerTab.jsx'));
-    order(between(m, 'function AdminTab(', 'export default function SalesManagerTab() {'),
-        '                    {!isAdmin && (',
-        "<span style={{ fontSize:10, fontWeight:700, color:T.inkMid, fontFamily:T.sans }}>{quotaMode==='annual'?'Annual quotas':'Quarterly quotas'}</span>",
-        "                    {isAdmin && <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>",
-        '<button key={t} onClick={()=>setAllQuotaMode(t)}',
-        '                    </div>}');
-    order(between(m, '    const setAllQuotaMode = async (mode) => {', '    };'),
-        '        if (!isAdmin) return;',
-        '        const askedOrg = requestOrg();');
+    assert.ok(!m.includes('setAllQuotaMode') && !m.includes('quotaMode'), 'the per-member mode and its switch are gone: a plan per fiscal year, one checked save');
     order(between(m, '    const saveUser = async (user, label) => {', '    };'),
         '            if (!res.ok) {',
         '                const d = await res.json().catch(() => ({}));',

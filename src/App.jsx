@@ -5,6 +5,7 @@ import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal } from './utils/dateLocal';
+import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
@@ -855,41 +856,18 @@ dbFetch('/.netlify/functions/users?me=true')
     const avgRevenue = activeOpps > 0 ? totalRevenue / activeOpps : 0;
     
     // Calculate forecasted revenue by quarter
+    // The company's fiscal quarter of a day, from quarters.js — the one reader of the
+    // start (fiscalStartOf: January when none is set) and a plain date read as a local
+    // day (state §0.203). This copy parsed '2026-10-01' as UTC — 30 Sep west of
+    // Greenwich — and fell back to October where the Pipeline list fell back to January.
     const getQuarter = (dateString) => {
-        const date = new Date(dateString);
-        const month = date.getMonth() + 1; // 1-12
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
-        // How many months into the fiscal year is this date?
-        // monthsIn = 0 means first month of FY, 1 = second, etc.
-        const monthsIn = ((month - fiscalStart + 12) % 12);
-        if (monthsIn < 3) return 'Q1';
-        if (monthsIn < 6) return 'Q2';
-        if (monthsIn < 9) return 'Q3';
-        return 'Q4';
+        const qk = quarterOf(dateString, fiscalStartOf(settings.fiscalYearStart));
+        return qk ? `Q${qk.q}` : '';
     };
 
     const getQuarterLabel = (quarter, dateString) => {
-        const date = new Date(dateString);
-        const month = date.getMonth() + 1;
-        const year = date.getFullYear();
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
-        // Fiscal year number = calendar year of the fiscal year END
-        // If fiscal starts Oct, then Oct 2025 → FY2026, Jan 2026 → FY2026
-        // monthsIn tells how far into the FY we are
-        const monthsIn = ((month - fiscalStart + 12) % 12);
-        // The fiscal year "ends" 12 - fiscalStart months after Jan 1
-        // If monthsIn puts us in the first part of the FY that spans into next cal year:
-        // fiscalStart > 1 means the FY starts partway through the calendar year
-        // months before fiscalStart belong to FY that started in PREVIOUS calendar year
-        let fiscalYear;
-        if (fiscalStart === 1) {
-            fiscalYear = year; // Jan start = simple calendar year
-        } else if (month >= fiscalStart) {
-            fiscalYear = year + 1; // e.g. Oct 2025 → FY2026
-        } else {
-            fiscalYear = year; // e.g. Jan 2026 → FY2026 (same year as end)
-        }
-        return `FY${fiscalYear} ${quarter}`;
+        const qk = quarterOf(dateString, fiscalStartOf(settings.fiscalYearStart));
+        return qk ? `FY${qk.fiscalYear} ${quarter}` : '';
     };
 
     // Populate getQuarter refs now that the functions are defined
@@ -1765,6 +1743,9 @@ dbFetch('/.netlify/functions/users?me=true')
         currentUser,
         currentUserId,
         myProfile,   // the caller's own users row (/users?me) — the contact rail names the owner of a pre-§0.104 row from it
+        // The same row, only once it is THIS org's (roleKnown): Home's and Reports' own quota read it —
+        // a rep's member list is names only — and never the last org's figures mid-switch (state §0.203).
+        myProfileHere: roleKnown ? myProfile : null,
         setMyProfile, // the pin list on it is edited from the report library (state §0.135)
         userRole,
         clerkUser,

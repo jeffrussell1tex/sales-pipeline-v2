@@ -38,6 +38,21 @@ export function serverErrorBody(err, label = 'function') {
     return JSON.stringify({ error: 'Internal server error', requestId });
 }
 
+// A member's profile as a whole-profile write stores it, with the quota plans the row holds
+// when the write lands (state §0.203). Every save of a member — the PUT, the member's own
+// save, a role change, a re-invitation, the first sign-in's link — reads the row, then
+// writes the whole profile back: a quota save (PUT /users?quotas=true, their one writer)
+// landing between that read and the write was put back to the plans read, silently. The
+// row's own key at write time, or none when it holds none; anything else — a profile that
+// is no object, or none sent — is written as given.
+export function keepQuotaPlans(profile) {
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return profile;
+    const sent = JSON.stringify(profile);
+    return sql`(case when ${users.profile} -> 'quotaPlans' is not null
+        then jsonb_set(${sent}::jsonb, '{quotaPlans}', ${users.profile} -> 'quotaPlans')
+        else ${sent}::jsonb - 'quotaPlans' end)`;
+}
+
 // Best-effort audit-log writer shared by entity endpoints. Never throws —
 // an audit failure must not fail (or roll back the visibility of) the
 // operation being audited; it is logged server-side instead.

@@ -18,6 +18,7 @@ import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 // A key a workspace has never saved is the shared default (state §0.170) — the
 // app's own copy, so a read, a save and the app's first paint agree.
 import { settingsSeeds, DEFAULT_SETTINGS } from '../../src/utils/settingsDefaults.js';
+import { QUOTA_PERIODS, cleanQuotaPeriods } from '../../src/utils/quotaPlan.js';
 
 // ── BYOK key quarantine ──────────────────────────────────────────────
 // The org's Anthropic key may only ever live in extra.anthropicApiKey, as
@@ -202,6 +203,9 @@ export const handler = async (event) => {
                 // May sales reps use Dispatch (§0.152)? OFF when absent — Jeff: reps "should
                 // not have dispatch power". Both halves; dispatchAccessOf reads it.
                 repsCanUseDispatch:   row.extra?.repsCanUseDispatch    ?? false,
+                // How each rep's yearly quota is broken down (state §0.203): quarters or
+                // months, quarters when absent. Both halves; the quota writer reads it too.
+                quotaPeriods:         cleanQuotaPeriods(row.extra?.quotaPeriods),
                 dispatchSkills:       row.extra?.dispatchSkills        || [],
                 // Dispatch premises segment for a service customer. Distinct from
                 // `customerTypes` above, which is the CRM account-tier vocabulary.
@@ -242,6 +246,12 @@ export const handler = async (event) => {
             if (forbidden) return forbidden;
 
             const data = body;
+
+            // A company's quota periods are quarters or months (state §0.203) — anything
+            // else is refused, never stored.
+            if ('quotaPeriods' in data && !QUOTA_PERIODS.includes(data.quotaPeriods)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Quota periods are quarters or months.' }) };
+            }
 
             // A stored webhook is a URL this server POSTs to on every pipeline
             // alert (send-slack.mjs). Pin it to Slack at save time so the card
@@ -388,6 +398,7 @@ export const handler = async (event) => {
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
                 dispatchEnabled:      'dispatchEnabled'      in data ? !!data.dispatchEnabled               : existingExtra.dispatchEnabled       ?? false,
                 repsCanUseDispatch:   'repsCanUseDispatch'   in data ? !!data.repsCanUseDispatch            : existingExtra.repsCanUseDispatch    ?? false,
+                quotaPeriods:         'quotaPeriods'         in data ? data.quotaPeriods                    : cleanQuotaPeriods(existingExtra.quotaPeriods),
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],
                 dispatchPropertyTypes: 'dispatchPropertyTypes' in data ? (data.dispatchPropertyTypes || []) : existingExtra.dispatchPropertyTypes || [],
                 dispatchCerts:        'dispatchCerts'        in data ? (data.dispatchCerts        || [])   : existingExtra.dispatchCerts         || [],

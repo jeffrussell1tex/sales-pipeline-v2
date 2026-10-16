@@ -28,7 +28,7 @@ const ADMIN_ONLY = [
     'role', 'userType', 'active', 'status',
     'team', 'teamId', 'territory', 'vertical', 'manager', 'teamJoinedAt',
     'quota', 'annualQuota', 'q1Quota', 'q2Quota', 'q3Quota', 'q4Quota', 'quotaType',
-    'forecastCalls',
+    'forecastCalls', 'quotaPlans',
 ];
 
 test('the allowlist is frozen, carries the personal fields, and none of the administrative ones', () => {

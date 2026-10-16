@@ -245,7 +245,7 @@ test('ReportsTab: the prompt is read into the builder (every part a chip), the f
     assert.ok(s.includes("const builderDefinition = () => ({ source: builderSource, dims: builderDims, metrics: builderMetrics, period: builderPeriod, from: builderFrom, to: builderTo, where: builderWhere, limit: builderChart === 'table' ? 200 : 12 });"));
     assert.ok(s.includes("filters:{ period: builderPeriod, from: builderPeriod==='custom' ? builderFrom : '', to: builderPeriod==='custom' ? builderTo : '', where: builderWhere }"), 'saved with the report');
     assert.ok(s.includes("const where = Array.isArray(r.filters?.where) ? r.filters.where : [];") && s.includes('setBuilderWhere(where);'), 'a saved report reopens with its filters');
-    assert.ok(s.includes("setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));"));
+    assert.ok(s.includes("setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) }));"));
     assert.ok(s.includes('<WhereEditor source={builderSource} where={builderWhere} onChange={w=>{ setBuilderWhere(w); setBuilderDirty(true); }}/>'), 'the Filters tab edits them');
     assert.ok(s.includes('<option value="custom">Custom range…</option>'), 'the custom range is offered');
     assert.ok(s.includes("<PromptBanner interpretation={aiInterpretation} onEdit={()=>{ setAiPrompt(aiInterpretation.prompt); setCreateMode('picker'); }} onDismiss={()=>setAiInterpretation(null)}/>"), 'Edit prompt restores the sentence');

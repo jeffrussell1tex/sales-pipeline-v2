@@ -24,7 +24,7 @@
 // names and roster names become equality filters ("in Proposal", "Karen's
 // deals"); without them those words are left alone — never guessed.
 import { fieldsFor, filtersFor, whereLabel, isReportSource, REPORT_CHARTS, REPORT_PERIODS } from './reportQuery.js';
-import { quarterOf } from './quarters.js';
+import { quarterOf, fiscalStartOf } from './quarters.js';
 import { fiscalRange, priorRange } from './reportPeriod.js';
 import { isoLocal, parseLocalDate } from './dateLocal.js';
 
@@ -247,7 +247,7 @@ const TIME_DIM = { Opportunities: 'close_date', Accounts: 'created_date', Leads:
  */
 export function interpretPrompt(text, opts = {}) {
     const today = opts.today instanceof Date ? opts.today : new Date();
-    const fiscalStart = Number.isFinite(Number(opts.fiscalStart)) ? Number(opts.fiscalStart) : 10;
+    const fiscalStart = fiscalStartOf(opts.fiscalStart);   // the one reader: January when none (state §0.203)
     const raw = str(text).trim();
     let t = ' ' + normalizePrompt(raw) + ' ';
     const consume = (re) => { t = t.replace(re, ' '); };

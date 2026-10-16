@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { useAuth } from '@clerk/clerk-react';
-import { quarterOf, quarterStartDate, quarterEndDate } from '../utils/quarters';
+import { quarterOf, quarterStartDate, quarterEndDate, fiscalStartOf } from '../utils/quarters';
 import { isoLocal } from '../utils/dateLocal';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
@@ -35,16 +35,19 @@ const fmtArr = v => v >= 1000000 ? '$'+(v/1000000).toFixed(1)+'M' : v >= 1000 ? 
 // ─────────────────────────────────────────────────────────────
 //  QuotaBar
 // ─────────────────────────────────────────────────────────────
-function QuotaBar({ closedArr, commitArr, quota, label }) {
-    const closedPct = quota > 0 ? Math.min(100, (closedArr / quota) * 100) : 0;
-    const commitPct = quota > 0 ? Math.min(100 - closedPct, (commitArr / quota) * 100) : 0;
+// `ready` is false until this org's profile and settings are in (state §0.203): the card waits
+// rather than read the last org's figures or a default year. No quota is said, never "of $0".
+function QuotaBar({ closedArr, commitArr, quota, label, ready = true }) {
+    const has = ready && quota > 0;   // the bars wait for this org too
+    const closedPct = has ? Math.min(100, (closedArr / quota) * 100) : 0;
+    const commitPct = has ? Math.min(100 - closedPct, (commitArr / quota) * 100) : 0;
 
     return (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '1rem 1.25rem' }}>
             <div style={{ ...eyebrow(T.goldInk), marginBottom: '0.5rem' }}>{label || 'Q2 Quota'}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem', marginBottom: '0.25rem' }}>
                 <span style={{ fontSize: '1.5rem', fontWeight: '700', color: T.ink, fontFamily: T.sans, lineHeight: 1 }}>{fmtArr(closedArr)}</span>
-                <span style={{ fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>of {fmtArr(quota)}</span>
+                <span style={{ fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>{!ready ? '…' : quota > 0 ? `of ${fmtArr(quota)}` : 'No quota set'}</span>
             </div>
             <div style={{ height: '8px', background: T.border, borderRadius: '2px', overflow: 'hidden', marginBottom: '0.5rem', display: 'flex' }}>
                 <div style={{ width: closedPct + '%', background: T.ink, height: '100%', transition: 'width 0.4s' }}/>
@@ -53,11 +56,11 @@ function QuotaBar({ closedArr, commitArr, quota, label }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ display: 'inline-block', width: '8px', height: '8px', background: T.ink, borderRadius: '1px' }}/>
-                    Closed {Math.round(closedPct)}%
+                    Closed {has ? Math.round(closedPct) + '%' : '—'}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ display: 'inline-block', width: '8px', height: '8px', background: T.gold, borderRadius: '1px' }}/>
-                    + Commit {Math.round(closedPct + commitPct)}%
+                    + Commit {has ? Math.round(closedPct + commitPct) + '%' : '—'}
                 </span>
             </div>
         </div>
@@ -155,7 +158,8 @@ export default function HomeTab() {
         calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
         coachingNotes, markCoachingNoteRead, currentUserId,
-        myProfile, leads,
+        myProfile, myProfileHere, leads,
+        settingsOrgId, activeOrgId,
         setEditingOpp, setShowModal,
         setEditingTask,
         setTaskRailId, setTaskRailMode,
@@ -186,7 +190,7 @@ export default function HomeTab() {
         const ids = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];
         if (!ids.length || !homeReports.length) return [];
         const data = { opportunities: visibleOpportunities || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} };
-        const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+        const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
         return ids.map(id => homeReports.find(r => r.id === id)).filter(Boolean).map(r => ({
             report: r,
             chartType: REPORT_CHARTS.some(c => c.id === r.chartType) ? r.chartType : 'table',
@@ -232,11 +236,9 @@ export default function HomeTab() {
     // in scope (getQuarter, from the context) and simply not called; the quota card
     // now reads quarters.js and pipelineReport.js directly (§0.84).
     //
-    // Default 10 matches App.jsx, OpportunityModal, AnalyticsDashboard and
-    // ReportsTab. NOTE: ListView.jsx:349 defaults to 1 instead, so an org that has
-    // never set fiscalYearStart gets calendar quarters there and October quarters
-    // everywhere else. Not fixed here — flagged for the consolidation pass.
-    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+    // The start is read by quarters.js's fiscalStartOf, as on every screen (state
+    // §0.203): January when the company has set none.
+    const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
     const todayQk     = quarterOf(todayStr, fiscalStart);
     const quarter     = todayQk ? todayQk.q : Math.floor(now.getMonth() / 3) + 1;
 
@@ -393,8 +395,11 @@ export default function HomeTab() {
     // all evening.
     const quarterStart = isoLocal(todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), (quarter-1)*3, 1));
     const quarterEnd   = isoLocal(todayQk ? quarterEndDate(todayQk.fiscalYear, todayQk.q, fiscalStart)   : new Date(now.getFullYear(), quarter*3, 0));
-    const myUserObj      = (settings?.users || []).find(u => u.name === currentUser);
-    const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`);
+    // The member's own row for this org (state §0.203): a rep's settings.users is the
+    // directory, names only, so the card read $0 of $0. This quarter of THIS fiscal year's plan.
+    const myUserObj      = myProfileHere;
+    const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`, todayQk?.fiscalYear);
+    const quotaReady     = !!myProfileHere && !!activeOrgId && settingsOrgId === activeOrgId;
 
     // Always scoped to current user — canSeeAll Admins/Managers still see their own home
     const myOpps         = visibleOpportunities.filter(o => !o.salesRep || o.salesRep === currentUser);
@@ -848,6 +853,7 @@ export default function HomeTab() {
                             commitArr={myCommitARR}
                             quota={quarterlyQuota}
                             label={`${qLabel} Quota`}
+                            ready={quotaReady}
                         />
 
                         {/* SPIFFS — reps and managers only */}

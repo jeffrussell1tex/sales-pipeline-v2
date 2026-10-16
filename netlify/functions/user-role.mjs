@@ -3,7 +3,7 @@ import { users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { isAppUserId } from './_ownership.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, keepQuotaPlans } from './_lib.mjs';
 
 // Change a user's role IN THIS ORG.
 //
@@ -116,7 +116,7 @@ export const handler = async (event) => {
         // A drizzle UPDATE that matches nothing does NOT throw, so count the rows:
         // this write is the role change itself, not a mirror of one.
         const touched = await db.update(users)
-            .set({ role, profile: { ...(target.profile || {}), userType: role }, updatedAt: new Date() })
+            .set({ role, profile: keepQuotaPlans({ ...(target.profile || {}), userType: role }), updatedAt: new Date() })   // the plans as they stand (state §0.203)
             .where(and(eq(users.id, targetUserId), eq(users.orgId, orgId)))
             .returning({ id: users.id });
         if (touched.length !== 1) {

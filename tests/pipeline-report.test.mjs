@@ -11,40 +11,50 @@ import { readFileSync } from 'node:fs';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, closeDayOf, openPipelineByRep, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../src/utils/pipelineReport.js';
 import { repsInScopeOf } from '../src/utils/reportScope.js';
 
-// ── quotas ──────────────────────────────────────────────────────────────────
+// ── quotas (state §0.203: a plan per fiscal year; a quarter reads its own year's plan) ──────────────
 
-const ANNUAL    = { name: 'Karen Russell',   userType: 'User', quotaType: 'annual',    annualQuota: 400000 };
-const QUARTERLY = { name: 'Savannah Miller', userType: 'User', quotaType: 'quarterly', q1Quota: 100000, q2Quota: 100000, q3Quota: 300000, q4Quota: 500000 };
-const ADMIN     = { name: 'Jeff Russell',    userType: 'Admin', quotaType: 'annual', annualQuota: 999999 };
-const USERS = [ANNUAL, QUARTERLY, ADMIN, { name: 'Ryan Algie', userType: 'Technician' }];
+const plan = (annual, quarters, months = null) => ({ annual, quarters, months });
+const KAREN    = { name: 'Karen Russell',   userType: 'User', quotaPlans: { '2026': plan(400000, [100000, 100000, 100000, 100000]), '2027': plan(500000, [100000, 100000, 125000, 175000]) } };
+const SAVANNAH = { name: 'Savannah Miller', userType: 'User', quotaPlans: { '2027': plan(1000000, [100000, 100000, 300000, 500000]) } };
+const ADMIN    = { name: 'Jeff Russell',    userType: 'Admin', quotaPlans: { '2027': plan(999999, [0, 0, 0, 999999]) } };
+const OLD_KEYS = { name: 'Old Keys',        userType: 'User', quotaType: 'annual', annualQuota: 400000, q1Quota: 100000 };
+const USERS = [KAREN, SAVANNAH, ADMIN, { name: 'Ryan Algie', userType: 'Technician' }, OLD_KEYS];
 
-test('REGRESSION: a quarter gets a quarter of an annual plan, and the quarter\'s own figure on a quarterly plan', () => {
-    assert.equal(userQuotaFor(ANNUAL, 'Q3'), 100000);
-    assert.equal(userQuotaFor(QUARTERLY, 'Q3'), 300000, 'not the average of the four');
-    assert.equal(userQuotaFor(QUARTERLY, 'Q4'), 500000);
+test('REGRESSION: a quarter reads its own quarter of its own year\'s plan — a ramp, never the year ÷ 4', () => {
+    assert.equal(userQuotaFor(KAREN, 'Q4', 2027), 175000);
+    assert.equal(userQuotaFor(SAVANNAH, 'Q3', 2027), 300000, 'not the average of the four');
+    assert.equal(userQuotaFor(KAREN, 'Q4', 2026), 100000, 'last year\'s plan for last year\'s quarter');
 });
 
-test('the year is the annual figure, or the four quarters summed', () => {
-    for (const p of ['FY', 'all', 'custom', '']) {
-        assert.equal(userQuotaFor(ANNUAL, p), 400000, p);
-        assert.equal(userQuotaFor(QUARTERLY, p), 1000000, p);
-    }
+test('REGRESSION: a year with no plan reads 0 — never another year\'s plan; the old keys carry no year and are never read', () => {
+    assert.equal(userQuotaFor(SAVANNAH, 'Q1', 2026), 0);
+    assert.equal(userQuotaFor(KAREN, 'Q1', 2028), 0);
+    assert.equal(userQuotaFor(OLD_KEYS, 'FY', 2027), 0);
+    assert.equal(userQuotaFor(OLD_KEYS, 'Q1', 2027), 0);
+});
+
+test('the year is the plan\'s yearly figure; any other period, or no year named, is 0', () => {
+    assert.equal(userQuotaFor(KAREN, 'FY', 2027), 500000);
+    for (const p of ['all', 'custom', '']) assert.equal(userQuotaFor(KAREN, p, 2027), 0, p);
+    assert.equal(userQuotaFor(KAREN, 'Q1'), 0, 'no year named');
+    assert.equal(userQuotaFor(KAREN, 'Q1', '2027'), 0, 'a year is a number');
 });
 
 test('no plan, no user: 0 — never a made-up number', () => {
-    assert.equal(userQuotaFor({ name: 'x' }, 'Q1'), 0);
-    assert.equal(userQuotaFor(null, 'FY'), 0);
-    assert.equal(teamQuotaFor([], 'FY', {}), 0);
+    assert.equal(userQuotaFor({ name: 'x' }, 'Q1', 2027), 0);
+    assert.equal(userQuotaFor(null, 'FY', 2027), 0);
+    assert.equal(teamQuotaFor([], 'FY', {}, 2027), 0);
 });
 
-test('REGRESSION: the team quota is the reps\' configured quotas, not $175,000', () => {
-    assert.equal(teamQuotaFor(USERS, 'FY', {}), 1400000, 'Admin excluded; the technician has none');
-    assert.equal(teamQuotaFor(USERS, 'Q3', {}), 400000);
+test('REGRESSION: the team quota is the reps\' plans for the year, not $175,000', () => {
+    assert.equal(teamQuotaFor(USERS, 'FY', {}, 2027), 1500000, 'Admin excluded; the technician and the old keys have none');
+    assert.equal(teamQuotaFor(USERS, 'Q3', {}, 2027), 425000);
+    assert.equal(teamQuotaFor(USERS, 'FY', {}, 2026), 400000, 'only Karen planned FY2026');
 });
 
 test('the team quota follows the slice', () => {
-    assert.equal(teamQuotaFor(USERS, 'FY', { rep: 'Karen Russell' }), 400000);
-    assert.equal(teamQuotaFor([...USERS.map(u => ({ ...u, team: u.name === 'Savannah Miller' ? 'West' : 'East' }))], 'Q4', { team: 'West' }), 500000);
+    assert.equal(teamQuotaFor(USERS, 'FY', { rep: 'Karen Russell' }, 2027), 500000);
+    assert.equal(teamQuotaFor(USERS.map(u => ({ ...u, team: u.name === 'Savannah Miller' ? 'West' : 'East' })), 'Q4', { team: 'West' }, 2027), 500000);
 });
 
 // ── movement ────────────────────────────────────────────────────────────────
@@ -141,10 +151,10 @@ test('ReportsTab: no $175,000, no att: 1.0, no Lost: 0; the helpers are what ren
     assert.doesNotMatch(src, /att: 1\.0/);
     assert.doesNotMatch(src, /fcPath/, 'no forecast line drawn from the actual');
     assert.doesNotMatch(src, /key:'lost',\s+label:'Lost',\s+value:0/);
-    assert.match(src, /const quota = teamQuotaFor\(settings\.users, reportTimePeriod,/);
+    assert.match(src, /const quota = teamQuotaFor\(quotaUsers, reportTimePeriod, \{ rep: reportsRep, team: reportsTeam, territory: reportsTerritory \}, currentFiscalYear\(fiscalStart\)\);/, 'the reps\' plans for this fiscal year, the member\'s own row filled (state §0.203)');
     assert.match(src, /const mv = pipelineMovement\(reportsOpps,/);
     assert.match(src, /const fxHistory = closedWonByQuarter\(reportsOpps, fiscalStart,/);
-    assert.match(src, /const getUserQuota = \(u\) => userQuotaFor\(u, reportTimePeriod\);/, 'the Performance leaderboard divides period revenue by period quota');
+    assert.match(src, /const getUserQuota = \(u\) => userQuotaFor\(u, reportTimePeriod, currentFiscalYear\(fiscalStart\)\);/, 'the Performance leaderboard divides period revenue by period quota');
     assert.doesNotMatch(src, /settings\.quotaData\?\.quarterlyQuota/, 'a field nothing writes');
 });
 

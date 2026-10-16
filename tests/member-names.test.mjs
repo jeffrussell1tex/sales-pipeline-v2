@@ -285,7 +285,7 @@ test('users.mjs: the self PUT, the Admin/Manager PUT and the create decide the n
         'const clean = withRole(',
         '            const selfNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);',
         '            if (selfNameTaken) return nameTaken(selfNameTaken);',
-        '.set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })');   // update-only (state §0.202)
+        '.set({ ...updateData, profile: keepQuotaPlans(updateData.profile), clerkUserId: userId, updatedAt: new Date() })');   // update-only (state §0.202)
 
     const create = between(u, "            const createRole = data.userType || data.role || 'User';", "        if (event.httpMethod === 'PUT') {");
     order(create,

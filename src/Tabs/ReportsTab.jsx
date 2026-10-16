@@ -7,7 +7,9 @@ import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
 import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf } from '../utils/reportScope';
-import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
+import { periodRange, priorRange, inRange, dayOf, currentFiscalYear, fiscalRange } from '../utils/reportPeriod';
+import { withOwnPlans } from '../utils/quotaPlan.js';
+import { fiscalStartOf } from '../utils/quarters';
 import { escapeHtml as esc, taskDay, linkedToAccount, linkedToContact, contactTouch, monthsSpanned } from '../utils/historyFeed';
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
@@ -58,9 +60,13 @@ export default function ReportsTab({ leadsEnabled = true }) {
         isMobile,
         setViewingAccount,
         showConfirm,
+        myProfileHere,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
+    // The member list with the signed-in member's own plans on their own row (state §0.203):
+    // a rep's list is the directory, names only, so their own quota read $0 here too.
+    const quotaUsers = withOwnPlans(settings.users, myProfileHere);
     const isManager = userRole === 'Manager';
     // A Dispatcher reads the whole org's CRM (§0.151): their reports cover every
     // rep, like an Admin's, and the rep / team / territory slices — read-only
@@ -204,7 +210,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 // local clock (dayOf); the comparison baseline starts from the
                 // SLICED set so a rep's period is compared with that rep's prior
                 // period, and "All time" has no previous period.
-                const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+                const fiscalStart = fiscalStartOf(settings.fiscalYearStart);
                 const reportRange = periodRange(reportTimePeriod, fiscalStart, { from: reportDateFrom, to: reportDateTo });
                 const reportsTimedOpps = reportRange
                     ? reportsOpps.filter(o => inRange(dayOf(o.forecastedCloseDate || o.createdDate), reportRange))
@@ -481,7 +487,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             // this was a hardcoded dollar figure behind two fallbacks that read
                             // fields nothing writes (0.68 item 3). 0 means no quota is set, and the
                             // ring says so instead of measuring against an invented number.
-                            const quota = teamQuotaFor(settings.users, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory });
+                            // This fiscal year's plans (state §0.203); All time and custom dates have none.
+                            const quota = teamQuotaFor(quotaUsers, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory }, currentFiscalYear(fiscalStart));
                             // The org's open stages, in order (settings.funnelStages, else the app
                             // defaults). Every stage list on this tab derives from it: six hardcoded
                             // lists named stages no deal can be in and omitted real ones (0.68 item 5).
@@ -749,7 +756,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                         <div style={{ marginTop:4, padding:'8px 12px', background:T.surface2, borderRadius:T.r, display:'flex', gap:12, fontSize:12, color:T.inkMid, fontFamily:T.sans, flexWrap:'wrap' }}>
                                           {quota > 0
                                             ? <span><strong style={{ color:T.ink }}>{fmt(gapToQuota)}</strong> gap to quota</span>
-                                            : <span>No quota set for this scope and period — quotas are set on the Sales Manager tab</span>}
+                                            : <span>{reportTimePeriod === 'all' || reportTimePeriod === 'custom' ? 'All time and custom dates have no quota — choose a quarter or the fiscal year' : 'No quota set for this scope and period — quotas are set on the Sales Manager tab'}</span>}
                                           {coverage && <><span style={{ opacity:0.4 }}>·</span><span><strong style={{ color:T.ink }}>{coverage.toFixed(1)}×</strong> coverage</span></>}
                                         </div>
                                       </div>
@@ -868,16 +875,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
                               return new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean));
                             })();
                             const hasSlice2 = reportsRep||reportsTeam||reportsTerritory;
-                            const visibleUsers2 = (settings.users||[]).filter(u=>{
+                            const visibleUsers2 = quotaUsers.filter(u=>{
                               if(u.userType==='ReadOnly'||!u.name)return false;
                               if(hasSlice2)return visibleRepNames2.has(u.name);
-                              const hq=userQuotaFor(u,'FY')>0;
+                              const hq=userQuotaFor(u,'FY',currentFiscalYear(fiscalStart))>0;
                               return hq||visibleRepNames2.has(u.name);
                             });
                             // Period-scoped: a quarter's revenue against a quarter's quota. This
                             // divided the selected period's revenue by the FULL year's quota, so a
                             // quarter read ~¼ attainment (0.68 item 8).
-                            const getUserQuota = (u) => userQuotaFor(u, reportTimePeriod);
+                            const getUserQuota = (u) => userQuotaFor(u, reportTimePeriod, currentFiscalYear(fiscalStart));
                             const totalQuota2 = visibleUsers2.reduce((s,u)=>s+getUserQuota(u),0);
                             const closedWonValue2 = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
                             const attainPct2 = totalQuota2>0?(closedWonValue2/totalQuota2*100):0;
@@ -886,7 +893,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             const repNames = [...visibleRepNames2].sort();
                             const maxWidth = 1.2;
                             const repRows = repNames.map(rep=>{
-                              const rUser = (settings.users||[]).find(u=>u.name===rep);
+                              const rUser = quotaUsers.find(u=>u.name===rep);
                               const quota = rUser ? getUserQuota(rUser) : 0;
                               const rWon  = wonOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const rLost = lostOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
@@ -903,7 +910,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             }).sort((a,b)=>b.attain-a.attain);
 
                             if(repRows.length===0&&totalQuota2===0){
-                              return <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'1.25rem', color:T.inkMuted, fontSize:'0.8125rem', fontFamily:T.sans }}>No quota data. Configure rep quotas in Settings → Team.</div>;
+                              return <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'1.25rem', color:T.inkMuted, fontSize:'0.8125rem', fontFamily:T.sans }}>No quota data. Quotas are set on the Sales Manager tab → Administration.</div>;
                             }
 
                             // Sparkline (simplified — trend from monthly won revenue)
@@ -943,8 +950,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                   };
                                   const kpis = [
                                     {
-                                      label:'Team attainment', value:attainPct2.toFixed(0)+'%',
-                                      sub:`${fmt2(closedWonValue2)} of ${fmt2(totalQuota2)}`,
+                                      // No quota reads a dash, never "0% of $0" (state §0.203): All time and
+                                      // custom dates have none, and a year may have no plan yet.
+                                      label:'Team attainment', value:totalQuota2>0 ? attainPct2.toFixed(0)+'%' : '—',
+                                      sub:totalQuota2>0 ? `${fmt2(closedWonValue2)} of ${fmt2(totalQuota2)}` : `${fmt2(closedWonValue2)} won · ${reportTimePeriod==='all'||reportTimePeriod==='custom' ? 'these dates have no quota' : 'no quota set'}`,
                                       delta: fmtDeltaKpi(closedWonValue2, cmpWonRev),
                                       accent:'#4d6b3d',
                                     },
@@ -1058,11 +1067,11 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                             <div style={{ position:'absolute', top:-2, bottom:-2, left:`${(1/maxWidth)*100}%`, borderLeft:`1.5px dashed ${T.ink}` }}/>
                                           </div>
                                           {/* Attainment % */}
-                                          <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:attainColor, fontFamily:T.sans }}>{Math.round(r.attain*100)}%</div>
+                                          <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:r.quota>0?attainColor:T.inkMuted, fontFamily:T.sans }}>{r.quota>0 ? Math.round(r.attain*100)+'%' : '—'}</div>
                                           {/* Sparkline */}
                                           <div style={{ display:'flex', justifyContent:'flex-end' }}><Spark2 rep={r.rep}/></div>
                                           {/* Quota */}
-                                          <div style={{ textAlign:'right', fontSize:12, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2(r.quota)}</div>
+                                          <div style={{ textAlign:'right', fontSize:12, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.quota>0 ? fmt2(r.quota) : '—'}</div>
                                         </div>
                                       );
                                     })}
@@ -2379,7 +2388,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [builderTo, setBuilderTo] = React.useState('');
     const builderDefinition = () => ({ source: builderSource, dims: builderDims, metrics: builderMetrics, period: builderPeriod, from: builderFrom, to: builderTo, where: builderWhere, limit: builderChart === 'table' ? 200 : 12 });
     const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });
-    const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 });
+    const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) });
     // §0.139 — a prompt is READ into the same definition a hand-built report is,
     // the builder seeded with it, the real engine run: every part editable. The
     // org's own stage names and roster let "in Proposal" / "Karen's deals" become
@@ -2393,7 +2402,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const applyPrompt = async (text) => {
         const prompt = String(text || '').trim();
         if (!prompt || promptBusy) return;
-        const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+        const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
         let reading = null, readBy = 'local';
         const extraNotes = [];
         if (settings?.aiReportPromptsEnabled === true) {
@@ -2462,7 +2471,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         setAiInterpretation(null);
         setBuilderAdvanced(true);
         setBuilderTab('Data');
-        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));
+        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) }));
         setBuilderDirty(false);
         setBuilderRendered(true);
         setCreateMode('blank');
@@ -2477,7 +2486,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Sharing, pins and delivery (state §0.135) ────────────────────────────
     const { userId: clerkUserId } = useAuth();
-    const { myProfile, setMyProfile, currentUserId, userRole } = useApp();
+    const { myProfile, myProfileHere, setMyProfile, currentUserId, userRole } = useApp();
+    const quotaUsersS = withOwnPlans(settings?.users, myProfileHere);   // the member's own plans (state §0.203)
     const mayTouch = (r) => userRole === 'Admin' || r.ownerId === clerkUserId;
     const [libError, setLibError] = React.useState('');
     const [deliveryFor, setDeliveryFor] = React.useState(null);     // the report whose schedule dialog is open
@@ -2634,12 +2644,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const fmtS = v => { const n=parseFloat(v)||0; return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n); };
     const allWon  = (reportsOpps||[]).filter(o=>o.stage==='Closed Won');
     const allOpen = (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
-    const totalQ  = (settings?.users||[]).reduce((s,u)=>{
-        const qm = u.quotaType||'annual';
-        return s+(qm==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0));
-    }, 0);
-    const closedWonRev = allWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-    const attainPctS   = totalQ>0 ? Math.round(closedWonRev/totalQ*100) : 0;
+    // Quota pacing: this fiscal year's wins (by close day) against this fiscal year's
+    // plans (state §0.203) — one year's quota against every win ever meant nothing.
+    const fiscalStartP = fiscalStartOf(settings?.fiscalYearStart);
+    const paceFY  = currentFiscalYear(fiscalStartP);
+    const paceRange = fiscalRange(paceFY, 'FY', fiscalStartP);
+    const totalQ  = quotaUsersS.reduce((s,u)=>s+userQuotaFor(u,'FY',paceFY), 0);
+    const closedWonRev = allWon.filter(o=>closeDayInRange(o, paceRange.from, paceRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+    const attainPctS   = totalQ>0 ? Math.round(closedWonRev/totalQ*100) : null;
     const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
     const sevenISO = isoLocal(sevenDaysAgo);
     const addedRecent = allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
@@ -2654,7 +2666,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const closingARR = closingMonth.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
 
     const pinnedCards = [
-        { id:'p1', name:'Quota pacing', basedOn:'Performance', headline:attainPctS+'%', subhead:`${fmtS(closedWonRev)} of ${fmtS(totalQ)} quota`, preview:{ kind:'number', big:attainPctS+'%', sub:'of quota, closed-won' } },
+        { id:'p1', name:'Quota pacing', basedOn:'Performance', headline:attainPctS===null?'—':attainPctS+'%', subhead:attainPctS===null?`no quota set for FY${paceFY}`:`${fmtS(closedWonRev)} of ${fmtS(totalQ)} FY${paceFY} quota`, preview:{ kind:'number', big:attainPctS===null?'—':attainPctS+'%', sub:attainPctS===null?`no FY${paceFY} quota`:`of FY${paceFY} quota, closed-won` } },
         { id:'p2', name:'Pipeline added this week', basedOn:'Pipeline & Forecast', headline:fmtS(addedRecent), subhead:`${allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).length} new deals · 7d`, preview:{ kind:'number', big:fmtS(addedRecent), sub:'added, last 7 days' } },
         { id:'p3', name:'Stuck deals (14d+ no activity)', basedOn:'Pipeline & Forecast', headline:stuckDeals.length+' deals', subhead:fmtS(stuckARR)+' at risk', preview:{ kind:'number', big:String(stuckDeals.length), sub:fmtS(stuckARR)+' pipeline' } },
         { id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast', headline:fmtS(closingARR), subhead:`${closingMonth.length} deals open`, preview:{ kind:'number', big:fmtS(closingARR), sub:`${closingMonth.length} deals` } },
@@ -3189,23 +3201,10 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         );
 
         // ── Fiscal quarter helper
-        const fiscalStart = parseInt(settings.fiscalYearStart)||10;
-        const getOppFiscalQtr = (dateStr) => {
-            if (!dateStr) return null;
-            const d = new Date(dateStr+'T12:00:00');
-            const m = d.getMonth()+1; // 1-12
-            const y = d.getFullYear();
-            // How many months past fiscal start
-            let offset = m - fiscalStart;
-            if (offset < 0) offset += 12;
-            const q = Math.floor(offset/3)+1; // 1-4
-            // Fiscal year label: year when fiscal year ends
-            const fyEnd = m >= fiscalStart ? y+1 : y;
-            return { q, fyEnd, label:`Q${q} FY${String(fyEnd).slice(2)}` };
-        };
+        const fiscalStart = fiscalStartOf(settings.fiscalYearStart);
 
         // Visible reps
-        const repsD = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
+        const repsD = quotaUsersS.filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
 
         // All won opps with a close date
         const wonWithDate = (reportsOpps||[]).filter(o=>o.stage==='Closed Won'&&closeDayOf(o));
@@ -3219,9 +3218,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const qData = quarters.map(qt => {
             const won = wonWithDate.filter(o => closeDayInRange(o, qt.from, qt.to));
             const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-            // The team's quota for THAT quarter — a quarterly plan's own figure, a
-            // quarter of an annual. It was one flattened average for all six.
-            const forecast = repsD.reduce((s,u)=>s+userQuotaFor(u, `Q${qt.q}`),0);
+            // The team's quota for THAT quarter of THAT quarter's fiscal year (state §0.203) —
+            // never this year's plan for last year's quarter. It was one flattened average for all six.
+            const forecast = repsD.reduce((s,u)=>s+userQuotaFor(u, `Q${qt.q}`, qt.fiscalYear),0);
             const accuracy = forecast > 0 ? actual/forecast : null;
             return { ...qt, actual, forecast, accuracy, wonCount:won.length };
         });
@@ -3241,7 +3240,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             const qCells = quarters.map(qt => {
                 const won = repWon.filter(o=>closeDayInRange(o, qt.from, qt.to));
                 const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                const forecast = userQuotaFor(u, `Q${qt.q}`);
+                const forecast = userQuotaFor(u, `Q${qt.q}`, qt.fiscalYear);
                 return forecast>0 ? actual/forecast : null;
             });
             const completedCells = qCells.slice(0,-1).filter(v=>v!=null);
@@ -3272,8 +3271,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter quota</div>
-                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.forecast)}</div>
-                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.label} team quota</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{currentQ.forecast>0 ? fmtShort(currentQ.forecast) : '—'}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.forecast>0 ? `${currentQ.label} team quota` : `no quota set for ${currentQ.label}`}</div>
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Booked so far</div>
@@ -3282,8 +3281,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     </div>
                     <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.danger), marginBottom:4 }}>At-risk gap</div>
-                        <div style={{ fontSize:28, fontWeight:700, color:T.danger, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(Math.max(0,currentQ.forecast-currentQ.actual))}</div>
-                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>to hit quota · {currentQ.label}</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:currentQ.forecast>0 ? T.danger : T.inkMuted, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{currentQ.forecast>0 ? fmtShort(Math.max(0,currentQ.forecast-currentQ.actual)) : '—'}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.forecast>0 ? `to hit quota · ${currentQ.label}` : `no quota set for ${currentQ.label}`}</div>
                     </div>
                 </div>
 
@@ -3588,7 +3587,10 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const repsListSC = visibleReps((settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name), scopedRepNames);
         // Fall back to currentUser if repsListSC is empty
         const repNameSC = repsListSC.includes(selectedRepSC) ? selectedRepSC : (repsListSC[0]||currentUser||'');
-        const repUserSC = (settings.users||[]).find(u=>u.name===repNameSC);
+        const repUserSC = quotaUsersS.find(u=>u.name===repNameSC);
+        const fiscalStartSC = fiscalStartOf(settings.fiscalYearStart);
+        const fyNowSC = currentFiscalYear(fiscalStartSC);
+        const fyRangeSC = fiscalRange(fyNowSC, 'FY', fiscalStartSC);
 
         // ── Rep data
         const repOpps = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===repNameSC);
@@ -3598,10 +3600,12 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const repActs = (activities||[]).filter(a=>a.author===repNameSC||a.assignedTo===repNameSC);
 
         // Quota
-        const getUserQuotaSC = u => u ? ((u.quotaType||'annual')==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0)) : 0;
-        const repQuota = getUserQuotaSC(repUserSC);
+        // This fiscal year's plan against this fiscal year's wins (state §0.203); every win
+        // ever (repClosed) stays for the average deal size.
+        const repQuota = userQuotaFor(repUserSC, 'FY', fyNowSC);
         const repClosed = repWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-        const attainPct = repQuota>0 ? repClosed/repQuota : 0;
+        const repClosedFY = repWon.filter(o=>closeDayInRange(o, fyRangeSC.from, fyRangeSC.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const attainPct = repQuota>0 ? repClosedFY/repQuota : 0;
         const attainColor = attainPct>=1?T.ok:attainPct>=0.8?T.ink:T.warn;
 
         // Team metrics for comparison
@@ -3639,8 +3643,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const actTypes = Object.entries(actTypeMap).sort((a,b)=>b[1]-a[1]);
         const actColors = { 'Call':T.info,'Email':T.gold,'Meeting':T.ok,'Demo':T.warn,'Note':T.inkMuted,'Other':T.inkMuted };
 
-        // Attainment history — last 6 quarters
-        const fiscalStartSC = parseInt(settings.fiscalYearStart)||10;
+        // Attainment history — last 6 quarters (fiscalStartSC, above)
         // The last six fiscal quarters (current last) from quarters.js, won deals
         // by their close day, and the rep's quota for THAT quarter (a quarterly
         // plan's own figure; the loop this replaces flattened it to annual/4 and
@@ -3648,7 +3651,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const qtrsH = lastQuarters(fiscalStartSC, { count: 6 }).map(qt => {
             const wonInQ = repWon.filter(o => closeDayInRange(o, qt.from, qt.to));
             const actualV = wonInQ.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-            const qQuota = userQuotaFor(repUserSC, `Q${qt.q}`);
+            const qQuota = userQuotaFor(repUserSC, `Q${qt.q}`, qt.fiscalYear);
             return { label: qt.label, acc: qQuota>0?actualV/qQuota:null, actual: actualV, isCurrentQ: qt.isCurrent };
         });
         const completedH=qtrsH.filter(q=>!q.isCurrentQ&&q.acc!=null);
@@ -3704,8 +3707,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                         strokeLinecap="round" transform="rotate(-90 40 40)"/>
                                 </svg>
                                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
-                                    <div style={{ fontSize:16, fontWeight:700, color:attainColor, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{Math.round(attainPct*100)}%</div>
-                                    <div style={{ fontSize:8, color:T.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600 }}>Quota</div>
+                                    <div style={{ fontSize:16, fontWeight:700, color:repQuota>0?attainColor:T.inkMuted, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{repQuota>0 ? Math.round(attainPct*100)+'%' : '—'}</div>
+                                    <div style={{ fontSize:8, color:T.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600 }}>{repQuota>0 ? 'Quota' : 'No quota'}</div>
                                 </div>
                             </div>
                             {/* Name + role */}

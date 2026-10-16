@@ -33,6 +33,7 @@ import { activityRepOf } from './reportScope.js';
 import { lossBucketOf } from './lossAnalysis.js';
 import { openStagesOf, CLOSED_STAGES } from './stageOrder.js';
 import { parseLocalDate, isoLocal } from './dateLocal.js';
+import { fiscalStartOf } from './quarters.js';
 
 export const REPORT_SOURCES = Object.freeze(['Opportunities', 'Accounts', 'Leads', 'Activity']);
 export const REPORT_PERIODS = Object.freeze([
@@ -325,7 +326,7 @@ const stageRank = (stages) => { const m = new Map(); stages.forEach((s, i) => m.
 export function runReport(def, data, opts = {}) {
     const today = opts.today instanceof Date ? opts.today : new Date();
     const todayDay = isoLocal(today);   // the local calendar day, never a UTC truncation (18b26)
-    const fiscalStart = Number.isFinite(Number(opts.fiscalStart)) ? Number(opts.fiscalStart) : 10;
+    const fiscalStart = fiscalStartOf(opts.fiscalStart);
     const { source, dims, metrics, dropped } = resolveDefinition(def);
     const rowsAll = (source === 'Opportunities' ? data?.opportunities : source === 'Accounts' ? data?.accounts : source === 'Leads' ? data?.leads : data?.activities);
     const scanned = Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];

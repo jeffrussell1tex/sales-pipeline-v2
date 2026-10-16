@@ -39,6 +39,7 @@ import { resolveAnthropicKey } from './_aiKey.mjs';
 import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';
 import { promptVocabulary } from '../../src/utils/reportPrompt.js';
 import { openStagesOf } from '../../src/utils/stageOrder.js';
+import { fiscalStartOf } from '../../src/utils/quarters.js';
 
 const headers = {
     'Content-Type':                 'application/json',
@@ -71,7 +72,7 @@ export const handler = async (event) => {
         const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);
         if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });
 
-        const fiscalStart = parseInt(row?.fiscalYearStart) || 10;
+        const fiscalStart = fiscalStartOf(row?.fiscalYearStart);
         const stages = openStagesOf({ funnelStages: row?.extra?.funnelStages || row?.stages || [] });
         const roster = await db.select({ name: users.name, active: users.active }).from(users).where(eq(users.orgId, orgId));
         const people = [...new Set(roster.filter(u => u.active !== false && u.name).map(u => String(u.name).trim()).filter(Boolean))].slice(0, 200);

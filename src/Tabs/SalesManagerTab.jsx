@@ -3,7 +3,8 @@ import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
-import { currentQuarter } from '../utils/quarters';
+import { currentQuarter, fiscalStartOf, fiscalMonthOf } from '../utils/quarters';
+import { cleanQuotaPeriods, quotaPlanOf, quotaDraftRow, editQuotaDraft, checkQuotaSave, quotaRefusal, quotaYearsOffered } from '../utils/quotaPlan.js';
 import { fiscalRange } from '../utils/reportPeriod';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { forecastCallOf, withForecastCall, bestCaseOf } from '../utils/forecastCall';
@@ -30,10 +31,10 @@ const Avatar = ({ name, size=28 }) => {
 };
 
 // ── Per-rep stats computation ─────────────────────────────────
-// `period` is the current fiscal quarter from currentQuarter(): { q, from, to }.
+// `period` is the current fiscal quarter from currentQuarter(): { q, fiscalYear, from, to }.
 // Closed and quota are QUARTER-TO-DATE — the deals won inside it by close day
-// (closeDayInRange, §0.75) against that quarter's figure (userQuotaFor: a
-// quarterly plan's own number, else annual ÷ 4). They used to be every Closed
+// (closeDayInRange, §0.75) against that quarter of THIS fiscal year's plan
+// (userQuotaFor, state §0.203 — 0 when the year has none). They used to be every Closed
 // Won deal the rep ever had against the ANNUAL quota, under a header that names
 // a quarter (state §0.80; Jeff's call). wonOpps stays all-time: the Team tab's
 // win rate reads it.
@@ -50,7 +51,7 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     const pipelineArr = activeOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
     // Quota — this quarter's
-    const quota     = userQuotaFor(rep, `Q${period.q}`);
+    const quota     = userQuotaFor(rep, `Q${period.q}`, period.fiscalYear);
     const attainPct = quota > 0 ? Math.round((closedArr / quota) * 100) : null;
 
     // Commit and Best case — the rep's forecast call for THIS quarter, from
@@ -99,32 +100,77 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     return { rep, quota, closedArr, commit, bestCase, bestCaseEstimated, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, wonInQ, activeOpps };
 }
 
-// ── QuotaRepCard ──────────────────────────────────────────────
-// A rep's quota inputs show the page's draft for them, else the figure saved
-// (state §0.170): an edit is a draft until the Assign Quotas card's Save — each
-// input used to save the moment it lost focus.
-function QuotaRepCard({ u, quotaMode, inputSt, draft, onQuotaChange, compactInput }) {
-    const shown = (field) => (draft && field in draft) ? draft[field] : (u[field] != null ? String(u[field]) : '');
-    if (compactInput) {
-        if (quotaMode === 'annual') return (
-            <input type="number" value={shown('annualQuota')} placeholder="0" onChange={e=>onQuotaChange(u.id,'annualQuota',e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} style={inputSt} />
-        );
-        return (
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {[['Q1','Q2'],['Q3','Q4']].map((pair,pi) => (
-                    <div key={pi} style={{display:'flex',gap:4}}>
-                        {pair.map(q => { const qk=q.toLowerCase(); return (
-                            <div key={q} style={{display:'flex',flexDirection:'column',gap:1}}>
-                                <div style={{fontSize:8,fontWeight:700,color:T.inkMuted,textTransform:'uppercase'}}>{q}</div>
-                                <input type="number" value={shown(qk+'Quota')} placeholder="0" onChange={e=>onQuotaChange(u.id,qk+'Quota',e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} style={inputSt} />
+// ── QuotaRow ─────────────────────────────────────────────────
+// One Sales Rep's quota plan for the board's fiscal year (state §0.203; Jeff, 15 Oct: "A rep has an annual quota
+// that is broken down into 4 quarters ... It may ramp up into the year. the 4 quarters of quota do need to add up
+// to their annual quota number", "some companies may do monthly quotas"): the yearly figure and its periods — four
+// quarters, or twelve months grouped under their quarters — with what is left to allocate. The page's draft where
+// typed, else the saved plan (quotaDraftRow). Module scope: inside the tab it would remount on every render and
+// lose the input mid-edit.
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function QuotaRow({ u, row, breakdown, fiscalStart, won, dotColor, subtitle, disabled, onChange }) {
+    const months = breakdown === 'months';
+    const inputSt = { padding:'4px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:disabled?T.surface2:T.surface, color:T.ink, width:months?72:96, outline:'none', textAlign:'right' };
+    const annual = Number.isFinite(row.annual) ? row.annual : 0;
+    const attain = annual > 0 && won != null ? Math.min((won / annual) * 100, 100) : null;
+    const aColor = attain === null ? T.inkMuted : attain >= 100 ? T.ok : attain >= 75 ? T.warn : attain >= 40 ? T.info : T.inkMuted;
+    const gap = row.unallocated;
+    const chip = gap === null ? { text:'Whole dollars only', color:T.warn }
+        : gap === 0 ? { text: annual > 0 ? 'Adds up' : 'No quota set', color: annual > 0 ? T.ok : T.inkMuted }
+        : gap > 0 ? { text:`$${gap.toLocaleString('en-US')} left to allocate`, color:T.warn }
+        : { text:`$${(-gap).toLocaleString('en-US')} over`, color:T.warn };
+    const monthLabel = (k) => MONTH_ABBR[fiscalMonthOf(k, fiscalStart) - 1];
+    const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const periodInput = (i, label) => (
+        <input type="number" min="0" step="1" aria-label={`${u.name} ${label} quota`} value={row.periodTexts[i]} placeholder="0" disabled={disabled}
+            onChange={e => onChange(u.id, { period: i, text: e.target.value })} style={inputSt} />
+    );
+    return (
+        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 0.9fr 3.4fr 1.1fr 1fr', gap:10, padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ width:28, height:28, borderRadius:'50%', background:dotColor+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:dotColor, flexShrink:0 }}>{initials}</div>
+                <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div>
+                    <div style={{ fontSize:10, color:T.inkMuted }}>{subtitle}</div>
+                </div>
+            </div>
+            <div>
+                <input type="number" min="0" step="1" aria-label={`${u.name} yearly quota`} value={row.annualText} placeholder="0" disabled={disabled}
+                    onChange={e => onChange(u.id, { annual: e.target.value })} style={{ ...inputSt, width:110 }} />
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+                {[1,2,3,4].map(q => (
+                    <div key={q} style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                        <div style={{ fontSize:8, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.4 }}>Q{q} · {monthLabel(3*q-2)}–{monthLabel(3*q)}</div>
+                        {months ? (
+                            <div style={{ display:'flex', gap:3 }}>
+                                {[0,1,2].map(j => { const k = 3*(q-1)+j; return (
+                                    <div key={k} style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                                        <div style={{ fontSize:8, color:T.inkMuted }}>{monthLabel(k+1)}</div>
+                                        {periodInput(k, monthLabel(k+1))}
+                                    </div>
+                                ); })}
                             </div>
-                        );})}
+                        ) : periodInput(q-1, `Q${q}`)}
                     </div>
                 ))}
+                {months && row.set && !row.monthsSaved && (
+                    <div style={{ fontSize:9, color:T.inkMuted, fontStyle:'italic', alignSelf:'flex-end' }}>Months not saved yet — each quarter shown split three ways</div>
+                )}
             </div>
-        );
-    }
-    return null;
+            <div style={{ display:'flex', flexDirection:'column', gap:4, alignItems:'flex-start' }}>
+                <span style={{ fontSize:10, fontWeight:700, color:chip.color }}>{chip.text}</span>
+                <button onClick={() => onChange(u.id, { split: true })} disabled={disabled || !(annual > 0)}
+                    style={{ padding:'2px 8px', background:'transparent', color:T.ink, border:`1px solid ${T.ink}`, borderRadius:T.r, fontSize:10, fontWeight:600, cursor:(disabled || !(annual > 0)) ? 'default' : 'pointer', opacity:(disabled || !(annual > 0)) ? 0.45 : 1, fontFamily:T.sans }}>Split evenly</button>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
+                    <div style={{ height:'100%', width:(attain||0)+'%', background:aColor, borderRadius:T.r }} />
+                </div>
+                <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{attain === null ? '—' : attain.toFixed(1)+'%'}</span>
+            </div>
+        </div>
+    );
 }
 
 // A forecast-call cell (Commit / Best case): click to type, blur or Enter to
@@ -200,7 +246,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
                 <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Team to quota</div>
                 <div style={{ display:'flex', alignItems:'baseline', gap:10, marginTop:4 }}>
                     <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
-                    <span style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>of {fmtV(teamQuota)}</span>
+                    <span style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>{teamQuota > 0 ? `of ${fmtV(teamQuota)}` : `no quota set for ${period.label}`}</span>
                     <span style={{ fontSize:12, fontWeight:600, color:teamAttain>=100?T.ok:T.inkMid, fontFamily:T.sans }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
                 </div>
 
@@ -210,7 +256,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
                     <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold }} />
                     <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.goldInk }} />
                     <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok }} />
-                    <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3 }} />
+                    {teamQuota > 0 && <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3 }} />}
                 </div>
 
                 {/* Legend */}
@@ -275,7 +321,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
                         </div>
 
                         {/* Quota */}
-                        <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.quota)}</div>
+                        <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{rs.quota > 0 ? fmtV(rs.quota) : '—'}</div>
 
                         {/* Closed */}
                         <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.closedArr)}</div>
@@ -303,7 +349,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
 
                         {/* Attain % + mini bar */}
                         <div style={{ textAlign:'right' }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.ink : rs.attainPct>=40 ? T.warn : T.danger }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:rs.attainPct === null ? T.inkMuted : rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.ink : rs.attainPct>=40 ? T.warn : T.danger }}>
                                 {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
                             </div>
                             <div style={{ height:3, background:T.border, marginTop:2, position:'relative' }}>
@@ -331,7 +377,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
             {/* Team total row */}
             <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', background:T.surface2, borderTop:`2px solid ${T.ink}`, fontFamily:T.sans }}>
                 <div style={{ fontSize:12, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
-                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamQuota)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{teamQuota > 0 ? fmtV(teamQuota) : '—'}</div>
                 <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamClosed)}</div>
                 <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamCommit)}</div>
                 <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamBest)}</div>
@@ -347,18 +393,28 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
 // ════════════════════════════════════════════════════════
 // ADMINISTRATION TAB (unchanged logic, V1 tokens)
 // ════════════════════════════════════════════════════════
-// `fyRange` is the current fiscal year { from, to }: the board's quota column is
-// the ANNUAL figure, so its bar is fiscal-year-to-date won by close day — not
-// every deal ever (state §0.80).
-function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, visibleReps,
-                   quotaDrafts, onQuotaChange, tiersDraft, setTiersDraft, spiffsDraft, setSpiffsDraft, saveQuotas, cancelQuotas, saveCommission, cancelCommission, saveSpiffBoard, cancelSpiffBoard }) {
+// `fyRange` is the board's fiscal year { from, to } (planYear's): a rep's FY
+// attainment is that year's won by close day against that year's plan — not
+// every deal ever (state §0.80), and never another year's plan (§0.203).
+function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, opportunities, saveState, setActiveTab, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, visibleReps,
+                   planYear, setQuotaYear, thisYear, breakdown, fiscalStart, settingsLoaded,
+                   quotaDrafts, onQuotaChange, tiersDraft, setTiersDraft, spiffsDraft, setSpiffsDraft, saveQuotas, quotaSending, cancelQuotas, saveCommission, cancelCommission, saveSpiffBoard, cancelSpiffBoard }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
     const setTerrFilter = v => setSettings(prev => ({...prev, __qbTerrFilter:v}));
     const filteredReps = isAdmin && terrFilter !== 'all' ? visibleReps.filter(u=>u.territory?.trim()===terrFilter) : visibleReps;
-    const renderTerritories = isAdmin && terrFilter === 'all' ? visibleTerritories : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory).map(u=>u.territory.trim()))].sort());
-    const filteredTotal = filteredReps.reduce((s,u)=>s+getRepTotal(u),0);
+    const renderTerritories = isAdmin && terrFilter === 'all' ? visibleTerritories : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort());
+    // The year's plans (state §0.203): what is saved for planYear, and each row as typed.
+    const savedYearly = (u) => quotaPlanOf(u, planYear).annual;
+    const rowOf = (u) => quotaDraftRow(u, planYear, breakdown, quotaDrafts[u.id]);
+    const wonOf = (u) => planYear > thisYear ? null
+        : (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+    const filteredTotal = filteredReps.reduce((s,u)=>s+savedYearly(u),0);
+    const notAddingUp = filteredReps.filter(u => rowOf(u).unallocated !== 0).length;
+    const hasQuotaDrafts = Object.keys(quotaDrafts).length > 0;
+    const yearsOffered = quotaYearsOffered(thisYear);
+    const fyLabel = `${MONTH_ABBR[Number(fyRange.from.slice(5,7))-1]} ${fyRange.from.slice(0,4)} – ${MONTH_ABBR[Number(fyRange.to.slice(5,7))-1]} ${fyRange.to.slice(0,4)}`;
     const terrColors = ['#9c6b4a','#4a6b5a','#3a5a7a','#7a6a48','#9c3a2e'];
     const terrColorMap = {}; visibleTerritories.forEach((t,i) => { terrColorMap[t] = terrColors[i%terrColors.length]; });
     const smCard2 = { ...card };
@@ -404,7 +460,8 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
     const spiffList = spiffsDraft ?? (settings.spiffs || []);
     const editTiers  = next => setTiersDraft(next);
     const editSpiffs = next => setSpiffsDraft(next);
-    const busy = saveState.status === 'saving';
+    const busy = saveState.status === 'saving' || quotaSending;
+    const yearLocked = hasQuotaDrafts || busy || !settingsLoaded;
 
     return (
         <>
@@ -447,12 +504,14 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
             </div>
         )}
 
-        {/* Quota Board */}
+        {/* Quota Board — a fiscal year's plan per Sales Rep (state §0.203) */}
         <div style={smCard2}>
             <div style={{ ...cardHdr, flexWrap:'wrap', gap:8 }}>
                 <div>
                     <div style={eyebrow}>Assign Quotas</div>
-                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>${filteredTotal.toLocaleString()} assigned</div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                        FY{planYear} · {fyLabel} · by {breakdown === 'months' ? 'month' : 'quarter'} · ${filteredTotal.toLocaleString()} assigned{notAddingUp > 0 ? ` · ${notAddingUp} ${notAddingUp === 1 ? 'doesn\'t' : 'don\'t'} add up` : ''}
+                    </div>
                 </div>
                 <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginLeft:'auto' }}>
                     {isAdmin && visibleTerritories.length > 1 && (
@@ -467,27 +526,29 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                     {Object.keys(quotaDrafts).length > 0 && (
                         <DraftActions label="Save quotas" busy={busy} onSave={saveQuotas} onCancel={cancelQuotas}/>
                     )}
-                    {/* The org's quota mode — every member's row — is an Admin's to switch (state §0.202;
-                        Jeff, 15 Oct: "Admins only"): a Manager's save reaches only a Sales Rep's row. */}
-                    {!isAdmin && (
-                        <span style={{ fontSize:10, fontWeight:700, color:T.inkMid, fontFamily:T.sans }}>{quotaMode==='annual'?'Annual quotas':'Quarterly quotas'}</span>
-                    )}
-                    {isAdmin && <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
-                        {['annual','quarterly'].map(t => (
-                            <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
-                                {t==='annual'?'Annual':'Quarterly'}
-                            </button>
+                    {/* The year: held while a draft is open, so a save names the year its figures were typed for. */}
+                    <select aria-label="Quota fiscal year" value={planYear} disabled={yearLocked}
+                        title={hasQuotaDrafts ? `Save or cancel FY${planYear}'s changes first` : undefined}
+                        onChange={e => setQuotaYear(parseInt(e.target.value, 10))}
+                        style={{ padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, color:T.ink }}>
+                        {yearsOffered.map(y => (
+                            <option key={y} value={y}>FY{y}{y === thisYear ? ' (this year)' : y < thisYear ? ' (last year)' : ' (next year)'}</option>
                         ))}
-                    </div>}
+                    </select>
                 </div>
+            </div>
+            <div style={{ padding:'6px 16px', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans, borderBottom:`1px solid ${T.border}` }}>
+                Each rep's {breakdown === 'months' ? 'months' : 'quarters'} must add up to their yearly quota. Each fiscal year has its own plan — nothing carries over. Whether quotas are broken into quarters or months is set by an Admin in Settings → Company → Fiscal year.
             </div>
 
             {/* Column headers */}
-            <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
-                <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>FY attainment</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1.4fr 0.9fr 3.4fr 1.1fr 1fr', gap:10, padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                <div>Rep</div><div>Yearly quota</div><div>{breakdown === 'months' ? 'Months, by quarter' : 'Quarters'}</div><div>Allocation</div><div>FY attainment</div>
             </div>
 
-            {visibleReps.length === 0 ? (
+            {!settingsLoaded ? (
+                <div style={{ padding:'2.5rem', textAlign:'center', color:T.inkMuted, fontSize:12, fontFamily:T.sans }}>Loading this organization's settings…</div>
+            ) : visibleReps.length === 0 ? (
                 <div style={{ padding:'2.5rem', textAlign:'center', color:T.inkMuted, fontSize:12, fontFamily:T.sans }}>No reps configured yet.</div>
             ) : (
                 <>
@@ -495,7 +556,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                     const terrReps = filteredReps.filter(u=>u.territory?.trim()===terr);
                     if (!terrReps.length) return null;
                     const dotColor = terrColorMap[terr] || T.inkMuted;
-                    const terrTotal = terrReps.reduce((s,u)=>s+getRepTotal(u),0);
+                    const terrTotal = terrReps.reduce((s,u)=>s+savedYearly(u),0);
                     return (
                         <div key={terr}>
                             {isAdmin && terrFilter==='all' && (
@@ -507,64 +568,24 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                                     <span style={{ fontSize:9, color:dotColor }}>{terrReps.length} rep{terrReps.length!==1?'s':''} · ${terrTotal.toLocaleString()}</span>
                                 </div>
                             )}
-                            {terrReps.map((u,ui) => {
-                                const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                                const quota = getRepTotal(u);
-                                const attain = quota>0 ? Math.min((rWon/quota)*100,100) : 0;
-                                const aColor = attain>=100?T.ok:attain>=75?T.warn:attain>=40?T.info:T.inkMuted;
-                                const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                                return (
-                                    <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}
-                                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                            <div style={{ width:28, height:28, borderRadius:'50%', background:dotColor+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:dotColor, flexShrink:0 }}>{initials}</div>
-                                            <div>
-                                                <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div>
-                                                <div style={{ fontSize:10, color:T.inkMuted }}>{u.team||u.territory||'—'}</div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <QuotaRepCard u={u} quotaMode={quotaMode} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} draft={quotaDrafts[u.id]} onQuotaChange={onQuotaChange} compactInput />
-                                        </div>
-                                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                            <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
-                                                <div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} />
-                                            </div>
-                                            <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {terrReps.map(u => (
+                                <QuotaRow key={u.id} u={u} row={rowOf(u)} breakdown={breakdown} fiscalStart={fiscalStart} won={wonOf(u)} dotColor={dotColor}
+                                    subtitle={u.team||u.territory||'—'} disabled={busy} onChange={onQuotaChange} />
+                            ))}
                         </div>
                     );
                 })}
-                {/* Unassigned reps */}
-                {isAdmin && filteredReps.filter(u=>!u.territory?.trim()).map((u,ui,arr) => {
-                    const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                    const quota=getRepTotal(u), attain=quota>0?Math.min((rWon/quota)*100,100):0;
-                    const aColor=attain>=100?T.ok:attain>=75?T.warn:T.inkMuted;
-                    const initials=(u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                    return (
-                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                <div style={{ width:28, height:28, borderRadius:'50%', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:T.inkMuted }}>{initials}</div>
-                                <div><div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div><div style={{ fontSize:10, color:T.inkMuted }}>No territory</div></div>
-                            </div>
-                            <QuotaRepCard u={u} quotaMode={quotaMode} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} draft={quotaDrafts[u.id]} onQuotaChange={onQuotaChange} compactInput />
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}><div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} /></div>
-                                <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
-                            </div>
-                        </div>
-                    );
-                })}
+                {/* Reps with no territory — a Manager's too (state §0.203) */}
+                {filteredReps.filter(u=>!u.territory?.trim()).map(u => (
+                    <QuotaRow key={u.id} u={u} row={rowOf(u)} breakdown={breakdown} fiscalStart={fiscalStart} won={wonOf(u)} dotColor={T.inkMuted}
+                        subtitle="No territory" disabled={busy} onChange={onQuotaChange} />
+                ))}
                 {/* Total */}
                 {filteredReps.length > 0 && (
-                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
-                        <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>Total Assigned</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 0.9fr 3.4fr 1.1fr 1fr', gap:10, padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>Total Assigned · FY{planYear}</div>
                         <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>${filteredTotal.toLocaleString()}</div>
-                        <div />
+                        <div /><div /><div />
                     </div>
                 )}
                 </>
@@ -760,14 +781,20 @@ export default function SalesManagerTab() {
     // and every report already use. This block built a CALENDAR quarter from
     // now.getMonth() and never read settings.fiscalYearStart, so with an October
     // fiscal start the header read "Q3 2026 · 4 weeks remaining" on the day Home
-    // read "Q4 · Week 10" (state §0.80). Default 10 is the App.jsx / HomeTab /
-    // ReportsTab convention. weeksLeft counts today and is never 0 — the
-    // Gap-to-Quota tile divides by it.
-    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+    // read "Q4 · Week 10" (state §0.80). The start is quarters.js's fiscalStartOf,
+    // as on every screen — January when none is set (state §0.203). weeksLeft counts
+    // today and is never 0 — the Gap-to-Quota tile divides by it.
+    const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
     const curQ      = currentQuarter(fiscalStart);
     const weeksLeft = curQ.weeksLeft;
     const qLabel    = curQ.label;
-    const fyRange   = fiscalRange(curQ.fiscalYear, 'FY', fiscalStart);
+    // The quota board's fiscal year (state §0.203): this year until another is picked,
+    // pinned by the first draft, so a save names the year its figures were typed for.
+    const [quotaYear, setQuotaYear] = useState(null);
+    const planYear  = quotaYear ?? curQ.fiscalYear;
+    const fyRange   = fiscalRange(planYear, 'FY', fiscalStart);
+    // How the company breaks its reps' yearly quotas down — quarters or months (Settings → Fiscal year).
+    const quotaBreakdown = cleanQuotaPeriods(settings.quotaPeriods);
 
     const repStats = useMemo(() =>
         visibleReps.map(rep => buildRepStats(rep, opportunities, activities, tasks, curQ)),
@@ -775,10 +802,7 @@ export default function SalesManagerTab() {
         [visibleReps, opportunities, activities, tasks, curQ.key]   // eslint-disable-line react-hooks/exhaustive-deps
     );
 
-    const quarters    = ['Q1','Q2','Q3','Q4'];
-    const quotaMode   = allUsers.find(u => u.quotaType)?.quotaType || 'annual';
-    const getRepTotal = u => quotaMode === 'annual' ? (u.annualQuota||0) : (u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0);
-    // Lifted out of AdminTab: updateRepField and setAllQuotaMode live here but the
+    // Lifted out of AdminTab: updateRepField and the saves below live here but the
     // status banner renders in AdminTab, so the state has to sit above both.
     // Declared above saveUser, which closes over it.
     const [saveState, setSaveState] = useState({ status: 'idle', msg: '' });
@@ -825,40 +849,29 @@ export default function SalesManagerTab() {
         setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === userId ? { ...u, [field]: value } : u) }));
         return true;
     };
-    // Annual / Quarterly: one click, saved at once for every rep it changes (a
-    // single action, not a form). The same fix: the reps as in state now.
-    const setAllQuotaMode = async (mode) => {
-        if (!isAdmin) return;   // an Admin's (state §0.202)
-        const askedOrg = requestOrg();
-        const toSave = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && u.quotaType !== mode).map(u => ({ ...u, quotaType: mode }));
-        // Sequential, not a forEach of un-awaited promises: this can be every rep in
-        // the org, and one report of the first failure beats N unhandled rejections.
-        for (const u of toSave) {
-            if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
-            if (!stillOrg(askedOrg)) return;   // and the next PUT is not sent
-            setSettings(prev => ({ ...prev, users: (prev.users || []).map(x => x.id === u.id ? { ...x, quotaType: mode } : x) }));
-        }
-    };
-
     // ── The Administration page's drafts (state §0.170) ──
     // Quotas, the commission plan and the SPIFF board are drafts until their
     // card's Save; held here, above the sub-tabs, so a sub-tab switch keeps them
     // and the leave guard can save them while the Administration page is closed.
-    const [quotaDrafts, setQuotaDrafts] = useState({});      // { [userId]: { [field]: text } }
+    const [quotaDrafts, setQuotaDrafts] = useState({});      // { [userId]: { annual, periods: [text], typed } } — planYear's
     const [tiersDraft,  setTiersDraft]  = useState(null);    // null = nothing unsaved
     const [spiffsDraft, setSpiffsDraft] = useState(null);
     // A draft is this org's: an org switch drops it (state §0.162's rule), or a
     // save would send one org's figures with the next org's token.
     useEffect(() => { setQuotaDrafts({}); setTiersDraft(null); setSpiffsDraft(null); }, [activeOrgId]);
+    // and the board goes back to this year (state §0.203).
+    useEffect(() => { setQuotaYear(null); }, [activeOrgId]);
 
-    const onQuotaChange = (userId, field, text) => {
+    // One change on the board (quotaPlan.js editQuotaDraft): the yearly figure, a
+    // period, or an even split. The first draft pins the year (state §0.203).
+    const onQuotaChange = (userId, change) => {
         const rep = (settings.users || []).find(u => u.id === userId);
-        const stored = rep && rep[field] != null ? String(rep[field]) : '';
+        if (!rep) return;
+        setQuotaYear(y => y ?? planYear);
         setQuotaDrafts(prev => {
-            const fields = { ...(prev[userId] || {}) };
-            if (text === stored) delete fields[field]; else fields[field] = text;
             const next = { ...prev };
-            if (Object.keys(fields).length) next[userId] = fields; else delete next[userId];
+            const draft = editQuotaDraft(rep, planYear, quotaBreakdown, prev[userId], change);
+            if (draft) next[userId] = draft; else delete next[userId];
             return next;
         });
     };
@@ -896,29 +909,66 @@ export default function SalesManagerTab() {
     // Each save throws when nothing was saved — the page's banner says why — so
     // the leave guard's "Save and continue" stays; a card's own button swallows it.
     const refuse = (msg) => { setSaveState({ status: 'error', msg: `Not saved — ${msg}` }); return new Error(msg); };
-    const saveQuotas = async () => {
-        const changes = [];
-        for (const [userId, fields] of Object.entries(quotaDrafts)) {
+    const unsure = (msg) => { setSaveState({ status: 'error', msg }); return new Error(msg); };
+    // The year's plans in one request (state §0.203): every drafted row checked first —
+    // its periods add up to its year, whole dollars — then PUT /users?quotas=true, the one
+    // writer of a member's quota, and the screen takes the rows the answer gives back,
+    // never the copy it sent. A refusal throws, so the leave guard keeps its dialog.
+    const quotaSaving = React.useRef(null);
+    const [quotaSending, setQuotaSending] = useState(false);
+    const sendQuotas = async () => {
+        if (!settingsLoaded) throw refuse('this organization\'s settings have not loaded. Reload the page and try again.');
+        const members = [];
+        const gone = [];
+        for (const [userId, draft] of Object.entries(quotaDrafts)) {
             const rep = (settings.users || []).find(u => u.id === userId);
-            if (!rep) continue;
-            const patch = {};
-            for (const [field, text] of Object.entries(fields)) {
-                if (String(text).trim() === '') continue;            // cleared: the figure stays
-                const n = parseFloat(text);
-                if (isNaN(n) || n < 0) throw refuse(`${rep.name}'s quota must be a number, 0 or more.`);
-                patch[field] = n;
-            }
-            if (Object.keys(patch).length) changes.push({ ...rep, ...patch });
+            if (!rep) { gone.push(userId); continue; }
+            const row = quotaDraftRow(rep, planYear, quotaBreakdown, draft);
+            const check = checkQuotaSave({ breakdown: quotaBreakdown, annual: row.annual, periods: row.periods });
+            if (check) throw refuse(quotaRefusal(rep.name, planYear, check, quotaBreakdown));
+            members.push({ id: userId, annual: row.annual, periods: row.periods });
+        }
+        if (!members.length) {
+            setQuotaDrafts({});
+            if (gone.length) throw refuse(`${gone.length === 1 ? 'a rep was' : `${gone.length} reps were`} removed since the page loaded — reload it.`);
+            return;
         }
         const askedOrg = requestOrg();
-        for (const user of changes) {
-            if (!await saveUser(user, 'quotas')) throw new Error('Quotas not saved.');   // saveUser has said why
-            if (!stillOrg(askedOrg)) return;   // and the next PUT is not sent
-            setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === user.id ? user : u) }));
-            setQuotaDrafts(prev => { const next = { ...prev }; delete next[user.id]; return next; });
+        setSaveState({ status: 'saving', msg: '' });
+        let res = null, answer = {};
+        try {
+            res = await dbFetch('/.netlify/functions/users?quotas=true', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fiscalYear: planYear, breakdown: quotaBreakdown, members }),
+            });
+            answer = await res.json().catch(() => ({}));
+        } catch (err) {
+            console.error('[SalesManagerTab] save quotas', err);
         }
+        if (!stillOrg(askedOrg)) return;   // the answer is the last org's
+        // No answer, or one the server did not write (a timeout's 502), is not "not stored":
+        // the plans may be in. The server's own refusals write nothing and say so.
+        if (!res) throw unsure('No answer from the server — reload the page to see whether the quotas were saved.');
+        if (!res.ok) throw res.status < 500 && answer.error ? refuse(answer.error) : unsure(`The server returned ${res.status} — reload the page to see whether the quotas were saved.`);
+        const rows = new Map((answer.users || []).map(u => [u.id, u]));
+        const removed = new Set(answer.removed || []);
+        setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => !removed.has(u.id)).map(u => rows.get(u.id) || u) }));
         setQuotaDrafts({});
-        if (changes.length) setSaveState({ status: 'saved', msg: '' });
+        const lost = removed.size + gone.length;
+        setSaveState(lost ? { status: 'error', msg: `Saved — but ${lost === 1 ? 'a rep was' : `${lost} reps were`} removed since the page loaded; reload it.` } : { status: 'saved', msg: '' });
+    };
+    // A second save while one is out waits for that one and shares its outcome (state §0.203) —
+    // the leave guard's "Save and continue" during a save: refused, it unlocked the board
+    // mid-save and reported a failure for a save that landed, and what was typed in the
+    // meantime was dropped unsent when the first answered.
+    // Locked while it is out, whatever another save does to the banner (a SPIFF claim's
+    // Approve set it, unlocking the board mid-save; what was typed then was dropped unsent).
+    const saveQuotas = () => {
+        if (!quotaSaving.current) {
+            setQuotaSending(true);
+            quotaSaving.current = sendQuotas().finally(() => { quotaSaving.current = null; setQuotaSending(false); });
+        }
+        return quotaSaving.current;
     };
     const cancelQuotas = () => setQuotaDrafts({});
     const saveCommission = async () => {
@@ -1024,7 +1074,7 @@ export default function SalesManagerTab() {
             {/* Summary bar */}
             <div style={{ display:'flex', alignItems:'center', gap:20, padding:'10px 0', marginBottom:12, fontFamily:T.sans }}>
                 <div style={{ fontSize:13, color:T.inkMid }}>
-                    Commit to date <strong style={{ color:T.ink }}>{fmtV(teamCommit)}</strong> of {fmtV(teamQuota)} · {teamAttain}%
+                    Commit to date <strong style={{ color:T.ink }}>{fmtV(teamCommit)}</strong>{teamQuota > 0 ? ` of ${fmtV(teamQuota)} · ${teamAttain}%` : ` · no quota set for ${qLabel}`}
                 </div>
                 <div style={{ display:'flex', gap:12, fontSize:12 }}>
                     {onTrack>0 && <span style={{ color:T.ok, fontWeight:600 }}>{onTrack} on track</span>}
@@ -1058,7 +1108,7 @@ export default function SalesManagerTab() {
                             <div style={{ marginTop:10 }}>
                                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:10, color:T.inkMuted }}>
                                     <span>Attainment</span>
-                                    <span style={{ fontWeight:700, color:rs.healthColor }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</span>
+                                    <span style={{ fontWeight:700, color:rs.attainPct !== null ? rs.healthColor : T.inkMuted }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</span>
                                 </div>
                                 <div style={{ height:4, background:T.border, borderRadius:2 }}>
                                     <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.healthColor, borderRadius:2, transition:'width 0.4s' }} />
@@ -1070,7 +1120,7 @@ export default function SalesManagerTab() {
                                 {[
                                     { v:fmtV(rs.closedArr), l:'closed' },
                                     { v:fmtV(rs.commit),    l:'commit' },
-                                    { v:fmtV(rs.quota),     l:'quota'  },
+                                    { v:rs.quota > 0 ? fmtV(rs.quota) : '—', l:'quota'  },
                                 ].map(({v,l}) => (
                                     <div key={l}>
                                         <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{v}</div>
@@ -1283,8 +1333,8 @@ export default function SalesManagerTab() {
             {/* 4 KPI tiles */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
                 {[
-                    { label:'Team Commit',   value:fmtV(teamCommit),  sub:`of ${fmtV(teamQuota)} quota`,    color:T.ink  },
-                    { label:'Gap to Quota',  value:fmtV(gapToQuota),  sub:`${weeksLeft} weeks · ${fmtV(Math.max(gapToQuota/weeksLeft,0))}/wk needed`, color:gapToQuota>0?T.danger:T.ok },
+                    { label:'Team Commit',   value:fmtV(teamCommit),  sub:teamQuota > 0 ? `of ${fmtV(teamQuota)} quota` : `no quota set for ${qLabel}`,    color:T.ink  },
+                    { label:'Gap to Quota',  value:teamQuota > 0 ? fmtV(gapToQuota) : '—',  sub:teamQuota > 0 ? `${weeksLeft} weeks · ${fmtV(Math.max(gapToQuota/weeksLeft,0))}/wk needed` : `no quota set for ${qLabel}`, color:teamQuota > 0 ? (gapToQuota>0?T.danger:T.ok) : T.inkMuted },
                     { label:'Reps at Risk',  value:repsAtRisk,         sub:repsAtRisk>0?repStats.filter(r=>r.score<40).map(r=>r.rep.name.split(' ')[0]).join(', '):'All reps on track', color:repsAtRisk>0?T.danger:T.ok },
                     { label:'Stuck Deals',   value:stuckDeals.length,  sub:stuckDeals.length>0?`${fmtV(stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0))} at stake`:'Pipeline flowing well', color:stuckDeals.length>0?T.warn:T.ok },
                 ].map(({label,value,sub,color}) => (
@@ -1320,7 +1370,7 @@ export default function SalesManagerTab() {
                                     <div>
                                         <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
                                         <div style={{ fontSize:10, color:T.danger }}>
-                                            {rs.attainPct}% to quota · {rs.stuck} stuck deals · {rs.act7d} activities this week
+                                            {rs.attainPct !== null ? `${rs.attainPct}% to quota` : 'no quota set'} · {rs.stuck} stuck deals · {rs.act7d} activities this week
                                         </div>
                                     </div>
                                 </div>
@@ -1381,7 +1431,7 @@ export default function SalesManagerTab() {
                                     <div style={{ flex:2, height:4, background:T.border, borderRadius:2 }}>
                                         <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.healthColor, borderRadius:2 }} />
                                     </div>
-                                    <div style={{ fontSize:11, fontWeight:600, color:rs.healthColor, minWidth:32, textAlign:'right' }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</div>
+                                    <div style={{ fontSize:11, fontWeight:600, color:rs.attainPct !== null ? rs.healthColor : T.inkMuted, minWidth:32, textAlign:'right' }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</div>
                                 </div>
                             ))}
                         </div>
@@ -1441,14 +1491,14 @@ export default function SalesManagerTab() {
                 card={card} cardHdr={cardHdr} eyebrow={eyebrow}
                 settings={settings} setSettings={setSettings}
                 opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
-                visibleReps={visibleReps} quotaMode={quotaMode} fyRange={fyRange}
-                getRepTotal={getRepTotal}
+                visibleReps={visibleReps} fyRange={fyRange}
+                planYear={planYear} setQuotaYear={setQuotaYear} thisYear={curQ.fiscalYear} breakdown={quotaBreakdown} fiscalStart={fiscalStart} settingsLoaded={settingsLoaded}
                 quotaDrafts={quotaDrafts} onQuotaChange={onQuotaChange}
                 tiersDraft={tiersDraft} setTiersDraft={setTiersDraft} spiffsDraft={spiffsDraft} setSpiffsDraft={setSpiffsDraft}
-                saveQuotas={saveQuotas} cancelQuotas={cancelQuotas} saveCommission={saveCommission} cancelCommission={cancelCommission}
+                saveQuotas={saveQuotas} quotaSending={quotaSending} cancelQuotas={cancelQuotas} saveCommission={saveCommission} cancelCommission={cancelCommission}
                 saveSpiffBoard={saveSpiffBoard} cancelSpiffBoard={cancelSpiffBoard}
                 saveState={saveState} setSaveState={setSaveState}
-                setAllQuotaMode={setAllQuotaMode} setActiveTab={setActiveTab}
+                setActiveTab={setActiveTab}
                 showConfirm={showConfirm} spiffClaims={spiffClaims} setSpiffClaims={setSpiffClaims} />}
         </div>
     );

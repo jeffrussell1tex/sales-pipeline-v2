@@ -15,6 +15,7 @@ import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, 
 import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, isHiddenAccount, HIDDEN_ACCOUNT_WORDS } from '../../utils/dealAccount.js';
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
+import { quarterOf, fiscalStartOf } from '../../utils/quarters.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -1103,17 +1104,11 @@ export default function OpportunityModal({
     }, [lastCreatedRepName]);
 
     // ── Fiscal quarter helper ────────────────────────────────
+    // quarters.js, as every screen (state §0.203): this copy named a January company's
+    // year one ahead (every month is >= 1) and read the date as UTC.
     const calculateCloseQuarter = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        const month = date.getMonth() + 1;
-        const year = date.getFullYear();
-        const fiscalStart = settings?.fiscalYearStart || 10;
-        let monthsFromFiscalStart = month - fiscalStart;
-        if (monthsFromFiscalStart < 0) monthsFromFiscalStart += 12;
-        const quarter = Math.floor(monthsFromFiscalStart / 3) + 1;
-        const fiscalYear = month >= fiscalStart ? year + 1 : year;
-        return `FY${fiscalYear} Q${quarter}`;
+        const qk = quarterOf(dateString, fiscalStartOf(settings?.fiscalYearStart));
+        return qk ? `FY${qk.fiscalYear} Q${qk.q}` : '';
     };
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
 

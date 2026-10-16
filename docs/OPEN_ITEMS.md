@@ -118,81 +118,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      nothing; a Manager's invitation to an address a member holds only
      resends a Sales Rep's open invitation; the Annual / Quarterly switch is
      an Admin's. What it found and left is filed in §4.6 and §6.
-   - **Quotas: a yearly quota broken into quarters or months, next** (Jeff,
-     15 Oct: "A rep has an annual quota that is broken down into 4
-     quarters … It may ramp up into the year. the 4 quarters of quota do
-     need to add up to their annual quota number", "some companies may do
-     monthly quotas that add up to an annual number"; then "Yes, per
-     company", "Quarters and the year", "Next, before 4b-2", and the rep's
-     Home card in it). Each company breaks its reps' yearly quotas into
-     quarters or months (an Admin's setting); each rep's periods may ramp
-     and must add up to the year — the board shows what is left to allocate
-     and saves only when they add up; quarters and months follow the fiscal
-     year; months are entered, and attainment is shown by quarter and year.
-     It replaces the Annual / Quarterly switch (found in §0.202's browser
-     check): "Annual" keeps only the year and splits it into equal quarters,
-     "Quarterly" only the quarters, nothing checks they add up, and the
-     switch saves every member's whole record one at a time (6 took 5.6 s
-     locally), says nothing while it runs, and starts another run on each
-     click — Jeff's clicks in Accelerep QA made about 50 saves in 20 s (the
-     audit log) and left the modes mixed. With it: a rep's Home quota card
-     reads $0 of $0 (Home reads the member directory, names only for a rep;
-     Karen's row holds $500,000). The census (SELECT, counts only, 15 Oct):
-     UKG has no quota set; the three reps with quotas (Accelerep QA 2,
-     Accelerep Test 1) already follow the rule. Jeff first chose a small
-     fix of the switch ("Small batch next"); this replaces it. Then 4b-2.
-     - The design pass (15 Oct, read in code at ff79995: three mappers, a
-       designer and a critic) and the census (SELECT, counts only, 15
-       Oct): every org has a settings row; UKG, Accelerep QA, Accelerep
-       and one other store no fiscal start, which the Fiscal year page
-       and every reader but the Pipeline list read as October — the list
-       (ListView.jsx:332, `|| 1`) groups their deals by calendar quarter
-       (corrected 15 Oct: an earlier line here said no company moves;
-       the list does — the per-year pass's critic); every stored
-       figure is a whole-dollar number, each year equal to its quarters.
-       Built in, not
-       asked: switching Quarters ↔ Months changes no saved figure (months
-       start as each quarter split three ways until saved); the board and
-       the server both refuse figures that do not add up; figures saved
-       before the rule read as today and are flagged; whole dollars; the
-       Quarters / Months choice on Settings → Company → Fiscal year.
-     - Jeff's decisions (15 Oct): "Admins and Managers" set quotas, as
-       today (a Manager can set any Sales Rep's — the server cannot narrow
-       a Manager to their team); "Per-year plans now" — each fiscal year
-       its own plan, and past quarters read their own year's (the design
-       is re-run for it); a rep's own quota in Reports, $0 for the same
-       reason as Home, fixed with it ("Yes, with Home"); the Fiscal year
-       page's made-up "Reporting adjustments" card removed ("Remove
-       it"), its side panel's invented counts filed.
-     - The per-year design pass (15 Oct, read in code at 67a898f: a
-       fiscal-year mapper, a designer and a critic). Each Sales Rep has
-       one plan per fiscal year (`profile.quotaPlans`, keyed by year); a
-       plan is never read for another year; a new year reads "No quota
-       set" until set; past quarters read their own year's plan ("—"
-       where none); every quota reader names its year; today's figures
-       carry no year and are entered once as the current fiscal year's
-       plan (Accelerep QA's two reps in the browser check — FY2026 under
-       the January default, so Karen's Home card should read Q4 FY2026,
-       $175K); the board offers last year, this
-       year and next; All Time and custom dates show no quota.
-     - Jeff's answers (15 Oct): past years' plans — "Admins and
-       Managers", as this year's; quarters follow each company's Fiscal
-       year setting on every screen, the Pipeline list included ("The
-       fiscal year is set by the admin in settings under the company tab |
-       fiscal year. Quarters should follow whatever is set there for that
-       company") — one reader of the setting on every screen and job; a
-       company that never set one starts on January 1, the Admin changing
-       it if necessary, and companies need not agree (Jeff, 15 Oct: "the
-       two instances dont have to agree. It should default to Jan 1 as
-       fiscal year start and then the admin can change it if necessary";
-       an earlier line here said October). So UKG, Accelerep QA,
-       Accelerep and one other (no start saved; read as October by every
-       screen but the Pipeline list today) move to calendar quarters on
-       Home, Reports and the Sales Manager tab — October 2026 becomes Q4
-       FY2026 — unless an Admin sets their start; Accelerep Test and one
-       other saved October and do not move. Accelerep Test's one
-       rep's figures left as they are ("Leave it" — his quota reads "No
-       quota set" until entered).
+   - **The quota batch is DONE (§0.203; guide §13, §18b96)** (Jeff, 15
+     Oct). A Sales Rep's quota is a plan per fiscal year — a yearly figure
+     broken into the company's quarters or months (an Admin's setting on
+     Settings → Company → Fiscal year), which may ramp and must add up to
+     it; Admins and Managers set it, past years too, on the Sales Manager
+     tab's board, one save refused whole when a rep's figures do not add
+     up; every other save keeps it; every reader names its year; a rep's
+     Home card and Reports read their own; no quota reads "No quota set".
+     A company's quarters come from its own fiscal start on every screen
+     and job, January when none is saved. The Annual / Quarterly switch is
+     gone. What it found and left is filed in §2.2, §4.2, §4.5 and §4.6.
    - **Batch 4b-2, the sales links, after it** (Jeff's decisions, 15 Oct —
      §4.6): SPIFF claims' deal and SPIFF, quote lines' product, automations'
      assignee, members' team and pinned reports; export runs stop taking a
@@ -363,6 +299,19 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **UKG's fiscal year starts in October, but no start is saved** (SELECT,
+  15 Oct 22:41 UTC: `fiscal_year_start` null — Jeff's October pick on the
+  old Fiscal year page changed nothing, as October was already shown, and
+  saved nothing). Since §0.203 a company with no saved start reads January,
+  so after the ship UKG's screens and scheduled reports read Q4 FY2026 and
+  a January year. Jeff: open UKG's Settings → Company → Fiscal year — it
+  now reads "Not set — January" — pick October, Save; then strike this.
+- **Ship §0.203 to dev and prod in one sitting.** Until prod ships, prod's
+  old report-deliveries job (jobs run on prod only) reads October for a
+  dev org with no saved start (Accelerep QA among them) while that org's
+  Reports read January — a scheduled "This FY" or quarter report would
+  cover other dates than the screen. No stored figure is at risk either
+  way. Reload any app tab opened before the deploys.
 - **Reload every app tab opened before the thirty-eighth ship** (Deployed:
   dev 17:56 UTC, prod 17:59 UTC, 15 Oct — it covers the thirty-seventh's,
   15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the
@@ -882,6 +831,33 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.2 Deals, activities and pipeline
 
+- **Quotas — what the quota batch left** (§0.203's design and review, 15
+  Oct; read in code):
+  - Reports has no fiscal-year picker: each view reads this fiscal year's
+    plan; and custom dates carry no quota (a prorated one is not built).
+  - A team's quota counts every member the slice names — deactivated,
+    invited and non-rep members included — by one rule nowhere.
+  - Attainment's numerator differs by screen: close day or forecast date,
+    with or without implementation cost.
+  - The Sales Manager tab's health score (and the digest's) measures a
+    quarter's wins to date against the whole quarter's quota, so early in a
+    quarter every rep reads at risk; a months plan would allow pacing.
+  - The board on a phone, and Home's card on a phone, are not laid out.
+  - A Dispatcher's or Read-only member's Reports read no rep's quota (their
+    copy of the member list carries none; only their own row is filled),
+    and Home's quota card shows for members no plan can be set for — an
+    Admin, Manager, Dispatcher or Technician reads "No quota set".
+  - Dead code: `src/components/QuotaRepCard.jsx` (imported nowhere, with
+    the whole-row save-as-you-type shape §0.170 removed) and unread locals
+    in SalesManagerTab.jsx.
+  - The Fiscal year page's side panel counts are invented.
+  - The Teams page's "QUOTA Q" column and the member profile page's
+    static "—".
+  - sanitize still carries the old keys (`annualQuota`, `q1Quota`…,
+    `quotaType`), kept as stored; remove them from the code and the pin
+    (never from storage).
+  - Month-by-month attainment; a quota CSV import; a "Copy last year's
+    plans" button and a last-quarter reminder.
 - **A screen loaded before another change saves its old copy of the fields
   that are not links** (the pre-ship sweep, 12 Oct — older than §0.198,
   whose pre-ship round leaves only untouched LINKS out). The contact rail
@@ -1331,8 +1307,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - Its "Google Calendar · holidays@accelerep.com" row reads
     `settings.googleCalendarConnected`, which nothing sets.
   - Read 10 Oct.
-- **Two saves PUT a member's whole cached row:** SalesManagerTab's quota
-  and forecast save (`saveUser`) and the Settings → Users profile page. A
+- **Two saves PUT a member's whole cached row:** SalesManagerTab's
+  forecast save (`saveUser`; quotas are their own request since §0.203,
+  and every whole-profile write keeps the stored plans) and the Settings →
+  Users profile page. A
   rename made in another session is undone by the next such save (the stale
   First/Last rebuild the old name), or, since §0.196, refused when another
   member holds the old name by then. SalesManagerTab shows "the server
@@ -1528,6 +1506,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   under "Quote alerts".** §0.158.
 - **The Monday team digest's Attainment reads "—" for every rep.**
   - It reads quota fields from the row's top level; they live in `profile`.
+  - Since §0.203 a quota is a plan per fiscal year (`profile.quotaPlans`):
+    the fix reads `quotaPlanOf` for the quarter's fiscal year, from the
+    org's own start (`fiscalStartOf`), and says "No quota set" for none.
   - The jobs also read `profile.managedReps` and `profile.alertTime`, which
     nothing writes.
   - Source: §0.159; re-read 7 Oct.
@@ -1617,7 +1598,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Two jobs write the whole `settings.extra` back with no lock**
   (score-leads-batch.mjs, integration-requests.mjs; the 4b-2 map): one
   running beside an Admin's settings save can put back an older SPIFF or
-  team list. The timing is not verified.
+  team list. The timing is not verified. A company's quota periods
+  (`quotaPeriods`, §0.203) are one of its keys.
 - **A restore keeps a restored member's login link and role from the file**
   (restorableMembers, memberName.js; backup.mjs — the 4b-2 map's critic):
   an Admin's restore gives the file's role to any Clerk identity in it that
@@ -1717,7 +1699,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
   between the merge's read and an unrelated save's write is overwritten by
   the merge's copy of `active`; one landing between the two reads takes the
   unrelated save through the access branch as a reactivation. One request's
-  window. The lost-update class of the settings.extra item above.
+  window. The lost-update class of the settings.extra item above. The
+  quota plans' instance is closed (§0.203: every whole-profile write
+  takes the plans the row holds when it lands, `keepQuotaPlans`); the
+  same write-time read could keep `active` and the status.
+- **A multi-row audited write streams its rows one at a time** (§0.203's
+  review, 15 Oct; read in code, not run): the quota save (one insert, then
+  each row streamed in turn) and the invitation loop (`users.mjs`, an
+  insert and a stream per address). With an org's audit destination
+  hanging, each row waits its 4 s timeout until the destination pauses
+  itself after 10 failures, so a save of many rows can outlast the
+  function — the writes landed, the screen hears no answer (the quota
+  board then says to reload and look). In turn on purpose: each delivery
+  counts on the last one's state (`nextDeliveryState`). Recommended: one
+  delivery of many rows per destination.
 - **The users PUT lets a Manager write any org user's profile,** forecast
   calls included. This is the existing quota behaviour, not widened, and was
   noted only. §0.84, as recorded. Since §0.202 a Manager's save reaches

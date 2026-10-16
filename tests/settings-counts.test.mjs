@@ -42,7 +42,7 @@ test('company: the profile shows the name it has, the fiscal year the month it s
     assert.equal(detail('company-profile', { companyName: 'UKG', companyDisplayName: 'UKG Inc.' }), 'UKG Inc.');
     assert.equal(fiscalYearDetail('10'), 'FY starts October 1');
     assert.equal(fiscalYearDetail(2), 'FY starts February 1');
-    assert.equal(fiscalYearDetail(''), null, 'never set: nothing — every consumer assumes October, but the org did not choose it');
+    assert.equal(fiscalYearDetail(''), null, 'never set: nothing — every screen reads January (quarters.js fiscalStartOf), but the company did not choose it');
     assert.equal(fiscalYearDetail('13'), null);
     assert.equal(detail('fiscal-year', { fiscalYearStart: '1' }), 'FY starts January 1');
 });

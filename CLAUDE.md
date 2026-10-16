@@ -114,6 +114,11 @@ One commit per verified batch; doc patch in the same commit.
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.
 - `dbFetch` returns the raw `Response` — caller must `.json()`.
+- A Sales Rep's quota is a plan per fiscal year (`profile.quotaPlans`):
+  `PUT /users?quotas=true` is its one writer; every other save keeps it
+  (`storedQuota`, and `keepQuotaPlans` on any write of a member's whole
+  profile); every reader names its year. A company's fiscal start is read
+  only through `fiscalStartOf`, January when none (guide §18b96).
 - A link a write stores (an account, contact, deal, lead, customer or
   location id; Dispatch's technician, vehicle, equipment unit, service
   plan or job id) must name a live row of the org when the write names it

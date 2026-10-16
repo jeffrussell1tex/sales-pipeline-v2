@@ -16,6 +16,7 @@ import { repsForSlice } from './reportScope.js';
 import { quarterOf, quarterStartDate, quarterEndDate } from './quarters.js';
 import { dayOf } from './reportPeriod.js';
 import { isoLocal, parseLocalDate } from './dateLocal.js';
+import { quotaPlanOf } from './quotaPlan.js';
 
 const CLOSED = ['Closed Won', 'Closed Lost'];
 const arrOf = (o) => parseFloat(o?.arr) || 0;
@@ -24,34 +25,30 @@ const sum = (list) => list.reduce((s, o) => s + arrOf(o), 0);
 // ── Quota ────────────────────────────────────────────────────────────────────
 
 /**
- * One user's quota for the selected period. A quarterly plan has q1..q4Quota;
- * an annual plan has annualQuota. For 'Q1'..'Q4' that is the quarter's own
- * figure (or a quarter of the annual); for 'FY', 'all' or 'custom' the year.
+ * One member's quota for a period of fiscal year `fiscalYear` (state §0.203): 'Q1'..'Q4' is that quarter of
+ * the year's plan, 'FY' the year's figure. Any other period ('all', 'custom'), no year, or no plan for that
+ * year is 0 — never another year's plan (the old figures carried no year, so last year's ramp read as this
+ * year's) and never a made-up number (an annual plan's quarters were the year ÷ 4).
  */
-export function userQuotaFor(u, period) {
-    if (!u) return 0;
-    const type = u.quotaType || 'annual';
+export function userQuotaFor(u, period, fiscalYear) {
+    if (!u || !Number.isInteger(fiscalYear)) return 0;
+    const plan = quotaPlanOf(u, fiscalYear);
+    if (!plan.set) return 0;
     const m = /^Q([1-4])$/.exec(String(period || ''));
-    if (m) {
-        return type === 'quarterly'
-            ? (parseFloat(u[`q${m[1]}Quota`]) || 0)
-            : (parseFloat(u.annualQuota) || 0) / 4;
-    }
-    return type === 'quarterly'
-        ? [1, 2, 3, 4].reduce((s, q) => s + (parseFloat(u[`q${q}Quota`]) || 0), 0)
-        : (parseFloat(u.annualQuota) || 0);
+    if (m) return plan.quarters[Number(m[1]) - 1];
+    return period === 'FY' ? plan.annual : 0;
 }
 
 // Not reps (src/utils/roles.js) — the same list as reportScope's roster (§0.151).
 const REP_EXCLUDED = new Set(NON_REP_ROLES);
 
-/** The quota of the reps in scope: named users who are not Admin / Manager / ReadOnly, narrowed by the slice. 0 when none is set. */
-export function teamQuotaFor(users, period, slice) {
+/** The quota of the reps in scope for a period of `fiscalYear`: named users who are not Admin / Manager / ReadOnly, narrowed by the slice. 0 when none is set. */
+export function teamQuotaFor(users, period, slice, fiscalYear) {
     const list = Array.isArray(users) ? users : [];
     const reps = repsForSlice(slice, list);
     return list
         .filter(u => u?.name && !REP_EXCLUDED.has(u.userType) && (!reps || reps.has(u.name)))
-        .reduce((s, u) => s + userQuotaFor(u, period), 0);
+        .reduce((s, u) => s + userQuotaFor(u, period, fiscalYear), 0);
 }
 
 // ── Pipeline movement, last N days ───────────────────────────────────────────
