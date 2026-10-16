@@ -64,8 +64,8 @@ test('the words name the kind, in the deals endpoint\'s; only accounts and conta
     assert.equal(notInOrg('customer'), 'That customer is not in your organization — pick one from the list.');
     assert.equal(notInOrg('location'), 'That service location is not in your organization — pick one from the list.');
     assert.equal(NOT_AN_ID, 'A link must name a record by its id.');
-    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job'],
-        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs)");
+    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'product', 'member', 'spiff'],
+        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs)");
     assert.deepEqual([...MERGES], ['account', 'contact']);
 });
 
@@ -224,6 +224,10 @@ const SPECS = {
     accounts: ["const PARENT_LINK = [{ key: 'parentAccountId', kind: 'account', follow: false }];"],
     'dispatch-customers': ['const CUSTOMER_LINKS = [', "    { key: 'accountId', kind: 'account' },"],
     'dispatch-jobs': ['const JOB_LINKS = [', "    { key: 'customerId', kind: 'customer' },", "    { key: 'locationId', kind: 'location' },", "    { key: 'accountId', kind: 'account' },", "    { key: 'opportunityId', kind: 'deal' },"],
+    // A sales record's (§0.204): tests/sales-links.test.mjs runs each, and pins where each is asked.
+    'spiff-claims': ["const CLAIM_LINKS = [{ key: 'opportunityId', kind: 'deal' }, { key: 'spiffId', kind: 'spiff' }];"],
+    quotes: ["const QUOTE_LINES = [{ key: 'lineItems', kind: 'product', shape: 'many' }];"],
+    automations: ["const RULE_LINKS = [{ key: 'actions', kind: 'member', shape: 'many' }];"],
 };
 
 test('THE GUARD: each endpoint names its links — the fields batch 4 lists and E1\'s CRM extras', () => {
@@ -239,7 +243,7 @@ test('THE GUARD: each endpoint names its links — the fields batch 4 lists and 
     assert.ok(l.includes('const merges = MERGES.includes(kind);'));
     assert.ok(l.includes('for (const ask of asks) read.set(ask, await liveIdsInOrg(ask.kind, ask.fresh, orgId, { follow: ask.follow }));'), 'each field read as its spec says — a parent not followed');
     assert.equal(count(l, '    if (asked.error) return asked;\n'), 2, 'a value that names no record is refused before any read — one write and a batch');
-    assert.equal(count(l, 'db.select('), 5, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201) — nothing reads around them');
+    assert.equal(count(l, 'db.select('), 7, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204) — nothing reads around them');
     const ac = read('netlify/functions/accounts.mjs');
     assert.ok(ac.includes("        parentAccountId:   d.parentAccountId   || null,"), 'the parent stored is the parent checked');
     assert.ok(!ac.includes('d.parentId'), "no legacy `parentId` alias: a parent sent so was stored with no check (the review, server S3)");
@@ -283,6 +287,8 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
     for (const [name, v, single, bulkN] of [
         ['contacts', 'linked', 2, 2], ['activities', 'linked', 2, 0], ['tasks', 'linked', 2, 0], ['opportunities', 'people', 2, 2],
         ['accounts', 'parents', 0, 2], ['dispatch-customers', 'linked', 2, 0], ['dispatch-jobs', 'linked', 2, 0],
+        // a sales record's (§0.204): a claim's create and save, a quote's, a rule's — none takes a batch
+        ['spiff-claims', 'linked', 2, 0], ['quotes', 'lined', 2, 0], ['automations', 'assigned', 2, 0],
     ]) {
         const s = fn(name);
         assert.equal(count(s, ONE(v)), single, `${name}: each single write's refusal is answered`);
@@ -330,7 +336,9 @@ test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anyt
 });
 
 test('THE GUARD: each single create answers 409 for an id another org holds — it crashed on the key (a 500 that said the id was taken elsewhere)', () => {
-    for (const [name, table, noun] of [['contacts', 'contacts', 'contact'], ['activities', 'activities', 'activity'], ['tasks', 'tasks', 'task'], ['opportunities', 'opportunities', 'deal'], ['accounts', 'accounts', 'account']]) {
+    // A claim's and a quote's since §0.204 (an export run's, whose headers are HEADERS: tests/sales-links.test.mjs).
+    for (const [name, table, noun] of [['contacts', 'contacts', 'contact'], ['activities', 'activities', 'activity'], ['tasks', 'tasks', 'task'], ['opportunities', 'opportunities', 'deal'], ['accounts', 'accounts', 'account'],
+        ['spiff-claims', 'spiffClaims', 'claim'], ['quotes', 'quotes', 'quote']]) {
         const s = fn(name);
         assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id }).returning();`), `${name}: the create writes nothing for a taken id`);
         assert.ok(s.includes(`if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${noun} id is already in use.' }) };`), name);

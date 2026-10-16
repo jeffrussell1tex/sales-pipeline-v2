@@ -195,6 +195,33 @@ function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color }
     );
 }
 
+// A claim action's answer in words (state §0.204): a refusal says the server's own, with its log ref when it
+// sent one (a 500's requestId is what finds its log line); an answer lost, or a server error that said nothing,
+// is not "not done" — the write may have landed (the quota board's rule, §0.203), so it says to reload and see.
+const claimRefused = (done, d, status) => (status < 500
+    ? `Not ${done} \u2014 ${d?.error || `the server returned ${status}`}${d?.requestId ? ` (ref ${d.requestId})` : ''}`
+    : `The server returned ${status}${d?.error ? ` \u2014 ${d.error}${d.requestId ? ` (ref ${d.requestId})` : ''}` : ''}. Reload the page to see whether the claim was ${done}.`);
+const claimUnanswered = (done) => `No answer from the server \u2014 reload the page to see whether the claim was ${done}.`;
+
+// A SPIFF's status on the SPIFF board (state §0.204 — Jeff asked for a clear Active / Inactive control on
+// each SPIFF): Active is offered to reps on a Closed Won deal; Inactive is not, and claims already filed can
+// still be approved. Two segments that write a boolean into the board's draft, saved by Save SPIFFs as the
+// checkbox it replaces was (state §0.170). Module scope: a component inside the tab remounts on every render.
+function SpiffStatus({ name, active, disabled, onChange }) {
+    const opt = (value, label) => (
+        <button type="button" disabled={disabled} aria-pressed={active === value}
+            onClick={() => { if (!disabled && active !== value) onChange(value); }}
+            style={{ padding:'3px 10px', border:'none', fontSize:10, fontWeight:700, fontFamily:T.sans,
+                     cursor: disabled ? 'default' : 'pointer',
+                     background: active === value ? T.ink : 'transparent', color: active === value ? T.surface : T.inkMid }}>{label}</button>
+    );
+    return (
+        <div role="group" aria-label={`${name || 'SPIFF'} status`} style={{ display:'inline-flex', border:`1px solid ${T.border}`, borderRadius:999, overflow:'hidden', background:T.surface, opacity: disabled ? 0.55 : 1 }}>
+            {opt(true, 'Active')}{opt(false, 'Inactive')}
+        </div>
+    );
+}
+
 // A card's unsaved changes (state §0.170): its Cancel and its Save. A failed save
 // says why in the page's banner and keeps the draft; the click swallows the throw
 // that the leave guard's "Save and continue" needs.
@@ -429,27 +456,68 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
     // Claim status writes used .catch(console.error) then updated state
     // unconditionally. dbFetch resolves for ANY response (guide 18b1), so a 403
     // never reached the catch and the row flipped to Approved regardless.
+    // Only the change is sent (state §0.204 — Jeff: "send only the change"): the server merges
+    // it over the stored claim, so a copy loaded earlier never puts back what another save
+    // changed, and an Approve names no deal or SPIFF to be asked. The list's own copy takes
+    // the same change. A refusal says the server's words: a claim deleted since the list
+    // loaded is a 404 (the Delete below).
     const updateClaimStatus = async (claim, status) => {
-        const u = { ...claim, status, approvedAt: new Date().toISOString(), approvedBy: currentUser };
+        const approvedAt = new Date().toISOString(), approvedBy = currentUser;
+        const u = { ...claim, status, approvedAt, approvedBy };   // the list's own copy
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res = await dbFetch('/.netlify/functions/spiff-claims', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(u),
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy }),
             });
+            const d = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
-                setSaveState({ status: 'error', msg: res.status === 403
-                    ? 'Not saved \u2014 only Admins can approve or reject claims.'
-                    : `Not saved \u2014 the server returned ${res.status}. The claim is unchanged.` });
+                // Not found (404): a claim deleted since the list loaded is gone — its row goes too.
+                if (res.status === 404) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
+                setSaveState({ status: 'error', msg: claimRefused('saved', d, res.status) });
                 return;
             }
             setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));
             setSaveState({ status: 'saved', msg: '' });
         } catch (err) {
             console.error('[SalesManagerTab] claim ' + status, err);
-            setSaveState({ status: 'error', msg: 'Not saved \u2014 network error. The claim is unchanged.' });
+            if (stillOrg(askedOrg)) setSaveState({ status: 'error', msg: claimUnanswered('saved') });
         }
     };
+
+    // A claim's Delete (state §0.204 — Jeff's addition: "the server already deletes, audited"):
+    // any claim in view, any status, for an Admin or a Manager — the only roles this tab renders
+    // for (App.jsx); a Manager's are their own team's (the claims in view, below). Confirmed first; the server deletes it for good and audits it, so there is no
+    // Undo. The row's buttons wait for the answer, which changes nothing after an org switch
+    // (state §0.175). Its SPIFF can then be claimed again on that deal.
+    // Each Delete holds its own row while it is out — one slot let a second Delete's answer free the first's row.
+    const [deletingIds, setDeletingIds] = useState(() => new Set());
+    const deleteClaim = (claim) => showConfirm(`Delete ${claim.repName || 'this rep'}'s ${claim.spiffName || 'SPIFF'} claim (${claim.status || 'pending'})? This cannot be undone.`, async () => {
+        const askedOrg = requestOrg();
+        setDeletingIds(s => new Set(s).add(claim.id));
+        try {
+            const res = await dbFetch(`/.netlify/functions/spiff-claims?id=${encodeURIComponent(claim.id)}`, { method: 'DELETE' });
+            const d = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
+            if (!res.ok) { setSaveState({ status: 'error', msg: claimRefused('deleted', d, res.status) }); return; }
+            setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
+            setSaveState({ status: 'saved', msg: '' });
+        } catch (err) {
+            console.error('[SalesManagerTab] claim delete', err);
+            if (stillOrg(askedOrg)) setSaveState({ status: 'error', msg: claimUnanswered('deleted') });
+        } finally {
+            setDeletingIds(s => { const n = new Set(s); n.delete(claim.id); return n; });
+        }
+    }, true);
+
+    // The claims in view (state §0.204 — Jeff, 16 Oct: "Narrow to their team"): a Manager's are the claims named for
+    // their own team's reps, the reps the quota board shows them (visibleReps), so a Delete — for good — reaches only
+    // those; an Admin's are every claim. A claim names its rep by name only, compared as the claims endpoint compares
+    // it, trimmed and in any case: a claim filed under a name its rep has since changed drops out of their Manager's
+    // list (an Admin's still holds it), and one filed for a removed rep whose name a new member of the team takes
+    // joins it.
+    const teamRepNames = new Set(visibleReps.map(u => String(u.name ?? '').trim().toLowerCase()));
+    const claimInView = (c) => isAdmin || teamRepNames.has(String(c.repName ?? '').trim().toLowerCase());
 
     // The commission plan and the SPIFF board on screen: the page's draft while
     // one is open (state §0.170), else what is saved. They used to change the
@@ -646,7 +714,8 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                         ? <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, fontFamily:T.sans }}>No SPIFFs defined yet.</div>
                         : spiffList.map((spiff,si) => (
                             <div key={spiff.id} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px', marginBottom:8 }}>
-                                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                                {/* An Inactive SPIFF is dimmed, with a caption under it (state §0.204) */}
+                                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', opacity:spiff.active?1:0.62 }}>
                                     <input type="text" value={spiff.name} placeholder="SPIFF name"
                                         disabled={!canEditIncentives}
                                         onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,name:e.target.value}:s))}
@@ -664,11 +733,8 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                                         style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
                                         onFocus={e=>e.target.style.borderColor=T.info}
                                         onBlur={e=>{ e.target.style.borderColor=T.border; }} />
-                                    <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
-                                        <input type="checkbox" checked={!!spiff.active} disabled={!canEditIncentives}
-                                            onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,active:e.target.checked}:s))} />
-                                        <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
-                                    </label>
+                                    <SpiffStatus name={spiff.name} active={!!spiff.active} disabled={!canEditIncentives}
+                                        onChange={v => editSpiffs(spiffList.map((s,i)=>i===si?{...s,active:v}:s))}/>
                                     {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>editSpiffs(spiffList.filter((_,i)=>i!==si)))}
                                         style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
@@ -676,9 +742,12 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                                 <input type="text" value={spiff.condition||''} placeholder="Description (shown to reps)"
                                     disabled={!canEditIncentives}
                                     onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,condition:e.target.value}:s))}
-                                    style={{ width:'100%', marginTop:6, padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.inkMid, boxSizing:'border-box' }}
+                                    style={{ width:'100%', marginTop:6, padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.inkMid, boxSizing:'border-box', opacity:spiff.active?1:0.62 }}
                                     onFocus={e=>e.target.style.borderColor=T.info}
                                     onBlur={e=>{ e.target.style.borderColor=T.border; }} />
+                                {!spiff.active && (
+                                    <div style={{ marginTop:6, fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>Inactive — not offered to reps. Claims already filed can still be approved.</div>
+                                )}
                             </div>
                         ))
                     }
@@ -707,7 +776,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
             <div style={{ padding:'12px 16px' }}>
                 {(() => {
                     const filter = settings._spiffClaimFilter||'pending';
-                    const filtered = spiffClaims.filter(c=>filter==='all'||c.status===filter).sort((a,b)=>new Date(b.claimedAt)-new Date(a.claimedAt));
+                    const filtered = spiffClaims.filter(c=>claimInView(c)&&(filter==='all'||c.status===filter)).sort((a,b)=>new Date(b.claimedAt)-new Date(a.claimedAt));
                     if (!filtered.length) return <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, background:T.surface2, borderRadius:T.r, fontFamily:T.sans }}>No {filter==='all'?'':filter} claims.</div>;
                     return filtered.map((claim,ci) => (
                         <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:ci<filtered.length-1?`1px solid ${T.border}`:'none', flexWrap:'wrap', fontFamily:T.sans }}>
@@ -716,7 +785,8 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                                 <div style={{ fontSize:10, color:T.inkMuted }}>{claim.repName} · {claim.opportunityName} · {new Date(claim.claimedAt).toLocaleDateString()}</div>
                             </div>
                             <div style={{ fontWeight:700, color:claim.spiffType==='multiplier'?T.info:T.ok, fontSize:13 }}>
-                                {claim.spiffType==='multiplier'?`${claim.multiplier}×`:`$${claim.amount.toLocaleString()}`}
+                                {/* No amount reads a dash: it threw here and took the whole tab down (state §0.204) */}
+                                {claim.spiffType==='multiplier'?(claim.multiplier == null ? '—' : `${claim.multiplier}×`):claim.amount == null ? '—' : `$${claim.amount.toLocaleString()}`}
                             </div>
                             <span style={{ fontSize:9, padding:'2px 7px', borderRadius:999, fontWeight:700,
                                 background:claim.status==='approved'?T.ok+'22':claim.status==='rejected'?T.danger+'22':claim.status==='paid'?T.info+'22':T.warn+'22',
@@ -725,12 +795,16 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                             </span>
                             {claim.status==='pending' && (
                                 <div style={{ display:'flex', gap:4 }}>
-                                    <button onClick={()=>updateClaimStatus(claim,'approved')}
-                                        style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓ Approve</button>
-                                    <button onClick={()=>updateClaimStatus(claim,'rejected')}
-                                        style={{ padding:'2px 8px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✕ Reject</button>
+                                    <button onClick={()=>updateClaimStatus(claim,'approved')} disabled={deletingIds.has(claim.id)}
+                                        style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:deletingIds.has(claim.id)?'default':'pointer', opacity:deletingIds.has(claim.id)?0.6:1, fontFamily:T.sans }}>✓ Approve</button>
+                                    {/* Reject deletes nothing, so it is not red — red is only for delete (state §0.204) */}
+                                    <button onClick={()=>updateClaimStatus(claim,'rejected')} disabled={deletingIds.has(claim.id)}
+                                        style={{ padding:'1px 7px', background:'transparent', color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:10, fontWeight:700, cursor:deletingIds.has(claim.id)?'default':'pointer', opacity:deletingIds.has(claim.id)?0.6:1, fontFamily:T.sans }}>✕ Reject</button>
                                 </div>
                             )}
+                            {/* Delete: every claim in view, every status, an Admin's or a Manager's alike (state §0.204) */}
+                            <button onClick={()=>deleteClaim(claim)} disabled={deletingIds.has(claim.id)} title="Delete this claim"
+                                style={{ padding:'1px 7px', background:'transparent', color:T.danger, border:`1px solid ${T.danger}`, borderRadius:T.r, fontSize:10, fontWeight:600, cursor:deletingIds.has(claim.id)?'default':'pointer', opacity:deletingIds.has(claim.id)?0.6:1, fontFamily:T.sans }}>{deletingIds.has(claim.id) ? 'Deleting…' : 'Delete'}</button>
                         </div>
                     ));
                 })()}

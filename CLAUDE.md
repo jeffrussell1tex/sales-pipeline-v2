@@ -121,10 +121,14 @@ One commit per verified batch; doc patch in the same commit.
   only through `fiscalStartOf`, January when none (guide §18b96).
 - A link a write stores (an account, contact, deal, lead, customer or
   location id; Dispatch's technician, vehicle, equipment unit, service
-  plan or job id) must name a live row of the org when the write names it
-  anew: `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92,
-  §18b94). An id the row already holds is never asked again; a screen that
-  copies a link leaves off one the server refuses (`saveDroppingRefused`).
+  plan or job id; a SPIFF claim's deal and SPIFF (an entry of the org's
+  SPIFF list), a quote line's product, an automation's task assignee (a
+  member)) must name a live row of the org when the write names it anew:
+  `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92, §18b94,
+  §18b97). An id the row already holds is never asked again; a screen that
+  copies a link leaves off one the server refuses (`saveDroppingRefused`) —
+  never a quote's lines, whose null would wipe every line: a New version
+  whose copied line names no product of this org is refused whole.
   A technician's login is a member of THIS org, stored as their Clerk id
   (`techLogin.js`) — never the app id the picker sends.
 

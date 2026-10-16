@@ -447,8 +447,9 @@ test('the price book is ONE: Quotes → Price Book (the products table) — the 
 test('the suites: the integration suite is in test:int and this file is in the harness', () => {
     const pkg = JSON.parse(read('package.json'));
     assert.ok(pkg.scripts['test:int'].includes('tests/integration/invoices.itest.mjs'));
-    const h = read('scripts/mutate-import.mjs');
-    assert.ok(h.includes('tests/invoices.test.mjs'));
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').replace(/\r\n/g, '\n').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/invoices.test.mjs'), 'SUITES runs this file');
     const a = read('tests/audit-coverage.test.mjs');
     assert.ok(a.includes("'quote-to-job.mjs':             ['dispatch_job.created_from_quote', 'dispatch_customer.created'],"));
     assert.ok(a.includes("'invoices.mjs':                 ['invoice.created', 'invoice.updated', 'invoice.issued', 'invoice.paid', 'invoice.voided', 'invoice.deleted'],"));

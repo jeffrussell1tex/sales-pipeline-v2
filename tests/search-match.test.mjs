@@ -520,7 +520,9 @@ test("the document share picker is the class's: the matcher, fifty, a word to op
 });
 
 test('the suites: this file is graded by the harness', () => {
-    assert.ok(read('scripts/mutate-import.mjs').includes(' tests/search-match.test.mjs'));
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/search-match.test.mjs'), 'SUITES runs this file');
 });
 
 // ── THE GUARDS ──────────────────────────────────────────────────────────────

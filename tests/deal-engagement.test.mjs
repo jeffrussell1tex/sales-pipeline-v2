@@ -297,7 +297,9 @@ test('ai-score.mjs tells the model who was engaged — names looked up by id, in
 });
 
 test('the suites: this file is graded by the harness; the prompt\'s integration test runs', () => {
-    assert.ok(read('scripts/mutate-import.mjs').includes(' tests/deal-engagement.test.mjs'));
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/deal-engagement.test.mjs'), 'SUITES runs this file');
     assert.ok(JSON.parse(read('package.json')).scripts['test:int'].includes('tests/integration/ai-score.itest.mjs'));
 });
 

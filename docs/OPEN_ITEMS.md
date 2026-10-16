@@ -129,20 +129,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      A company's quarters come from its own fiscal start on every screen
      and job, January when none is saved. The Annual / Quarterly switch is
      gone. What it found and left is filed in §2.2, §4.2, §4.5 and §4.6.
-   - **Batch 4b-2, the sales links — in two, next** (Jeff, 16 Oct: "Two
-     batches"; the decisions of 15 and 16 Oct in §4.6). The census (SELECT,
+   - **Batch 4b-2, the sales links — in two; 4b-2b done, 4b-2c next**
+     (Jeff, 16 Oct: "Two batches"; the decisions of 15 and 16 Oct in
+     §4.6). The census (SELECT,
      counts only, 16 Oct): no stored link names another org's record or
      nothing — 44 quote lines, every member's team and pin, the one rule
      assignee (blank) — and Accelerep QA's one claim, whose SPIFF was
      removed, is already approved.
-     - **4b-2b, the records, first:** SPIFF claims' deal and SPIFF, export
-       runs (no schedule; 409), quote lines' product (409), automations'
-       create-task assignee; a claim's Approve / Reject sends only what it
-       changes; the claim Delete button and the SPIFF Active / Inactive
-       control; a claim with no amount reads a dash, not a crash; a quote
-       line that is no line, or lines that are no list, refused (400);
-       Reject no longer red.
-     - **4b-2c, the members and the restore, then:** members' team and
+     - **4b-2b is DONE (§0.204; guide §18b97):** SPIFF claims' deal and
+       SPIFF, export runs (no schedule; 409), quote lines' product (409),
+       automations' create-task assignee; a claim save never creates a
+       claim or clears its SPIFF or rep; a claim's Approve / Reject sends
+       only what it changes; the claim Delete button — a Manager's list
+       their own team's ("Narrow to their team") — and the SPIFF Active /
+       Inactive control; a claim with no amount reads a dash, not a crash;
+       a quote line that is no line, or lines that are no list, refused
+       (400); Reject no longer red. What it found and left is filed in
+       §4.2, §4.6 and §4.8.
+     - **4b-2c, the members and the restore, next:** members' team and
        pinned reports, the forecast call sending only what it changes, and
        the restore — every date column, refused rows said, "records
        restored" counting only rows written (the rest "already here"), and
@@ -1261,6 +1265,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "Customer not found"); a New Job from Service Due's copied plan.
   Recommended with the rest: "… is no longer in your organization — reload
   Dispatch and try again." where the screen picked it.
+  Since §0.204, three more where the screen offers no list, or its own:
+  the claim modal (its SPIFFs are the session's list), the rule modal (its
+  roster the app load's) and New version — a copied line naming no product
+  of this org refuses the version, and the banner says "pick one from the
+  list" with no list offered (§0.204's review).
 - **After a backup restore clears an activity's first contact, its
   `contactId` stays empty** (§0.199): the list keeps the rest, and the
   mirror is rebuilt from it only when a save names the contacts. Minor.
@@ -1590,8 +1599,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
   The census (SELECT only, counts only, 15 Oct): no field names another
   org's row; 1 of 8 SPIFF claims names a SPIFF removed since — Accelerep
   QA's "Pane check SPIFF §0.169" (Jeff: demo data, "you can dump any non
-  matching spiff"; he removes it with the claim Delete button once it ships;
-  Claude deletes nothing).
+  matching spiff"; he removed it himself with the new claim Delete button in
+  §0.204's browser check, 16 Oct — `spiff_claim.deleted`, "was approved";
+  Claude deleted nothing).
+  - **4b-2b is DONE (§0.204; guide §18b97):** claims' deal and SPIFF,
+    quote lines' product and automations' assignee asked; the claim rules
+    (1) and (2); the 409s of claims, quotes and export runs; export runs
+    store no schedule; the claim Delete and the SPIFF control; D2, D3, D5
+    and Reject's colour. **4b-2c, still to do:** members' team and pinned
+    reports (pins written only by the member's own Pin; an Admin's or
+    Manager's member save stops taking them), the forecast call sending
+    only what it changes, and the restore — its dates, the rows it could
+    not restore said, "records restored" counting only rows written, and
+    the clean-up of quote lines' products, teams and pins.
   - 4b-2 (Jeff's decisions, 15 Oct): SPIFF claims' `opportunityId` (a deal)
     and `spiffId` (an entry of the org's SPIFF list); quote lines'
     `productId`; automations' create-task `assignedToId` (a member);
@@ -1655,6 +1675,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (a fourth breach of CLAUDE.md's sanitize rule — every Edit blanks
   `createdBy` and `lastError` and re-enables a paused schedule), and
   nothing runs a scheduled export (netlify.toml has no runner).
+  Since §0.204 claims, quotes and export runs answer 409, and a claim id
+  that is not text is 400; the quotes and export-runs creates still take
+  an id that is not text (`if (!data.id)` only — stored as its text, as a
+  claim's was), and export-runs looks its scope up on a plain object, so
+  a scope such as 'toString' passes the "Unknown scope" check and the read
+  is expected to throw — a 500, Admin only, nothing read (read in code,
+  not run).
 - **Two jobs write the whole `settings.extra` back with no lock**
   (score-leads-batch.mjs, integration-requests.mjs; the 4b-2 map): one
   running beside an Admin's settings save can put back an older SPIFF or
@@ -1782,10 +1809,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   the server takes the body's amount, multiplier, deal name and ARR; it
   does not require the rep's own Closed Won deal, an active SPIFF, or one
   not already claimed on that deal; a rep may re-point their pending
-  claim's deal and SPIFF. Also: the claims list throws on a claim with no
-  amount, says only Admins approve (Managers can too), keeps its own copy
-  after an approve, and lists the whole org's claims to a Manager; an
-  account merge renames a same-named twin account's claims' account text.
+  claim's deal and SPIFF. Also: the claims list keeps its own copy after
+  an approve; a Manager's list is the claims named for their own team's
+  reps on the screen only (since §0.204, "Narrow to their team") — the
+  claims GET, an Approve and a Delete still take any claim of the org
+  from a Manager — and by name, as a claim names its rep: a rep renamed
+  since leaves her earlier claims out of her Manager's list (an Admin's
+  still holds them), and a removed rep's name taken by a new member of
+  the team brings the old claims in; an account merge renames a
+  same-named twin account's claims' account text. And (§0.204, read in
+  code, not run): a claim stored with a SPIFF or
+  rep of only spaces, saved with that field cleared, still meets the NOT
+  NULL — a 500 — as the cleared 400 refuses only a set value turned
+  blank; one stored '' meets it on every save, an Approve included, as
+  sanitize stores '' as none (none of either — the census, 16 Oct; no
+  write stores one now).
 - **`spiff_claims` has no owner id;** claims match by roster name. A schema
   change, Jeff's go (§2.4). §0.169 (d).
 - **Stored ids and identity** (§0.166):
@@ -1918,6 +1956,25 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **The Sales Manager tab has one status line for every save** (§0.204's
+  review, 16 Oct; read in code; older for Approve and Reject — one
+  handler, `updateClaimStatus` — new for the Delete): a claim's Approve,
+  Reject or Delete answering while a SPIFF or commission save is out
+  replaces its "Saving…" — which unlocks that card's Save and Cancel
+  mid-save — and a claim action's success replaces any save's refusal — a
+  SPIFF, commission or quota save's — with "✓ Changes saved" while that
+  draft is still unsaved (its "Unsaved changes" label the only sign);
+  during a quota save it replaces the line's "Saving…" too, though
+  `quotaSending` keeps the quota card locked. Recommended: the SPIFF and
+  commission saves their own in-flight flag, as the quota save has
+  (`quotaSending`), and a claim's outcome never replacing any save's.
+- **A refused quote save's words follow the user to another org**
+  (§0.204's review, 16 Oct; read in code; older): `quoteModalError` is
+  App-level (useQuotes.js), cleared only when a quote save starts, with no
+  org-switch reset and no dismiss — org B's Quotes banner shows org A's
+  last refusal until a quote save starts in B. Since §0.204 a refused New
+  version is shown only there. Recommended: reset it on an org switch.
+  (`productModalError` is App-level too, but no screen reads it.)
 - **The Leads tab's lead-requests load throws an uncaught rejection on a
   dropped connection** (§0.199's pane check, 13 Oct — the pane's console
   showed "Uncaught (in promise) TypeError: Failed to fetch" during a burst

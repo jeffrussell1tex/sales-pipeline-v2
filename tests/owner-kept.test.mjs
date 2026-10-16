@@ -248,6 +248,8 @@ test('DIALOG: the number and letter shortcuts wait while the dialog is open', ()
 });
 
 test('the suites: this file is graded by the harness; the endpoints\' integration test runs', () => {
-    assert.ok(read('scripts/mutate-import.mjs').includes(' tests/owner-kept.test.mjs'));
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/owner-kept.test.mjs'), 'SUITES runs this file');
     assert.ok(JSON.parse(read('package.json')).scripts['test:int'].includes('tests/integration/owner-kept.itest.mjs'));
 });

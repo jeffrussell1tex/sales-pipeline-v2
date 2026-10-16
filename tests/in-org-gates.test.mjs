@@ -154,15 +154,20 @@ test('SPIFF PUT: over the stored claim; a rep edits their own, while pending, an
     const put = between(s, "if (event.httpMethod === 'PUT') {", '.returning();');
     assert.ok(put.includes('.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));'), 'the stored claim, in this org');
     const rep = between(put, 'if (!isAdmin && !isManager) {', 'changes = ownFields;');
-    assert.ok(rep.includes("if (!existing) return { statusCode: 404,"));
+    // A claim this org does not hold is not found for every role (§0.204 — "(1) and (2) now"): after the stored
+    // claim is read, before the rep's block — a manager's save of an unknown id created a claim.
+    before(put, '.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));', "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'after the stored claim is read');
+    before(put, "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'if (!isAdmin && !isManager) {', "every role's 404, before the rep's block");
+    assert.ok(!rep.includes('if (!existing)'), "not the rep's alone");
     assert.ok(rep.includes('if (!sameName(existing.repName, await getCallerName(auth.userId, orgId))) {'), 'their own claim');
     assert.ok(rep.includes("if ((existing.status || 'pending') !== 'pending') {"), 'while pending');
     assert.ok(rep.includes('const { status: _status, approvedAt: _approvedAt, approvedBy: _approvedBy, paidAt: _paidAt, repName: _repName, ...ownFields } = data;'),
         'status, approval, payment and the rep are not a rep’s to set');
     assert.ok(put.includes('const clean = sanitize({ ...(existing || {}), ...changes });'), 'built over the stored claim');
     assert.ok(!s.includes('const clean = sanitize(data);'), 'the full-row build from the body alone is gone');
-    // The §0.166 answer stays: a manager naming an id another org holds writes nothing.
-    assert.ok(s.includes("if (!upserted) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
+    // The §0.166 answer stays — a manager naming an id another org holds writes nothing — and the write is an update
+    // now (§0.204): a claim deleted while the save was out is not found, never put back.
+    assert.ok(s.includes("if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
 });
 
 test('SPIFF: a claim is a rep’s by name — trimmed, any case, never an empty name', () => {

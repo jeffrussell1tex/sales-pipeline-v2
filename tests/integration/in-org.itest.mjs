@@ -114,7 +114,9 @@ before(async () => {
     await cleanup();
     const now = new Date();
     await db.insert(settings).values([
-        { id: 'settings_' + A, orgId: A, extra: { dispatchEnabled: true, slackConfig: { webhookUrl: SLACK_URL, channel: '#wins', enabled: true } } },
+        // A's SPIFF list holds the SPIFF its claims name: a claim's SPIFF is an entry of the org's list (state §0.204).
+        { id: 'settings_' + A, orgId: A, extra: { dispatchEnabled: true, slackConfig: { webhookUrl: SLACK_URL, channel: '#wins', enabled: true },
+            spiffs: [{ id: 'spiff_itest_inorg', name: 'Q4 push', type: 'flat', amount: 500, active: true }] } },
         { id: 'settings_' + B, orgId: B, extra: { dispatchEnabled: true } },
     ]);
     await db.insert(users).values([

@@ -7,7 +7,10 @@
 //
 // A spec names a write's link fields: [{ key, kind, shape = 'one', heldFrom = [key], follow = true, notSelf }]
 //   kind      what the id names: account, contact, deal, lead, customer, location (NOUNS); and since
-//             §0.201 Dispatch's technician, vehicle, equipment unit, service plan and job
+//             §0.201 Dispatch's technician, vehicle, equipment unit, service plan and job; since §0.204 a
+//             quote line's product, a rule's assignee (a member) and a claim's SPIFF (an entry of the org's
+//             list, not a row) — a link inside a list or an action checked through a view of the ids it
+//             holds (productIdsOf, assigneesOf, below)
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
@@ -24,6 +27,8 @@ export const NOUNS = Object.freeze({
     account: 'account', contact: 'contact', deal: 'deal', lead: 'lead', customer: 'customer', location: 'service location',
     // Dispatch's (§0.201): none of them is ever merged away
     technician: 'technician', vehicle: 'vehicle', equipment: 'equipment unit', plan: 'service plan', job: 'job',
+    // A sales record's (state §0.204): a quote line's product, a rule's assignee, a claim's SPIFF — none ever merged away
+    product: 'product', member: 'member', spiff: 'SPIFF',
 });
 // The kinds a row of which can be merged away (mergeArchived, mergedIntoId).
 export const MERGES = Object.freeze(['account', 'contact']);
@@ -188,4 +193,32 @@ export async function saveDroppingRefused(send, body, droppable) {
         answer = await send(sent);
     }
     return { answer, sent };
+}
+
+// The ids of a list's entries that are records (state §0.204): what _links.mjs reads of a list the org's settings
+// row keeps (its SPIFFs) — an entry that is an object whose id is text, not empty. A plain-text entry (an old
+// team, teamMembership.js) or one with no id names nothing; an id twice is one. Anything but a list: none.
+export function listEntryIds(list) {
+    if (!Array.isArray(list)) return [];
+    return [...new Set(list.filter((e) => e && typeof e === 'object' && typeof e.id === 'string' && e.id !== '').map((e) => e.id))];
+}
+
+// A quote's lines as the flat list their products are checked through (state §0.204) — a view: the lines are
+// stored as sent, never rewritten (no product is merged away), and a screen never lists them for
+// saveDroppingRefused (its null would wipe every line). Each line's productId; a line that is no object names
+// none (undefined, which heldIds passes over). Anything but a list is handed back as given, so the check refuses
+// a non-empty one as no list (NOT_AN_ID) rather than read it as no lines.
+export function productIdsOf(lineItems) {
+    if (!Array.isArray(lineItems)) return lineItems;
+    return lineItems.map((l) => (l && typeof l === 'object' ? l.productId : undefined));
+}
+
+// A rule's actions as the flat list their assignees are checked through (state §0.204 — a view, as above): the
+// member id (params.assignedToId) of each create-task action, the one action that names a member by id
+// (dispatch-automations.mjs); a name-only pick stores '' and names none. An action that is no object, or whose
+// params are none, names none. Anything but a list names none — the engine runs only a list.
+export function assigneesOf(actions) {
+    if (!Array.isArray(actions)) return [];
+    return actions.filter((a) => a && typeof a === 'object' && a.type === 'create_task' && a.params && typeof a.params === 'object')
+        .map((a) => a.params.assignedToId);
 }

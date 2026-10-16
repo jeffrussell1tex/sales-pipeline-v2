@@ -117,5 +117,7 @@ test('a refused write hands back no data — the caller rolls back on ok', async
 });
 
 test('the suites: this file is graded by the harness', () => {
-    assert.ok(readFileSync(new URL('../scripts/mutate-import.mjs', import.meta.url), 'utf8').includes(' tests/db-write.test.mjs'), 'SUITES runs this file');
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = readFileSync(new URL('../scripts/mutate-import.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/db-write.test.mjs'), 'SUITES runs this file');
 });

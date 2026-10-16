@@ -1,8 +1,8 @@
 import { db }                                                        from '../../db/index.js';
-import { exportRuns, exportSchedules,
+import { exportRuns,
          accounts, contacts, opportunities,
          tasks, activities, leads }                                   from '../../db/schema.js';
-import { eq, and, desc }                                              from 'drizzle-orm';
+import { eq, desc }                                                   from 'drizzle-orm';
 import { verifyAuth, requireRole }                                    from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 
@@ -79,7 +79,7 @@ export const handler = async (event) => {
         }
 
         // ── POST — trigger an ad-hoc export ───────────────────────────────
-        // Body: { id, scope, format, name?, scheduleId? }
+        // Body: { id, scope, format, name? }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id)    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };
@@ -116,13 +116,15 @@ export const handler = async (event) => {
             const sizeBytes  = Buffer.byteLength(payload, 'utf8');
             const name       = data.name || `Ad-hoc · ${data.scope} · ${new Date().toISOString().split('T')[0]}`;
 
-            // Record the run
+            // Record the run. It names no schedule, whatever the body says (state §0.204 — "Fix these 3"): no
+            // screen sends one, nothing reads it and nothing runs a schedule. An id another org holds writes
+            // nothing — answered 409, not crashed on the key; no file is handed over.
             const [run] = await db
                 .insert(exportRuns)
                 .values({
                     id:          data.id,
                     orgId,
-                    scheduleId:  data.scheduleId || null,
+                    scheduleId:  null,
                     name,
                     scope:       data.scope,
                     format,
@@ -132,7 +134,9 @@ export const handler = async (event) => {
                     durationMs,
                     status:      'ok',
                 })
+                .onConflictDoNothing({ target: exportRuns.id })
                 .returning();
+            if (!run) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.' }) };
             // A whole table left the app as a file — the log says which, how big, by whom (§0.143).
             await auditAs(orgId, userId, { action: 'export.run', entityType: 'export', entityId: run.id, entityName: name, detail: `${data.scope} · ${format} · ${rows.length} rows · ${Math.round(sizeBytes / 1024)} KB` });
 

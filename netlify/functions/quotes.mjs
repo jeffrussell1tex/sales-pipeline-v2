@@ -21,6 +21,13 @@ import {
 // The action words stay literals here, as every writer's do (tests/audit-coverage);
 // tests/approval-stats.test.mjs pins them to approvalStats.js's.
 import { APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, approvalTierStats } from '../../src/utils/approvalStats.js';
+import { checkLinks } from './_links.mjs';
+import { productIdsOf } from '../../src/utils/linkIds.js';
+
+// The product each quote line names is one of this org's — any, an inactive one too — when a write names it
+// anew; one the stored lines hold is never asked again (state §0.204 — Jeff: "Any of this org's, refuse").
+// Asked through productIdsOf's view of the lines, which is never written back.
+const QUOTE_LINES = [{ key: 'lineItems', kind: 'product', shape: 'many' }];
 
 // A status a save MOVES the quote to names the event (§0.143); anything else is an
 // update. The words are the ones the app stores: this map listed 'Sent' and
@@ -191,6 +198,13 @@ const refuse = (statusCode, error) => ({ statusCode, headers, body: JSON.stringi
 // A quote on a deal the caller may not see answers as missing — never "it exists,
 // but it is not yours".
 const NOT_FOUND = 'Quote not found';
+// A quote's lines are a list of product lines (state §0.204 — Jeff, 16 Oct: "Refuse with a 400"). A line that
+// is not an object, or lines that are not a list, were taken: a null line was a 500 (calcTotals), any other
+// was stored as a line, and a value that is not a list was stored as no lines — on a save, the lines wiped and
+// the totals zeroed. An empty value ('' or null) still clears them, as before.
+const NOT_LINES = 'Each quote line must be a product line, in a list.';
+const linesMalformed = (data) => 'lineItems' in data && data.lineItems != null && data.lineItems !== ''
+    && (!Array.isArray(data.lineItems) || data.lineItems.some((l) => !l || typeof l !== 'object' || Array.isArray(l)));
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -284,6 +298,14 @@ export const handler = async (event) => {
             if (!access.canRead) return refuse(404, 'Deal not found');
             if (!access.canWrite) return refuse(403, 'Forbidden: you can only quote your own or unassigned deals');
 
+            // Its lines (state §0.204): a list of product lines, each product one of this org's — any, an inactive
+            // one too; another org's, or an id that names none, is refused naming the field, and nothing is
+            // written. A new quote holds nothing, so every product it names is asked — a new version's copied
+            // lines too.
+            if (linesMalformed(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: NOT_LINES, field: 'lineItems' }) };
+            const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, null, orgId);
+            if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
+
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
             const totals = calcTotals(lineItems, data.dealDiscount || 0);
 
@@ -308,8 +330,12 @@ export const handler = async (event) => {
             // index is on (org, number, version) — so versioning cannot trip it.
             const [inserted] = await withNumberRetry(async () => {
                 const quoteNumber = await resolveQuoteNumber(orgId, data);
-                return db.insert(quotes).values({ ...basePayload, quoteNumber }).returning();
+                // A taken id — another org's or this org's — writes nothing and is answered 409 (state §0.204 —
+                // Jeff: "Fix these 3"); it was retried as a number collision, then a 500. The arbiter is the id
+                // alone: a number taken is still a unique violation on (org, number, version), retried as before.
+                return db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning();
             }, { label: 'quote number' });
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That quote id is already in use.' }) };
             await auditAs(orgId, auth.userId, {
                 action: 'quote.created', entityType: 'quote', entityId: inserted.id, entityName: inserted.name || inserted.quoteNumber,
                 detail: `${inserted.quoteNumber} v${inserted.version} · ${lineItems.length} line item${lineItems.length === 1 ? '' : 's'}`,
@@ -332,6 +358,14 @@ export const handler = async (event) => {
             const access = await dealAccess(auth, existing.opportunityId);
             if (!access.canRead) return refuse(404, NOT_FOUND);
             if (!access.canWrite) return refuse(403, 'Forbidden: you can only change quotes on your own or unassigned deals');
+
+            // Its lines (state §0.204), before anything is written — the deal's sync below included: a list of
+            // product lines, and a product a line names anew is one of this org's; one the stored lines hold (a
+            // set, not by position) is never asked again, so a Draft re-sent as stored stands. A save that sends
+            // no lines — a status move — asks nothing.
+            if (linesMalformed(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: NOT_LINES, field: 'lineItems' }) };
+            const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, { lineItems: productIdsOf(existing.lineItems) }, orgId);
+            if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
 
             // Merged over the stored row: a save names what it changes, and a field it
             // leaves out keeps its value — a PUT without lineItems used to write [] and

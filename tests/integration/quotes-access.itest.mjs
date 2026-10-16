@@ -59,7 +59,7 @@ const { handler: quotesFn } = await import('../../netlify/functions/quotes.mjs')
 const { handler: emailFn }  = await import('../../netlify/functions/quote-email.mjs');
 const { handler: toJobFn }  = await import('../../netlify/functions/quote-to-job.mjs');
 const { db } = await import('../../db/index.js');
-const { users, opportunities, quotes, auditLog, settings } = await import('../../db/schema.js');
+const { users, opportunities, quotes, auditLog, settings, products } = await import('../../db/schema.js');
 const { eq, and } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
@@ -111,6 +111,7 @@ const row = async (id) => (await db.select().from(quotes).where(eq(quotes.id, id
 const cleanup = async () => {
     for (const o of [A, B]) {
         await db.delete(quotes).where(eq(quotes.orgId, o));
+        await db.delete(products).where(eq(products.orgId, o));
         await db.delete(opportunities).where(eq(opportunities.orgId, o));
         await db.delete(auditLog).where(eq(auditLog.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
@@ -128,6 +129,8 @@ before(async () => {
     invalidateRoster();
     const opp = (id, org, ownerKey) => ({ id, orgId: org, ownerId: ownerKey ? USR[ownerKey] : null, salesRep: ownerKey ? `Itest Quotes ${ownerKey}` : '', opportunityName: id, account: 'Itest Co', pipelineId: 'default', stage: 'Proposal', arr: '1000.00' });
     await db.insert(opportunities).values([opp(OPP.mine, A, 'rep'), opp(OPP.other, A, 'other'), opp(OPP.none, A, null), opp(OPP.b, B, null)]);
+    // The product the lines name: a quote line's product is one of the org's (state §0.204).
+    await db.insert(products).values({ id: 'p_itest_quotes', orgId: A, name: 'Itest Platform', productType: 'recurring', unit: 'month', listPrice: '100.00' });
     const q = (id, opportunityId, status, disc, extra = {}) => ({
         id, orgId: opportunityId === OPP.b ? B : A, opportunityId, quoteNumber: 'Q-2026-9' + (10 + Object.values(Q).indexOf(id)),
         version: 1, name: id, status, lineItems: lines(disc), createdBy: 'Itest Quotes rep', ...extra,

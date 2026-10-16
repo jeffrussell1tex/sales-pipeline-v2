@@ -405,7 +405,14 @@ test('an existing automation can be EDITED — the same modal seeded from the ru
     assert.ok(s.includes("onClose={() => { setShowModal(false); setEditingRule(null); }}"), 'closing forgets the rule being edited');
     // the endpoint's PUT already takes every field the modal sends
     const fn = code(read('netlify/functions/automations.mjs'));
-    for (const k of ['name', 'triggerEvent', 'conditions', 'actions']) assert.ok(fn.includes(`if (data.${k}`), `PUT applies ${k}`);
+    // Each field the modal sends is applied — its whole apply line, so no other line that starts `if (data.…` stands
+    // in for it (§0.204 put a check of the rule's actions, `'actions' in data`, ahead of these).
+    for (const [k, line] of [
+        ['name',         '            if (data.name         !== undefined) updates.name         = data.name;'],
+        ['triggerEvent', '            if (data.triggerEvent !== undefined) updates.triggerEvent = data.triggerEvent;'],
+        ['conditions',   '            if (data.conditions   !== undefined) updates.conditions   = data.conditions;'],
+        ['actions',      '            if (data.actions      !== undefined) updates.actions      = data.actions;'],
+    ]) assert.ok(fn.includes(line), `PUT applies ${k}`);
     assert.ok(fn.includes('.where(and(eq(automations.id, data.id), eq(automations.orgId, orgId)))'), 'org-scoped');
 });
 

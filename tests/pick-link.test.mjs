@@ -380,5 +380,7 @@ test('pickLink.js is pure: it imports only the matcher (netlify/functions reach 
 });
 
 test('the suites: this file is graded by the harness', () => {
-    assert.ok(read('scripts/mutate-import.mjs').includes(' tests/pick-link.test.mjs'), 'SUITES runs this file');
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/pick-link.test.mjs'), 'SUITES runs this file');
 });

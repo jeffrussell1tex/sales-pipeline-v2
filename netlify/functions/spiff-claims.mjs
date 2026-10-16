@@ -3,6 +3,12 @@ import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A claim's deal and its SPIFF (state §0.204 — Jeff, 15 Oct: "Any of this org's, refuse"): a deal of this org,
+// an entry of its SPIFF list — any, an inactive one too — when a write names it anew; one the claim holds is
+// never asked again (a SPIFF removed since, a deal deleted since). Anything else is refused, naming the field.
+const CLAIM_LINKS = [{ key: 'opportunityId', kind: 'deal' }, { key: 'spiffId', kind: 'spiff' }];
 
 // A claim names its rep by name only (spiff_claims has no owner id), so a rep's
 // own claim is the one whose name is theirs — trimmed and in any case, as owners
@@ -11,6 +17,12 @@ const sameName = (a, b) => {
     const x = String(a ?? '').trim().toLowerCase();
     return !!x && x === String(b ?? '').trim().toLowerCase();
 };
+
+// A claim's SPIFF or rep is blank (state §0.204) as its write would store it: text that is empty or spaces, or
+// any value sanitize's `|| null` stores as none — 0 and false too, which read as set through String() and met
+// the NOT NULL (a 500). Anything else is not blank: an object or a number is the link check's to refuse (a SPIFF
+// that is no id is 400), never String()'s to throw on.
+const blankText = (v) => (typeof v === 'string' ? !v.trim() : !v);
 
 // A status a manager sets names the event (§0.143); a rep's edit is an update.
 const CLAIM_STATUS_ACTIONS = Object.freeze({ approved: 'spiff_claim.approved', rejected: 'spiff_claim.rejected', paid: 'spiff_claim.paid' });
@@ -70,7 +82,8 @@ export const handler = async (event) => {
         // ── POST: submit a new claim (reps) ───────────────────────────────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-            if (!data.id || !data.repName || !data.spiffId) {
+            // A SPIFF of spaces is none (state §0.204), as no SPIFF is; the rep is tested below, on the claim as written.
+            if (!data.id || blankText(data.spiffId)) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, repName, spiffId required' }) };
             }
             // A rep's claim is filed in their own name, pending, with nothing
@@ -85,17 +98,29 @@ export const handler = async (event) => {
                 if (!me) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your account is not on this organization\'s team list.' }) };
                 claim = { ...claim, repName: me, status: 'pending', approvedAt: null, approvedBy: null, paidAt: null };
             }
+            // The rep it is filed for is named (state §0.204), on the claim as written: a rep's own claim is their
+            // roster name, whatever the body sent; a manager's names the body's rep, and spaces name none — a claim
+            // filed for "  " was no rep's, no name matches it.
+            if (blankText(claim.repName)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, repName, spiffId required' }) };
+            // A claim id is text (state §0.204), as a member's is.
+            if (typeof data.id !== 'string') return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+            // Its deal and SPIFF are this org's (CLAIM_LINKS), asked of the claim as written: no deal asks nothing.
+            const linked = await checkLinks(CLAIM_LINKS, claim, null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            // An id another org holds writes nothing — answered, not crashed on the key (state §0.204).
             const [inserted] = await db.insert(spiffClaims)
                 .values({ ...claim, orgId })
-                .returning();
+                .onConflictDoNothing({ target: spiffClaims.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.' }) };
             await auditAs(orgId, auth.userId, { action: 'spiff_claim.submitted', entityType: 'spiff_claim', entityId: inserted.id, entityName: `${inserted.repName} · ${inserted.spiffName || inserted.spiffId}`, detail: `${inserted.account || inserted.opportunityName || ''}${inserted.amount != null ? ` · $${Number(inserted.amount).toLocaleString()}` : ''}`.trim() || null });
             return { statusCode: 201, headers, body: JSON.stringify({ spiffClaim: inserted }) };
         }
 
-        // ── PUT: update a claim — approve / reject / mark paid / upsert ───────
+        // ── PUT: update a claim — approve / reject / mark paid / edit ─────────
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
-            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+            // A claim id is text (state §0.204), as a member's is.
+            if (!data.id || typeof data.id !== 'string') return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
 
             // Only managers/admins can change status to approved/rejected/paid
             if (['approved','rejected','paid'].includes(data.status) && !isAdmin && !isManager) {
@@ -109,12 +134,14 @@ export const handler = async (event) => {
             // — a 500.
             const [existing] = await db.select().from(spiffClaims)
                 .where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));
+            // A claim this org does not hold is not found, for every role (state §0.204 — "(1) and (2) now"): a
+            // manager's save of an unknown id created a claim.
+            if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
             let changes = data;
             if (!isAdmin && !isManager) {
                 // A rep edits their own claim, while it is pending; its approval and
                 // payment are a manager's (state §0.169) — a rep could edit any rep's
                 // claim, and set who approved it and when it was paid.
-                if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
                 if (!sameName(existing.repName, await getCallerName(auth.userId, orgId))) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'You can only edit your own claims.' }) };
                 }
@@ -124,17 +151,25 @@ export const handler = async (event) => {
                 const { status: _status, approvedAt: _approvedAt, approvedBy: _approvedBy, paidAt: _paidAt, repName: _repName, ...ownFields } = data;
                 changes = ownFields;
             }
+            // A claim names its SPIFF and its rep (state §0.204 — "(1) and (2) now"): a save that turns either from set
+            // to blank — '', null, spaces, 0 or false (blankText) — is refused before anything is asked; a cleared one was the write's NOT
+            // NULL, a 500, a rep of spaces was stored, and a SPIFF of spaces read as one not in the org. A value stored
+            // blank before is not this save's to refuse.
+            const blank = ['spiffId', 'repName'].find((k) => k in changes && !blankText(existing[k]) && blankText(changes[k]));
+            if (blank) return { statusCode: 400, headers, body: JSON.stringify({ error: blank === 'spiffId' ? 'A claim names its SPIFF — it cannot be cleared.' : 'A claim names its rep — it cannot be cleared.', field: blank }) };
+            // Each link it names anew is this org's (CLAIM_LINKS, state §0.204); one the claim holds is never asked
+            // again — a SPIFF removed since, a deal deleted since.
+            const linked = await checkLinks(CLAIM_LINKS, changes, existing, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             const clean = sanitize({ ...(existing || {}), ...changes });
             const { id, ...updateData } = clean;
-            const [upserted] = await db.insert(spiffClaims)
-                .values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: spiffClaims.id, setWhere: eq(spiffClaims.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
+            // Update-only (state §0.204): a claim deleted while this save was out is not found — the upsert put it back.
+            const [updated] = await db.update(spiffClaims).set({ ...updateData, updatedAt: new Date() })
+                .where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id)))
                 .returning();
-            // An id another org holds (state §0.166): the org-scoped upsert writes
-            // nothing, and this went on to crash on the missing row — a 500.
-            if (!upserted) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
-            await auditAs(orgId, auth.userId, { action: CLAIM_STATUS_ACTIONS[data.status] || 'spiff_claim.updated', entityType: 'spiff_claim', entityId: upserted.id, entityName: `${upserted.repName} · ${upserted.spiffName || upserted.spiffId}`, detail: `${upserted.status || 'pending'}${upserted.amount != null ? ` · $${Number(upserted.amount).toLocaleString()}` : ''}` });
-            return { statusCode: 200, headers, body: JSON.stringify({ spiffClaim: upserted }) };
+            if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
+            await auditAs(orgId, auth.userId, { action: CLAIM_STATUS_ACTIONS[data.status] || 'spiff_claim.updated', entityType: 'spiff_claim', entityId: updated.id, entityName: `${updated.repName} · ${updated.spiffName || updated.spiffId}`, detail: `${updated.status || 'pending'}${updated.amount != null ? ` · $${Number(updated.amount).toLocaleString()}` : ''}` });
+            return { statusCode: 200, headers, body: JSON.stringify({ spiffClaim: updated }) };
         }
 
         // ── DELETE: remove a claim (managers/admins only) ─────────────────────

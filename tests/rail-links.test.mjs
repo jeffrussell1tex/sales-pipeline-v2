@@ -430,7 +430,9 @@ test("a Save's refusal is never hidden behind the last save's server error: each
 });
 
 test('the suites: this file is graded by the harness', () => {
-    assert.ok(read('scripts/mutate-import.mjs').includes(' tests/rail-links.test.mjs'), 'SUITES runs this file');
+    // The SUITES value itself, never the whole harness: a comment there naming this file met the old pin (§0.204 review P1).
+    const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
+    assert.ok(suites.includes('tests/rail-links.test.mjs'), 'SUITES runs this file');
 });
 
 // ── the pre-ship round (12 Oct): untouched is what it opened with, and said ──────────

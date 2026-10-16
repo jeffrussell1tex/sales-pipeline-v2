@@ -14,6 +14,8 @@ import { automations, automationRuns } from '../../db/schema.js';
 import { eq, and, desc, asc } from 'drizzle-orm';
 import { verifyAuth }  from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { checkLinks } from './_links.mjs';
+import { assigneesOf } from '../../src/utils/linkIds.js';
 
 const headers = {
     'Content-Type':                'application/json',
@@ -24,6 +26,12 @@ const headers = {
 
 // Admins and Managers manage automations, and only they read them (state §0.169).
 const canWrite = (role) => ['Admin', 'Manager'].includes(role);
+
+// The member a create-task action assigns its task to (params.assignedToId — the one id the engine reads off a
+// rule, dispatch-automations.mjs) is one of this org's — any, deactivated or invited too — when a write names
+// it anew; one the stored rule holds is never asked again (state §0.204 — Jeff: "Any of this org's, refuse").
+// Asked through assigneesOf's view of the actions, which is never written back.
+const RULE_LINKS = [{ key: 'actions', kind: 'member', shape: 'many' }];
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -70,6 +78,10 @@ export const handler = async (event) => {
             if (!Array.isArray(data.actions) || data.actions.length === 0) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'at least one action is required' }) };
             }
+            // Each assignee it names is a member of this org (state §0.204): another org's, or an id that names no
+            // member, is refused naming the field, and nothing is written.
+            const assigned = await checkLinks(RULE_LINKS, { actions: assigneesOf(data.actions) }, null, orgId);
+            if (assigned.error) return { statusCode: assigned.status, headers, body: JSON.stringify({ error: assigned.error, field: assigned.field }) };
             const [inserted] = await db.insert(automations).values({
                 id:           'auto_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                 orgId,
@@ -91,6 +103,16 @@ export const handler = async (event) => {
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            // A rule's create-task assignee is a member of this org (state §0.204), deactivated or invited too; the
+            // one the rule holds is never asked again. The rule is read in this org: one it does not hold is 404,
+            // as the update's own. The toggle names no actions and reads nothing.
+            if ('actions' in data) {
+                const [held] = await db.select({ actions: automations.actions }).from(automations)
+                    .where(and(eq(automations.orgId, orgId), eq(automations.id, data.id))).limit(1);
+                if (!held) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                const assigned = await checkLinks(RULE_LINKS, { actions: assigneesOf(data.actions) }, { actions: assigneesOf(held.actions) }, orgId);
+                if (assigned.error) return { statusCode: assigned.status, headers, body: JSON.stringify({ error: assigned.error, field: assigned.field }) };
+            }
             const updates = { updatedAt: new Date() };
             if (data.name         !== undefined) updates.name         = data.name;
             if (data.triggerEvent !== undefined) updates.triggerEvent = data.triggerEvent;

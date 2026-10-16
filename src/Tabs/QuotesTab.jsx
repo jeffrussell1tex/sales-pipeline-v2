@@ -1640,7 +1640,7 @@ export default function QuotesTab() {
 
     const handleNewVersion = async () => {
         if (!activeQuote || !canEdit) return;
-        setSaving(true);
+        setSaving(true); setError(null);
         try {
             // No cap on versions. A real negotiation can run well past three rounds,
             // and the previous hard limit of 3 was arbitrary, client-only (nothing
@@ -1675,7 +1675,10 @@ export default function QuotesTab() {
                 createdBy: currentUser,
             };
             const saved = await handleSaveQuote(payload, null);
-            if (!saved) { setError('Could not create the new version — nothing was written.'); return; }
+            // Refused: the server's own words are on the banner already — handleSaveQuote keeps them
+            // in quoteModalError (state §0.204: a copied line naming no product of this org is refused,
+            // and the version is not made).
+            if (!saved) return;
             // Carrying nothing forward is almost never what the rep wanted, so say so
             // rather than leaving them to discover an empty builder.
             if ((source.lineItems || []).length && !(saved.lineItems || []).length) {

@@ -19,26 +19,45 @@
 // own rows that did not land.
 import { db } from '../../db/index.js';
 import {
-    accounts, contacts, opportunities, leads, tasks, activities, quotes, users,
+    accounts, contacts, opportunities, leads, tasks, activities, quotes, users, products, settings,
     dispatchCustomers, dispatchServiceLocations, dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory,
     dispatchTechnicians, dispatchVehicles, dispatchEquipment, dispatchServicePlans,
 } from '../../db/schema.js';
 import { and, eq, getTableName, inArray, isNotNull, sql } from 'drizzle-orm';
 import { MERGES, liveIds, linksAsked, linksDecided, bulkLinksAsked, bulkLinksDecided } from '../../src/utils/linkIds.js';
+import { listEntryIds } from '../../src/utils/linkIds.js';
 
-// The table each kind of link names — Dispatch's since §0.201.
+// The table each kind of link names — Dispatch's since §0.201; a quote line's product since §0.204 (any of the
+// org's, an inactive one too: a product is only ever deactivated).
 const TABLES = Object.freeze({
     account: accounts, contact: contacts, deal: opportunities, lead: leads,
     customer: dispatchCustomers, location: dispatchServiceLocations,
     technician: dispatchTechnicians, vehicle: dispatchVehicles, equipment: dispatchEquipment, plan: dispatchServicePlans, job: dispatchJobs,
+    product: products,
 });
 // What only the restore's clean-up names: a job's quote, a quote of the org — and a technician's login, a
 // member's Clerk identity (users.clerk_user_id, never their app id: §0.201), read in clearField.
 const SWEPT = Object.freeze({ ...TABLES, quote: quotes });
 
+// The kinds read apart from TABLES (state §0.204 — "Any of this org's, refuse"): a member, any row of the org's
+// members, deactivated or invited too — the users table named only where it is read (the member-names guard
+// lists each place it is handed on as a value), and read fresh, not through the roster's 30-second cache, so a
+// member invited a moment ago counts; and an entry of a list the org's settings row keeps (a SPIFF, an inactive
+// one too) — an entry, not a row, so never in TABLES or SWEPT: the restore's clean-up reads columns. Every
+// settings row of the org is read, with no limit (there is one, settings_org_id_uniq): a read that lost its org
+// clause would take every org's list each time, never one row at random.
+const LISTS = Object.freeze({ spiff: 'spiffs' });
+async function idsReadApart(kind, list, orgId) {
+    if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));
+    const rows = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));
+    const held = new Set(rows.flatMap((r) => listEntryIds(r.extra?.[LISTS[kind]])));
+    return list.filter((id) => held.has(id)).map((id) => ({ id }));
+}
+
 // The live row each asked id names in this org (linkIds.js's liveIds): every row it reads — the merge walk's
 // each hop too — is read in this org.
 export async function liveIdsInOrg(kind, ids, orgId, { follow = true } = {}) {
+    if (kind === 'member' || LISTS[kind]) return liveIds(ids, (list) => idsReadApart(kind, list, orgId));
     const table = TABLES[kind];
     const merges = MERGES.includes(kind);
     const cols = merges
