@@ -180,7 +180,30 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      them" — merged-away accounts leave the Accounts tab and Sub-Accounts,
      the record kept (its Undo and the links that resolve through it
      unchanged); "Right after 4b-2c" — a batch of its own, the Contacts tab
-     checked for the same gap with it.
+     checked for the same gap with it. Mapped and designed 16 Oct (read
+     only: two mappers, a designer, two critics): the hiding belongs in the
+     screens, not the accounts GET or the app's loaded lists — those must
+     keep merged-away rows, through which links, chips and pickers reach the
+     record each was merged into, and an Admin's "delete every listed
+     contact" compares against the whole loaded list. The census (SELECT,
+     counts only, 21:13 UTC): UKG holds 3 merged-away accounts and 5
+     merged-away contacts; no live account stands under a merged-away
+     parent, and no live contact or deal names a merged-away account, in
+     any org. Jeff, 16 Oct: "Hide contacts too" — merged-away contacts leave
+     the Contacts tab, an account's People list and the contact counts, in
+     the same batch.
+     - **Then, a merge's Undo on screen** (Jeff, 16 Oct: "Undo as its own
+       batch next"): every merge screen says merges are fully reversible,
+       but no screen calls the server's reverse (`reverseMerge`,
+       `reverseContactMerge` in useMerge — read in code); a merge confirms
+       with an Undo.
+     - **Then, merged-away records leave every other list** (Jeff, 16 Oct:
+       "One cleanup batch next"): the header search, Reports' account list,
+       the "# of accounts" counts in reports and on Home, Settings' Segments
+       and Industries counts, and four pickers that break guide §18b91 rule
+       5 (merged-away records leave every picker) — the document link
+       picker, Dispatch's two account pickers and Reports' "add contacts to
+       this deal".
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
