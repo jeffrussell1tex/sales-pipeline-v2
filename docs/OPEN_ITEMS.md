@@ -431,40 +431,29 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **When §0.206 ships, reload every app tab opened before it; then Jeff's
-  read-only look at UKG on PROD** (`org_3CwnbloUXZQl0e6KtDhXFXRK8UD`; the
-  design's close-out): a tab opened before its site's §0.206 deploy and
-  not reloaded keeps the old lists — merged-away accounts and contacts
-  listed — and there a Select all + Delete takes the listed merged-away
-  records with the rest. Contacts go by the one-request clear when it is
-  an Admin's, the list holds every contact of the org (All, no search)
-  and none is kept for an open deal; otherwise one request each. Accounts
-  (an Admin's) go one request each.
-  Their merges' reverse then un-archives nothing, and the delete's Undo
-  brings them back as live records (each re-post carries its merge mark,
-  but neither POST stores it — `sanitize` in accounts.mjs and contacts.mjs
-  has no merge field; §4.2 files the accounts' half). After a reload: the
-  Accounts tab, All, in the Signal or List view (Business Book's lanes
-  can show one account in several lanes, or in none), search "Resinall"
-  — "Resinall" listed once, "Resinall, Inc." absent; if the Contacts
-  tab's All count was noted before the deploy, an Admin's reads fewer by
-  the merged-away contacts UKG then holds — 5 at the census (16 Oct 21:13
-  UTC; a contact merge, a reverse or such a contact's delete since
-  changes it) — unless contacts were added or removed between the two
-  reads. Nothing that writes is clicked. The ship folds the reload into
-  the item below.
-- **Reload every app tab opened before the forty-first ship** (Deployed:
-  dev 13:03 UTC, prod 13:06 UTC, 17 Oct — it covers the fortieth's, 16 Oct
-  15:03 UTC, the thirty-ninth's, 16 Oct 03:28 UTC, the thirty-eighth's, 15
-  Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the
-  thirty-sixth's, 14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25
-  UTC, too): an older tab keeps the screens from before §0.199, §0.200,
-  §0.201, §0.202, §0.203, §0.204 and §0.205 — the task rail's completion,
-  a New Job's copied links, the task popups, the Technicians form's login
-  picker, the member profile page's save, the Sales Manager tab's quota
-  board, claims list, SPIFF board and forecast ledger, a saved report's
-  Pin, the backup page's import window, and the Fiscal year page among
-  them. An older tab's Save quotas answers 200 and stores no quota (the
+- **Reload every app tab opened before the forty-second ship** (Deployed:
+  dev 18:32 UTC, prod 18:36 UTC, 17 Oct — it covers the forty-first's, 17
+  Oct 13:06 UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16
+  Oct 03:28 UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the
+  thirty-seventh's, 15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59
+  UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps
+  the screens from before §0.199, §0.200, §0.201, §0.202, §0.203, §0.204,
+  §0.205 and §0.206 — the task rail's completion, a New Job's copied
+  links, the task popups, the Technicians form's login picker, the member
+  profile page's save, the Sales Manager tab's quota board, claims list,
+  SPIFF board and forecast ledger, a saved report's Pin, the backup page's
+  import window, the Fiscal year page, and the Accounts and Contacts tabs'
+  lists among them. A tab opened before its site's §0.206 deploy and not
+  reloaded keeps the old lists — merged-away accounts and contacts listed
+  — and there a Select all + Delete takes the listed merged-away records
+  with the rest. Contacts go by the one-request clear when it is an
+  Admin's, the list holds every contact of the org (All, no search) and
+  none is kept for an open deal; otherwise one request each. Accounts (an
+  Admin's) go one request each. Their merges' reverse then un-archives
+  nothing, and the delete's Undo brings them back as live records (each
+  re-post carries its merge mark, but neither POST stores it — `sanitize`
+  in accounts.mjs and contacts.mjs has no merge field; §4.2 files the
+  accounts' half). An older tab's Save quotas answers 200 and stores no quota (the
   server keeps the stored figures), and its claim Approve still re-sends
   the whole claim as loaded (a stale copy can put back what another save
   changed — what §0.204's Approve no longer does). Its forecast call
@@ -481,9 +470,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   the ones unpinned elsewhere, as before); its import window closes on an
   accepted restore's answer and reads only "Import failed" on a refused
   one, so nothing the restore says is read. Reload, then strike this.
-- Nothing else open. The forty-first ship (17 Oct, 13:06 UTC: §0.205, a
-  member's team and pinned reports name this org's, and the restore says
-  what it did — batch 4b-2c; dev and prod in one sitting), the fortieth
+- Nothing else open. The forty-second ship (17 Oct, 18:36 UTC: §0.206, a
+  merged-away account or contact leaves the lists the screens draw — the
+  merged-away batch; dev and prod in one sitting; Jeff's read-only look
+  at UKG after it is recorded on state §0.206's Verified line — the
+  check written here before the ship, "Resinall" listed once, was wrong:
+  the survivor is a business unit under "Ergon", which the Accounts tab's
+  search, over the top-level list only, does not reach), the
+  forty-first (17 Oct, 13:06 UTC: §0.205, a member's team and pinned
+  reports name this org's, and the restore says what it did — batch
+  4b-2c; dev and prod in one sitting), the fortieth
   (16 Oct, 15:03 UTC: §0.204, a sales record's links name live rows or
   entries of this org — batch 4b-2b; dev and prod in one sitting), the
   thirty-ninth (16 Oct, 03:28 UTC: §0.203, a
