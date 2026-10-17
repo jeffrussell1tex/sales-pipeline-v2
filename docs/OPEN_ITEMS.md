@@ -362,38 +362,40 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **When §0.205 ships, reload every app tab opened before it:** an older
-  tab's forecast call re-sends the rep's whole cached row — when the
-  cached team is no longer the rep's stored team and has been deleted
-  since, it now answers 404 "That team is not in your organization — pick
-  one from the list.", its call not stored (a deleted team the rep still
-  holds is taken, as before), and a team or a name changed since is put
-  back as before (never the pins: the server keeps them); its Pin
-  from a window whose pin list still holds a report unpinned in another
-  window and deleted since is refused, with no re-read, and so is every
-  later Pin and Unpin there until a reload — but an Unpin of that report
-  itself, which drops it (a stale list that names only
-  live reports is taken, and puts back the ones unpinned elsewhere, as
-  before); its import window closes on an accepted restore's answer and
-  reads only "Import failed" on a refused one, so nothing the restore
-  says is read. The ship folds this into the item below.
-- **Reload every app tab opened before the fortieth ship** (Deployed: dev
-  15:00 UTC, prod 15:03 UTC, 16 Oct — it covers the thirty-ninth's, 16 Oct
-  03:28 UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the thirty-seventh's,
-  15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the
-  thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps the screens
-  from before §0.199, §0.200, §0.201, §0.202, §0.203 and §0.204 — the task
-  rail's completion, a New Job's copied links, the task popups, the
-  Technicians form's login picker, the member profile page's save, the
-  Sales Manager tab's quota board, claims list and SPIFF board, and the
-  Fiscal year page among them; an older tab's Save quotas answers 200 and
-  stores no quota (the server keeps the stored figures), and its claim
-  Approve still re-sends the whole claim as loaded (a stale copy can put
-  back what another save changed — what §0.204's Approve no longer does).
-  Reload, then strike this.
-- Nothing else open. The fortieth ship (16 Oct, 15:03 UTC: §0.204, a sales
-  record's links name live rows or entries of this org — batch 4b-2b; dev
-  and prod in one sitting), the thirty-ninth (16 Oct, 03:28 UTC: §0.203, a
+- **Reload every app tab opened before the forty-first ship** (Deployed:
+  dev 13:03 UTC, prod 13:06 UTC, 17 Oct — it covers the fortieth's, 16 Oct
+  15:03 UTC, the thirty-ninth's, 16 Oct 03:28 UTC, the thirty-eighth's, 15
+  Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the
+  thirty-sixth's, 14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25
+  UTC, too): an older tab keeps the screens from before §0.199, §0.200,
+  §0.201, §0.202, §0.203, §0.204 and §0.205 — the task rail's completion,
+  a New Job's copied links, the task popups, the Technicians form's login
+  picker, the member profile page's save, the Sales Manager tab's quota
+  board, claims list, SPIFF board and forecast ledger, a saved report's
+  Pin, the backup page's import window, and the Fiscal year page among
+  them. An older tab's Save quotas answers 200 and stores no quota (the
+  server keeps the stored figures), and its claim Approve still re-sends
+  the whole claim as loaded (a stale copy can put back what another save
+  changed — what §0.204's Approve no longer does). Its forecast call
+  re-sends the rep's whole cached row — when the cached team is no longer
+  the rep's stored team and has been deleted since, it now answers 404
+  "That team is not in your organization — pick one from the list.", its
+  call not stored (a deleted team the rep still holds is taken, as
+  before), and a team or a name changed since is put back as before
+  (never the pins: the server keeps them); its Pin from a window whose
+  pin list still holds a report unpinned in another window and deleted
+  since is refused, with no re-read, and so is every later Pin and Unpin
+  there until a reload — but an Unpin of that report itself, which drops
+  it (a stale list that names only live reports is taken, and puts back
+  the ones unpinned elsewhere, as before); its import window closes on an
+  accepted restore's answer and reads only "Import failed" on a refused
+  one, so nothing the restore says is read. Reload, then strike this.
+- Nothing else open. The forty-first ship (17 Oct, 13:06 UTC: §0.205, a
+  member's team and pinned reports name this org's, and the restore says
+  what it did — batch 4b-2c; dev and prod in one sitting), the fortieth
+  (16 Oct, 15:03 UTC: §0.204, a sales record's links name live rows or
+  entries of this org — batch 4b-2b; dev and prod in one sitting), the
+  thirty-ninth (16 Oct, 03:28 UTC: §0.203, a
   Sales Rep's quota is a plan per fiscal year — the quota batch; dev and
   prod in one sitting), the thirty-eighth (15 Oct, 17:59 UTC: §0.202, a
   member's save changes a member this org holds — batch 4b-2a), the
