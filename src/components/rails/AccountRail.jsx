@@ -10,7 +10,7 @@ import { parseLocalDate } from '../../utils/dateLocal.js';
 import AccountPicker from './AccountPicker';
 import HiddenLink from './HiddenLink';
 import { parentChoices, parentNote, parentLeftOut, typedParentRefusal } from '../../utils/accountParent.js';
-import { resolveLink, linkRefusal, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { resolveLink, linkRefusal, unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 
 // A deal's close date as "Nov 30, 2026"; a value that is not a date shows as it is
 // written. The row read closeDate, which a deal does not have — its close date is
@@ -159,6 +159,7 @@ export default function AccountRail() {
         handleAddActivity,
         escapeBlocked,
         openMeetingPrep,
+        getSubAccounts,
     } = useApp();
 
     const isNew    = accountRailId === 'new';
@@ -252,9 +253,9 @@ export default function AccountRail() {
         return [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
     })();
 
-    const subAccounts = (accounts || []).filter(a =>
-        (a.parentAccountId || a.parentId) === accountRailId
-    );
+    // Its sub-accounts by the hook's one rule (state §0.206 — Jeff: "Hide them"): one merged away is not listed. The
+    // rail's own copy listed Evonik - Lafayette's merged-away twin.
+    const subAccounts = getSubAccounts(accountRailId);
 
     // The accounts this one may stand under (state §0.198; Jeff, 11 Oct — D3: "No self, no
     // loops, no sites"; D12; D21): not itself, not one of its own sub-accounts or sites, not a
@@ -270,6 +271,10 @@ export default function AccountRail() {
     const accountContacts = (contacts || []).filter(c =>
         c.accountId ? c.accountId === account?.id : (c.company === account?.name)
     );
+    // The People list and its count (state §0.206 — "Hide contacts too"): a contact merged away is not listed.
+    // The Activity tab below keeps the whole list — an activity's contacts still name a merged-away contact
+    // (OPEN_ITEMS §4.7).
+    const shownContacts = unarchived(accountContacts);
 
     const openOpps = (opportunities || []).filter(o => {
         if (!account) return false;
@@ -570,7 +575,7 @@ export default function AccountRail() {
             {!isEditing && account && (
                 <div style={{ display: 'flex', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                     {[
-                        { label: 'CONTACTS',    value: accountContacts.length },
+                        { label: 'CONTACTS',    value: shownContacts.length },
                         { label: 'OPEN PIPE',   value: openOpps.length },
                         { label: 'SUB-ACCTS',   value: subAccounts.length },
                     ].map(({ label, value }) => (
@@ -934,12 +939,12 @@ export default function AccountRail() {
                 {/* ════════ TAB: People ════════ */}
                 {activeTab === 'people' && !isNew && (
                     <>
-                        <SectionHeading label={`Contacts (${accountContacts.length})`} />
-                        {accountContacts.length === 0 ? (
+                        <SectionHeading label={`Contacts (${shownContacts.length})`} />
+                        {shownContacts.length === 0 ? (
                             <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No contacts linked to this account</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                {accountContacts.map(c => (
+                                {shownContacts.map(c => (
                                     <button key={c.id}
                                         onClick={() => handleOpenContactRail(c.id)}
                                         style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '8px 10px', cursor: 'pointer', textAlign: 'left', fontFamily: T.sans, width: '100%' }}>

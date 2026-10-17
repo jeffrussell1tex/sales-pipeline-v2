@@ -164,22 +164,33 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        §2.2, §4.3, §4.6, §4.7 and §4.8.
      - **Then, the member profile page sends only what changed** (§4.3's
        "The Settings → Users profile page PUTs a member's whole cached
-       row"; Jeff, 16 Oct: "File it, own batch next").
+       row"; Jeff, 16 Oct: "File it, own batch next"; 17 Oct: "Undo,
+       cleanup, profile" — the third of the next three, after the merge
+       Undo and the merged-records cleanup, below under the merged-away
+       batch).
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
-   - **Then, a merged-away account leaves the Accounts tab** (Jeff, 16 Oct,
+   - **A merged-away account or contact leaves the tabs' lists — DONE
+     (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
      but both still show on the account list" — SELECT from 20:20 UTC: "Resinall,
      Inc." stored merged, `merge_archived` true, archived 20:18:01 UTC, its
      audit "merged in · 0 references repointed"). Also seen: "Evonik -
      Lafayette", two sites, one of them merge-archived (SELECT 9 Oct). Since
-     §0.198 the pickers leave the archived one out; the Accounts tab and an
-     account's Sub-Accounts still list it, because the accounts GET does not
-     filter archived rows (read in code 11 Oct; again 16 Oct: the GET selects
-     every account of the org, the tab filters none). Jeff, 16 Oct: "Hide
+     §0.198 the pickers leave the archived one out — all but three of the
+     cleanup batch's four (below: the document link picker and Dispatch's
+     two account pickers; the fourth, Reports' "Select contacts to add to
+     this deal", lists contacts); until §0.206 it was still listed — by the
+     Accounts tab if it stands at the top level, else by its parent's
+     Sub-Accounts (where it stands was not read), since a merge leaves the
+     merged-away row's parent as it was (its archive write, merge.mjs:246,
+     sets no parent) — because the accounts GET does not filter
+     archived rows (read in code 11 Oct; again 16 Oct: the GET selects every
+     account of the org, the tab filtered none). Jeff, 16 Oct: "Hide
      them" — merged-away accounts leave the Accounts tab and Sub-Accounts,
-     the record kept (its Undo and the links that resolve through it
-     unchanged); "Right after 4b-2c" — a batch of its own, the Contacts tab
+     the record kept (the server's merge reverse — no screen offers an Undo
+     yet — and the links that resolve through it unchanged); "Right after
+     4b-2c" — a batch of its own, the Contacts tab
      checked for the same gap with it. Mapped and designed 16 Oct (read
      only: two mappers, a designer, two critics): the hiding belongs in the
      screens, not the accounts GET or the app's loaded lists — those must
@@ -191,19 +202,51 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      parent, and no live contact or deal names a merged-away account, in
      any org. Jeff, 16 Oct: "Hide contacts too" — merged-away contacts leave
      the Contacts tab, an account's People list and the contact counts, in
-     the same batch.
-     - **Then, a merge's Undo on screen** (Jeff, 16 Oct: "Undo as its own
-       batch next"): every merge screen says merges are fully reversible,
-       but no screen calls the server's reverse (`reverseMerge`,
-       `reverseContactMerge` in useMerge — read in code); a merge confirms
-       with an Undo.
+     the same batch. Done: a merged-away account or contact leaves the
+     Accounts tab, an account's Sub-Accounts, the Contacts tab, an account's
+     People list and the contact counts beside them; the record is kept —
+     the app's lists, their loads and both GETs still hold it. Jeff, 17 Oct:
+     "Export follows the list" — each tab's Export follows its list
+     (Settings → Data's export runs and the backups keep every row); App's
+     rollup follows the one sub-account rule, built in by default and his
+     to veto (§2.4). The census's UKG is `org_3CwnbloUXZQl0e6KtDhXFXRK8UD`,
+     the prod instance's. What it found and left is filed in §2.2, §2.4,
+     §4.2 and §4.7.
+     - **Next, a merge's Undo on screen** (Jeff, 16 Oct: "Undo as its own
+       batch next"; 17 Oct: "Undo, cleanup, profile" — the first of the
+       three): every merge screen says merges are reversible (the merge
+       windows "Reversible afterward", the scan pages and Settings "fully
+       reversible"), but no screen calls the server's reverse
+       (`reverseMerge`, `reverseContactMerge` in useMerge — read in code); a
+       merge confirms with an Undo. Since §0.206 a merged-away record also
+       leaves the Accounts and Contacts tabs, an account's Sub-Accounts and
+       People list (the header search, Reports and a match by name (§4.7)
+       still reach it; a link to a merged-away account opens the account it
+       was merged into where the caller's list holds that live, and the
+       merged-away row only where it does not), and no screen can undo its
+       merge until this lands. The server's reverse can put a survivor
+       back under a parent merged away, deleted or moved under it since,
+       live and listed nowhere on the Accounts tab (§4.7).
      - **Then, merged-away records leave every other list** (Jeff, 16 Oct:
-       "One cleanup batch next"): the header search, Reports' account list,
-       the "# of accounts" counts in reports and on Home, Settings' Segments
-       and Industries counts, and four pickers that break guide §18b91 rule
-       5 (merged-away records leave every picker) — the document link
-       picker, Dispatch's two account pickers and Reports' "add contacts to
-       this deal".
+       "One cleanup batch next"; 17 Oct: "Undo, cleanup, profile" — the
+       second): the header search, Reports' account list, the "# of
+       accounts" counts in reports and on Home, Settings' Segments and
+       Industries counts, and four pickers that break guide §18b91 rule 5
+       (merged-away records leave every picker) — the document link picker,
+       Dispatch's two account pickers and Reports' "Select contacts to add
+       to this deal". Added by Jeff, 17 Oct ("Add them to the cleanup
+       batch"): Reports' Activity History contact list, the meeting prep
+       panel's contacts, the merge window's predicted sub-account count, a
+       segment's "View accounts" link, the public API's contacts and
+       Settings → Buyer Personas' contact count (which keeps a persona's
+       Delete disabled while above 0). Filed with it, not put to Jeff: an
+       industry's "View accounts" link (the segment's twin), Reports' three
+       account lookups by name, the merge window's contacts and deal counts,
+       the public API's accounts and the account rail's other reads of the
+       app's lists — and, for the batch's class scan, three comments of
+       tests/merged-away-lists.test.mjs and one of AccountRail.jsx. Its
+       map, what each place reads, and what is filed beside it: §4.7, "The
+       cleanup batch's map".
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -362,6 +405,28 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **When §0.206 ships, reload every app tab opened before it; then Jeff's
+  read-only look at UKG on PROD** (`org_3CwnbloUXZQl0e6KtDhXFXRK8UD`; the
+  design's close-out): a tab opened before its site's §0.206 deploy and
+  not reloaded keeps the old lists — merged-away accounts and contacts
+  listed — and there a Select all + Delete takes the listed merged-away
+  records with the rest. Contacts go by the one-request clear when it is
+  an Admin's, the list holds every contact of the org (All, no search)
+  and none is kept for an open deal; otherwise one request each. Accounts
+  (an Admin's) go one request each.
+  Their merges' reverse then un-archives nothing, and the delete's Undo
+  brings them back as live records (each re-post carries its merge mark,
+  but neither POST stores it — `sanitize` in accounts.mjs and contacts.mjs
+  has no merge field; §4.2 files the accounts' half). After a reload: the
+  Accounts tab, All, in the Signal or List view (Business Book's lanes
+  can show one account in several lanes, or in none), search "Resinall"
+  — "Resinall" listed once, "Resinall, Inc." absent; if the Contacts
+  tab's All count was noted before the deploy, an Admin's reads fewer by
+  the merged-away contacts UKG then holds — 5 at the census (16 Oct 21:13
+  UTC; a contact merge, a reverse or such a contact's delete since
+  changes it) — unless contacts were added or removed between the two
+  reads. Nothing that writes is clicked. The ship folds the reload into
+  the item below.
 - **Reload every app tab opened before the forty-first ship** (Deployed:
   dev 13:03 UTC, prod 13:06 UTC, 17 Oct — it covers the fortieth's, 16 Oct
   15:03 UTC, the thirty-ninth's, 16 Oct 03:28 UTC, the thirty-eighth's, 15
@@ -504,6 +569,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.4 Decisions
 
+- **§0.206's App rollup default — Jeff's to veto** (the design's flag, 16
+  Oct; not asked: nothing is expected to change). App's rollup follows the
+  one sub-account rule, so the Contacts tab's company card leaves a
+  merged-away sub-account's name out of the names its pipeline sums deals
+  by; a merge renames that name on the merge's deals — to the survivor's,
+  or to the live account above a site it merged into (D22) — so nothing is
+  expected to drop (read in code; the re-check's render read the same
+  pipeline as before). The design's other flag is decided: each tab's
+  Export follows its list (Jeff, 17 Oct: "Export follows the list").
 - **AI scoring's four decisions:** see §3.1.
 - **QuickLog's "📅 Add to Google Calendar"** promises an event and makes
   none. Wire it to `fireActivityCalendarEvent`, or remove the box.
@@ -1112,20 +1186,28 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Undo put them back.
 - **A delete's Undo does not put back an account's created date, its
   merge mark or its last-edited time** (§0.198; the critics, 12 Oct). The
-  restore re-posts what the account form saves, its parent, tier and owner
-  — not `createdAt`, `mergeArchived`, `mergedIntoId` or `archivedAt` — so
-  every row posted back is dated the Undo (the column's default) and reads
+  restore re-posts the row as the delete answered it, but the accounts
+  POST keeps only what the account form saves (`sanitize`), its parent,
+  tier and owner — not `createdAt`, `mergeArchived`, `mergedIntoId` or
+  `archivedAt` — so every row posted back is dated the Undo (the column's
+  default) and reads
   as last edited then. §0.198's fifth fix round carried the created date
   back; the sixth took it out again: the app's driver (`@netlify/neon`
   loads the CommonJS copy of `@neondatabase/serverless`, which drizzle's
   type-parser override does not reach) reads a `timestamp without time
   zone` in the function process's own time zone (state §0.91), so a date
   read back and written again moves by that zone's offset — on Jeff's
-  machine 5 or 6 hours. The Accounts tab lists merge-archived accounts (§1
-  item 1, "Also seen"), and an Admin may delete one: its Undo brings it
-  back as a live account, offered in the pickers again. Recommended: carry
-  the merge mark on a restore (its survivor checked in the org), or leave
-  merge-archived accounts out of the Accounts tab's delete; carry the
+  machine 5 or 6 hours. Since §0.206 the Accounts tab lists, and so its
+  delete reaches, a merge-archived account only in a tab opened before
+  the §0.206 deploy and not reloaded (§2.2), or in one whose accounts were
+  read before another session merged the account and not read again
+  since (its list holds the row unmarked; §4.7). That delete is the only
+  one with this Undo, which brings a deleted account back as a live
+  account, offered in the pickers again. The accounts DELETE still
+  deletes one sent by id, with no Undo (§4.7). The delete's confirm counts
+  the sub-accounts the server lifts, merged-away ones too, so it can name
+  more than the drawer lists (§0.206). Recommended: carry the merge mark on
+  a restore (its survivor checked in the org); carry the
   created date only as text (the delete answering `created_at::text`, the
   restore writing it back so) or once the driver's parser is fixed for
   every read (a wider change — put to Jeff).
@@ -1145,8 +1227,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **D22's edges** (§0.198; Jeff, 11 Oct: "Move them up"). A move that makes
   an account holding deals a site, and a merge into a site, move those
   deals up to the account above the site, Site Name the site, in the same
-  write; the merge's Undo puts them back. A merge that lifts its survivor
-  to the top level makes it an account, so the deals it takes are not left
+  write; the server's merge reverse puts them back (no screen offers it
+  yet — §1). A merge that lifts its survivor to the top level makes it an
+  account, so the deals it takes are not left
   on a site. A screen loaded before either keeps the lift when it saves.
   Left:
   - deals already on a site before §0.198 are moved by nothing — a
@@ -1307,9 +1390,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
   bulk request. Jeff decides.
 - **A link followed to the record it was merged into keeps the name the
   screen sent** (§0.199, E2): a task's or an org chart's chip keeps its name;
-  a contact's Company text and a deal's Contacts text are not renamed. Only a
-  stale screen sends a merged-away record (the pickers leave them out since
-  §0.198). As the merges leave names; with the first item above.
+  a contact's Company text and a deal's Contacts text are not renamed. A
+  stale screen sends a merged-away record, and so do the four pickers
+  that still offer one (the cleanup batch's, §1; §0.206's docs check, 17
+  Oct, read in code). Three are followed to the survivor: Reports'
+  "Select contacts to add to this deal" lists every contact not already
+  on the deal and sends a merged-away one's id with its name in the
+  deal's Contacts text (ReportsTab.jsx:6244, :6251-6264), so the deal
+  links the survivor under that name; Dispatch's customer typeahead gives
+  a new job's customer a merged-away account's name, its account followed
+  to the survivor (DispatchTab.jsx:335-339, :6702-6706); its Linked CRM
+  account select sends one with no name (:2659), followed likewise. The
+  fourth, the document link picker, links the merged-away record itself
+  (documents.mjs follows no merge). As the merges leave names; with the
+  first item above.
 - **The link refusal's words fit another org's record, not a deleted one**
   (§0.199's review): a deleted record is now its common cause — Log Activity
   from a contact whose account was deleted shows "An account you can't open
@@ -1404,8 +1498,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   whatever a save sends), and the forecast save sends only its field,
   `{ id, forecastCalls }`, its refusal in the server's words with the
   rep's name — that field is the rep's whole calls map (§4.6). Jeff, 16
-  Oct: the profile page sends only what changed in its own batch, next
-  ("File it, own batch next" — §1).
+  Oct: the profile page sends only what changed, in its own batch ("File
+  it, own batch next"); 17 Oct: "Undo, cleanup, profile" — the third of
+  the next three, after the merge Undo and the merged-records cleanup
+  (§1).
 - **The Settings → Users profile page after a save:** its title band and
   crumb read the member as the page opened, so a rename shows the old name
   until the page is left; "Save changes" stays (the form is compared with that
@@ -2022,6 +2118,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   scalar the merge had moved — the pair counts as held (§0.199's review). An
   account merge leaves contacts' `accountId` on the merged-away account the
   same way. Belongs with batch 3 (the merge moving contacts' `accountId`).
+  Since §0.206 the merged-away contact leaves the Contacts tab. The
+  survivor's rail (ContactRail.jsx:268-274) shows an activity whose
+  `contactIds` still name it only when the activity also names the
+  survivor — as its `contactId`, which the merge moved there where the
+  merged-away contact was its first (merge.mjs:383; activities.mjs:78), or
+  in its `contactIds` — or is on one of the survivor's open deals. Any
+  other such activity is reached per contact only through the
+  merged-away contact's own rail, opened from the header search, or
+  through Reports' Activity History, whose contact list keeps merged-away
+  contacts (ReportsTab.jsx:5095). That covers a contact named further down
+  the list, and one whose `contactId` a later save wrote back (a Save
+  that changed its contacts, or a stale whole-row save). An account's
+  Activity tab keeps it (§0.206 kept the rail's whole list for it). Both
+  ways are the cleanup batch's to narrow, so its design keeps a way to
+  such an activity (its map, below). The re-check, 17 Oct; read in code.
 - **A CSV overwrite batch empties the Account of a row that names none** while
   another row names one (partialRows sets the union of the keys a batch
   sends; the re-check). Every row of a CSV names an Account today, so no screen
@@ -2030,6 +2141,183 @@ to add meetings. Nothing in the app adds a meeting to Google:
   neither it nor its survivor in a rep's list**, is saved linked to the
   merged-away account (the sweep). Batch 3's move of contacts' `accountId`
   on a merge removes the shape.
+- **The cleanup batch's map** (§1, "Then, merged-away records leave every
+  other list"; Jeff, 16 Oct: "One cleanup batch next"; 17 Oct: "Add them
+  to the cleanup batch", "Undo, cleanup, profile" — after the merge Undo;
+  read in code over §0.206's tree):
+  - In Jeff's 16 Oct answer ("One cleanup batch next"): the header search,
+    accounts and contacts (src/components/layout/AppHeader.jsx:440-441);
+    Reports' Activity History account list (ReportsTab.jsx:5078, its own
+    `visibleAccounts`); "# of accounts" — reportQuery.js's Accounts source
+    (`runReport`, :331), read by Home's widgets, the Reports builder and
+    scheduled reports; Settings' Segments and Industries counts
+    (AccountSegmentsDetail.jsx:97-112, IndustriesDetail.jsx:153-167 —
+    every top-level account, merged away or not); and the four pickers
+    against guide §18b91 rule 5 — the document link picker
+    (DocumentLinkPicker.jsx:55 accounts, :57 contacts), Dispatch's
+    customer typeahead (DispatchTab.jsx:335-339) and its Linked CRM
+    account select (:2659 — it holds a stored link, so a merged-away
+    option needs the unmatched-select treatment, guide §16), and Reports'
+    "Select contacts to add to this deal" (`AddContactToOppPanel`,
+    ReportsTab.jsx:4880, handed every contact at :6244).
+  - Added by Jeff, 17 Oct ("Add them to the cleanup batch"): Reports'
+    Activity History contact list (ReportsTab.jsx:5095); the meeting prep
+    panel's contacts (MeetingPrepPanel.jsx:41-44); the merge window's
+    predicted sub-account count (MergeReviewModal.jsx:63 — what the merge
+    re-parents, merged-away rows included, so it can read more than the
+    Sub-Accounts lists show); a segment's "View accounts" link
+    (AccountSegmentsDetail.jsx:230 — the tab it opens can list fewer than
+    the card counts, by the merged-away top-level accounts the card
+    counts); Settings → Buyer Personas' contact counts, and its Delete,
+    disabled while any contact holds the persona
+    (BuyerPersonasDetail.jsx:98-104, :250) — a merged-away contact keeps a
+    persona undeletable, and since §0.206 is on no Contacts-tab list to
+    open and clear (the re-check, 17 Oct); and the public API's contacts,
+    which list merged-away rows with no field that tells them apart
+    (public-api.mjs:246+).
+  - Filed with it, not put to Jeff: an industry's "View accounts" link,
+    the segment's twin (IndustriesDetail.jsx:283), which can likewise open
+    a tab listing fewer than its card counts; three account lookups by
+    name in Reports, each of which can take a merged-away twin (the maps,
+    16 Oct; raised for filing by the re-check) — its industry mix
+    (`acctByName`, ReportsTab.jsx:3945, the later of two same-named rows),
+    its Opportunity history's account (`selectedAccount`, :5842, the
+    first) and the Accounts source's names for a deal with no account id
+    (`byName`, reportQuery.js:294, the later); the merge window's contacts
+    and deal counts — its contacts count, by company name over every
+    contact (MergeReviewModal.jsx:61), counts merged-away contacts, so it
+    can read more than the People list shows, and its deal count goes by
+    name alone (:60), where the server moves deals by id (merge.mjs),
+    while its activity and task counts (:62, :64) go by id, as the server
+    moves them; the public API's accounts, which list merged-away rows the
+    same way (public-api.mjs:197+); and the account rail's other reads of
+    the app's lists, which THE GUARD
+    (tests/merged-away-lists.test.mjs, T8) does not scan — it reads the
+    two tabs only — a class scan of the rail being that batch's to design
+    (the re-check). With that scan, three comments of the suite itself
+    (tests/merged-away-lists.test.mjs — §0.206's docs checks, 17 Oct; read
+    in code), each saying what §0.206's docs corrected: :413, "Wherever a
+    tab reads one but through unarchived, it draws or counts merged-away
+    rows" — a dependency line or the Company view card's hand-off lists
+    none, a Signal or List view row drawn from one makes the Accounts tab
+    fail to load, and a Business Book lane draws the accounts the search
+    and the filters left out (guide §18b99 rule 4); :5-6, "its Undo and
+    the links that resolve through it unchanged" — no screen offers a
+    merge's Undo (§1); and :14-15, which names Reports' picker by words
+    the panel does not show (it reads "Select contacts to add to this
+    deal", ReportsTab.jsx:4901). One comment of the account rail's is
+    likewise untrue since §0.206 (AccountRail.jsx:286-289; §0.206's docs
+    checks, 17 Oct; read in code): it heads the Activity tab's rollup
+    with "a contact that belongs to this company (same set as the People
+    tab)", but the People list now leaves a merged-away contact out
+    (`shownContacts`, :277) and the rollup keeps it (`accountContacts`,
+    :292), as the batch's own comment at :274-276 says. Comments only:
+    the suite's `code()` drops whole-line comments, so no pin reads the
+    suite's, and no test or harness entry quotes the rail's; left
+    unchanged for §0.206's commit, whose full harness run was on a
+    byte-identical copy of the repo (624 files compared,
+    before and after — state §0.206, Verified). The header search and
+    Reports' Activity History contact list are the only ways, per
+    contact, to an activity whose `contactIds` name a merged-away contact
+    — further down the list, or first with its `contactId` written back
+    to it by a later save — that does not name the survivor and is on no
+    open deal of the survivor's (the contact merge item, above): the
+    batch's design keeps a way to it.
+  - Settings → Data's export runs and the backups keep merged-away rows,
+    as they should; each tab's Export follows its list (§0.206; Jeff, 17
+    Oct: "Export follows the list").
+- **A record matched by name or email can be a merged-away one** (§0.206's
+  maps, re-check and docs check, 16-17 Oct; read in code): the Contacts
+  tab's company card and its "Open account" button (`matchedAccount`,
+  ContactsTab.jsx:365-368, the first account of the company's name among
+  every account; the button :521-528); the meeting prep panel's account
+  (`matchedAccount`, MeetingPrepPanel.jsx:47-49, the first account of the
+  deal's account name); the account rail's "Similar account found" when a
+  new account is saved (`checkDuplicate`, AccountRail.jsx:311, called at
+  :380-383, among every account; its Open existing button opens the first
+  match); an inbound email's contact (email-inbound.mjs:332-337 — the
+  first contact of the address, no merge test, no order); a CSV contact
+  import's conflict (CsvImportModal.jsx:49-59 — the first contact of the
+  email, else of the name; Overwrite writes onto it) and its new companies
+  (ModalLayer.jsx:464-467 — a company only a merged-away account names
+  gets no account); a CSV account import's conflict (CsvImportModal.jsx:66
+  — the first account of the name; Overwrite writes onto it); the lead
+  duplicate check (LeadModal.jsx:102-106); and Dispatch's won-deal jobs
+  (`buildWonBridgeJobs`, DispatchTab.jsx:2052, the first account holding
+  the deal's id or its name). Each can take a merged-away twin that shares
+  the survivor's, or a live twin's, name or email (UKG's two "Evonik -
+  Lafayette" sites). Reports' three lookups by name are filed with the
+  cleanup batch, not put to Jeff (its map, above). Recommended: each
+  matches live records first.
+- **The server deletes a merged-away account or contact on request** (the
+  maps, 16 Oct; read in code): neither DELETE reads the merge mark
+  (contacts.mjs reads none; accounts.mjs reads `mergeArchived` only for
+  its parent tree), and a later reverse of that merge un-archives no row
+  and moves the links back to the deleted id (merge.mjs's reverse). Since
+  §0.206 no list offers one for delete, except in a tab opened before the
+  §0.206 deploy and not reloaded (§2.2), or in one whose lists were read
+  before another session (another Admin or Manager, or another browser
+  tab) merged the record and not read again since, whose list holds the
+  row unmarked (read in code); the API path stays. How many merges'
+  archived rows are gone was not counted (the 16 Oct census).
+  Recommended: refuse the delete of a merged-away record (409), or have
+  the reverse refuse when the archived row is gone.
+- **A merged-away record's rail says nothing of the merge** (the maps, 16
+  Oct; read in code): opened from the header search, a merged-away
+  account's or contact's rail reads as live, with Edit. Recommended:
+  "Merged into X", linking the survivor.
+- **A restore can land a live account under a merged-away parent**
+  (§0.206's review, 16 Oct — read in code, not run against a database;
+  the re-check's render of the Accounts tab over such rows listed it
+  nowhere): a file downloaded before a merge holds an account P and its
+  sub-account C; P is merged away and C deleted, before the merge or
+  after; restoring the file inserts C with P as its parent — backup.mjs
+  inserts with `onConflictDoNothing`, so P, still stored, is skipped and
+  kept — and the clean-up (`_links.mjs`, RESTORE_LINKS' `parentAccountId`)
+  clears a parent only when it names no row of this org; a merged-away
+  account is one. Since §0.206 C, a live account, is listed nowhere on
+  the Accounts tab (App's list is the top level, and its parent is
+  hidden); the header search and links still reach it. None at the
+  census (16 Oct 21:13 UTC). The file must be one kept from before the
+  merge: a download is made fresh from current data (backup.mjs). The
+  same restore can land a contact on a merged-away account, as an account
+  merge can (batch 3's item below). Recommended (a functions batch): the
+  restore's clean-up treats a parent naming a merged-away account as
+  stray — re-pointed to its survivor where the survivor is live in the
+  org and fits the parent rule, else cleared and the account made an
+  account, as for a parent that names nothing.
+- **The merge reverse can put a survivor back under a parent merged
+  away, deleted or moved under it since** (§0.206's docs checks, 17 Oct;
+  read in code, not run): the account merge's reverse
+  (`reverseAccountMerge`) sets the survivor's `parentAccountId` from its
+  pre-merge snapshot (merge.mjs:315-316, written at :326) with none of
+  the checks a delete's Undo makes of a parent (`restorePlace`,
+  accountParent.js:328-336: one that names no account of the org, the
+  account itself or one under it, a site, one merged away). When that
+  parent has been merged away since — into another account, which takes
+  the survivor as its sub-account (merge.mjs:223), or into the survivor
+  itself, which then stands where that parent stood (:236) — the reverse
+  puts the survivor back under the account that merge archived (:246):
+  live, and listed nowhere on the Accounts tab (App's list is the top
+  level, App.jsx:834, and its parent is hidden); the header search and
+  links still reach it. None under a merged-away parent at the census
+  (16 Oct 21:13 UTC). The same unchecked write has two older outcomes,
+  not caused by §0.206 (App's list was the top level before it). When
+  that parent has been deleted since (a delete lifts the accounts under
+  it to the top level, accounts.mjs:534-537), the reverse puts the
+  survivor back under an id that names no row (no foreign key,
+  db/schema.ts:75). When it has been moved under the survivor since
+  (possible once the survivor no longer stood under it: the parent rule
+  refuses only a loop that stands at the write — `parentProblem`,
+  accountParent.js:179), the reverse closes a loop. Either way the
+  survivor is listed nowhere on the Accounts tab, and in a loop that
+  parent is not either; neither case was counted. No screen calls the
+  reverse yet (§1, the merge Undo); an Admin's or Manager's POST reaches
+  it (merge.mjs:74). Recommended (with the Undo): check the snapshot's
+  parent as `restorePlace` does — it refuses a missing parent (404) and
+  a descendant (400; accountParent.js:331, :333) as well as a merged-away
+  one, so the check covers all three — and keep the survivor's current
+  parent when the check fails.
 - **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
   over 7e68f26):
   - The account import gives a sub-account the first account whose name
@@ -2063,7 +2351,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
     are renamed too (a twin's deals with an id keep their name). It never
     moves contacts' `accountId` (merge.mjs). Its comment says contacts have
     no account link; `contacts.account_id` exists and AccountRail lists by
-    it.
+    it. Since §0.206 the Accounts tab hides a merged-away account, so a
+    contact still linked to it by `accountId` is in the People list of no
+    account the tab lists: it is reached from the Contacts tab, and its
+    chip opens the survivor, whose People list matches by id and so leaves
+    it out (the survivor's Accounts-tab row counts it by company name,
+    which the merge renamed). None at the census of 16 Oct 21:13 UTC, which
+    found no live contact or deal naming a merged-away account, in any
+    org; any account merge since can make one. merge.mjs:245's comment
+    ("reports filter mergeArchived=false") is wrong — no report reads the
+    mark (reportQuery.js, report-deliveries.mjs) — and is corrected with
+    batch 3's merge.mjs edit (§0.206 left it: a bundle-only batch).
   - An account merge re-parents the merged-away account's sub-accounts onto
     the survivor, and lifts the survivor to the merged-away account's parent
     when it stood under it, with no parent rule and no tier re-fit — but a

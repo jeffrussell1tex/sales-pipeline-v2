@@ -4,6 +4,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { unarchived } from '../utils/pickLink.js';
 import { T } from '../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -663,9 +664,15 @@ export default function ContactsTab() {
     // rows stay visible under Mine, matching the server's read policy.
     const [scope, setScope] = useState(() => localStorage.getItem('tab:contacts:scope') === 'all' ? 'all' : 'mine');
     const setScopePersist   = v => { setScope(v); localStorage.setItem('tab:contacts:scope', v); };
-    const visibleContacts = useMemo(() => scope === 'mine'
-        ? allVisibleContacts.filter(r => !r.ownerId || r.ownerId === currentUserId)
-        : allVisibleContacts, [scope, allVisibleContacts, currentUserId]);
+    // A merged-away contact leaves the tab (state §0.206 — Jeff, 16 Oct: "Hide contacts too"): its rows, counts,
+    // letters, Company view, Select all and Export read this one list. The app's list keeps it — a deal's committee
+    // and a chip name its survivor through it, a name only it holds, typed as a task's contact, is refused naming its
+    // survivor (taskLinks.js), and the Admin's one-request clear compares the whole list, so a Select all here never
+    // clears a merged-away contact (useContacts.js; guide §18b99).
+    const visibleContacts = useMemo(() => {
+        const live = unarchived(allVisibleContacts);
+        return scope === 'mine' ? live.filter(r => !r.ownerId || r.ownerId === currentUserId) : live;
+    }, [scope, allVisibleContacts, currentUserId]);
 
     // ── State ─────────────────────────────────────────────────
     const [search,          setSearch]          = useState('');

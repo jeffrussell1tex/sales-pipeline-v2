@@ -3,6 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
 import { tierUnder, branchTiers, parentRefusal, withTiers, withRows, parentsFirst, undoOfDeletes } from '../utils/accountParent.js';
+import { isMergeArchived } from '../utils/pickLink.js';
 
 // The accounts by id, as the tier rule reads them.
 const byIdOf = (list) => new Map((list || []).map(a => [a.id, a]));
@@ -22,7 +23,10 @@ export function useAccounts(deps) {
             .catch(err => console.error('Failed to load accounts:', err));
     };
 
-    const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId);
+    // An account's sub-accounts as the screens list them — the Accounts tab's badge and drawer, the account rail's
+    // Sub-Accounts, App's rollup: one merged away is left out (state §0.206 — Jeff: "Hide them"). The record is
+    // kept, in `accounts` too: the delete's confirm below counts what the server lifts, merged-away rows included.
+    const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId && !isMergeArchived(a));
 
     // An account's tier fits its parent (state §0.198; D3, D21 "Keep what fits"): accountParent.js
     // tierUnder and branchTiers, below — the rule accounts.mjs applies again from the org's own

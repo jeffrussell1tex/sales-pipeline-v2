@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
+import { unarchived } from '../utils/pickLink.js';
 
 // ── Design tokens ─────────────────────────────────────────────
 
@@ -590,9 +591,18 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     // rows stay visible under Mine, matching the server's read policy.
     const [scope, setScope] = useState(() => localStorage.getItem('tab:accounts:scope') === 'all' ? 'all' : 'mine');
     const setScopePersist   = v => { setScope(v); localStorage.setItem('tab:accounts:scope', v); };
-    const visibleAccounts = useMemo(() => scope === 'mine'
-        ? allVisibleAccounts.filter(r => !r.ownerId || r.ownerId === currentUserId)
-        : allVisibleAccounts, [scope, allVisibleAccounts, currentUserId]);
+    // A merged-away account leaves the tab (state §0.206 — Jeff, 16 Oct: "Hide them"): every view, count, filter,
+    // Select all and Export read this one list. The app's list keeps it — a link to it names its survivor, a name
+    // only it holds, typed in the account picker, is refused naming its survivor (AccountPicker.jsx), and the
+    // server's merge reverse un-archives it — no screen offers an Undo yet (Jeff: "Undo as its own batch next";
+    // guide §18b99).
+    const visibleAccounts = useMemo(() => {
+        const live = unarchived(allVisibleAccounts);
+        return scope === 'mine' ? live.filter(r => !r.ownerId || r.ownerId === currentUserId) : live;
+    }, [scope, allVisibleAccounts, currentUserId]);
+    // The contacts a row's "N contacts" and the Sub-accounts drawer count (state §0.206 — "Hide contacts too"): one
+    // merged away is not counted — the Contacts tab does not list it either.
+    const shownContacts = useMemo(() => unarchived(contacts), [contacts]);
 
     // ── View + sort state ─────────────────────────────────────
     const [view, setView]           = useState(() => localStorage.getItem('accounts:view') || 'signal');
@@ -799,7 +809,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     );
 
     const sharedRowProps = {
-        contacts, getSubAccounts, getWarmthFn: getWarmth,
+        contacts: shownContacts, getSubAccounts, getWarmthFn: getWarmth,
         opportunities, activities,
         selectMode, onToggleSelect: toggleSelect,
         onView: setViewingAccount, onEdit: handleEditAccount,
@@ -1131,7 +1141,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                 <SubAccountDrawer
                     parentAccount={drawerAccount.account}
                     subAccounts={drawerAccount.subs}
-                    contacts={contacts}
+                    contacts={shownContacts}
                     onClose={() => setDrawerAccount(null)}
                     onView={(acc) => { setDrawerAccount(null); setViewingAccount(acc); }}
                 />

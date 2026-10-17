@@ -153,6 +153,19 @@ One commit per verified batch; doc patch in the same commit.
 - A task alert (a popup, the bell) interrupts only the member it is for:
   their own task or one nobody owns, by owner id, once the profile is known,
   from the active org's lists (`src/utils/taskAlerts.js`, guide §18b93).
+- A merged-away account or contact (`mergeArchived`) leaves the lists the
+  screens draw — the Accounts and Contacts tabs, Sub-Accounts, an account's
+  People and the contact counts — through `unarchived` / `getSubAccounts`;
+  the app's `accounts` and `contacts`, their loads and both GETs keep the
+  merged-away rows (links name the survivor through them; the one-request
+  contacts clear compares the whole list). A new read of the app's whole
+  lists in the Accounts or Contacts tab fails THE GUARD
+  (tests/merged-away-lists.test.mjs; no other screen is scanned). Not yet:
+  the header search, Reports, Home's "# of accounts", Settings' counts and a
+  segment's "View accounts" link, the meeting prep panel's contacts, the
+  merge window's predicted sub-account count, the public API's contacts and
+  four pickers — the cleanup batch, after the merge Undo (OPEN_ITEMS §1;
+  guide §18b91, §18b99).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

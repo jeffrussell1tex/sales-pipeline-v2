@@ -562,7 +562,8 @@ test("the account rail: its Parent field is the shared picker, fed the accounts 
     assert.ok(src.includes("import AccountPicker from './AccountPicker';"));
     assert.ok(src.includes("import HiddenLink from './HiddenLink';"));
     assert.ok(src.includes("import { parentChoices, parentNote, parentLeftOut, typedParentRefusal } from '../../utils/accountParent.js';"));
-    assert.ok(src.includes("import { resolveLink, linkRefusal, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';"));
+    // unarchived joins it (state §0.206): the rail's People list and CONTACTS leave a merged-away contact out.
+    assert.ok(src.includes("import { resolveLink, linkRefusal, unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';"));
     assert.ok(src.includes('    const selfId = isNew ? null : accountRailId;'));
     assert.ok(src.includes('    const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);'));
     assert.ok(src.includes('    const parentIds = useMemo(() => parentChoices(accounts, selfId, accountsById), [accounts, accountsById, selfId]);'));
