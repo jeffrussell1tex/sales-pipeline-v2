@@ -227,6 +227,32 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        merge until this lands. The server's reverse can put a survivor
        back under a parent merged away, deleted or moved under it since,
        live and listed nowhere on the Accounts tab (§4.7).
+       Mapped and designed 17 Oct (read only: three mappers — the server,
+       the client, the app's undo patterns — a designer and two critics).
+       Read in code: no screen keeps a merge's `mergeLogId` (the merge
+       answers it); nothing reads `merge_log` but merge.mjs, and no age
+       limit is enforced anywhere (the "30-day" comments are not
+       implemented); the reverse checks only that the log is this org's,
+       of its kind and not yet reversed — so (reasoned from the code, not
+       run) it answers 200 and moves links back to a record deleted since,
+       overwrites edits made since, and two at once both apply. Jeff, 17
+       Oct — where the Undo is once the toast is
+       gone: "Past merges on each page" (a list on each Find & merge
+       page, newest first, each with its Undo or why it has none); how
+       long: "No limit, safety checks decide"; edits made since: "Keep
+       later edits" (only what still holds what the merge wrote is put
+       back, the rest kept and counted; a deal's account and its name
+       move together); a merged-away record deleted since: "Undo refuses
+       and explains" (deleting stays as it is); the screen's own `merge`
+       audit row: "Drop the screen's row" (the server's row names who and
+       holds the undo id); four defects in the same hook — a merge answer
+       after an org switch auditing into the new org, contacts, tasks and
+       activities not re-read after a merge, the scan not re-run after an
+       Undo, a lost answer read as "Merge failed": "Fix all four now"; the
+       browser check: "Yes, real merge and Undo" (two TEST accounts and
+       two TEST contacts in Accelerep QA, his go asked at the merge); the
+       words: "Approve as written" (the toast "Merged “X” into “Y” · ↩
+       Undo", 5 seconds as the delete toasts — stated, no objection).
      - **Then, merged-away records leave every other list** (Jeff, 16 Oct:
        "One cleanup batch next"; 17 Oct: "Undo, cleanup, profile" — the
        second): the header search, Reports' account list, the "# of
