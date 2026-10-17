@@ -248,7 +248,8 @@ test('Sales Manager: a rep is read from state, not out of a state updater — th
     const upd = between(s, 'const updateRepField = async (userId, field, value) => {', 'return true;');
     assert.ok(upd.includes('const rep = (settings.users || []).find(u => u.id === userId);'));
     assert.ok(!/let updatedUser|updatedUser = updatedUsers/.test(s), 'no value smuggled out of an updater');
-    before(upd, "if (!await saveUser({ ...rep, [field]: value }, 'forecast call')) return false;", 'setSettings(prev =>', 'the copy follows the save');
+    before(upd, "if (!await saveUser({ id: userId, [field]: value }, 'forecast call', rep.name)) return false;", 'setSettings(prev =>', 'the copy follows the save');
+    assert.ok(!upd.includes('...rep'), "REGRESSION: a forecast call re-sends the rep's whole cached row (state §0.205)");
     assert.ok(!s.includes('setAllQuotaMode'), 'the Annual / Quarterly switch is gone: a plan per fiscal year, one checked save (state §0.203)');
 });
 

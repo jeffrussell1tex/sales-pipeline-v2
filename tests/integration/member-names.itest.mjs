@@ -302,7 +302,7 @@ test('SYNC: a new member whose name a member here has is numbered, in the dry ru
     assert.equal((await rowOf(ID('pat1'), ORG_A)).name, 'Pat Smith', 'an existing row is never renamed by the sync');
 });
 
-test('RESTORE: a member the file brings under a taken name is restored numbered, said once its row has landed; a row whose id another org holds is kept out, not reported, and excuses no later row of its address; a blank address is not restored and is an error; a member with no name is said on its own line; the member\'s next save is not refused', async () => {
+test('RESTORE: a member the file brings under a taken name is restored numbered, said once its row has landed; a row whose id another org holds is kept out — counted only among the records already here (§0.205) — and excuses no later row of its address; a blank address is not restored and is an error; a member with no name is said on its own line; the member\'s next save is not refused', async () => {
     const r = parse(await backupHandler(ev(as(ADMIN_A), 'PATCH', { entities: { users: [
         { id: ID('restored'), email: E('restored'), name: 'Max Manager', role: 'User', active: true, profile: { status: 'Active', firstName: 'Max', lastName: 'Manager', title: 'AE' } },
         { id: ID('admin_b'), email: E('elsewhere'), name: 'Max Manager', role: 'User', active: true, profile: { status: 'Active' } },
@@ -324,11 +324,14 @@ test('RESTORE: a member the file brings under a taken name is restored numbered,
     assert.equal((await byEmail(E('elsewhere'))).name, 'Max Manager (4)',
         'REGRESSION: the row whose id org B holds excused a later row of its address — which landed as "Max Manager", a pair');
     assert.equal((await rowOf(ID('noname'), ORG_A)).name, E('noname'), 'no name in the file: the address');
+    // The row whose id org B holds is said as already here — last, after the renamed members, as a count that never
+    // names the org holding it (state §0.205 — Jeff, 16 Oct: "Fix both").
     assert.deepEqual(r.body.notes, [
         '2 members were restored under another name — a member of this workspace already has theirs: "Max Manager" as "Max Manager (2)", "Max Manager" as "Max Manager (4)".',
         `1 member was restored with no name in the file — named by their address: "${E('noname')}".`,
+        '1 record in the file was already here — a record holds the same id, or a detail only one record may have, such as a number, an email or a login — and was left as it is.',
     ]);
-    assert.ok(!r.body.notes[0].includes('(3)'), 'the row whose id org B holds never landed, and is not reported');
+    assert.ok(!r.body.notes[0].includes('(3)'), 'the row whose id org B holds never landed — its only mention the "already here" count');
     assert.equal((await rowOf(ID('rest'), ORG_A)).name, 'Rest Ored', 'org B\'s "Rest Ored" does not count here');
     const bRow = await rowOf(ID('admin_b'), ORG_B);
     assert.deepEqual([bRow.name, bRow.email], ['Bea Admin', E('admin-b')], 'org B\'s row is untouched');

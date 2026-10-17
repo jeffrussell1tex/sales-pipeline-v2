@@ -2514,10 +2514,32 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         // caller's row in the org that asked — its role and id merged into the new
         // org's profile made the client's role the last org's.
         const askedOrg = requestOrg();
-        const next = isPinned(r) ? pinnedIds.filter(id => id !== r.id) : [...pinnedIds, r.id];
+        const unpin = isPinned(r);   // what the member asked, as this window shows it
+        const toggled = (ids) => (unpin ? ids.filter(id => id !== r.id) : ids.includes(r.id) ? ids : [...ids, r.id]);
+        let next = toggled(pinnedIds);
+        // No answer to a PUT — a network failure — is not "not pinned": the PUT may have landed (state §0.205; the quota
+        // board's rule, §0.203), so the window says to reload and see; after an org switch, nothing (§0.175).
+        const unanswered = `No answer from the server — reload the page to see whether the report was ${unpin ? 'unpinned' : 'pinned'}.`;
         setLibError('');
-        const res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) });
-        const data = await res.json().catch(() => ({}));
+        let res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) }).catch(() => null);
+        if (!res) { if (stillOrg(askedOrg)) setLibError(unanswered); return; }
+        let data = await res.json().catch(() => ({}));
+        // A pin list this window holds stale is refused (state §0.205): a pin of a report deleted since — one another
+        // window unpinned — is a pin named anew, and it names no saved report. The member's own row is read again, as
+        // the app reads it, its pins adopted, and the list rebuilt from them with this report added or removed is sent
+        // once more; refused again, the server's words show.
+        if (!res.ok && data.field === 'pinnedReports' && stillOrg(askedOrg)) {
+            const me = await dbFetch('/.netlify/functions/users?me=true').then(x => (x.ok ? x.json() : null)).catch(() => null);
+            if (!stillOrg(askedOrg)) return;
+            if (me?.user) {
+                const held = Array.isArray(me.user.pinnedReports) ? me.user.pinnedReports : [];
+                if (setMyProfile) setMyProfile(prev => ({ ...(prev || {}), pinnedReports: held }));
+                next = toggled(held);
+                res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) }).catch(() => null);
+                if (!res) { if (stillOrg(askedOrg)) setLibError(unanswered); return; }
+                data = await res.json().catch(() => ({}));
+            }
+        }
         if (!stillOrg(askedOrg)) return;
         if (!res.ok) { setLibError(data.error || ('Pin not saved — HTTP ' + res.status)); return; }
         const stored = Array.isArray(data.user?.pinnedReports) ? data.user.pinnedReports : next;

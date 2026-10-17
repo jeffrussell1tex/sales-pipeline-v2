@@ -7,12 +7,14 @@ import {
     dispatchCustomers, dispatchServiceLocations,
     dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory,
 } from '../../db/schema.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, getTableColumns } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs, memberNamesOf } from './_lib.mjs';
 // One name per member of an org (state §0.196).
 import { restorableMembers, restoreNotes, droppedErrors } from '../../src/utils/memberName.js';
 import { clearStrayLinks } from './_links.mjs';
+import { invalidateRoster } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -20,6 +22,36 @@ const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
+
+// The date columns of a table, read from its own columns (state §0.205 — Jeff, 15 Oct: "Fix both in 4b-2"): drizzle's
+// mode-less timestamp() and date({ mode: 'date' }) — the columns whose write calls toISOString — and never a text column
+// holding a date. A list by name missed seven — a member's team date, a quote's approval, sent and accepted dates, a
+// merged account's and contact's archive date, a lead's score date — so the app's own backup dropped every row holding
+// one, silently; and it made a Date of a job's invoice paid date, a text column, which then could not be stored.
+const dateKeysOf = (table) => Object.entries(getTableColumns(table)).filter(([, c]) => c.dataType === 'date').map(([k]) => k);
+
+// What a restore says of a table's rows the database would not take, of the rows it never answered for, and of the
+// file's rows already here (state §0.205 — 15 Oct "Fix both in 4b-2", 16 Oct "Fix both"; the review). Never which
+// organization holds a row: ids are global.
+const refusedWords = (label, n) => `${label}: ${n} record${n === 1 ? '' : 's'} could not be restored — ${n === 1 ? 'it has' : 'each has'} a value that cannot be stored, or lacks one that is required.`;
+const alreadyWords = (n) => (n === 1
+    ? '1 record in the file was already here — a record holds the same id, or a detail only one record may have, such as a number, an email or a login — and was left as it is.'
+    : `${n} records in the file were already here — for each, a record holds the same id, or a detail only one record may have, such as a number, an email or a login — and were left as they are.`);
+// The rows not reached, said once for the restore (state §0.205 — the review; the re-check): the database did not
+// answer for them, or did not take them for a reason of its own — any failure isRefusal (below) does not lay on the
+// file's data: no answer, a timeout, a connection, its resources, or any other code. Only what is known is said: not
+// that they were not written — an insert that landed while its answer was lost wrote its row — and not which of the
+// two. Run again, a row written is already here and left as it is, and the rest are sent again.
+const unreachedWords = (n) => `${n} record${n === 1 ? '' : 's'} may not have been written — the database did not answer, or did not take ${n === 1 ? 'it' : 'them'} for a reason of its own. Restore the file again: a record already here is left as it is.`;
+// A row is the file's — refused (state §0.205 — the review) — only when it held a value the driver cannot encode (a
+// TypeError, thrown as the query is built: a number in a date column) or the database refused its data: a Postgres code
+// (SQLSTATE) of class 22, a data exception (a value of the wrong kind, too long, out of range), or 23, an integrity
+// constraint (a value required and missing, a link to no row). The code rides the driver's error drizzle wraps (e.cause
+// — @neondatabase/serverless sets it only on a 400, from the database's own answer) or the error itself. Any other
+// failure says nothing of the row and is counted not reached: no code (a fetch that failed, a server error), a code
+// about the database's own state — a connection (08), a transaction rolled back (40), its resources (53), an operator's
+// intervention or a timeout (57), the system (58), an internal error (XX) — or any other code.
+const isRefusal = (e) => e instanceof TypeError || ['22', '23'].includes(String(e?.cause?.code || e?.code || '').slice(0, 2));
 
 function formatDuration(ms) {
     if (!ms) return '0m 00s';
@@ -36,6 +68,10 @@ function formatSize(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// A snapshot's id (state §0.205 — Jeff, 16 Oct: "Fix now"): the minute it was taken, then 12 random hex characters.
+// The id is the backups table's GLOBAL primary key (db/schema.ts), and it was the minute alone: a second backup in
+// the same minute — by any org — answered 500, and an import's snapshot row was lost, its audit entry and its answer
+// naming an id another org may hold. Nothing reads the date back out of an id: the list is ordered by createdAt.
 function generateSnapId() {
     const now = new Date();
     const y  = now.getUTCFullYear();
@@ -43,7 +79,7 @@ function generateSnapId() {
     const d  = String(now.getUTCDate()).padStart(2, '0');
     const h  = String(now.getUTCHours()).padStart(2, '0');
     const mi = String(now.getUTCMinutes()).padStart(2, '0');
-    return `bk_snap_${y}_${mo}_${d}_${h}${mi}`;
+    return `bk_snap_${y}_${mo}_${d}_${h}${mi}_${randomBytes(6).toString('hex')}`;
 }
 
 // Collect all org data and return as a serialised JSON string + stats.
@@ -254,11 +290,6 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing entities key' }) };
             }
 
-            const TIMESTAMP_KEYS = new Set([
-                'createdAt','updatedAt','checkedOutAt','actualStart','actualEnd','invoicePaidAt',
-                'created_at','updated_at','checked_out_at','actual_start','actual_end','invoice_paid_at',
-            ]);
-
             // JSONB columns that must be stringified when coming in as arrays/objects
             const JSONB_KEYS = new Set([
                 'serviceZones','skills','certifications','workingHours',
@@ -270,15 +301,15 @@ export const handler = async (event) => {
             // string read back to its list.
             const ID_LISTS = new Set(['coTechIds', 'assignedEquipmentIds', 'co_tech_ids', 'assigned_equipment_ids']);
 
-            // Stamp orgId, coerce timestamps → Date, stringify JSONB arrays/objects
-            const stamp = rows => (rows || []).map(r => {
+            // Stamp orgId, make each date column's text a Date (state §0.205: the table's own date columns), stringify JSONB arrays/objects
+            const stamp = (table, rows) => (rows || []).map(r => {
                 const out = { ...r, orgId };
-                TIMESTAMP_KEYS.forEach(k => {
-                    if (out[k] && typeof out[k] === 'string') {
+                dateKeysOf(table).forEach(k => {
+                    if (typeof out[k] === 'string') {
                         const d = new Date(out[k]);
-                        out[k] = isNaN(d.getTime()) ? null : d;
+                        out[k] = isNaN(d.getTime()) ? undefined : d;
                     }
-                    // null stays null, Date stays Date
+                    // null stays null, Date stays Date; '' or text that is no date is left to the column — its default, or none (state §0.205); a number is left — refused, and said
                 });
                 JSONB_KEYS.forEach(k => {
                     if (k in out && (Array.isArray(out[k]) || (out[k] !== null && typeof out[k] === 'object'))) {
@@ -293,36 +324,55 @@ export const handler = async (event) => {
             });
 
             // The rows this restore inserted, by table — a row another org's id kept out is not one — for
-            // the link clean-up after it (state §0.199, E4).
+            // the link clean-up after it (state §0.199, E4). Answers how many the insert wrote (state §0.205).
             const restored = new Map();
             const keepRestored = (table, rows) => {
                 const ids = restored.get(table) || [];
                 for (const r of rows || []) if (r && r.id) ids.push(r.id);
                 restored.set(table, ids);
+                return (rows || []).length;
             };
+            // Each table's rows — sent, written, refused by the database, not reached (the database did not answer, or
+            // did not take them for a reason of its own: isRefusal) — and the first cause of a refusal and of a row not
+            // reached, for the function log only (state §0.205): the rest were already here.
+            const tally = new Map();
+            const firstCause = new Map();
+            const firstMiss = new Map();
 
             const CHUNK = 50;
             async function upsertChunked(table, rows) {
                 if (!rows || rows.length === 0) return 0;
-                const stamped = stamp(rows);
+                const stamped = stamp(table, rows);
                 let count = 0;
+                let refused = 0;
+                let unreached = 0;
                 for (let i = 0; i < stamped.length; i += CHUNK) {
                     const chunk = stamped.slice(i, i + CHUNK);
                     try {
-                        // Use onConflictDoNothing for bulk — safe for seed/restore
-                        // since we want existing records preserved and new ones inserted
-                        keepRestored(table, await db.insert(table).values(chunk).onConflictDoNothing().returning({ id: table.id }));
-                        count += chunk.length;
+                        // onConflictDoNothing: a row already here — its id (any org's), a number, an email, a login or a
+                        // link token another row holds, or a settings row where this org has one — is left as it is; the
+                        // insert answers only the rows it wrote, and only those count
+                        count += keepRestored(table, await db.insert(table).values(chunk).onConflictDoNothing().returning({ id: table.id }));
                     } catch {
-                        // Bulk failed — fall back row-by-row to skip any single bad record
+                        // Bulk failed — fall back row-by-row: a row the database refuses is counted, and said by its table;
+                        // a row not reached — no answer, or a reason of the database's own — is counted apart: never the
+                        // file's fault, never already here (§0.205)
                         for (const row of chunk) {
                             try {
-                                keepRestored(table, await db.insert(table).values(row).onConflictDoNothing().returning({ id: table.id }));
-                                count++;
-                            } catch { /* truly bad row — skip silently */ }
+                                count += keepRestored(table, await db.insert(table).values(row).onConflictDoNothing().returning({ id: table.id }));
+                            } catch (e) {
+                                if (!isRefusal(e)) {
+                                    unreached++;
+                                    if (!firstMiss.has(table)) firstMiss.set(table, e?.cause?.message || e?.message);
+                                    continue;
+                                }
+                                refused++;
+                                if (!firstCause.has(table)) firstCause.set(table, e?.cause?.message || e?.message);
+                            }
                         }
                     }
                 }
+                tally.set(table, { sent: stamped.length, written: count, refused, unreached });
                 return count;
             }
 
@@ -357,6 +407,21 @@ export const handler = async (event) => {
                 catch (e) { ents.users = []; console.warn('backup: the names of the members could not be read:', e.message); errs.push('users: not restored — the names of the members could not be checked. Try again.'); }
             }
 
+            // A table's rows the database would not take, said by the table (state §0.205 — Jeff, 15 Oct: "Fix both in
+            // 4b-2": they were dropped silently); the cause — the driver's words — to the function log only. Its rows the
+            // database never answered for are said once for the restore, below. Each table's count of either is kept for
+            // the audit row (notWritten): the window's answer is never stored.
+            const notWritten = [];
+            const sayRefused = (label, table) => {
+                const u = tally.get(table)?.unreached || 0;
+                const n = tally.get(table)?.refused || 0;
+                if (n || u) notWritten.push({ label, refused: n, unreached: u });
+                if (u) console.warn('backup: rows not reached', label, u, firstMiss.get(table));
+                if (!n) return;
+                errs.push(refusedWords(label, n));
+                console.warn('backup: rows refused', label, n, firstCause.get(table));
+            };
+
             // Standard CRM entities
             const crmEntities = [
                 { key: 'opportunities', table: opportunities },
@@ -377,7 +442,12 @@ export const handler = async (event) => {
                 if (!Array.isArray(rows) || rows.length === 0) continue;
                 try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }
                 catch (e) { errs.push(`${key}: ${e.message}`); }
+                sayRefused(key, table);
             }
+            // Members restored: this function's own roster and caller caches are dropped, as after any write of users in a
+            // request (state §0.205 — _lib.mjs). Each other warm function's 30-second caches — another endpoint resolving
+            // an owner by name — still miss them until they expire, as after every write of users.
+            if (Array.isArray(ents.users) && ents.users.length) invalidateRoster(orgId);
             // A renamed member is reported only once its row is here — a row whose id
             // another org holds was skipped by the insert, and was never restored.
             if (renamedMembers.length) {
@@ -405,8 +475,21 @@ export const handler = async (event) => {
                     if (!Array.isArray(rows) || rows.length === 0) continue;
                     try { imported += await upsertChunked(table, rows); }
                     catch (e) { errs.push(`dispatch.${key}: ${e.message}`); }
+                    sayRefused(`dispatch.${key}`, table);
                 }
             }
+
+            // The rows not reached — the database did not answer for them, or did not take them for a reason of its own —
+            // said once (state §0.205 — the review): an error — the snapshot 'partial', and a restore that wrote nothing
+            // and found nothing already here a 500, as with any error — and counted in the answer (unreached, below).
+            const missed = [...tally.values()].reduce((n, t) => n + t.unreached, 0);
+            if (missed) errs.push(unreachedWords(missed));
+
+            // The file's rows already here — the same id (any org's), a number, an email, a login or a link token a row holds,
+            // or a settings row where this org has one; the insert leaves each as it is — are said apart, never counted as
+            // restored (state §0.205 — Jeff, 16 Oct: "Fix both"): the rows sent, less those written, refused or not reached.
+            const already = [...tally.values()].reduce((n, t) => n + t.sent - t.written - t.refused - t.unreached, 0);
+            if (already) notes.push(alreadyWords(already));
 
             // On the rows it restored, every link that names no row of this org is cleared, and the answer says
             // how many; a file is never refused over a link (state §0.199, E4: "Clear stray links"; Dispatch's
@@ -451,12 +534,18 @@ export const handler = async (event) => {
                 swept.lineItemsWithoutJob ? `${swept.lineItemsWithoutJob} line item${swept.lineItemsWithoutJob === 1 ? '' : 's'} with a job not in this org` : '',
                 swept.historyWithoutJob ? `${swept.historyWithoutJob} history entr${swept.historyWithoutJob === 1 ? 'y' : 'ies'} with a job not in this org` : '',
             ].filter(Boolean).join(' · ') : '';
-            await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${linkDetail ? ` · ${linkDetail}` : ''}${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}` });
+            // And which tables' rows were refused or not reached, each with its count (state §0.205 — the review): the
+            // window's answer is never stored, so this row is the record that outlives it ("· refused: products 1").
+            const rowsBy = (k) => notWritten.filter((t) => t[k]).map((t) => `${t.label} ${t[k]}`).join(', ');
+            const rowDetail = [rowsBy('refused') && `refused: ${rowsBy('refused')}`, rowsBy('unreached') && `not reached: ${rowsBy('unreached')}`].filter(Boolean).join(' · ');
+            await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${linkDetail ? ` · ${linkDetail}` : ''}${already ? ` · ${already} already here` : ''}${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}${rowDetail ? ` · ${rowDetail}` : ''}` });
 
+            // The answer counts the rows not reached (state §0.205 — the re-check): with any, the restore may have
+            // written records no count shows, so the window reloads the page on Close — on a 500 as on a 200.
             return {
-                statusCode: errs.length && imported === 0 ? 500 : 200,
+                statusCode: errs.length && imported === 0 && !already ? 500 : 200,
                 headers,
-                body: JSON.stringify({ ok: imported > 0, imported, errors: errs, notes, snapId }),
+                body: JSON.stringify({ ok: imported > 0, imported, unreached: missed, errors: errs, notes, snapId }),
             };
         }
 

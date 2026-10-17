@@ -933,7 +933,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // `active` and the status as loaded, so a save made after the member
             // accepted deactivated them (or switched a deactivated one back on).
             // Deactivate / Reactivate change access; a sign-in links the login.
-            const { active: _active, status: _status, clerkUserId: _login, ...edited } = form;
+            // Nor the pins (state §0.205): the member's own; the server keeps them whatever a save sends.
+            const { active: _active, status: _status, clerkUserId: _login, pinnedReports: _pins, ...edited } = form;
             const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });

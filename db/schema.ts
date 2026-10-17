@@ -705,7 +705,7 @@ export const invoices = pgTable('invoices', {
 // ── BACKUPS ───────────────────────────────────────────────────────────────────
 // One row per snapshot. payload stores the full JSON export for download.
 export const backups = pgTable('backups', {
-    id:           text('id').primaryKey(),                         // e.g. bk_snap_2026_05_01_0314
+    id:           text('id').primaryKey(),                         // e.g. bk_snap_2026_05_01_0314_3f9a1c0b7e2d — the minute, then a random suffix (state §0.205): by the minute alone, two snapshots in one minute, any orgs', shared an id
     orgId:        text('org_id').notNull(),
     type:         varchar('type', { length: 20 }).notNull().default('manual'),  // 'manual' | 'automated'
     status:       varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'running' | 'failed'

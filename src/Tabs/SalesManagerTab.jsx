@@ -884,7 +884,11 @@ export default function SalesManagerTab() {
     // These PUTs used to live INSIDE the setSettings updater. A state reducer must
     // be pure: React invokes it twice under StrictMode, so every quota edit fired
     // two writes. Moved out, and the response is now checked.
-    const saveUser = async (user, label) => {
+    // Each save sends only its field (state §0.205): `who` names the member a refusal is about. A forecast call's field
+    // is the rep's whole calls map as this tab holds it — withForecastCall (forecastCall.js) copies every quarter and the
+    // quarter's other figure — so another manager's call made since is put back: one for another quarter, and this
+    // quarter's other figure too (a Commit re-sends the Best case as this tab holds it). Filed, OPEN_ITEMS §4.6.
+    const saveUser = async (user, label, who = user.name) => {
         try {
             const res = await dbFetch('/.netlify/functions/users', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user),
@@ -894,7 +898,7 @@ export default function SalesManagerTab() {
                 // since the screen loaded answers 404, a row a Manager cannot change 403.
                 const d = await res.json().catch(() => ({}));
                 setSaveState({ status: 'error', msg: d.error
-                    ? `Not saved \u2014 ${user.name || 'a member'}: ${d.error}`
+                    ? `Not saved \u2014 ${who || 'a member'}: ${d.error}`
                     : res.status === 403
                     ? `Not saved \u2014 only Admins can change ${label}.`
                     : `Not saved \u2014 the server returned ${res.status}. Your ${label} changes are not stored.` });
@@ -914,11 +918,13 @@ export default function SalesManagerTab() {
     // save was skipped without a word.
     // Each save below stops at an org switch (state §0.175): the next PUT would carry
     // the new org's token, and the app's copy it updates is the new org's.
+    // Only the field is sent — { id, [field] } (state §0.205 — Jeff: "Send only what changed"): the rep's whole cached
+    // row put back a team, a name or pins saved since the tab loaded.
     const updateRepField = async (userId, field, value) => {
         const askedOrg = requestOrg();
         const rep = (settings.users || []).find(u => u.id === userId);
         if (!rep) return false;
-        if (!await saveUser({ ...rep, [field]: value }, 'forecast call')) return false;
+        if (!await saveUser({ id: userId, [field]: value }, 'forecast call', rep.name)) return false;
         if (!stillOrg(askedOrg)) return false;
         setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === userId ? { ...u, [field]: value } : u) }));
         return true;

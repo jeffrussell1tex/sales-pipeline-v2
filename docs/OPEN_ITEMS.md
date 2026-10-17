@@ -129,9 +129,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      A company's quarters come from its own fiscal start on every screen
      and job, January when none is saved. The Annual / Quarterly switch is
      gone. What it found and left is filed in §2.2, §4.2, §4.5 and §4.6.
-   - **Batch 4b-2, the sales links — in two; 4b-2b done, 4b-2c next**
-     (Jeff, 16 Oct: "Two batches"; the decisions of 15 and 16 Oct in
-     §4.6). The census (SELECT,
+   - **Batch 4b-2, the sales links, is DONE — in two** (Jeff, 16 Oct:
+     "Two batches"; the decisions of 15 and 16 Oct in §4.6). The census
+     (SELECT,
      counts only, 16 Oct): no stored link names another org's record or
      nothing — 44 quote lines, every member's team and pin, the one rule
      assignee (blank) — and Accelerep QA's one claim, whose SPIFF was
@@ -146,25 +146,25 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        a quote line that is no line, or lines that are no list, refused
        (400); Reject no longer red. What it found and left is filed in
        §4.2, §4.6 and §4.8.
-     - **4b-2c, the members and the restore, next:** members' team and
-       pinned reports, the forecast call sending only what it changes, and
-       the restore — every date column, refused rows said, "records
-       restored" counting only rows written (the rest "already here"), and
-       the clean-up of quote lines' products, teams and pins. Re-mapped 16
-       Oct over 3226ad8 (three mappers, a designer and two critics; read in
-       code). Jeff's answers, 16 Oct: the import window shows the restore's
-       answer — today it closes as the answer lands, so no count, error or
-       note is ever seen ("Fold it in"; the two §4.3 items on that window
-       with it); a backup snapshot's id made unique — minted per minute and
-       shared by every org, a second backup in the same minute answers 500
-       and an import's snapshot row is lost, its audit entry naming an id
-       another org may hold ("Fix now"); the member profile page's
-       whole-row save filed for its own batch, next ("File it, own batch
-       next" — §4.3); a restored member's login link and role kept filed
-       ("Keep it filed, named" — §4.6).
+     - **4b-2c is DONE (§0.205; guide §18b98):** members' team and pinned
+       reports — a team an entry of this org's teams list, a pin a saved
+       report of it, any of either, asked where a write names one anew;
+       pins written only by the member's own Pin; the forecast call sends
+       only its field, `{ id, forecastCalls }` (the field is the rep's
+       whole calls map — §4.6); the restore — every date column, "records
+       restored" counting only rows written, the rows refused, not reached
+       and already here each said, the audit row naming each table whose
+       rows were refused or not reached, with the count — and the clean-up
+       of quote lines' products, teams and pins; the import window shows
+       the restore's answer ("Fold it in"); a backup snapshot's id is
+       unique ("Fix now"). Jeff's other answers of 16 Oct stand: the member
+       profile page's whole-row save is its own batch ("File it, own batch
+       next" — below); a restored member's login link and role stay filed
+       ("Keep it filed, named" — §4.6). What it found and left is filed in
+       §2.2, §4.3, §4.6, §4.7 and §4.8.
      - **Then, the member profile page sends only what changed** (§4.3's
-       "Two saves PUT a member's whole cached row"; Jeff, 16 Oct: "File it,
-       own batch next").
+       "The Settings → Users profile page PUTs a member's whole cached
+       row"; Jeff, 16 Oct: "File it, own batch next").
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
    - **Then, a merged-away account leaves the Accounts tab** (Jeff, 16 Oct,
@@ -362,6 +362,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **When §0.205 ships, reload every app tab opened before it:** an older
+  tab's forecast call re-sends the rep's whole cached row — when the
+  cached team is no longer the rep's stored team and has been deleted
+  since, it now answers 404 "That team is not in your organization — pick
+  one from the list.", its call not stored (a deleted team the rep still
+  holds is taken, as before), and a team or a name changed since is put
+  back as before (never the pins: the server keeps them); its Pin
+  from a window whose pin list still holds a report unpinned in another
+  window and deleted since is refused, with no re-read, and so is every
+  later Pin and Unpin there until a reload — but an Unpin of that report
+  itself, which drops it (a stale list that names only
+  live reports is taken, and puts back the ones unpinned elsewhere, as
+  before); its import window closes on an accepted restore's answer and
+  reads only "Import failed" on a refused one, so nothing the restore
+  says is read. The ship folds this into the item below.
 - **Reload every app tab opened before the fortieth ship** (Deployed: dev
   15:00 UTC, prod 15:03 UTC, 16 Oct — it covers the thirty-ninth's, 16 Oct
   03:28 UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the thirty-seventh's,
@@ -1372,42 +1387,46 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - Its "Google Calendar · holidays@accelerep.com" row reads
     `settings.googleCalendarConnected`, which nothing sets.
   - Read 10 Oct.
-- **Two saves PUT a member's whole cached row:** SalesManagerTab's
-  forecast save (`saveUser`; quotas are their own request since §0.203,
-  and every whole-profile write keeps the stored plans) and the Settings →
-  Users profile page. A
-  rename made in another session is undone by the next such save (the stale
-  First/Last rebuild the old name), or, since §0.196, refused when another
-  member holds the old name by then. SalesManagerTab shows "the server
-  returned 409" without the server's words. Recommended: partial PUTs, as
+- **The Settings → Users profile page PUTs a member's whole cached row**
+  (recorded 11 Oct with SalesManagerTab's forecast save; quotas are their
+  own request since §0.203, and every whole-profile write keeps the stored
+  plans). A rename made in another session is undone by its next save (the
+  stale First/Last rebuild the old name), or, since §0.196, refused when
+  another member holds the old name by then. Recommended: partial PUTs, as
   the Teams page and the profile panel send. Read 11 Oct (§0.196). The
-  4b-2c re-map (16 Oct, read in code): the profile page also re-sends the
-  member's forecast calls and own preferences as loaded, so an Admin's save
-  there puts back a Manager's call or the member's own change made since the
-  page opened, and it derives the team by name (§4.6). Jeff, 16 Oct: the
-  forecast save sends only what it changes in batch 4b-2c ("Send only what
-  changed"); the profile page stops sending pins in 4b-2c and sends only
-  what changed in its own batch, next ("File it, own batch next").
+  4b-2c re-map (16 Oct, read in code): it also re-sends the member's
+  forecast calls, own preferences, email signature and contact fields as
+  loaded, so an Admin's save there puts back a Manager's call or the
+  member's own change made since the page opened, and it derives the team
+  by name (§4.6). Since §0.205 it sends no pins (the server keeps them
+  whatever a save sends), and the forecast save sends only its field,
+  `{ id, forecastCalls }`, its refusal in the server's words with the
+  rep's name — that field is the rep's whole calls map (§4.6). Jeff, 16
+  Oct: the profile page sends only what changed in its own batch, next
+  ("File it, own batch next" — §1).
 - **The Settings → Users profile page after a save:** its title band and
   crumb read the member as the page opened, so a rename shows the old name
   until the page is left; "Save changes" stays (the form is compared with that
   first copy); and an Admin renaming their own row there keeps the old name
   in the header until a reload (nothing sets their profile). §0.196.
-- **The backup import window says "Existing records with matching IDs will be
-  updated."** The restore inserts with `onConflictDoNothing`: a record whose
-  id is already there is left as it is. Recommended: reword it ("… are left
-  as they are") with the backup page's next pass, not in §0.196. Read 11 Oct
-  (§0.196). Jeff, 16 Oct: in batch 4b-2c, with the window showing the
-  restore's answer ("Fold it in").
-- **A restore that drops every member row and imports nothing else reads
-  only "Import failed".** Since §0.196 a member row with no usable id or
-  email is dropped and reported in `errors`; backup.mjs then answers 500,
-  and BackupDetail shows `data.error` only. Before, such a hand-edited file
-  imported. Recommended: show `data.errors` when the answer is not OK (one
-  line), with the backup page's next pass. Read 11 Oct (§0.196's review).
-  The 4b-2c re-map (16 Oct, read in code, not seen): the window never shows
-  any answer — on success it closes in the render that sets it. Jeff, 16
-  Oct: shown in batch 4b-2c ("Fold it in").
+- **The backup page after §0.205** (its reviews, 16 Oct; read in code):
+  - The snapshot list reads an import as "Automated" (it tells only
+    'manual' apart) and a partial one as "Failed" (it knows only 'ready'
+    and 'running'); a restore that wrote nothing does not reload the page
+    on Close, so its own snapshot row is not listed until a reload; and a
+    manual backup's record count leaves out settings and pipelines, which
+    a restore's count includes. Older.
+  - Close reloading the page — once records are restored, or may have
+    been — discards an unsaved Backup schedule edit on the same page: no
+    leave guard. New in §0.205.
+  - The file picker stays clickable while an import runs. Older.
+  - What Netlify answers on a timeout or an oversized file is unverified:
+    a 413 that is not JSON reads "No answer from the server — the restore
+    may have written records" and reloads the page on Close, though
+    nothing was written.
+  - The refused restore's line keeps a `data.error ||` that no answer of
+    the restore's own reaches now (`saidBy` takes any answer in words
+    first). Housekeeping.
 
 ### 4.4 Dispatch
 
@@ -1607,18 +1626,24 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **A Manager can put a Sales Rep on any team through the API** (the 4b-2
-  re-map, 16 Oct; read in code, not run). Every screen that sets a team is
-  in Settings, which only Admins open, but the users PUT, the create and
-  the invitation take a Manager's team id; the team brings its coaching
-  notes from that day on (users.mjs; _coaching.mjs). Jeff, 16 Oct: "No,
-  leave it".
+- **A Manager can put a Sales Rep on any team of the org through the API**
+  (the 4b-2 re-map, 16 Oct; read in code, not run). Every screen that sets
+  a team is in Settings, which only Admins open, but the users PUT, the
+  create and the invitation take a Manager's team id — since §0.205 only a
+  team of this org's list — and the team's name, which the manager digest
+  matches by, as text; the team brings its coaching notes from that day on
+  (users.mjs; _coaching.mjs). Jeff, 16 Oct: "No, leave it".
 - **A Pin can be undone by a whole-profile save racing it** (the 4b-2
-  design, 16 Oct; read in code). From 4b-2c pins are written only by the
+  design, 16 Oct; read in code). Since §0.205 pins are written only by the
   member's own Pin, and every other save keeps the pins its merge read — a
   Pin landing between that read and the write is put back. The quota plans
   take their stored value at write time (`keepQuotaPlans`, §0.203); the
   same would close this. Jeff, 16 Oct: "Not now, file it".
+- **The member's own Pin reads the member's row again** (§0.205's build;
+  read in code): `mergeForUpdate` has read it, and the pin check reads it
+  again for the pins it holds — one extra query per Pin. Passing the
+  merge's pins through would drop it; it moves member-links T5's order pin
+  and two harness entries. Jeff's call.
 - **Found by the 4b-2 re-map** (15–16 Oct; read in code, not run; Jeff, 16
   Oct: "file the rest"):
   - Home's coaching block never shows a rep their team's notes — Home reads
@@ -1629,7 +1654,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - The member profile page derives the team by name on every save, which
     can clear a valid team and its joined date (UsersDetail.jsx).
   - A forecast call sends the rep's whole calls map, so one manager's call
-    can put back another's for a different quarter (forecastCall.js).
+    can put back another's for a different quarter, or the same quarter's
+    other figure — a Commit re-sends the Best case as the tab holds it
+    (forecastCall.js). Since §0.205 the call sends only that field,
+    `{ id, forecastCalls }`, never the rep's whole row; the field is still
+    the whole map.
   - A 51st Pin does nothing, and a pin of a deleted report can never be
     unpinned (users.mjs; ReportsTab.jsx).
   - The settings PUT keeps a SPIFF list of any shape (settings.mjs) — for
@@ -1661,12 +1690,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
     quote lines' product and automations' assignee asked; the claim rules
     (1) and (2); the 409s of claims, quotes and export runs; export runs
     store no schedule; the claim Delete and the SPIFF control; D2, D3, D5
-    and Reject's colour. **4b-2c, still to do:** members' team and pinned
-    reports (pins written only by the member's own Pin; an Admin's or
-    Manager's member save stops taking them), the forecast call sending
-    only what it changes, and the restore — its dates, the rows it could
-    not restore said, "records restored" counting only rows written, and
-    the clean-up of quote lines' products, teams and pins.
+    and Reject's colour. **4b-2c is DONE (§0.205; guide §18b98):**
+    members' team and pinned reports asked (pins written only by the
+    member's own Pin; an Admin's or Manager's member save keeps the stored
+    ones), the forecast call sending only its field, and the restore — its
+    dates, the rows refused, not reached and already here said, "records
+    restored" counting only rows written, and the clean-up of quote lines'
+    products, teams and pins. A Manager setting a rep's team ("No, leave
+    it") and pins kept at write time ("Not now, file it") stay filed
+    (above).
   - 4b-2 (Jeff's decisions, 15 Oct): SPIFF claims' `opportunityId` (a deal)
     and `spiffId` (an entry of the org's SPIFF list); quote lines'
     `productId`; automations' create-task `assignedToId` (a member);
@@ -1676,7 +1708,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
     refuse"); a link a row holds is never asked again. Pins are written only
     by the member's own Pin: an Admin's or Manager's member save stops taking
     them, and the Sales Manager tab's saves send only what they change ("Send
-    only what changed"). A claim save that clears its SPIFF or rep answers
+    only what changed" — since §0.205 the forecast call sends only its field,
+    the rep's whole calls map as the tab holds it: filed above). A claim save
+    that clears its SPIFF or rep answers
     400 (a 500 today), and a claim id this org does not hold answers 404 on
     every save (an Admin's or Manager's save created one); the rest of the
     claim rules filed ("(1) and (2) now, file (3)"). SPIFF claims, quotes and
@@ -1704,7 +1738,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     or lines that are no list, answer 400 — today a 500, or every line of a
     Draft wiped ("Refuse with a 400"; none stored); the restore's "records
     restored" counts only rows it wrote, and the rest are said apart ("Fix
-    both" — the item below); the claims list's Reject loses its red fill,
+    both" — done in §0.205); the claims list's Reject loses its red fill,
     red being for delete ("Fix Reject's colour, file the rest"). Not done:
     a Manager setting a rep's team ("No, leave it") and pins kept at write
     time ("Not now, file it") — both below. The census found no stray to
@@ -1712,7 +1746,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
     already, so the held link is proved in the itest (D4).
   - 4b-3: settings' teams, crews and quote templates' product ids, and a
     service plan's `visitTemplateId` (an entry of the org's job templates —
-    found by the 15 Oct critic, in no list).
+    found by the 15 Oct critic, in no list); and the teams list a restore
+    lands where the org had no settings row — its entries' `repIds` and
+    `managerId` can name another org's members, and since §0.205 a
+    restored member's team is judged against that list (the 4b-2c map,
+    16 Oct).
   - left as they are by design: tasks' `relatedTo` (free text in places),
     the recommendation log's id (a deal, task or customer by action),
     deals' `pipelineId` (a settings id, 'default' a sentinel).
@@ -1749,21 +1787,23 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.202's rule: no save links a row — a sign-in, an Admin's Clerk sync or
   an Admin's restore does, and the restore's is this item. The 4b-2c
   re-map (16 Oct): from that batch the restore lands rows it dropped
-  silently — every member who ever joined a team among them — so more
-  members reach this. Jeff, 16 Oct: "Keep it filed, named".
+  silently — every member whose row held a team date (stamped when a save
+  puts them on a team, cleared when they leave it) among them — so more
+  members reach this. Jeff, 16 Oct: "Keep it filed, named". Named in
+  §0.205: since it, those rows land.
+- **A restored merged-away account or contact lands with its merged-into
+  id** (§0.205's amendment, 16 Oct; read in code): the restore's clean-up
+  (RESTORE_LINKS, `_links.mjs`) does not list `mergedIntoId`, so one that
+  names no record of this org stays. A dangling link, not a leak — every
+  reader looks it up in the org (opportunities.mjs, ai-score.mjs,
+  linkIds.js). Since §0.205 merged accounts and contacts land (their
+  archive date was one the old date list missed).
 - **Automations: a deactivated assignee, and the rule save** (the 4b-2 map):
   the engine assigns a rule's tasks by id to a deactivated member while the
   rule editor shows that assignee as gone; the rule PUT has none of the
   create's checks — `actions: []` is taken, `null` is a 500 (NOT NULL),
   and the trigger is never checked against the list (the engine fails
   closed).
-- **The backup restore counts the rows it sent, not those it restored**
-  (§0.199's review; older): a row skipped because this org or another already
-  holds its id is counted, so a second import of the same file reads "N
-  records restored" and restores nothing; the snapshot's record count and
-  the audit row say the same. Since §0.199 each insert answers the ids it
-  wrote. Recommended: count those, and say "N already here" apart. Jeff,
-  16 Oct: "Fix both" — batch 4b-2c.
 - **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
   later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
@@ -1935,6 +1975,39 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.7 Imports and merge
 
+- **The backup restore after §0.205** (its reviews and re-check, 16 Oct;
+  read in code, and run where said):
+  - A row written whose answer was lost — a chunk's, then counted already
+    here in the same run, or a row's, counted not reached — is not among
+    the rows restored, so the link clean-up never reads it, and a re-run
+    calls it already here: its stray links stay as the file had them (run
+    on drizzle's driver with a made-up fetch, the re-check). Older in
+    kind: the restore always cleaned only the rows an answer named.
+    Recommended: hand the clean-up the id of each row not reached, and of
+    each row of a failed chunk that the fallback then finds already here
+    (it reads and writes by id within this org; a row of this org that
+    held that id before the restore would have its stray links cleared
+    too).
+  - A member profile the file gives as JSON text is stored as a jsonb
+    string; since §0.205 the clean-up counts it right (nothing), but never
+    cleans it — its team and pins stand as filed. Recommended: read a text
+    profile that parses to an object back into that object as the restore
+    stamps the row.
+  - A code the database gives every time, outside classes 22 and 23 —
+    54000 (an index row too large: a hand-made file's oversized id) or
+    42703 (a column it lacks: the code ahead of the shared schema) — is
+    counted not reached and said "Restore the file again", which never
+    lands. Whether classes 42 and 54 count as refused is Jeff's call.
+  - During an outage the row fallback sends each row of a failed chunk in
+    turn, so a large file can outlast the function's time limit; the
+    window then hears no answer and says the restore may have written
+    records. How long is unverified.
+  - A refused row's cause — the driver's words — goes to `console.warn`
+    only; whether Netlify's function log shows it is unverified (memory:
+    it shows no console output). The answer and the audit row carry the
+    table and the count.
+  - A row a hand-made file gives the id '' is counted restored but never
+    cleaned (keepRestored keeps truthy ids). Older; rare.
 - **A contact merge leaves activities' `contactIds` and tasks' chips on the
   merged-away contact** (the pre-ship sweep; older than §0.198). Its
   `tasks.contactId` and deals' ids move; the arrays do not. An untouched Save
@@ -2014,6 +2087,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **A refused forecast call is said only on the Team and Admin sub-tabs**
+  (§0.205's review, 16 Oct; read in code; older): the Forecast sub-tab
+  draws no save state, so a call refused there — a rep removed or re-roled
+  in another session, 404 or 403 — flips back to the old figure with no
+  word, and its "Not saved — {rep}: …" line shows later on another
+  sub-tab; a later success never clears it. Recommended: draw the save
+  state above the sub-tabs, and clear an error on the next success.
+- **A Pin answered with a server error reads as not saved** (§0.205's
+  second fix round, 16 Oct; read in code; older): togglePin shows the
+  server's words, or "Pin not saved — HTTP 500", and keeps the window's
+  pins, though a 5xx may come after the write landed (§0.203's rule).
+  Recommended: the no-answer words ("reload the page to see whether the
+  report was pinned").
 - **The Sales Manager tab has one status line for every save** (§0.204's
   review, 16 Oct; read in code; older for Approve and Reject — one
   handler, `updateClaimStatus` — new for the Delete): a claim's Approve,

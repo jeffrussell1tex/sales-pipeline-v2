@@ -15,25 +15,29 @@
 //     deals endpoint's words, §0.198), 400 for a value that names no record by its id;
 //   - a bulk write: refused whole, 400, naming the ids, before anything is written.
 // An Admin's backup restore clears, on the rows it restored, every link that names no row of this org
-// (E4: clearStrayLinks), and says how many; a bulk create clears so, after its insert, a link to one of its
-// own rows that did not land.
+// (E4: clearStrayLinks) — since §0.205 a quote line's product and a member's team and pins too — and says how
+// many; a bulk create clears so, after its insert, a link to one of its own rows that did not land.
 import { db } from '../../db/index.js';
 import {
-    accounts, contacts, opportunities, leads, tasks, activities, quotes, users, products, settings,
+    accounts, contacts, opportunities, leads, tasks, activities, quotes, users, products, settings, savedReports,
     dispatchCustomers, dispatchServiceLocations, dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory,
     dispatchTechnicians, dispatchVehicles, dispatchEquipment, dispatchServicePlans,
 } from '../../db/schema.js';
 import { and, eq, getTableName, inArray, isNotNull, sql } from 'drizzle-orm';
 import { MERGES, liveIds, linksAsked, linksDecided, bulkLinksAsked, bulkLinksDecided } from '../../src/utils/linkIds.js';
 import { listEntryIds } from '../../src/utils/linkIds.js';
+import { productIdsOf, lineProductsCleared, memberLinksCleared } from '../../src/utils/linkIds.js';
 
 // The table each kind of link names — Dispatch's since §0.201; a quote line's product since §0.204 (any of the
-// org's, an inactive one too: a product is only ever deactivated).
+// org's, an inactive one too: a product is only ever deactivated); a member's pinned report since §0.205 — a saved
+// report of the org, any of them, a colleague's private one too: which one a viewer may open is the reader's (Home
+// skips one they cannot see).
 const TABLES = Object.freeze({
     account: accounts, contact: contacts, deal: opportunities, lead: leads,
     customer: dispatchCustomers, location: dispatchServiceLocations,
     technician: dispatchTechnicians, vehicle: dispatchVehicles, equipment: dispatchEquipment, plan: dispatchServicePlans, job: dispatchJobs,
     product: products,
+    report: savedReports,
 });
 // What only the restore's clean-up names: a job's quote, a quote of the org — and a technician's login, a
 // member's Clerk identity (users.clerk_user_id, never their app id: §0.201), read in clearField.
@@ -43,10 +47,12 @@ const SWEPT = Object.freeze({ ...TABLES, quote: quotes });
 // members, deactivated or invited too — the users table named only where it is read (the member-names guard
 // lists each place it is handed on as a value), and read fresh, not through the roster's 30-second cache, so a
 // member invited a moment ago counts; and an entry of a list the org's settings row keeps (a SPIFF, an inactive
-// one too) — an entry, not a row, so never in TABLES or SWEPT: the restore's clean-up reads columns. Every
-// settings row of the org is read, with no limit (there is one, settings_org_id_uniq): a read that lost its org
-// clause would take every org's list each time, never one row at random.
-const LISTS = Object.freeze({ spiff: 'spiffs' });
+// one too; since §0.205 a team — an old plain-text team names nothing) — an entry, not a row, so never in TABLES
+// or SWEPT, the columns the restore's clean-up clears (a member's team it clears apart, clearMemberLinks). Every
+// settings row of the org is read, with no limit (there is
+// one, settings_org_id_uniq): a read that lost its org clause would take every org's list each time, never one
+// row at random.
+const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams' });
 async function idsReadApart(kind, list, orgId) {
     if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));
     const rows = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));
@@ -181,6 +187,10 @@ export async function clearStrayLinks(orgId, restored) {
             console.warn('clearStrayLinks: dispatch_equipment status', e?.cause?.message || e?.message);
         }
     }
+    // A quote line's product and a member's team and pins (state §0.205): links inside a jsonb value, which clearField
+    // cannot read as a column — read apart, below; counted with the links cleared, a field that fails named.
+    cleared += await clearLineProducts(orgId, restored, failed);
+    cleared += await clearMemberLinks(orgId, restored, failed);
     const jobsWithoutCustomer = await countRequired(orgId, restored, dispatchJobs, 'customerId', dispatchCustomers, failed);
     const quotesWithoutDeal = await countRequired(orgId, restored, quotes, 'opportunityId', opportunities, failed);
     const locationsWithoutCustomer = await countRequired(orgId, restored, dispatchServiceLocations, 'customerId', dispatchCustomers, failed);
@@ -243,6 +253,73 @@ async function countRequired(orgId, restored, table, key, parentTable, failed) {
     } catch (e) {
         failed.push(`${getTableName(table)}.${key}`);
         console.warn('clearStrayLinks:', getTableName(table), key, e?.cause?.message || e?.message);
+        return 0;
+    }
+}
+
+// A restored quote's lines (state §0.205 — Jeff, 15 Oct: "Fix both in 4b-2"): a line whose product names no product of
+// this org has its product cleared — the line kept, its name, price and quantity as filed, the quote's totals as filed;
+// linkIds.js's lineProductsCleared decides (run by tests/member-links.test.mjs). A quote whose lines are no list is left
+// as it is. Written whatever the quote's status, as every clean-up write is the restore's. One batch, all or none.
+async function clearLineProducts(orgId, restored, failed) {
+    const ids = (restored && restored.get(quotes)) || [];
+    if (!ids.length) return 0;
+    try {
+        const held = await db.select({ id: quotes.id, lineItems: quotes.lineItems }).from(quotes)
+            .where(and(eq(quotes.orgId, orgId), inArray(quotes.id, ids)));
+        const live = await liveIdsInOrg('product', held.flatMap((q) => (Array.isArray(q.lineItems) ? productIdsOf(q.lineItems) : [])), orgId);
+        let cleared = 0;
+        const writes = [];
+        for (const q of held) {
+            const done = lineProductsCleared(q.lineItems, live);
+            if (!done.cleared) continue;
+            cleared += done.cleared;
+            writes.push(db.update(quotes).set({ lineItems: done.lines }).where(and(eq(quotes.orgId, orgId), eq(quotes.id, q.id))));
+        }
+        if (writes.length) await db.batch(writes);
+        return cleared;
+    } catch (e) {
+        failed.push('quotes.lineItems');
+        console.warn('clearStrayLinks:', 'quotes', 'lineItems', e?.cause?.message || e?.message);
+        return 0;
+    }
+}
+
+// A restored member's team and pins (state §0.205 — Jeff, 15 Oct: "a member's unknown team (with its joined date) and
+// unknown pins"): a team that names no entry of this org's teams list — the list as the restore leaves it — is cleared
+// with the date they joined it (the team's name kept), and a pin that names no saved report of this org is dropped, the
+// rest kept in their order; linkIds.js's memberLinksCleared decides. Only those two keys are written, merged into the
+// profile as stored — the quota plans and every other key kept — and only where the profile is stored as an object: its
+// stored kind is read with it, and a member whose profile is stored as anything else is skipped before anything is
+// counted (state §0.205 — the review: JSON text a file gave is stored as a jsonb string, which the read hands back
+// parsed, an object, while the write's guard leaves it as it is — it was counted as cleared, and nothing was).
+async function clearMemberLinks(orgId, restored, failed) {
+    const ids = (restored && restored.get(users)) || [];
+    if (!ids.length) return 0;
+    try {
+        const held = await db.select({ id: users.id, profile: users.profile, kind: sql`jsonb_typeof(${users.profile})` }).from(users)
+            .where(and(eq(users.orgId, orgId), inArray(users.id, ids)));
+        const own = (p) => (p && typeof p === 'object' && !Array.isArray(p) ? p : {});
+        const teams = await liveIdsInOrg('team', held.map((m) => own(m.profile).teamId), orgId);
+        const reports = await liveIdsInOrg('report', held.flatMap((m) => (Array.isArray(own(m.profile).pinnedReports) ? own(m.profile).pinnedReports : [])), orgId);
+        let cleared = 0;
+        const writes = [];
+        for (const m of held) {
+            // The write's own guard, read first (state §0.205): a profile it would not write is not counted.
+            if (m.kind !== 'object') continue;
+            const done = memberLinksCleared(m.profile, teams, reports);
+            if (!done.cleared) continue;
+            cleared += done.cleared;
+            writes.push(db.update(users).set({
+                profile: sql`coalesce(${users.profile}, '{}'::jsonb) || ${JSON.stringify(done.patch)}::jsonb`,
+                teamJoinedAt: 'teamId' in done.patch ? null : sql`${users.teamJoinedAt}`,
+            }).where(and(eq(users.orgId, orgId), eq(users.id, m.id), sql`jsonb_typeof(${users.profile}) = 'object'`)));
+        }
+        if (writes.length) await db.batch(writes);
+        return cleared;
+    } catch (e) {
+        failed.push('users.profile');
+        console.warn('clearStrayLinks:', 'users', 'profile', e?.cause?.message || e?.message);
         return 0;
     }
 }

@@ -10,7 +10,8 @@
 //             §0.201 Dispatch's technician, vehicle, equipment unit, service plan and job; since §0.204 a
 //             quote line's product, a rule's assignee (a member) and a claim's SPIFF (an entry of the org's
 //             list, not a row) — a link inside a list or an action checked through a view of the ids it
-//             holds (productIdsOf, assigneesOf, below)
+//             holds (productIdsOf, assigneesOf, below); since §0.205 a member's team (an entry of the org's
+//             teams list) and pinned reports (saved reports of the org)
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
@@ -29,6 +30,9 @@ export const NOUNS = Object.freeze({
     technician: 'technician', vehicle: 'vehicle', equipment: 'equipment unit', plan: 'service plan', job: 'job',
     // A sales record's (state §0.204): a quote line's product, a rule's assignee, a claim's SPIFF — none ever merged away
     product: 'product', member: 'member', spiff: 'SPIFF',
+    // A member's (state §0.205): their team — an entry of the org's teams list — and their pinned reports, saved reports
+    // of the org; neither ever merged away
+    team: 'team', report: 'saved report',
 });
 // The kinds a row of which can be merged away (mergeArchived, mergedIntoId).
 export const MERGES = Object.freeze(['account', 'contact']);
@@ -196,8 +200,9 @@ export async function saveDroppingRefused(send, body, droppable) {
 }
 
 // The ids of a list's entries that are records (state §0.204): what _links.mjs reads of a list the org's settings
-// row keeps (its SPIFFs) — an entry that is an object whose id is text, not empty. A plain-text entry (an old
-// team, teamMembership.js) or one with no id names nothing; an id twice is one. Anything but a list: none.
+// row keeps (its SPIFFs; since §0.205 its teams) — an entry that is an object whose id is text, not empty. A
+// plain-text entry (an old team, teamMembership.js) or one with no id names nothing; an id twice is one. Anything
+// but a list: none.
 export function listEntryIds(list) {
     if (!Array.isArray(list)) return [];
     return [...new Set(list.filter((e) => e && typeof e === 'object' && typeof e.id === 'string' && e.id !== '').map((e) => e.id))];
@@ -221,4 +226,37 @@ export function assigneesOf(actions) {
     if (!Array.isArray(actions)) return [];
     return actions.filter((a) => a && typeof a === 'object' && a.type === 'create_task' && a.params && typeof a.params === 'object')
         .map((a) => a.params.assignedToId);
+}
+
+// A restored quote's lines with each product that names no product of this org cleared (state §0.205 — Jeff, 15 Oct:
+// "Fix both in 4b-2": a quote line's unknown product, the line kept): { lines, cleared } — the lines in their order, a
+// cleared one with every other key as filed; a line that names no product, or is no object, as it was. live: the
+// product ids of this org among those named (liveIdsInOrg's Map). Lines that are no list are left as they are.
+export function lineProductsCleared(lineItems, live) {
+    if (!Array.isArray(lineItems)) return { lines: lineItems, cleared: 0 };
+    let cleared = 0;
+    const lines = lineItems.map((l) => {
+        if (!l || typeof l !== 'object' || l.productId == null || l.productId === '' || live.has(l.productId)) return l;
+        cleared++;
+        return { ...l, productId: null };
+    });
+    return { lines, cleared };
+}
+
+// A restored member's team and pins with what names nothing of this org cleared (state §0.205 — Jeff, 15 Oct: "a
+// member's unknown team (with its joined date) and unknown pins"): { patch, cleared } — patch the profile keys to write,
+// {} for none. A team that names no team of this org, or is no text, is cleared (the caller clears the date they joined
+// it; the team's name is a column, kept); a pin that names no saved report of this org, or is no text, is dropped, the
+// rest kept in their order. An empty team or pin names nothing and is kept; pins that are no list are left as they are
+// (every reader reads them as none); a profile that is no object, as it is. teams, reports: liveIdsInOrg's Maps.
+export function memberLinksCleared(profile, teams, reports) {
+    const patch = {};
+    let cleared = 0;
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return { patch, cleared };
+    if (profile.teamId != null && profile.teamId !== '' && !teams.has(profile.teamId)) { patch.teamId = null; cleared++; }
+    if (Array.isArray(profile.pinnedReports)) {
+        const kept = profile.pinnedReports.filter((id) => id == null || id === '' || reports.has(id));
+        if (kept.length < profile.pinnedReports.length) { patch.pinnedReports = kept; cleared += profile.pinnedReports.length - kept.length; }
+    }
+    return { patch, cleared };
 }

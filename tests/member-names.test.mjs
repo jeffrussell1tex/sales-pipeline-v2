@@ -366,7 +366,7 @@ test('backup.mjs: a member the file brings in under a taken name is restored num
         "                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }",
         '                    const landed = new Set((await memberNamesOf(orgId)).map((u) => u.id));',
         '                    notes.push(...restoreNotes(renamedMembers.filter((m) => landed.has(m.id))));',
-        '                body: JSON.stringify({ ok: imported > 0, imported, errors: errs, notes, snapId }),');
+        '                body: JSON.stringify({ ok: imported > 0, imported, unreached: missed, errors: errs, notes, snapId }),');
     assert.ok(!/errs\.push\([^)]*renamed/.test(b), 'a rename is not an error (errs marks the snapshot partial)');
 });
 
@@ -485,7 +485,8 @@ export const usersWrites = (file, src) => {
     return out;
 };
 // Each decided through memberName.js (the test below names the decider of each).
-const LISTED = ['_lib.mjs ensureRosterRow .values', 'backup.mjs handler value', 'users-sync.mjs handler .set', 'users-sync.mjs handler .values',
+// _links.mjs clearMemberLinks: reads the members a restore landed; its .set names no name (state §0.205)
+const LISTED = ['_lib.mjs ensureRosterRow .values', '_links.mjs clearMemberLinks value', 'backup.mjs handler value', 'users-sync.mjs handler .set', 'users-sync.mjs handler .values',
     'users.mjs handler .set', 'users.mjs upsertUser .onConflictDoUpdate set',   // the self-save's insert went (state §0.202)
     'users.mjs upsertUser .set',   // the PUT's update-only write (state §0.202) — its name decided above it (putNameTaken)
     'users.mjs upsertUser .values'];

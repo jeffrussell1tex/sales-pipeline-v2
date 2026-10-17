@@ -138,7 +138,7 @@ test("the words name each new kind — a product, a member (the technician login
     assert.equal(notInOrg('member'), 'That member is not in your organization — pick one from the list.');
     assert.equal(notInOrg('member'), LOGIN_NOT_IN_ORG, "word for word the technician login's (techLogin.js)");
     assert.equal(notInOrg('spiff'), 'That SPIFF is not in your organization — pick one from the list.');
-    assert.deepEqual(Object.keys(NOUNS).slice(-3), ['product', 'member', 'spiff'], "after Dispatch's");
+    assert.deepEqual(Object.keys(NOUNS).slice(-5, -2), ['product', 'member', 'spiff'], "after Dispatch's; a member's two after them (§0.205)");
     for (const kind of ['product', 'member', 'spiff']) assert.ok(!MERGES.includes(kind), `${kind}: never merged away — stored as sent`);
     assert.deepEqual([...MERGES], ['account', 'contact']);
 });
@@ -210,8 +210,10 @@ const ROWS = {
         { id: 'u_b', orgId: 'org_B' },
     ],
     settings: [
-        { orgId: 'org_A', extra: { spiffs: [{ id: 'sp_on', active: true }, { id: 'sp_off', active: false }, 'sp_text', { name: 'no id' }] } },
-        { orgId: 'org_B', extra: { spiffs: [{ id: 'sp_b', active: true }] } },
+        // Each org's teams list too (§0.205): org A's tm_east, an old plain-text team, one with no id, one with an empty id.
+        { orgId: 'org_A', extra: { spiffs: [{ id: 'sp_on', active: true }, { id: 'sp_off', active: false }, 'sp_text', { name: 'no id' }],
+            teams: [{ id: 'tm_east', name: 'East' }, 'Legacy', { name: 'no id' }, { id: '' }] } },
+        { orgId: 'org_B', extra: { spiffs: [{ id: 'sp_b', active: true }], teams: [{ id: 'tm_b', name: 'B Team' }] } },
         { orgId: 'org_C', extra: null },
     ],
 };
@@ -241,7 +243,7 @@ const readApart = () => {
 
 test("a member and a SPIFF are read apart, in this org (_links.mjs's own reader, run): any member of it, deactivated or invited; any entry of its SPIFF list, an inactive one — another org's never, one naming nothing never; every read scoped to the org", async () => {
     const { LISTS, idsReadApart, reads } = readApart();
-    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs' }, "a SPIFF is an entry of the settings list `spiffs` (a team joins it in 4b-2c)");
+    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs', team: 'teams' }, "a SPIFF is an entry of the settings list `spiffs`, a team of `teams` (§0.205)");
     assert.ok(Object.isFrozen(LISTS));
     const ids = async (kind, list, org) => (await idsReadApart(kind, list, org)).map((r) => r.id).sort();
     assert.deepEqual(await ids('spiff', ['sp_on', 'sp_off', 'sp_b', 'sp_text', 'nope'], 'org_A'), ['sp_off', 'sp_on'],
@@ -260,15 +262,32 @@ test("a member and a SPIFF are read apart, in this org (_links.mjs's own reader,
     assert.equal(reads.length, 7, 'one read for the ids asked');
 });
 
-test("_links.mjs: a product is a TABLES kind, read in the org as every row is; a member and a SPIFF are read apart — the branch is liveIdsInOrg's first line; the member read and the settings read each carry the org clause, the settings read no limit (the lines the harness breaks)", () => {
+test("a team is an entry of this org's teams list (_links.mjs's own reader, run — state §0.205): an object team of the org's list; another org's, an old plain-text team, one with no id or an empty id, a SPIFF's id and one naming nothing are none; the lists are kept apart; every read scoped", async () => {
+    const { idsReadApart, reads } = readApart();
+    const ids = async (kind, list, org) => (await idsReadApart(kind, list, org)).map((r) => r.id).sort();
+    assert.deepEqual(await ids('team', ['tm_east', 'tm_b', 'Legacy', '', 'sp_on', 'nope'], 'org_A'), ['tm_east'],
+        "org B's team, a plain-text team (an old one: no id), a SPIFF's id and one naming nothing are no team of A's");
+    assert.deepEqual(await ids('team', ['tm_east', 'tm_b'], 'org_B'), ['tm_b'], 'org B reads only its own');
+    assert.deepEqual(await ids('team', ['tm_east'], 'org_C'), [], 'a settings row with no list');
+    assert.deepEqual(await ids('team', ['tm_east'], 'org_none'), [], 'no settings row');
+    assert.deepEqual(await ids('spiff', ['tm_east'], 'org_A'), [], "a team's id asked as a SPIFF: the lists are kept apart");
+    assert.equal(reads.length, 5, 'one read each');
+    assert.ok(reads.every((r) => r.table === 'settings' && r.scoped), "each read is the org's settings, with its where");
+    const live = await liveIds(['tm_east', 'tm_b', 'tm_east', '', 7], (list) => idsReadApart('team', list, 'org_A'));
+    assert.deepEqual([...live], [['tm_east', 'tm_east']], 'as liveIdsInOrg hands it: each id once, text only');
+});
+
+test("_links.mjs: a product is a TABLES kind, read in the org as every row is; a member, a SPIFF and a team are read apart — the branch is liveIdsInOrg's first line; a member's pinned report is a TABLES kind (§0.205); the member read and the settings read each carry the org clause, the settings read no limit (the lines the harness breaks)", () => {
     const l = fn('_links');
     once(l, "import { listEntryIds } from '../../src/utils/linkIds.js';", 'listEntryIds on an import line of its own (the decisions line stays as pinned)');
     const tables = between(l, 'const TABLES = Object.freeze({', '\n});');
     assert.ok(tables.split('\n').includes('    product: products,'), "a quote line's product, read from the products table");
-    assert.ok(!/\busers\b/.test(tables) && !tables.includes('spiff') && !tables.includes('member'),
-        'a member and a SPIFF are no TABLES kind (the member-names guard; the restore reads TABLES kinds as columns)');
+    assert.ok(tables.split('\n').includes('    report: savedReports,'), "a member's pinned report, read from the saved reports (§0.205)");
+    assert.ok(!/\busers\b/.test(tables) && !tables.includes('spiff') && !tables.includes('member') && !tables.includes('team'),
+        'a member, a SPIFF and a team are no TABLES kind (the member-names guard; the restore reads TABLES kinds as columns)');
     once(l, '    product: products,');
-    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs' });");
+    once(l, '    report: savedReports,');
+    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams' });");
     const reader = between(l, 'async function idsReadApart(kind, list, orgId) {', '\n}\n');
     order(reader,
         "    if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));",
@@ -761,7 +780,7 @@ test("the suites: every suite's 'graded by the harness' pin reads the SUITES val
             pins.push({ f, src, line: src.slice(from, src.indexOf('\n', hit.index)).trim() });
         }
     }
-    assert.ok(pins.length >= 12, `the scan finds the suites' pins (a scan that finds none proves nothing): ${pins.length}`);
+    assert.ok(pins.length >= 13, `the scan finds the suites' pins — thirteen since §0.205 (a scan that finds none proves nothing): ${pins.length}`);
     for (const { f, src, line } of pins) {
         assert.equal(line, `assert.ok(suites.includes('tests/${f}'), 'SUITES runs this file');`, `${f}: its own path, looked for in the SUITES value`);
         assert.ok(src.includes(SUITES_PARSE), `${f}: suites is the SUITES line's value, split on spaces`);

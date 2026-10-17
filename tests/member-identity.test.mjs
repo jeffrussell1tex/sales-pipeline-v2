@@ -155,11 +155,11 @@ test('the member form sends what it edits — not what it only shows (team, terr
         "            const payload = { ...fields, id: editingUser.id, email: userData.email || editingUser.email || '' };");
 });
 
-test('the member profile page (Settings → Users) sends what it edits — never access (active, status) or the login as loaded', () => {
+test('the member profile page (Settings → Users) sends what it edits — never access (active, status) or the login as loaded, nor the member\'s pins', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
     order(between(profile, '    const handleSave = async () => {', "body:JSON.stringify(toSave) });"),
-        '            const { active: _active, status: _status, clerkUserId: _login, ...edited } = form;',
+        '            const { active: _active, status: _status, clerkUserId: _login, pinnedReports: _pins, ...edited } = form;',
         '            const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };');
     assert.ok(!/JSON\.stringify\(\{?\s*\.\.\.form/.test(profile), 'the form as loaded is never what is sent');
 });
@@ -167,9 +167,9 @@ test('the member profile page (Settings → Users) sends what it edits — never
 test('the Sales Manager tab: no Annual / Quarterly switch saves every member any more (state §0.203), and a refused save shows the server\'s words, naming the member', () => {
     const m = code(read('src/Tabs/SalesManagerTab.jsx'));
     assert.ok(!m.includes('setAllQuotaMode') && !m.includes('quotaMode'), 'the per-member mode and its switch are gone: a plan per fiscal year, one checked save');
-    order(between(m, '    const saveUser = async (user, label) => {', '    };'),
+    order(between(m, '    const saveUser = async (user, label, who = user.name) => {', '    };'),
         '            if (!res.ok) {',
         '                const d = await res.json().catch(() => ({}));',
         "                setSaveState({ status: 'error', msg: d.error",
-        "                    ? `Not saved \\u2014 ${user.name || 'a member'}: ${d.error}`");
+        "                    ? `Not saved \\u2014 ${who || 'a member'}: ${d.error}`");
 });

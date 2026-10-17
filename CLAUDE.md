@@ -96,8 +96,13 @@ One commit per verified batch; doc patch in the same commit.
 - A member's save never carries the login link, status or access: the
   server keeps the stored ones, and `active` changes only by the
   `{ id, active }` request; a Manager's save reaches only a Sales Rep's
-  row; a save naming no member of this org is a 404 (`users.mjs`, guide
-  §18b95).
+  row; a save naming no member of this org is a 404. Nor the member's
+  pins: of the saves, only their own (`?me`, the Pin) writes them — an
+  Admin's or Manager's save keeps the stored ones on the row it builds,
+  never by dropping the key (that makes `{ id, active, pinnedReports }`
+  a Deactivate); an Admin's restore lands a restored member's as filed,
+  cleared of any naming no saved report here (`users.mjs`, guide
+  §18b95, §18b98).
 
 ## Endpoint and data invariants
 
@@ -123,9 +128,11 @@ One commit per verified batch; doc patch in the same commit.
   location id; Dispatch's technician, vehicle, equipment unit, service
   plan or job id; a SPIFF claim's deal and SPIFF (an entry of the org's
   SPIFF list), a quote line's product, an automation's task assignee (a
-  member)) must name a live row of the org when the write names it anew:
-  `checkLinks` / `checkBulkLinks` (`_links.mjs`, guide §18b92, §18b94,
-  §18b97). An id the row already holds is never asked again; a screen that
+  member); a member's team (an entry of the org's teams list) and pinned
+  reports (saved reports of the org)) must name a live row of the org
+  when the write names it anew: `checkLinks` / `checkBulkLinks`
+  (`_links.mjs`, guide §18b92, §18b94, §18b97, §18b98). An id the row
+  already holds is never asked again; a screen that
   copies a link leaves off one the server refuses (`saveDroppingRefused`) —
   never a quote's lines, whose null would wipe every line: a New version
   whose copied line names no product of this org is refused whole.

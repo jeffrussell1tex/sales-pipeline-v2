@@ -209,7 +209,7 @@ test('the library: cards are one module-scope component; Share / Pin / Deliver /
     assert.ok(s.includes("const mayTouch = (r) => userRole === 'Admin' || r.ownerId === clerkUserId;"), 'the owner or an Admin — the endpoint’s rule, on the card');
     assert.ok(s.includes("{mayTouch && <button onClick={stop(onShare)}") && s.includes("{mayTouch && !r.config?.templateId && <button onClick={stop(onDeliver)}"), 'Share and Deliver only for those who may; no delivery for a template');
     assert.ok(s.includes("body: JSON.stringify({ id, ...patch }) });") && s.includes('if (data.report) setSavedReportsList(prev => prev.map(r => r.id === data.report.id ? data.report : r));'), 'a partial PUT; the list adopts the server’s row');
-    assert.ok(s.includes("body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) });"), 'the pin is a self-profile write');
+    assert.ok(s.includes("body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) }).catch(() => null);"), 'the pin is a self-profile write — a PUT with no answer said, never unhandled (state §0.205; tests/member-links.test.mjs T14 runs it)');
     assert.ok(s.includes("'/.netlify/functions/saved-reports?action=deliver&id=' + encodeURIComponent(deliveryFor.id)"), 'Send now');
     assert.ok(s.includes('<SectionS title="Your reports"') && s.includes('<SectionS title="Shared with you"'), 'mine and shared-with-me, apart');
     assert.ok(s.includes("slackConfigured={!!settings?.connectedApps?.slack}"), 'Slack offered only when connected');

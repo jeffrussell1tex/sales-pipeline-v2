@@ -113,7 +113,7 @@ mock.module('@clerk/backend', {
 const { handler: usersHandler } = await import('../../netlify/functions/users.mjs');
 const { handler: syncHandler } = await import('../../netlify/functions/users-sync.mjs');
 const { db } = await import('../../db/index.js');
-const { users, auditLog } = await import('../../db/schema.js');
+const { users, auditLog, settings } = await import('../../db/schema.js');
 const { eq, and, inArray } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
@@ -146,6 +146,7 @@ const clearAs = (clerkId, org) => usersHandler(ev(tokenFor(clerkId, org), 'DELET
 const cleanup = async () => {
     await db.delete(users).where(inArray(users.orgId, ORGS));
     await db.delete(auditLog).where(inArray(auditLog.orgId, ORGS));
+    await db.delete(settings).where(inArray(settings.orgId, ORGS));
 };
 
 before(async () => {
@@ -177,6 +178,9 @@ before(async () => {
         { id: 'usr_itest_invite_member_c', orgId: ORG_C, clerkUserId: MEMBER_C, name: 'Cam Member', email: E('member-c'), role: 'User', active: true, profile: { status: 'Active' } },
         invitedRow('usr_itest_invite_invited_c', ORG_C, E('invited-c')),
     ]);
+    // ORG_A's teams (state §0.205 — Jeff, 15 Oct: "Any of this org's, refuse"): a new member's team is an entry of the
+    // org's list.
+    await db.insert(settings).values({ id: 'itest_invite_settings_A', orgId: ORG_A, extra: { teams: [{ id: 'team_itest_east', name: 'East' }] } });
     invDupA = invite(ORG_A, E('dup'));
     invDupB = invite(ORG_B, E('dup'));
     invKeepA = invite(ORG_A, E('keep'));

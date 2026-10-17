@@ -64,8 +64,8 @@ test('the words name the kind, in the deals endpoint\'s; only accounts and conta
     assert.equal(notInOrg('customer'), 'That customer is not in your organization — pick one from the list.');
     assert.equal(notInOrg('location'), 'That service location is not in your organization — pick one from the list.');
     assert.equal(NOT_AN_ID, 'A link must name a record by its id.');
-    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'product', 'member', 'spiff'],
-        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs)");
+    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'product', 'member', 'spiff', 'team', 'report'],
+        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs), then a member's two (§0.205 — tests/member-links.test.mjs)");
     assert.deepEqual([...MERGES], ['account', 'contact']);
 });
 
@@ -228,6 +228,8 @@ const SPECS = {
     'spiff-claims': ["const CLAIM_LINKS = [{ key: 'opportunityId', kind: 'deal' }, { key: 'spiffId', kind: 'spiff' }];"],
     quotes: ["const QUOTE_LINES = [{ key: 'lineItems', kind: 'product', shape: 'many' }];"],
     automations: ["const RULE_LINKS = [{ key: 'actions', kind: 'member', shape: 'many' }];"],
+    // A member's (§0.205): tests/member-links.test.mjs runs each, and pins where each is asked.
+    users: ["const TEAM_LINK = [{ key: 'teamId', kind: 'team' }];", "const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];"],
 };
 
 test('THE GUARD: each endpoint names its links — the fields batch 4 lists and E1\'s CRM extras', () => {
@@ -243,7 +245,7 @@ test('THE GUARD: each endpoint names its links — the fields batch 4 lists and 
     assert.ok(l.includes('const merges = MERGES.includes(kind);'));
     assert.ok(l.includes('for (const ask of asks) read.set(ask, await liveIdsInOrg(ask.kind, ask.fresh, orgId, { follow: ask.follow }));'), 'each field read as its spec says — a parent not followed');
     assert.equal(count(l, '    if (asked.error) return asked;\n'), 2, 'a value that names no record is refused before any read — one write and a batch');
-    assert.equal(count(l, 'db.select('), 7, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204) — nothing reads around them');
+    assert.equal(count(l, 'db.select('), 9, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204); the restore\'s quote lines and members\' profiles, each read in clearLineProducts and clearMemberLinks (§0.205) — nothing reads around them');
     const ac = read('netlify/functions/accounts.mjs');
     assert.ok(ac.includes("        parentAccountId:   d.parentAccountId   || null,"), 'the parent stored is the parent checked');
     assert.ok(!ac.includes('d.parentId'), "no legacy `parentId` alias: a parent sent so was stored with no check (the review, server S3)");
@@ -289,6 +291,8 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
         ['accounts', 'parents', 0, 2], ['dispatch-customers', 'linked', 2, 0], ['dispatch-jobs', 'linked', 2, 0],
         // a sales record's (§0.204): a claim's create and save, a quote's, a rule's — none takes a batch
         ['spiff-claims', 'linked', 2, 0], ['quotes', 'lined', 2, 0], ['automations', 'assigned', 2, 0],
+        // a member's (§0.205): the create's and the PUT's team, the member's own pins
+        ['users', 'teamed', 2, 0], ['users', 'pinned', 1, 0],
     ]) {
         const s = fn(name);
         assert.equal(count(s, ONE(v)), single, `${name}: each single write's refusal is answered`);

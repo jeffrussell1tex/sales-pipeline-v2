@@ -5,6 +5,19 @@ import { T } from '../shared/tokens.js';
 import { LIcon } from '../shared/ui.jsx';
 import { DataStatCard, DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
+// No answer, or one that is not the restore's own (state §0.205): the restore writes table by table, so a lost answer
+// may come after records were written — never read as "nothing restored". Running the file again is safe: the restore
+// leaves a record already here as it is.
+const NO_ANSWER = 'No answer from the server — the restore may have written records. Run the file again: a record already here is left as it is, never written twice.';
+// What the server said in words when its answer is not the restore's own — no count, no list of errors (state §0.205):
+// its error, with the ref of its log line when it sent one (serverErrorBody's requestId, as the house says it). An
+// answer with no words, or one that is no object, says nothing.
+const saidBy = (d) => (d && typeof d === 'object' && !('imported' in d) && !('errors' in d) && typeof d.error === 'string' && d.error
+    ? `${d.error}${d.requestId ? ` (ref ${d.requestId})` : ''}` : '');
+// A function crash — serverErrorBody's 500, with its requestId — may come after the restore wrote records: its words and
+// ref, then what no answer says (state §0.205).
+const crashedWords = (said) => `${said} — the restore may have written records. Run the file again: a record already here is left as it is, never written twice.`;
+
 const ImportBackupModal = ({ onClose, onSuccess }) => {
     const [file,      setFile]      = useState(null);
     const [parsed,    setParsed]    = useState(null);
@@ -12,6 +25,10 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
     const [loading,   setLoading]   = useState(false);
     const [result,    setResult]    = useState(null);
     const [error,     setError]     = useState('');
+    // Records may have been written with no answer to say so — none came, a crash's, or the restore's own counting rows
+    // not reached (state §0.205; the re-check): closing the window reloads the page, as after a restore that wrote some.
+    // Kept once set: a later run cannot unwrite them.
+    const [mayHaveWritten, setMayHaveWritten] = useState(false);
     const fileRef = useRef();
 
     const handleFile = e => {
@@ -43,21 +60,34 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setLoading(true);
         setError('');
+        let res = null, data = null;
         try {
-            const res = await dbFetch('/.netlify/functions/backup', {
+            res = await dbFetch('/.netlify/functions/backup', {
                 method: 'PATCH',
                 body: JSON.stringify(parsed),
             });
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Import failed');
-            setResult(data);
-            onSuccess && onSuccess(data);
-        } catch (e) {
-            setError(e.message || 'Import failed. Please try again.');
-        } finally {
-            setLoading(false);
-        }
+            data = await res.json().catch(() => null);   // an answer that is no JSON is no answer (state §0.205)
+        } catch { /* no answer at all — said below */ }
+        setLoading(false);
+        if (!stillOrg(askedOrg)) return;
+        // The restore's own answer counts what it wrote (backup.mjs). Any other the server gave in words is shown in them,
+        // with its log ref when it sent one (state §0.205): a refusal before the restore ran — Admin only, a file that is
+        // no backup, or verifyAuth's 503 or 500 — wrote nothing; a function crash (serverErrorBody's 500, its requestId)
+        // may have come after records were written. So may no answer, one that is no JSON, or one with no words: where
+        // records may have been written, closing the window reloads the page.
+        const said = saidBy(data);
+        if (typeof data?.imported !== 'number' && !said) { setMayHaveWritten(true); setError(NO_ANSWER); return; }
+        if (said && res.status >= 500 && data.requestId) { setMayHaveWritten(true); setError(crashedWords(said)); return; }
+        if (said) { setError(said); return; }
+        // The restore's own answer counts its rows not reached (backup.mjs's unreached — state §0.205, the re-check):
+        // with any, records may have been written that no count shows — an insert that landed while its answer was
+        // lost — refused (a 500) or not, so closing the window reloads the page, and the window says so.
+        if (data.unreached > 0) setMayHaveWritten(true);
+        // A refused restore shows its errors, one per line as an accepted one does (state §0.205 — Jeff, 16 Oct: "Fold it
+        // in"): the window read only "Import failed".
+        if (!res.ok) { setError(data.error || (Array.isArray(data.errors) && data.errors.length ? `Import failed — ${data.errors.join('\n')}` : 'Import failed')); return; }
+        setResult(data);
+        onSuccess && onSuccess(data);
     };
 
     // Summary counts from the parsed file
@@ -66,9 +96,16 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
         .map(([k, v]) => `${v.length} ${k}`)
         : [];
 
+    // While the restore runs the window stays (state §0.205): the backdrop, the × and Cancel do nothing until it
+    // answers — closing it lost the answer while the restore ran on. Once records are restored — or may have been,
+    // with no answer to say so (none came, a crash's, or the restore's own counting rows not reached) — closing
+    // reloads the page: the open app still shows what it loaded, and a settings save from it could replace what was
+    // restored (a new org's teams). With nothing restored, Close just closes.
+    const close = loading ? () => {} : result?.imported > 0 || mayHaveWritten ? () => window.location.reload() : onClose;
+
     return (
-        <DataModal width={520} onClose={onClose}>
-            <DataModalHead onClose={onClose}
+        <DataModal width={520} onClose={close}>
+            <DataModalHead onClose={close}
                 title="Import from backup file"
                 sub="Upload a JSON backup to restore data into this workspace."/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
@@ -119,13 +156,21 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                             </div>
                         )}
 
+                        {/* What the restore does with a record already here (state §0.205): leaves it as it is — it never updated one */}
                         <div style={{ padding:'10px 12px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:3, marginBottom:14, fontSize:12, color:T.inkMid }}>
-                            <b style={{ color:T.info }}>Safe to run on empty orgs.</b> Existing records with matching IDs will be updated. Records not in the file are left untouched.
+                            <b style={{ color:T.info }}>Safe to run on empty orgs.</b> A record already here — the same id, or a detail only one record may have, such as a number, an email or a login — is left as it is. Records not in the file are left untouched.
                         </div>
 
+                        {/* One error per line (state §0.205), as an accepted restore lists them */}
                         {error && (
-                            <div style={{ fontSize:12.5, color:T.danger, fontWeight:600, marginBottom:8 }}>
+                            <div style={{ fontSize:12.5, color:T.danger, fontWeight:600, marginBottom:8, whiteSpace:'pre-line' }}>
                                 ✕ {error}
+                            </div>
+                        )}
+                        {/* Records may have been written (state §0.205): closing the window reloads the page, as after a restore that wrote some. */}
+                        {mayHaveWritten && (
+                            <div style={{ fontSize:12, color:T.inkMuted, marginBottom:8 }}>
+                                The page reloads when this window closes, so every screen shows what the restore wrote.
                             </div>
                         )}
                     </>
@@ -141,12 +186,20 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                         <div style={{ fontSize:13, color:T.inkMid }}>
                             {result.imported.toLocaleString()} records restored into this workspace.
                         </div>
-                        {result.errors?.length > 0 && (
-                            <div style={{ marginTop:12, fontSize:12, color:T.warn }}>
-                                Some entities had errors: {result.errors.join(', ')}
+                        {/* The open app still shows what it loaded (state §0.205): Close reloads the page once records are restored, or may have been — rows this run did not reach, or an earlier run's (the re-check). */}
+                        {(result.imported > 0 || mayHaveWritten) && (
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:6 }}>
+                                The page reloads on Close, so every screen shows what was restored.
                             </div>
                         )}
-                        {/* Who was restored under another name, or named by their address (state §0.196) — not an error; each on its own line. */}
+                        {/* What the restore could not do (state §0.205) — each on its own line, as the notes are. */}
+                        {result.errors?.length > 0 && (
+                            <div style={{ marginTop:12, fontSize:12, color:T.warn }}>
+                                <div>Some entities had errors:</div>
+                                {result.errors.map((e, i) => <div key={i}>{e}</div>)}
+                            </div>
+                        )}
+                        {/* What the restore says beside its count — members restored under another name or named by their address (state §0.196), records already here (§0.205), links cleared or left as restored (§0.199, §0.201) — none an error; each on its own line. */}
                         {result.notes?.length > 0 && (
                             <div style={{ marginTop:12, fontSize:12, color:T.inkMid }}>
                                 {result.notes.map((note, i) => <div key={i}>{note}</div>)}
@@ -156,7 +209,7 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                 )}
             </div>
             <DataModalFoot>
-                <DataBtn label={result ? 'Close' : 'Cancel'} onClick={onClose}/>
+                <DataBtn label={result ? 'Close' : 'Cancel'} onClick={close} disabled={loading}/>
                 {!result && (
                     <DataBtn
                         label={loading ? 'Importing…' : 'Import records'}
@@ -417,7 +470,8 @@ export const BackupDetail = ({ onBack }) => {
     return (
         <div style={{ fontFamily:T.sans }}>
             {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
-            {showImport  && <ImportBackupModal onClose={()=>setShowImport(false)} onSuccess={() => { setShowImport(false); }}/>}
+            {/* The import window stays open on its answer until its Close (state §0.205 — Jeff, 16 Oct: "Fold it in"): it closed in the render that set the result, so no count, error or note was ever seen */}
+            {showImport  && <ImportBackupModal onClose={()=>setShowImport(false)}/>}
 
             <DataCrumb page="Backup & restore" onBack={onBack}/>
             <DataTitle

@@ -18,8 +18,18 @@ import { nameRefusal, firstFreeName, numbered, nameTakenMessage } from '../../sr
 import { QUOTA_PERIODS, QUOTA_KEYS, cleanQuotaPeriods, cleanQuotaPlans, storedQuota, checkQuotaSave, quotaRefusal, planFromSave, samePlan, quotaYearAllowed } from '../../src/utils/quotaPlan.js';
 import { fiscalStartOf } from '../../src/utils/quarters.js';
 import { currentFiscalYear } from '../../src/utils/reportPeriod.js';
+// A member's team and pinned reports name this org's (state §0.205): asked through the links machinery.
+import { checkLinks, liveIdsInOrg } from './_links.mjs';
+import { notInOrg, NOT_AN_ID } from '../../src/utils/linkIds.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
+
+// A member's links (state §0.205 — Jeff, 15 Oct: "Any of this org's, refuse"): their team, an entry of the org's teams
+// list (settings.extra.teams); their pinned reports, saved reports of the org — any of either, a colleague's private
+// report too. Pins are the member's own: of the saves, only their own (?me — the Pin) writes them; an Admin's restore
+// lands a restored member's as filed, cleared of any that name no saved report here (backup.mjs, _links.mjs).
+const TEAM_LINK = [{ key: 'teamId', kind: 'team' }];
+const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];
 
 // ── Clerk organization invitations (state §0.165) ───────────────────────────
 // Every call names the CALLER's org — the token's, never one from the request —
@@ -429,6 +439,14 @@ export const handler = async (event) => {
             const own  = { id: data.id, ...pickSelfEditable(data) };
             const storedRole = await roleOf(data.id) || 'User';
             const clean = withRole(sanitize({ ...(await mergeForUpdate(own)), userType: storedRole }), storedRole);
+            // A pin names a saved report of this org (state §0.205 — "Any of this org's, refuse"; any of them, a
+            // colleague's private one too — Home shows only those its reader may open): asked only of a pin named anew;
+            // the pins the row holds are never asked again (one whose report was deleted since stands).
+            if ('pinnedReports' in own) {
+                const [stored] = await db.select({ profile: users.profile }).from(users).where(and(eq(users.orgId, orgId), eq(users.id, data.id)));
+                const pinned = await checkLinks(PIN_LINKS, own, { pinnedReports: stored?.profile?.pinnedReports ?? null }, orgId);
+                if (pinned.error) return { statusCode: pinned.status, headers, body: JSON.stringify({ error: pinned.error, field: pinned.field }) };
+            }
             // One name per member of an org (state §0.196): a First/Last that spells
             // another member's name is refused — every assignment by it would be a 409.
             const selfNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);
@@ -705,6 +723,8 @@ export const handler = async (event) => {
                 // Every member's name in this org, kept current through the batch
                 // (state §0.196): two invitations of one name are two members of it.
                 const roster = await memberNamesOf(orgId);
+                // The teams the batch names, read once (state §0.205): a new member's team is one of this org's.
+                const liveTeams = await liveIdsInOrg('team', invites.map((i) => i?.teamId), orgId);
 
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
@@ -740,6 +760,12 @@ export const handler = async (event) => {
                     const newRow = !roster.some((u) => u.email === email);   // the row lookup below: this org, the exact address
                     const rowName = givenName ? (nameRefusal(roster, givenName) ? null : givenName) : firstFreeName(roster, numbered(localPart));
                     if (newRow && !rowName) { errors.push({ email, error: nameTakenMessage(givenName || localPart) }); continue; }
+                    // A new member's team is one of this org's (state §0.205 — "Any of this org's, refuse"), refused before
+                    // Clerk is called. A re-invitation stores no team (it keeps the row's), so it is not asked.
+                    if (newRow && invite.teamId != null && invite.teamId !== '') {
+                        if (typeof invite.teamId !== 'string') { errors.push({ email, error: NOT_AN_ID, field: 'teamId' }); continue; }
+                        if (!liveTeams.has(invite.teamId)) { errors.push({ email, error: notInOrg('team'), field: 'teamId' }); continue; }
+                    }
                     // A Manager's invitation to an address a member of this org already
                     // holds only resends a Sales Rep's open invitation (state §0.202 —
                     // Jeff, 15 Oct: "Close both in 4b-2a"). The row keeps its role and is
@@ -821,10 +847,13 @@ export const handler = async (event) => {
                                 userType:  invite.role      || 'User',
                                 team:      invite.team      || null,
                                 // The team's id with its name (state §0.168): teamId is
-                                // what coaching notes and the manager digest read, and
-                                // the invite stored the name alone. The screen resolves
-                                // it from the org's teams, as the team editor does.
-                                teamId:    (typeof invite.teamId === 'string' && invite.teamId) ? invite.teamId : null,
+                                // what coaching notes read (the manager digest matches by
+                                // the team's name), and the invite stored the name alone.
+                                // The screen resolves it from the org's teams, as the team
+                                // editor does. A new member's is checked above (state
+                                // §0.205); a row removed mid-batch reaches here unchecked,
+                                // so a team the batch's read did not find is stored as none.
+                                teamId:    (typeof invite.teamId === 'string' && liveTeams.has(invite.teamId)) ? invite.teamId : null,
                                 territory: invite.territory || null,
                                 active:    false,
                                 status:    'Invited',
@@ -886,6 +915,8 @@ export const handler = async (event) => {
             try {
                 // No quota from the body either (state §0.203): PUT ?quotas=true sets it, checked.
                 for (const k of QUOTA_KEYS) delete data[k];
+                // No pins either (state §0.205 — Jeff, 15 Oct): a member's pins are their own, written by their own Pin.
+                delete data.pinnedReports;
                 // No login link, status or access from the body (state §0.202): a
                 // create named any Clerk identity, a member to be, and a status
                 // 'Deactivated' or `active` false kept them out once linked — a
@@ -896,6 +927,10 @@ export const handler = async (event) => {
                 // holds is refused — the Admin chose it and is told.
                 const newNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name);
                 if (newNameTaken) return nameTaken(newNameTaken);
+                // A new member's team is one of this org's teams (state §0.205 — "Any of this org's, refuse"): another
+                // org's, or one that names nothing, is 404 naming the field, and nothing is written.
+                const teamed = await checkLinks(TEAM_LINK, data, null, orgId);
+                if (teamed.error) return { statusCode: teamed.status, headers, body: JSON.stringify({ error: teamed.error, field: teamed.field }) };
                 const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
@@ -1057,6 +1092,10 @@ export const handler = async (event) => {
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
                 const prevTeam = before?.profile?.teamId || null, nextTeam = clean.profile?.teamId || null;
                 if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;
+                // Pins are the member's own (state §0.205 — Jeff, 15 Oct): written only by their own Pin (?me). An Admin's
+                // or a Manager's save keeps the stored ones whatever it sends — not by dropping the key from the body, which
+                // would make { id, active, pinnedReports } a Deactivate (isAccessChange).
+                clean.profile = { ...clean.profile, pinnedReports: Array.isArray(before?.profile?.pinnedReports) ? before.profile.pinnedReports : null };
                 // ACCESS (state §0.164 — Jeff: "Deactivated means no access"). Only
                 // the Deactivate / Reactivate request reaches here with a change: the
                 // merge keeps the stored `active` for any other save (§0.202).
@@ -1075,6 +1114,11 @@ export const handler = async (event) => {
                     }
                     clean.profile = { ...clean.profile, status: nowActive ? (before.clerkUserId ? 'Active' : 'Invited') : 'Deactivated' };
                 }
+                // The member's team is one of this org's teams (state §0.205 — "Any of this org's, refuse"): asked only when
+                // the save names one anew — the team the row holds is never asked again, one deleted since too. A Manager's
+                // save of a rep's team is the org check alone (Jeff, 16 Oct: "No, leave it").
+                const teamed = await checkLinks(TEAM_LINK, data, { teamId: before?.profile?.teamId ?? null }, orgId);
+                if (teamed.error) return { statusCode: teamed.status, headers, body: JSON.stringify({ error: teamed.error, field: teamed.field }) };
                 // One name per member of an org (state §0.196) — after the access
                 // checks, so a Manager's deactivate is still the 403 it was.
                 const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);

@@ -577,8 +577,11 @@ test("a restore clears, on the rows it restored, every link that names no row of
     // + the second activity 1 (its contact — the mirror its list holds is not counted again) + task 3 (a chip,
     // its contactId, its account) + the second task 1 (its Primary chip, the mirror not again) + deal 2 (its
     // account, a contact) + account 1 + customer 1 + job 3 (location, account, deal) = 19; the job's customer
-    // and the quote's deal are counted apart
+    // and the quote's deal are counted apart. The file's two rows already here — C_B (org B holds the id) and
+    // T_HELD (this org's) — are said first, as a count that never names the org holding one (state §0.205 — Jeff,
+    // 16 Oct: "Fix both").
     assert.deepEqual(r.body.notes, [
+        '2 records in the file were already here — for each, a record holds the same id, or a detail only one record may have, such as a number, an email or a login — and were left as they are.',
         '19 links that named no record of this organization were cleared.',
         "1 job names a customer that is not in this organization — a job's customer can't be cleared, so it was left as restored.",
         "1 quote names a deal that is not in this organization — a quote's deal can't be cleared, so it was left as restored.",

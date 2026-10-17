@@ -124,7 +124,8 @@ test('every revoke takes the row off the roster and off its team\'s list', () =>
 
 test('the server: an invitation\'s row carries the team\'s id; GET ?seats=true is Clerk\'s limit and count, an Admin\'s', () => {
     const u = code(read('netlify/functions/users.mjs'));
-    assert.ok(u.includes("teamId:    (typeof invite.teamId === 'string' && invite.teamId) ? invite.teamId : null,"));
+    // The team only when the batch's one read found it (state §0.205): a row removed mid-batch stores no unchecked team.
+    assert.ok(u.includes("teamId:    (typeof invite.teamId === 'string' && liveTeams.has(invite.teamId)) ? invite.teamId : null,"));
     const seats = between(u, "if (event.httpMethod === 'GET' && event.queryStringParameters?.seats === 'true') {", "'Could not read the membership limit from Clerk.' }) };");
     assert.ok(seats.includes("if (userRole !== 'Admin') {"), 'an Admin\'s');
     assert.ok(seats.includes('clerk.organizations.getOrganization({ organizationId: orgId, includeMembersCount: true })'), 'the caller\'s org, with its count');
