@@ -2409,6 +2409,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **The Accounts tab's search finds top-level accounts only** (Jeff's
+  look at UKG after the forty-second ship, 17 Oct; read in code; older
+  than §0.206): it filters the tab's own list, the app's top-level
+  accounts (AccountsTab.jsx:657-668 — name, vertical, owner, rep), so a
+  sub-account is never found by its name there — "Resinall", a business
+  unit under "Ergon", lists nothing, though the header search finds it.
+  Jeff, 17 Oct: "File it as its own item". Recommended: a search that also
+  matches sub-accounts and shows each under its parent (merged-away ones
+  left out, §0.206).
 - **A refused forecast call is said only on the Team and Admin sub-tabs**
   (§0.205's review, 16 Oct; read in code; older): the Forecast sub-tab
   draws no save state, so a call refused there — a rep removed or re-roled
