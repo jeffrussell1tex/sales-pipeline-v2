@@ -63,7 +63,7 @@ test('AUDIT: the app\'s own entries are taken, by kind; anything else is not', (
     const refused = [
         ['quote.approved', 'quote'], ['update', 'quote'], ['quote.sentback', 'account'],
         ['user.role', 'user'], ['settings.updated', 'settings'], ['update', 'user'],
-        ['delete', 'opportunity'], ['create', 'lead'], ['merge', 'opportunity'],
+        ['delete', 'opportunity'], ['create', 'lead'], ['merge', 'opportunity'], ['merge', 'account'], ['merge', 'contact'],
         ['Update', 'account'], [' update', 'account'], ['update', 'Account'],
         ['dispatch.schedule', 'opportunity'], ['dispatch.timeoff.unassign', 'dispatch_job'],
         ['dispatch.anything', 'dispatch_job'], ['__proto__', 'account'], ['hasOwnProperty', 'account'],
@@ -115,7 +115,7 @@ test('AUDIT: every addAudit call under src/ names a pair the endpoint takes (the
         });
     }
     // Not vacuous: the call sites read on 9 Oct (the hooks, the merges, Dispatch).
-    for (const pair of ['create opportunity', 'update task', 'update account', 'merge contact', 'dispatch.crew.hold dispatch_job', 'dispatch.timeoff.unassign dispatch_technician']) {
+    for (const pair of ['create opportunity', 'update task', 'update account', 'create contact', 'dispatch.crew.hold dispatch_job', 'dispatch.timeoff.unassign dispatch_technician']) {
         assert.ok(seen.includes(pair), `the scan found ${pair}`);
     }
     // And nothing on the list that no call site sends.

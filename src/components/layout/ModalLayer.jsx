@@ -324,18 +324,23 @@ export default function ModalLayer() {
                     background: T.ink, color: T.surface, borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
                     minWidth: isMobile ? 'calc(100vw - 2rem)' : '320px', maxWidth: isMobile ? 'calc(100vw - 2rem)' : '480px' }}>
-                    {/* Two shapes. The delete shape is { label, restore, timerId }.
-                        The error shape is { error } and carries no restore — it is how
-                        a FAILED undo reports itself, since the row has already been put
-                        back on screen and then taken away again. Rendering .label for
-                        an error toast would print "undefined deleted" and give an Undo
-                        button that throws on click. */}
-                    <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                    {/* Four shapes, one slot. A delete's is { label, restore, timerId }; a merge's
+                        { merged, into, restore, timerId } (state §0.207 — Jeff, 17 Oct: "Approve as
+                        written"). A notice is { notice, timerId } and an error { error } — neither carries
+                        a restore, so neither shows Undo: the error shape is how a FAILED undo reports
+                        itself, since the row has already been put back on screen and then taken away
+                        again. Rendering .label for an error toast would print "undefined deleted" and give
+                        an Undo button that throws on click. 🗑 and "deleted" are a delete's alone. */}
+                    <span style={{ fontSize: '0.875rem', flex: 1, overflowWrap: 'anywhere' }}>
                         {undoToast.error
                             ? <>⚠ {undoToast.error}</>
-                            : <>🗑 <strong>{undoToast.label}</strong> deleted</>}
+                            : undoToast.notice
+                                ? <>✓ {undoToast.notice}</>
+                                : undoToast.merged
+                                    ? <>Merged <strong>“{undoToast.merged}”</strong> into <strong>“{undoToast.into}”</strong></>
+                                    : <>🗑 <strong>{undoToast.label}</strong> deleted</>}
                     </span>
-                    {!undoToast.error && (
+                    {undoToast.restore && (
                         <button onClick={() => { clearTimeout(undoToast.timerId); undoToast.restore(); }}
                             style={{ padding: '0.3rem 0.875rem', background: T.ink, color: T.surface, border: 'none',
                                 borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>

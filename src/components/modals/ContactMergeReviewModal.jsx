@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
@@ -84,7 +84,17 @@ export default function ContactMergeReviewModal() {
     const [survivorId, setSurvivorId] = useState(defaultSurvivorId);
     const [choices, setChoices] = useState({}); // field -> 'survivor' | 'archived'
 
-    useEffect(() => { setSurvivorId(defaultSurvivorId); }, [defaultSurvivorId]);
+    // The default survivor is set when the window opens on a pair — never again while it stays open (state §0.207; the
+    // review, 17 Oct): a merge's lost answer reads the lists again (Q7), and counts read after a merge that landed could
+    // swap the two records — the record merged away offered as the survivor — and the swap would clear the words that
+    // say the merge may have been made. A card the user picks stays picked too.
+    const openedOn = useRef(null);
+    useEffect(() => {
+        const pair = cA && cB ? `${cA.id}|${cB.id}` : null;
+        if (pair === openedOn.current) return;
+        openedOn.current = pair;
+        if (pair) setSurvivorId(defaultSurvivorId);
+    }, [cA, cB, defaultSurvivorId]);
     useEffect(() => { setChoices({}); setMergeError?.(null); }, [survivorId, aId, bId, setMergeError]);
 
     if (!contactMergeModal || !cA || !cB) return null;
@@ -160,7 +170,7 @@ export default function ContactMergeReviewModal() {
 
                 <div style={{ padding: '1.1rem 1.25rem 0.5rem' }}>
                     <div style={{ fontSize: 12, color: C.muted, marginBottom: '0.75rem' }}>
-                        Choose the record that survives. The other is archived and its related items are re-linked to the survivor. Reversible afterward.
+                        Choose the record that survives. The other is archived and its related items are re-linked to the survivor. You can undo the merge afterward under Past merges on this page.
                     </div>
 
                     {mergeError && (

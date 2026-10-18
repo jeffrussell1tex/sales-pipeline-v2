@@ -1272,8 +1272,9 @@ export const dispatchScheduleBlocks = pgTable('dispatch_schedule_blocks', {
 // ── MERGE LOG ─────────────────────────────────────────────────────────────────
 // One row per executed duplicate-merge. `rewrites` snapshots every FK / name-string
 // rewrite (with the exact affected row ids and their pre-merge values) so a merge
-// can be deterministically reversed within the retention window. `survivorSnapshot`
-// and `archivedSnapshot` hold the full pre-merge rows for field-level restore.
+// can be undone (state §0.207): merge.mjs puts back what still holds the merge's value and
+// refuses when either record was deleted or merged again since; nothing purges this table.
+// `survivorSnapshot` and `archivedSnapshot` hold the full pre-merge rows for field-level restore.
 export const mergeLog = pgTable('merge_log', {
     id:               text('id').primaryKey(),
     orgId:            text('org_id').notNull(),

@@ -442,22 +442,29 @@ function App() {
         }).catch(err => console.warn('addAudit write failed:', err.message));
     };
 
-    // Duplicate-merge (accounts) — scan + commit + reverse, exposed via context.
-    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge,
-        findContactDuplicates, handleContactMerge, reverseContactMerge } =
-        useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser: { name: currentUser } });
-
-    const softDelete = (label, deleteFunc, restoreFunc) => {
+    // The Undo toast (state §0.176, §0.207): five seconds, then it goes — a later toast, Escape or an org switch
+    // takes it down sooner. A delete's toast ({ label, restore }), a merge's ({ merged, into, restore }) and a
+    // notice ({ notice }) share it.
+    const offerUndo = (toast) => {
         if (undoToast) clearTimeout(undoToast.timerId);
-        deleteFunc();
         const askedOrg = requestOrg();   // after an org switch the timer clears nothing (state §0.175)
         // A timer clears only the toast it put up (state §0.176). The data hooks hold
         // the softDelete of the render before the last, which read no toast when the
         // last delete's toast had just gone up: that timer kept running and cleared
         // the next delete's toast — and its Undo — when the first five seconds ran out.
         const timerId = setTimeout(() => { if (stillOrg(askedOrg)) setUndoToast(t => (t && t.timerId === timerId ? null : t)); }, 5000);
-        setUndoToast({ label, restore: restoreFunc, timerId });
+        setUndoToast({ ...toast, timerId });
     };
+    const softDelete = (label, deleteFunc, restoreFunc) => {
+        deleteFunc();
+        offerUndo({ label, restore: restoreFunc });
+    };
+
+    // Duplicate merge — scans, merges, a merge's Undo and the org's past merges, exposed via context (state §0.207).
+    // Called after offerUndo, which it is handed: named before its declaration, it would be read in its TDZ.
+    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge,
+        findContactDuplicates, handleContactMerge, findMerges, undoMerge } =
+        useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });
 
     // Populate refs so data hooks can call these safely
     _addAuditRef.current    = addAudit;
@@ -1735,10 +1742,12 @@ dbFetch('/.netlify/functions/users?me=true')
         // Duplicate merge (accounts)
         mergeModal, setMergeModal,
         mergeSaving, mergeError, setMergeError,
-        findDuplicates, handleMerge, reverseMerge,
+        findDuplicates, handleMerge,
         // Duplicate merge (contacts)
         contactMergeModal, setContactMergeModal,
-        findContactDuplicates, handleContactMerge, reverseContactMerge,
+        findContactDuplicates, handleContactMerge,
+        // A merge's Undo and the org's past merges (state §0.207): Past merges, below each Find & merge page
+        findMerges, undoMerge,
         // Auth
         currentUser,
         currentUserId,

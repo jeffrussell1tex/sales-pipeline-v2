@@ -104,7 +104,7 @@ test('OpportunityModal: the History tab and the notes wait for the save — a fa
 const SHARED = new Set(['setOpportunities', 'setAccounts', 'setContacts', 'setTasks', 'setActivities', 'setCoachingNotes',
     'setDocuments', 'setQuotes', 'setProducts', 'setLeads', 'setSpiffClaims', 'setSettings']);
 // A server call: a request, or a helper that sends one and answers with what it saved.
-const SERVER = /\b(dbFetch|dbWrite|putSettings|fetch|postNew|putBulk|saveUser|saveExtra|setMemberActive|uploadNewDocument|uploadNewVersion|handleSave\w*|handleDelete\w*|handleLog\w*|saveDeal\w*|handleMerge|reverseMerge|handleContactMerge|reverseContactMerge|softDelete|load[A-Z]\w*)\s*\(/;
+const SERVER = /\b(dbFetch|dbWrite|putSettings|fetch|postNew|putBulk|saveUser|saveExtra|setMemberActive|uploadNewDocument|uploadNewVersion|handleSave\w*|handleDelete\w*|handleLog\w*|saveDeal\w*|handleMerge|undoMerge|handleContactMerge|softDelete|load[A-Z]\w*)\s*\(/;
 // What sets a shared list without a request of its own, and why that is right.
 const ALLOWED = [
     ['src/components/layout/ModalLayer.jsx', 'setLeads(prev => [...(prev||[]), lead])', 'the lead form saved it (LeadModal) and hands back the saved row'],
@@ -133,7 +133,7 @@ const screenOnly = (file, src) => {
     const hits = [];
     const visit = (node, anc) => {
         if (!node || typeof node.type !== 'string') return;
-        if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && SHARED.has(node.callee.name)
+        if ((node.type === 'CallExpression' || node.type === 'OptionalCallExpression') && node.callee.type === 'Identifier' && SHARED.has(node.callee.name)
             && (owner || !local.has(node.callee.name))) {
             const fns = anc.filter(isFn);
             const handler = fns.length >= 2 ? fns[1] : fns[0];
@@ -158,6 +158,13 @@ test('THE GUARD — no handler sets a shared list without a server call, unless 
     assert.deepEqual(unexplained.map((h) => `${h.file}:${h.line} ${h.call.slice(0, 90)}`), []);
     // and every allowance still names something — a stale one would excuse the next
     for (const [file, call] of ALLOWED) assert.ok(hits.some((h) => h.file === file && h.call.startsWith(call)), `stale allowance: ${file} ${call}`);
+});
+
+test('T1 — the guard sees an optional call — setAccounts?.(…) in a handler with no request (state §0.207)', () => {
+    const made = 'export function useMade(deps) { const { setAccounts } = deps; const drop = (id) => { setAccounts?.(prev => prev.filter(a => a.id !== id)); }; return { drop }; }';
+    assert.equal(screenOnly('src/hooks/useMade.js', made).length, 1);
+    const sent = made.replace('const drop = (id) => {', 'const drop = async (id) => { await dbWrite(\'/x\', {});');
+    assert.equal(screenOnly('src/hooks/useMade.js', sent).length, 0, 'a handler that sends a request is not screen-only');
 });
 
 test('the guard finds the five it was written for, as they were (HEAD before §0.177)', () => {

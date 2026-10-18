@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
@@ -15,10 +15,15 @@ export function useAccounts(deps) {
     const [accountModalError, setAccountModalError] = useState(null);
     const [accountModalSaving, setAccountModalSaving] = useState(false);
 
+    // The latest load of the accounts: an answer a later load overtook is dropped (state §0.207) — a merge's
+    // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
+    const loadGen = useRef(0);
     const loadAccounts = (setDbOffline) => {
         const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
+        const gen = ++loadGen.current;
         dbFetch('/.netlify/functions/accounts')
             .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
             .then(data => { if (data && stillOrg(askedOrg)) setAccounts(data.accounts || []); })
             .catch(err => console.error('Failed to load accounts:', err));
     };

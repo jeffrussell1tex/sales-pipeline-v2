@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
@@ -27,12 +27,17 @@ export function useOpportunities(deps) {
     const [oppModalError, setOppModalError] = useState(null);
     const [oppModalSaving, setOppModalSaving] = useState(false);
 
+    // The latest load of the opportunities: an answer a later load overtook is dropped (state §0.207) — a merge's
+    // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
+    const loadGen = useRef(0);
     const loadOpportunities = (setDbOffline) => {
         // This org's deals only (state §0.173): an answer for an org switched away
         // from is dropped.
         const askedOrg = requestOrg();
+        const gen = ++loadGen.current;
         dbFetch('/.netlify/functions/opportunities')
             .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
             .then(data => {
                 if (!data || !stillOrg(askedOrg)) return;
                 // Read when the answer lands (state §0.176): App fills these refs during

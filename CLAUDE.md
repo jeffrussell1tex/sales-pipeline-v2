@@ -138,6 +138,26 @@ One commit per verified batch; doc patch in the same commit.
   whose copied line names no product of this org is refused whole.
   A technician's login is a member of THIS org, stored as their Clerk id
   (`techLogin.js`) — never the app id the picker sends.
+- A merge's Undo (`merge.mjs`; the rule in `src/utils/mergeUndo.js`) puts
+  back only what still holds what the merge wrote — a deal's account id
+  and name together, the survivor's restored name cascaded by account id
+  as the accounts PUT does — and an account's place only where the house
+  parent rule puts it back (`undoPlaces`, as a delete's Undo meets it).
+  It puts no deal on a site by its id: a survivor that would go back a
+  site while a deal would still stand on it by id once the Undo is done
+  keeps its level (`dealsOn`, `noDealOn` — by id alone), and no deal
+  goes back to a record merged away that is a site — by its id, its
+  lift, or its name where the merge renamed it from that record's
+  (`notASite`). What it leaves is kept and counted — except a deal with
+  no account id, which can still end on a site by its name, not counted:
+  on a survivor that goes back a site, or on the site merged away once
+  the survivor's own name goes back after a merge that gave it that
+  site's name (Jeff, 18 Oct: "Ship as is, file the edge"; OPEN_ITEMS
+  §4.7, batch 3; guide §18b100 rule 5). It is refused (409, nothing
+  written) when the merge was undone, either record was deleted, the
+  survivor was merged into another record since, or the record merged
+  away is no longer merged into it; its claim and un-archive each abort
+  the batch unless they wrote their row (guide §18b100).
 
 ## Frontend conventions
 
@@ -164,7 +184,7 @@ One commit per verified batch; doc patch in the same commit.
   the header search, Reports, Home's "# of accounts", Settings' counts and a
   segment's "View accounts" link, the meeting prep panel's contacts, the
   merge window's predicted sub-account count, the public API's contacts and
-  four pickers — the cleanup batch, after the merge Undo (OPEN_ITEMS §1;
+  four pickers — the cleanup batch, next (OPEN_ITEMS §1;
   guide §18b91, §18b99).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).

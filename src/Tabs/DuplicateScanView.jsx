@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { T } from '../tokens.js';
+import { isMergeArchived } from '../utils/pickLink.js';
+import PastMerges from './PastMerges';
 
 // ── Theme (mirrors SettingsTab T) ──────────────────────────────────────────
 
@@ -93,27 +95,35 @@ export default function DuplicateScanView({ onBack }) {
 
     const acctCountRef = useRef(null);
 
+    // An answer a later scan overtook is dropped (the review, 17 Oct — as the five list loads drop theirs): a merge's
+    // re-scan landing after its Undo's would leave out the pair the Undo gave back, and a scan of the tier toggled from
+    // would show its pairs under the other.
+    const scanGen = useRef(0);
     const runScan = useCallback(async (t) => {
+        const gen = ++scanGen.current;
         setLoading(true); setError(null);
         try {
             const d = await fdRef.current(t);
-            setData(d);
+            if (gen === scanGen.current) setData(d);
         } catch (e) {
-            setError(e?.message || 'Scan failed. Please try again.');
+            if (gen === scanGen.current) setError(e?.message || 'Scan failed. Please try again.');
         } finally {
-            setLoading(false);
+            if (gen === scanGen.current) setLoading(false);
         }
     }, []);
 
     // Initial scan + re-scan whenever the tier toggles.
     useEffect(() => { runScan(tier); }, [tier, runScan]);
 
-    // Re-scan after a merge: the accounts list shrinks when a row is archived.
+    // Re-scan after a merge and after its Undo (state §0.207 — Jeff, 17 Oct: "Fix all four now"): a merge drops
+    // the archived row, then the list read again holds it merged away; an Undo's list read again holds it live —
+    // the length alone stays, so the merged-away count is part of the key. Past merges reads its list again on the
+    // same key.
+    const scanKey = `${(accounts || []).length}:${(accounts || []).filter(isMergeArchived).length}`;
     useEffect(() => {
-        const n = (accounts || []).length;
-        if (acctCountRef.current === null) { acctCountRef.current = n; return; }
-        if (n !== acctCountRef.current) { acctCountRef.current = n; runScan(tier); }
-    }, [accounts, tier, runScan]);
+        if (acctCountRef.current === null) { acctCountRef.current = scanKey; return; }
+        if (scanKey !== acctCountRef.current) { acctCountRef.current = scanKey; runScan(tier); }
+    }, [scanKey, tier, runScan]);
 
     const counts = data?.counts || { duplicate: 0, related: 0 };
     const pairs  = data?.pairs || [];
@@ -147,7 +157,7 @@ export default function DuplicateScanView({ onBack }) {
             <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 20, fontWeight: 700, color: T.ink, marginBottom: 4, fontFamily: T.sans }}>Find &amp; merge duplicates</div>
                 <div style={{ fontSize: 13, color: T.inkMid, fontFamily: T.sans }}>
-                    Scan accounts for likely duplicates and merge them into one record. Every merge is fully reversible.
+                    Scan accounts for likely duplicates and merge them into one record. A merge can be undone under Past merges below, unless one of its two records was deleted or merged again since.
                 </div>
             </div>
 
@@ -200,6 +210,8 @@ export default function DuplicateScanView({ onBack }) {
             {pairs.map((pair, i) => (
                 <PairCard key={`${pair.a.id}::${pair.b.id}::${i}`} pair={pair} tier={tier} onMerge={openMerge} />
             ))}
+
+            <PastMerges entityType="account" version={scanKey} />
         </div>
     );
 }

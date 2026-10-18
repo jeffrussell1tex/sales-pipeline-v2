@@ -17,7 +17,6 @@ export const CLIENT_AUDIT_ENTRIES = Object.freeze({
     crm: Object.freeze({
         create: Object.freeze(['opportunity', 'account', 'contact', 'task']),
         update: Object.freeze(['opportunity', 'account', 'contact', 'task']),
-        merge:  Object.freeze(['account', 'contact']),
     }),
     dispatch: Object.freeze({
         'dispatch.schedule':            Object.freeze(['dispatch_job']),

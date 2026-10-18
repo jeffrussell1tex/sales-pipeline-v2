@@ -62,8 +62,8 @@ export const SETTINGS_ITEMS = [
     // Data
     { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'Open the CSV importers for accounts, contacts, opportunities and leads', status:'none', statusDetail:null },
     { id:'export',           scope:'workspace', category:'Data', name:'Export',                    desc:'Scheduled and ad-hoc exports; GDPR data requests',            status:'none',    statusDetail:null },
-    { id:'duplicates',       scope:'workspace', category:'Data', name:'Find & merge duplicate accounts',    desc:'Scan accounts for likely duplicates and merge them — fully reversible', status:'ok',      statusDetail:'Scan on demand' },
-    { id:'contact-duplicates', scope:'workspace', category:'Data', name:'Find & merge duplicate contacts', desc:'Scan contacts for likely duplicates and merge them — fully reversible', status:'ok',      statusDetail:'Scan on demand' },
+    { id:'duplicates',       scope:'workspace', category:'Data', name:'Find & merge duplicate accounts',    desc:'Scan accounts for likely duplicates and merge them — and undo a merge', status:'ok',      statusDetail:'Scan on demand' },
+    { id:'contact-duplicates', scope:'workspace', category:'Data', name:'Find & merge duplicate contacts', desc:'Scan contacts for likely duplicates and merge them — and undo a merge', status:'ok',      statusDetail:'Scan on demand' },
     { id:'backup',           scope:'workspace', category:'Data', name:'Backup & restore',           desc:'Automated daily backups and point-in-time restore',           status:'ok',      statusDetail:null },
     { id:'features',         scope:'workspace', category:'Data', name:'Features & AI',              desc:'Enable app features and AI (deal scoring, writing assist)',   status:'ok',      statusDetail:null },
 ];

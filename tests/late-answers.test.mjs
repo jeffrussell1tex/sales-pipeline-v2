@@ -132,9 +132,9 @@ export const scanText = (file, src, shared = sharedSetters()) => {
             let pushedFn = false;
             if (isFn(node)) {
                 let lateCb = false;
-                if (parent && parent.type === 'CallExpression' && parent.arguments.includes(node)) {
+                if (parent && (parent.type === 'CallExpression' || parent.type === 'OptionalCallExpression') && parent.arguments.includes(node)) {
                     const c = parent.callee;
-                    if (c.type === 'MemberExpression' && c.property && ASYNC_CB.test(c.property.name)) lateCb = true;
+                    if ((c.type === 'MemberExpression' || c.type === 'OptionalMemberExpression') && c.property && ASYNC_CB.test(c.property.name)) lateCb = true;
                     if (c.type === 'Identifier' && /^(setTimeout|setInterval)$/.test(c.name)) lateCb = true;
                 }
                 fns.push({ node, lateCb, awaits: [], depth: path.length });
@@ -143,9 +143,11 @@ export const scanText = (file, src, shared = sharedSetters()) => {
             const here = [...path, node];
             // putSettings answers only in the org that asked — after a switch it never
             // settles (src/Tabs/settings/shared/saveSettings.js) — so awaiting it opens no window.
-            const settles = !(node.argument && node.argument.type === 'CallExpression' && node.argument.callee.name === 'putSettings');
+            const settles = !(node.argument && (node.argument.type === 'CallExpression' || node.argument.type === 'OptionalCallExpression') && node.argument.callee.name === 'putSettings');
             if (node.type === 'AwaitExpression' && fns.length && settles) fns[fns.length - 1].awaits.push({ end: node.end, path: here });
-            if (node.type === 'CallExpression' && fns.length) {
+            // x?.() is an OptionalCallExpression (state §0.207): the merge hook's four late sets and audit rows were
+            // invisible to a scan of CallExpression alone.
+            if ((node.type === 'CallExpression' || node.type === 'OptionalCallExpression') && fns.length) {
                 const name = node.callee.type === 'Identifier' ? node.callee.name : null;
                 const what = (name && shared.has(name) && !local.has(name)) ? name
                     : (name && CALLBACK.test(name)) ? name : writeRequest(node);
@@ -192,6 +194,14 @@ test('after an await or in an async callback, the org is checked before shared s
     const misses = scan().filter((v) => !ALLOWED.some((a) => a.file === v.file && v.line.includes(a.line)));
     assert.deepEqual(misses.map((v) => `${v.file}:${v.at} ${v.what} — ${v.line.slice(0, 110)}`), [],
         'an answer that lands after a switch sets the new org\'s screen, or sends a write with its token — check `stillOrg(askedOrg)` first');
+});
+
+test('T1 — the scan sees an optional call — x?.() after an await, and p?.then(() => …) — as it sees a plain one (state §0.207: the merge hook\'s four were invisible to it)', () => {
+    const late = (src) => scanText('src/hooks/useMade.js', src).map((v) => v.what);
+    assert.deepEqual(late('export const f = async () => { await x(); setAccounts?.([]); };'), ['setAccounts']);
+    assert.deepEqual(late('export const f = () => { p?.then(() => setAccounts([])); };'), ['setAccounts']);
+    assert.deepEqual(late('export const f = () => { p?.then(() => { addAudit?.(\'merge\', \'account\'); }); };'), ['addAudit']);
+    assert.deepEqual(late('export const f = async () => { const askedOrg = requestOrg(); await x(); if (!stillOrg(askedOrg)) return; setAccounts?.([]); };'), [], 'checked first: none');
 });
 
 test('every allowed late point is still in the code — a stale entry hides nothing', () => {

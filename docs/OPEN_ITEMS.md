@@ -165,8 +165,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      - **Then, the member profile page sends only what changed** (§4.3's
        "The Settings → Users profile page PUTs a member's whole cached
        row"; Jeff, 16 Oct: "File it, own batch next"; 17 Oct: "Undo,
-       cleanup, profile" — the third of the next three, after the merge
-       Undo and the merged-records cleanup, below under the merged-away
+       cleanup, profile" — the third, after the merged-records cleanup
+       (the merge Undo is done, §0.207), below under the merged-away
        batch).
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
@@ -183,13 +183,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      this deal", lists contacts); until §0.206 it was still listed — by the
      Accounts tab if it stands at the top level, else by its parent's
      Sub-Accounts (where it stands was not read), since a merge leaves the
-     merged-away row's parent as it was (its archive write, merge.mjs:246,
+     merged-away row's parent as it was (its archive write, merge.mjs:260,
      sets no parent) — because the accounts GET does not filter
      archived rows (read in code 11 Oct; again 16 Oct: the GET selects every
      account of the org, the tab filtered none). Jeff, 16 Oct: "Hide
      them" — merged-away accounts leave the Accounts tab and Sub-Accounts,
-     the record kept (the server's merge reverse — no screen offers an Undo
-     yet — and the links that resolve through it unchanged); "Right after
+     the record kept (the server's merge reverse — a merge's Undo on
+     screen since §0.207 — and the links that resolve through it
+     unchanged); "Right after
      4b-2c" — a batch of its own, the Contacts tab
      checked for the same gap with it. Mapped and designed 16 Oct (read
      only: two mappers, a designer, two critics): the hiding belongs in the
@@ -212,30 +213,32 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      to veto (§2.4). The census's UKG is `org_3CwnbloUXZQl0e6KtDhXFXRK8UD`,
      the prod instance's. What it found and left is filed in §2.2, §2.4,
      §4.2 and §4.7.
-     - **Next, a merge's Undo on screen** (Jeff, 16 Oct: "Undo as its own
-       batch next"; 17 Oct: "Undo, cleanup, profile" — the first of the
-       three): every merge screen says merges are reversible (the merge
-       windows "Reversible afterward", the scan pages and Settings "fully
-       reversible"), but no screen calls the server's reverse
-       (`reverseMerge`, `reverseContactMerge` in useMerge — read in code); a
-       merge confirms with an Undo. Since §0.206 a merged-away record also
-       leaves the Accounts and Contacts tabs, an account's Sub-Accounts and
-       People list (the header search, Reports and a match by name (§4.7)
-       still reach it; a link to a merged-away account opens the account it
-       was merged into where the caller's list holds that live, and the
-       merged-away row only where it does not), and no screen can undo its
-       merge until this lands. The server's reverse can put a survivor
-       back under a parent merged away, deleted or moved under it since,
-       live and listed nowhere on the Accounts tab (§4.7).
+     - **A merge's Undo on screen — DONE (§0.207; guide §18b100)** (Jeff,
+       16 Oct: "Undo as its own batch next"; 17 Oct: "Undo, cleanup,
+       profile" — the first of the three): every merge screen said merges
+       were reversible (the merge windows "Reversible afterward", the scan
+       pages and Settings "fully reversible"), but no screen called the
+       server's reverse (`reverseMerge`, `reverseContactMerge` in useMerge
+       — read in code). Since §0.206 a merged-away record also leaves the
+       Accounts and Contacts tabs, an account's Sub-Accounts and People
+       list (the header search, Reports and a match by name (§4.7) still
+       reach it; a link to a merged-away account opens the account it was
+       merged into where the caller's list holds that live, and the
+       merged-away row only where it does not), and no screen could undo
+       its merge until §0.207. The server's reverse could put a survivor
+       back under a parent merged away, deleted or moved under it since
+       (§4.7's item, closed by §0.207).
        Mapped and designed 17 Oct (read only: three mappers — the server,
        the client, the app's undo patterns — a designer and two critics).
-       Read in code: no screen keeps a merge's `mergeLogId` (the merge
-       answers it); nothing reads `merge_log` but merge.mjs, and no age
-       limit is enforced anywhere (the "30-day" comments are not
-       implemented); the reverse checks only that the log is this org's,
+       Read in code then: no screen kept a merge's `mergeLogId` (the merge
+       answers it); nothing read `merge_log` but merge.mjs, and no age
+       limit was enforced anywhere (the "30-day" comments were not
+       implemented); the reverse checked only that the log was this org's,
        of its kind and not yet reversed — so (reasoned from the code, not
-       run) it answers 200 and moves links back to a record deleted since,
-       overwrites edits made since, and two at once both apply. Jeff, 17
+       run) it answered 200 and moved links back to a record deleted since,
+       overwrote edits made since, and two at once could both apply (run
+       on that code later, I8's second Undo was refused — the race is
+       reasoned, not seen; state §0.207). Jeff, 17
        Oct — where the Undo is once the toast is
        gone: "Past merges on each page" (a list on each Find & merge
        page, newest first, each with its Undo or why it has none); how
@@ -253,9 +256,41 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        two TEST contacts in Accelerep QA, his go asked at the merge); the
        words: "Approve as written" (the toast "Merged “X” into “Y” · ↩
        Undo", 5 seconds as the delete toasts — stated, no objection).
-     - **Then, merged-away records leave every other list** (Jeff, 16 Oct:
+       Done: a merge offers its Undo in the toast for five seconds and
+       under Past merges at the foot of each Find & merge page, with no
+       age limit; an Undo sends its log id alone, puts back only what
+       still holds what the merge wrote — a deal's account id and name
+       together, a contact's company by name only while it is not linked
+       to the survivor by id, a deal moved up by its lift alone — and, of
+       accounts (the survivor's place and the sub-accounts the merge
+       moved), only where the house parent rule puts them back
+       (`restorePlace`, as a delete's Undo meets it), and no deal by its
+       id onto a site; it keeps the rest and says how many records it
+       left as they are now, and is refused in words, writing nothing,
+       when the merge was undone, either record was deleted, the
+       survivor was merged into another record since or the record
+       merged away is no longer merged into it; its one batch claims the
+       log and un-archives the record first, each aborting it unless it
+       wrote its row. The merge hook acts only in the org that merged,
+       writes no audit row, reads contacts, deals, tasks and activities
+       again after a merge and its Undo (and accounts after an
+       account's), and says a lost answer may have landed; the five list
+       loads, Past merges and the scans drop an answer a later one
+       overtook; the copy says what is offered. Jeff's second set (18
+       Oct, after the second fix round) is built: "Leave such deals and
+       count them", "New words", "Yes, both" (the parent rule keeps and
+       counts, never refusing the whole Undo; contacts follow the deals'
+       rule) and "Accept the limits" (merges logged before §0.207). His
+       third set (18 Oct, after the last fix round) is built too: Past
+       merges' confirm in his corrected text ("Use the corrected text"),
+       and the deals the Undo leaves where they are — by name alone, or a
+       site's own from before the merge — as built ("Ship as is, file the
+       edge"; the name-only case filed for batch 3, §4.7). What it found
+       and left is filed in §2.2, §2.4, §4.2, §4.7 and §6.
+     - **Next, merged-away records leave every other list** (Jeff, 16 Oct:
        "One cleanup batch next"; 17 Oct: "Undo, cleanup, profile" — the
-       second): the header search, Reports' account list, the "# of
+       second, and next: the merge Undo is done, §0.207): the header
+       search, Reports' account list, the "# of
        accounts" counts in reports and on Home, Settings' Segments and
        Industries counts, and four pickers that break guide §18b91 rule 5
        (merged-away records leave every picker) — the document link picker,
@@ -269,8 +304,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        industry's "View accounts" link (the segment's twin), Reports' three
        account lookups by name, the merge window's contacts and deal counts,
        the public API's accounts and the account rail's other reads of the
-       app's lists — and, for the batch's class scan, three comments of
-       tests/merged-away-lists.test.mjs and one of AccountRail.jsx. Its
+       app's lists — and, for the batch's class scan, two comments of
+       tests/merged-away-lists.test.mjs (a third is true again since
+       §0.207) and one of AccountRail.jsx. Its
        map, what each place reads, and what is filed beside it: §4.7, "The
        cleanup batch's map".
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
@@ -431,6 +467,43 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **Before §0.207 ships: the census of the merge logs still open; when it
+  ships, reload every app tab opened before it** (§0.207's design, as
+  amended — the census is its gate order's step 4, not run with the
+  commit). The census is two SELECTs — read only, counts only, scoped to
+  `merge_log`, each naming its host in its first line of output (the
+  ad-hoc DB script): the logs still 'merged', by org; and, among their
+  rewrites, by org, the id and name rewrites with no `newValue`, the list
+  rewrites holding a row with no `new`, the lift rewrites holding a row
+  with no `old`, and any rewrite of another kind. Expected: 0 in every
+  column of the second. Any other answer stops the ship and is reported.
+  Reasoned from merge.mjs's restores, not run: an id, name or list
+  restore compares each row with the value the merge logged, so a value
+  missing there would make its restore match nothing and read as kept —
+  safe, but the count would be wrong; a lift row with no `old` is not
+  safe: its restore still matches a deal standing where the lift put it
+  and writes the deal's account id, account name and Site Name empty.
+  Such logs would need a design. A third count, for Jeff and not a stop
+  (the second re-check's completeness lens, 18 Oct; reasoned, not run):
+  of the logs still 'merged', by org, those whose account merged away is
+  a site now and whose merge moved a deal off it (a deal id rewrite, a
+  lift row, or a deal name rewrite from its name to another); those whose
+  survivor a lift made an account (a top-level account merged into its
+  own site) that holds a deal by id other than those the merge's deal id
+  rewrite moved there from the account merged away (those go back to it
+  while it is no site; while it is one, the log is in the first count);
+  and those whose survivor, a site at the merge, was sent another tier
+  (`resolvedFields.accountTier` — the API's alone; the merge window sends
+  none) and holds such a deal — at most the Undos in which the deal rule
+  would leave a deal where it is rather than put it on a site (Jeff, 18
+  Oct: "Leave such deals and count them"; UKG's 6 deals on sites, §2.4).
+  Then, after the deploy, a tab opened before it and not reloaded keeps
+  the old screens: no Undo after a merge and no Past merges, the merge
+  screens still saying merges are fully reversible, its lists with no
+  overtaken-answer guard, and its merge hook's own `merge` audit row
+  refused by the audit-log POST (403; read in code — not shown on screen;
+  the server's `account.merged` / `contact.merged` row is written as
+  before). The ship folds the reload into the item below.
 - **Reload every app tab opened before the forty-second ship** (Deployed:
   dev 18:32 UTC, prod 18:36 UTC, 17 Oct — it covers the forty-first's, 17
   Oct 13:06 UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16
@@ -449,8 +522,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   with the rest. Contacts go by the one-request clear when it is an
   Admin's, the list holds every contact of the org (All, no search) and
   none is kept for an open deal; otherwise one request each. Accounts (an
-  Admin's) go one request each. Their merges' reverse then un-archives
-  nothing, and the delete's Undo brings them back as live records (each
+  Admin's) go one request each. Their merges' Undo is then refused
+  (§0.207: "… was deleted after this merge …"), and the delete's Undo
+  brings them back as live records — their merges' Undo refused again,
+  "… is no longer merged into …" (each
   re-post carries its merge mark, but neither POST stores it — `sanitize`
   in accounts.mjs and contacts.mjs has no merge field; §4.2 files the
   accounts' half). An older tab's Save quotas answers 200 and stores no quota (the
@@ -591,6 +666,49 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.4 Decisions
 
+- **§0.207's defaults — Jeff's to veto** (not asked; each built in by
+  the design, its amendment, the review or the fix rounds). What the
+  batch's rounds listed back to him is answered, each built or filed
+  (state §0.207): his second set (18 Oct, after the second fix round) —
+  "Leave such deals and count them", "New words", "Yes, both", "Accept
+  the limits" — and his third (18 Oct, after the last fix round): Past
+  merges' confirm in his corrected text ("Use the corrected text"), and
+  the deals the Undo leaves where they are — by name alone, or a site's
+  own from before the merge — as built ("Ship as is, file the edge"; the
+  name-only case filed for batch 3, §4.7). The defaults:
+  - Past merges' Undo asks first, in the app's confirm, not red; a done
+    Undo says so (the toast's in a notice that clears itself, Past
+    merges' on its own row); Past merges shows the latest 50 merges of a
+    kind ("Showing the latest N merges.", no paging — §4.7); the refusal
+    "…already been reversed." reads "…already been undone.";
+  - the five list loads' overtaken-answer guard, and the review's same
+    guard on Past merges' list and both scans; the merge windows' default
+    survivor set when they open, never on a list read again;
+  - four sentences the approved tables did not cover: "One of these
+    records changed while the merge was being undone. Please try
+    again."; "Merged “X” into “Y” — its Undo is under Past merges on this
+    page." (a merge whose answer names no log id); "Past merges did not
+    load — …"; and the house's "You do not have permission to make this
+    change." for a merge refused 403 — with "Merge undone." where a done
+    Undo's answer could not be read and no name is known (the two
+    screens always pass one);
+  - restored link rows stamped `updatedAt`, as the merge stamps them; two
+    §0.206 harness names corrected;
+  - the lifted survivor's parent and tier go back together or stay
+    together — one edited since keeps the other (before the review's fix
+    a parent went back beside a tier edited since);
+  - the done words for one, "1 record was left as it is now." (his words
+    give the plural alone), and the survivor counted in them once,
+    whatever of it was kept — its owner with its id, its place, a phone
+    and a website one record (the second re-check: a field is no record;
+    the survivor once told to him with his third set, not asked);
+  - the audit row's detail in the done words' sense — " · M linked
+    records were left as they are now · kept: <fields>", M the linked
+    records alone (the done words count the survivor too, once, when
+    any of its fields was kept) — where it said "changed since, kept"
+    of deals the deal rule held and places the parent rule kept, which
+    nobody changed (the second re-check; told to him with his third
+    set, not asked).
 - **§0.206's App rollup default — Jeff's to veto** (the design's flag, 16
   Oct; not asked: nothing is expected to change). App's rollup follows the
   one sub-account rule, so the Contacts tab's company card leaves a
@@ -1055,13 +1173,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
   list from the stored `contactId` (activities.mjs sanitize), dropping the
   other contacts it held. Which screens can send either was not read.
   Recommended: read `''` as an empty list in both sanitizes.
-- **After a merge, the merging session does not read its contacts, tasks or
-  activities again** (the pre-ship sweep; older than §0.198): useMerge
-  re-reads accounts and deals (contacts after a contact merge). A contact
-  merge moves deals' and tasks' contact ids on the server; the session's lists
-  keep the old ones. An untouched link is no longer sent back (§0.198's
-  pre-ship round); a touched screen still sends its copy of the rest.
-  Recommended: re-read contacts, tasks and activities after every merge.
+- **After a merge or its Undo, the merging session does not read its SPIFF
+  claims or Dispatch's lists again** (the pre-ship sweep, older than
+  §0.198; narrowed by §0.207, which reads contacts, deals, tasks and
+  activities again after a merge and its Undo, and accounts after an
+  account's — Jeff, 17 Oct: "Fix all four now"). An account merge
+  renames SPIFF claims' account name and moves Dispatch's customers' and
+  jobs' account (merge.mjs); the claims are read once per org (an App
+  effect) and Dispatch's lists by the tab itself, so the merge hook reads
+  neither again (read in code; what a screen then shows or sends was not
+  read). Recommended: read them again after a merge and its Undo.
 - **A lead's Convert opens the deal window empty** (the fix review of §0.198's
   pre-ship round, 12 Oct — older than §0.198; read in code only, to confirm in
   the pane as Karen before acting). LeadsTab.jsx's convertLead opens the window
@@ -1223,10 +1344,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   delete reaches, a merge-archived account only in a tab opened before
   the §0.206 deploy and not reloaded (§2.2), or in one whose accounts were
   read before another session merged the account and not read again
-  since (its list holds the row unmarked; §4.7). That delete is the only
-  one with this Undo, which brings a deleted account back as a live
-  account, offered in the pickers again. The accounts DELETE still
-  deletes one sent by id, with no Undo (§4.7). The delete's confirm counts
+  since (its list holds the row unmarked). That delete is the only one
+  with this Undo, which brings a deleted account back as a live account,
+  offered in the pickers again — its merge's Undo then refused, "… is no
+  longer merged into …" (§0.207). The accounts DELETE still deletes one
+  sent by id, with no Undo, and its merge's Undo is then refused, "… was
+  deleted after this merge …" (§0.207; Jeff, 17 Oct: "Undo refuses and
+  explains" — deleting stays as it is). The delete's confirm counts
   the sub-accounts the server lifts, merged-away ones too, so it can name
   more than the drawer lists (§0.206). Recommended: carry the merge mark on
   a restore (its survivor checked in the org); carry the
@@ -1249,8 +1373,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **D22's edges** (§0.198; Jeff, 11 Oct: "Move them up"). A move that makes
   an account holding deals a site, and a merge into a site, move those
   deals up to the account above the site, Site Name the site, in the same
-  write; the server's merge reverse puts them back (no screen offers it
-  yet — §1). A merge that lifts its survivor to the top level makes it an
+  write; a merge's Undo (§0.207 — the toast after a merge, and Past
+  merges) puts back each one still where the lift put it, by its lift
+  alone, and never onto a site: while the account merged away is a site
+  the deal stays, counted (Jeff, 18 Oct: "Leave such deals and count
+  them"). A merge that lifts its survivor to the top level makes it an
   account, so the deals it takes are not left
   on a site. A screen loaded before either keeps the lift when it saves.
   Left:
@@ -1288,6 +1415,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
     round: placing such a re-save as a move moved every deal of the site
     up, open or closed, its Site Name overwritten) — so it is changed by
     hand (the deal window: pick the site's row in Account, D5);
+  - a merge's Undo (§0.207) puts no deal on a site by its id (Jeff, 18
+    Oct: "Leave such deals and count them" — the account keeps its
+    level, the deal stays, counted), but a deal with no account id can
+    still end on a site by its name, not counted: a lifted survivor goes
+    back a site with such a deal naming it (its deals are read by id),
+    and a merge that gave the survivor the name of the account merged
+    away, a site, leaves such a deal naming only that site once the
+    survivor's own name goes back — and the Undo has no age limit, so
+    unlike a delete's this is no matter of seconds (the second re-check
+    and the fifth cross-check, 18 Oct, each run on the test database).
+    Jeff, 18 Oct: "Ship as is, file the edge" — filed for batch 3 to
+    close (§4.7). Reasoned from the code, not run: a name for the
+    survivor that is neither record's, sent through the API (no screen
+    sends one), leaves a kept deal by name alone naming no account once
+    the survivor's own name goes back;
   - an Admin's marked PUT naming a parent for a top-level account no
     delete lifted is taken as a restore — only a forged body sends one: the
     Undo marks only rows its delete lifted — and is written as sent, so a
@@ -1295,7 +1437,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
     site: a restore runs no D22 (§0.198's fifth fix round). The server
     cannot tell such a row from one a delete lifted; a server-side "was
     lifted" marker would, if it is ever seen.
-  Recommended: keep (each is rare, or data from before the rule).
+  Recommended: keep (each is rare, or data from before the rule), but the
+  merge's Undo's shapes by name, which have no age limit, are batch 3's
+  to close (Jeff, 18 Oct: "Ship as is, file the edge" — §4.7).
 - **A deal's notes are saved as the whole list.** Two people saving at once
   keep the last list, so a note is dropped. Recommended: a server-side
   append, or a version check. §0.177 (a).
@@ -1521,9 +1665,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `{ id, forecastCalls }`, its refusal in the server's words with the
   rep's name — that field is the rep's whole calls map (§4.6). Jeff, 16
   Oct: the profile page sends only what changed, in its own batch ("File
-  it, own batch next"); 17 Oct: "Undo, cleanup, profile" — the third of
-  the next three, after the merge Undo and the merged-records cleanup
-  (§1).
+  it, own batch next"); 17 Oct: "Undo, cleanup, profile" — the third,
+  after the merged-records cleanup (the merge Undo is done, §0.207 —
+  §1).
 - **The Settings → Users profile page after a save:** its title band and
   crumb read the member as the page opened, so a rename shows the old name
   until the page is left; "Save changes" stays (the form is compared with that
@@ -2144,7 +2288,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   survivor's rail (ContactRail.jsx:268-274) shows an activity whose
   `contactIds` still name it only when the activity also names the
   survivor — as its `contactId`, which the merge moved there where the
-  merged-away contact was its first (merge.mjs:383; activities.mjs:78), or
+  merged-away contact was its first (merge.mjs:660; activities.mjs:78), or
   in its `contactIds` — or is on one of the survivor's open deals. Any
   other such activity is reached per contact only through the
   merged-away contact's own rail, opened from the header search, or
@@ -2163,9 +2307,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   neither it nor its survivor in a rep's list**, is saved linked to the
   merged-away account (the sweep). Batch 3's move of contacts' `accountId`
   on a merge removes the shape.
-- **The cleanup batch's map** (§1, "Then, merged-away records leave every
+- **The cleanup batch's map** (§1, "Next, merged-away records leave every
   other list"; Jeff, 16 Oct: "One cleanup batch next"; 17 Oct: "Add them
-  to the cleanup batch", "Undo, cleanup, profile" — after the merge Undo;
+  to the cleanup batch", "Undo, cleanup, profile" — next: the merge Undo
+  is done, §0.207;
   read in code over §0.206's tree):
   - In Jeff's 16 Oct answer ("One cleanup batch next"): the header search,
     accounts and contacts (src/components/layout/AppHeader.jsx:440-441);
@@ -2216,16 +2361,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
     the app's lists, which THE GUARD
     (tests/merged-away-lists.test.mjs, T8) does not scan — it reads the
     two tabs only — a class scan of the rail being that batch's to design
-    (the re-check). With that scan, three comments of the suite itself
+    (the re-check). With that scan, two comments of the suite itself
     (tests/merged-away-lists.test.mjs — §0.206's docs checks, 17 Oct; read
-    in code), each saying what §0.206's docs corrected: :413, "Wherever a
+    in code — a third, :5-6, "its Undo and the links that resolve through
+    it unchanged", is true again since §0.207 put a merge's Undo on
+    screen), each saying what §0.206's docs corrected: :413, "Wherever a
     tab reads one but through unarchived, it draws or counts merged-away
     rows" — a dependency line or the Company view card's hand-off lists
     none, a Signal or List view row drawn from one makes the Accounts tab
     fail to load, and a Business Book lane draws the accounts the search
-    and the filters left out (guide §18b99 rule 4); :5-6, "its Undo and
-    the links that resolve through it unchanged" — no screen offers a
-    merge's Undo (§1); and :14-15, which names Reports' picker by words
+    and the filters left out (guide §18b99 rule 4); and :14-15, which
+    names Reports' picker by words
     the panel does not show (it reads "Select contacts to add to this
     deal", ReportsTab.jsx:4901). One comment of the account rail's is
     likewise untrue since §0.206 (AccountRail.jsx:286-289; §0.206's docs
@@ -2261,7 +2407,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first contact of the address, no merge test, no order); a CSV contact
   import's conflict (CsvImportModal.jsx:49-59 — the first contact of the
   email, else of the name; Overwrite writes onto it) and its new companies
-  (ModalLayer.jsx:464-467 — a company only a merged-away account names
+  (ModalLayer.jsx:469-472 — a company only a merged-away account names
   gets no account); a CSV account import's conflict (CsvImportModal.jsx:66
   — the first account of the name; Overwrite writes onto it); the lead
   duplicate check (LeadModal.jsx:102-106); and Dispatch's won-deal jobs
@@ -2271,19 +2417,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Lafayette" sites). Reports' three lookups by name are filed with the
   cleanup batch, not put to Jeff (its map, above). Recommended: each
   matches live records first.
-- **The server deletes a merged-away account or contact on request** (the
-  maps, 16 Oct; read in code): neither DELETE reads the merge mark
-  (contacts.mjs reads none; accounts.mjs reads `mergeArchived` only for
-  its parent tree), and a later reverse of that merge un-archives no row
-  and moves the links back to the deleted id (merge.mjs's reverse). Since
-  §0.206 no list offers one for delete, except in a tab opened before the
-  §0.206 deploy and not reloaded (§2.2), or in one whose lists were read
-  before another session (another Admin or Manager, or another browser
-  tab) merged the record and not read again since, whose list holds the
-  row unmarked (read in code); the API path stays. How many merges'
-  archived rows are gone was not counted (the 16 Oct census).
-  Recommended: refuse the delete of a merged-away record (409), or have
-  the reverse refuse when the archived row is gone.
 - **A merged-away record's rail says nothing of the merge** (the maps, 16
   Oct; read in code): opened from the header search, a merged-away
   account's or contact's rail reads as live, with Edit. Recommended:
@@ -2308,38 +2441,121 @@ to add meetings. Nothing in the app adds a meeting to Google:
   stray — re-pointed to its survivor where the survivor is live in the
   org and fits the parent rule, else cleared and the account made an
   account, as for a parent that names nothing.
-- **The merge reverse can put a survivor back under a parent merged
-  away, deleted or moved under it since** (§0.206's docs checks, 17 Oct;
-  read in code, not run): the account merge's reverse
-  (`reverseAccountMerge`) sets the survivor's `parentAccountId` from its
-  pre-merge snapshot (merge.mjs:315-316, written at :326) with none of
-  the checks a delete's Undo makes of a parent (`restorePlace`,
-  accountParent.js:328-336: one that names no account of the org, the
-  account itself or one under it, a site, one merged away). When that
-  parent has been merged away since — into another account, which takes
-  the survivor as its sub-account (merge.mjs:223), or into the survivor
-  itself, which then stands where that parent stood (:236) — the reverse
-  puts the survivor back under the account that merge archived (:246):
-  live, and listed nowhere on the Accounts tab (App's list is the top
-  level, App.jsx:834, and its parent is hidden); the header search and
-  links still reach it. None under a merged-away parent at the census
-  (16 Oct 21:13 UTC). The same unchecked write has two older outcomes,
-  not caused by §0.206 (App's list was the top level before it). When
-  that parent has been deleted since (a delete lifts the accounts under
-  it to the top level, accounts.mjs:534-537), the reverse puts the
-  survivor back under an id that names no row (no foreign key,
-  db/schema.ts:75). When it has been moved under the survivor since
-  (possible once the survivor no longer stood under it: the parent rule
-  refuses only a loop that stands at the write — `parentProblem`,
-  accountParent.js:179), the reverse closes a loop. Either way the
-  survivor is listed nowhere on the Accounts tab, and in a loop that
-  parent is not either; neither case was counted. No screen calls the
-  reverse yet (§1, the merge Undo); an Admin's or Manager's POST reaches
-  it (merge.mjs:74). Recommended (with the Undo): check the snapshot's
-  parent as `restorePlace` does — it refuses a missing parent (404) and
-  a descendant (400; accountParent.js:331, :333) as well as a merged-away
-  one, so the check covers all three — and keep the survivor's current
-  parent when the check fails.
+- **What §0.207's merge Undo leaves** (its design, reviews and re-checks,
+  17–18 Oct; each read in code, or run where said):
+  - **Two concurrent merges of one record merged away both commit** (the
+    server map; reasoned from the code, not run): each passes the merge's
+    check that the record is live, the second's archive write overwrites
+    `mergedIntoId`, and two logs read 'merged' for one record. Since
+    §0.207 the first's Undo is refused ("… is no longer merged into …"),
+    and the second's puts back only the rows still holding its own
+    survivor's id. Recommended: the merge's archive write conditioned on
+    the record still live, aborting its batch as the Undo's un-archive
+    does.
+  - **The merge's own read-then-batch gap** (the server map; reasoned):
+    the merge logs the ids it read and its batch moves rows by predicate,
+    so a row linked to the record merged away between the two is moved
+    but not logged — its Undo leaves it on the survivor; a row unlinked
+    between them is logged but not moved — since §0.207 its Undo leaves
+    that one too (it does not hold the survivor's id), counted kept. A
+    contact merge differs in part: it moves its tasks' or activities'
+    contact only when its read found one there (then by predicate, as
+    above), and writes a deal's contacts and a colleague's managers or
+    reports by id, each as computed from its read. So a task or activity
+    linked between the two when the read found none, and a deal or
+    colleague linked between them, is not moved (it keeps the record
+    merged away); a list edited between them is overwritten by the
+    merge, and its Undo puts back the list as read, not the edit (the
+    server map; reasoned from merge.mjs, not run).
+  - **A delete racing an Undo** (run by the review's server probe, the
+    Undo's batch held mid-flight): a delete of the record merged away that
+    reaches it after the Undo's un-archive waits for the batch, then
+    deletes the record live, with the links the Undo put back — the
+    DELETE's own read-then-write gap (its open-deal check and the tree its
+    re-fits use are read before its batch, and its sub-accounts by the
+    batch's first statement, before its delete waits on the Undo's lock;
+    read in code, accounts.mjs). One that lands first leaves the Undo
+    writing nothing (409).
+  - **The races the Undo does not ask again** (stated in merge.mjs's
+    comments, the re-check's notes or 05's fixer's; not proved): an
+    account above the record merged away moved while the batch runs; an
+    account added under the survivor after `nothingUnder`'s statement
+    read, or a deal linked to it after `noDealOn`'s; a PUT moving the
+    record merged away under the survivor that waits on the un-archive's
+    lock (the accounts PUT's own check-then-write, older). And one it
+    asks, counted short: a deal linked to the survivor between the Undo's
+    read of its deals (`dealsOn`) and its batch keeps the survivor where
+    it stands (`noDealOn`), every field kept and counted, the deal itself
+    not (05's cross-check; I21(f) runs it).
+  - **Past merges lists the latest 50 merges of a kind**, with no paging;
+    "Showing the latest N merges." says so, and an older merge's Undo is
+    reached by its log id alone (a default of Jeff's to veto, §2.4). Its
+    Undo's busy mark clears before its list is read again, so the Undo is
+    offered for a moment; a press then answers a true 409 (the review's
+    proof lens).
+  - **A Manager may merge and undo by the API, with no screen** (the
+    client map, F5): merge.mjs's role gate admits Admins and Managers; the
+    Find & merge pages are in Settings, an Admin's.
+  - **tests/hook-deps.test.mjs does not see `deps || {}`** (the client
+    map, F7): its guard matches `= deps`, and useMerge.js destructures
+    `deps || {}`; harmless while App hands the hook a fresh object each
+    render.
+  - **The app's other loads keep an answer a later load overtook**
+    (§0.207's design, as amended): leads, quotes, documents, coaching notes
+    and Dispatch's; a merge moves none of their links but Dispatch's
+    customers' and jobs' account (§4.2). SPIFF claims, whose account name a
+    merge renames, are read once per org by an App effect whose `cancelled`
+    flag drops an earlier run's answer, so none is overtaken today; reading
+    them again after a merge and its Undo (§4.2's recommendation) would
+    need the guard below. Recommended: the generation counter the five list
+    loads now have (guide §18b100 rule 6).
+  - **An account merge's audit count counts a lifted deal two or three
+    times** (the server map): the summary adds every rewrite's ids, and a
+    deal moved by id or by name and then lifted (D22) is in both, so "N
+    references repointed" reads more than were moved.
+- **Deals by name alone that a merge's Undo leaves on a site by their
+  name — batch 3's to close** (Jeff, 18 Oct: "Ship as is, file the edge"
+  — the Undo leaves such old deals where they are, the rare name-only
+  case recorded for the merge batch, batch 3, to close; §0.207's second
+  re-check and fifth cross-check, 18 Oct, each run on the test database
+  where said, else reasoned from the code). The deal rule (§0.207; §4.2,
+  D22's edges) keeps a deal off a site by its id, by its lift and — one
+  with no account id that the merge renamed from the name of the account
+  merged away — by its name (`toArchivedName`). But it reads the
+  survivor's deals by id alone (`dealsOn`, `noDealOn`: the first shape
+  below), and it never asks where the merge left a deal's name as it
+  was, a restore that moves no deal, while the survivor's own name, put
+  back, reaches only its deals by id (the second). So a deal with no
+  account id — saved before §0.198, or taken since by the deals POST
+  with none, as SK4's was — can still end on a site by its name, not
+  counted:
+  - **A lifted survivor goes back a site with such a deal naming it**
+    (run: the second re-check's completeness skeptic, SK4, through the
+    real deals POST, on 05's code — 200 with nothing kept, the Dock back
+    under the Plant a site, the deal naming it and no other account).
+  - **A merge that gave the survivor the name of the account merged
+    away, a site, leaves such a deal naming only that site once the
+    survivor's own name goes back** (run: the fifth cross-check's probe
+    P1, on 06's code — keptLinks 1: its by-id sibling, the deal the
+    account merged away held by id, which the merge moved to the
+    survivor, held there by the deal rule and counted; the deal by name
+    alone not counted, naming only the site, live; the same before 06).
+    Where the merge kept the survivor's own name (its probe P2), such a
+    deal stays on the survivor, counted (keptLinks 2): which name the
+    merge window picked decides. A fix would need a write the merge
+    never made.
+  - **Reasoned from the code, not run** (06's fixer): a name for the
+    survivor that is neither record's, sent through the API (no screen
+    sends one), leaves a kept deal by name alone naming no account once
+    the survivor's own name goes back; and where another account shares
+    the name of the account merged away, such deals stay on the
+    survivor, counted, though a move would not read them as on the site.
+  His answer keeps, as built, the deal rule's reach over a site's own
+  deals from before the merge (UKG's six are the kind, §2.4): the Undo
+  leaves them where they are, off the site (state §0.207). Options
+  listed back with the shapes: for the first, read the survivor's deals
+  by name too, as a move reads one (accounts.mjs `dealLifts`, D22); the
+  second needs a write the merge never made.
 - **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
   over 7e68f26):
   - The account import gives a sub-account the first account whose name
@@ -2380,17 +2596,38 @@ to add meetings. Nothing in the app adds a meeting to Google:
     it out (the survivor's Accounts-tab row counts it by company name,
     which the merge renamed). None at the census of 16 Oct 21:13 UTC, which
     found no live contact or deal naming a merged-away account, in any
-    org; any account merge since can make one. merge.mjs:245's comment
-    ("reports filter mergeArchived=false") is wrong — no report reads the
-    mark (reportQuery.js, report-deliveries.mjs) — and is corrected with
-    batch 3's merge.mjs edit (§0.206 left it: a bundle-only batch).
+    org; any account merge since can make one. merge.mjs:259's comment
+    ("reports filter mergeArchived=false"; :245 before §0.207) is wrong —
+    no report reads the mark (reportQuery.js, report-deliveries.mjs) — and
+    is corrected with batch 3's merge.mjs edit (§0.206 left it: a
+    bundle-only batch; §0.207 left it too, though its merge.mjs edit went
+    beyond the Undo — Past merges' GET, and on the merge's own path its
+    two new log fields (:170-175, :193-197), the contact merge's org-chart
+    union read from mergeUndo.js (:712-718) and five comments rewritten
+    (:161-162, :177, :208, :252-255, :618)).
   - An account merge re-parents the merged-away account's sub-accounts onto
     the survivor, and lifts the survivor to the merged-away account's parent
     when it stood under it, with no parent rule and no tier re-fit — but a
     survivor lifted to the top level is made an account, the only tier that
-    fits there, and the undo puts its tier back (§0.198); its `accountTier`
-    field (the modal's field map) is written unchecked, and the log keeps no
-    other tiers. Merging an account that has sites into a site puts sites
+    fits there, and the undo puts its tier back (§0.198) — since §0.207
+    only where the house parent rule lets it and, where the tier it gets
+    back is a site's, no deal stands on it by id but those the deal id
+    restore moves back to the account merged away (Jeff, 18 Oct: "Leave
+    such deals and count them": such a survivor stays an account, its
+    deals where they are, each counted — a site's own deals from before
+    the merge too, as built (Jeff, 18 Oct: "Ship as is, file the edge");
+    any other tier — a business unit's — goes back whatever deals stand on
+    it); its `accountTier` field (the modal's field map) is written
+    unchecked, and the log keeps no other tiers but each moved
+    sub-account's (since §0.207, for the Undo's rule). A merge into a
+    deeper descendant of the record merged away —
+    its grandchild or below — closes a loop: the record's children go
+    under the survivor (merge.mjs:236), and the survivor keeps its own
+    parent, lifted only from directly under the record merged away
+    (:249); the duplicate scan can offer such a pair, an identical name
+    read as a duplicate before any hierarchy test (duplicates.mjs
+    `classifyPair`; the merge Undo's server map, 17 Oct; read in code, not
+    run). Merging an account that has sites into a site puts sites
     under a site; merging a top-level account into a business unit puts its
     units under a unit (the server critic's probes, 11 Oct). Recommended
     (batch 3): run placeAccount for each moved child with the survivor as its
@@ -2576,6 +2813,27 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **Three things §0.207 left in its tests and comments** (its docs checks
+  and its cross-checks, 17–18 Oct; read in code): I17(b)'s count message
+  ("…the survivor's own contact counted kept",
+  merge-undo.itest.mjs:730) is what fails first under the harness entry
+  "§0.207 undo: a contact linked by id to another account than the
+  survivor …", where the contacts counted kept are two — the other
+  twin's and the record merged away's (keptLinks 2; the docs' fact-check
+  ran I17 under that mutant on the test database, on 04's code);
+  db/schema.ts:1286's comment on `merge_log.rewrites` lists `{ table,
+  column, kind, ids:[], oldValue, newValue }` alone — not §0.207's
+  `tiers` and `onSurvivor`, nor the `rows` the lift and the list
+  rewrites carried before it; and five of the batch's own comments and
+  one test title cite OPEN_ITEMS §4.7 for what it no longer holds —
+  useMerge.js:43-48, which says every list a merge or its Undo moves is
+  read again, then that SPIFF claims and Dispatch's lists are not, citing
+  §4.7 for those (the item is §4.2's); mergeUndo.js:112-113, quoting
+  "keep the survivor's current parent when the check fails", the
+  recommendation of the §4.7 item §0.207 closed; and mergeUndo.js:21-22,
+  merge.mjs:309, merge-undo.itest.mjs's header (:7-8) and I4's title, on
+  what the reverse did before, the items §0.207 struck. Recommended: each
+  with its file's next edit.
 - **A bare pin passes when a later edit repeats its line** (§0.202: the
   re-invitation check's `if (userRole !== 'Admin') {` was the text an older
   pin held for the access branch's refusal, which then passed with the

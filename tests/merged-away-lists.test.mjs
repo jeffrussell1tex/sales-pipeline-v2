@@ -5,8 +5,8 @@
 // list"; "Hide them" — merged-away accounts leave the Accounts tab and Sub-Accounts, the record kept (its Undo and the
 // links that resolve through it unchanged); "Right after 4b-2c" — a batch of its own, the Contacts tab checked for
 // the same gap with it; "Hide contacts too" — merged-away contacts leave the Contacts tab, an account's People list
-// and the contact counts, in the same batch. Not here ("Undo as its own batch next", "One cleanup batch next"): a
-// merge's Undo on screen, and the other lists, counts and pickers.
+// and the contact counts, in the same batch. Not here ("One cleanup batch next"): the other lists, counts and
+// pickers. A merge's Undo on screen is state §0.207's ("Undo as its own batch next").
 //
 // Before: a merge stored the record merged away (merge_archived, merged_into_id, archived_at), and the merge hook
 // dropped it from the screen — then read the list again, and the accounts and contacts GETs answer every row of the
@@ -376,8 +376,8 @@ test("T6 — the record is kept: both GETs answer every row of the org, narrowed
     assert.equal(load(LOAD_CONTACTS, 'setContacts', { contacts: CONTACTS }, false), 'not set', 'an answer for an org switched away from is dropped (§0.173)');
     assert.equal(count(code(read('src/App.jsx')), '\n        accounts, setAccounts,\n        contacts, setContacts,\n'), 1,
         "the app's context hands on the whole lists");
-    // The scan re-runs when the list's length changes (DuplicateScanView, ContactDuplicateScanView): a merge that marked
-    // the row instead of dropping it would leave the merged pair offered, and its second merge answers 409.
+    // The merge hook drops the row it archived at once; the scan's key — the list's length and its merged-away count
+    // (state §0.207) — moves with the drop, and again when the list read again holds the row merged away.
     const merge = code(read('src/hooks/useMerge.js'));
     order(merge, ...DROP_ACCOUNT);
     order(merge, ...DROP_CONTACT);

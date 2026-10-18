@@ -237,8 +237,11 @@ test('BULK AND MERGE: a writer that changes the owner name moves the owner id wi
     assert.ok(merge.includes("const owner = 'assignedRep' in resolved ? mergedOwnerId('assignedRep', resolved, surv, arch) : null;"));
     assert.equal(count(merge, "if (owner?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: owner.error }) };"), 2);
     assert.equal(count(merge, 'if (owner) survSet.ownerId = owner.ownerId;'), 2);
-    assert.ok(merge.includes("if ('accountOwner' in (log.resolvedFields || {}) && 'ownerId' in snapS) restore.ownerId = snapS.ownerId ?? null;"), 'an account undo');
-    assert.ok(merge.includes("if ('assignedRep' in (log.resolvedFields || {}) && 'ownerId' in snapS) restore.ownerId = snapS.ownerId ?? null;"), 'a contact undo');
+    // An undo (state §0.207, src/utils/mergeUndo.js survivorRestore): the owner id back with the owner name, from a
+    // snapshot that holds one — an account's owner, a contact's rep.
+    const mu = read('src/utils/mergeUndo.js');
+    assert.ok(mu.includes("    const ownerKey = entityType === 'contact' ? 'assignedRep' : 'accountOwner';"), 'a contact undo: its rep');
+    assert.ok(mu.includes("    if (ownerKey in set && 'ownerId' in snap) set.ownerId = snap.ownerId ?? null;"), 'an account undo and a contact undo');
 });
 
 test('DIALOG: the number and letter shortcuts wait while the dialog is open', () => {

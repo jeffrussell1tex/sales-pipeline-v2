@@ -594,8 +594,8 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     // A merged-away account leaves the tab (state §0.206 — Jeff, 16 Oct: "Hide them"): every view, count, filter,
     // Select all and Export read this one list. The app's list keeps it — a link to it names its survivor, a name
     // only it holds, typed in the account picker, is refused naming its survivor (AccountPicker.jsx), and the
-    // server's merge reverse un-archives it — no screen offers an Undo yet (Jeff: "Undo as its own batch next";
-    // guide §18b99).
+    // merge's Undo — the toast after a merge, and Past merges on the Find & merge page (state §0.207) —
+    // un-archives it, and the list read again lists it (guide §18b99).
     const visibleAccounts = useMemo(() => {
         const live = unarchived(allVisibleAccounts);
         return scope === 'mine' ? live.filter(r => !r.ownerId || r.ownerId === currentUserId) : live;

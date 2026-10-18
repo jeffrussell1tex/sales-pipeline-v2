@@ -532,7 +532,7 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(g.includes("{ name: 'opportunities', table: opportunities, column: 'accountId', col: opportunities.accountId },"), 'snapshotted for the undo');
     assert.ok(g.includes('ops.push(db.update(opportunities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));'));
     // F3: the deals' NAME rewrite (and its snapshot) only touches the deals of the two accounts merged, or of none
-    assert.ok(g.includes("import { eq, and, or, isNull, inArray } from 'drizzle-orm';"));
+    assert.ok(g.includes("import { eq, and, or, isNull, inArray, desc, sql, getTableColumns } from 'drizzle-orm';"));
     assert.ok(g.includes('const dealsOfMerge = () => or(isNull(opportunities.accountId), inArray(opportunities.accountId, [archivedId, survivorId]));'), "a twin's deals are not the merge's: their id names the twin");
     assert.ok(g.includes("{ name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account, scope: dealsOfMerge },"));
     assert.ok(g.includes('const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId), ...(t.scope ? [t.scope()] : [])));'), 'the snapshot, the same deals: the undo puts back exactly what was renamed');
@@ -552,21 +552,28 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(g.includes("if (lifted.length) rewrites.push({ table: 'opportunities', column: 'accountId', kind: 'lift', ids: lifted.map((d) => d.id), rows: lifted.map((d) => ({ id: d.id, old: { accountId: d.accountId ?? null, account: d.account ?? null, site: d.site ?? null } })) });"), 'logged as they were, after every other rewrite');
     const liftOp = g.indexOf('if (lifted.length) ops.push(db.update(opportunities).set({ accountId: up.id, account: up.name, site: survName, updatedAt: now }).where(and(inArray(opportunities.id, lifted.map((d) => d.id)), eq(opportunities.orgId, orgId))));');
     assert.ok(liftOp > g.indexOf('ops.push(db.update(opportunities).set({ account: survName') && liftOp < g.indexOf('await db.batch(ops);'), 'after the id and name rewrites, in the same batch');
-    const undoLift = between(g, 'async function reverseAccountMerge(', '// Un-archive the loser.');
-    assert.ok(undoLift.includes("if (rw.kind === 'lift') {\n            for (const row of (rw.rows || [])) ops.push(db.update(table).set({ accountId: row.old?.accountId ?? null, account: row.old?.account ?? null, site: row.old?.site ?? null }).where(and(eq(table.id, row.id), eq(table.orgId, orgId))));\n            continue;\n        }"), 'the undo: each deal back to its own account, id and Site Name, in this org');
-    // H6: a survivor lifted to the top level is an account; the undo puts its stored tier back
+    // the undo (state §0.207): each deal back to its own account, id and Site Name, in this org — while it is still where
+    // the lift put it; one moved up from the account merged away under that account's name as it stands (C2)
+    const undoLift = between(g, 'const accountRestores = (log, orgId, now, ops, restores, subs) => {', 'const contactRestores = ');
+    assert.ok(undoLift.includes("        if (rw.kind === 'lift') {\n            for (const row of (rw.rows || [])) {\n                const fromArchived = row.old?.accountId === log.archivedId;\n"), 'the undo: each deal moved up');
+    assert.ok(undoLift.includes("ops.push(db.update(table).set({ accountId: row.old?.accountId ?? null, account: fromArchived ? nameNow(log.archivedId, orgId) : (row.old?.account ?? null), site: row.old?.site ?? null, updatedAt: now })\n                    .where(and(eq(table.id, row.id), eq(table.orgId, orgId), eq(table.accountId, upId), eq(table.site, log.survivorName), notASite(log.archivedId, orgId)))"), 'back to its own account, id and Site Name, in this org, while it is still where the lift put it and the account merged away is no site (Jeff, 18 Oct)');
+    // H6: a survivor lifted to the top level is an account; the undo puts its stored tier back where the house parent
+    // rule lets it and no deal stands on it (mergeUndo.js undoPlaces — state §0.207; Jeff, 18 Oct)
     const top = g.indexOf("        if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';\n");
     assert.ok(top > g.indexOf('if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;') && top < g.indexOf('ops.push(db.update(accounts).set(survSet)'), "H6: lifted to the top level, the survivor is an account — the deals it takes are not left on a site");
-    const back = g.indexOf("    if (snapS.parentAccountId === log.archivedId && !(log.archivedSnapshot || {}).parentAccountId && 'accountTier' in snapS) restore.accountTier = snapS.accountTier ?? null;\n");
-    assert.ok(back > g.indexOf('const restore = { updatedAt: now, name: snapS.name, parentAccountId: snapS.parentAccountId ?? null };') && back < g.indexOf('ops.push(db.update(accounts).set(restore)'), 'and its undo puts the stored tier back');
+    const mu = read('src/utils/mergeUndo.js');
+    const back = mu.indexOf("            if (!arch.parentAccountId) wrote.accountTier = 'account';\n");
+    assert.ok(back > mu.indexOf('        if (snap.parentAccountId === log.archivedId) {') && back < mu.indexOf('    const set = {}, keptFields = [];'), 'and its undo puts the stored tier back (survivorRestore: what the merge wrote, while it still holds it)');
     const u = read('src/hooks/useMerge.js');
-    assert.ok(u.includes('const { setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser } = deps || {};'));
+    assert.ok(u.includes('const { setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser } = deps || {};'));
     assert.ok(u.includes("try { loadOpportunities?.(() => {}); } catch (e) { console.error('Deal refresh failed after merge:', e); }"));
-    const merge = between(u, 'const handleMerge = async (payload) => {', 'const reverseMerge = async');
-    assert.ok(merge.includes('refreshAccounts();\n            refreshOpportunities();'), 'after a merge');
-    const undo = between(u, 'const reverseMerge = async (mergeLogId) => {', 'const findContactDuplicates');
-    assert.ok(undo.includes('refreshAccounts();\n            refreshOpportunities();'), 'after its undo');
-    assert.ok(read('src/App.jsx').includes('useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, loadOpportunities, addAudit, currentUser: { name: currentUser } });'));
+    const merge = between(u, 'const handleMerge = async (payload) => {', 'const findContactDuplicates');
+    assert.ok(merge.includes("            refreshAfter('account');\n"), 'after a merge');
+    const undo = between(u, 'const undoMerge = async (mergeLogId, entityType, name) => {', 'const offerMergeUndo');
+    assert.ok(undo.includes('refreshAfter(entityType);'), 'after its undo');
+    const after = between(u, 'const refreshAfter = (entityType) => {', '\n    };\n');
+    assert.ok(after.includes("        if (entityType === 'account') refreshAccounts();\n") && after.includes('        refreshOpportunities();\n'), 'the accounts and the deals among the lists read again');
+    assert.ok(read('src/App.jsx').includes('useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });'));
 });
 
 test("H4: the Kanban's stage drag sends the stage, its date and its history — never the whole row its list holds, which wrote a list loaded before another session's save back (a D22 lift undone)", () => {
