@@ -309,6 +309,33 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        §0.207) and one of AccountRail.jsx. Its
        map, what each place reads, and what is filed beside it: §4.7, "The
        cleanup batch's map".
+       Mapped and designed 18 Oct (read only, over 7ee14fe: eight mappers, a
+       designer, three critics and a reviser; the census, SELECT, counts
+       only, 21:16 UTC: only UKG holds merged-away rows — 3 accounts and 5
+       contacts — no activity, task, contact or deal names one by id, and
+       the one API key in use is another org's, which holds none). Jeff, 18
+       Oct (every answer the recommended one): "Three steps" — §0.208, THE
+       GUARD class-wide (tests only; nothing on screen changes), §0.209,
+       every screen, and §0.210, the public API, the quote email and the
+       numbers, all before the member profile page; "Survivor shows them" —
+       the surviving record lists what a merge left naming the record merged
+       into it (a document still linked to it, a person still linked to it
+       by id, an activity naming the merged-away contact among its people),
+       nothing in the data moved and an Undo taking them off again (told:
+       Unlink there unlinks the old record too, and an Undo does not bring
+       that link back); "One row to the survivor" — the top search, for a
+       name only a merged-away record has, lists the survivor with "“X” was
+       merged into this account"; "Leave them out" — the public API's
+       accounts and contacts, its totals counting only what it lists; "Count
+       what you see" — the merge windows and the delete warning count live
+       records, deals by their account link; "Grey it out" — "View accounts"
+       in Settings reads "Not available yet", making it work filed as its
+       own feature; "Fix both now" — the top search's "N open deals" and
+       Reports → Activity History → Account history take deals by the
+       account link, not the name (both by name only for an old deal with
+       none); "Approve; fix the list" — the design's ten defaults, and the
+       guide's gate list names all eight checks, the `Tests` run gaining
+       check:fnscope, with §0.208.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -2336,9 +2363,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
     predicted sub-account count (MergeReviewModal.jsx:63 — what the merge
     re-parents, merged-away rows included, so it can read more than the
     Sub-Accounts lists show); a segment's "View accounts" link
-    (AccountSegmentsDetail.jsx:230 — the tab it opens can list fewer than
-    the card counts, by the merged-away top-level accounts the card
-    counts); Settings → Buyer Personas' contact counts, and its Delete,
+    (AccountSegmentsDetail.jsx:230 — filed believing it opened the
+    Accounts tab on a list shorter than the card counts; it opens nothing:
+    since 85cc230, 7 May, `setAccountsDeepFilter` reaches no screen — it is
+    in neither App.jsx nor AppContext.jsx, so the menu's own guard skips
+    it — and the Accounts tab reads no deep filter; the cleanup batch's
+    maps, 18 Oct; Jeff: "Grey it out"); Settings → Buyer Personas' contact
+    counts, and its Delete,
     disabled while any contact holds the persona
     (BuyerPersonasDetail.jsx:98-104, :250) — a merged-away contact keeps a
     persona undeletable, and since §0.206 is on no Contacts-tab list to
@@ -2346,8 +2377,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
     which list merged-away rows with no field that tells them apart
     (public-api.mjs:246+).
   - Filed with it, not put to Jeff: an industry's "View accounts" link,
-    the segment's twin (IndustriesDetail.jsx:283), which can likewise open
-    a tab listing fewer than its card counts; three account lookups by
+    the segment's twin (IndustriesDetail.jsx:283), likewise dead since
+    85cc230; three account lookups by
     name in Reports, each of which can take a merged-away twin (the maps,
     16 Oct; raised for filing by the re-check) — its industry mix
     (`acctByName`, ReportsTab.jsx:3945, the later of two same-named rows),
