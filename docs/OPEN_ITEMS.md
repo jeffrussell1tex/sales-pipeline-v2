@@ -467,10 +467,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Before §0.207 ships: the census of the merge logs still open; when it
-  ships, reload every app tab opened before it** (§0.207's design, as
-  amended — the census is its gate order's step 4, not run with the
-  commit). The census is two SELECTs — read only, counts only, scoped to
+- **The census of the merge logs: its two stop counts ran before the
+  forty-third ship; its third count, for Jeff and not a stop, was not
+  run** (§0.207's design, as amended — the census was its gate order's
+  step 4; run 18 Oct, 18:56:02 UTC, SELECT, counts only: UKG holds 10 logs
+  still 'merged' and no other org any, and every column of the second
+  count is 0, so the ship went ahead — the state header's forty-third ship
+  record). The census is two SELECTs — read only, counts only, scoped to
   `merge_log`, each naming its host in its first line of output (the
   ad-hoc DB script): the logs still 'merged', by org; and, among their
   rewrites, by org, the id and name rewrites with no `newValue`, the list
@@ -497,55 +500,55 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   none) and holds such a deal — at most the Undos in which the deal rule
   would leave a deal where it is rather than put it on a site (Jeff, 18
   Oct: "Leave such deals and count them"; UKG's 6 deals on sites, §2.4).
-  Then, after the deploy, a tab opened before it and not reloaded keeps
-  the old screens: no Undo after a merge and no Past merges, the merge
-  screens still saying merges are fully reversible, its lists with no
-  overtaken-answer guard, and its merge hook's own `merge` audit row
-  refused by the audit-log POST (403; read in code — not shown on screen;
-  the server's `account.merged` / `contact.merged` row is written as
-  before). The ship folds the reload into the item below.
-- **Reload every app tab opened before the forty-second ship** (Deployed:
-  dev 18:32 UTC, prod 18:36 UTC, 17 Oct — it covers the forty-first's, 17
-  Oct 13:06 UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16
-  Oct 03:28 UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the
-  thirty-seventh's, 15 Oct 01:30 UTC, the thirty-sixth's, 14 Oct 12:59
-  UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older tab keeps
-  the screens from before §0.199, §0.200, §0.201, §0.202, §0.203, §0.204,
-  §0.205 and §0.206 — the task rail's completion, a New Job's copied
-  links, the task popups, the Technicians form's login picker, the member
-  profile page's save, the Sales Manager tab's quota board, claims list,
-  SPIFF board and forecast ledger, a saved report's Pin, the backup page's
-  import window, the Fiscal year page, and the Accounts and Contacts tabs'
-  lists among them. A tab opened before its site's §0.206 deploy and not
-  reloaded keeps the old lists — merged-away accounts and contacts listed
-  — and there a Select all + Delete takes the listed merged-away records
-  with the rest. Contacts go by the one-request clear when it is an
-  Admin's, the list holds every contact of the org (All, no search) and
-  none is kept for an open deal; otherwise one request each. Accounts (an
-  Admin's) go one request each. Their merges' Undo is then refused
-  (§0.207: "… was deleted after this merge …"), and the delete's Undo
-  brings them back as live records — their merges' Undo refused again,
-  "… is no longer merged into …" (each
-  re-post carries its merge mark, but neither POST stores it — `sanitize`
-  in accounts.mjs and contacts.mjs has no merge field; §4.2 files the
-  accounts' half). An older tab's Save quotas answers 200 and stores no quota (the
-  server keeps the stored figures), and its claim Approve still re-sends
-  the whole claim as loaded (a stale copy can put back what another save
-  changed — what §0.204's Approve no longer does). Its forecast call
-  re-sends the rep's whole cached row — when the cached team is no longer
-  the rep's stored team and has been deleted since, it now answers 404
-  "That team is not in your organization — pick one from the list.", its
-  call not stored (a deleted team the rep still holds is taken, as
-  before), and a team or a name changed since is put back as before
-  (never the pins: the server keeps them); its Pin from a window whose
-  pin list still holds a report unpinned in another window and deleted
+- **Reload every app tab opened before the forty-third ship** (Deployed: dev
+  20:48 UTC, prod 20:51 UTC, 18 Oct — it covers the forty-second's, 17 Oct
+  18:36 UTC, the forty-first's, 17 Oct 13:06 UTC, the fortieth's, 16 Oct
+  15:03 UTC, the thirty-ninth's, 16 Oct 03:28 UTC, the thirty-eighth's, 15
+  Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the thirty-sixth's,
+  14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older
+  tab keeps the screens from before §0.199, §0.200, §0.201, §0.202, §0.203,
+  §0.204, §0.205, §0.206 and §0.207 — the task rail's completion, a New
+  Job's copied links, the task popups, the Technicians form's login picker,
+  the member profile page's save, the Sales Manager tab's quota board,
+  claims list, SPIFF board and forecast ledger, a saved report's Pin, the
+  backup page's import window, the Fiscal year page, and the Accounts and
+  Contacts tabs' lists among them. A tab opened before its site's §0.207
+  deploy and not reloaded keeps the old screens: no Undo after a merge and
+  no Past merges, the merge screens still saying merges are fully
+  reversible, its lists with no overtaken-answer guard, and its merge hook's
+  own `merge` audit row refused by the audit-log POST (403; read in code —
+  not shown on screen; the server's `account.merged` / `contact.merged` row
+  is written as before). A tab opened before its site's §0.206 deploy and
+  not reloaded keeps the old lists — merged-away accounts and contacts
+  listed — and there a Select all + Delete takes the listed merged-away
+  records with the rest. Contacts go by the one-request clear when it is an
+  Admin's, the list holds every contact of the org (All, no search) and none
+  is kept for an open deal; otherwise one request each. Accounts (an
+  Admin's) go one request each. Their merges' Undo is then refused (§0.207:
+  "… was deleted after this merge …"), and the delete's Undo brings them
+  back as live records — their merges' Undo refused again, "… is no longer
+  merged into …" (each re-post carries its merge mark, but neither POST
+  stores it — `sanitize` in accounts.mjs and contacts.mjs has no merge
+  field; §4.2 files the accounts' half). An older tab's Save quotas answers
+  200 and stores no quota (the server keeps the stored figures), and its
+  claim Approve still re-sends the whole claim as loaded (a stale copy can
+  put back what another save changed — what §0.204's Approve no longer
+  does). Its forecast call re-sends the rep's whole cached row — when the
+  cached team is no longer the rep's stored team and has been deleted since,
+  it now answers 404 "That team is not in your organization — pick one from
+  the list.", its call not stored (a deleted team the rep still holds is
+  taken, as before), and a team or a name changed since is put back as
+  before (never the pins: the server keeps them); its Pin from a window
+  whose pin list still holds a report unpinned in another window and deleted
   since is refused, with no re-read, and so is every later Pin and Unpin
-  there until a reload — but an Unpin of that report itself, which drops
-  it (a stale list that names only live reports is taken, and puts back
-  the ones unpinned elsewhere, as before); its import window closes on an
-  accepted restore's answer and reads only "Import failed" on a refused
-  one, so nothing the restore says is read. Reload, then strike this.
-- Nothing else open. The forty-second ship (17 Oct, 18:36 UTC: §0.206, a
+  there until a reload — but an Unpin of that report itself, which drops it
+  (a stale list that names only live reports is taken, and puts back the
+  ones unpinned elsewhere, as before); its import window closes on an
+  accepted restore's answer and reads only "Import failed" on a refused one,
+  so nothing the restore says is read. Reload, then strike this.
+- Nothing else open. The forty-third ship (18 Oct, 20:51 UTC: §0.207, a
+  merge's Undo on screen — the merge Undo batch; dev and prod in one
+  sitting), the forty-second (17 Oct, 18:36 UTC: §0.206, a
   merged-away account or contact leaves the lists the screens draw — the
   merged-away batch; dev and prod in one sitting; Jeff's read-only look
   at UKG after it is recorded on state §0.206's Verified line — the
