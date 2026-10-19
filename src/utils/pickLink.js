@@ -218,3 +218,88 @@ export function dealText(o) {
 export function dealSubline(o) {
     return [o?.account, o?.stage].filter(Boolean).join(' · ');
 }
+
+// ── The cleanup batch's screens (state §0.209; guide §18b101) ──────────────────────────────
+// A merged-away record leaves every list a screen draws; what still names it is shown on the
+// record it was merged into. Nothing here writes: an Undo un-archives the record, and each
+// answer below is worked out again from the lists it reloads.
+
+// The ids a record stands for (state §0.209): its own, and every record of `records` merged
+// into it — directly or through later merges (survivorOf, MERGE_HOPS) — so a screen that finds
+// what names a record also finds what still names one merged into it (a merge moves no
+// activity's contactIds, task's chips, document's link or contact's accountId — OPEN_ITEMS
+// §4.7). A record merged away stands for itself alone (survivorOf answers only a live record,
+// so no row names one merged away). An Undo un-archives the record merged away: it stands for
+// itself again, not the survivor. A Set of ids; empty for no record.
+export function standsFor(record, records) {
+    if (!record) return new Set();
+    const own = idOf(record.id);
+    const out = new Set([own]);
+    const list = Array.isArray(records) ? records.filter(Boolean) : [];
+    for (const r of list) {
+        if (isMergeArchived(r) && idOf(survivorOf(r, list)?.id) === own) out.add(idOf(r.id));
+    }
+    return out;
+}
+
+// A name typed in full that only records merged into another have (resolveLink's 'merged',
+// over the whole list), for a box that lists the live ones (state §0.209): { text, name, into }
+// — `text` as typed (trimmed); `name` the merged-away record's own name when one has it, else
+// the text; `into` the one live record of `records` they were merged into, null when the list
+// holds none (a rep's scope) or more than one. null when a live record has the name, or none.
+export function mergedInto(text, records, labelOf = (r) => r.name) {
+    const list = Array.isArray(records) ? records.filter(Boolean) : [];
+    const r = resolveLink({ text, records: list, labelOf });
+    if (r.refusal !== 'merged') return null;
+    const survivors = new Map(r.matches.map((m) => survivorOf(m, list)).filter(Boolean).map((s) => [idOf(s.id), s]));
+    return {
+        text: r.text,
+        name: r.matches.length === 1 ? String(labelOf(r.matches[0]) ?? '') : r.text,
+        into: survivors.size === 1 ? [...survivors.values()][0] : null,
+    };
+}
+
+// The words of the header search's merged line (state §0.209): with `into`, "“<name>” was
+// merged into this <noun>"; without, linkRefusal's "“<name>” was merged into another <noun>."
+export function mergedSearchWords(line, noun = 'account') {
+    if (!line) return '';
+    const name = String(line.name ?? '').trim();
+    return line.into ? `“${name}” was merged into this ${noun}` : linkRefusal({ refusal: 'merged', text: name, into: '' }, { noun });
+}
+
+// The account a deal stands on, for a screen that shows it (state §0.209): its accountId's —
+// one merged into another, the account it was merged into when the list holds it live
+// (survivorOf), else none — and, for a deal with no account id, the LATER live account of its
+// name (lower case, as Reports reads names; the tie the report engine and the industry chart
+// use). An id the list does not hold: none.
+export function accountOfDeal(deal, accounts) {
+    if (!deal) return null;
+    const list = Array.isArray(accounts) ? accounts.filter(Boolean) : [];
+    const id = idOf(deal.accountId);
+    if (id) {
+        const held = list.find((a) => idOf(a.id) === id) || null;
+        return held && isMergeArchived(held) ? survivorOf(held, list) : held;
+    }
+    const name = String(deal.account ?? '').toLowerCase();
+    const named = unarchived(list).filter((a) => String(a.name ?? '').toLowerCase() === name);
+    return named.length ? named[named.length - 1] : null;
+}
+
+// What an account <select> or chip shows for the link it holds when the options (the live
+// accounts) leave it out — itself, disabled (guide §16, §18b24.3): { label, note }. One merged
+// away: "<name> (merged into <survivor>)" and the note naming what to pick; one the list does
+// not hold (out of a rep's scope, or deleted): HIDDEN_ACCOUNT, no note. null when the options
+// hold it, or for no link.
+export function heldAccountOption(id, accounts) {
+    const key = idOf(id);
+    if (!key) return null;
+    const list = Array.isArray(accounts) ? accounts.filter(Boolean) : [];
+    const held = list.find((a) => idOf(a.id) === key);
+    if (!held) return { label: HIDDEN_ACCOUNT, note: '' };
+    if (!isMergeArchived(held)) return null;
+    const name = String(held.name ?? '');
+    const into = survivorOf(held, list);
+    return into
+        ? { label: `${name} (merged into ${into.name})`, note: `“${name}” was merged into “${into.name}” — pick “${into.name}”, or “— Not linked —”, and save.` }
+        : { label: `${name} (merged into another account)`, note: `“${name}” was merged into another account — pick another, or “— Not linked —”, and save.` };
+}

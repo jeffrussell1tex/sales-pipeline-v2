@@ -467,9 +467,9 @@ test("a field that waits for typing waits for a word: the header's search and th
 
 test("the header's search, the quick log, the deal window's mentions, Reports, Tasks and Dispatch ask the matcher — the grouped boxes at the sizes Jeff kept", () => {
     const h = read('src/components/layout/AppHeader.jsx');
-    assert.ok(h.includes("const { shown: mA, more: moreA } = matchSearch(accounts, globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });"),
+    assert.ok(h.includes("const { shown: mA, more: moreA } = matchSearch(unarchived(accounts), globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });"),
         'five a group (Jeff, 9 Oct, told the box scrolls: "Keep 5 per group")');
-    assert.ok(h.includes("const { shown: mC, more: moreC } = matchSearch(contacts, globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });"));
+    assert.ok(h.includes("const { shown: mC, more: moreC } = matchSearch(unarchived(contacts), globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });"), 'the live contacts (state §0.209)');
     assert.ok(h.includes('const { shown: mO, more: moreO } = matchSearch(opportunities, globalSearch, { text: o => o.opportunityName || o.account, also: o => [o.account], limit: 5 });'));
     const ql = read('src/components/layout/QuickLogFab.jsx');
     assert.ok(ql.includes("setQuickLogContactResults(rankMatches(unarchived(contacts), q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));"), 'every match kept, best first — of the contacts not merged into another (D12)');

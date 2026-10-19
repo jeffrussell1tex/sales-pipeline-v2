@@ -12,6 +12,7 @@ import { activeDealsOf } from '../../utils/contactDeals.js';
 import DealPrepPicker from './DealPrepPicker';
 import HiddenLink from './HiddenLink';
 import { HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { standsFor } from '../../utils/pickLink.js';
 import { NO_LINK, contactSeed, contactCompany, linkedAccount, contactLogContext, outOfList } from '../../utils/railLinks.js';
 import { leaveOut } from '../../utils/leaveOut.js';
 
@@ -264,11 +265,15 @@ export default function ContactRail() {
     // The contact's open deals (state §0.176) — the Contacts tab's badge counts the same list.
     const openOpps = activeDealsOf(contact, opportunities);
 
-    // Activities linked to this contact — by direct contactId or via involved opportunities
+    // Activities linked to this contact — by direct contactId or via involved opportunities — or to a contact merged
+    // into it (state §0.209): a contact merge moves an activity's contactId, not its contactIds (OPEN_ITEMS §4.7), so
+    // one naming the merged-away contact further down its list is listed here; an Undo, the lists read again, takes
+    // it off.
+    const ownIds = standsFor(contact, contacts);
     const contactActivities = (activities || []).filter(a => {
         if (!contact) return false;
-        if (a.contactId && a.contactId === contact.id) return true;
-        if (Array.isArray(a.contactIds) && a.contactIds.includes(contact.id)) return true;
+        if (a.contactId && ownIds.has(a.contactId)) return true;
+        if (Array.isArray(a.contactIds) && a.contactIds.some(id => ownIds.has(id))) return true;
         const involvedOppIds = openOpps.map(o => o.id);
         return a.opportunityId && involvedOppIds.includes(a.opportunityId);
     }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));

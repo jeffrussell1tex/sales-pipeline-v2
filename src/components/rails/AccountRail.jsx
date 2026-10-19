@@ -11,6 +11,7 @@ import AccountPicker from './AccountPicker';
 import HiddenLink from './HiddenLink';
 import { parentChoices, parentNote, parentLeftOut, typedParentRefusal } from '../../utils/accountParent.js';
 import { resolveLink, linkRefusal, unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { standsFor } from '../../utils/pickLink.js';
 
 // A deal's close date as "Nov 30, 2026"; a value that is not a date shows as it is
 // written. The row read closeDate, which a deal does not have — its close date is
@@ -267,9 +268,12 @@ export default function AccountRail() {
     const parentIds = useMemo(() => parentChoices(accounts, selfId, accountsById), [accounts, accountsById, selfId]);
 
     // Prefer the real accountId link; fall back to the legacy company-name match for
-    // contacts not yet migrated/backfilled. Keeps the People list correct mid-migration.
+    // contacts not yet migrated/backfilled. Keeps the People list correct mid-migration. A contact linked by id to an
+    // account merged into this one is this one's too (state §0.209): an account merge renames contacts' company, not
+    // their accountId (OPEN_ITEMS §4.7); an Undo, the lists read again, gives it back.
+    const ownAccountIds = standsFor(account, accounts);
     const accountContacts = (contacts || []).filter(c =>
-        c.accountId ? c.accountId === account?.id : (c.company === account?.name)
+        c.accountId ? ownAccountIds.has(c.accountId) : (c.company === account?.name)
     );
     // The People list and its count (state §0.206 — "Hide contacts too"): a contact merged away is not listed.
     // The Activity tab below keeps the whole list — an activity's contacts still name a merged-away contact
@@ -285,7 +289,8 @@ export default function AccountRail() {
 
     // Activities that roll up to this account, via ANY of:
     //   - a direct accountId link (the Email/Call quick-log writes this)
-    //   - a contact that belongs to this company (same set as the People tab)
+    //   - a contact of this account (accountContacts: the People list's, one merged away, and one linked by id to
+    //     an account merged into this one — state §0.209; OPEN_ITEMS §4.7)
     //   - any opportunity belonging to this account (open OR closed)
     const accountActivities = (() => {
         if (!account) return [];

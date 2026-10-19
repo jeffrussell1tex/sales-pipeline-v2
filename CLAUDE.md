@@ -183,12 +183,14 @@ One commit per verified batch; doc patch in the same commit.
   handed to, fails THE GUARD (tests/merged-away-lists.test.mjs) unless it
   is a shape the guard names or is named with its reason; App.jsx's own
   reads are named, only the two list hooks fetch the lists, and utils are
-  not scanned. Not yet:
-  the header search, Reports, Home's "# of accounts", Settings' counts and a
-  segment's "View accounts" link, the meeting prep panel's contacts, the
-  merge window's predicted sub-account count, the public API's contacts and
-  four pickers — the cleanup batch, next (OPEN_ITEMS §1;
-  guide §18b91, §18b99).
+  not scanned. Since §0.209 (guide §18b101) every screen lists and offers
+  only live records; the record a merge kept shows what still names the
+  one merged into it (`standsFor`); a name only a merged-away record has
+  names its survivor (`mergedInto`); a held link the options leave out
+  shows as itself (`heldAccountOption`); a deal's account is its link
+  (`accountOfDeal`). Not yet: "# of accounts", Settings' counts and its
+  "View accounts" items, the merge windows' counts, the public API and the
+  quote email — §0.210, next (OPEN_ITEMS §1; guide §18b99).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

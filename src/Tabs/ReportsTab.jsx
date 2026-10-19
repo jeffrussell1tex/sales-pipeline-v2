@@ -21,6 +21,7 @@ import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 import { matchSearch } from '../utils/searchMatch.js';
+import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
 // The report builder's query engine and its chart (state §0.133): the preview
 // and an opened saved report are the same runReport() over the tab's scoped
 // sets, drawn by the same component.
@@ -5076,7 +5077,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     // ── Access-controlled account list ────────────────────────
     const visibleAccounts = React.useMemo(() => {
-        const all = accounts || [];
+        // The live accounts (state §0.209): one merged into another is listed nowhere.
+        const all = unarchived(accounts);
         if (seesAllRecords) return all;
         // Rep: only accounts they own or are on the team for
         const myTeam = (() => {
@@ -5093,7 +5095,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     // ── Access-controlled contact list ────────────────────────
     const visibleContacts = React.useMemo(() => {
-        const all = contacts || [];
+        // The live contacts (state §0.209): one merged into another is listed nowhere.
+        const all = unarchived(contacts);
         if (seesAllRecords) return all;
         const myTeam = (() => {
             const me = (settings?.users || []).find(u => u.name === currentUserName);
@@ -5131,9 +5134,12 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const accName = (selectedAccount.name || '').toLowerCase();
         const events = [];
 
-        // Build set of opp IDs for this account (activities/tasks link via opportunityId)
+        // Build set of opp IDs for this account (activities/tasks link via opportunityId): a deal by the account it
+        // is linked to — this one, or one merged into it — and by name only for an old deal with no link (state
+        // §0.209; Jeff, 18 Oct: "Fix both now"). UKG's two "Shell - Port Allen" each read their own.
+        const accIds = standsFor(selectedAccount, accounts);
         const accOppsAll = (opportunities || []).filter(o =>
-            (o.account || o.accountName || '').toLowerCase() === accName
+            o.accountId ? accIds.has(o.accountId) : (o.account || o.accountName || '').toLowerCase() === accName
         );
         const accOppIds = new Set(accOppsAll.map(o => o.id));
 
@@ -5207,25 +5213,28 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         return events
             .filter(e => inPeriod(e.date))
             .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    }, [selectedAccount, activities, tasks, opportunities, period, periodCutoff]);
+    }, [selectedAccount, activities, tasks, opportunities, accounts, period, periodCutoff]);
 
     // ── Build event feed for selected contact ─────────────────
     const contactEvents = React.useMemo(() => {
         if (!selectedContact) return [];
-        const cId = selectedContact.id;
+        // Every contact merged into this one too (state §0.209): a contact merge moves activities' and tasks' contactId,
+        // not their contactIds or chips (OPEN_ITEMS §4.7), so what still names the merged-away contact is this one's
+        // history; an Undo, the lists read again, takes it off.
+        const cIds = [...standsFor(selectedContact, contacts)];
         const events = [];
 
         // Opps this contact is linked to
         const conOppsAll = (opportunities || []).filter(o => {
             const ids = Array.isArray(o.contactIds) ? o.contactIds : [];
-            return ids.includes(cId);
+            return ids.some(id => cIds.includes(id));
         });
         const conOppIds = new Set(conOppsAll.map(o => o.id));
 
         // Activities: linked via opportunityId on a contact opp, or directly by contactId/name/contactSearch
         (activities || []).forEach(a => {
             const linkedByOpp  = a.opportunityId && conOppIds.has(a.opportunityId);
-            if (!linkedToContact(a, cId, conOppIds)) return;
+            if (!cIds.some(id => linkedToContact(a, id, conOppIds))) return;
             const opp = linkedByOpp ? conOppsAll.find(o => o.id === a.opportunityId) : null;
             events.push({
                 id: 'act_' + a.id,
@@ -5241,7 +5250,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
         // Tasks: linked via opportunityId on a contact opp, or directly
         (tasks || []).forEach(t => {
-            if (!linkedToContact(t, cId, conOppIds)) return;
+            if (!cIds.some(id => linkedToContact(t, id, conOppIds))) return;
             events.push({
                 id: 'task_' + t.id,
                 date: taskDay(t),
@@ -5268,7 +5277,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         return events
             .filter(e => inPeriod(e.date))
             .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    }, [selectedContact, activities, tasks, opportunities, period, periodCutoff]);
+    }, [selectedContact, activities, tasks, opportunities, contacts, period, periodCutoff]);
 
     // ── KPIs ───────────────────────────────────────────────────
     const buildKpis = (events, oppsForEntity) => {
@@ -5290,14 +5299,18 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const accOpps = React.useMemo(() => {
         if (!selectedAccount) return [];
         const name = selectedAccount.name || '';
-        return (opportunities||[]).filter(o => (o.account||o.accountName||'').toLowerCase() === name.toLowerCase() && inPeriod(o.createdAt||o.closeDate||''));
-    }, [selectedAccount, opportunities, period, periodCutoff]);
+        // By the deal's account link — this account, or one merged into it — and by name only for an old deal with none
+        // (state §0.209).
+        const oppAccIds = standsFor(selectedAccount, accounts);
+        return (opportunities||[]).filter(o => (o.accountId ? oppAccIds.has(o.accountId) : (o.account||o.accountName||'').toLowerCase() === name.toLowerCase()) && inPeriod(o.createdAt||o.closeDate||''));
+    }, [selectedAccount, opportunities, accounts, period, periodCutoff]);
 
     const conOpps = React.useMemo(() => {
         if (!selectedContact) return [];
-        const cId = selectedContact.id;
-        return (opportunities||[]).filter(o => (Array.isArray(o.contactIds) ? o.contactIds.includes(cId) : false) && inPeriod(o.createdAt||o.closeDate||''));
-    }, [selectedContact, opportunities, period, periodCutoff]);
+        // Its deals and those naming a contact merged into it (state §0.209).
+        const conIds = standsFor(selectedContact, contacts);
+        return (opportunities||[]).filter(o => (Array.isArray(o.contactIds) ? o.contactIds.some(id => conIds.has(id)) : false) && inPeriod(o.createdAt||o.closeDate||''));
+    }, [selectedContact, opportunities, contacts, period, periodCutoff]);
 
     // ── Filter events by showFilter ────────────────────────────
     const filterEvents = (events) => {
@@ -5839,7 +5852,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 const { shown: shownOpps, more: oppsMore } = matchSearch(visibleOpps, oppSearch, { text: o => `${o.account || ''} ${o.opportunityName || o.name || ''}` });
 
                 const selectedOpp = visibleOpps.find(o => o.id === selectedOppId) || null;
-                const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;
+                // The deal's own account, by its link — one merged into another as the account it was merged into — and, for an
+                // old deal with none, the later live account of its name (state §0.209; pickLink.js accountOfDeal).
+                const selectedAccount = selectedOpp ? accountOfDeal(selectedOpp, accounts) : null;
 
                 // Stage journey from opportunity data
                 const funnelStages = (settings?.funnelStages?.length ? settings.funnelStages : openStagesOf(settings).map(name => ({ name })))
@@ -6241,7 +6256,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         {showAddContact && selectedOpp && (
                                             <AddContactToOppPanel
                                                 opp={{ ...selectedOpp, contactIds: oppContactIds }}
-                                                allContacts={contacts || []}
+                                                allContacts={unarchived(contacts)}
                                                 saving={addContactSaving}
                                                 onCancel={() => setShowAddContact(false)}
                                                 onSave={async (newIds) => {

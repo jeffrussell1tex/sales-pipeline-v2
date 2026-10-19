@@ -111,7 +111,8 @@ test('ReportsTab: the History tab reads real columns; PDF export escapes; labels
     assert.ok(src.includes('sub: t.description || \'\','));
     assert.ok(src.includes('if (!linkedToAccount(a, selectedAccount, accOppIds)) return;'));
     assert.ok(src.includes('if (!linkedToAccount(t, selectedAccount, accOppIds)) return;'));
-    assert.ok(src.includes('if (!linkedToContact(a, cId, conOppIds)) return;'));
-    assert.ok(src.includes('if (!linkedToContact(t, cId, conOppIds)) return;'));
+    // the contact and every contact merged into it (state §0.209; tests/merged-away-cleanup.test.mjs C4)
+    assert.ok(src.includes('if (!cIds.some(id => linkedToContact(a, id, conOppIds))) return;'));
+    assert.ok(src.includes('if (!cIds.some(id => linkedToContact(t, id, conOppIds))) return;'));
     assert.ok(src.includes('const touch = contactTouch(activities, c.id);'));
 });

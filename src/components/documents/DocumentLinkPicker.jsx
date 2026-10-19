@@ -13,16 +13,51 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtDate, EntityGlyph, ENTITY_META } from './atoms';
+import { unarchived, survivorOf, isMergeArchived, HIDDEN_ACCOUNT, HIDDEN_DEAL } from '../../utils/pickLink.js';
 
 const ORDER = ['account', 'opportunity', 'contact', 'task', 'activity'];
 const money = (v) => (Number(v) ? `$${Number(v).toLocaleString()}` : null);
 const join = (parts) => parts.filter(Boolean).join(' · ');
 
+// What a held link's row says when the offer leaves its record out (state §0.209): one merged into another names
+// the record it was merged into (through the whole list), else the record is one the caller's list does not hold.
+const CANT_OPEN = { account: HIDDEN_ACCOUNT, opportunity: HIDDEN_DEAL, contact: "A contact you can't open", task: "A task you can't open", activity: "An activity you can't open" };
+const heldLinkSub = (link, accounts, contacts) => {
+    const list = link.type === 'account' ? accounts : link.type === 'contact' ? contacts : null;
+    const rec = list ? list.find((r) => r.id === link.recordId) : null;
+    if (rec && isMergeArchived(rec)) {
+        const into = survivorOf(rec, list);
+        const label = (r) => (link.type === 'contact' ? `${r.firstName || ''} ${r.lastName || ''}`.trim() : r.name);
+        return into ? `Merged into “${label(into)}”` : `Merged into another ${link.type}`;
+    }
+    return CANT_OPEN[link.type] || '';
+};
+
+const groupHead = { padding: '10px 18px 4px', fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.07em', textTransform: 'uppercase' };
+
+// One record of the list, ticked while linked (module scope: declared inside the picker, every row would be a new
+// component on each render).
+const LinkRow = ({ c, on, onToggle }) => (
+    <div onClick={() => onToggle(c)}
+        style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 18px', cursor: 'pointer', background: on ? 'rgba(200,185,154,0.1)' : 'transparent' }}>
+        <div style={{ width: 28, height: 28, borderRadius: T.r, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <EntityGlyph type={c.type} size={14} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+            {c.sub && <div style={{ fontSize: 11, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>}
+        </div>
+        <div style={{ width: 18, height: 18, borderRadius: T.r, border: `1.5px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {on && <span style={{ color: '#f5f1eb', fontSize: 12, lineHeight: 1 }}>✓</span>}
+        </div>
+    </div>
+);
+
 export default function DocumentLinkPicker() {
     const {
         showDocLinkPicker, setShowDocLinkPicker,
         docLinkPickerContext, setDocLinkPickerContext,
-        accounts = [], contacts = [], opportunities = [], tasks = [], activities = [],
+        accounts: allAccounts = [], contacts: allContacts = [], opportunities = [], tasks = [], activities = [],
         linkDocument, unlinkDocument,
         escapeBlocked,
     } = useApp();
@@ -44,6 +79,11 @@ export default function DocumentLinkPicker() {
         setTypeFilter('all');
     }, [showDocLinkPicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // The records a link can name anew: none merged into another (guide §18b91 rule 5; state §0.209). A document
+    // already linked to one keeps that link (seeded from currentLinks, above); the app's lists keep every row (§18b99).
+    const accounts = useMemo(() => unarchived(allAccounts), [allAccounts]);
+    const contacts = useMemo(() => unarchived(allContacts), [allContacts]);
+
     // Each record is offered by its own fields (state §0.181): a task by its title, an
     // activity by its subject (its type when it has none), a deal's amount from its arr.
     // The picker read `name` for the first two and `value` for the third — none of them a
@@ -59,6 +99,19 @@ export default function DocumentLinkPicker() {
         activities.forEach((a) => out.push({ type: 'activity', recordId: a.id, name: a.subject || a.type || 'Activity', sub: join([a.type, a.date ? fmtDate(a.date) : null]) }));
         return out.filter((x) => x.recordId).map((x) => ({ ...x, key: `${x.type}:${x.recordId}` }));
     }, [accounts, opportunities, contacts, tasks, activities]);
+
+    // A link the document holds that the offer leaves out — a record merged into another, or one the caller's list does
+    // not hold — is drawn, ticked, so it can be removed here; never only counted in "N linked" (§18b91 rule 4; state
+    // §0.209). Not narrowed by the search or the type pills: a document holds a few.
+    const heldRows = useMemo(() => {
+        const offered = new Set(candidates.map((c) => c.key));
+        return (ctx.currentLinks || [])
+            .filter((l) => l.recordId && !offered.has(`${l.type}:${l.recordId}`))
+            .map((l) => {
+                const sub = heldLinkSub(l, allAccounts, allContacts);
+                return { key: `${l.type}:${l.recordId}`, type: l.type, recordId: l.recordId, name: l.name || sub, sub: l.name ? sub : '' };
+            });
+    }, [docLinkPickerContext, candidates, allAccounts, allContacts]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -150,29 +203,18 @@ export default function DocumentLinkPicker() {
 
                 {/* Results */}
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, borderTop: `1px solid ${T.border}` }}>
+                    {heldRows.length > 0 && (
+                        <div>
+                            <div style={groupHead}>Already linked</div>
+                            {heldRows.map((c) => <LinkRow key={c.key} c={c} on={!!selected[c.key]} onToggle={toggle} />)}
+                        </div>
+                    )}
                     {grouped.length === 0 ? (
                         <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>No matching records.</div>
                     ) : grouped.map(([type, rows]) => (
                         <div key={type}>
-                            <div style={{ padding: '10px 18px 4px', fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{ENTITY_META[type].label}s</div>
-                            {rows.map((c) => {
-                                const on = !!selected[c.key];
-                                return (
-                                    <div key={c.key} onClick={() => toggle(c)}
-                                        style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 18px', cursor: 'pointer', background: on ? 'rgba(200,185,154,0.1)' : 'transparent' }}>
-                                        <div style={{ width: 28, height: 28, borderRadius: T.r, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                            <EntityGlyph type={c.type} size={14} />
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                                            {c.sub && <div style={{ fontSize: 11, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>}
-                                        </div>
-                                        <div style={{ width: 18, height: 18, borderRadius: T.r, border: `1.5px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                            {on && <span style={{ color: '#f5f1eb', fontSize: 12, lineHeight: 1 }}>✓</span>}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            <div style={groupHead}>{ENTITY_META[type].label}s</div>
+                            {rows.map((c) => <LinkRow key={c.key} c={c} on={!!selected[c.key]} onToggle={toggle} />)}
                         </div>
                     ))}
                 </div>

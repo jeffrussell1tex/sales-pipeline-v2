@@ -287,7 +287,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        site's own from before the merge — as built ("Ship as is, file the
        edge"; the name-only case filed for batch 3, §4.7). What it found
        and left is filed in §2.2, §2.4, §4.2, §4.7 and §6.
-     - **Next, merged-away records leave every other list** (Jeff, 16 Oct:
+     - **Next, merged-away records leave every other list — step A, every screen, DONE but for its browser check (§0.209; guide §18b101), committed on dev, not pushed; step B (§0.210) next** (Jeff, 16 Oct:
        "One cleanup batch next"; 17 Oct: "Undo, cleanup, profile" — the
        second, and next: the merge Undo is done, §0.207): the header
        search, Reports' account list, the "# of
@@ -344,7 +344,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        function that reads either table, its selects and hand-offs counted;
        the guide's gate list names all eight checks, and the `Tests` run's
        gates job runs check:fnscope. Tests and CI only: nothing on screen
-       changed. Next: step A, every screen (§0.209), then step B, the
+       changed. Step A is DONE but for its browser check (§0.209; guide
+       §18b101): the header search (one row naming the record a name was
+       merged into), Reports' Activity History pickers and add-contacts
+       panel, the document link picker (a held link drawn under "Already
+       linked"), Dispatch's customer field (no Create, its Save refuses a
+       merged-away name) and Linked CRM account (a held link shown as
+       itself), the meeting prep panel; the record a merge kept shows what
+       still names the one merged into it (Q2); a deal's account by its
+       link (Q7). Its browser check is owed (§2.2). Next: step B, the
        public API, the quote email and the numbers (§0.210).
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
@@ -504,6 +512,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **§0.209's browser check is owed** (19 Oct — Jeff away from his
+  machine until Thursday evening, 22 Oct: "Commit it"). Committed on dev,
+  not pushed. Before dev is pushed: DESIGN.md §6's Pass A in Accelerep
+  QA — as Karen, then as Jeff — on the §0.207 TEST records plus a TEST
+  contact linked by id to "TEST Undo, Inc.", a TEST activity naming the
+  Tess to be merged away second, a TEST deal, and a TEST document Jeff
+  uploads on "TEST Undo, Inc."; a real merge of "TEST Undo, Inc." into
+  "TEST Undo Co" and of one Tess into the other, and their Undos, each on
+  Jeff's go at the moment. Unverified: whether QA has Dispatch on (its
+  step 7 is units only otherwise).
 - **The census of the merge logs: its two stop counts ran before the
   forty-third ship; its third count, for Jeff and not a stop, was not
   run** (§0.207's design, as amended — the census was its gate order's
@@ -2345,6 +2363,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   company, by id from `contactIds[0]` (else `contactId`;
   `resolveActivityAccount`, TasksTab.jsx:97-106) — a merged-away
   contact's company where the merge left that contact first.
+  Since §0.209 the survivor shows them (Jeff, 18 Oct: "Survivor shows
+  them"): its rail's Activity History and Reports' Contact history list an
+  activity or task naming a contact merged into it (`standsFor`), an
+  account's People list and Activity tab a contact linked by id to an
+  account merged into it, and the Documents tab a document linked to
+  either. The data move stays batch 3's.
 - **A CSV overwrite batch empties the Account of a row that names none** while
   another row names one (partialRows sets the union of the keys a batch
   sends; the re-check). Every row of a CSV names an Account today, so no screen
@@ -2432,6 +2456,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
     to it by a later save — that does not name the survivor and is on no
     open deal of the survivor's (the contact merge item, above): the
     batch's design keeps a way to it.
+  - Since §0.209 (step A): the header search, both Activity History
+    lists, the add panel, the four pickers and the meeting prep panel are
+    done; the account rail's comment is corrected; Reports' Opportunity
+    history account and the header's and Account history's deals read by
+    the link (Q7); and the way to an activity still naming a merged-away
+    contact is the survivor's own — its rail's Activity History and
+    Reports' Contact history list it (Q2). Left for step B (§0.210):
+    "# of accounts" and `byName`, the industry chart's `acctByName`,
+    Settings' Segments, Industries and Buyer Personas counts and both
+    dead "View accounts" items, the merge windows' counts and the delete
+    warning, the public API and the quote email.
   - Settings → Data's export runs and the backups keep merged-away rows,
     as they should; each tab's Export follows its list (§0.206; Jeff, 17
     Oct: "Export follows the list").
@@ -2893,6 +2928,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
   design on a text that repeats. Recommended: print AMBIGUOUS for an anchor
   that matches more than once and make each such entry name its line
   uniquely (a fail once none remain).
+  On 19 Oct (§0.209's anchor check, every entry against the tree) seven
+  match twice, each in a file §0.209 did not touch, each mutating its
+  first match: "deal window: an unnamed row on the deal is blank"
+  (OpportunityModal.jsx), "§0.199 contacts: a bulk create's refusal is
+  not answered" (contacts.mjs), "§0.199 accounts: a bulk create's refusal
+  is not answered" (accounts.mjs), "§0.199 dispatch customers: a create
+  stores a merged-away account as sent" (dispatch-customers.mjs), "§0.199
+  activity save: an update's refusal answers nothing" (useActivities.js),
+  "§0.200 popups: the reminder's backdrop leaves those waiting unseen"
+  (ModalLayer.jsx) and "§0.201 login: the create's refused login is
+  answered nowhere" (dispatch-technicians.mjs). One more, "pick link
+  (F9)", matched twice once §0.209's helper repeated its text; the helper
+  was reworded.
 - **An ordering pin of `indexOf` against `indexOf` passes when its first
   text is gone** (§0.199's pre-run: a mutant deleting the restore's clean-up
   survived on one; that pin is fixed). About 60 such pins stand in some 35

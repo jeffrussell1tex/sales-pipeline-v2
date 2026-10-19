@@ -780,7 +780,7 @@ test("the suites: every suite's 'graded by the harness' pin reads the SUITES val
             pins.push({ f, src, line: src.slice(from, src.indexOf('\n', hit.index)).trim() });
         }
     }
-    assert.ok(pins.length >= 15, `the scan finds the suites' pins — fifteen since §0.207 (a scan that finds none proves nothing): ${pins.length}`);
+    assert.ok(pins.length >= 16, `the scan finds the suites' pins — sixteen since §0.209 (a scan that finds none proves nothing): ${pins.length}`);
     for (const { f, src, line } of pins) {
         assert.equal(line, `assert.ok(suites.includes('tests/${f}'), 'SUITES runs this file');`, `${f}: its own path, looked for in the SUITES value`);
         assert.ok(src.includes(SUITES_PARSE), `${f}: suites is the SUITES line's value, split on spaces`);

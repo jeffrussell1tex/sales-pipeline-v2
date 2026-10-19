@@ -10,6 +10,7 @@ import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill, baseName } from './at
 import DocumentPicker from './DocumentPicker';
 import { validateFile } from '../../utils/documentsStorage';
 import { canEditCrm } from '../../utils/roles.js';
+import { standsFor } from '../../utils/pickLink.js';
 
 export default function RecordDocuments({ recordType, recordId, recordName, recordSub }) {
     const {
@@ -17,6 +18,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
         createDocument, linkDocument, unlinkDocument,
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
         downloadDoc, userRole,
+        accounts = [], contacts = [],
     } = useApp();
     // Upload, Link existing, a dropped file and Unlink are offered to whom the server lets
     // write — canEditCrm, requireWrite's list (state §0.182); a reader sees the list and
@@ -31,9 +33,17 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
 
     const recordLink = { type: recordType, recordId, name: recordName, sub: recordSub };
 
+    // The records this one stands for (state §0.209; Jeff, 18 Oct: "Survivor shows them"): its own id — and on an
+    // account or a contact, every record merged into it, whose documents a merge leaves linked where they were
+    // (OPEN_ITEMS §4.7): listed here, unlinked here. An Undo, the lists read again, takes them off.
+    const ids = useMemo(() => {
+        if (recordType === 'account') return new Set([recordId, ...standsFor(accounts.find((a) => a.id === recordId), accounts)]);
+        if (recordType === 'contact') return new Set([recordId, ...standsFor(contacts.find((c) => c.id === recordId), contacts)]);
+        return new Set([recordId]);
+    }, [recordType, recordId, accounts, contacts]);
     const docs = useMemo(
-        () => documents.filter((d) => (d.links || []).some((l) => l.type === recordType && l.recordId === recordId)),
-        [documents, recordType, recordId],
+        () => documents.filter((d) => (d.links || []).some((l) => l.type === recordType && ids.has(l.recordId))),
+        [documents, recordType, ids],
     );
 
     const openUpload = () => {
@@ -66,9 +76,12 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
         attachFiles(e.dataTransfer.files);
     };
 
-    const unlinkHere = (doc) => {
-        const mine = (doc.links || []).find((l) => l.type === recordType && l.recordId === recordId);
-        if (mine && mine.id && unlinkDocument) unlinkDocument(doc.id, mine.id);
+    // Every link of the document to the records this one stands for — its own and a record merged into it — stopping
+    // at a refusal, which the app's message says (useDocuments). A merge's Undo does not put such a link back.
+    const unlinkHere = async (doc) => {
+        for (const l of (doc.links || []).filter((x) => x.type === recordType && ids.has(x.recordId))) {
+            if (l.id && unlinkDocument && !(await unlinkDocument(doc.id, l.id)).ok) return;
+        }
     };
 
     // A refused link says so in the app's message (useDocuments); the rest are not sent

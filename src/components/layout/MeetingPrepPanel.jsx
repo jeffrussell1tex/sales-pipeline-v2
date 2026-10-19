@@ -10,6 +10,7 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { unarchived } from '../../utils/pickLink.js';
 
 export default function MeetingPrepPanel() {
     const {
@@ -37,9 +38,9 @@ export default function MeetingPrepPanel() {
             return titleWords.some(w => haystack.includes(w));
         });
 
-    // Get contacts linked to this account
+    // Get contacts linked to this account — the live ones (state §0.209): a contact merged into another takes no slot.
     const matchedContacts = matchedOpp
-        ? (contacts || []).filter(c => c.company?.toLowerCase() === (matchedOpp.account || '').toLowerCase() || c.accountId === (matchedOpp.accountId || ''))
+        ? unarchived(contacts).filter(c => c.company?.toLowerCase() === (matchedOpp.account || '').toLowerCase() || c.accountId === (matchedOpp.accountId || ''))
             .slice(0, 5)
         : [];
 

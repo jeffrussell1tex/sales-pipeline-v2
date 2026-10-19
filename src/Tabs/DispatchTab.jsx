@@ -14,7 +14,8 @@ import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines,
     JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
-import { matchSearch } from '../utils/searchMatch.js';
+import { matchSearch, searchKey } from '../utils/searchMatch.js';
+import { isMergeArchived, resolveLink, linkRefusal, unarchived, heldAccountOption } from '../utils/pickLink.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 // Dispatch keeps its own base radius (4, not the app's 3) — the one deliberate
@@ -312,6 +313,18 @@ const unitLabel = (id, units = []) => {
 };
 
 // ── Customer typeahead ───────────────────────────────────────────────
+// A name only an account merged into another has — and no dispatch customer has (state §0.209): the account
+// picker's refusal ("“X” was merged into “Y” — pick “Y”."), never a new customer of that name, which would be a
+// second customer for the account it was merged into. A customer already named so (one made before the merge,
+// which a merge re-links but never renames — merge.mjs) is that customer's to pick. The field and its Save read
+// this one rule.
+const mergedAwayName = (text, customers, accounts) => {
+    const r = resolveLink({ text, records: accounts || [] });
+    if (r.refusal !== 'merged') return null;
+    const key = searchKey(text);
+    return (customers || []).some((c) => searchKey(c.name || '') === key) ? null : r;
+};
+
 // Defined at module scope on purpose: a component declared inside DispatchTab
 // would be a new type on every render, remounting the input and losing focus
 // on each keystroke.
@@ -333,11 +346,14 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
     const linkedAccountIds = new Set((customers || []).map(c => c.accountId).filter(Boolean));
     const linkedNames      = new Set((customers || []).map(c => (c.name || '').trim().toLowerCase()));
     const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])
-        .filter(a => !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);
+        .filter(a => !isMergeArchived(a) && !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);
 
     const exact = [...(customers || []), ...(accounts || [])]
         .some(x => (x.name || '').trim().toLowerCase() === q);
     const showCreate = q.length > 0 && !exact;
+    // A name only an account merged into another has (state §0.209): no Create, and the line under the field says
+    // which account to pick.
+    const merged = q ? mergedAwayName(query, customers, accounts) : null;
 
     const inputSt = { width: '100%', padding: '8px 10px', border: `1px solid ${selectedId ? T.ok : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' };
     const rowSt   = { padding: '7px 10px', fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer', borderBottom: `1px solid ${T.border}` };
@@ -365,7 +381,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
             )}
             {!selectedId && !selectedAccountId && query.trim() && (
                 <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                    New customer — will be created on save
+                    {merged ? linkRefusal(merged) : 'New customer — will be created on save'}
                 </div>
             )}
             {open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (
@@ -400,7 +416,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                         </div>
                     ))}
                     {acctMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{acctMore} more — keep typing</div>}
-                    {showCreate && (
+                    {showCreate && !merged && (
                         <div style={{ ...rowSt, borderBottom: 'none', color: T.info, fontWeight: 600 }}
                             onMouseDown={e => { e.preventDefault(); onCreateIntent(); setOpen(false); }}>
                             + Create “{query.trim()}”
@@ -2646,7 +2662,7 @@ const shortDate = (iso) => iso ? fromYmd(iso).toLocaleDateString('en-US', { mont
 // to be declared inside CustomersView and picked them up from the parent scope;
 // hoisting it to module scope (correct — it was remounting on every keystroke)
 // left those two references dangling, and `copyFromAccount` never existed at all.
-const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft, linkedAccount, copyFromAccount,
+const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft, linkedAccount, heldLink, copyFromAccount,
     prefTech, prefMissing, prefOptions, saving, status, onSave, onCancel }) => (
     <div style={{ maxWidth: 620 }}>
             <CustFieldRow label="Name *">
@@ -2656,8 +2672,12 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, p
             <CustFieldRow label="Linked CRM account">
                 <select value={draft.accountId || ''} onChange={e => set('accountId', e.target.value)} style={custInput}>
                     <option value="">— Not linked —</option>
-                    {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    {/* A link the options leave out — an account merged into another, one you can't open, one deleted — shows as
+                        itself, disabled, never as "— Not linked —" (guide §16, §18b24.3); an untouched Save keeps it (state §0.209). */}
+                    {heldLink && <option value={draft.accountId} disabled>{heldLink.label}</option>}
+                    {unarchived(accounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
+                {heldLink?.note && <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{heldLink.note}</div>}
                 {linkedAccount && (
                     <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
                         {[linkedAccount.address, linkedAccount.city, linkedAccount.state, linkedAccount.zip].filter(Boolean).join(', ') || 'No address on the account'}
@@ -3041,6 +3061,10 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
     // Resolved against the DRAFT, not the selected row: while editing, the account
     // being pointed at is whichever one the picker currently shows.
     const draftAccount = draft && draft.accountId ? (accounts || []).find(a => a.id === draft.accountId) : null;
+    // The link the "Linked CRM account" options leave out — an account merged into another, one you can't open, one
+    // deleted — shown as itself, disabled, on the form and the record view (state §0.209; guide §16, §18b24.3).
+    const draftHeld = draft ? heldAccountOption(draft.accountId, accounts) : null;
+    const selHeld = selected ? heldAccountOption(selected.accountId, accounts) : null;
 
     // Copies the CRM account's address onto the service address. Never overwrites
     // silently — a service address that is already filled in is usually a site
@@ -3222,7 +3246,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                     {editing && draft ? (
                         <CustomerEditForm draft={draft} set={set} accounts={accounts} techs={techs} plans={plans}
                             propertyTypes={propertyTypes}
-                            linkedAccount={draftAccount} copyFromAccount={copyFromAccount}
+                            heldLink={draftHeld} linkedAccount={draftAccount && !isMergeArchived(draftAccount) ? draftAccount : null} copyFromAccount={copyFromAccount}
                             planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
                             saving={saving} status={status} onSave={save}
                             onCancel={() => guarded(() => { setEditing(false); setDraft(null); setStatus(null); })}/>
@@ -3258,11 +3282,11 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                                             </span>
                                         </>}
                                     </div>
-                                    {linkedAccount && (
+                                    {(linkedAccount || selHeld) && (
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11.5,
                                             fontWeight: 600, color: T.goldInk, background: T.surface, padding: '4px 9px',
                                             border: `1px solid ${T.border}`, borderRadius: 999, fontFamily: T.sans }}>
-                                            <DIcon name="link" size={11} color={T.goldInk}/>Linked to account · {linkedAccount.name}
+                                            <DIcon name="link" size={11} color={T.goldInk}/>Linked to account · {selHeld ? selHeld.label : linkedAccount.name}
                                         </div>
                                     )}
                                 </div>
@@ -5753,6 +5777,9 @@ export default function DispatchTab() {
         if (!custName) { setNewJobError('Customer is required.'); return; }
         if (!title)    { setNewJobError('Job title is required.'); return; }
         if (address && !city) { setNewJobError('City is required when a job address is entered.'); return; }
+        // A name only an account merged into another has makes no customer (state §0.209): refused in the field's words.
+        const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;
+        if (gone) { setNewJobError(linkRefusal(gone)); return; }
 
         setNewJobSaving(true);
         setNewJobError('');

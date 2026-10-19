@@ -7,13 +7,14 @@
 // for the same gap with it; "Hide contacts too" — merged-away contacts leave the Contacts tab, an account's People list
 // and the contact counts, in the same batch. The other lists, counts and pickers are the cleanup batch's ("One cleanup
 // batch next"; 18 Oct: "Three steps"): THE GUARD made class-wide first (state §0.208, tests only — T8-T10 here), then
-// every other screen (§0.209), then the public API, the quote email and the numbers (§0.210).
+// every other screen (§0.209, tests/merged-away-cleanup.test.mjs), then the public API, the quote email and the numbers
+// (§0.210).
 //
 // Before: a merge stored the record merged away (merge_archived, merged_into_id, archived_at), and the merge hook
 // dropped it from the screen — then read the list again, and the accounts and contacts GETs answer every row of the
-// org, so it came straight back. Since §0.198 the pickers left it out (unarchived) — all but four, the cleanup batch's
-// screens step (§0.209: the document link picker, Dispatch's two account pickers and Reports' "Select contacts to add
-// to this deal"); no list did: the Accounts tab, an account's Sub-Accounts (the tab's badge and drawer, the rail's
+// org, so it came straight back. Since §0.198 the pickers left it out (unarchived) — all but four, until the cleanup
+// batch's screens step (§0.209: the document link picker, Dispatch's two account pickers and Reports' "Select contacts to
+// add to this deal"); no list did: the Accounts tab, an account's Sub-Accounts (the tab's badge and drawer, the rail's
 // section), the Contacts tab, an account's People list and the contact counts beside them.
 //
 // Now each of those screens draws its list through unarchived / isMergeArchived (src/utils/pickLink.js). The app's
@@ -41,7 +42,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { posix } from 'node:path';
 import { parse } from '@babel/parser';
-import { unarchived, isMergeArchived, resolveLink } from '../src/utils/pickLink.js';
+import { unarchived, isMergeArchived, resolveLink, standsFor } from '../src/utils/pickLink.js';
 import { linkedAccount, outOfList } from '../src/utils/railLinks.js';
 import { chipLabel } from '../src/utils/taskLinks.js';
 
@@ -253,10 +254,12 @@ test("T3 — an account's Sub-Accounts: one merged away is not listed — the ta
 // ── the account rail ────────────────────────────────────────────────────────
 
 const RAIL_SUBS = ind(4, 'const subAccounts = getSubAccounts(accountRailId);');
-// The account's contacts, its whole list (by accountId, else by company name): the Activity tab's contact ids read it.
+// The account's contacts, its whole list (by accountId — this account's, or one merged into it since §0.209 — else by
+// company name): the Activity tab's contact ids read it.
+const RAIL_OWN = ind(4, 'const ownAccountIds = standsFor(account, accounts);');
 const RAIL_CONTACTS = [
     ind(4, 'const accountContacts = (contacts || []).filter(c =>'),
-    ind(8, 'c.accountId ? c.accountId === account?.id : (c.company === account?.name)'),
+    ind(8, 'c.accountId ? ownAccountIds.has(c.accountId) : (c.company === account?.name)'),
     ind(4, ');'),
 ];
 const RAIL_SHOWN = ind(4, 'const shownContacts = unarchived(accountContacts);');
@@ -276,8 +279,8 @@ test("T4 — the account rail: its Sub-Accounts are the hook's; its People list,
     // The account's contacts, the rail's own lines run as written: every one, merged-away included — the Activity tab
     // reads them. The shown list comes after, from them.
     assert.equal(count(rail, `\n${RAIL_CONTACTS.join('\n')}\n`), 1, "the account's contacts: its three lines, together, once");
-    order(rail, ...RAIL_CONTACTS, RAIL_SHOWN);
-    const accountContacts = run(RAIL_CONTACTS, ['contacts', 'account'], [CONTACTS, { id: 'acc_resinall', name: 'Resinall' }], 'accountContacts');
+    order(rail, RAIL_OWN, ...RAIL_CONTACTS, RAIL_SHOWN);
+    const accountContacts = run([RAIL_OWN, ...RAIL_CONTACTS], ['standsFor', 'accounts', 'contacts', 'account'], [standsFor, ACCOUNTS, CONTACTS, { id: 'acc_resinall', name: 'Resinall' }], 'accountContacts');
     assert.deepEqual(ids(accountContacts), ['con_lee', 'con_lee_dup', 'con_ana'],
         "REGRESSION: the account's contacts leave a merged-away contact out at their source — its Activity tab drops that contact's activities (their contact ids still name it)");
     assert.deepEqual(ids(run([RAIL_SHOWN], ['unarchived', 'accountContacts'], [unarchived, accountContacts], 'shownContacts')), ['con_lee', 'con_ana'],
@@ -490,6 +493,14 @@ const CTX_PATH = /^(?:\.\.?\/)+AppContext(?:\.jsx)?$/;
 const RESOLVERS = {
     resolveLink: [PICK_LINK, 'a typed name or a held link resolved through the whole list: a merged-away record is no match for a typed name, and names the record it was merged into — never a Create for its name (T6)',
         'tests/pick-link.test.mjs', 'merged away (D12: "Yes, hide them"): never matched by a typed name; a link to one, held, is kept; accounts and contacts alike'],
+    standsFor: [PICK_LINK, "the ids a record stands for — its own and every record merged into it, found through the whole list (the merge marks): the record a merge kept shows what still names the one merged into it (state §0.209); an id set, no rows",
+        'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
+    mergedInto: [PICK_LINK, "a name typed in full that only a merged-away record has: resolveLink's 'merged' over the whole list, naming the one live record it was merged into — the header search's one row (state §0.209)",
+        'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
+    accountOfDeal: [PICK_LINK, "a deal's account by its link, through the whole list: one merged away is named as its survivor; an id-less deal the later LIVE account of its name (state §0.209)",
+        'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
+    heldAccountOption: [PICK_LINK, "what a select shows for the link it holds when the live options leave it out: the record found by id in the whole list — merged away, named with its survivor; missing, \"an account you can't open\" (state §0.209)",
+        'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
     siteLine: [PICK_LINK, "a site's line under the Account picker: its parent looked up by id in the whole list — a parent merged away is held there, so the line says \"a site — pick the account it belongs to\", never \"an account you can't open\"",
         'tests/pick-link.test.mjs', "the deal window (F7): 'unreachable' — D11's sentence — only for a site whose account the list does not hold; a site whose account is listed but no deal's (merged away, or a site itself) is a site to refuse, in its own words"],
     linkedAccount: ['src/utils/railLinks.js', "a contact's company chip: its account by id — one merged away opens the account it was merged into (T6)",
@@ -545,10 +556,10 @@ const WHOLE_CONTEXT = {
 };
 
 // Every other read, each with why it may read the whole list and its fate: [the context's key, the read's line (trimmed),
-// how many reads on it, why, fate] — "stay"; "until §0.209" (the screens step fixes it); "until §0.210" (the numbers
-// step). A read not here fails; one here read a different number of times fails ("gone or moved: take it out").
+// how many reads on it, why, fate] — "stay"; "until §0.210" (the numbers step fixes it; the screens step's, "until
+// §0.209", are done — state §0.209). A read not here fails; one here read a different number of times fails ("gone or
+// moved: take it out").
 const STAY = 'stay';
-const SCREENS = 'until §0.209';
 const NUMBERS = 'until §0.210';
 const BY_NAME = 'matched by name (or email) among the whole list, merged away included — filed: OPEN_ITEMS §4.7, "A record matched by name or email can be a merged-away one"';
 const WHOLE_READS = {
@@ -572,10 +583,6 @@ const WHOLE_READS = {
         ['accounts', 'const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });', 1, "the report builder's data handed whole to runReport — its \"# of accounts\" counts merged-away accounts until §0.210", STAY],
         ['contacts', 'const oppContacts = (contacts||[]).filter(c =>', 1, "a deal's people by their ids — a contact merge rewrites a deal's contactIds (merge.mjs); a stale whole-row save writing one back is OPEN_ITEMS §4.7's stale-write edge", STAY],
         ['accounts', 'const acctByName = new Map((accounts||[]).map(a => [(a.name||\'\').toLowerCase(), a]));', 1, "Reports' industry chart takes a deal's account by name — a merged-away twin can be the one", NUMBERS],
-        ['accounts', 'const all = accounts || [];', 1, "Activity History's Account history list (ActivityHistoryTab, handed the app's accounts) lists merged-away accounts", SCREENS],
-        ['contacts', 'const all = contacts || [];', 1, "Activity History's Contact history list lists merged-away contacts", SCREENS],
-        ['accounts', "const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;", 1, "Opportunity history's account panel takes a deal's account by name — a merged-away twin can be the one", SCREENS],
-        ['contacts', 'const available = (allContacts || []).filter(c => {', 1, '"Select contacts to add to this deal" (AddContactToOppPanel, handed every contact) offers merged-away contacts', SCREENS],
     ],
     'src/components/rails/AccountRail.jsx': [
         ['accounts', 'const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);', 1, "an index by id: the Parent field's choices (parentChoices, typedParentRefusal and parentLeftOut read it), and the parent named by its id — a merge moves parentAccountId (merge.mjs), so no row names a merged-away parent", STAY],
@@ -587,7 +594,6 @@ const WHOLE_READS = {
     ],
     'src/components/layout/MeetingPrepPanel.jsx': [
         ['accounts', "? (accounts || []).find(a => a.name?.toLowerCase() === (matchedOpp.account || '').toLowerCase())", 1, `the meeting's account by the deal's name — ${BY_NAME}`, STAY],
-        ['contacts', "? (contacts || []).filter(c => c.company?.toLowerCase() === (matchedOpp.account || '').toLowerCase() || c.accountId === (matchedOpp.accountId || ''))", 1, "the meeting prep panel's contacts give a merged-away contact a slot", SCREENS],
     ],
     'src/components/modals/CsvImportModal.jsx': [
         ['contacts', 'contacts || [],', 1, `the import's duplicate check (detectDuplicates) by name or email — ${BY_NAME}`, STAY],
@@ -602,8 +608,8 @@ const WHOLE_READS = {
     'src/Tabs/DispatchTab.jsx': [
         ['accounts', 'const exact = [...(customers || []), ...(accounts || [])]', 1, "New Job's create-guard: a name an account already has, merged away included, offers no Create — a check, nothing drawn", STAY],
         ['accounts', 'opportunities, jobs, customers, accounts,', 1, `Dispatch's won-deal jobs (buildWonBridgeJobs) find their account by name — ${BY_NAME}`, STAY],
-        ['accounts', 'const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])', 1, "New Job's Customer field (CustomerTypeahead, handed every account) offers merged-away accounts", SCREENS],
-        ['accounts', '{(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}', 1, 'the customer form\'s "Linked CRM account" (CustomerEditForm, through CustomersView) offers merged-away accounts', SCREENS],
+        ['accounts', 'const merged = q ? mergedAwayName(query, customers, accounts) : null;', 1, "New Job's Customer field (CustomerTypeahead): a name only a merged-away account has — resolveLink's 'merged' over the whole list (mergedAwayName, local) — offers no Create and names the account to pick (state §0.209); a check, nothing drawn from the list", STAY],
+        ['accounts', 'const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;', 1, "Save Job: the same rule refuses a name only a merged-away account has, in the field's words (state §0.209); a check", STAY],
     ],
     // ── until §0.210, the numbers ──
     'src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx': [
@@ -624,22 +630,17 @@ const WHOLE_READS = {
     'src/components/modals/ContactMergeReviewModal.jsx': [
         ['contacts', 'const orgChart = (contacts || []).filter(other =>', 1, "the contact merge window's org-links count counts merged-away colleagues and the pair's other record", NUMBERS],
     ],
-    // ── until §0.209, the screens ──
-    'src/components/layout/AppHeader.jsx': [
-        ['accounts', 'const { shown: mA, more: moreA } = matchSearch(accounts, globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });', 1, 'the header search lists merged-away accounts', SCREENS],
-        ['contacts', "const { shown: mC, more: moreC } = matchSearch(contacts, globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });", 1, 'the header search lists merged-away contacts', SCREENS],
-    ],
     'src/components/documents/DocumentLinkPicker.jsx': [
-        ['accounts', "accounts.forEach((a) => out.push({ type: 'account', recordId: a.id, name: a.name, sub: join([a.verticalMarket || a.industry, join([a.city, a.state])]) }));", 1, 'the document link picker offers merged-away accounts', SCREENS],
-        ['contacts', "contacts.forEach((c) => out.push({ type: 'contact', recordId: c.id, name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Contact', sub: join([c.title, c.company]) }));", 1, 'the document link picker offers merged-away contacts', SCREENS],
+        ['accounts', 'const sub = heldLinkSub(l, allAccounts, allContacts);', 1, "a held link's words (heldLinkSub, local): its account found by id in the whole list — one merged away named by the record it was merged into (state §0.209); the offer reads the live lists", STAY],
+        ['contacts', 'const sub = heldLinkSub(l, allAccounts, allContacts);', 1, "a held link's words: its contact by id in the whole list, as the accounts'", STAY],
     ],
 };
-const FATES = new Set([STAY, SCREENS, NUMBERS]);
+const FATES = new Set([STAY, NUMBERS]);
 
 // The components a list is handed to today, every one — each must be reached (a follow that reaches none proves nothing),
 // and none reached may be left off (a new hand-off is named here when it is first followed).
 const RECEIVERS = [
-    'src/Tabs/ReportsTab.jsx ActivityHistoryTab', 'src/Tabs/ReportsTab.jsx SavedReportsTab', 'src/Tabs/ReportsTab.jsx AddContactToOppPanel',
+    'src/Tabs/ReportsTab.jsx ActivityHistoryTab', 'src/Tabs/ReportsTab.jsx SavedReportsTab',
     'src/Tabs/DispatchTab.jsx CustomerTypeahead', 'src/Tabs/DispatchTab.jsx CustomersView', 'src/Tabs/DispatchTab.jsx CustomerEditForm',
     'src/Tabs/ContactsTab.jsx CompanyTwoPane', 'src/components/rails/ActivityRail.jsx ContactMultiSelect',
     'src/components/modals/OpportunityModal.jsx OpportunityModal', 'src/components/modals/OpportunityModal.jsx DealHistoryTab',
