@@ -304,9 +304,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        industry's "View accounts" link (the segment's twin), Reports' three
        account lookups by name, the merge window's contacts and deal counts,
        the public API's accounts and the account rail's other reads of the
-       app's lists — and, for the batch's class scan, two comments of
-       tests/merged-away-lists.test.mjs (a third is true again since
-       §0.207) and one of AccountRail.jsx. Its
+       app's lists (scanned since §0.208, each a shape or named) — and one
+       comment of AccountRail.jsx (the suite's own, corrected in §0.208).
+       Its
        map, what each place reads, and what is filed beside it: §4.7, "The
        cleanup batch's map".
        Mapped and designed 18 Oct (read only, over 7ee14fe: eight mappers, a
@@ -336,6 +336,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        none); "Approve; fix the list" — the design's ten defaults, and the
        guide's gate list names all eight checks, the `Tests` run gaining
        check:fnscope, with §0.208.
+       Step G is DONE (§0.208; guide §18b99 rules 4 and 6): THE GUARD is
+       class-wide — tests/merged-away-lists.test.mjs's T8 parses every file
+       that imports `useApp` and every component a list is handed to, each
+       read of the app's whole lists a shape or named with its reason and
+       its fate (it stays, or goes in §0.209 or §0.210); T10 names every
+       function that reads either table, its selects and hand-offs counted;
+       the guide's gate list names all eight checks, and the `Tests` run's
+       gates job runs check:fnscope. Tests and CI only: nothing on screen
+       changed. Next: step A, every screen (§0.209), then step B, the
+       public API, the quote email and the numbers (§0.210).
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -2329,6 +2339,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Activity tab keeps it (§0.206 kept the rail's whole list for it). Both
   ways are the cleanup batch's to narrow, so its design keeps a way to
   such an activity (its map, below). The re-check, 17 Oct; read in code.
+  One more such read, named to stay by THE GUARD since §0.208 (its build,
+  18 Oct; read in code): the Tasks tab's feed shows, for an activity with
+  no account of its own and no deal that gives one, its first contact's
+  company, by id from `contactIds[0]` (else `contactId`;
+  `resolveActivityAccount`, TasksTab.jsx:97-106) — a merged-away
+  contact's company where the merge left that contact first.
 - **A CSV overwrite batch empties the Account of a row that names none** while
   another row names one (partialRows sets the union of the keys a batch
   sends; the re-check). Every row of a CSV names an Account today, so no screen
@@ -2392,24 +2408,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
     while its activity and task counts (:62, :64) go by id, as the server
     moves them; the public API's accounts, which list merged-away rows the
     same way (public-api.mjs:197+); and the account rail's other reads of
-    the app's lists, which THE GUARD
-    (tests/merged-away-lists.test.mjs, T8) does not scan — it reads the
-    two tabs only — a class scan of the rail being that batch's to design
-    (the re-check). With that scan, two comments of the suite itself
-    (tests/merged-away-lists.test.mjs — §0.206's docs checks, 17 Oct; read
-    in code — a third, :5-6, "its Undo and the links that resolve through
-    it unchanged", is true again since §0.207 put a merge's Undo on
-    screen), each saying what §0.206's docs corrected: :413, "Wherever a
-    tab reads one but through unarchived, it draws or counts merged-away
-    rows" — a dependency line or the Company view card's hand-off lists
-    none, a Signal or List view row drawn from one makes the Accounts tab
-    fail to load, and a Business Book lane draws the accounts the search
-    and the filters left out (guide §18b99 rule 4); and :14-15, which
-    names Reports' picker by words
-    the panel does not show (it reads "Select contacts to add to this
-    deal", ReportsTab.jsx:4901). One comment of the account rail's is
-    likewise untrue since §0.206 (AccountRail.jsx:286-289; §0.206's docs
-    checks, 17 Oct; read in code): it heads the Activity tab's rollup
+    the app's lists, which THE GUARD (tests/merged-away-lists.test.mjs,
+    T8) read on the two tabs only until §0.208 — since then it scans the
+    rail with every file that imports `useApp`, each of its reads a shape
+    or named with its reason (state §0.208) — and the suite's own comments
+    this item listed (:413, over the guard; :14-15, on Reports' picker;
+    :5-6, true again since §0.207), corrected in §0.208. One comment of
+    the account rail's is untrue since §0.206 (AccountRail.jsx:286-289;
+    §0.206's docs checks, 17 Oct; read in code): it heads the Activity
+    tab's rollup
     with "a contact that belongs to this company (same set as the People
     tab)", but the People list now leaves a merged-away contact out
     (`shownContacts`, :277) and the rollup keeps it (`accountContacts`,

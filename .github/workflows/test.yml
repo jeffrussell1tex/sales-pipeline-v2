@@ -55,6 +55,15 @@ jobs:
       # `dbfetch-ignore:` comment at the call site.
       - name: Discarded-Response dbFetch scan
         run: npm run check:dbfetch
+      # Every name a function file reads is bound somewhere it can see (state §0.107,
+      # guide §18b33): a name read where nothing binds it parses, bundles and imports —
+      # and throws ReferenceError the first time its line runs (a 500 every hour for five
+      # months, §0.95). npm test runs the scanner too — on its fixtures and the two files
+      # bf4a3c5 broke (tests/check-fnscope.test.mjs), and over the whole tree
+      # (tests/scanners.test.mjs); this makes it a named gate beside the other scans:
+      # every .mjs file under netlify/functions/ and db/.
+      - name: Unbound-name scan (function files)
+        run: npm run check:fnscope
       # The handoff lives at root AND docs/; the pair drifted twice on 31 Aug
       # alone — a FINAL rewrite committed to one copy only. Byte-comparing the
       # two copies makes the sync a fact instead of a memory item.

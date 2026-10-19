@@ -2,17 +2,18 @@
 //
 // A merged-away account or contact leaves the lists the screens draw (state §0.206 — OPEN_ITEMS §1 item 1). Jeff,
 // 16 Oct, after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it but both still show on the account
-// list"; "Hide them" — merged-away accounts leave the Accounts tab and Sub-Accounts, the record kept (its Undo and the
-// links that resolve through it unchanged); "Right after 4b-2c" — a batch of its own, the Contacts tab checked for
-// the same gap with it; "Hide contacts too" — merged-away contacts leave the Contacts tab, an account's People list
-// and the contact counts, in the same batch. Not here ("One cleanup batch next"): the other lists, counts and
-// pickers. A merge's Undo on screen is state §0.207's ("Undo as its own batch next").
+// list"; "Hide them" — merged-away accounts leave the Accounts tab and Sub-Accounts, the record kept (its Undo, state
+// §0.207, and the links that resolve through it); "Right after 4b-2c" — a batch of its own, the Contacts tab checked
+// for the same gap with it; "Hide contacts too" — merged-away contacts leave the Contacts tab, an account's People list
+// and the contact counts, in the same batch. The other lists, counts and pickers are the cleanup batch's ("One cleanup
+// batch next"; 18 Oct: "Three steps"): THE GUARD made class-wide first (state §0.208, tests only — T8-T10 here), then
+// every other screen (§0.209), then the public API, the quote email and the numbers (§0.210).
 //
 // Before: a merge stored the record merged away (merge_archived, merged_into_id, archived_at), and the merge hook
 // dropped it from the screen — then read the list again, and the accounts and contacts GETs answer every row of the
-// org, so it came straight back. Since §0.198 the pickers left it out (unarchived) — all but four, the cleanup
-// batch's (OPEN_ITEMS §1: the document link picker, Dispatch's two account pickers and Reports' "add contacts to
-// this deal"); no list did: the Accounts tab, an account's Sub-Accounts (the tab's badge and drawer, the rail's
+// org, so it came straight back. Since §0.198 the pickers left it out (unarchived) — all but four, the cleanup batch's
+// screens step (§0.209: the document link picker, Dispatch's two account pickers and Reports' "Select contacts to add
+// to this deal"); no list did: the Accounts tab, an account's Sub-Accounts (the tab's badge and drawer, the rail's
 // section), the Contacts tab, an account's People list and the contact counts beside them.
 //
 // Now each of those screens draws its list through unarchived / isMergeArchived (src/utils/pickLink.js). The app's
@@ -23,19 +24,26 @@
 //
 // Run here, on made-up rows in the shapes Jeff met (Resinall and "Resinall, Inc."; Evonik's two Lafayette sites, one
 // merged into the other): each screen's list, read from its file and run as written — and the lines as they stood
-// before (10aa4b5), run once on the same rows, so the rows are seen to tell the two apart. THE GUARD (T8; T9 runs
-// its scan on made-up components): a parse of each tab component holds every read of the app's whole lists to a
-// named few, each with its reason, so a view, count or hand-off pointed at the whole list fails it; five lines the
-// mutation harness breaks are held by it alone (the Accounts tab's Signal sort and "Needs attention" lane, the
-// Contacts tab's Company view, name-sorted rows and header count). Pinned, line for line: every other line the
-// harness breaks — it runs the unit suites only (scripts/mutate-import.mjs) — and the layers that must keep the
-// rows, each GET's code whole. No server code changed: there is no integration suite for this batch.
+// before (10aa4b5), run once on the same rows, so the rows are seen to tell the two apart. THE GUARD (T8, class-wide
+// since §0.208; T9 runs its rules on made-up components; T10 the server's): a parse of every file that takes the app's
+// lists through useApp(), and of every component a list is handed to, holds each read of the app's whole lists to a
+// shape that leaves merged-away rows out or resolves a link through them, or to a read named with its reason; App.jsx
+// and the list hooks are pinned, and every function that reads either table is named, its selects counted. The
+// mutation harness's breaks it alone holds: five since §0.206 (the Accounts tab's Signal sort and "Needs attention"
+// lane, the Contacts tab's Company view, name-sorted rows and header count) and seven since §0.208 (a lookup by name in
+// the task rail, the activity viewer and Dispatch's record view; the deal window's rail counting the whole list; a
+// contact read through the automations' whole-context hand-off; the Company card counting its rollup's contacts; a
+// function newly reading the contacts table). Pinned, line for line: every other line the harness breaks — it runs the
+// unit suites only (scripts/mutate-import.mjs) — and the layers that must keep the rows, each GET's code whole. No
+// server code changed in §0.206 or §0.208: neither has an integration suite.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { posix } from 'node:path';
 import { parse } from '@babel/parser';
 import { unarchived, isMergeArchived, resolveLink } from '../src/utils/pickLink.js';
 import { linkedAccount, outOfList } from '../src/utils/railLinks.js';
+import { chipLabel } from '../src/utils/taskLinks.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -277,8 +285,8 @@ test("T4 — the account rail: its Sub-Accounts are the hook's; its People list,
     // CONTACTS, the People heading ("Contacts (2)" over one row), its empty line (an account whose contacts are all
     // merged away drew nothing), its rows; SUB-ACCTS, and the Sub-Accounts section's test, heading and rows (the
     // re-check, 17 Oct: its rows or its test pointed at the app's whole list passed every suite — Evonik's merged-away
-    // site listed again, or "Sub-Accounts (0)" over none). THE GUARD (T8) reads the two tabs only: the rail's other
-    // reads of the app's lists are not scanned.
+    // site listed again, or "Sub-Accounts (0)" over none). These read the rail's own lists, not the app's: THE GUARD
+    // (T8) scans the rail since §0.208, and holds its reads of the app's lists — shapes, or named with their reasons.
     for (const line of [
         "{ label: 'CONTACTS',    value: shownContacts.length },",
         '<SectionHeading label={`Contacts (${shownContacts.length})`} />',
@@ -394,6 +402,10 @@ test("T6 — the record is kept: both GETs answer every row of the org, narrowed
     assert.equal(linkedAccount(chip, ACCOUNTS)?.id, 'acc_resinall', "the whole list: a contact's chip on \"Resinall, Inc.\" opens Resinall");
     assert.equal(linkedAccount(chip, unarchived(ACCOUNTS)), null, 'the shown list alone opens nothing');
     assert.equal(outOfList('acc_resinall_inc', unarchived(ACCOUNTS)), true, "— and draws the link as an account you can't open");
+    assert.equal(outOfList('acc_resinall_inc', ACCOUNTS), false, 'the whole list holds the link — it is named, never "an account you can\'t open"');
+    // A task's contact chip stored with no name, on the merged-away Lee Ng: named from the whole list.
+    assert.equal(chipLabel({ id: 'con_lee_dup', name: '' }, CONTACTS), 'Lee Ng', "the whole list: the chip reads the contact's name");
+    assert.equal(chipLabel({ id: 'con_lee_dup', name: '' }, unarchived(CONTACTS)), 'Contact not in your list', 'the shown list alone: "Contact not in your list"');
     const typed = resolveLink({ text: 'Resinall, Inc.', records: ACCOUNTS });
     assert.deepEqual([typed.refusal, typed.into], ['merged', 'Resinall'], 'the whole list: the picker says what it was merged into, and offers no Create');
     assert.equal(resolveLink({ text: 'Resinall, Inc.', records: unarchived(ACCOUNTS) }).refusal, 'none',
@@ -406,39 +418,257 @@ test('T7 — the suites: this file is graded by the harness', () => {
     assert.ok(suites.includes('tests/merged-away-lists.test.mjs'), 'SUITES runs this file');
 });
 
-// ── THE GUARD: every read of the app's whole lists in each tab ──────────────
+// ── THE GUARD: every read of the app's whole lists, class-wide (state §0.208) ─
 
 // The lists the app's context hands every screen, merged-away rows kept (T6): `accounts` and `contacts` every row the
 // caller may read, `visibleAccounts` and `visibleContacts` narrowed by App.jsx's isRepVisible (the accounts to the top
-// level too), never by a merge. Wherever a tab reads one but through unarchived, it draws or counts merged-away rows.
+// level too), never by a merge. A screen that draws, counts or offers one as it stands shows merged-away rows; one that
+// resolves a link or a name through it needs every row (T6). Each read is a shape below — one that leaves merged-away
+// rows out, resolves a link or a name through them, or draws nothing from the list (a hook's dependencies) — or a read
+// named with its reason (an index by id, a scan's key, a lookup by name, a count still to fix).
 const WHOLE = ['accounts', 'contacts', 'visibleAccounts', 'visibleContacts'];
-// Each tab's reads of them, each with why it may read the whole list: [the context's key, the read's line, how many
-// reads on it, why]. Any other read — a view, count, filter or hand-off pointed at the whole list (the review, 16 Oct:
-// the Signal view's sort, a Business Book lane, the Company view, the name-sorted rows, the header count) — fails.
-const WHOLE_READS = {
-    'src/Tabs/AccountsTab.jsx': [
-        ['visibleAccounts', 'const live = unarchived(allVisibleAccounts);', 1, "the tab's one list: the app's top-level accounts, the merged-away left out (T1)"],
-        ['visibleAccounts', '}, [scope, allVisibleAccounts, currentUserId]);', 1, "that list's dependencies — it is worked out again when the app's list changes; nothing is drawn from them"],
-        ['contacts', 'const shownContacts = useMemo(() => unarchived(contacts), [contacts]);', 2, "the contacts a row's \"N contacts\" and the Sub-accounts drawer count, the merged-away left out (T5), and its dependency"],
-    ],
-    'src/Tabs/ContactsTab.jsx': [
-        ['visibleContacts', 'const live = unarchived(allVisibleContacts);', 1, "the tab's one list: the app's contacts, the merged-away left out (T2)"],
-        ['visibleContacts', '}, [scope, allVisibleContacts, currentUserId]);', 1, "that list's dependencies — nothing is drawn from them"],
-        ['accounts', 'accounts={accounts}', 1, "the Company view's card finds its account by name among every account (CompanyTwoPane's matchedAccount) — it lists none; a merged-away account of the same name can match: found with §0.206, filed (OPEN_ITEMS §4.7), not changed here"],
+const PICK_LINK = 'src/utils/pickLink.js';
+// The path a screen imports useApp by: '../AppContext', '../../AppContext.jsx' (the house's only form — the adversary
+// counted all 58 imports of it in src).
+const CTX_PATH = /^(?:\.\.?\/)+AppContext(?:\.jsx)?$/;
+
+// The guard reads (state §0.208; the cleanup batch, Jeff, 18 Oct: "Three steps" — the guard first, tests only):
+//   1. every src file that imports useApp from a relative path ending AppContext (an alias refused) — App.jsx, which
+//      builds the context and calls no useApp(), is pinned apart (T8's last part), as are the list hooks; utils are not
+//      scanned (each resolver below is checked against its module, and run on a merged-away row by its named test).
+//      One road in: every path in src that leads to AppContext is such an import of useApp or AppProvider — a
+//      namespace import, a default import, a re-export, a dynamic import or another spelling of the path fails (ROADS).
+//      A file whose text never names AppContext cannot import it, so it is not parsed for this;
+//   2. in each, every function holding useApp() — named by its own id or the const it is bound to (a `*Host` among
+//      them) — and its reads of the four lists: a destructure (an alias and a default followed; a rest element or a
+//      computed key refused), a name bound to the whole context (`x.key` and `x?.key` read `key`; a bare test of it is
+//      no read; any other use refused unless named in WHOLE_CONTEXT), and `useApp().key`; `useApp?.()` refused (the
+//      holder is found by its plain call);
+//   3. every component a list is handed to as a JSX attribute — in the same file or by one relative import — its body
+//      scanned under the same rules: a destructured first parameter maps the prop to its key, a plain one is followed
+//      through `props.<prop>` and a later `const { prop } = props` (any other use of it refused); a receiver the guard
+//      cannot find fails, and so do a spread of a list, a rest element that would carry it, and a component declared
+//      more than once in its file (a local `const Pane = …` would hide which one renders);
+//   4. a name a list is bound to declared again anywhere in a scanned body fails: the scan could not tell its reads apart;
+//   5. a whole-context binding handed on whole, as WHOLE_CONTEXT names it: its callee — a module-scope function of the
+//      file — is scanned with the parameter the context lands in as a whole-context binding (a destructure of it, or
+//      any use but a read by key, refused), and must read none of the four lists.
+// Each read is then a SHAPE (each needs no entry; its reason here) or a NAMED read (WHOLE_READS, with its reason):
+//   live      — the argument of unarchived(…) (pickLink.js): the merged-away rows left out;
+//   deps      — an element of the dependency array of one of React's hooks (useMemo, useEffect, useCallback,
+//               useLayoutEffect — imported from 'react', as React.*, or one the file neither imports nor declares; a
+//               file's own useMemo is no React hook): worked out again when the list changes (a merge, its Undo), nothing
+//               drawn from it;
+//   byId      — `list.find(p => p.id === X)` (or `X === p.id`; the receiver the list or `(list || [])`): exactly one
+//               `===`, the predicate's own parameter's `.id` on one side, the other not reading it, no ||/&& chain. Its
+//               LIMIT (the proof critique, #5; the adversary's C41): it resolves a link by id, and may return a merged-away
+//               row where a merge left the link on it — a contact's accountId, an invoice's accountId, a document's link
+//               (no merge moves them: OPEN_ITEMS §4.7, batch 3). A new byId whose result is DRAWN should go through
+//               linkedAccount / survivorOf (a reviewer's question; no parse can answer it);
+//   liveOnly  — `list.filter(p => …)` (or `(list || []).filter`) whose top-level && chain holds `!isMergeArchived(p)` on
+//               the predicate's OWN parameter (pickLink.js). Its LIMIT (the adversary's C42): the chain's other terms are
+//               trusted — one with a side effect (collecting every row as it is tested) is not seen; no parse tells
+//               `all.push(p)` from a pure `matches(p)` — a reviewer's question;
+//   resolver  — the list a DIRECT argument of a call to a name in RESOLVERS (or `list || []`, `list ?? []`), or the
+//               direct value of a property of an object literal that is one (`{ records: list }`, `{ accounts }`) — the
+//               callee bound by an import from that module and declared nowhere else in the file (a same-named local
+//               function never launders a read): it resolves a link or a name through the whole list, a merged-away
+//               record named as its survivor or never matched. Anything else inside the arguments — a filter, a spread,
+//               an assignment, a list built from it — is a read of its own. A resolver whose answer carries the rows it
+//               was given (RESOLVERS' 'carries': contactIndex's `list`) must have its answer bound to a name, and that
+//               name is then scanned as the list itself;
+//   followed  — a JSX attribute handing the list (or `list || []`, `list ?? []`) to a component: its reads are the
+//               receiver's, scanned in turn (3).
+// Everything else is named. Beyond the parse: a list read out of the context's setters (`setAccounts(prev => …)`) is
+// no read here — the adversary's C44 — and is held by tests/deal-modal-saves.test.mjs's guard (no handler sets a shared
+// list without a server call).
+
+// Each resolver: [its module, why it may read the whole list, the suite and the test that runs it on a merged-away row,
+// and 'carries' when its answer holds the rows it was given]. A name no scanned read uses fails as stale; one that is not
+// its module's export fails; one whose named test does not call it (or a helper of that suite that does) with a
+// merge-marked row in reach fails (runsOnMerged, and its limit, below).
+const RESOLVERS = {
+    resolveLink: [PICK_LINK, 'a typed name or a held link resolved through the whole list: a merged-away record is no match for a typed name, and names the record it was merged into — never a Create for its name (T6)',
+        'tests/pick-link.test.mjs', 'merged away (D12: "Yes, hide them"): never matched by a typed name; a link to one, held, is kept; accounts and contacts alike'],
+    siteLine: [PICK_LINK, "a site's line under the Account picker: its parent looked up by id in the whole list — a parent merged away is held there, so the line says \"a site — pick the account it belongs to\", never \"an account you can't open\"",
+        'tests/pick-link.test.mjs', "the deal window (F7): 'unreachable' — D11's sentence — only for a site whose account the list does not hold; a site whose account is listed but no deal's (merged away, or a site itself) is a site to refuse, in its own words"],
+    linkedAccount: ['src/utils/railLinks.js', "a contact's company chip: its account by id — one merged away opens the account it was merged into (T6)",
+        'tests/rail-links.test.mjs', "REGRESSION (the pre-ship audit): a contact's untouched Company linked to an account merged away returns the text it opened with — never the merged-away name — and says untouched, so the rail leaves it out"],
+    outOfList: ['src/utils/railLinks.js', "whether the list holds a link's record: on the whole list a merged-away link is held and named, not \"an account you can't open\" (T6)",
+        'tests/merged-away-lists.test.mjs', "T6 — the record is kept: both GETs answer every row of the org, narrowed by the read scope alone (each GET's code, whole), both hooks load every row they are answered, the app's context hands every row on, and the merge hook still drops the row it archived; a link and the account picker read that whole list (run)"],
+    contactCompany: ['src/utils/railLinks.js', "the contact rail's Company: a typed name never lands on a merged-away account; a link held to one is kept",
+        'tests/rail-links.test.mjs', 'contact Company: an account merged away is never matched by a typed name, and a contact linked to one keeps it (D12)'],
+    activitySeed: ['src/utils/railLinks.js', "Log Activity's prefill: a merged-away account opens as the one it was merged into, by id",
+        'tests/rail-links.test.mjs', "Log Activity opens a NEW activity with its prefill — an account's own rail (D10), a deal (D7), a lead's company — and a merged-away account as the one it was merged into, by id (D12, F4)"],
+    activityLinks: ['src/utils/railLinks.js', "Log Activity's Save: a typed name never lands on a merged-away account; a link held or untouched is kept — a new activity's prefill already holds the survivor (activitySeed)",
+        'tests/rail-links.test.mjs', "F4: a contact still linked to an account merged into another — its Log buttons fill the account it was merged into, by id, never the merged-away name; with that one out of the list, the contact's own company as typed"],
+    companyAfterDealPick: ['src/utils/railLinks.js', "a deal picked fills an empty Company with its account by id — one merged away as the one it was merged into",
+        'tests/rail-links.test.mjs', "picking a deal fills an EMPTY Company with the deal's account (D7) — by id where the list holds it live; a Company already shown stays"],
+    taskSeed: ['src/utils/taskLinks.js', "the task rail's prefill: each link by id, a merged-away account as the one it was merged into",
+        'tests/task-links.test.mjs', 'D12: a typed name never lands on the account merged away; a task already on it keeps it; a new task from its rail opens on the account it was merged into, by id (F4)'],
+    taskLinks: ['src/utils/taskLinks.js', "the task rail's Save: a typed name never lands on a merged-away record; a link held to one is kept",
+        'tests/task-links.test.mjs', 'D12: a typed name never lands on the account merged away; a task already on it keeps it; a new task from its rail opens on the account it was merged into, by id (F4)'],
+    chipLabel: ['src/utils/taskLinks.js', "a contact chip's words: its stored name, else its contact by id in the whole list — a merged-away contact named, never \"Contact not in your list\" (T6)",
+        'tests/merged-away-lists.test.mjs', "T6 — the record is kept: both GETs answer every row of the org, narrowed by the read scope alone (each GET's code, whole), both hooks load every row they are answered, the app's context hands every row on, and the merge hook still drops the row it archived; a link and the account picker read that whole list (run)"],
+    resolveDealAccount: ['src/utils/dealAccount.js', "the deal window's Account: a typed name never lands on a merged-away account; an untouched link keeps the name the deal stores",
+        'tests/deal-account.test.mjs', 'REGRESSION (the pre-ship audit): an untouched Account linked to an account merged away returns the name the deal stores — never the merged-away name — as untouched'],
+    isHiddenAccount: ['src/utils/dealAccount.js', "whether the caller's list holds the deal's account: a merged-away one is held, so its name shows",
+        'tests/deal-account.test.mjs', "D16: a link to an account the caller's list does not hold is said so — the name the deal stores, the words, an ×; untouched, a Save keeps it"],
+    sitesOf: ['src/utils/dealAccount.js', "the Site Name list: an account's own sites by id, nothing merged away",
+        'tests/deal-account.test.mjs', "the Site Name list: by the account's id, never its name — the chosen twin's own sites, only real sites (D15), nothing merged away"],
+    parentChoices: ['src/utils/accountParent.js', 'the Parent list: the accounts it may stand under — never one merged away',
+        'tests/account-parent.test.mjs', 'UKG\'s two "Shell - Port Allen": the Parent list offers the unit, never the site — never either to itself, nor Shell\'s own to Shell — and never a parent its own branch is too deep for'],
+    parentLeftOut: ['src/utils/accountParent.js', 'why a name is not on the Parent list — merged away among the reasons',
+        'tests/account-parent.test.mjs', 'the reason for a name twins share is the same in either list order — self, then one under it, then a site, then merged away, then too deep — at the Save and on the list (F8)'],
+    typedParentRefusal: ['src/utils/accountParent.js', 'a Parent typed in full and not picked: refused by its reason, merged away among them',
+        'tests/account-parent.test.mjs', 'the reason for a name twins share is the same in either list order — self, then one under it, then a site, then merged away, then too deep — at the Save and on the list (F8)'],
+    importPasses: ['src/utils/importParents.js', "the account import's parents by name: a merged-away account is never a parent — its name names the account it was merged into",
+        'tests/import-parents.test.mjs', 'importPasses: the top-level rows with no parent, the sub-accounts each with the parent its name finds — the Parent Account column dropped'],
+    contactIndex: ['src/utils/dealEngagement.js', "the deals' people indexed once: a merged duplicate folds into the contact it was merged into — its answer's `list` is every contact it was given, so it CARRIES the list: its answer is bound to a name and scanned as the list (Home's `directory`, read only as dealCommittee's argument)",
+        'tests/deal-engagement.test.mjs', "a merged duplicate reads as the contact it was merged into — its touches fold in, its id stands with the survivor's", 'carries'],
+    dealCommittee: ['src/utils/dealEngagement.js', "a deal's committee: a merged duplicate reads as the contact it was merged into",
+        'tests/deal-engagement.test.mjs', "a merged duplicate reads as the contact it was merged into — its touches fold in, its id stands with the survivor's"],
+    engagedContacts: ['src/utils/dealEngagement.js', "a deal's engaged people: a merged duplicate as the contact it was merged into",
+        'tests/deal-engagement.test.mjs', "a merged duplicate reads as the contact it was merged into — its touches fold in, its id stands with the survivor's"],
+    onDealOf: ['src/utils/dealEngagement.js', 'who is already on a deal: a merged duplicate by the contact it was merged into',
+        'tests/deal-engagement.test.mjs', 'a picker offers no one already on the deal — by id, a merged duplicate by its survivor; a name only when it is not there'],
+    contactsToAdd: ['src/utils/buyingCommittee.js', "the deal's Contacts tab's add list: never a contact merged into another (D12)",
+        'tests/deal-account.test.mjs', "the deal's Contacts tab never offers a contact merged into another (D12) — buyingCommittee.js, run"],
+};
+
+// A whole-context binding handed on whole: [the call's exact text, why] — the scan cannot follow what it reads, so the
+// callee must read none of the four lists (T8 checks it).
+const WHOLE_CONTEXT = {
+    'src/Tabs/settings/integrations/AutomationsDetail.jsx': [
+        ['recordName(run, lists)', "names a run's record from opportunities, leads and tasks by id (recordName, :325-332) — no account or contact"],
     ],
 };
+
+// Every other read, each with why it may read the whole list and its fate: [the context's key, the read's line (trimmed),
+// how many reads on it, why, fate] — "stay"; "until §0.209" (the screens step fixes it); "until §0.210" (the numbers
+// step). A read not here fails; one here read a different number of times fails ("gone or moved: take it out").
+const STAY = 'stay';
+const SCREENS = 'until §0.209';
+const NUMBERS = 'until §0.210';
+const BY_NAME = 'matched by name (or email) among the whole list, merged away included — filed: OPEN_ITEMS §4.7, "A record matched by name or email can be a merged-away one"';
+const WHOLE_READS = {
+    // ── stay ──
+    'src/Tabs/DuplicateScanView.jsx': [
+        ['accounts', 'const scanKey = `${(accounts || []).length}:${(accounts || []).filter(isMergeArchived).length}`;', 2, "the duplicate scan's key — the list's length and its merged-away count — runs the scan again after a merge or its Undo (state §0.207); the scan itself leaves merged-away rows out (duplicates.mjs)", STAY],
+    ],
+    'src/Tabs/ContactDuplicateScanView.jsx': [
+        ['contacts', 'const scanKey = `${(contacts || []).length}:${(contacts || []).filter(isMergeArchived).length}`;', 2, "the duplicate scan's key, as the accounts' (state §0.207)", STAY],
+    ],
+    'src/Tabs/HomeTab.jsx': [
+        ['accounts', 'const data = { opportunities: visibleOpportunities || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} };', 1, "Home's reports: the report data handed whole to runReport (reportQuery.js) — its \"# of accounts\" counts merged-away accounts until §0.210", STAY],
+    ],
+    'src/Tabs/TasksTab.jsx': [
+        ['accounts', 'account: a.account || resolveActivityAccount(a, opportunities, accounts, contacts),', 1, "the feed's account (resolveActivityAccount, local, :97): by id — the item's own accountId, else its deal's (a merge moves tasks', activities' and deals' accountId, merge.mjs) — else the name it stores; a stale write is the filed edge", STAY],
+        ['contacts', 'account: a.account || resolveActivityAccount(a, opportunities, accounts, contacts),', 1, "an activity with no account: its first contact's company, by id — a merge leaves activities' contactIds (OPEN_ITEMS §4.7, batch 3), so a merged-away contact's company can show", STAY],
+        ['accounts', 'source: \'all\', type: \'all\', range, account: \'all\', scope, search, currentUserId, opportunities, accounts,', 1, "the feed's filter (applyFilters, local, :300): an item's account by id through resolveAccountName, as above", STAY],
+        ['accounts', "const account = resolveAccountName(t, opportunities, accounts) || '';", 2, "a task row's account (resolveAccountName, local, :75): by id, as above", STAY],
+    ],
+    'src/Tabs/ReportsTab.jsx': [
+        ['accounts', 'const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });', 1, "the report builder's data handed whole to runReport — its \"# of accounts\" counts merged-away accounts until §0.210", STAY],
+        ['contacts', 'const oppContacts = (contacts||[]).filter(c =>', 1, "a deal's people by their ids — a contact merge rewrites a deal's contactIds (merge.mjs); a stale whole-row save writing one back is OPEN_ITEMS §4.7's stale-write edge", STAY],
+        ['accounts', 'const acctByName = new Map((accounts||[]).map(a => [(a.name||\'\').toLowerCase(), a]));', 1, "Reports' industry chart takes a deal's account by name — a merged-away twin can be the one", NUMBERS],
+        ['accounts', 'const all = accounts || [];', 1, "Activity History's Account history list (ActivityHistoryTab, handed the app's accounts) lists merged-away accounts", SCREENS],
+        ['contacts', 'const all = contacts || [];', 1, "Activity History's Contact history list lists merged-away contacts", SCREENS],
+        ['accounts', "const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;", 1, "Opportunity history's account panel takes a deal's account by name — a merged-away twin can be the one", SCREENS],
+        ['contacts', 'const available = (allContacts || []).filter(c => {', 1, '"Select contacts to add to this deal" (AddContactToOppPanel, handed every contact) offers merged-away contacts', SCREENS],
+    ],
+    'src/components/rails/AccountRail.jsx': [
+        ['accounts', 'const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);', 1, "an index by id: the Parent field's choices (parentChoices, typedParentRefusal and parentLeftOut read it), and the parent named by its id — a merge moves parentAccountId (merge.mjs), so no row names a merged-away parent", STAY],
+        ['contacts', 'const accountContacts = (contacts || []).filter(c =>', 1, "the account's contacts, whole on purpose: its Activity tab reads their ids (T4); People and CONTACTS draw unarchived(accountContacts)", STAY],
+        ['accounts', 'const candidates = (accounts || []).filter(a => {', 1, `the rail's "Open existing" (checkDuplicate): a name another account has — ${BY_NAME}`, STAY],
+    ],
+    'src/Tabs/ContactsTab.jsx': [
+        ['accounts', 'return (accounts || []).find(a => a.name?.toLowerCase() === activeCompany.name.toLowerCase());', 1, `the Company view's card (CompanyTwoPane's matchedAccount, handed every account) finds its account by name — it lists none; ${BY_NAME}`, STAY],
+    ],
+    'src/components/layout/MeetingPrepPanel.jsx': [
+        ['accounts', "? (accounts || []).find(a => a.name?.toLowerCase() === (matchedOpp.account || '').toLowerCase())", 1, `the meeting's account by the deal's name — ${BY_NAME}`, STAY],
+        ['contacts', "? (contacts || []).filter(c => c.company?.toLowerCase() === (matchedOpp.account || '').toLowerCase() || c.accountId === (matchedOpp.accountId || ''))", 1, "the meeting prep panel's contacts give a merged-away contact a slot", SCREENS],
+    ],
+    'src/components/modals/CsvImportModal.jsx': [
+        ['contacts', 'contacts || [],', 1, `the import's duplicate check (detectDuplicates) by name or email — ${BY_NAME}`, STAY],
+        ['accounts', 'accounts || [],', 1, `the import's duplicate check (detectDuplicates) by name — ${BY_NAME}`, STAY],
+    ],
+    'src/components/layout/ModalLayer.jsx': [
+        ['accounts', 'const existingNames = accounts.map(a => a.name.toLowerCase());', 1, `the contact import's new companies: a company an account already has is not made again — ${BY_NAME}`, STAY],
+    ],
+    'src/components/modals/LeadModal.jsx': [
+        ['contacts', 'return findDuplicate(form, normalizedLeads, contacts);', 1, `a lead's duplicate warning by name or email — ${BY_NAME}`, STAY],
+    ],
+    'src/Tabs/DispatchTab.jsx': [
+        ['accounts', 'const exact = [...(customers || []), ...(accounts || [])]', 1, "New Job's create-guard: a name an account already has, merged away included, offers no Create — a check, nothing drawn", STAY],
+        ['accounts', 'opportunities, jobs, customers, accounts,', 1, `Dispatch's won-deal jobs (buildWonBridgeJobs) find their account by name — ${BY_NAME}`, STAY],
+        ['accounts', 'const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])', 1, "New Job's Customer field (CustomerTypeahead, handed every account) offers merged-away accounts", SCREENS],
+        ['accounts', '{(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}', 1, 'the customer form\'s "Linked CRM account" (CustomerEditForm, through CustomersView) offers merged-away accounts', SCREENS],
+    ],
+    // ── until §0.210, the numbers ──
+    'src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx': [
+        ['accounts', 'for (const a of accounts) {', 1, "Settings → Account segments' counts count merged-away accounts", NUMBERS],
+        ['accounts', 'const topLevelCount = accounts.filter(a => !a.parentAccountId).length;', 1, "Settings → Account segments' top-level count counts merged-away accounts", NUMBERS],
+    ],
+    'src/Tabs/settings/salesProcess/IndustriesDetail.jsx': [
+        ['accounts', 'for (const a of accounts) {', 1, "Settings → Industries' counts count merged-away accounts", NUMBERS],
+        ['accounts', 'const topLevelCount = accounts.filter(a => !a.parentAccountId).length;', 1, "Settings → Industries' top-level count counts merged-away accounts", NUMBERS],
+    ],
+    'src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx': [
+        ['contacts', '(contacts || []).forEach(c => {', 1, "Settings → Buyer Personas' counts, and its Delete gate, count merged-away contacts", NUMBERS],
+    ],
+    'src/components/modals/MergeReviewModal.jsx': [
+        ['contacts', 'const cts = (contacts || []).filter(c => c.company === acc.name).length;', 1, "the account merge window counts merged-away contacts", NUMBERS],
+        ['accounts', 'const subs = (accounts || []).filter(x => (x.parentAccountId) === acc.id).length;', 1, 'the account merge window counts merged-away sub-accounts', NUMBERS],
+    ],
+    'src/components/modals/ContactMergeReviewModal.jsx': [
+        ['contacts', 'const orgChart = (contacts || []).filter(other =>', 1, "the contact merge window's org-links count counts merged-away colleagues and the pair's other record", NUMBERS],
+    ],
+    // ── until §0.209, the screens ──
+    'src/components/layout/AppHeader.jsx': [
+        ['accounts', 'const { shown: mA, more: moreA } = matchSearch(accounts, globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });', 1, 'the header search lists merged-away accounts', SCREENS],
+        ['contacts', "const { shown: mC, more: moreC } = matchSearch(contacts, globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });", 1, 'the header search lists merged-away contacts', SCREENS],
+    ],
+    'src/components/documents/DocumentLinkPicker.jsx': [
+        ['accounts', "accounts.forEach((a) => out.push({ type: 'account', recordId: a.id, name: a.name, sub: join([a.verticalMarket || a.industry, join([a.city, a.state])]) }));", 1, 'the document link picker offers merged-away accounts', SCREENS],
+        ['contacts', "contacts.forEach((c) => out.push({ type: 'contact', recordId: c.id, name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Contact', sub: join([c.title, c.company]) }));", 1, 'the document link picker offers merged-away contacts', SCREENS],
+    ],
+};
+const FATES = new Set([STAY, SCREENS, NUMBERS]);
+
+// The components a list is handed to today, every one — each must be reached (a follow that reaches none proves nothing),
+// and none reached may be left off (a new hand-off is named here when it is first followed).
+const RECEIVERS = [
+    'src/Tabs/ReportsTab.jsx ActivityHistoryTab', 'src/Tabs/ReportsTab.jsx SavedReportsTab', 'src/Tabs/ReportsTab.jsx AddContactToOppPanel',
+    'src/Tabs/DispatchTab.jsx CustomerTypeahead', 'src/Tabs/DispatchTab.jsx CustomersView', 'src/Tabs/DispatchTab.jsx CustomerEditForm',
+    'src/Tabs/ContactsTab.jsx CompanyTwoPane', 'src/components/rails/ActivityRail.jsx ContactMultiSelect',
+    'src/components/modals/OpportunityModal.jsx OpportunityModal', 'src/components/modals/OpportunityModal.jsx DealHistoryTab',
+    'src/components/modals/OpportunityModal.jsx ContactEngagementTab', 'src/components/modals/OpportunityModal.jsx OppQuotesPanel',
+    'src/components/modals/OpportunityModal.jsx RightRail', 'src/components/modals/CsvImportModal.jsx CsvImportModal',
+];
+
 const FN = /^(FunctionDeclaration|FunctionExpression|ArrowFunctionExpression|ObjectMethod|ClassMethod|ClassPrivateMethod)$/;
 const NOT_CHILD = new Set(['loc', 'start', 'end', 'extra', 'range', 'leadingComments', 'trailingComments', 'innerComments']);
-const kids = (n) => Object.keys(n).filter((k) => !NOT_CHILD.has(k))
-    .flatMap((k) => (Array.isArray(n[k]) ? n[k].map((c) => [k, c]) : [[k, n[k]]]))
-    .filter(([, c]) => c && typeof c.type === 'string');
+// A node's children, [key, child], in key order (a loop, not a chain of array copies: every walk runs through it).
+const kids = (n) => {
+    const out = [];
+    for (const k of Object.keys(n)) {
+        if (NOT_CHILD.has(k)) continue;
+        const v = n[k];
+        if (Array.isArray(v)) { for (const c of v) if (c && typeof c.type === 'string') out.push([k, c]); }
+        else if (v && typeof v.type === 'string') out.push([k, v]);
+    }
+    return out;
+};
 // A property's own name — a.contacts, { contacts: x }, a method's — reads no list of that name.
 const isName = (parent, key) => !!parent && !parent.computed && (
     (/MemberExpression$/.test(parent.type) && key === 'property')
     || (/^(ObjectProperty|ObjectMethod|ClassMethod|ClassPrivateMethod|ClassProperty|ClassPrivateProperty)$/.test(parent.type) && key === 'key'));
-// Walks a function's body: onRead(id) for each name read (a shorthand { contacts } and a dependency list among them),
-// onBind(id) for each name declared — a variable, a parameter, a function's or a class's own name, a catch's.
+// Walks a body: onRead(id, path) for each name read (a shorthand { contacts } and a dependency list among them) — path
+// its ancestors, each { node, key } (the key the walk went down by) — and onBind(id) for each name declared: a
+// variable, a parameter, a function's or a class's own name, a catch's.
 const walk = (node, onRead, onBind) => {
+    const path = [];
     const pattern = (p) => {
         if (!p) return;
         if (p.type === 'Identifier') onBind(p);
@@ -456,89 +686,861 @@ const walk = (node, onRead, onBind) => {
     const expr = (n, parent, key) => {
         if (!n || typeof n.type !== 'string') return;
         if (n.type === 'Identifier') {
-            if (!isName(parent, key) && key !== 'label') onRead(n);
+            if (!isName(parent, key) && key !== 'label') onRead(n, path);
             return;
         }
-        if (n.type === 'VariableDeclarator') { pattern(n.id); expr(n.init, n, 'init'); return; }
-        if (n.type === 'CatchClause') { pattern(n.param); expr(n.body, n, 'body'); return; }
-        if (FN.test(n.type) || /^Class(Declaration|Expression)$/.test(n.type)) {
+        const at = { node: n, key: null };
+        path.push(at);
+        if (n.type === 'VariableDeclarator') { at.key = 'id'; pattern(n.id); at.key = 'init'; expr(n.init, n, 'init'); }
+        else if (n.type === 'CatchClause') { at.key = 'param'; pattern(n.param); at.key = 'body'; expr(n.body, n, 'body'); }
+        else if (FN.test(n.type) || /^Class(Declaration|Expression)$/.test(n.type)) {
             if (n.id) onBind(n.id);
-            if (n.computed) expr(n.key, n, 'key');
+            if (n.computed) { at.key = 'key'; expr(n.key, n, 'key'); }
+            at.key = 'params';
             (n.params || []).forEach(pattern);
-            expr(n.superClass, n, 'superClass');
-            expr(n.body, n, 'body');
-            return;
-        }
-        for (const [k, c] of kids(n)) expr(c, n, k);
+            at.key = 'superClass'; expr(n.superClass, n, 'superClass');
+            at.key = 'body'; expr(n.body, n, 'body');
+        } else for (const [k, c] of kids(n)) { at.key = k; expr(c, n, k); }
+        path.pop();
     };
     expr(node);
 };
-// Every useApp() destructure in a file, and each read — in the function that holds it — of a whole list it takes:
-// { key, line, at }. A useApp() not destructured, a rest element or a name declared again would hide reads: refused.
-const wholeReads = (src) => {
-    const lines = src.split('\n');
-    const isUseApp = (c) => c?.type === 'CallExpression' && c.callee.type === 'Identifier' && c.callee.name === 'useApp';
-    const takes = [];
-    let calls = 0;
-    const find = (n, fns) => {
-        if (isUseApp(n)) calls++;
-        if (n.type === 'VariableDeclarator' && n.id.type === 'ObjectPattern' && isUseApp(n.init)) takes.push({ decl: n, fn: fns.at(-1) });
-        for (const [, c] of kids(n)) find(c, FN.test(n.type) ? [...fns, n] : fns);
+// A call's own name: f(…) or React.f(…).
+const calleeName = (c) => (c?.type === 'Identifier' ? c.name
+    : (/MemberExpression$/.test(c?.type) && !c.computed && c.object.type === 'Identifier' && c.object.name === 'React' ? c.property.name : null));
+const WRAPPERS = /^(memo|forwardRef)$/;
+
+// The files the guard reads, parsed once: `source(path)` answers a repo-relative path's code (LF), or null.
+const project = (source) => {
+    const cache = new Map();
+    const resolve = (from, spec) => {
+        if (!/^\.\.?\//.test(spec)) return null;
+        const base = posix.normalize(posix.join(posix.dirname(from), spec));
+        return [base, `${base}.jsx`, `${base}.js`, `${base}/index.jsx`, `${base}/index.js`]
+            .find((p) => /\.jsx?$/.test(p) && source(p) != null) ?? null;
     };
-    find(parse(src, { sourceType: 'module', plugins: ['jsx'] }).program, []);
-    assert.equal(takes.length, calls, 'every useApp() is a destructure the scan reads — none hands the context on whole');
-    const reads = [];
-    for (const { decl, fn } of takes) {
-        assert.ok(fn, 'useApp() is called inside a component');
-        const local = new Map();   // the name a whole list is bound to -> its key in the context
-        const own = new Set();     // the names the destructure itself declares
-        for (const p of decl.id.properties) {
-            assert.notEqual(p.type, 'RestElement', 'a rest element would hand every list on under another name');
-            const v = p.value.type === 'AssignmentPattern' ? p.value.left : p.value;
-            own.add(v);
-            const key = p.computed ? null : (p.key.name ?? p.key.value);
-            if (!WHOLE.includes(key)) continue;
-            assert.equal(v.type, 'Identifier', `${key}: destructured further — the scan follows names`);
-            local.set(v.name, key);
+    const info = (file) => {
+        if (cache.has(file)) return cache.get(file);
+        const src = source(file);
+        assert.ok(src != null, `${file}: not found`);
+        const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+        const imports = new Map();   // local name -> { source, path (resolved), imported }
+        const top = new Map();       // a module-scope function by its name (or { alias })
+        const exported = new Set();
+        const bound = new Map();     // name -> how many times it is declared anywhere in the file
+        const bind = (name) => bound.set(name, (bound.get(name) || 0) + 1);
+        const fnOf = (init) => {
+            if (init && /CallExpression$/.test(init.type) && WRAPPERS.test(calleeName(init.callee) || '') && FN.test(init.arguments[0]?.type)) return init.arguments[0];
+            return init && FN.test(init.type) ? init : null;
+        };
+        for (const s of ast.program.body) {
+            if (s.type === 'ImportDeclaration') {
+                for (const sp of s.specifiers) {
+                    imports.set(sp.local.name, { source: s.source.value, path: resolve(file, s.source.value),
+                        imported: sp.type === 'ImportDefaultSpecifier' ? 'default' : sp.type === 'ImportNamespaceSpecifier' ? '*' : (sp.imported.name ?? sp.imported.value) });
+                    bind(sp.local.name);
+                }
+                continue;
+            }
+            const named = s.type === 'ExportNamedDeclaration';
+            const d = /^Export(Named|Default)Declaration$/.test(s.type) ? s.declaration : s;
+            if (named && !s.declaration) for (const sp of s.specifiers) { top.set(sp.exported.name, { alias: sp.local.name }); exported.add(sp.exported.name); }
+            if (!d) continue;
+            if (s.type === 'ExportDefaultDeclaration') {
+                if (FN.test(d.type)) top.set('default', d);
+                else if (d.type === 'Identifier') top.set('default', { alias: d.name });
+            }
+            if (d.type === 'FunctionDeclaration' && d.id) { top.set(d.id.name, d); if (named) exported.add(d.id.name); }
+            if (d.type === 'VariableDeclaration') for (const v of d.declarations) {
+                if (v.id.type !== 'Identifier') continue;
+                if (named) exported.add(v.id.name);
+                const f = fnOf(v.init);
+                if (f) top.set(v.id.name, f);
+            }
         }
-        walk(fn.body,
-            (id) => { if (local.has(id.name)) reads.push({ key: local.get(id.name), line: lines[id.loc.start.line - 1].trim(), at: id.loc.start.line }); },
-            (id) => { if (local.has(id.name) && !own.has(id)) assert.fail(`${id.name} declared again at line ${id.loc.start.line} — it shadows the app's list, and the scan could not tell its reads apart`); });
-    }
-    return { fns: takes.map((t) => t.fn.id?.name ?? null), reads };
+        walk(ast.program, () => {}, (id) => bind(id.name));
+        const parentOf = new Map();
+        const index = (n, parent) => { parentOf.set(n, parent); for (const [, c] of kids(n)) index(c, n); };
+        index(ast.program, null);
+        const it = { file, src, lines: src.split('\n'), ast, imports, top, exported, bound, parentOf };
+        cache.set(file, it);
+        return it;
+    };
+    // A module-scope function of the file by name, through `export default X` / `export { X as Y }`.
+    const topFn = (it, name) => {
+        let f = it.top.get(name);
+        if (f?.alias) f = it.top.get(f.alias);
+        return f && FN.test(f.type) ? f : null;
+    };
+    // A function's own name: its id, or the const it is bound to (through memo / forwardRef).
+    const nameOf = (it, fn) => {
+        if (fn.id) return fn.id.name;
+        let p = it.parentOf.get(fn);
+        if (p && /CallExpression$/.test(p.type) && WRAPPERS.test(calleeName(p.callee) || '')) p = it.parentOf.get(p);
+        return p?.type === 'VariableDeclarator' && p.id.type === 'Identifier' ? p.id.name : null;
+    };
+    // `name`, called as `callee`, is the one `module` exports, imported under its own name and declared nowhere else.
+    const importedFrom = (it, callee, name, module) => callee?.type === 'Identifier' && callee.name === name
+        && it.imports.get(name)?.path === module && it.imports.get(name).imported === name && it.bound.get(name) === 1;
+    return { info, topFn, nameOf, importedFrom };
 };
 
-test("T8 — THE GUARD — each tab reads the app's whole lists only where named here, each with its reason: a view, count, filter or hand-off pointed at the whole list draws merged-away rows again, or the tab fails to load (a parse of each tab component)", () => {
-    for (const [file, named] of Object.entries(WHOLE_READS)) {
-        const src = read(file);
-        assert.ok(src.includes("import { useApp } from '../AppContext';") && !/\buseContext\b/.test(src), `${file}: the app's lists through useApp() alone`);
-        const { fns, reads } = wholeReads(src);
-        assert.ok(fns.includes(file.match(/(\w+)\.jsx$/)[1]), `${file}: the tab's own useApp() found (a scan that finds nothing proves nothing)`);
-        const allowed = new Set(named.map(([key, line]) => `${key} | ${line}`));
-        assert.deepEqual(reads.filter((r) => !allowed.has(`${r.key} | ${r.line}`)).map((r) => `${file}:${r.at} ${r.key} — ${r.line}`), [],
-            "REGRESSION: the app's whole list read where the tab draws its rows, counts or views — merged-away rows back on screen, or the tab failing to load (a read the tab needs whole is named above, with its reason)");
-        for (const [key, line, times] of named) {
-            assert.equal(reads.filter((r) => r.key === key && r.line === line).length, times, `${file}: ${key} read ${times}× on: ${line} — gone or moved: take it out of the list`);
+const HOOK_DEPS = /^(useMemo|useEffect|useCallback|useLayoutEffect)$/;
+// One of React's hooks: React.<hook>, or a name imported from 'react' — or one the file neither imports nor declares
+// (a made-up component's bare useMemo); a file's own `useMemo` is not (the adversary's C45).
+const reactHook = (it, callee) => callee.type !== 'Identifier'
+    || (it.imports.has(callee.name) ? it.imports.get(callee.name).source === 'react' : !it.bound.get(callee.name));
+// The shape of a read: R the node that is the whole list (a name, or x.key), anc its ancestors.
+const shapeOf = (P, it, R, anc) => {
+    const up = (i) => anc[anc.length - 1 - i]?.node;
+    if (up(0)?.type === 'ArrayExpression' && /CallExpression$/.test(up(1)?.type) && up(1).arguments[1] === up(0)
+        && HOOK_DEPS.test(calleeName(up(1).callee) || '') && reactHook(it, up(1).callee)) return 'deps';
+    let node = R, i = 0;
+    if (up(0)?.type === 'LogicalExpression' && /^(\|\||\?\?)$/.test(up(0).operator) && up(0).left === R
+        && up(0).right.type === 'ArrayExpression' && !up(0).right.elements.length) { node = up(0); i = 1; }
+    const p = up(i), pp = up(i + 1);
+    if (/CallExpression$/.test(p?.type) && p.arguments.length === 1 && p.arguments[0] === node
+        && P.importedFrom(it, p.callee, 'unarchived', PICK_LINK)) return 'live';
+    // list.find(…) / list.filter(…) with one predicate of one parameter
+    const pred = (method) => {
+        if (!(/MemberExpression$/.test(p?.type) && p.object === node && !p.computed && p.property.name === method
+            && /CallExpression$/.test(pp?.type) && pp.callee === p && pp.arguments.length === 1)) return null;
+        const f = pp.arguments[0];
+        if (!/^(ArrowFunctionExpression|FunctionExpression)$/.test(f.type) || f.params.length !== 1 || f.params[0].type !== 'Identifier') return null;
+        let body = f.body;
+        if (body.type === 'BlockStatement') {
+            if (body.body.length !== 1 || body.body[0].type !== 'ReturnStatement') return null;
+            body = body.body[0].argument;
+        }
+        return { param: f.params[0].name, body };
+    };
+    const reads = (n, name) => { let hit = false; walk(n, (id) => { if (id.name === name) hit = true; }, () => {}); return hit; };
+    const byId = pred('find');
+    if (byId?.body?.type === 'BinaryExpression' && byId.body.operator === '===') {
+        const ownId = (s) => s.type === 'MemberExpression' && !s.computed && s.object.type === 'Identifier' && s.object.name === byId.param && s.property.name === 'id';
+        const { left, right } = byId.body;
+        if ((ownId(left) && !reads(right, byId.param)) || (ownId(right) && !reads(left, byId.param))) return 'byId';
+    }
+    const live = pred('filter');
+    if (live?.body) {
+        const terms = [];
+        const and = (n) => { if (n.type === 'LogicalExpression' && n.operator === '&&') { and(n.left); and(n.right); } else terms.push(n); };
+        and(live.body);
+        if (terms.some((t) => t.type === 'UnaryExpression' && t.operator === '!' && t.argument.type === 'CallExpression'
+            && P.importedFrom(it, t.argument.callee, 'isMergeArchived', PICK_LINK) && t.argument.arguments.length === 1
+            && t.argument.arguments[0].type === 'Identifier' && t.argument.arguments[0].name === live.param)) return 'liveOnly';
+    }
+    // A resolver's direct argument, or the direct value of a property of an object literal that is one (fidelity #9;
+    // an assignment or a sequence inside the arguments, the adversary's C43, is neither).
+    const call = /CallExpression$/.test(p?.type) && p.arguments.includes(node) ? p
+        : p?.type === 'ObjectProperty' && p.value === node && !p.computed && pp?.type === 'ObjectExpression'
+            && /CallExpression$/.test(up(i + 2)?.type) && up(i + 2).arguments.includes(pp) ? up(i + 2) : null;
+    if (call && call.callee.type === 'Identifier' && Object.hasOwn(RESOLVERS, call.callee.name)
+        && P.importedFrom(it, call.callee, call.callee.name, RESOLVERS[call.callee.name][0])) return `resolver:${call.callee.name}`;
+    if (p?.type === 'JSXSpreadAttribute') assert.fail(`${it.file}:${R.loc.start.line} spreads the app's whole list into a component — the scan cannot follow it`);
+    if (p?.type === 'JSXExpressionContainer' && pp?.type === 'JSXAttribute') {
+        const el = up(i + 2);
+        if (el.name.type !== 'JSXIdentifier' || pp.name.type !== 'JSXIdentifier') assert.fail(`${it.file}:${R.loc.start.line} hands the app's whole list to a component the guard cannot find`);
+        if (/^[A-Z]/.test(el.name.name)) return { to: el.name.name, prop: pp.name.name };
+    }
+    return null;
+};
+
+// A file read as text first, parsed only when its text names `re`: a file that never names AppContext cannot import
+// from it; one that never names a list endpoint cannot GET it (a parse of every src file made T8 the slowest test —
+// the harness review, #6; what the guard finds is the same with them and without).
+const naming = (re, source = (p) => fromDisk(p)) => (file) => re.test(source(file) ?? '');
+
+// The guard over `files` (repo-relative paths), reading through `source`. Answers { files: [the files that import
+// useApp], holders: { file: [function names] }, reads: [{ file, key, line, at, shape }] (shape null for a named read),
+// receivers: Set('file Name'), context: [{ file, text, reads }] }; a shape the scan cannot read fails, saying why.
+const guard = (files, source, { context = WHOLE_CONTEXT } = {}) => {
+    const P = project(source);
+    const out = { files: [], holders: {}, reads: [], receivers: new Set(), context: [] };
+    const seen = new Set();
+    const lineOf = (it, n) => it.lines[n.loc.start.line - 1].trim();
+    const record = (it, R, anc, key) => {
+        const s = shapeOf(P, it, R, anc);
+        const id = `${it.file}:${R.start}:${key}`;
+        if (!seen.has(id)) {
+            seen.add(id);
+            out.reads.push({ file: it.file, key, at: R.loc.start.line, line: lineOf(it, R), shape: s && typeof s === 'object' ? `followed:${s.to}` : s });
+        }
+        if (s && typeof s === 'object') follow(it, s.to, s.prop, key, R);
+        return s;
+    };
+    // The body of `fn` in file `it`, its names: tracked (a name -> its key), own (the binding nodes that declare them),
+    // ctx (a name bound to the whole context), props ({ name, id, map: prop -> key } for a plain first parameter).
+    const scan = (it, fn, { tracked = new Map(), own = new Set(), ctx = new Map(), props = null }) => {
+        // A read; and when it is a carrier's argument (RESOLVERS' 'carries'), the name its answer is bound to is the list.
+        const rec = (R, anc, key) => {
+            const s = record(it, R, anc, key);
+            const r = typeof s === 'string' && s.startsWith('resolver:') ? s.slice(9) : null;
+            if (!r || RESOLVERS[r][4] !== 'carries') return;
+            const at = anc.findLastIndex((x) => /CallExpression$/.test(x.node.type) && x.node.callee.type === 'Identifier' && x.node.callee.name === r);
+            const d = anc[at - 1]?.node;
+            assert.ok(at > 0 && d?.type === 'VariableDeclarator' && d.init === anc[at].node && d.id.type === 'Identifier',
+                `${it.file}:${R.loc.start.line} ${r}(…) hands back the list it is given — bind its answer to a name (const x = ${r}(…)), so the scan reads x as the list`);
+            tracked.set(d.id.name, key);
+            own.add(d.id);
+        };
+        walk(fn.body, (id, path) => {
+            const last = path.at(-1);
+            if (id.name === 'useApp' && last?.key === 'callee' && /CallExpression$/.test(last.node.type)) {
+                const m = path.at(-2)?.node;
+                if (/MemberExpression$/.test(m?.type) && m.object === last.node) {
+                    if (m.computed) assert.fail(`${it.file}:${m.loc.start.line} reads the app's context by a computed key`);
+                    if (WHOLE.includes(m.property.name)) rec(m, path.slice(0, -2), m.property.name);
+                }
+                return;
+            }
+            if (tracked.has(id.name)) return rec(id, path, tracked.get(id.name));
+            const via = ctx.has(id.name) ? 'context' : props && id.name === props.name ? 'props' : null;
+            if (!via) return;
+            const p = last?.node, k = last?.key;
+            if (/MemberExpression$/.test(p?.type) && k === 'object') {
+                if (p.computed) assert.fail(`${it.file}:${p.loc.start.line} reads its ${via} by a computed key`);
+                const key = via === 'context' ? (WHOLE.includes(p.property.name) ? p.property.name : null) : props.map[p.property.name];
+                if (key) rec(p, path.slice(0, -1), key);
+                return;
+            }
+            if (via === 'props') {
+                if (p?.type === 'VariableDeclarator' && k === 'init' && p.id.type === 'ObjectPattern') return;   // read before the walk
+                assert.fail(`${it.file}:${id.loc.start.line} uses its props whole (${props.name}) — the scan cannot follow ${Object.keys(props.map).join(', ')} through it`);
+            }
+            if (((p?.type === 'IfStatement' || p?.type === 'ConditionalExpression') && k === 'test') || (p?.type === 'LogicalExpression' && p.operator === '&&' && k === 'left')) return;
+            const text = /CallExpression$/.test(p?.type) && k === 'arguments' ? it.src.slice(p.start, p.end) : null;
+            if (text && (context[it.file] || []).some(([t]) => t === text)) {
+                // The callee, a module-scope function of the file, scanned with the parameter the context lands in as a
+                // whole-context binding: what it reads of the four lists is counted (T8 holds it to none).
+                const callee = p.callee.type === 'Identifier' ? P.topFn(it, p.callee.name) : null;
+                assert.ok(callee, `${it.file}:${id.loc.start.line} ${text} — the context handed to a function the guard cannot find (a module-scope function of this file)`);
+                const param = callee.params[p.arguments.indexOf(id)];
+                assert.ok(param?.type === 'Identifier', `${it.file}:${id.loc.start.line} ${text} — the context lands in a parameter of ${p.callee.name} that is not a plain name: the scan reads it by key`);
+                const before = out.reads.length;
+                scan(it, callee, { ctx: new Map([[param.name, param]]) });
+                out.context.push({ file: it.file, text, reads: out.reads.length - before });
+                return;
+            }
+            assert.fail(`${it.file}:${id.loc.start.line} uses the app's context whole (${text ?? lineOf(it, id)}) — the scan cannot follow its lists: read them by key, or name the call in WHOLE_CONTEXT with its reason`);
+        }, (id) => {
+            if ((tracked.has(id.name) && !own.has(id)) || (ctx.has(id.name) && ctx.get(id.name) !== id) || (props && id.name === props.name && id !== props.id)) {
+                assert.fail(`${id.name} declared again at line ${id.loc.start.line} — it shadows the app's list, and the scan could not tell its reads apart (${it.file})`);
+            }
+        });
+    };
+    // A list handed to <to prop={…}/>: the component in this file, or by one relative import, its body scanned.
+    const follow = (it, to, prop, key, at) => {
+        let rit = it, rfn = P.topFn(it, to);
+        const imp = it.imports.get(to);
+        if (!rfn && imp?.path) { rit = P.info(imp.path); rfn = P.topFn(rit, imp.imported); }
+        if (!rfn) assert.fail(`${it.file}:${at.loc.start.line} hands the app's whole list to <${to}> — the guard cannot find the component (a module-scope function of this file, or one relative import)`);
+        assert.ok((it.bound.get(to) || 0) <= 1, `${it.file}:${at.loc.start.line} <${to}> is declared more than once in the file — the guard cannot tell which one it renders: give each its own name`);
+        out.receivers.add(`${rit.file} ${to}`);
+        const visit = `${rit.file}:${rfn.start}:${prop}:${key}`;
+        if (seen.has(visit)) return;
+        seen.add(visit);
+        const p0 = rfn.params[0];
+        if (!p0) return;
+        if (p0.type === 'ObjectPattern') {
+            const q = p0.properties.find((x) => x.type !== 'RestElement' && !x.computed && (x.key.name ?? x.key.value) === prop);
+            if (!q) {
+                assert.ok(!p0.properties.some((x) => x.type === 'RestElement' || x.computed), `${rit.file}:${p0.loc.start.line} <${to}>: a rest element or a computed key would hand ${prop} on under another name`);
+                return;
+            }
+            const v = q.value.type === 'AssignmentPattern' ? q.value.left : q.value;
+            assert.equal(v.type, 'Identifier', `${rit.file}:${v.loc.start.line} <${to}>: ${prop} destructured further — the scan follows names`);
+            scan(rit, rfn, { tracked: new Map([[v.name, key]]), own: new Set([v]) });
+        } else if (p0.type === 'Identifier') {
+            const tracked = new Map(), own = new Set();
+            const later = (n) => {
+                if (n.type === 'VariableDeclarator' && n.init?.type === 'Identifier' && n.init.name === p0.name && n.id.type === 'ObjectPattern') {
+                    for (const q of n.id.properties) {
+                        assert.ok(q.type !== 'RestElement' && !q.computed, `${rit.file}:${q.loc.start.line} <${to}>: a rest element or a computed key of ${p0.name} would hand ${prop} on under another name`);
+                        if ((q.key.name ?? q.key.value) !== prop) continue;
+                        const v = q.value.type === 'AssignmentPattern' ? q.value.left : q.value;
+                        assert.equal(v.type, 'Identifier', `${rit.file}:${v.loc.start.line} <${to}>: ${prop} destructured further — the scan follows names`);
+                        tracked.set(v.name, key);
+                        own.add(v);
+                    }
+                }
+                for (const [, c] of kids(n)) later(c);
+            };
+            later(rfn.body);
+            scan(rit, rfn, { tracked, own, props: { name: p0.name, id: p0, map: { [prop]: key } } });
+        } else assert.fail(`${rit.file}:${p0.loc.start.line} <${to}>: its first parameter is neither a destructure nor a name — the scan cannot follow ${prop}`);
+    };
+    for (const file of files) {
+        if (!naming(/AppContext/, source)(file)) continue;
+        const it = P.info(file);
+        const specs = it.ast.program.body.filter((s) => s.type === 'ImportDeclaration' && CTX_PATH.test(s.source.value))
+            .flatMap((s) => s.specifiers).filter((sp) => sp.type === 'ImportSpecifier' && (sp.imported.name ?? sp.imported.value) === 'useApp');
+        if (!specs.length) continue;
+        assert.ok(specs.every((sp) => sp.local.name === 'useApp'), `${file} imports useApp under another name — the scan reads useApp() by its name`);
+        out.files.push(file);
+        // Each useApp() call, by the function that holds it.
+        const byFn = new Map();
+        const find = (n, fns, key) => {
+            if (n.type === 'Identifier' && n.name === 'useApp') {
+                const p = it.parentOf.get(n);
+                assert.ok(!(p?.type === 'OptionalCallExpression' && p.callee === n), `${file}:${n.loc.start.line} useApp?.() — call useApp() plainly: the scan finds its holder by that call`);
+                assert.ok(p?.type === 'ImportSpecifier' || (/CallExpression$/.test(p?.type) && p.callee === n) || isName(p, key),
+                    `${file}:${n.loc.start.line} useApp handed on as a value — the scan reads useApp() where it is called`);
+            }
+            if (n.type === 'CallExpression' && n.callee.type === 'Identifier' && n.callee.name === 'useApp') {
+                assert.ok(fns.length, `${file}:${n.loc.start.line} useApp() outside a component`);
+                if (!byFn.has(fns.at(-1))) byFn.set(fns.at(-1), []);
+                byFn.get(fns.at(-1)).push(n);
+            }
+            for (const [k, c] of kids(n)) find(c, FN.test(n.type) ? [...fns, n] : fns, k);
+        };
+        find(it.ast.program, [], null);
+        out.holders[file] = [];
+        for (const [fn, calls] of byFn) {
+            const name = P.nameOf(it, fn);
+            assert.ok(name, `${file}:${fn.loc.start.line} useApp() in a function with no name — not a component the guard can name`);
+            out.holders[file].push(name);
+            const tracked = new Map(), own = new Set(), ctx = new Map();
+            for (const call of calls) {
+                const p = it.parentOf.get(call);
+                if (p.type === 'VariableDeclarator' && p.init === call && p.id.type === 'ObjectPattern') {
+                    for (const q of p.id.properties) {
+                        assert.notEqual(q.type, 'RestElement', `${file}:${q.loc.start.line} a rest element would hand every list on under another name`);
+                        assert.ok(!q.computed, `${file}:${q.loc.start.line} a computed key of useApp() — the scan reads keys by their names`);
+                        const v = q.value.type === 'AssignmentPattern' ? q.value.left : q.value;
+                        own.add(v);
+                        const key = q.key.name ?? q.key.value;
+                        if (!WHOLE.includes(key)) continue;
+                        assert.equal(v.type, 'Identifier', `${file}:${v.loc.start.line} ${key}: destructured further — the scan follows names`);
+                        tracked.set(v.name, key);
+                    }
+                } else if (p.type === 'VariableDeclarator' && p.init === call && p.id.type === 'Identifier') ctx.set(p.id.name, p.id);
+                else assert.ok(/MemberExpression$/.test(p.type) && p.object === call, `${file}:${call.loc.start.line} useApp() neither destructured, bound to a name, nor read by a key`);
+            }
+            scan(it, fn, { tracked, own, ctx });
         }
     }
+    return Object.assign(out, { project: P });
+};
+
+// The tree's src files, by path; a reader of the tree.
+const srcFiles = (dir = 'src') => readdirSync(new URL(`${dir}/`, ROOT), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? srcFiles(`${dir}/${e.name}`) : (/\.jsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])));
+const fromDisk = (p) => (existsSync(new URL(p, ROOT)) ? read(p) : null);
+
+// Whether test `label` of `suite` runs `name` on a merged-away row: its body calls the name (or a module-scope helper of
+// the suite that does), and reads a row holding a merge mark (`mergeArchived: true`, or `mergedIntoId: '…'`) — in its
+// own text, or through a module-scope binding of the suite that holds one. Its LIMIT (the fidelity review, #1): both
+// must be in the test, not the one in the other — a test that calls the name on a live list and reads a marked row
+// elsewhere passes. Each test named below was read to run the call on a list holding a merged-away row (outOfList's
+// and chipLabel's are T6's own assertions on the whole list); a new entry's test is read the same way.
+const MERGE_MARK = /mergeArchived: true|mergedIntoId: '/;
+const runsOnMerged = (suite, label, name) => {
+    const src = read(suite);
+    const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+    const names = (n, s = new Set()) => { if (n.type === 'Identifier') s.add(n.name); for (const [, c] of kids(n)) names(c, s); return s; };
+    const calls = (n, set) => { let hit = false; const f = (x) => { if (x.type === 'CallExpression' && x.callee.type === 'Identifier' && set.has(x.callee.name)) hit = true; for (const [, c] of kids(x)) f(c); }; f(n); return hit; };
+    const decls = ast.program.body.flatMap((s) => (s.type === 'FunctionDeclaration' ? [{ name: s.id.name, node: s }]
+        : s.type === 'VariableDeclaration' ? s.declarations.filter((d) => d.id.type === 'Identifier' && d.init).map((d) => ({ name: d.id.name, node: d.init })) : []));
+    const helpers = new Set([name]), marked = new Set();
+    for (let more = true; more;) {
+        more = false;
+        for (const d of decls) {
+            if (!helpers.has(d.name) && FN.test(d.node.type) && calls(d.node, helpers)) { helpers.add(d.name); more = true; }
+            if (!marked.has(d.name) && (MERGE_MARK.test(src.slice(d.node.start, d.node.end)) || [...names(d.node)].some((x) => marked.has(x)))) { marked.add(d.name); more = true; }
+        }
+    }
+    const t = ast.program.body.map((s) => s.expression).find((e) => e?.type === 'CallExpression' && e.callee.name === 'test' && e.arguments[0]?.value === label);
+    assert.ok(t, `${suite}: no test "${label}"`);
+    return calls(t, helpers) && (MERGE_MARK.test(src.slice(t.start, t.end)) || [...names(t)].some((x) => marked.has(x)));
+};
+
+// App.jsx builds the context and calls no useApp(): its lists — `accounts` and `contacts` from the hooks, the
+// `visibleAccounts` and `visibleContacts` it narrows from them — are read only where named, and handed to no component
+// as a prop (none today: the tabs take them from the context). [key, line, times, why].
+const APP_READS = [
+    ['accounts', 'const visibleAccounts = (accounts || [])', 1, "the context's visibleAccounts: isRepVisible and the top level — never a merge (the tabs read it through unarchived, T1)"],
+    ['contacts', 'const visibleContacts = (contacts || []).filter(c => isRepVisible(c.assignedRep));', 1, "the context's visibleContacts: isRepVisible — never a merge (T2)"],
+    ['contacts', 'const allContacts = contacts.filter(c => c.company && names.includes(c.company.toLowerCase()));', 1, "getAccountRollup's allContacts — every contact of the account's names, merged-away included — read by nothing (dead code, found by the cleanup batch's maps, 18 Oct): no screen may read it (CARRIED, T8)"],
+    ['accounts', 'accounts, setAccounts,', 1, "the context hands every row on (T6)"],
+    ['contacts', 'contacts, setContacts,', 1, "the context hands every row on (T6)"],
+    ['visibleAccounts', 'visibleAccounts,', 1, 'the context hands it on'],
+    ['visibleContacts', 'visibleContacts,', 1, 'the context hands it on'],
+];
+// The list hooks are the only screens' reads of either list endpoint: a screen that fetched its own list would be
+// outside the guard. Every other call naming the endpoint writes (a method, or a bulk post or put).
+const LIST_GETS = [
+    "src/hooks/useAccounts.js — dbFetch('/.netlify/functions/accounts')",
+    "src/hooks/useContacts.js — dbFetch('/.netlify/functions/contacts')",
+];
+const LIST_ENDPOINT = /\/\.netlify\/functions\/(accounts|contacts)/;
+
+// One road to the context (the adversary's C33-C35; the fidelity review, #7): every path in a src file that leads to
+// src/AppContext — an import's or a re-export's source, a dynamic import's or a require's argument, any string — is the
+// source of an `import { useApp }` / `import { AppProvider }` by a path the guard's file pick reads (CTX_PATH). Answers
+// each other road, 'file:line path'.
+const roads = (P, file) => {
+    const it = P.info(file);
+    const house = (s) => s.type === 'ImportDeclaration' && CTX_PATH.test(s.source.value)
+        && s.specifiers.every((sp) => sp.type === 'ImportSpecifier' && /^(useApp|AppProvider)$/.test(sp.imported.name ?? sp.imported.value));
+    // Every road names AppContext in its text: when each time the text does is one of the house's imports, there is none.
+    if (count(it.src, 'AppContext') === it.ast.program.body.filter(house).length) return [];
+    const toCtx = (spec) => /^\.\.?\//.test(spec) && posix.normalize(posix.join(posix.dirname(file), spec)).replace(/\.jsx?$/, '') === 'src/AppContext';
+    const out = [];
+    const visit = (n, parent, key) => {
+        const text = n.type === 'StringLiteral' ? n.value : n.type === 'TemplateLiteral' && !n.expressions.length ? n.quasis[0].value.cooked : null;
+        if (text != null && toCtx(text) && !(key === 'source' && house(parent))) out.push(`${file}:${n.loc.start.line} ${text}`);
+        for (const [k, c] of kids(n)) visit(c, n, k);
+    };
+    visit(it.ast.program, null, null);
+    return out;
+};
+
+// A list a context function carries out, read by no screen (the adversary's C39): getAccountRollup's allContacts —
+// App.jsx builds it from the whole list (APP_READS) and hands the function on the context. In every src file but
+// App.jsx, a member read of it (`r.allContacts`, `r?.['allContacts']`) or a destructure naming it (`const { allContacts }
+// = …`, at any depth) fails. A component's own prop of that name (AddContactToOppPanel's, ReportsTab.jsx) is a
+// parameter, neither of these. Answers each read, 'file:line name'.
+const CARRIED = { allContacts: "getAccountRollup's (App.jsx): every contact of the account's names, merged-away included — read by nothing (dead code, filed with the batch's flags, P40)" };
+const CARRIED_TEXT = new RegExp(Object.keys(CARRIED).join('|'));
+const carried = (P, file) => {
+    const hits = [];
+    const keyOf = (n, computed) => (computed ? (n.type === 'StringLiteral' ? n.value : null) : (n.name ?? n.value));
+    const hit = (name, n) => { if (name != null && Object.hasOwn(CARRIED, name)) hits.push(`${file}:${n.loc.start.line} ${name}`); };
+    const pattern = (p) => {
+        if (p?.type === 'ObjectPattern') for (const q of p.properties) { if (q.type === 'ObjectProperty') { hit(keyOf(q.key, q.computed), q); pattern(q.value); } }
+        else if (p?.type === 'ArrayPattern') p.elements.forEach(pattern);
+        else if (p?.type === 'AssignmentPattern') pattern(p.left);
+    };
+    const visit = (n) => {
+        if (/MemberExpression$/.test(n.type)) hit(keyOf(n.property, n.computed), n);
+        if (n.type === 'VariableDeclarator') pattern(n.id);
+        if (n.type === 'AssignmentExpression') pattern(n.left);
+        for (const [, c] of kids(n)) visit(c);
+    };
+    visit(P.info(file).ast.program);
+    return hits;
+};
+
+// What App.jsx takes from the two list hooks, key for key (the adversary's C40: a value built there from the whole list
+// reaches the context unscanned — getSubAccounts took that road): [the keys that hand on rows, each with why; the keys
+// that hand on none — setters, loaders, handlers, a modal's state]. A key taken that is not here fails until classified.
+const LIST_HOOK_KEYS = {
+    useAccounts: [{ accounts: 'every row, handed on whole (T6)', getSubAccounts: "an account's sub-accounts, merged-away ones left out (T3)" },
+        'accountModalError accountModalSaving handleDeleteAccounts handleSaveAccount loadAccounts setAccountModalError setAccountModalSaving setAccounts'],
+    useContacts: [{ contacts: 'every row, handed on whole (T6)' },
+        'contactModalError contactModalSaving handleDeleteContacts handleSaveContact loadContacts setContactModalError setContactModalSaving setContacts'],
+};
+// Answers { hook: 'its keys, sorted' } for each list hook `fn` takes by a destructure; anything else of one fails.
+const hookKeys = (fn) => {
+    const taken = {};
+    const visit = (n, d) => {
+        if (/CallExpression$/.test(n.type) && n.callee.type === 'Identifier' && Object.hasOwn(LIST_HOOK_KEYS, n.callee.name)) {
+            assert.ok(d?.type === 'VariableDeclarator' && d.init === n && d.id.type === 'ObjectPattern', `App.jsx: ${n.callee.name}() taken whole, or not by a destructure — the guard reads its keys by name`);
+            assert.ok(!taken[n.callee.name], `App.jsx: ${n.callee.name}() called twice`);
+            taken[n.callee.name] = d.id.properties.map((q) => {
+                assert.ok(q.type === 'ObjectProperty' && !q.computed, `App.jsx: a rest element or a computed key of ${n.callee.name}() — the guard reads its keys by name`);
+                return q.key.name ?? q.key.value;
+            }).sort().join(' ');
+        }
+        for (const [, c] of kids(n)) visit(c, n);
+    };
+    visit(fn, null);
+    return taken;
+};
+
+test("T8 — THE GUARD, class-wide (state §0.208): every file that takes the app's lists through useApp(), and every component a list is handed to, reads the whole list only through a shape that leaves merged-away rows out or resolves through them, or where named here with its reason and fate — a view, count, filter, picker or hand-off pointed at the whole list draws merged-away rows again (a parse of every screen); App.jsx and the list hooks pinned", () => {
+    const all = srcFiles().filter((f) => f !== 'src/App.jsx');
+    const g = guard(all, fromDisk);
+    // A scan that finds nothing proves nothing: every file the parse picks, each with its own component, every key read.
+    assert.ok(g.files.length >= 57, `the files that import useApp — 57 since §0.208: ${g.files.length} (a file that stopped taking the app's lists on purpose: lower the floor here and say why)`);
+    for (const file of g.files) {
+        const own = file.match(/(\w+)\.jsx?$/)[1];
+        assert.ok(g.holders[file].some((n) => n === own || n === `${own}Host`),
+            `${file}: its own component holds useApp() (found: ${g.holders[file].join(', ')}) — name the component after its file (or ${own}Host), so the guard can tell it found the file's own component`);
+    }
+    for (const key of WHOLE) assert.ok(g.reads.some((r) => r.key === key), `a read of ${key} found`);
+    // Every component a list is handed to: reached, and named.
+    for (const r of RECEIVERS) assert.ok(g.receivers.has(r), `the hand-off to ${r} not followed — is nothing handed to it any more? Then take it out of RECEIVERS`);
+    assert.deepEqual([...g.receivers].filter((r) => !RECEIVERS.includes(r)).sort(), [], "a list handed to a component RECEIVERS does not name — name it there (its reads are scanned under the same rules)");
+    // Every read is a shape or named, with its reason; each named read read as many times as said. A named line that
+    // changed reads as both — an entry short of its count, and a read on a line not named, in the same file and of the
+    // same key: said once, together, before either alone.
+    const named = g.reads.filter((r) => !r.shape);
+    const listed = (r) => (WHOLE_READS[r.file] || []).some(([key, line]) => key === r.key && line === r.line);
+    const unlisted = named.filter((r) => !listed(r));
+    const said = (r) => `${r.file}:${r.at} ${r.key} — ${r.line}`;
+    for (const [file, entries] of Object.entries(WHOLE_READS)) {
+        for (const [key, line, , why, fate] of entries) assert.ok(why && FATES.has(fate), `${file}: ${line} — a reason and a fate (${key})`);
+    }
+    const short = Object.entries(WHOLE_READS).flatMap(([file, entries]) => entries
+        .filter(([key, line, times]) => named.filter((r) => r.file === file && r.key === key && r.line === line).length !== times)
+        .map(([key, line, times]) => ({ file, key, line, times })));
+    const changed = short.filter((e) => unlisted.some((r) => r.file === e.file && r.key === e.key));
+    assert.deepEqual(changed.map((e) => `${e.file}: ${e.key} read ${e.times}× on: ${e.line}`), [],
+        `a line WHOLE_READS names, not found as written — fixed? take it out of the list; moved or reworded? update its text there. The reads on lines it does not name, in the same files: ${unlisted.filter((r) => changed.some((e) => e.file === r.file && e.key === r.key)).map(said).join('; ')}`);
+    assert.deepEqual(unlisted.map(said), [],
+        "REGRESSION: the app's whole list read where a screen draws, counts, offers or hands on its rows — merged-away rows back on screen (a read that needs the whole list is a shape above, or named in WHOLE_READS with its reason; a call that resolves through the whole list: add it to RESOLVERS, with the test that runs it on a merged-away row)");
+    assert.deepEqual(short.map((e) => `${e.file}: ${e.key} read ${e.times}× on: ${e.line}`), [], 'a line WHOLE_READS names, gone or read a different number of times — fixed? take it out of the list');
+    // Each resolver: used, its module's own export, and run on a merged-away row by the test it names.
+    for (const [name, [module, why, suite, label, carries]] of Object.entries(RESOLVERS)) {
+        assert.ok(why, name);
+        assert.ok(carries === undefined || carries === 'carries', `RESOLVERS: ${name} — its fifth element is 'carries' or nothing`);
+        assert.ok(g.reads.some((r) => r.shape === `resolver:${name}`), `RESOLVERS: ${name} — no scanned read uses it: take it out of the list`);
+        assert.ok(g.project.info(module).exported.has(name), `RESOLVERS: ${name} is not an export of ${module}`);
+        assert.ok(runsOnMerged(suite, label, name), `RESOLVERS: ${name} — ${suite} "${label.slice(0, 60)}…" does not run it on a merged-away row`);
+    }
+    // A context handed on whole: each call named once, its callee a function of the file reading none of the lists.
+    for (const [file, calls] of Object.entries(WHOLE_CONTEXT)) {
+        const it = g.project.info(file);
+        for (const [text, why] of calls) {
+            assert.ok(why, text);
+            const handed = g.context.filter((c) => c.file === file && c.text === text);
+            assert.equal(handed.length, 1, `${file}: ${text} — the context handed on, once`);
+            assert.equal(handed[0].reads, 0, `${file}: ${text} — its callee reads the four lists through the context it is handed (${handed[0].reads}): read them where useApp() is called, by key`);
+            const fn = g.project.topFn(it, text.match(/^(\w+)\(/)[1]);
+            assert.ok(fn, `${file}: ${text} — its callee a function of the file`);
+            const keys = [];
+            walk(fn.body, (id, path) => { const m = path.at(-1)?.node; if (/MemberExpression$/.test(m?.type) && !m.computed && WHOLE.includes(m.property.name)) keys.push(m.property.name); }, () => {});
+            assert.deepEqual(keys, [], `${file}: ${text} — its callee reads none of the four lists`);
+        }
+    }
+    // No other road to the context: AppContext.jsx exports the provider and useApp, never the context itself — no
+    // default export, no export of all — and every path in src that leads to it is an import of one of the two (ROADS).
+    const ctxFile = g.project.info('src/AppContext.jsx');
+    assert.deepEqual([...ctxFile.exported].sort(), ['AppProvider', 'useApp'], 'the context object is not exported — useApp() is the one way in');
+    assert.deepEqual(ctxFile.ast.program.body.filter((s) => /^Export(Default|All)Declaration$/.test(s.type)).map((s) => s.type), [], 'AppContext.jsx: no default export and no export of all — useApp() is the one way in');
+    assert.deepEqual(srcFiles().filter(naming(/AppContext/)).flatMap((f) => roads(g.project, f)), [],
+        "a road to the app's context other than import { useApp } (or { AppProvider }) from '…/AppContext' — a namespace or default import, a re-export, a dynamic import or another spelling of the path: the guard would not see the lists it hands on");
+    // A list a context function carries out (CARRIED), read by no screen.
+    assert.deepEqual(srcFiles().filter((f) => f !== 'src/App.jsx' && naming(CARRIED_TEXT)(f)).flatMap((f) => carried(g.project, f)), [],
+        `REGRESSION: a screen reads a list a context function carries out — ${Object.entries(CARRIED).map(([k, why]) => `${k}: ${why}`).join('; ')}`);
+    // App.jsx: its lists read only where named; none handed to a component as a prop.
+    const app = g.project.info('src/App.jsx');
+    const appFn = g.project.topFn(app, 'App');
+    const tracked = new Map(), own = new Set();
+    const bindings = (n) => {
+        if (n.type === 'VariableDeclarator') {
+            const hook = n.init?.type === 'CallExpression' && n.init.callee.type === 'Identifier' ? n.init.callee.name : null;
+            if (n.id.type === 'ObjectPattern' && (hook === 'useAccounts' || hook === 'useContacts')) {
+                for (const q of n.id.properties) {
+                    const key = q.type === 'ObjectProperty' ? (q.key.name ?? q.key.value) : null;
+                    if (key === (hook === 'useAccounts' ? 'accounts' : 'contacts')) { tracked.set(q.value.name, key); own.add(q.value); }
+                }
+            }
+            if (n.id.type === 'Identifier' && (n.id.name === 'visibleAccounts' || n.id.name === 'visibleContacts')) { tracked.set(n.id.name, n.id.name); own.add(n.id); }
+        }
+        for (const [, c] of kids(n)) bindings(c);
+    };
+    bindings(appFn.body);
+    assert.deepEqual([...tracked.keys()].sort(), ['accounts', 'contacts', 'visibleAccounts', 'visibleContacts'], "App's four lists found");
+    // What App.jsx takes from the list hooks, key for key (LIST_HOOK_KEYS): a new value from one could hand on rows
+    // built from the whole list, past every scan.
+    for (const [rows] of Object.values(LIST_HOOK_KEYS)) for (const [key, why] of Object.entries(rows)) assert.ok(why, key);
+    assert.deepEqual(hookKeys(appFn.body), Object.fromEntries(Object.entries(LIST_HOOK_KEYS).map(([hook, [rows, none]]) => [hook, [...Object.keys(rows), ...none.split(' ')].sort().join(' ')])),
+        'REGRESSION: App.jsx takes a new value from a list hook (or no longer takes one) — does it hand on rows built from the whole list? Classify it in LIST_HOOK_KEYS (getSubAccounts leaves merged-away rows out, T3)');
+    const appReads = [];
+    walk(appFn.body, (id, path) => { if (tracked.has(id.name)) appReads.push({ key: tracked.get(id.name), line: app.lines[id.loc.start.line - 1].trim(), shape: shapeOf(g.project, app, id, path) }); },
+        (id) => { if (tracked.has(id.name) && !own.has(id)) assert.fail(`App.jsx: ${id.name} declared again at line ${id.loc.start.line}`); });
+    assert.deepEqual(appReads.filter((r) => r.shape && typeof r.shape === 'object').map((r) => r.line), [], 'App.jsx hands no list to a component as a prop');
+    const appNamed = appReads.filter((r) => !r.shape);
+    assert.deepEqual(appNamed.filter((r) => !APP_READS.some(([key, line]) => key === r.key && line === r.line)).map((r) => `${r.key} — ${r.line}`), [],
+        "REGRESSION: App.jsx reads one of its lists where it draws or hands on rows — name it here with its reason");
+    for (const [key, line, times, why] of APP_READS) {
+        assert.ok(why, line);
+        assert.equal(appNamed.filter((r) => r.key === key && r.line === line).length, times, `App.jsx: ${key} read ${times}× on: ${line}`);
+    }
+    // The list endpoints: GET only by the two hooks (a file whose text never names either endpoint is not parsed).
+    const gets = [];
+    for (const file of srcFiles().filter(naming(LIST_ENDPOINT))) {
+        const it = g.project.info(file);
+        const visit = (n, parent, key) => {
+            const text = n.type === 'StringLiteral' ? n.value : n.type === 'TemplateLiteral' ? n.quasis[0].value.cooked : null;
+            if (text != null && /^\/\.netlify\/functions\/(accounts|contacts)(?=$|[?/])/.test(text)) {
+                const call = /CallExpression$/.test(parent?.type) && key === 'arguments' && parent.arguments[0] === n ? parent : null;
+                const opts = call?.arguments[1];
+                const write = !!call && ((opts?.type === 'ObjectExpression' && opts.properties.some((q) => q.type === 'ObjectProperty' && !q.computed && q.key.name === 'method' && !(q.value.type === 'StringLiteral' && q.value.value === 'GET')))
+                    || (/MemberExpression$/.test(call.callee.type) && /^(postNew|putBulk)$/.test(call.callee.property.name)));
+                if (!write) gets.push(`${file} — ${it.lines[n.loc.start.line - 1].trim()}`);
+            }
+            for (const [k, c] of kids(n)) visit(c, n, k);
+        };
+        visit(it.ast.program, null, null);
+    }
+    assert.deepEqual(gets, LIST_GETS, 'REGRESSION: a screen reads a list endpoint itself — outside THE GUARD (only the hooks load the lists the context hands on)');
 });
 
-test('T9 — the guard sees a view, count or hand-off pointed at the whole list (a shorthand among them, a property name never), and refuses a name declared again, a rest element and a useApp() not destructured (made-up components)', () => {
-    const tab = [
-        'export default function Tab() {',
-        '    const { contacts, visibleContacts: all, accounts: acc, settings } = useApp();',
+test('T9 — the guard sees a view, count or hand-off pointed at the whole list in every form it reads (a shorthand among them, a property name never), follows a list into the component it is handed to, and refuses what would hide a read (made-up components)', () => {
+    const scanOf = (map, opts) => guard(Object.keys(map), (p) => (p in map ? map[p].join('\n') : fromDisk(p)), opts);
+    const reads = (g) => g.reads.map((r) => `${r.file.split('/').pop()}:${r.at} ${r.key} ${r.shape ?? 'NAMED'}`);
+    const named = (g) => g.reads.filter((r) => !r.shape).map((r) => `${r.file.split('/').pop()}:${r.at} ${r.key}`);
+    const HEAD = ["import { useApp } from '../AppContext';", "import { unarchived, isMergeArchived, resolveLink } from '../utils/pickLink.js';"];
+    const made = (...body) => ({ 'src/Tabs/Made.jsx': [...HEAD, ...body] });
+    // Every shape seen to see its read, and to refuse a form that would hide one.
+    const g = scanOf(made(
+        'export default function Made() {',
+        '    const { contacts, visibleContacts: all, accounts: acc = [], settings } = useApp();',
         '    const visibleContacts = useMemo(() => unarchived(all), [all]);',
         '    const rows = (contacts || []).map(c => c.id);',
         '    const meta = { contacts: rows.length, label: settings.accounts, shared: { contacts } };',
-        '    return <Pane accounts={acc} count={contacts.length} rows={rows} meta={meta} />;',
+        '    const one = acc.find(a => a.id === meta.id) || (acc || []).find(a => meta.id === a.id);',
+        '    const byName = acc.find(a => a.name === meta.name);',
+        '    const either = acc.find(a => a.id === meta.id || a.name === meta.name);',
+        '    const live = acc.filter(a => a.ownerId && !isMergeArchived(a));',
+        '    const gone = acc.filter(a => isMergeArchived(a));',
+        '    const other = acc.filter(a => !isMergeArchived(one) && a.ownerId);',
+        '    const link = resolveLink({ text: meta.name, records: acc }) || other({ records: acc });',
+        '    return <Pane accounts={acc} count={contacts.length} rows={rows} live={unarchived(contacts)} />;',
         '}',
-    ].join('\n');
-    const { fns, reads } = wholeReads(tab);
-    assert.deepEqual(fns, ['Tab']);
-    assert.deepEqual(reads.map((r) => `${r.at} ${r.key}`), ['3 visibleContacts', '3 visibleContacts', '4 contacts', '5 contacts', '6 accounts', '6 contacts'],
-        "each read once, under the key it is bound from; { contacts: … }'s key, settings.accounts and an attribute's name are none");
-    const component = (...body) => ['function Tab() {', ...body, '}'].join('\n');
-    assert.throws(() => wholeReads(component('    const { contacts } = useApp();', '    const count = (contacts) => contacts.length;', '    return count([]);')), /declared again at line 3/);
-    assert.throws(() => wholeReads(component('    const { ...ctx } = useApp();', '    return ctx.contacts.length;')), /a rest element/);
-    assert.throws(() => wholeReads(component('    const ctx = useApp();', '    return ctx.contacts.length;')), /every useApp\(\) is a destructure/);
+        'function Pane({ accounts: list = [], count }) {',
+        '    return list.map(a => a.id).length + count;',
+        '}',
+    ));
+    assert.deepEqual(g.holders, { 'src/Tabs/Made.jsx': ['Made'] });
+    assert.deepEqual(reads(g), [
+        'Made.jsx:5 visibleContacts live', 'Made.jsx:5 visibleContacts deps', 'Made.jsx:6 contacts NAMED', 'Made.jsx:7 contacts NAMED',
+        'Made.jsx:8 accounts byId', 'Made.jsx:8 accounts byId', 'Made.jsx:9 accounts NAMED', 'Made.jsx:10 accounts NAMED',
+        'Made.jsx:11 accounts liveOnly', 'Made.jsx:12 accounts NAMED', 'Made.jsx:13 accounts NAMED',
+        'Made.jsx:14 accounts resolver:resolveLink', 'Made.jsx:14 accounts NAMED',
+        'Made.jsx:15 accounts followed:Pane', 'Made.jsx:18 accounts NAMED', 'Made.jsx:15 contacts NAMED', 'Made.jsx:15 contacts live',
+    ], "each read once, under the key it is bound from — { contacts: … }'s key, settings.accounts and an attribute's name are none; a lookup by name, by id OR name, a filter keeping merged-away rows or testing another row's mark, a call to anything but an imported resolver: each a read; the list handed to Pane read where Pane reads it");
+    // A resolver's name declared in the file launders nothing.
+    assert.deepEqual(named(scanOf({ 'src/Tabs/Made.jsx': [
+        "import { useApp } from '../AppContext';",
+        'function resolveLink(o) { return o.records; }',
+        'export default function Made() {',
+        '    const { accounts } = useApp();',
+        '    return resolveLink({ records: accounts });',
+        '}',
+    ] })), ['Made.jsx:5 accounts'], 'a local resolveLink is no resolver');
+    // A component bound to a const, a *Host, a deeper import: each found and read.
+    const deep = scanOf({ 'src/components/made/Deep.jsx': [
+        "import { useApp } from '../../AppContext';",
+        'export const Deep = () => {',
+        '    const { contacts } = useApp();',
+        '    return contacts.length;',
+        '};',
+        'export function DeepHost() {',
+        '    const { accounts } = useApp();',
+        '    return accounts.length;',
+        '}',
+    ] });
+    assert.deepEqual(deep.holders, { 'src/components/made/Deep.jsx': ['Deep', 'DeepHost'] });
+    assert.deepEqual(named(deep), ['Deep.jsx:4 contacts', 'Deep.jsx:8 accounts']);
+    // A whole-context binding: x.key and x?.key read; another key, a bare test, useApp().key; handed on whole, refused unless named.
+    const ctx = scanOf(made(
+        'export default function Made() {',
+        '    const app = useApp();',
+        "    if (app) app.escapeBlocked?.('x');",
+        '    const n = app && app.settings ? app.contacts.length : 0;',
+        '    return n + (app?.contacts || []).length + useApp().accounts.length + useApp().settings.length;',
+        '}',
+    ));
+    assert.deepEqual(named(ctx), ['Made.jsx:6 contacts', 'Made.jsx:7 contacts', 'Made.jsx:7 accounts']);
+    const callee = (...fn) => made('export default function Made() {', '    const app = useApp();', '    return fn(app);', '}', ...fn);
+    const NAMED_FN = { context: { 'src/Tabs/Made.jsx': [['fn(app)', 'made up']] } };
+    const handed = callee('function fn(ctx) {', '    return ctx.settings;', '}');
+    assert.throws(() => scanOf(handed), /uses the app's context whole \(fn\(app\)\)/);
+    assert.deepEqual(scanOf(handed, NAMED_FN).context, [{ file: 'src/Tabs/Made.jsx', text: 'fn(app)', reads: 0 }], 'named: handed on — its callee scanned, reading none of the lists');
+    assert.throws(() => scanOf(made('export default function Made() {', '    const app = useApp();', '    const { contacts } = app;', '    return contacts;', '}')), /uses the app's context whole/);
+    // The callee of a named hand-off (fidelity #8): the parameter the context lands in read as a whole-context binding —
+    // a list read by key counted (T8 holds the count to none), a destructure of it refused; a callee the guard cannot
+    // find, or a parameter that is no plain name, refused.
+    const viaCallee = scanOf(callee('function fn(ctx) {', '    return (ctx?.contacts || []).length;', '}'), NAMED_FN);
+    assert.deepEqual([viaCallee.context[0].reads, named(viaCallee)], [1, ['Made.jsx:8 contacts']], "the callee's read of a list through the context, seen");
+    assert.throws(() => scanOf(callee('function fn(ctx) {', '    const { contacts } = ctx;', '    return contacts.length;', '}'), NAMED_FN), /uses the app's context whole/);
+    assert.throws(() => scanOf(callee('function fn({ settings }) {', '    return settings;', '}'), NAMED_FN), /not a plain name/);
+    assert.throws(() => scanOf(callee(), NAMED_FN), /a function the guard cannot find/);
+    // A plain props parameter: props.<prop> and a later destructure followed; props used whole refused.
+    const hop = (...pane) => made('export default function Made() {', '    const { contacts } = useApp();', '    return <P rows={contacts} />;', '}', ...pane);
+    assert.deepEqual(named(scanOf(hop('function P(props) {', '    const { rows: list } = props;', '    return props.rows.length + list.length + props.title.length;', '}'))),
+        ['Made.jsx:9 contacts', 'Made.jsx:9 contacts']);
+    assert.throws(() => scanOf(hop('function P(props) {', '    return use(props);', '}')), /uses its props whole/);
+    // A hop through a relative import, the list as `x || []`.
+    const two = scanOf({
+        'src/Tabs/made/Host.jsx': ["import { useApp } from '../../AppContext';", "import { Pane } from './Pane';", 'export default function Host() {', '    const { contacts } = useApp();', '    return <Pane rows={contacts || []} />;', '}'],
+        'src/Tabs/made/Pane.jsx': ['export function Pane({ rows }) {', '    return rows.filter(r => r.ownerId).length;', '}'],
+    });
+    assert.deepEqual(named(two), ['Pane.jsx:2 contacts']);
+    assert.ok(two.receivers.has('src/Tabs/made/Pane.jsx Pane'));
+    // Refused: a receiver it cannot find, a spread, a rest element that would carry the list, a name declared again
+    // (in a receiver too), a rest element or a computed key of useApp(), an alias of useApp, useApp() handed on, and
+    // useApp itself handed on as a value.
+    assert.throws(() => scanOf(hop()), /cannot find the component/);
+    assert.throws(() => scanOf(made('export default function Made() {', '    const { contacts } = useApp();', '    return <P {...contacts} />;', '}', 'function P() { return null; }')), /spreads the app's whole list/);
+    assert.throws(() => scanOf(hop('function P({ ...rest }) {', '    return rest.rows.length;', '}')), /a rest element or a computed key would hand rows on/);
+    assert.throws(() => scanOf(hop('function P({ rows }) {', '    const f = (rows) => rows;', '    return f(rows);', '}')), /rows declared again at line 8/);
+    assert.throws(() => scanOf(made('function Made() {', '    const { contacts } = useApp();', '    const count = (contacts) => contacts.length;', '    return count([]);', '}')), /declared again at line 5/);
+    assert.throws(() => scanOf(made('function Made() {', '    const { ...ctx } = useApp();', '    return ctx.contacts.length;', '}')), /a rest element/);
+    assert.throws(() => scanOf(made('function Made() {', "    const { ['contacts']: c } = useApp();", '    return c.length;', '}')), /a computed key/);
+    assert.throws(() => scanOf({ 'src/Tabs/Made.jsx': ["import { useApp as useCtx } from '../AppContext';", 'export default function Made() {', '    const { contacts } = useCtx();', '    return contacts.length;', '}'] }), /imports useApp under another name/);
+    assert.throws(() => scanOf(made('function Made() {', '    return use(useApp());', '}')), /neither destructured, bound to a name, nor read by a key/);
+    assert.throws(() => scanOf(made('const ctx = useApp;', 'function Made() {', '    const { contacts } = ctx();', '    return contacts.length;', '}')), /useApp handed on as a value/);
+    // useApp() called plainly finds its holder (every case above); `useApp?.()` refused (the adversary's C31).
+    assert.throws(() => scanOf(made('export default function Made() {', '    const { contacts } = useApp?.() ?? {};', '    return contacts.length;', '}')), /useApp\?\.\(\) — call useApp\(\) plainly/);
+    // A resolver: the list its direct argument, or the direct value of a property of an object literal that is one — no
+    // read; anything else inside its arguments — an assignment (the adversary's C43), a filter, a spread — a read.
+    const forms = scanOf({ 'src/Tabs/Made.jsx': [...HEAD, "import { linkedAccount } from '../utils/railLinks.js';",
+        'export default function Made({ q, c }) {',
+        '    const { accounts } = useApp();',
+        '    let shown = [];',
+        '    const a = resolveLink({ text: q, records: accounts }) && resolveLink({ records: accounts || [] }) && resolveLink({ accounts }) && linkedAccount(c, accounts);',
+        '    const b = resolveLink({ text: q, records: (shown = accounts) }) && linkedAccount(c, accounts.filter(x => x.name === q)) && resolveLink({ records: [...accounts] });',
+        '    return [a, b, shown];',
+        '}',
+    ] });
+    assert.deepEqual(reads(forms), ['Made.jsx:7 accounts resolver:resolveLink', 'Made.jsx:7 accounts resolver:resolveLink', 'Made.jsx:7 accounts resolver:resolveLink',
+        'Made.jsx:7 accounts resolver:linkedAccount', 'Made.jsx:8 accounts NAMED', 'Made.jsx:8 accounts NAMED', 'Made.jsx:8 accounts NAMED'], "a resolver's direct argument or property value is no read; an assignment, a filter or a spread inside its arguments is one");
+    // A resolver whose answer carries the list it was given (contactIndex — the adversary's C22): the name its answer is
+    // bound to is scanned as the list — handed to another resolver, no read; drawn, a read; left unbound, refused.
+    const carrier = (...body) => ({ 'src/Tabs/Made.jsx': [...HEAD, "import { contactIndex, dealCommittee } from '../utils/dealEngagement.js';", ...body] });
+    assert.deepEqual(reads(scanOf(carrier(
+        'export default function Made({ deal }) {',
+        '    const { contacts } = useApp();',
+        '    const directory = contactIndex(contacts);',
+        '    const people = dealCommittee(deal, directory, []);',
+        '    return people.length + directory.list.length;',
+        '}',
+    ))), ['Made.jsx:6 contacts resolver:contactIndex', 'Made.jsx:7 contacts resolver:dealCommittee', 'Made.jsx:8 contacts NAMED'], "the carrier's answer read as the list it carries");
+    assert.deepEqual(named(scanOf(carrier('export default function Made() {', '    const app = useApp();', '    const d = contactIndex(app.contacts);', '    return d.byId.size;', '}'))),
+        ['Made.jsx:7 contacts'], "through a whole-context binding too");
+    assert.throws(() => scanOf(carrier('export default function Made() {', '    const { contacts } = useApp();', '    return useMemo(() => contactIndex(contacts).list, [contacts]).length;', '}')), /contactIndex\(…\) hands back the list it is given — bind its answer to a name/);
+    assert.throws(() => scanOf(carrier('export default function Made() {', '    const { contacts } = useApp();', '    const { list } = contactIndex(contacts);', '    return list.length;', '}')), /bind its answer to a name/);
+    // A dependency array is React's (the adversary's C45): a hook imported from react, React.<hook>, or one the file
+    // neither imports nor declares — no read; a file's own useMemo, or one imported from elsewhere — a read.
+    const depsOf = (...pre) => reads(scanOf({ 'src/Tabs/Made.jsx': [...HEAD, ...pre, 'export default function Made() {', '    const { accounts } = useApp();', '    return useMemo(() => 1, [accounts]) + React.useMemo(() => 2, [accounts]);', '}'] }));
+    assert.deepEqual(depsOf("import React, { useMemo } from 'react';"), ['Made.jsx:6 accounts deps', 'Made.jsx:6 accounts deps']);
+    assert.deepEqual(depsOf("import React from 'react';", 'const useMemo = (f, deps) => deps[0];'), ['Made.jsx:7 accounts NAMED', 'Made.jsx:7 accounts deps']);
+    assert.deepEqual(depsOf("import React from 'react';", "import { useMemo } from '../utils/memo.js';"), ['Made.jsx:7 accounts NAMED', 'Made.jsx:7 accounts deps']);
+    // A component a list is handed to, declared once in its file (the adversary's C48): a local alias of its name refused.
+    assert.throws(() => scanOf(made('function Pane() { return null; }', 'function Rich({ rows }) { return rows.length; }', 'export default function Made() {',
+        '    const { accounts } = useApp();', '    const Pane = Rich;', '    return <Pane rows={accounts} />;', '}')), /<Pane> is declared more than once in the file/);
+    // One road to the context (ROADS; the adversary's C33-C35): the house's imports pass; a namespace, default or
+    // re-export of it, a dynamic import, an export of all, or another spelling of its path each fail.
+    const roadsOf = (map) => { const P = project((p) => (p in map ? map[p].join('\n') : fromDisk(p))); return Object.keys(map).flatMap((f) => roads(P, f)); };
+    assert.deepEqual(roadsOf({
+        'src/Tabs/Made.jsx': ["import { useApp } from '../AppContext';"],
+        'src/components/made/Deep.jsx': ["import { useApp } from '../../AppContext.jsx';"],
+        'src/Made.jsx': ["import { AppProvider } from './AppContext';", "const words = 'AppContext';"],
+    }), [], "the house's imports, and a string that is no path to it");
+    assert.deepEqual(roadsOf({
+        'src/Tabs/A.jsx': ["import * as Ctx from '../AppContext';"],
+        'src/Tabs/B.jsx': ["export { useApp } from '../AppContext';"],
+        'src/Tabs/C.jsx': ["import { useApp } from '../../src/AppContext';"],
+        'src/Tabs/D.jsx': ['const ctx = () => import(`../AppContext`);'],
+        'src/Tabs/E.jsx': ["import Ctx, { useApp } from '../AppContext';"],
+        'src/Tabs/F.jsx': ["export * from '../AppContext.jsx';"],
+    }), ['src/Tabs/A.jsx:1 ../AppContext', 'src/Tabs/B.jsx:1 ../AppContext', 'src/Tabs/C.jsx:1 ../../src/AppContext', 'src/Tabs/D.jsx:1 ../AppContext',
+        'src/Tabs/E.jsx:1 ../AppContext', 'src/Tabs/F.jsx:1 ../AppContext.jsx'], 'every other road to the context');
+    // A list a context function carries out (CARRIED; the adversary's C39): the rollup's other members and a component's
+    // own prop of the name are no read; a member read of it, or a destructure naming it, at any depth, each one.
+    const carriedOf = (...lines) => carried(project((p) => (p === 'src/Tabs/R.jsx' ? lines.join('\n') : fromDisk(p))), 'src/Tabs/R.jsx');
+    assert.deepEqual(carriedOf('export function R({ acc, getAccountRollup }) {', '    const r = getAccountRollup(acc);', '    return r.subCount + r.pipeline;', '}',
+        'export function Panel({ allContacts }) { return allContacts.length; }'), [], "the rollup's other members; a component's own prop");
+    assert.deepEqual(carriedOf('export function R({ acc, getAccountRollup }) {', '    const r = getAccountRollup(acc);', '    const { allContacts } = getAccountRollup(acc);',
+        '    const { rollup: { allContacts: deep } } = { rollup: r };', "    return r.allContacts.length + r?.['allContacts'].length + allContacts.length + deep.length;", '}'),
+    ['src/Tabs/R.jsx:3 allContacts', 'src/Tabs/R.jsx:4 allContacts', 'src/Tabs/R.jsx:5 allContacts', 'src/Tabs/R.jsx:5 allContacts'], 'each read of the carried list');
+    // What App.jsx takes from a list hook, key by key (LIST_HOOK_KEYS; the adversary's C40): a new key shows — T8
+    // refuses it until classified; a rest element, or the hook taken whole, refused.
+    const appOf = (...lines) => parse(lines.join('\n'), { sourceType: 'module', plugins: ['jsx'] }).program.body[0];
+    const took = hookKeys(appOf('function App() {', '    const { accounts, setAccounts } = useAccounts(_deps);', '    const { contacts, contactsOfCompany } = useContacts(_deps);', '}'));
+    assert.deepEqual(took, { useAccounts: 'accounts setAccounts', useContacts: 'contacts contactsOfCompany' }, 'every key App takes, by name');
+    assert.throws(() => hookKeys(appOf('function App() {', '    const { accounts, ...rest } = useAccounts(_deps);', '}')), /a rest element or a computed key of useAccounts/);
+    assert.throws(() => hookKeys(appOf('function App() {', '    const hook = useContacts(_deps);', '}')), /useContacts\(\) taken whole/);
+});
+
+// ── T10: the server's reads of either table ─────────────────────────────────
+
+// Every function that imports `accounts` or `contacts` from the schema, [why, its selects, its hand-offs]: selects —
+// each `.from(<table>)`; hand-offs — every other use of the table object: handed to code that selects through it (a
+// generic `from(table)` in a helper, a table map, a raw-SQL fragment), to a helper such as `ownerColumnOf(accounts)`, or
+// compared (`table === accounts`, _links.mjs) — each counted, so a new one is seen. A write (`.insert`, `.update`,
+// `.delete`) and a column (`accounts.orgId`) are neither. A new select or hand-off in a named file fails until it is
+// classified here; a function newly reading either table fails until it is named. The generic helpers (_bulk.mjs,
+// _lib.mjs) import neither table: they select only through one a caller hands them, counted at the caller. Two roads
+// past the import are refused outright: `db.query.accounts` / `db.query.contacts` (db/index.ts builds `db` with the
+// schema, so the relational query reads a table it never imports), and raw SQL naming either table in any string.
+const KEEP = 'keep whole';
+const SERVER_READS = {
+    'netlify/functions/accounts.mjs': [`${KEEP}: the GET answers every row of the org, narrowed by the read scope alone (T6), and the Admin's clear reads every account of the org (everyAccount — an open deal on any refuses the clear); the rest read by id — a save's prior row, a delete's lift, a batch's own ids — and the parent rule's names (a merged-away namesake counted as one of the name — found by the cleanup batch's maps, 18 Oct, for batch 3)`, 9, 7],
+    'netlify/functions/contacts.mjs': [`${KEEP}: the GET answers every row (T6), and the one-request clear compares the whole list; the rest by id`, 6, 7],
+    'netlify/functions/backup.mjs': [`${KEEP}: an org's backup holds every row`, 2, 2],
+    'netlify/functions/export-runs.mjs': [`${KEEP}: a Settings → Data export run exports every row of the scope (its SCOPE_TABLE)`, 0, 2],
+    'netlify/functions/merge.mjs': [`${KEEP}: the merge and its Undo (state §0.207) read both records, the ones merged away included, by id`, 13, 13],
+    'netlify/functions/_links.mjs': [`${KEEP}: a link names a row of the org by id — a merged-away one is a row, its link named by its survivor on screen (guide §18b99)`, 0, 7],
+    'netlify/functions/duplicates.mjs': ['filter in JS: the duplicate scans leave merged-away rows out (`!c.mergeArchived`, `!a.mergeArchived`)', 2, 0],
+    'netlify/functions/ai-score.mjs': ["follow to the survivor: a deal's people by id, a merged duplicate followed to the contact it was merged into (up to five steps, as contactIndex)", 1, 0],
+    'netlify/functions/opportunities.mjs': ["follow to the survivor: a deal's account by id (accountLink), one merged away followed to the account it was merged into; the bulk paths' ids (filed: OPEN_ITEMS §4.7 — they take an account merged away)", 3, 0],
+    'netlify/functions/quote-email.mjs': ["the quote's fallback recipient: the first contact named like the deal's first contact, among every contact of the org, merged-away included — until §0.210", 1, 0],
+    'netlify/functions/public-api.mjs': ["the public API's accounts and contacts answer merged-away rows — until §0.210 (Jeff, 18 Oct: \"Leave them out\")", 4, 0],
+    'netlify/functions/report-deliveries.mjs': ['the engine: loadReportData hands runReport (reportQuery.js) every account the owner may read (all of the org, or their own for a role that sees only its own), whose "# of accounts" counts merged-away rows — until §0.210', 0, 1],
+    'netlify/functions/documents.mjs': ["filed: a document's links resolve by id and follow no merge (resolveLinks; filed: OPEN_ITEMS §4.2, documents.mjs follows no merge)", 0, 2],
+    'netlify/functions/email-inbound.mjs': ["filed: an inbound email's contact is the first of every contact with the address, merged-away included (filed: OPEN_ITEMS §4.7, the matched-by-name item)", 1, 0],
+};
+
+// A function file's [selects, hand-offs] of either table, or null when it imports neither; a road T10 cannot count fails.
+const RAW_SQL = /\b(from|join|update|into)\s+(?:"?public"?\s*\.\s*)?"?(accounts|contacts)\b/i;
+const serverReads = (file, src) => {
+    const ast = parse(src, { sourceType: 'module' });
+    const tables = new Set();
+    for (const s of ast.program.body) {
+        if (s.type !== 'ImportDeclaration' || !/(^|\/)db\/schema(\.[jt]s)?$/.test(s.source.value)) continue;
+        for (const sp of s.specifiers) {
+            assert.equal(sp.type, 'ImportSpecifier', `${file}: the schema imported whole — T10 cannot count its tables`);
+            if (/^(accounts|contacts)$/.test(sp.imported.name ?? sp.imported.value)) tables.add(sp.local.name);
+        }
+    }
+    let selects = 0, handed = 0;
+    const visit = (n, parent, key) => {
+        // No raw SQL names either table but through the table object (a `${accounts}` fragment is a hand-off).
+        const text = n.type === 'StringLiteral' ? n.value : n.type === 'TemplateElement' ? n.value.raw : null;
+        if (text && RAW_SQL.test(text)) {
+            assert.fail(`${file}:${n.loc.start.line} raw SQL names a table T10 cannot count — ${text.trim().slice(0, 80)} — select through the table object (a \`\${accounts}\` fragment is counted); if this is not SQL but words a person reads, reword them: T10 reads every string of a function as SQL`);
+        }
+        // db.query.accounts / db.query.contacts: the relational query reads the table with no import of it.
+        if (/MemberExpression$/.test(n.type) && /MemberExpression$/.test(n.object.type) && !n.object.computed && n.object.property.name === 'query'
+            && /^(accounts|contacts)$/.test(n.computed ? (n.property.type === 'StringLiteral' ? n.property.value : '') : n.property.name)) {
+            assert.fail(`${file}:${n.loc.start.line} reads a table through db.query — T10 cannot count it: select through the imported table object`);
+        }
+        if (n.type === 'Identifier' && tables.has(n.name)) {
+            if (parent?.type === 'ImportSpecifier' || (/MemberExpression$/.test(parent?.type) && (key === 'object' || (key === 'property' && !parent.computed)))
+                || (parent?.type === 'ObjectProperty' && key === 'key' && !parent.computed)) return;
+            const method = /CallExpression$/.test(parent?.type) && key === 'arguments' && /MemberExpression$/.test(parent.callee.type) && !parent.callee.computed ? parent.callee.property.name : null;
+            if (method === 'from') selects++;
+            else if (!/^(insert|update|delete)$/.test(method || '')) handed++;
+            return;
+        }
+        for (const [k, c] of kids(n)) visit(c, n, k);
+    };
+    visit(ast.program, null, null);
+    return tables.size ? [selects, handed] : null;
+};
+
+test("T10 — the server's reads of either table: every function that imports accounts or contacts from the schema is named with its reason, its selects and hand-offs counted — a new list answer in a named function, or a function newly reading either table, fails until classified (a parse of every function)", () => {
+    // Every .mjs under netlify/functions/, a folder's too.
+    const fnFiles = (dir) => readdirSync(new URL(`${dir}/`, ROOT), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? fnFiles(`${dir}/${e.name}`) : (e.name.endsWith('.mjs') ? [`${dir}/${e.name}`] : [])));
+    const found = {};
+    for (const file of fnFiles('netlify/functions').sort()) {
+        const counted = serverReads(file, read(file));
+        if (counted) found[file] = counted;
+    }
+    assert.ok(Object.keys(found).length >= 14, `the functions that read either table — fourteen since §0.208: ${Object.keys(found).length} (one that stopped reading them on purpose: take it out of SERVER_READS, lower the floor here and say why)`);
+    assert.deepEqual(Object.keys(found).filter((f) => !Object.hasOwn(SERVER_READS, f)), [], 'REGRESSION: a function reads accounts or contacts and is not named — does it answer merged-away rows? Name it in SERVER_READS with its reason');
+    for (const [file, [why, selects, handed]] of Object.entries(SERVER_READS)) {
+        assert.ok(why, file);
+        assert.deepEqual(found[file], [selects, handed], `${file}: ${selects} select(s) and ${handed} hand-off(s) of either table — a new one (or one gone) is classified here first`);
+    }
+    // Its rules, on made-up function files: a select and a hand-off counted, a write and a column neither; a function
+    // importing neither table, null; the schema imported whole, raw SQL naming a table (schema-qualified too), and
+    // db.query.<table>, each refused.
+    const fn = (...lines) => lines.join('\n');
+    const IMPORT = "import { accounts, contacts as people, users } from '../../db/schema.js';";
+    assert.deepEqual(serverReads('made.mjs', fn(IMPORT, 'export const a = (db) => db.select().from(accounts).where(eq(accounts.orgId, 1));',
+        'export const b = (db) => db.insert(people).values({}); export const c = (db) => everyRow(db, people); export const d = (t) => t === accounts;')), [1, 2]);
+    assert.equal(serverReads('made.mjs', fn("import { users } from '../../db/schema.js';", 'export const a = (db) => db.select().from(users);')), null);
+    assert.throws(() => serverReads('made.mjs', fn("import * as schema from '../../db/schema.js';", 'export const a = (db) => db.select().from(schema.accounts);')), /the schema imported whole/);
+    assert.throws(() => serverReads('made.mjs', fn(IMPORT, 'export const a = (db) => db.execute(sql`select * from contacts where org_id = ${1}`);')), /raw SQL names a table/);
+    assert.throws(() => serverReads('made.mjs', fn(IMPORT, "export const a = (db) => db.execute(sql.raw('SELECT id FROM public.accounts'));")), /raw SQL names a table/);
+    assert.throws(() => serverReads('made.mjs', fn("import { users } from '../../db/schema.js';", 'export const a = (db) => db.query.contacts.findMany();')), /reads a table through db\.query/);
 });

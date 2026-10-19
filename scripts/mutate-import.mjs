@@ -13898,6 +13898,48 @@ const mutations = [
         "src/utils/mergeUndo.js",
         ", except what cannot go back where it was (it stays, and is counted)",
         ""],
+
+    // ── §0.208 THE GUARD made class-wide (18 Oct — Jeff: "Three steps", the guard first, tests only; b14/design-final.md
+    // §4, §5.4): tests/merged-away-lists.test.mjs T8 parses every file that takes the app's lists through useApp() and
+    // every component a list is handed to, each read a shape or named with its reason; T9 runs its rules on made-up
+    // components; T10 names every function that reads either table, its selects counted. The guards a newly scanned
+    // file already held — unarchived( in QuickLogFab.jsx, OpportunityModal.jsx and AccountPicker.jsx, !isMergeArchived(
+    // in ActivityRail.jsx and TaskRail.jsx — were each caught by their own batches' pins when dropped, so none is here;
+    // AccountRail.jsx's shown contacts are T4's (the §0.206 entry above). The five §0.206 entries above that the old T8
+    // alone caught (the Signal sort, the "Needs attention" lane, the Company view, the name-sorted rows, the header
+    // count) are caught by the new T8. The seven below each break a rule only the new guard holds — a lookup by id made
+    // one by name (byId: a component's own, a *Host's, a receiver's in its own file), a count two hand-offs deep
+    // (followed), a list read through a whole-context hand-off (WHOLE_CONTEXT's callee), a carried list read
+    // (CARRIED), a function newly reading a table (T10): each SURVIVED the suites as they stood at 13ba06c and is
+    // CAUGHT by the new ones (pre-run against the full SUITES after a green baseline). ──
+    ["§0.208 task rail: the task's Account row is the account named like its related-to text — a merged-away twin can be the one (THE GUARD: a lookup not by id alone)",
+        "src/components/rails/TaskRail.jsx",
+        "(accounts || []).find(a => a.id === task.accountId)",
+        "(accounts || []).find(a => a.name === task.relatedTo)"],
+    ["§0.208 activity viewer: its contact is the first of the activity's contact ids the whole list holds — a merged-away contact (a merge leaves activities' contactIds) can be the one named (THE GUARD: a *Host's lookup not by id alone)",
+        "src/components/modals/ActivityDetailDialog.jsx",
+        "const contact = (contacts || []).find(c => c.id === a.contactId);",
+        "const contact = (contacts || []).find(c => (a.contactIds || [a.contactId]).includes(c.id));"],
+    ["§0.208 Dispatch customers: the record view's linked account falls back to an account named like the customer — a merged-away twin can be the one (THE GUARD: the list handed to CustomersView, read there not by id alone)",
+        "src/Tabs/DispatchTab.jsx",
+        "(accounts || []).find(a => a.id === selected.accountId)",
+        "(accounts || []).find(a => a.id === selected.accountId || a.name === selected.name)"],
+    ["§0.208 deal window: the rail's \"Engagement details →\" shows by the app's whole contact list, merged-away contacts among them — on a deal with no people (THE GUARD: ModalLayer → OpportunityModal → RightRail)",
+        "src/components/modals/OpportunityModal.jsx",
+        "{committee.length > 0 && (",
+        "{contacts.length > 0 && ("],
+    ["§0.208 automations: a run's record named from the contacts the context hands whole — a read THE GUARD cannot follow (WHOLE_CONTEXT: recordName reads none of the lists)",
+        "src/Tabs/settings/integrations/AutomationsDetail.jsx",
+        "{ const t = (lists?.tasks || []).find(x => x.id === id);         return t ? (t.title || id) : id; }",
+        "{ const t = (lists?.tasks || []).find(x => x.id === id);         return t ? (t.title || id) : id; }\n    if (ev.startsWith('contact.'))     { const c = (lists?.contacts || []).find(x => x.id === id);      return c ? ([c.firstName, c.lastName].filter(Boolean).join(' ') || id) : id; }"],
+    ["§0.208 server: a function newly reads the contacts table and is named nowhere — does it answer merged-away rows? (T10)",
+        "netlify/functions/mention-sms.mjs",
+        "import { users, opportunities, tasks } from '../../db/schema.js';",
+        "import { users, opportunities, tasks, contacts } from '../../db/schema.js';\nexport const everyContact = (db) => db.select().from(contacts);"],
+    ["§0.208 contacts tab: the Company card counts its account's rollup — every contact of the account's names, merged-away included (THE GUARD: CARRIED — getAccountRollup's allContacts is read by no screen)",
+        "src/Tabs/ContactsTab.jsx",
+        "lineHeight: 1.2 }}>{activeCompany.contacts.length}</div>",
+        "lineHeight: 1.2 }}>{rollup.allContacts.length}</div>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

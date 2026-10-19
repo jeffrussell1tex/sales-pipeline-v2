@@ -179,8 +179,11 @@ One commit per verified batch; doc patch in the same commit.
   the app's `accounts` and `contacts`, their loads and both GETs keep the
   merged-away rows (links name the survivor through them; the one-request
   contacts clear compares the whole list). A new read of the app's whole
-  lists in the Accounts or Contacts tab fails THE GUARD
-  (tests/merged-away-lists.test.mjs; no other screen is scanned). Not yet:
+  lists in any file that imports `useApp`, or in any component a list is
+  handed to, fails THE GUARD (tests/merged-away-lists.test.mjs) unless it
+  is a shape the guard names or is named with its reason; App.jsx's own
+  reads are named, only the two list hooks fetch the lists, and utils are
+  not scanned. Not yet:
   the header search, Reports, Home's "# of accounts", Settings' counts and a
   segment's "View accounts" link, the meeting prep panel's contacts, the
   merge window's predicted sub-account count, the public API's contacts and
