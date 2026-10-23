@@ -384,7 +384,9 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                     {merged ? linkRefusal(merged) : 'New customer — will be created on save'}
                 </div>
             )}
-            {open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (
+            {/* Open only with a row to show (state §0.210): a near spelling of a merged-away name offers no Create
+                (`merged`), so it alone opened an empty box (§0.209's defect; Jeff, 23 Oct: "File it, fix in §0.210"). */}
+            {open && (custMatches.length > 0 || acctMatches.length > 0 || (showCreate && !merged)) && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3,
                     background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
                     boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>

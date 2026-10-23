@@ -632,7 +632,7 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(deals > after, 'the deals of an account the move made a site, as the server moved them (D22)');
     assert.ok(save.includes('const liftedDeals = new Map((Array.isArray(data.liftedDeals) ? data.liftedDeals : []).map(d => [d.id, d]));'));
     const del = between(src, 'const handleDeleteAccounts = (ids, opts = {}) => {', 'const handleSaveAccount');
-    assert.ok(del.includes('const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id));'), "the screen's sub-accounts: the confirm counts them");
+    assert.ok(del.includes('const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id) && !isMergeArchived(a));'), "the screen's live sub-accounts: the confirm counts them (state §0.210)");
     assert.ok(!/children\.(filter|map|find|some)\(/.test(del), "the screen's copies are never what the Undo re-sends (H2)");
     assert.ok(del.includes('if (!r.ok) failed.push({ a, error: r.error });\n                else lifted.push(...(r.data?.retiered || []));'), 'the tiers the server gave what it lifted (D18)');
     assert.ok(del.includes('                if (r.ok) answers.push(r.data || {});\n'), 'what each delete answered: the row and its sub-accounts as stored');

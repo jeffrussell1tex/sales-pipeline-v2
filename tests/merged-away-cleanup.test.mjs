@@ -27,6 +27,15 @@
 // memo sliced from its file and run whole) — and the lines as they stood before (on 8f62dc7), run once on the same rows,
 // so the rows are seen to tell the two apart; where a line reads the merge mark, an Undo run repeats it with the mark
 // taken off. THE GUARD (tests/merged-away-lists.test.mjs T8) holds every other read of the app's lists.
+//
+// Step B (state §0.210 — Jeff, 18 Oct: "Leave them out", "Count what you see", "Grey it out"; 23 Oct: "File it, fix in
+// §0.210"), C15-C22: the report engine's Accounts source (Home, the builder, Send now, the scheduled email) counts and
+// lists live accounts, a deal on a merged-away account counted on its survivor; Settings' Segments, Industries and Buyer
+// Personas count live records (personas by name or id) and its "View accounts" items say "Not available yet"; the merge
+// windows and the delete warning count what the lists show; the industry chart takes a deal's account by its link; the
+// public API leaves merged-away rows out in its SQL (its run: tests/integration/merged-away-cleanup.itest.mjs, I1-I3);
+// the quote email's fallback recipient is the live contact of the name (I5); and Dispatch's New Job field no longer opens
+// an empty box for a near spelling of a merged-away name (step A's defect).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -37,6 +46,7 @@ import {
 } from '../src/utils/pickLink.js';
 import { matchSearch, searchKey } from '../src/utils/searchMatch.js';
 import { linkedToContact, taskDay } from '../src/utils/historyFeed.js';
+import { runReport } from '../src/utils/reportQuery.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -53,6 +63,14 @@ const order = (s, ...lines) => {
         assert.ok(i >= 0, `missing, changed or out of order: ${line.trim()}`);
         at = i + 1 + line.length;
     }
+};
+// From `from` to the first `to` after it, both included — each there.
+const between = (s, from, to) => {
+    const a = s.indexOf(from);
+    assert.ok(a >= 0, `missing: ${from}`);
+    const b = s.indexOf(to, a + from.length);
+    assert.ok(b > a, `missing after it: ${to}`);
+    return s.slice(a, b + to.length);
 };
 // A whole line of s, exactly once.
 const once = (s, line, why) => assert.equal(s.split('\n').filter((l) => l === line).length, 1, why || `once, as a whole line: ${line.trim()}`);
@@ -205,6 +223,10 @@ test('C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, account
     assert.equal(accountOfDeal({ accountId: 'acc_resinall_inc' }, ACCOUNTS.filter((a) => a.id !== 'acc_resinall')), null, "a survivor outside the list");
     assert.equal(accountOfDeal({ accountId: 'acc_resinall_inc' }, undone(ACCOUNTS, 'acc_resinall_inc'))?.id, 'acc_resinall_inc', 'Undo: its own account again');
     assert.equal(accountOfDeal(null, ACCOUNTS), null);
+    assert.equal(accountOfDeal({ account: 'resinall, inc.', accountId: null }, ACCOUNTS)?.id, 'acc_resinall', 'a name only a merged-away account has: the one it was merged into (§0.210)');
+    assert.equal(accountOfDeal({ account: 'Alpha', accountId: null }, ACCOUNTS)?.id, 'acc_gamma', 'through a chain');
+    const two = [{ id: 'x1', name: 'X1' }, { id: 'x2', name: 'X2' }, { id: 'g1', name: 'Gone', mergeArchived: true, mergedIntoId: 'x1' }, { id: 'g2', name: 'Gone', mergeArchived: true, mergedIntoId: 'x2' }];
+    assert.equal(accountOfDeal({ account: 'Gone', accountId: null }, two), null, 'merged into two survivors: none');
     // heldAccountOption: a held link the live options leave out.
     assert.equal(heldAccountOption('acc_resinall', ACCOUNTS), null, 'live: the options hold it');
     assert.deepEqual(heldAccountOption('acc_resinall_inc', ACCOUNTS), {
@@ -613,6 +635,256 @@ test("C13 — an account's rail: a contact linked by id to an account merged int
     assert.deepEqual(ids(people(undone(ACCOUNTS, 'acc_resinall_inc')).shownContacts), ['con_lee', 'con_ana'], 'Undo: Tia back on "Resinall, Inc."');
     const old = run([LINES[1], S(8) + 'c.accountId ? c.accountId === account?.id : (c.company === account?.name)', LINES[3]], ['account', 'contacts'], [RESINALL, CONTACTS], 'accountContacts');
     assert.ok(!ids(old).includes('con_tia'), 'the old line left her out');
+});
+
+// ── step B (§0.210): the numbers, the public API, the quote email ─────────
+// Jeff, 18 Oct: "Three steps" (the third), "Leave them out" (the API), "Count what you see" (the merge windows and the
+// delete warning), "Grey it out" ("View accounts"); the design's D5-D8. A const's init or a memo, sliced from anywhere in
+// its file (exactly one of the name).
+const anyInit = (src, name) => { const init = declIn(jsx(src).program, name); return src.slice(init.start, init.end); };
+const anyMemo = (src, name) => {
+    const init = declIn(jsx(src).program, name);
+    assert.ok(init.type === 'CallExpression' && /useMemo$/.test(src.slice(init.callee.start, init.callee.end)), `${name} is a memo`);
+    return src.slice(init.arguments[0].start, init.arguments[0].end);
+};
+
+test('C15 — the report engine (Home, the builder, Send now, the scheduled email): the Accounts source lists and counts no merged-away account; a deal on one is counted on the account it was merged into; an id-less deal on the later LIVE account of its name, or — a name only merged-away accounts have — on their one survivor; a NULL mark reads live (runReport, run)', () => {
+    const q = code(read('src/utils/reportQuery.js'));
+    assert.ok(q.includes("import { unarchived, isMergeArchived, survivorOf } from './pickLink.js';"));
+    once(q, S(4) + 'const byName = new Map(unarchived(accts).map(a => [str(a.name).toLowerCase(), a.id]));');
+    once(q, S(8) + 'return gone && gone.size === 1 ? [...gone][0] : undefined;');
+    once(q, S(8) + 'const id = held && isMergeArchived(held) ? survivorOf(held, accts)?.id : (o.accountId || nameToId(o.account));');
+    once(q, S(4) + "const scanned = source === 'Accounts' ? unarchived(rowsAll) : Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];");
+    // Each account its own industry, so each is its own row. The merged-away Lafayette twin LATER (the old Map kept the
+    // later of two names); UKG's live Shell twins (the later of two live ones takes an id-less deal); two merged-away
+    // "Twin Gone" with two different survivors; a top-level NULL mark.
+    const ACCTS = [
+        { id: 'acc_resinall', name: 'Resinall', industry: 'T-Resinall' },
+        { id: 'acc_resinall_inc', name: 'Resinall, Inc.', industry: 'T-Inc', mergeArchived: true, mergedIntoId: 'acc_resinall' },
+        { id: 'acc_lafayette', name: 'Evonik - Lafayette', industry: 'T-Laf' },
+        { id: 'acc_lafayette_dup', name: 'Evonik - Lafayette', industry: 'T-LafDup', mergeArchived: true, mergedIntoId: 'acc_lafayette' },
+        { id: 'acc_shell_unit', name: 'Shell - Port Allen', industry: 'T-Unit' },
+        { id: 'acc_shell_site', name: 'Shell - Port Allen', industry: 'T-Site' },
+        { id: 'acc_x1', name: 'X One', industry: 'T-X1' },
+        { id: 'acc_x2', name: 'X Two', industry: 'T-X2' },
+        { id: 'acc_tg1', name: 'Twin Gone', industry: 'T-TG1', mergeArchived: true, mergedIntoId: 'acc_x1' },
+        { id: 'acc_tg2', name: 'Twin Gone', industry: 'T-TG2', mergeArchived: true, mergedIntoId: 'acc_x2' },
+        { id: 'acc_null', name: 'Null Co', industry: 'T-Null', mergeArchived: null },
+    ];
+    const OPPS = [
+        { id: 'opp_won', account: 'Resinall, Inc.', accountId: 'acc_resinall_inc', stage: 'Closed Won', arr: 50000 },
+        { id: 'opp_case', account: 'resinall, inc. ', accountId: null, stage: 'Closed Won', arr: 7000 },
+        { id: 'opp_laf', account: 'Evonik - Lafayette', accountId: null, stage: 'Proposal', arr: 1000 },
+        { id: 'opp_shell', account: 'Shell - Port Allen', accountId: null, stage: 'Proposal', arr: 2000 },
+        { id: 'opp_tg', account: 'Twin Gone', accountId: null, stage: 'Proposal', arr: 300 },
+    ];
+    const report = (accounts) => runReport({ source: 'Accounts', dims: ['industry'], metrics: ['accounts', 'revenue', 'open_pipeline'] },
+        { opportunities: OPPS, accounts, leads: [], activities: [], settings: {} }, { today: new Date(2026, 9, 23, 12), fiscalStart: 1 });
+    const byKey = (r) => Object.fromEntries(r.rows.map((x) => [x.keys[0], x.values]));
+    const whole = report(ACCTS);
+    const r = byKey(whole);
+    assert.deepEqual(Object.keys(r).sort(), ['T-Laf', 'T-Null', 'T-Resinall', 'T-Site', 'T-Unit', 'T-X1', 'T-X2'], 'REGRESSION: a merged-away account is a row of the Accounts source ("# of accounts" counts it)');
+    assert.equal(r['T-Resinall'].revenue, 57000, 'REGRESSION: a won deal still on "Resinall, Inc." — by its id, or by its name in another case — leaves Revenue (won); it belongs to Resinall');
+    assert.equal(r['T-Laf'].open_pipeline, 1000, 'an id-less deal on the live twin, never the merged-away one');
+    assert.deepEqual([r['T-Unit'].open_pipeline, r['T-Site'].open_pipeline], [0, 2000], 'two live twins: the later of the name takes an id-less deal (D5)');
+    assert.deepEqual([r['T-X1'].open_pipeline, r['T-X2'].open_pipeline], [0, 0], 'a name merged into two survivors: counted on neither');
+    assert.equal(r['T-Null'].accounts, 1, 'a NULL mark reads live');
+    assert.deepEqual([whole.count, whole.scanned], [7, 7], '"N of M accounts": both the live ones');
+    // A survivor the list does not hold: the deal is counted on no row at all.
+    const noSurvivor = report(ACCTS.filter((a) => a.id !== 'acc_resinall'));
+    assert.equal(byKey(noSurvivor)['T-Inc'], undefined, 'never on the merged-away row');
+    assert.equal(noSurvivor.totals.revenue, 0, 'and on no other: the won deals of a survivor the list lacks count nowhere');
+    // Undo: "Resinall, Inc." live again — its own row, its own deals.
+    const back = byKey(report(undone(ACCTS, 'acc_resinall_inc')));
+    assert.deepEqual([back['T-Inc']?.revenue, back['T-Resinall']?.revenue], [57000, 0], 'Undo: the deals back on their own account');
+    // The lines as they stood (7ee14fe's reportQuery.js:293-300 and :332), run once on the same rows.
+    const OLD_LOOP = [
+        'const oppsByAccount = new Map();',
+        "const byName = new Map((Array.isArray(data?.accounts) ? data.accounts : []).map(a => [str(a.name).toLowerCase(), a.id]));",
+        'for (const o of opps) {',
+        'const id = o.accountId || byName.get(str(o.account).toLowerCase());',
+        'if (!id) continue;',
+        'if (!oppsByAccount.has(id)) oppsByAccount.set(id, []);',
+        'oppsByAccount.get(id).push(o);',
+        '}',
+    ];
+    const old = run(OLD_LOOP, ['data', 'opps', 'str'], [{ accounts: ACCTS }, OPPS, (v) => String(v ?? '').trim()], 'oppsByAccount');
+    assert.deepEqual([...old.keys()].sort(), ['acc_lafayette_dup', 'acc_resinall_inc', 'acc_shell_site', 'acc_tg2'], 'the old loop put the deals on merged-away rows');
+    const oldScanned = run(['const scanned = Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];'], ['rowsAll'], [ACCTS], 'scanned');
+    assert.equal(oldScanned.length, 11, 'the old line scanned every account');
+});
+
+test('C16 — Settings → Account segments and Industries count no merged-away account; their "View accounts" items say "Not available yet" and open nothing (run as written)', () => {
+    const ACCTS = [
+        { id: 'acc_resinall', name: 'Resinall', accountSegment: 'SMB', verticalMarket: 'Chemicals' },
+        { id: 'acc_resinall_inc', name: 'Resinall, Inc.', accountSegment: 'SMB', verticalMarket: 'Chemicals', mergeArchived: true, mergedIntoId: 'acc_resinall' },
+        { id: 'acc_null', name: 'Null Co', accountSegment: 'SMB', mergeArchived: null },
+        { id: 'acc_sub', name: 'Resinall - Site', parentAccountId: 'acc_resinall', accountSegment: 'SMB', verticalMarket: 'Chemicals' },
+    ];
+    for (const [file, memoName, extra, comp] of [
+        [`src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx`, 'segCounts', { tiers: [{ tier: 'SMB' }] }, 'SMB'],
+        [`src/Tabs/settings/salesProcess/IndustriesDetail.jsx`, 'counts', { industries: [{ k: 'Chemicals', subs: [] }] }, 'Chemicals'],
+    ]) {
+        const src = read(file);
+        const c = code(src);
+        assert.ok(c.includes("import { unarchived } from '../../../utils/pickLink.js';"), file);
+        once(c, S(4) + 'const live = useMemo(() => unarchived(accounts), [accounts]);');
+        once(c, S(4) + 'const topLevelCount = live.filter(a => !a.parentAccountId).length;');
+        const live = runSlice(anyMemo(src, 'live'), { unarchived, accounts: ACCTS })();
+        // `accounts` in scope too: a loop pointed back at it is then counted, not a ReferenceError (the review).
+        const counted = runSlice(anyMemo(src, memoName), { live, accounts: ACCTS, ...extra })();
+        const top = run([S(4) + 'const topLevelCount = live.filter(a => !a.parentAccountId).length;'], ['live', 'accounts'], [live, ACCTS], 'topLevelCount');
+        assert.deepEqual([counted[comp], top], [memoName === 'segCounts' ? 2 : 1, 2], `REGRESSION (${file}): "Resinall, Inc." counted beside Resinall`);
+        const oldCounted = runSlice(anyMemo(src, memoName).replace('for (const a of live) {', 'for (const a of accounts) {'), { accounts: ACCTS, ...extra })();
+        assert.equal(oldCounted[comp], memoName === 'segCounts' ? 3 : 2, 'the old loop counted it');
+    }
+    const seg = code(read('src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx'));
+    once(seg, S(60) + "{ label:'View accounts', note:'Not available yet', disabled:true, action: () => setOpenTierKebab(null) },");
+    assert.equal(count(seg, '<button key={mi} onClick={item.action} disabled={item.disabled}'), 1, 'the menu honours disabled');
+    assert.ok(!seg.includes('setAccountsDeepFilter({'), 'REGRESSION: "View accounts" offered again (segments) — it opens nothing (85cc230)');
+    const ind = code(read('src/Tabs/settings/salesProcess/IndustriesDetail.jsx'));
+    once(ind, S(60) + "{ label:'View accounts', sub:'Not available yet', action:() => setOpenIndKebab(null), muted:true },");
+    assert.ok(!ind.includes('setAccountsDeepFilter({'), 'REGRESSION: "View accounts" offered again (industries)');
+});
+
+test("C17 — Settings → Buyer Personas counts live contacts, by the persona's name or its id: a persona only a merged-away contact holds reads 0 (its Delete enabled); one Reports gave by id is counted (run as written)", () => {
+    const src = read('src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx');
+    const c = code(src);
+    assert.ok(c.includes("import { unarchived } from '../../../utils/pickLink.js';"));
+    once(c, S(8) + 'unarchived(contacts).forEach(c => {');
+    once(c, S(4) + 'const countOf = (p) => (contactCounts[p.name] || 0) + (p.id && p.id !== p.name ? contactCounts[p.id] || 0 : 0);');
+    assert.equal(count(c, 'countOf(p)'), 6, 'the six places a count is read: the row, its Delete, the preview, the bar, its title, the Distribution');
+    assert.equal(count(c, 'contactCounts[p.name] || 0'), 1, 'by name alone nowhere but countOf');
+    const PERSONAS = [{ id: 'champion', name: 'Champion' }, { id: 'p_econ', name: 'Economic Buyer' }];
+    const PEOPLE = [
+        { id: 'con_lee_dup', buyerPersona: 'Champion', mergeArchived: true, mergedIntoId: 'con_lee' },
+        { id: 'con_lee' },
+        { id: 'con_ana', buyerPersona: 'p_econ' },
+    ];
+    const counts = (contacts, memo = anyMemo(src, 'contactCounts')) => {
+        const contactCounts = runSlice(memo, { unarchived, contacts })();
+        const countOf = runSlice(anyInit(src, 'countOf'), { contactCounts });
+        return PERSONAS.map(countOf);
+    };
+    assert.deepEqual(counts(PEOPLE), [0, 1], 'REGRESSION: a persona only a merged-away contact holds keeps its Delete disabled — or one given by id from Reports counts 0');
+    assert.deepEqual(counts(undone(PEOPLE, 'con_lee_dup')), [1, 1], 'Undo: counted again');
+    const oldMemo = anyMemo(src, 'contactCounts').replace('unarchived(contacts).forEach(', '(contacts || []).forEach(');
+    const oldMap = runSlice(oldMemo, { contacts: PEOPLE })();
+    assert.deepEqual(PERSONAS.map((p) => oldMap[p.name] || 0), [1, 0], 'the old count: by name over every contact');
+});
+
+test('C18 — the merge windows and the delete warning count what the lists show: live contacts and sub-accounts, deals by their account link, never the pair itself, by the ids the window was opened on; the contact window\'s default survivor follows (each memo run whole; the deps pinned)', () => {
+    const acc = read('src/components/modals/MergeReviewModal.jsx');
+    assert.ok(code(acc).includes("import { unarchived } from '../../utils/pickLink.js';"));
+    once(code(acc), S(4) + '}, [opportunities, contacts, activities, accounts, tasks, aId, bId]);', 'the account window\'s counts are worked out again when it opens on another pair');
+    const accCounts = (aId, bId, memo = anyMemo(acc, 'countsFor')) => runSlice(memo, { unarchived, opportunities: DEALS, contacts: CONTACTS, activities: ACTIVITIES, accounts: ACCOUNTS, tasks: [], aId, bId })();
+    const countsFor = accCounts('acc_resinall', 'acc_resinall_inc');
+    const resinall = countsFor(RESINALL);
+    assert.deepEqual([resinall.opps, resinall.contacts], [1, 3], 'REGRESSION: the account window counts a merged-away contact (Lee twice) — or a deal by name');
+    assert.equal(countsFor(ACCOUNTS.find((a) => a.id === 'acc_evonik')).subs, 2, 'REGRESSION: the account window counts a merged-away sub-account');
+    assert.equal(countsFor(ACCOUNTS.find((a) => a.id === 'acc_shell_site')).opps, 2, 'deals by id, by name only for a deal with none — not the unit\'s');
+    // A unit and its own site of one name (the scan offers them): the site is no sub-account the merge re-links.
+    const unit = ACCOUNTS.find((a) => a.id === 'acc_shell_unit');
+    assert.equal(accCounts('acc_shell_unit', 'acc_shell_site')(unit).subs, 0, 'REGRESSION: the account window counts the pair\'s other record as a sub-account');
+    const OLD_ACC = asWas(anyMemo(acc, 'countsFor'), [
+        ['const liveContacts = unarchived(contacts);', 'const liveContacts = contacts;'],
+        ['const liveAccounts = unarchived(accounts);', 'const liveAccounts = accounts;'],
+        ['(o.accountId ? o.accountId === acc.id : o.account === acc.name)', 'o.account === acc.name'],
+        [' && x.id !== aId && x.id !== bId', ''],
+    ]);
+    const oldCountsFor = accCounts('acc_shell_unit', 'acc_shell_site', OLD_ACC);
+    assert.deepEqual([oldCountsFor(RESINALL).contacts, oldCountsFor(ACCOUNTS.find((a) => a.id === 'acc_evonik')).subs, oldCountsFor(ACCOUNTS.find((a) => a.id === 'acc_shell_site')).opps, oldCountsFor(unit).subs], [4, 3, 3, 1], 'the old lines');
+    // The contact window: A and B its pair, linked both ways; C a live colleague of A's; E and F merged-away reports of B's.
+    const con = read('src/components/modals/ContactMergeReviewModal.jsx');
+    assert.ok(code(con).includes("import { unarchived } from '../../utils/pickLink.js';"));
+    once(code(con), S(4) + '}, [opportunities, activities, tasks, contacts, aId, bId]);', 'the counts are worked out again when the window opens on another pair');
+    once(code(con), S(16) + 'other.id !== aId && other.id !== bId && (');
+    const PEOPLE = [
+        { id: 'x_a', directReports: ['x_b'], createdAt: '2026-01-01' },
+        { id: 'x_b', managers: ['x_a'], createdAt: '2026-02-01' },
+        { id: 'x_c', managers: ['x_a'] },
+        { id: 'x_e', managers: ['x_b'], mergeArchived: true, mergedIntoId: 'x_c' },
+        { id: 'x_f', managers: ['x_b'], mergeArchived: true, mergedIntoId: 'x_c' },
+    ];
+    const conCounts = (memo = anyMemo(con, 'countsFor')) => runSlice(memo, { unarchived, opportunities: [], activities: [], tasks: [], contacts: PEOPLE, aId: 'x_a', bId: 'x_b' })();
+    const now = conCounts();
+    assert.deepEqual([now(PEOPLE[0]).orgChart, now(PEOPLE[1]).orgChart], [1, 0], 'REGRESSION: the contact window counts its pair, or a merged-away colleague, as an org link');
+    const OLD_CON = asWas(anyMemo(con, 'countsFor'), [
+        ['const liveContacts = unarchived(contacts);', 'const liveContacts = contacts;'],
+        ['other.id !== aId && other.id !== bId && (', 'other.id !== c.id && ('],
+    ]);
+    const was = conCounts(OLD_CON);
+    assert.deepEqual([was(PEOPLE[0]).orgChart, was(PEOPLE[1]).orgChart], [2, 3], 'the old lines: the pair and the merged-away reports counted');
+    // The default survivor the counts drive: now A (the richer by what the lists show); the old counts chose B.
+    const survivor = (countsFor) => runSlice(anyMemo(con, 'defaultSurvivorId'), { cA: PEOPLE[0], cB: PEOPLE[1], countsFor, aId: 'x_a' })();
+    assert.deepEqual([survivor(now), survivor(was)], ['x_a', 'x_b'], 'REGRESSION: the default survivor follows counts that include merged-away or paired records');
+    // The delete warning: tests/merged-away-lists.test.mjs T3 runs it.
+});
+
+test("C19 — Reports' industry chart takes a deal's account by its link, an id-less deal the later LIVE account of its name — never a merged-away twin, in either order (run as written)", () => {
+    const r = code(read(REPORTS));
+    const LINE = S(12) + "const ind = o.vertical || accountOfDeal(o, accounts)?.verticalMarket || 'Other';";
+    once(r, LINE);
+    assert.ok(!r.includes('acctByName'), 'the lookup by name is gone');
+    const live = { id: 'acc_lafayette', name: 'Evonik - Lafayette', verticalMarket: 'Live Chem' };
+    const dup = { id: 'acc_lafayette_dup', name: 'Evonik - Lafayette', verticalMarket: 'Old Chem', mergeArchived: true, mergedIntoId: 'acc_lafayette' };
+    const deal = { account: 'Evonik - Lafayette', accountId: null };
+    const ind = (accounts, lines = [LINE]) => run(lines, ['o', 'accountOfDeal', 'accounts'], [deal, accountOfDeal, accounts], 'ind');
+    assert.equal(ind([live, dup]), 'Live Chem', 'REGRESSION: the chart files a deal under a merged-away twin\'s industry (the twin later)');
+    assert.equal(ind([dup, live]), 'Live Chem', 'REGRESSION: … or by the first of its name (the twin first)');
+    const OLD = ["const acctByName = new Map((accounts||[]).map(a => [(a.name||'').toLowerCase(), a]));", "const ind = o.vertical || acctByName.get((o.account||'').toLowerCase())?.verticalMarket || 'Other';"];
+    assert.equal(ind([live, dup], OLD), 'Old Chem', 'the old Map kept the later of the name');
+});
+
+test('C20 — the public API answers no merged-away account or contact, filtered in its SQL conditions (`is not true`, so NULL reads live) before its total and its page (pinned; the run is the integration suite\'s I1-I3)', () => {
+    const api = code(read('netlify/functions/public-api.mjs'));
+    for (const table of ['accounts', 'contacts']) {
+        const conds = between(api, `if (resource === '${table}') {`, 'const whereExpr = and(...conds);');
+        once(conds, S(12) + `conds.push(sql\`\${${table}.mergeArchived} is not true\`);`, `REGRESSION: the ${table} answer lists merged-away rows again (or drops a NULL mark: = false)`);
+        order(conds, S(12) + `const conds = [eq(${table}.orgId, orgId)];`, S(12) + `conds.push(sql\`\${${table}.mergeArchived} is not true\`);`, S(12) + 'const whereExpr = and(...conds);');
+    }
+    assert.ok(read('netlify/functions/public-api.mjs').includes(' * accounts and contacts leave out a record merged into another (Find & merge); total counts what is listed.'));
+});
+
+test("C21 — the quote email's fallback recipient is the live contact of the deal's first name — never a merged-away twin's old address; an Undo makes it the first of the name again (the find, sliced from the file and run)", () => {
+    const src = read('netlify/functions/quote-email.mjs');
+    const start = src.indexOf('const match = allContacts.find(c =>');
+    const end = src.indexOf(');', start);
+    assert.ok(start > 0 && end > start, 'the find');
+    const expr = src.slice(src.indexOf('allContacts.find', start), end + 1);
+    assert.ok(expr.includes('c.mergeArchived !== true && `${c.firstName || \'\'} ${c.lastName || \'\'}`.trim() === primaryName'));
+    const pick = (allContacts, e = expr) => new Function('allContacts', 'primaryName', `return ${e};`)(allContacts, 'Lee Ng')?.email ?? null;
+    assert.equal(pick(CONTACTS), 'lee@resinall.test', 'REGRESSION: the quote goes to the merged-away twin\'s old address');
+    assert.equal(pick(CONTACTS.filter((c) => c.id !== 'con_lee')), null, 'a name only a merged-away contact has: no recipient (the 422)');
+    assert.equal(pick(undone(CONTACTS, 'con_lee_dup')), 'old@resinall.test', 'Undo: the first of the name again, as before');
+    assert.equal(pick(CONTACTS, expr.replace('c.mergeArchived !== true && ', '')), 'old@resinall.test', 'the old find took the first, merged away or not');
+});
+
+test("C22 — Dispatch's New Job Customer field opens only with a row to show: a near spelling of a merged-away name — no exact name, so no Create — opens no empty box (§0.209's defect; Jeff, 23 Oct: \"File it, fix in §0.210\") (the condition and the field's pieces, from the file, run)", () => {
+    const d = code(read(DISPATCH));
+    const OPEN = S(12) + '{open && (custMatches.length > 0 || acctMatches.length > 0 || (showCreate && !merged)) && (';
+    once(d, OPEN);
+    // The condition the pinned line holds — run, never a copy.
+    const cond = OPEN.trim().replace(/^\{open && /, '').replace(/ && \($/, '');
+    const opens = (state, c = cond) => runSlice(c, state);
+    // The field's own pieces, sliced from CustomerTypeahead: `exact`, `showCreate`, `merged` over its customers and accounts.
+    const src = read(DISPATCH);
+    const mergedAwayName = runSlice(initOf(src, null, 'mergedAwayName'), { resolveLink, searchKey });
+    const accts = [{ id: 'acc_co', name: 'TEST Undo Co' }, { id: 'acc_inc', name: 'TEST Undo, Inc.', mergeArchived: true, mergedIntoId: 'acc_co' }];
+    const field = (query, customers = []) => {
+        const q = (query || '').trim().toLowerCase();
+        const exact = runSlice(initOf(src, 'CustomerTypeahead', 'exact'), { customers, accounts: accts, q });
+        const showCreate = runSlice(initOf(src, 'CustomerTypeahead', 'showCreate'), { q, exact });
+        const merged = runSlice(initOf(src, 'CustomerTypeahead', 'merged'), { q, query, customers, accounts: accts, mergedAwayName });
+        return { custMatches: [], acctMatches: [], showCreate, merged };
+    };
+    const near = field('test undo inc');
+    assert.deepEqual([near.showCreate, !!near.merged], [true, true], 'the near spelling: not exact (Create would show), yet merged');
+    assert.equal(opens(near), false, 'REGRESSION: "test undo inc" opens an empty box under the merged line');
+    assert.equal(opens(field('TEST Undo, Inc.')), false, 'the name in full: exact, no Create, no box');
+    assert.equal(opens(field('Brand New Co')), true, 'a new name: its Create row');
+    assert.equal(opens({ ...near, acctMatches: [{ id: 'a' }] }), true, 'rows to show');
+    assert.equal(opens(near, cond.replace('(showCreate && !merged)', 'showCreate')), true, 'the old condition opened it');
 });
 
 test('C-self — the suites: this file is graded by the harness', () => {

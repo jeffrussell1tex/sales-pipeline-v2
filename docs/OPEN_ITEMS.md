@@ -165,9 +165,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      - **Then, the member profile page sends only what changed** (§4.3's
        "The Settings → Users profile page PUTs a member's whole cached
        row"; Jeff, 16 Oct: "File it, own batch next"; 17 Oct: "Undo,
-       cleanup, profile" — the third, after the merged-records cleanup
-       (the merge Undo is done, §0.207), below under the merged-away
-       batch).
+       cleanup, profile" — the third, and next: the merge Undo and the
+       merged-records cleanup are done, §0.207-§0.210).
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
      quote templates) and a service plan's visit template (§4.6).
    - **A merged-away account or contact leaves the tabs' lists — DONE
@@ -177,13 +176,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Inc." stored merged, `merge_archived` true, archived 20:18:01 UTC, its
      audit "merged in · 0 references repointed"). Also seen: "Evonik -
      Lafayette", two sites, one of them merge-archived (SELECT 9 Oct). Since
-     §0.198 the pickers leave the archived one out — all but three of the
-     cleanup batch's four (below: the document link picker and Dispatch's
-     two account pickers; the fourth, Reports' "Select contacts to add to
-     this deal", lists contacts); until §0.206 it was still listed — by the
+     §0.198 the pickers leave the archived one out, and since §0.209 so do
+     the four the cleanup batch named (the document link picker,
+     Dispatch's two account pickers and Reports' "Select contacts to add
+     to this deal" — guide §18b99 rule 5); until §0.206 it was still listed — by the
      Accounts tab if it stands at the top level, else by its parent's
      Sub-Accounts (where it stands was not read), since a merge leaves the
-     merged-away row's parent as it was (its archive write, merge.mjs:260,
+     merged-away row's parent as it was (its archive write, merge.mjs:261,
      sets no parent) — because the accounts GET does not filter
      archived rows (read in code 11 Oct; again 16 Oct: the GET selects every
      account of the org, the tab filtered none). Jeff, 16 Oct: "Hide
@@ -287,76 +286,22 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        site's own from before the merge — as built ("Ship as is, file the
        edge"; the name-only case filed for batch 3, §4.7). What it found
        and left is filed in §2.2, §2.4, §4.2, §4.7 and §6.
-     - **Next, merged-away records leave every other list — step A, every screen, DONE (§0.209; guide §18b101; its browser check passed 23 Oct), committed on dev, not pushed; step B (§0.210) next** (Jeff, 16 Oct:
-       "One cleanup batch next"; 17 Oct: "Undo, cleanup, profile" — the
-       second, and next: the merge Undo is done, §0.207): the header
-       search, Reports' account list, the "# of
-       accounts" counts in reports and on Home, Settings' Segments and
-       Industries counts, and four pickers that break guide §18b91 rule 5
-       (merged-away records leave every picker) — the document link picker,
-       Dispatch's two account pickers and Reports' "Select contacts to add
-       to this deal". Added by Jeff, 17 Oct ("Add them to the cleanup
-       batch"): Reports' Activity History contact list, the meeting prep
-       panel's contacts, the merge window's predicted sub-account count, a
-       segment's "View accounts" link, the public API's contacts and
-       Settings → Buyer Personas' contact count (which keeps a persona's
-       Delete disabled while above 0). Filed with it, not put to Jeff: an
-       industry's "View accounts" link (the segment's twin), Reports' three
-       account lookups by name, the merge window's contacts and deal counts,
-       the public API's accounts and the account rail's other reads of the
-       app's lists (scanned since §0.208, each a shape or named) — and one
-       comment of AccountRail.jsx (the suite's own, corrected in §0.208).
-       Its
-       map, what each place reads, and what is filed beside it: §4.7, "The
-       cleanup batch's map".
-       Mapped and designed 18 Oct (read only, over 7ee14fe: eight mappers, a
-       designer, three critics and a reviser; the census, SELECT, counts
-       only, 21:16 UTC: only UKG holds merged-away rows — 3 accounts and 5
-       contacts — no activity, task, contact or deal names one by id, and
-       the one API key in use is another org's, which holds none). Jeff, 18
-       Oct (every answer the recommended one): "Three steps" — §0.208, THE
-       GUARD class-wide (tests only; nothing on screen changes), §0.209,
-       every screen, and §0.210, the public API, the quote email and the
-       numbers, all before the member profile page; "Survivor shows them" —
-       the surviving record lists what a merge left naming the record merged
-       into it (a document still linked to it, a person still linked to it
-       by id, an activity naming the merged-away contact among its people),
-       nothing in the data moved and an Undo taking them off again (told:
-       Unlink there unlinks the old record too, and an Undo does not bring
-       that link back); "One row to the survivor" — the top search, for a
-       name only a merged-away record has, lists the survivor with "“X” was
-       merged into this account"; "Leave them out" — the public API's
-       accounts and contacts, its totals counting only what it lists; "Count
-       what you see" — the merge windows and the delete warning count live
-       records, deals by their account link; "Grey it out" — "View accounts"
-       in Settings reads "Not available yet", making it work filed as its
-       own feature; "Fix both now" — the top search's "N open deals" and
-       Reports → Activity History → Account history take deals by the
-       account link, not the name (both by name only for an old deal with
-       none); "Approve; fix the list" — the design's ten defaults, and the
-       guide's gate list names all eight checks, the `Tests` run gaining
-       check:fnscope, with §0.208.
-       Step G is DONE (§0.208; guide §18b99 rules 4 and 6): THE GUARD is
-       class-wide — tests/merged-away-lists.test.mjs's T8 parses every file
-       that imports `useApp` and every component a list is handed to, each
-       read of the app's whole lists a shape or named with its reason and
-       its fate (it stays, or goes in §0.209 or §0.210); T10 names every
-       function that reads either table, its selects and hand-offs counted;
-       the guide's gate list names all eight checks, and the `Tests` run's
-       gates job runs check:fnscope. Tests and CI only: nothing on screen
-       changed. Step A is DONE (§0.209; guide §18b101; its browser check
-       passed 23 Oct, in Accelerep QA, as Karen and as Jeff — state §0.209):
-       the header search (one row naming the record a name was
-       merged into), Reports' Activity History pickers and add-contacts
-       panel, the document link picker (a held link drawn under "Already
-       linked"), Dispatch's customer field (no Create, its Save refuses a
-       merged-away name) and Linked CRM account (a held link shown as
-       itself), the meeting prep panel; the record a merge kept shows what
-       still names the one merged into it (Q2); a deal's account by its
-       link (Q7). Next: step B, the
-       public API, the quote email and the numbers (§0.210) — with it the
-       fix of step A's one defect, Dispatch's empty box for a near spelling
-       of a merged-away name (§4.4; Jeff, 23 Oct: "File it, fix in §0.210").
+     - **Merged-away records leave every other list — DONE (§0.208,
+       §0.209, §0.210; guide §18b99, §18b101)** (Jeff, 16 Oct: "One
+       cleanup batch next"; 17 Oct: "Add them to the cleanup batch",
+       "Undo, cleanup, profile"; 18 Oct: "Three steps" and his seven other
+       answers, docs/design/cleanup-batch/ANSWERS.md; 23 Oct: "File it,
+       fix in §0.210"): THE GUARD class-wide (§0.208); every screen
+       (§0.209); and the numbers and the server's answers — "# of
+       accounts" and the report engine, Reports' industry chart, Settings'
+       Segments, Industries and Buyer Personas counts, both "View
+       accounts" items ("Not available yet"), the merge windows' counts
+       and the delete warning, the public API and the quote email — with
+       §0.209's one defect, Dispatch's empty box (§0.210). The browser
+       checks of §0.209 and §0.210 passed in Accelerep QA (23 Oct; §0.208
+       was tests and CI only). What the batch found and left is filed in
+       §2.2, §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8, §5 and §6.
+       Next in Jeff's order: the member profile page (above).
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -515,12 +460,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **§0.209's TEST records in Accelerep QA, Jeff's to delete if he
-  wishes** (its browser check, 23 Oct — state §0.209): "Tara Other",
-  "Tia Linked", the call "TEST §0.209 pane check call", "TEST §0.209
-  deal", the document "Anadarko Tear Sheet" (linked to "TEST Undo, Inc."
-  and the TEST deal) and the two merge logs (`reversed`). Nothing else in
-  QA changed: both merges were undone, and QA holds no merged-away row.
+- **§0.209's and §0.210's TEST records in Accelerep QA, Jeff's to
+  delete if he wishes** (their browser checks, 23 Oct — state §0.209,
+  §0.210): "Tara Other", "Tia Linked", the call "TEST §0.209 pane check
+  call", "TEST §0.209 deal", the document "Anadarko Tear Sheet" (linked
+  to "TEST Undo, Inc." and the TEST deal), "TEST §0.210 won deal"
+  ($2,000, Closed Won, on "TEST Undo, Inc."), "TEST Undo, Inc."'s
+  segment SMB and vertical market Energy, Tess `id_test_tess_b`'s
+  persona Champion, and the four merge logs (`reversed`). Nothing else
+  in QA changed: all four merges were undone, and QA holds no
+  merged-away row.
 - **The census of the merge logs: its two stop counts ran before the
   forty-third ship; its third count, for Jeff and not a stop, was not
   run** (§0.207's design, as amended — the census was its gate order's
@@ -1195,22 +1144,22 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Reports' "Contacts on this deal" keeps its adds and removes to itself**
   (the cleanup batch's design, 18 Oct, P37; re-read 23 Oct; read in code,
   not run). A save that lands sets the tab's own ids
-  (`setLocalContactIds`, ReportsTab.jsx:6283 add, :6337 remove), never
+  (`setLocalContactIds`, ReportsTab.jsx:6284 add, :6338 remove), never
   the app's deal: ActivityHistoryTab is handed the app's deals in scope
   (`roleFilteredOpps`, :2093) and no setter, though the app's context
   carries `setOpportunities` (App.jsx:1732), and the PUT's answer — the
   deal as stored (opportunities.mjs:612) — is not read. Picking a deal,
-  another or the same one again, sets the ids back to null (:6005), and
+  another or the same one again, sets the ids back to null (:6006), and
   leaving Activity History drops them (:2088); the table then reads the
-  app's copy (:5943) — without the contact just added, with the one just
+  app's copy (:5944) — without the contact just added, with the one just
   removed — until the app reads the deals again (a reload, App.jsx:499; a
   merge, useMerge.js:35). The next add or remove sends that copy as the
-  deal's whole `contactIds` (:6266, :6326), which the PUT lays over the
+  deal's whole `contactIds` (:6267, :6327), which the PUT lays over the
   stored row (opportunities.mjs:499): the earlier add or remove undone,
   nothing said. The deal window opened from the Pipeline tab starts from
   the same copy (PipelineTab.jsx:379; OpportunityModal.jsx:1063), and a
   Contacts change there sends its list whole (:1204-1206). A refused
-  save says nothing either: `if (res.ok)` only (:6282-6285, :6337), the
+  save says nothing either: `if (res.ok)` only (:6283-6286, :6338), the
   add's panel stays open, the remove's row stays, and dbFetch logs it to
   the console alone (storage.js:68). Two halves are filed in this
   section, older and without a cite: "never updates the app's copy" (the
@@ -1224,7 +1173,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first; its Accounts source takes no slice** (the cleanup batch's
   design, 18 Oct, P40; re-read 23 Oct; read in code, not run): the
   Filters tab's note ends "The Rep / Team / Territory slice above the tab
-  applies first." (ReportsTab.jsx:4479). It holds for three sources: the
+  applies first." (ReportsTab.jsx:4480). It holds for three sources: the
   builder hands `runReport` the sliced deals, activities and leads
   (`builderData`, :2391; `reportsOpps` :192-203, `reportsActivities`
   :225, `reportsLeads` :234; handed at :2110-2118). Its accounts are the
@@ -1233,12 +1182,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Dispatcher, the only viewers the slice is drawn for
   (`hasReportsSlicing`, :189; `canSeeAll`, :75-76), that is every account
   of the org (accounts.mjs:188-209; `crmReadScope`, roles.js:56-60),
-  merged-away rows too until §0.210 (§1). So with a rep picked, the
+  merged-away ones left out since §0.210. So with a rep picked, the
   Accounts source still reads every account: "# of accounts" and the
-  "N of M accounts in the period" line (:4378) count the org's accounts,
+  "N of M accounts in the period" line (:4379) count the org's accounts,
   not the rep's, while its Revenue (won), Open pipeline and # of deals
   follow the slice, read from the sliced deals (`oppsByAccount`,
-  reportQuery.js:293-300; :106-108). The tab's role gate skips accounts
+  reportQuery.js:294-325; :107-109). The tab's role gate skips accounts
   too: `myTeamMembers` (:124-135) narrows deals, activities, leads and
   tasks (:172-175), never accounts, so a Manager's Accounts report counts
   the whole org under "Showing your data and your team (…)" (:329-331).
@@ -1474,9 +1423,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   longer merged into …" (§0.207). The accounts DELETE still deletes one
   sent by id, with no Undo, and its merge's Undo is then refused, "… was
   deleted after this merge …" (§0.207; Jeff, 17 Oct: "Undo refuses and
-  explains" — deleting stays as it is). The delete's confirm counts
-  the sub-accounts the server lifts, merged-away ones too, so it can name
-  more than the drawer lists (§0.206). Recommended: carry the merge mark on
+  explains" — deleting stays as it is). The delete's confirm counted
+  the sub-accounts the server lifts, merged-away ones too, so it could
+  name more than the drawer lists (§0.206) — until §0.210, when it counts
+  the live ones (useAccounts.js:77; Jeff, 18 Oct: "Count what you see");
+  the server still lifts a merged-away one. Recommended: carry the merge mark on
   a restore (its survivor checked in the org); carry the
   created date only as text (the delete answering `created_at::text`, the
   restore writing it back so) or once the driver's parser is fixed for
@@ -1683,19 +1634,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a contact's Company text and a deal's Contacts text are not renamed. Since
   §0.209 none of the four pickers offers a merged-away record — Reports'
   "Select contacts to add to this deal" (`allContacts={unarchived(contacts)}`,
-  ReportsTab.jsx:6259), Dispatch's customer typeahead
-  (`!isMergeArchived(a)`, DispatchTab.jsx:347-348), its Linked CRM account
-  select (`unarchived(accounts)`, :2678) and the document link picker
+  ReportsTab.jsx:6260), Dispatch's customer typeahead
+  (`!isMergeArchived(a)`, DispatchTab.jsx:348-349), its Linked CRM account
+  select (`unarchived(accounts)`, :2680) and the document link picker
   (DocumentLinkPicker.jsx:84-85) list only live ones — so what sends one
   through them is a screen whose lists were loaded before the merge, or a
   hand-made request (the cleanup batch's design, 18 Oct, P30; re-read 23
   Oct; read in code, not run). The first three are followed to the
   survivor (`checkLinks`, opportunities.mjs:480, dispatch-customers.mjs:249;
   `follow = true` by default, linkIds.js:118): the add panel's PUT names
-  the contact in the deal's Contacts text (ReportsTab.jsx:6266-6280), so
+  the contact in the deal's Contacts text (ReportsTab.jsx:6267-6281), so
   the deal links the survivor under that name; the typeahead gives a new
-  job's customer the account's name (DispatchTab.jsx:6729-6733, posted at
-  :5791-5799); the select sends an id with no name (:2673). For these
+  job's customer the account's name (DispatchTab.jsx:6731-6735, posted at
+  :5793-5801); the select sends an id with no name (:2675). For these
   names: as the merges leave names; with the first item above. The fourth
   is not followed: documents.mjs follows no merge. `resolveLinks`
   (documents.mjs:167-190) reads the record by id in the org (:176) and
@@ -1767,6 +1718,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Quotes: the server takes two lines of one product** (the editor refuses
   a second; the version compare and the analytics assume one per product).
   No screen makes them; refusing them is quote-shape integrity, not tenancy.
+- **A deal's account by name: the report engine trims the name,
+  `accountOfDeal` does not** (§0.210's doc check, 23 Oct; read in code,
+  and run by a checker on made-up rows): the engine compares a deal's
+  account name trimmed and lower-cased (`str`, reportQuery.js:59, used at
+  :303, :309, :314), `accountOfDeal` lower-cased only (pickLink.js:285-288). So
+  an id-less deal named "resinall, inc. " (a trailing space) counts on
+  Resinall in a report and has no account in Reports' Opportunity
+  history and its industry chart ("Other") — as before §0.210 (the old
+  `acctByName` and `accountOfDeal` were untrimmed too). Recommended:
+  `accountOfDeal` trims as the engine does.
 
 ### 4.3 Settings
 
@@ -1774,33 +1735,36 @@ to add meetings. Nothing in the app adds a meeting to Google:
   stores the list as sent** (the cleanup batch's design, 18 Oct, P38;
   re-read 23 Oct; read in code, not run): Settings → Buyer Personas
   disables Delete while any contact holds the persona
-  (BuyerPersonasDetail.jsx:250, its handler :134-138, counted at :98-104
-  over the app's loaded `contacts`, :62) — on the screen only: the PUT
+  (BuyerPersonasDetail.jsx:254, its handler :138-142, counted at :99-108
+  over the app's loaded `contacts`, :63 — the live ones since §0.210) —
+  on the screen only: the PUT
   takes `buyerPersonas` whole, as sent (settings.mjs:397), and reads no
   contact (of the schema it imports only `settings` and `users`, :2).
-  The screen's own count lets one through three ways. It counts by name
-  (`contactCounts[p.name]`, BuyerPersonasDetail.jsx:220) while Reports'
-  "Assign persona" stores the persona's id (ReportsTab.jsx:4847 →
-  :6349), so a persona given only from Reports reads 0 and its Delete is
-  enabled (§0.210 is to count by name or id — on the screen only). It
+  The screen's own count let one through three ways until §0.210, which
+  closed the first: it counted by name alone (`contactCounts[p.name]`)
+  while Reports' "Assign persona" stores the persona's id
+  (ReportsTab.jsx:4848 → :6350), so a persona given only from Reports
+  read 0 and its Delete was enabled — since §0.210 it counts live
+  contacts by name or id (`countOf`, BuyerPersonasDetail.jsx:108; on the
+  screen only). It
   counts the list as loaded: the app reads the contacts with the org
   (App.jsx:501) and again only after a merge or its Undo
   (useMerge.js:49-55) or an import's owner overwrite (ModalLayer.jsx:516),
   and Reports keeps its assignment in its own map (`localPersonaMap`,
-  ReportsTab.jsx:6342), never in the app's list — so a persona given
+  ReportsTab.jsx:6343), never in the app's list — so a persona given
   since the list loaded, by another member or by the Admin from Reports,
   is not counted, by name or by id. And a rename keeps the persona's id,
-  not its name (BuyerPersonasDetail.jsx:346, :179), while a contact given
+  not its name (BuyerPersonasDetail.jsx:350, :183), while a contact given
   the persona on its rail holds the name (ContactRail.jsx:842-844): after
   a rename that contact counts for no persona. A PUT sent by hand needs
   none of these. The contact keeps the value (contacts.mjs:71 stores it
   as sent): its rail's read view shows the stored text
   (ContactRail.jsx:866) and Reports' "Contacts on this deal" a "—"
-  (ReportsTab.jsx:6320, :6388). Admin only (settings.mjs:245) and this
+  (ReportsTab.jsx:6321, :6389). Admin only (settings.mjs:245) and this
   org's row only (:442-445) — integrity, not a leak. Recommended: the PUT
   refuses (409, nothing written) a save that drops a persona whose id or
   name a contact of this org holds, or renames one a contact holds by
-  name — by the screen's rule after §0.210 (live contacts, by name or
+  name — by the screen's rule since §0.210 (live contacts, by name or
   id) — in the screen's words ("N contacts still use this").
 - **The API docs page and the API keys panel describe an API no key can
   reach, with the wrong limits and scopes** (the cleanup batch's design,
@@ -1813,14 +1777,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Clerk session token (`verifyAuth`, e.g. opportunities.mjs:250;
   auth.mjs:93 `verifyToken`), so a key is answered 401 "Auth error: ..."
   (auth.mjs:168-170; read in code, not run). The one endpoint a key opens,
-  public-api.mjs, is on the page nowhere: GET only (:75-77, "Public API is
-  read-only"), `?resource=` of six tables (:443; no quotes or webhooks,
+  public-api.mjs, is on the page nowhere: GET only (:77-79, "Public API is
+  read-only"), `?resource=` of six tables (:450; no quotes or webhooks,
   and activities and tasks undocumented), `page`/`limit` up to 200
-  answered as `{ data, meta }` (:49-64). The limits: the page's "1,000
+  answered as `{ data, meta }` (:51-66). The limits: the page's "1,000
   requests/minute" per key and per organization (api-docs.html:391) and
   the panel's "Rate limit: 1,000 req/min per key" (ApiKeysDetail.jsx:630),
   against `RATE_LIMIT = 300` per `WINDOW_MS = 15 * 60 * 1000`, per key, in
-  memory per function instance (public-api.mjs:16, :25-28); and the
+  memory per function instance (public-api.mjs:18, :27-30); and the
   page's "return all records ... Cursor-based pagination is on the
   roadmap" (api-docs.html:387). Read/write: "Keys currently grant
   read/write access to all resources within the workspace"
@@ -1864,20 +1828,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Industries' "Delete industry" says "Removes tag from all accounts";
   it takes the industry out of the taxonomy only** (the cleanup batch's
   design, 18 Oct, P40, its Industries item; re-read 23 Oct; read in
-  code, not run): the menu item's line (IndustriesDetail.jsx:310) sits on
-  a button that runs `handleDeleteInd` (:305, :137-140), which only
+  code, not run): the menu item's line (IndustriesDetail.jsx:313) sits on
+  a button that runs `handleDeleteInd` (:308, :138-141), which only
   filters the panel's own list —
-  `setIndustries(prev => prev.filter(ind => ind.k !== indKey))` (:138) —
-  and Save sends `putSettings({ industries })` (:54), which settings.mjs
+  `setIndustries(prev => prev.filter(ind => ind.k !== indKey))` (:139) —
+  and Save sends `putSettings({ industries })` (:55), which settings.mjs
   stores as `extra.industries` (:396; the file never names the accounts
   table). Every account's `verticalMarket` / `industry` keeps its value.
   What changes: the account rail's Industry suggestions stop offering it
   (AccountRail.jsx:246-248, :716), as they already do for a hidden one;
   and the Distribution card stops counting it (its index is built from
-  the taxonomy, :155, :161), so the top-level accounts that hold it or
+  the taxonomy, :158, :164), so the top-level accounts that hold it or
   one of its sub-types fall into the unmatched rest of "N of M accounts
-  matched to a primary industry" (:367). The Hide item beside it says
-  "Existing accounts keep this tag" (:303), which is what Delete does as
+  matched to a primary industry" (:370). The Hide item beside it says
+  "Existing accounts keep this tag" (:306), which is what Delete does as
   well. Recommended: say what it does (for example "Accounts keep their
   industry"), text only; a real cascade would be an org-wide write to
   accounts, its own designed item if Jeff wants one.
@@ -1960,6 +1924,34 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - The refused restore's line keeps a `data.error ||` that no answer of
     the restore's own reaches now (`saidBy` takes any answer in words
     first). Housekeeping.
+- **Settings' "View accounts" (a segment's, an industry's) is not
+  available yet — making it work is its own feature** (the cleanup
+  batch's design, 18 Oct, P8; Jeff, 18 Oct: "Grey it out" — making it
+  work "filed as its own feature"; state §0.210): since §0.210 both read
+  "Not available yet" and open nothing (AccountSegmentsDetail.jsx:235,
+  disabled; IndustriesDetail.jsx:286, muted). They had opened nothing
+  since 85cc230 (7 May): their setter, `setAccountsDeepFilter`, is made
+  by useUIState.js (:73, returned at :125) but put in neither App.jsx
+  nor AppContext.jsx, so `useApp()` hands SettingsTab.jsx undefined
+  (:30), which it passes to AdminView (:63; AdminView.jsx:95) and
+  AdminView on (:451, :454, :466) to CustomerTypesDetail.jsx (:20),
+  AccountSegmentsDetail.jsx (:30) and IndustriesDetail.jsx (:37) — none
+  of which reads it since §0.210 — and the Accounts tab is handed no
+  deep filter: App.jsx renders `<AccountsTab />` (:2110) without the
+  three props it still takes into its filters
+  (`initialAccountSegmentFilter`, `initialIndustryFilter`,
+  `onDeepFilterConsumed` — AccountsTab.jsx:564, :617-628), which 85cc230
+  dropped. To build: the setter and the filter through App.jsx's
+  context, App.jsx handing the Accounts tab those props again, and the
+  two items enabled, the list they open counting as the cards do — the
+  live top-level accounts.
+- **Buyer Personas' Delete reads "1 contact still use this"** (§0.210's
+  browser check, 23 Oct; read in code): the line under a disabled
+  Delete is `${count} contact${count !== 1 ? 's' : ''} still use this`
+  (BuyerPersonasDetail.jsx:254) — the noun takes its plural, the verb
+  never. Recommended: "1 contact still uses this", with §4.8's
+  "Opportunitys" and "Activitys" in one pass over the app's counted
+  words.
 
 ### 4.4 Dispatch
 
@@ -1969,16 +1961,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   account to the survivor and never renames it (merge.mjs:233), so a
   customer made from an account later merged away — New Job's "CRM
   accounts — not yet in Dispatch" pick (`onPickAccount`,
-  DispatchTab.jsx:6729-6740, its name and id; POSTed by handleSaveNewJob,
-  :5791-5806) or quote -> job's (quote-to-job.mjs:118-125, the deal's
+  DispatchTab.jsx:6731-6742, its name and id; POSTed by handleSaveNewJob,
+  :5793-5808) or quote -> job's (quote-to-job.mjs:118-125, the deal's
   account name and id) — names the survivor under the old name. The
-  builds the local `origin/dev` and `origin/master` refs hold (8f62dc7,
-  61ca21a; not fetched) still offer an account already merged away there
-  where no customer has its name (their :336 has no `isMergeArchived`),
-  and the create stores its survivor in its place
-  (dispatch-customers.mjs:249-251; linkIds.js:79-100, E2): the same
-  shape, made after the merge. §0.209 closes that route on this tree only
-  for a screen whose list knows of the merge (:349 and :5780-5782 read the
+  build the local `origin/master` ref holds (61ca21a, prod; not fetched)
+  still offers an account already merged away there where no customer
+  has its name (its :336 has no `isMergeArchived`), and the create
+  stores its survivor in its place (dispatch-customers.mjs:249-251;
+  linkIds.js:79-100, E2): the same shape, made after the merge;
+  `origin/dev` holds 9870ff0 since the push of 23 Oct, whose :349 has
+  the filter. §0.209 closes that route on this tree only
+  for a screen whose list knows of the merge (:349 and :5782-5784 read the
   loaded `accounts`, which load with the org, after this session's own
   merge and on a few saves — App.jsx:500, useMerge.js:26; never on a
   timer), and keeps a customer already so named the one to pick
@@ -2000,28 +1993,28 @@ to add meetings. Nothing in the app adds a meeting to Google:
   cleanup batch's design, 18 Oct: DESIGN.md:111, P40's last flag, and
   :1219, completeness F8d; re-read 23 Oct; read in code, not run). The
   customer form draws a stored plan or technician its list no longer holds
-  as itself — "Deleted plan (…)" (DispatchTab.jsx:2706-2708), "Unknown
-  technician (…)" (:2779) — each a live `<option>`. Guide §18b24.3 says
+  as itself — "Deleted plan (…)" (DispatchTab.jsx:2708-2710), "Unknown
+  technician (…)" (:2781) — each a live `<option>`. Guide §18b24.3 says
   "Render an unmatched value as itself, disabled." (:2934); guide §16's
   own example (:802) has no `disabled`, though §18b101 rule 4 (:4285)
   cites both for "a select shows it disabled". The role selects
   (UsersDetail.jsx:38, UserModal.jsx:159) and, since §0.209, the same
-  form's Linked CRM account (`heldLink`, DispatchTab.jsx:2677) draw theirs
+  form's Linked CRM account (`heldLink`, DispatchTab.jsx:2679) draw theirs
   disabled. Each is drawn only while the draft holds the stale value, so
   it leaves the list once another is picked, and an untouched Save sends
-  the stored value either way (`...draft`, :3026; react-dom 18.3.1's
+  the stored value either way (`...draft`, :3028; react-dom 18.3.1's
   `updateOptions` matches the value before it looks at `disabled`): the
   difference is how the open list draws it. The customer type's "Unlisted
-  type (…)" (:2695-2697) is another case: `propertyTypesFor` (:1978-1987)
+  type (…)" (:2697-2699) is another case: `propertyTypesFor` (:1980-1989)
   lists every type still on a customer, the form's own among them, as
-  `unlisted: true`, so the `.some(...)` at :2695 finds it and the option
-  is not drawn, while `.filter(t => !t.unlisted)` (:2698) leaves it out of
+  `unlisted: true`, so the `.some(...)` at :2697 finds it and the option
+  is not drawn, while `.filter(t => !t.unlisted)` (:2700) leaves it out of
   the options — React then shows the first type listed (guide §16's bug;
-  both from 32ef196, 11 Aug; state 0PB.14, :9252, says the select emits
+  both from 32ef196, 11 Aug; state 0PB.14, :9283, says the select emits
   the option). Its untouched Save still sends the stored type; as read,
   the option draws only if the customer list changes under an open form.
   The same shape, enabled, outside the design's list: the technician
-  form's "Unknown login" (DispatchTab.jsx:3581 — pinned word for word by
+  form's "Unknown login" (DispatchTab.jsx:3583 — pinned word for word by
   tests/dispatch-links.test.mjs:267 and quoted by a harness entry,
   scripts/mutate-import.mjs:11687-11689), a crew's default vehicle
   (DispatchCrewsDetail.jsx:232-234) and a service plan's visit template
@@ -2030,33 +2023,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   value is drawn as itself; then Jeff picks the rule — disabled is the one
   the role selects and §0.209 follow: `disabled` on all six, §16's example
   made to match, and that pin and harness entry updated, in one batch.
-- **Dispatch's New Job Customer field opens an empty box for a near
-  spelling of a merged-away name** (§0.209's doc review, 23 Oct; read in
-  code, its expressions run on made-up rows, nothing written; not seen on
-  screen): the box opens on `custMatches.length > 0 ||
-  acctMatches.length > 0 || showCreate` (DispatchTab.jsx:387), and since
-  §0.209 its Create row needs `showCreate && !merged` (:419). The two
-  read a name two ways: `showCreate` is no customer or account, merged
-  away or not, named exactly as typed, trimmed and lower-cased (`exact`,
-  :351-353); `merged` is searchKey's reading, punctuation and spacing
-  ignored (`mergedAwayName`, :321-326, :356). So after "TEST Undo, Inc."
-  was merged into "TEST Undo Co", "test undo inc" (or "TEST Undo, Inc"
-  with no period) gets the merged line under the field and, where no
-  customer and no live account not yet in Dispatch holds every word
-  typed ("inc" is not in "TEST Undo Co"), a box with no row in it: by
-  its styles its border alone, 2px tall, no padding, 3px under that line
-  (:388-390), in the form's 14px gap above Job Title (:6671), its shadow
-  reaching past it (how it looks is not seen), again on each focus
-  (:367). The name in full (the browser check's) is `exact`, so no box
-  opens; the suite's own "resinall inc"
-  (tests/merged-away-cleanup.test.mjs:455) is this shape, and C8 never
-  runs the open condition. Nothing is written (Create Job refuses it,
-  :5781-5782). New in §0.209: the Create row was `{showCreate && (`
-  (7ee14fe's :403), so an open box always held one. Recommended: open on
-  `(showCreate && !merged)` at :387, leaving :419 as it is (C8 pins it,
-  :463, and a harness entry quotes it,
-  scripts/mutate-import.mjs:14094-14097), and a C8 case that runs the
-  condition.
 - **Undo of a template a New Job starter applied keeps the template's
   values** (§0.199's second re-check; older — the base has the same lines;
   read in code and run on made-up forms). startBridgeJob (a won deal's
@@ -2211,7 +2177,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (`visibleOpportunities`, App.jsx:834-838), the email every pipeline's
   (`runReport` filters by no pipeline; no line here names it). Yet
   report-deliveries.mjs:96-97 says "the table sent is the picture the
-  builder showed", and state §0.135 (ACCELEREP_CURRENT_STATE.md:5860)
+  builder showed", and state §0.135 (ACCELEREP_CURRENT_STATE.md:5861)
   calls the own-only read "the server's rule". It also asks `canSeeAll`
   (the write authority) where the GETs ask `crmReadScope`
   (roles.js:56-60): an owner who became a Dispatcher is sent their own
@@ -2226,7 +2192,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   ask Jeff whether the email should also follow the tab's name scope and
   the active pipeline; with it, update the pins at
   tests/report-delivery.test.mjs:173-174 and THE GUARD's entry for this
-  file (tests/merged-away-lists.test.mjs:1477).
+  file (tests/merged-away-lists.test.mjs:1464).
 - **Home's "On Your Plate" and greeting counts, and the phone's Tasks badge,
   count the whole org's tasks for an Admin** (§0.200's map, read in code;
   Jeff, 13 Oct: "File them"). Home reads `visibleTasks` — for an Admin every
@@ -2319,8 +2285,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   team, to their own name) — deals on top of `visibleOpportunities`,
   activities, leads and tasks instead (:172-175); its saved reports take
   the whole `accounts` (:2109, :2391), and Activity History lists every
-  live account and contact to a Manager (`seesAllRecords`, :5051, :5082,
-  :5100). Nothing differs today while no row holds `profile.managedReps`
+  live account and contact to a Manager (`seesAllRecords`, :5052, :5083,
+  :5101). Nothing differs today while no row holds `profile.managedReps`
   (the item above; not re-checked, no database read — users.mjs's sanitize
   builds no such key, :119-169, but a restore inserts a new member's row
   with the file's profile, backup.mjs:443, memberName.js:98-101, and its
@@ -2332,11 +2298,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Reports' Activity History lists a rep's accounts and contacts by
   display name** (the cleanup batch's design, 18 Oct, P40c; re-read 23
   Oct; read in code, not run): for every role but Admin, Manager and
-  Dispatcher (`seesAllRecords`, ReportsTab.jsx:5051) the Account history
+  Dispatcher (`seesAllRecords`, ReportsTab.jsx:5052) the Account history
   and Contact history pickers keep a row only when its owner name is in
   `myTeam` — `myTeam.has(owner)` over `a.accountOwner || a.assignedRep`
-  (:5084-5093), and over `c.assignedRep || c.accountOwner` or no owner
-  (:5101-5110) — built from `settings.users` by
+  (:5085-5094), and over `c.assignedRep || c.accountOwner` or no owner
+  (:5102-5111) — built from `settings.users` by
   `u.name === currentUserName` (`currentUser` is the display name,
   App.jsx:200-209). The server already hands a rep their own rows by
   owner id and the unassigned ones (accounts.mjs:208, contacts.mjs:96),
@@ -2346,10 +2312,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   does not cascade — "Records named by an old roster name", §4.2) is left
   out of its picker, and an unassigned account with no owner name is never
   in Account history while an unassigned contact with none is in Contact
-  history (`|| !owner`, :5109). The team half (:5083, "or are on the team
-  for"; :5087-5088) never runs: a rep's `settings.users` is the directory,
+  history (`|| !owner`, :5110). The team half (:5084, "or are on the team
+  for"; :5088-5089) never runs: a rep's `settings.users` is the directory,
   `{ id, name, active }` with no team (users.mjs:506-508;
-  useSettings.js:116-128), so `myTeam` is the rep alone (:5086) — and the
+  useSettings.js:116-128), so `myTeam` is the rep alone (:5087) — and the
   server sends a rep no teammate's row anyway. The tab's own gate is by
   name too: a rep's `myTeamMembers` is `new Set([currentUserName])`
   (:119-135), which `oppInScope`, `actInScope` and `taskInScope` test
@@ -2358,7 +2324,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deals, activities and tasks under a picked record are narrowed by name
   too (not traced further). Recommended: pass a rep's two lists through
   as the server granted them, as `isRepVisible` does — one rule for both
-  pickers; C3 (tests/merged-away-cleanup.test.mjs:322-335, run with a
+  pickers; C3 (tests/merged-away-cleanup.test.mjs:344-357, run with a
   by-name fixture) and tests/roles.test.mjs:186-187 move with it. Whether
   the tab's gate goes the same way is Jeff's call (§0.71 left its leads
   half, which drops unassigned leads, as his call).
@@ -2708,6 +2674,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   A sign-in ends in a page load (clerk-js, as recorded), so a second member
   never inherits it. Recommended: drop an answer when
   `uiOrgRef.current !== meOrgId`.
+- **The public API's `limit` and `page` let a non-number through, and
+  `?limit=abc` answers every row** (§0.210's review, 23 Oct; read in
+  code, not run): `parsePagination` (public-api.mjs:51-55, since
+  5539b4c, 30 Mar) reads `parseInt(params.limit)`, NaN for a
+  non-number, and `Math.min(200, Math.max(1, NaN))` is NaN, so `limit`
+  and `offset` are NaN; drizzle 0.45.2 writes a LIMIT only for a number
+  of 0 or more and an OFFSET only for a truthy one
+  (node_modules/drizzle-orm/pg-core/dialect.js:286-287), so the query
+  has neither — every row of the resource its filters match, past the
+  200 cap, with `meta.limit` and `totalPages` null (`JSON.stringify`
+  of NaN) and `hasNextPage` false; `?page=abc` likewise drops the
+  OFFSET (page 1's rows, `meta.page` null). Within the key's own org and
+  under its rate limit (300 per 15 minutes) — a size cap bypassed, not a
+  leak. Recommended: a value that is not a positive whole number reads as
+  the default (`limit` 50, `page` 1), or answers 400.
 
 ### 4.7 Imports and merge
 
@@ -2748,15 +2729,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Dispatch customers and jobs and deals, and sub-accounts' parent
   (:231-236), and writes the survivor's name into deals' and SPIFF claims'
   `account` and contacts' `company` (:238-240); a contact merge moves
-  tasks' and activities' `contactId` (:657-669), deals' `contactIds`
-  (:671-682) and colleagues' org charts (:684-710). So a `document_links`
+  tasks' and activities' `contactId` (:658-670), deals' `contactIds`
+  (:672-683) and colleagues' org charts (:685-711). So a `document_links`
   row naming the record merged away (schema.ts:1330-1343) stays on it, its
   `recordName` too (:1336), and the reverse read `?linkedTo=` matches that
   id alone (documents.mjs:275-281; no caller in src found by grep). Since
   §0.209 the survivor's Documents tab lists such a document (`standsFor`,
   RecordDocuments.jsx:36-46), and its × removes every link of it to the
   survivor and to a record merged into it (`unlinkHere`, :81-85), which an
-  Undo does not bring back (Jeff was told, 18 Oct: §1 item 1). An
+  Undo does not bring back (Jeff was told, 18 Oct: docs/design/cleanup-batch/ANSWERS.md, Q2). An
   invoice's `accountId` (schema.ts:675), copied from its job when it is
   made (invoices.mjs:160) and written by no other path (its PUT, :188-221,
   writes no link), stays on the account merged away while the job's moves
@@ -2784,7 +2765,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   one a move makes, or one a merge puts it on — by its name only where
   no other account has the name (§4.2, "D22's edges"), and both checks
   count every account of the org, merged-away ones included, while a
-  merge leaves the record it archives its name (merge.mjs:260 writes the
+  merge leaves the record it archives its name (merge.mjs:261 writes the
   mark, not the name). A move: `sitesMade`'s `alone`
   (src/utils/accountParent.js:378, `!list.some((b) => b.id !== a.id &&
   (b.name || '') === storedName)`) reads every row `orgTreeOf` selects
@@ -2807,10 +2788,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   18 Oct counted links by id only, docs/design/cleanup-batch/DESIGN.md:8-10).
   The D22 test pins a live twin only
   (tests/account-parent.test.mjs:532-536). THE GUARD records the
-  accounts.mjs half "for batch 3" (tests/merged-away-lists.test.mjs:1466);
-  its merge.mjs reason (:1470) says the merge reads both records "by
+  accounts.mjs half "for batch 3" (tests/merged-away-lists.test.mjs:1453);
+  its merge.mjs reason (:1457) says the merge reads both records "by
   id", which :217 does not (nor :173, the sub-accounts by parent, nor
-  the Undo's `treeOf`, :351-354, every account of the org). Recommended
+  the Undo's `treeOf`, :352-355, every account of the org). Recommended
   (batch 3): count only live accounts as namesakes in both — in `alone`,
   and in `named` / `byName` — not by narrowing `orgTreeOf`, whose
   merged-away rows the parent rule reads for its "merged into another
@@ -2834,7 +2815,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   or one deleted since (the single DELETE's batch, accounts.mjs:527-538,
   writes no contact). Its contact is the first of an unordered read that
   keeps merged-away rows (:332-337 — the matched-by-name item below; a
-  merged-away contact keeps its email and personal email, merge.mjs:725
+  merged-away contact keeps its email and personal email, merge.mjs:726
   writes only its merge marks). Since §0.209 the survivor account's
   Activity tab lists one on a merged-away account through its contact
   (`standsFor`, AccountRail.jsx:274-277, :297-302); one on a deleted
@@ -2843,7 +2824,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `accountId` show is unverified. No test pins the links it stores:
   email-inbound.itest.mjs reads no `accountId`, and THE GUARD's T10
   names only the file's one contacts read, as filed
-  (tests/merged-away-lists.test.mjs:1479). Recommended (a functions
+  (tests/merged-away-lists.test.mjs:1466). Recommended (a functions
   batch, with batch 3): the insert's links go through `checkLinks` with
   `ACTIVITY_LINKS`, as the activities endpoint's create does — a
   merged-away account or contact stored as its survivor — except that
@@ -2853,26 +2834,27 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The account merge window's words leave out Dispatch, SPIFF claims
   and where lifted deals go** (the cleanup batch's design, 18 Oct, P36;
   re-read 23 Oct; read in code, not run): its summary
-  (MergeReviewModal.jsx:229 — "Merging re-links N opportunities, N
+  (MergeReviewModal.jsx:238 — "Merging re-links N opportunities, N
   contacts, N activities", tasks and sub-accounts when any, "from “X” to
-  “Y”, then archives “X”") names only what `countsFor` counts (:58-66).
+  “Y”, then archives “X”") names only what `countsFor` counts (:63-75).
   The merge also moves Dispatch's customers' and jobs' account to the
   survivor (merge.mjs:233-234) and renames SPIFF claims' account name
   (:239); the summary says neither. And where the survivor is a site
   and a live account stands above it once merged (:210-216), the merge
   moves the merged-away account's deals up to that account, under its
   name, Site Name the survivor (D22, §0.198; :217-224, :243), while the
-  summary's opportunities count (:60, by name) takes those named “X” as
-  re-linked to “Y”, and the window's opening line (:162, "its related
-  items are re-linked to the survivor") says the same of them. Both
-  files are unchanged since 7ee14fe (git log); step B (§0.210) changes
-  the window's counts (:60-61, :63), not these words. Recommended (with
+  summary's opportunities count (:68 — by the deal's account link since
+  §0.210) takes those on “X” as re-linked to “Y”, and the window's
+  opening line (:171, "its related items are re-linked to the
+  survivor") says the same of them. Since 7ee14fe the two files changed
+  only in §0.210 — the window's counts (:63-75) and merge.mjs's comment
+  (:259-260) — not these words or these moves. Recommended (with
   batch 3's merge.mjs edit): the summary names every kind the merge
   moves — Dispatch customers and jobs, SPIFF claims — and, for a merge
   into a site, both lines say the deals go to the account above it.
   SPIFF claims are in the app's context (App.jsx:1852; the window does
-  not take them from `useApp`, :41-46); Dispatch's lists are not (none
-  in App.jsx — the tab loads its own, DispatchTab.jsx:5622-5623, and
+  not take them from `useApp`, :42-47); Dispatch's lists are not (none
+  in App.jsx — the tab loads its own, DispatchTab.jsx:5624-5625, and
   §4.2 files that a merge reads neither again), so a Dispatch count
   needs a read, or the words name the kind with no count.
 - **UKG holds 10 merge logs still 'merged' but 8 merged-away records,
@@ -2880,12 +2862,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   re-read 23 Oct; read in code, not run against a database): the
   merge-log census (§2.2; 18 Oct 18:56:02 UTC, SELECT, counts only)
   found 10 logs still 'merged', all UKG's; the cleanup batch's census
-  (§1; 18 Oct 21:16 UTC, as on 16 Oct 21:13 UTC) found 3 accounts and 5
+  (docs/design/cleanup-batch/DESIGN.md:8-10; 18 Oct 21:16 UTC, as on 16
+  Oct 21:13 UTC) found 3 accounts and 5
   contacts merged away, all UKG's. Neither has been re-run, and which
   log names which record was never read. Every merge since the first
   (2e21f1a) writes its log in the batch that archives its record
-  (merge.mjs:260-281, :725-737); only an Undo moves a log off 'merged'
-  (:486-488), in one batch with its record's un-archive (:491-493), as
+  (merge.mjs:261-282, :726-738); only an Undo moves a log off 'merged'
+  (:487-489), in one batch with its record's un-archive (:492-494), as
   every reverse before §0.207 did (61ca21a^, :312/:328, :504/:523); no
   file but merge.mjs writes the table, and nothing purges it
   (db/schema.ts:1276); no save writes `mergeArchived` (neither
@@ -2900,14 +2883,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   time", and §2.2, a tab opened before §0.206's deploy), or by restoring
   a file made before the merge, whose rows `stamp` keeps as filed
   (backup.mjs:305-324, :355; read, not run); or (b) two merges of one
-  record, sent together, both committed (merge.mjs:123 and :633 check
-  it is not merged away, then :260 and :725 archive it with no such
+  record, sent together, both committed (merge.mjs:123 and :634 check
+  it is not merged away, then :261 and :726 archive it with no such
   condition; §4.7, "Two concurrent merges of one record merged away both
   commit"). Which, for UKG, is unverified. On screen: Past merges offers
   no Undo on a row the Undo's rule refuses and shows why (`undoRefusal`,
-  src/utils/mergeUndo.js:26-33; merge.mjs:786-788; PastMerges.jsx:68,
+  src/utils/mergeUndo.js:26-33; merge.mjs:787-789; PastMerges.jsx:68,
   :85), and the server refuses one sent, writing nothing
-  (merge.mjs:595-596): "… was deleted after this merge …" for a record
+  (merge.mjs:596-597): "… was deleted after this merge …" for a record
   gone, "… is no longer merged into …" for one put back live or merged
   into the other survivor. Where both merges named the same survivor,
   both rows offer an Undo (mergeUndo.js:31): the first pressed is taken,
@@ -2919,7 +2902,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (Settings → Data → Find & merge duplicate accounts, and the contacts
   page, as an Admin; no Undo pressed), which tells a record deleted from
   one no longer merged into its survivor, but not which way, and lists
-  the latest 50 of a kind (merge.mjs:752); or run one SELECT, counts
+  the latest 50 of a kind (merge.mjs:753); or run one SELECT, counts
   only, of UKG's 'merged' logs whose record is missing, live, or merged
   into another record, of the pairs logged twice, and of its
   merged-away records no 'merged' log names; file the answer here.
@@ -2927,20 +2910,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   an activity that names a contact merged into it** (the cleanup batch's
   design, 18 Oct, P44; re-read 23 Oct; read in code, not run): Opportunity
   history's "last touch … · N activities" and Engagement tier for each
-  contact come from `contactTouch(activities, c.id)` (ReportsTab.jsx:6318,
-  drawn :6367 and :6392-6396), which counts an activity only when its
+  contact come from `contactTouch(activities, c.id)` (ReportsTab.jsx:6319,
+  drawn :6368 and :6393-6397), which counts an activity only when its
   `contactId` is that one id or its `contactIds` include it
   (historyFeed.js:63-65). A contact merge moves activities' `contactId` and
-  deals' `contactIds`, not activities' `contactIds` (merge.mjs:657-682),
+  deals' `contactIds`, not activities' `contactIds` (merge.mjs:658-683),
   and a save writes an activity's `contactId` as its list's first
   (activities.mjs:78; email-inbound.mjs:385-386) — so an activity that
   names the merged-away contact and not the survivor (further down its
   list, or first where a later save wrote its `contactId` back: the
   contact merge item, above) is not counted on the survivor's row, while
   since §0.209 the survivor's rail (ContactRail.jsx:272-279) and Reports'
-  own Contact history (ReportsTab.jsx:5224, :5237) list it through
+  own Contact history (ReportsTab.jsx:5225, :5238) list it through
   `standsFor`. None at the census of 18 Oct 21:16 UTC, which found no
-  activity naming a merged-away record by id (§1; not re-run); any contact
+  activity naming a merged-away record by id
+  (docs/design/cleanup-batch/DESIGN.md:8-10; not re-run); any contact
   merge since can make one. Batch 3's move of activities' `contactIds`
   (the contact merge item, above) closes it for merges after it; rows an
   earlier merge left would need a backfill, which nothing files yet
@@ -2955,22 +2939,22 @@ to add meetings. Nothing in the app adds a meeting to Google:
   merged-away contact as itself** (the cleanup batch's design, 18 Oct,
   P46; re-read 23 Oct; read in code, not run): Opportunity history lists
   each contact of the app's whole list, merged-away rows kept (handed
-  whole at ReportsTab.jsx:2091), whose id the deal holds (:5943-5947,
+  whole at ReportsTab.jsx:2091), whose id the deal holds (:5944-5948,
   `oppContactIds.includes(c.id)` over `contacts`), never followed to the
   record it was merged into — the deal window and Home read a deal's
   people through `dealCommittee`, each id as its survivor
   (dealEngagement.js:142, :148-154; OpportunityModal.jsx:860,
-  HomeTab.jsx:517). Such a row's ⋮ menu (`ContactRowKebab`, :4761, drawn
-  at :6401-6406) offers "Remove from deal" and "Buyer Persona", whose
-  save PUTs the merged-away contact's whole row (:6347-6350): the persona
+  HomeTab.jsx:517). Such a row's ⋮ menu (`ContactRowKebab`, :4762, drawn
+  at :6402-6407) offers "Remove from deal" and "Buyer Persona", whose
+  save PUTs the merged-away contact's whole row (:6348-6351): the persona
   lands on the merged-away row, not its survivor (contacts.mjs:195-218
   writes the row its id names and reads no merge mark; its sanitize,
   :40-72, builds no merge column, so the mark stays). THE GUARD names the
-  read to stay (tests/merged-away-lists.test.mjs:584) because "a stale
+  read to stay (tests/merged-away-lists.test.mjs:588) because "a stale
   whole-row save writing one back is OPEN_ITEMS §4.7's stale-write edge"
   — but that edge is an activity's or a task's held pair; a deal holds
   none, the merge rewrites the ids of every deal that names the contact
-  (merge.mjs:671-682, one batch at :737), and every deal write follows a
+  (merge.mjs:672-683, one batch at :738), and every deal write follows a
   contact id it names anew to its survivor (opportunities.mjs:28, :297,
   :314-316, :415-417, :480-482; linkIds.js:79-99). An id a deal already
   holds is never asked again (linkIds.js:22-25, :121-122), so a
@@ -2982,14 +2966,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   section finds for an account's parent; a copy older than another
   session's merge — the app's deal (its lists are read on load and on an
   org switch, App.jsx:487-504), and after the panel's own add or remove
-  the ids it sent (`setLocalContactIds`, :6283, :6337), which override
-  the deal the app holds (:5943) until a deal is picked again (:6005),
+  the ids it sent (`setLocalContactIds`, :6284, :6338), which override
+  the deal the app holds (:5944) until a deal is picked again (:6006),
   never the row the PUT answers (opportunities.mjs:612), so they keep
   the merged-away id after the server stored its survivor; and a deal
   save whose link check reads before a merge's batch and whose write
-  lands after the merge read the deals (merge.mjs:672) — a race the code
+  lands after the merge read the deals (merge.mjs:673) — a race the code
   does not rule out; not run. The filter's other clause,
-  `c.opportunityId === selectedOppId` (:5945), reads a column contacts
+  `c.opportunityId === selectedOppId` (:5946), reads a column contacts
   lack (db/schema.ts:115-166). Near it, not it: §4.2's "The deal's
   contacts after a merge, a rename, a Reports edit" (the add and remove
   never update the app's copy) and its item on screens that save an old
@@ -2997,7 +2981,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   panel's people through `dealCommittee` (a merged-away id as its
   survivor, once — its rows also hold names with no id, which Remove and
   Buyer Persona cannot act on by id), its add and remove keeping the
-  `contactIds` the PUT answers, and THE GUARD's reason at :584
+  `contactIds` the PUT answers, and THE GUARD's reason at :588
   corrected; whether a restore follows a merged-away contact to its
   survivor, as a deal's create does, is Jeff's call (with the restore
   item's functions batch).
@@ -3050,17 +3034,22 @@ to add meetings. Nothing in the app adds a meeting to Google:
   survivor's rail (ContactRail.jsx:268-274) shows an activity whose
   `contactIds` still name it only when the activity also names the
   survivor — as its `contactId`, which the merge moved there where the
-  merged-away contact was its first (merge.mjs:660; activities.mjs:78), or
+  merged-away contact was its first (merge.mjs:661; activities.mjs:78), or
   in its `contactIds` — or is on one of the survivor's open deals. Any
-  other such activity is reached per contact only through the
+  other such activity was reached per contact only through the
   merged-away contact's own rail, opened from the header search, or
-  through Reports' Activity History, whose contact list keeps merged-away
-  contacts (ReportsTab.jsx:5095). That covers a contact named further down
+  through Reports' Activity History, whose contact list kept merged-away
+  contacts (ReportsTab.jsx:5095 on 7ee14fe) — until §0.209, which closed
+  both: the header search lists live records, a name only a merged-away
+  contact has drawing one row that opens its survivor
+  (AppHeader.jsx:462-468), and Activity History's `visibleContacts` lists
+  live contacts only (ReportsTab.jsx:5098-5100). That covered a contact named further down
   the list, and one whose `contactId` a later save wrote back (a Save
   that changed its contacts, or a stale whole-row save). An account's
   Activity tab keeps it (§0.206 kept the rail's whole list for it). Both
-  ways are the cleanup batch's to narrow, so its design keeps a way to
-  such an activity (its map, below). The re-check, 17 Oct; read in code.
+  ways were the cleanup batch's to narrow, and it kept a way to such an
+  activity — the survivor's own (below). The re-check, 17 Oct; read in
+  code.
   One more such read, named to stay by THE GUARD since §0.208 (its build,
   18 Oct; read in code): the Tasks tab's feed shows, for an activity with
   no account of its own and no deal that gives one, its first contact's
@@ -3081,99 +3070,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   neither it nor its survivor in a rep's list**, is saved linked to the
   merged-away account (the sweep). Batch 3's move of contacts' `accountId`
   on a merge removes the shape.
-- **The cleanup batch's map** (§1, "Next, merged-away records leave every
-  other list"; Jeff, 16 Oct: "One cleanup batch next"; 17 Oct: "Add them
-  to the cleanup batch", "Undo, cleanup, profile" — next: the merge Undo
-  is done, §0.207;
-  read in code over §0.206's tree):
-  - In Jeff's 16 Oct answer ("One cleanup batch next"): the header search,
-    accounts and contacts (src/components/layout/AppHeader.jsx:440-441);
-    Reports' Activity History account list (ReportsTab.jsx:5078, its own
-    `visibleAccounts`); "# of accounts" — reportQuery.js's Accounts source
-    (`runReport`, :331), read by Home's widgets, the Reports builder and
-    scheduled reports; Settings' Segments and Industries counts
-    (AccountSegmentsDetail.jsx:97-112, IndustriesDetail.jsx:153-167 —
-    every top-level account, merged away or not); and the four pickers
-    against guide §18b91 rule 5 — the document link picker
-    (DocumentLinkPicker.jsx:55 accounts, :57 contacts), Dispatch's
-    customer typeahead (DispatchTab.jsx:335-339) and its Linked CRM
-    account select (:2659 — it holds a stored link, so a merged-away
-    option needs the unmatched-select treatment, guide §16), and Reports'
-    "Select contacts to add to this deal" (`AddContactToOppPanel`,
-    ReportsTab.jsx:4880, handed every contact at :6244).
-  - Added by Jeff, 17 Oct ("Add them to the cleanup batch"): Reports'
-    Activity History contact list (ReportsTab.jsx:5095); the meeting prep
-    panel's contacts (MeetingPrepPanel.jsx:41-44); the merge window's
-    predicted sub-account count (MergeReviewModal.jsx:63 — what the merge
-    re-parents, merged-away rows included, so it can read more than the
-    Sub-Accounts lists show); a segment's "View accounts" link
-    (AccountSegmentsDetail.jsx:230 — filed believing it opened the
-    Accounts tab on a list shorter than the card counts; it opens nothing:
-    since 85cc230, 7 May, `setAccountsDeepFilter` reaches no screen — it is
-    in neither App.jsx nor AppContext.jsx, so the menu's own guard skips
-    it — and the Accounts tab reads no deep filter; the cleanup batch's
-    maps, 18 Oct; Jeff: "Grey it out"); Settings → Buyer Personas' contact
-    counts, and its Delete,
-    disabled while any contact holds the persona
-    (BuyerPersonasDetail.jsx:98-104, :250) — a merged-away contact keeps a
-    persona undeletable, and since §0.206 is on no Contacts-tab list to
-    open and clear (the re-check, 17 Oct); and the public API's contacts,
-    which list merged-away rows with no field that tells them apart
-    (public-api.mjs:246+).
-  - Filed with it, not put to Jeff: an industry's "View accounts" link,
-    the segment's twin (IndustriesDetail.jsx:283), likewise dead since
-    85cc230; three account lookups by
-    name in Reports, each of which can take a merged-away twin (the maps,
-    16 Oct; raised for filing by the re-check) — its industry mix
-    (`acctByName`, ReportsTab.jsx:3945, the later of two same-named rows),
-    its Opportunity history's account (`selectedAccount`, :5842, the
-    first) and the Accounts source's names for a deal with no account id
-    (`byName`, reportQuery.js:294, the later); the merge window's contacts
-    and deal counts — its contacts count, by company name over every
-    contact (MergeReviewModal.jsx:61), counts merged-away contacts, so it
-    can read more than the People list shows, and its deal count goes by
-    name alone (:60), where the server moves deals by id (merge.mjs),
-    while its activity and task counts (:62, :64) go by id, as the server
-    moves them; the public API's accounts, which list merged-away rows the
-    same way (public-api.mjs:197+); and the account rail's other reads of
-    the app's lists, which THE GUARD (tests/merged-away-lists.test.mjs,
-    T8) read on the two tabs only until §0.208 — since then it scans the
-    rail with every file that imports `useApp`, each of its reads a shape
-    or named with its reason (state §0.208) — and the suite's own comments
-    this item listed (:413, over the guard; :14-15, on Reports' picker;
-    :5-6, true again since §0.207), corrected in §0.208. One comment of
-    the account rail's is untrue since §0.206 (AccountRail.jsx:286-289;
-    §0.206's docs checks, 17 Oct; read in code): it heads the Activity
-    tab's rollup
-    with "a contact that belongs to this company (same set as the People
-    tab)", but the People list now leaves a merged-away contact out
-    (`shownContacts`, :277) and the rollup keeps it (`accountContacts`,
-    :292), as the batch's own comment at :274-276 says. Comments only:
-    the suite's `code()` drops whole-line comments, so no pin reads the
-    suite's, and no test or harness entry quotes the rail's; left
-    unchanged for §0.206's commit, whose full harness run was on a
-    byte-identical copy of the repo (624 files compared,
-    before and after — state §0.206, Verified). The header search and
-    Reports' Activity History contact list are the only ways, per
-    contact, to an activity whose `contactIds` name a merged-away contact
-    — further down the list, or first with its `contactId` written back
-    to it by a later save — that does not name the survivor and is on no
-    open deal of the survivor's (the contact merge item, above): the
-    batch's design keeps a way to it.
-  - Since §0.209 (step A): the header search, both Activity History
-    lists, the add panel, the four pickers and the meeting prep panel are
-    done; the account rail's comment is corrected; Reports' Opportunity
-    history account and the header's and Account history's deals read by
-    the link (Q7); and the way to an activity still naming a merged-away
-    contact is the survivor's own — its rail's Activity History and
-    Reports' Contact history list it (Q2). Left for step B (§0.210):
-    "# of accounts" and `byName`, the industry chart's `acctByName`,
-    Settings' Segments, Industries and Buyer Personas counts and both
-    dead "View accounts" items, the merge windows' counts and the delete
-    warning, the public API and the quote email.
-  - Settings → Data's export runs and the backups keep merged-away rows,
-    as they should; each tab's Export follows its list (§0.206; Jeff, 17
-    Oct: "Export follows the list").
 - **A record matched by name or email can be a merged-away one** (§0.206's
   maps, re-check and docs check, 16-17 Oct; the cleanup batch's design, 18
   Oct, P34; re-read 23 Oct; read in code): the Contacts tab's company card
@@ -3196,20 +3092,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Overwrite writes onto it, ModalLayer.jsx:569-577); the lead duplicate
   check (LeadModal.jsx:102-106 — the first contact of the email, over
   every contact, :312); and Dispatch's won-deal jobs
-  (`buildWonBridgeJobs`, DispatchTab.jsx:2068, the first account holding
+  (`buildWonBridgeJobs`, DispatchTab.jsx:2070, the first account holding
   the deal's id or its name — §4.4's "Dispatch takes the first of a
   name"). Each can take a merged-away twin that shares the survivor's, or
   a live twin's, name or email (UKG's two "Evonik - Lafayette" sites, one
   merge-archived — SELECT 9 Oct, not re-checked since). THE GUARD names
   each client read as staying, filed here by this bold line
-  (tests/merged-away-lists.test.mjs `BY_NAME`, :564), and T10 names the
-  inbound email's as filed here (:1479). Reports' three lookups by name
-  are filed with the cleanup batch (its map, above): since §0.209 the
-  Opportunity history's account reads the deal's link, else the later
-  live account of its name (ReportsTab.jsx:5857, `accountOfDeal`); the
-  industry chart's (`acctByName`, :3946) and the report engine's
-  (`byName`, reportQuery.js:294-296) are step B's (§0.210). Recommended:
-  each matches live records first.
+  (tests/merged-away-lists.test.mjs `BY_NAME`, :568), and T10 names the
+  inbound email's as filed here (:1466). Reports' three lookups by name
+  were the cleanup batch's, and read the deal's link now: the
+  Opportunity history's account since §0.209 (ReportsTab.jsx:5858,
+  `accountOfDeal`), the industry chart's (:3949, `accountOfDeal`) and
+  the report engine's (`buildContext`, reportQuery.js:294-325) since
+  §0.210 — a deal with no link the later live account of its name, or,
+  for a name only merged-away accounts have, their one survivor.
+  Recommended: each matches live records first.
 - **A merged-away account's rail says nothing of the merge, and four
   routes still open one** (the maps, 16 Oct; the cleanup batch's design,
   18 Oct, P28; re-read 23 Oct; read in code, not run): the rail takes its
@@ -3273,7 +3170,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (`closeRail`, :432-438: the ×, :576; Escape or a click outside when
   not editing, :485, :532). THE GUARD names the rail's `accountsById` to
   stay because "no row names a merged-away parent"
-  (tests/merged-away-lists.test.mjs:588) — untrue after such a restore.
+  (tests/merged-away-lists.test.mjs:591) — untrue after such a restore.
   None at the census (16 Oct 21:13 UTC; not run since). The file must be
   one kept from before the merge: a download is made fresh from current
   data (backup.mjs:166-178, `collectOrgData`). The same restore can land
@@ -3284,7 +3181,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   rule, else cleared and the account made an account, as for a parent
   that names nothing; with it, the rail's Parent Account row and chip
   say when a parent held already was merged away, and the guard's reason
-  at :588 names the restore.
+  at :591 names the restore.
 - **What §0.207's merge Undo leaves** (its design, reviews and re-checks,
   17–18 Oct; each read in code, or run where said):
   - **Two concurrent merges of one record merged away both commit** (the
@@ -3440,15 +3337,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     it out (the survivor's Accounts-tab row counts it by company name,
     which the merge renamed). None at the census of 16 Oct 21:13 UTC, which
     found no live contact or deal naming a merged-away account, in any
-    org; any account merge since can make one. merge.mjs:259's comment
-    ("reports filter mergeArchived=false"; :245 before §0.207) is wrong —
-    no report reads the mark (reportQuery.js, report-deliveries.mjs) — and
-    is corrected with batch 3's merge.mjs edit (§0.206 left it: a
-    bundle-only batch; §0.207 left it too, though its merge.mjs edit went
-    beyond the Undo — Past merges' GET, and on the merge's own path its
-    two new log fields (:170-175, :193-197), the contact merge's org-chart
-    union read from mergeUndo.js (:712-718) and five comments rewritten
-    (:161-162, :177, :208, :252-255, :618)).
+    org; any account merge since can make one.
   - An account merge re-parents the merged-away account's sub-accounts onto
     the survivor, and lifts the survivor to the merged-away account's parent
     when it stood under it, with no parent rule and no tier re-fit — but a
@@ -3487,18 +3376,32 @@ to add meetings. Nothing in the app adds a meeting to Google:
   rows, and one bad row kills the batch. As recorded.
 - **`onConflictDoNothing()` in the bulk POST can never fire,** so a repeated
   import inserts a new set. Decide where name dedupe belongs. As recorded.
+- **Past merges offers an Undo again until its list is read again**
+  (§0.210's browser check, 23 Oct; read in code): after an Undo's
+  answer, the row says so ("Merge undone — “Tess Undoer” is its own
+  record again.") beside an enabled Undo until the list's reload
+  answers — still there four seconds after the Confirm on local `netlify
+  dev` (the contact page; on the account page the reload had answered by
+  then). `onUndo`
+  releases the busy mark (`setBusyId(null)`, PastMerges.jsx:41) before
+  `load()` (:43) answers, and the row's Undo reads the row's old status
+  (`canUndo`, :69; the button :77-82). A second click asks the confirm
+  again and sends a second Undo, which the server refuses, writing
+  nothing (409, "This merge has already been undone." — guide §18b100
+  rule 3; reasoned, not clicked). Recommended: the busy mark released
+  after the list read again answers (`await load()` first).
 
 ### 4.8 Other UI
 
 - **Reports' Activity History declares eleven sub-components inside
   itself** (the cleanup batch's design, 18 Oct, §1 row P40's eighth item;
   re-read 23 Oct; read in code, not run): `ActivityHistoryTab`
-  (ReportsTab.jsx:5022-6536) holds `EventRow` :5370, `PeriodPill` :5418,
-  `KpiCard` :5425, `FilterBar` :5447, `EventFeed` :5459, `AccountGlance`
-  :5488, `ContactGlance` :5518, `ActivityMixPanel` :5558, `InsightPanel`
-  :5573, `SubTabBtn` :5585 and `ActionButtons` :5687 in its body and draws
+  (ReportsTab.jsx:5023-6537) holds `EventRow` :5371, `PeriodPill` :5419,
+  `KpiCard` :5426, `FilterBar` :5448, `EventFeed` :5460, `AccountGlance`
+  :5489, `ContactGlance` :5519, `ActivityMixPanel` :5559, `InsightPanel`
+  :5574, `SubTabBtn` :5586 and `ActionButtons` :5688 in its body and draws
   each as an element. Each of its renders (a keystroke in the account or
-  contact search, `accSearch`/`conSearch` :5037-5038, or a pill, filter,
+  contact search, `accSearch`/`conSearch` :5038-5039, or a pill, filter,
   sub-tab or Save click) remounts the ones on screen, the event feed and
   every `EventRow` with them (CLAUDE.md: module scope only; guide §16).
   `check:inline` counts all eleven churn-only, so the gate passes: its
@@ -3506,16 +3409,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `input`, `textarea` or `select` or a `use*` call, and none has one. A
   pill, filter, sub-tab or Save `<button>` is remounted by the state its
   own click sets, which would drop keyboard focus (not run). A twelfth,
-  `Toolbar` :5434, is drawn nowhere (only `{/* Toolbar */}` comments,
-  :5720, :5782, :5969). The design's "eight" (:5357-5688 on 7ee14fe)
+  `Toolbar` :5435, is drawn nowhere (only `{/* Toolbar */}` comments,
+  :5721, :5783, :5970). The design's "eight" (:5357-5688 on 7ee14fe)
   undercounted: twelve were there too. Recommended: hoist the eleven to
-  module scope beside `EntitySelector` (:4994), each closure read made a
+  module scope beside `EntitySelector` (:4995), each closure read made a
   prop (`period`/`setPeriod`, `showFilter`/`setShowFilter`,
   `historySubTab`/`setHistorySubTab`, `accountEvents`/`contactEvents`,
   `saveReportState`, `handleSaveAsReport`, `handleExportPDF`) and the
-  body's own helpers (`typeConfig` :5361, `typeLabels` :5368, `fmtMoney`
-  :5297, `filterEvents` :5316, `groupByDate` :5337 with the `parseLocal`
-  :5329 it calls) moved out or passed; then `npm run check:tdz` (guide
+  body's own helpers (`typeConfig` :5362, `typeLabels` :5369, `fmtMoney`
+  :5298, `filterEvents` :5317, `groupByDate` :5338 with the `parseLocal`
+  :5330 it calls) moved out or passed; then `npm run check:tdz` (guide
   §18b0, "Hoisting a component strands its closure reads"). Delete
   `Toolbar`. Opportunistic; eleven of the churn-only count below.
 - **The document link picker says "Opportunitys" and "Activitys"**
@@ -3686,6 +3589,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **`planWeek`** is greedy, not globally optimal.
 - **Email signatures** appear on quote emails only.
 - **The SPIFF panel on mobile:** where it goes in the mobile stack.
+- **The public API gives an outside app no sign that a record was
+  merged** (§0.210 — the design's P17 trade; Jeff, 18 Oct: "Leave them
+  out"): since §0.210 its accounts and contacts leave a merged-away row
+  out, so an app that copied "Resinall, Inc." sees it go, with no field
+  and no webhook saying it was merged into "Resinall". Settings → Data's
+  export runs keep the marks (export-runs.mjs:97-100, every column).
+  Proposed, additive: a switch to ask for them (`include_merged=true`,
+  each row with its `merged_into_id`), or a merge webhook — when an app
+  syncs.
 
 ---
 
@@ -3699,28 +3611,28 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (ContactsTab.jsx:372, handed the function at :926), reads only
   `rollup.pipeline` (:512); AccountsTab.jsx takes `getAccountRollup` from
   `useApp()` (:571) and never calls it; and useAccounts.js's own
-  `getAccountRollup` (:40-42, `return acc;`, returned at :272) is not
+  `getAccountRollup` (:40-42, `return acc;`, returned at :273) is not
   taken by App.jsx (:343-350). Reports' Opportunity history also takes a
-  contact whose `c.opportunityId === selectedOppId` (ReportsTab.jsx:5945),
+  contact whose `c.opportunityId === selectedOppId` (ReportsTab.jsx:5946),
   a field no contact has (no column, db/schema.ts:115-170; contacts.mjs's
   sanitize, :40-72, writes none; no line in src sets one on a contact),
-  so only the ids in `oppContactIds` match (:5943, :5946 — the deal's
+  so only the ids in `oppContactIds` match (:5944, :5947 — the deal's
   `contactIds`, or the add panel's own after an add). ReportsTab takes
   `visibleAccounts` and `visibleContacts` from `useApp()` (:56-57) and
   reads neither in its body (:36-2125 — ActivityHistoryTab's are its own,
-  :5079, :5097); PipelineTab takes `accounts`, `contacts` and
+  :5080, :5098); PipelineTab takes `accounts`, `contacts` and
   `activities` (:329) and reads none of them (:326-991). App's
   `handleEditContact` (:990) and `handleEditAccount` (:1019) are in
   "Unused code left in the files §0.198 edited" (this section). Removing
   `allContacts` empties THE GUARD's CARRIED: its two entries
-  (tests/merged-away-lists.test.mjs:1065, APP_READS; :1105, CARRIED,
+  (tests/merged-away-lists.test.mjs:1049, APP_READS; :1089, CARRIED,
   whose text says it is filed) go together (NOTES-STEP-A.md:70-74), and
-  with them CARRIED's check (:1216-1218), its self-test (:1436-1443,
+  with them CARRIED's check (:1203-1205), its self-test (:1423-1430,
   which expects four reads of `allContacts`) and the harness entry that
-  names CARRIED as its catcher (scripts/mutate-import.mjs:13939-13942, a
+  names CARRIED as its catcher (scripts/mutate-import.mjs:13937-13940, a
   read of `rollup.allContacts.length` at ContactsTab.jsx:508) — or
   CARRIED keeps a key to guard. The `c.opportunityId` test sits under a
-  line THE GUARD names (:584, `const oppContacts =
+  line THE GUARD names (:588, `const oppContacts =
   (contacts||[]).filter(c =>`), so that line keeps its text or its entry
   changes with it. Recommended: remove them in the class-wide
   unused-binding pass (the §0.198 item), with the AccountsTab and
@@ -3753,7 +3665,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §4.7 for those (the item is §4.2's); mergeUndo.js:112-113, quoting
   "keep the survivor's current parent when the check fails", the
   recommendation of the §4.7 item §0.207 closed; and mergeUndo.js:21-22,
-  merge.mjs:309, merge-undo.itest.mjs's header (:7-8) and I4's title, on
+  merge.mjs:310, merge-undo.itest.mjs's header (:7-8) and I4's title, on
   what the reverse did before, the items §0.207 struck. Recommended: each
   with its file's next edit.
 - **A bare pin passes when a later edit repeats its line** (§0.202: the
@@ -3786,7 +3698,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (ModalLayer.jsx) and "§0.201 login: the create's refused login is
   answered nowhere" (dispatch-technicians.mjs). One more, "pick link
   (F9)", matched twice once §0.209's helper repeated its text; the helper
-  was reworded.
+  was reworded. On 23 Oct (§0.210's anchor check) the same seven, and no
+  other: the one §0.210 would have made — §0.206's `getSubAccounts`
+  entry, whose anchor (` && !isMergeArchived(a));`) the delete warning's
+  new line also ends with — was lengthened at its front, to
+  `=== accountId && !isMergeArchived(a));`, which only its own line holds.
 - **An ordering pin of `indexOf` against `indexOf` passes when its first
   text is gone** (§0.199's pre-run: a mutant deleting the restore's clean-up
   survived on one; that pin is fixed). About 60 such pins stand in some 35

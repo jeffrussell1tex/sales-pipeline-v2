@@ -3942,10 +3942,11 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         // ── Industry mix from open opps via account lookup
         const industryMap = {};
         // The deal's own vertical, else its account's. The old lookup read a
-        // settings key no writer set, so every deal was "Other".
-        const acctByName = new Map((accounts||[]).map(a => [(a.name||'').toLowerCase(), a]));
+        // settings key no writer set, so every deal was "Other". Its account by its link — one merged
+        // into another as the account it was merged into — and, for a deal with no link, the later
+        // live account of its name (state §0.210; pickLink.js accountOfDeal).
         openOppsT.forEach(o => {
-            const ind = o.vertical || acctByName.get((o.account||'').toLowerCase())?.verticalMarket || 'Other';
+            const ind = o.vertical || accountOfDeal(o, accounts)?.verticalMarket || 'Other';
             industryMap[ind] = (industryMap[ind]||0)+1;
         });
         const industryRows = Object.entries(industryMap)

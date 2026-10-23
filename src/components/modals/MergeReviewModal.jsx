@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { unarchived } from '../../utils/pickLink.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -55,15 +56,23 @@ export default function MergeReviewModal() {
     const accA = useMemo(() => (accounts || []).find(a => a.id === aId) || null, [accounts, aId]);
     const accB = useMemo(() => (accounts || []).find(a => a.id === bId) || null, [accounts, bId]);
 
-    const countsFor = useMemo(() => (acc) => {
-        if (!acc) return { opps: 0, contacts: 0, activities: 0, subs: 0, total: 0 };
-        const opps = (opportunities || []).filter(o => o.account === acc.name).length;
-        const cts = (contacts || []).filter(c => c.company === acc.name).length;
-        const acts = (activities || []).filter(x => x.accountId === acc.id).length;
-        const subs = (accounts || []).filter(x => (x.parentAccountId) === acc.id).length;
-        const tsk = (tasks || []).filter(t => t.accountId === acc.id).length;
-        return { opps, contacts: cts, activities: acts, subs, tasks: tsk, total: opps + cts + acts + subs + tsk };
-    }, [opportunities, contacts, activities, accounts, tasks]);
+    // What each record holds, as the lists show it (state §0.210; Jeff, 18 Oct: "Count what you see"): live contacts
+    // and sub-accounts — one merged into another is on no list — and deals by their account link, by name only for
+    // a deal with none (the house read rule; the merge moves deals by id). A sub-account is never the pair itself: a site
+    // merged with its own parent is lifted, not re-linked (merge.mjs). The live lists worked out once a change.
+    const countsFor = useMemo(() => {
+        const liveContacts = unarchived(contacts);
+        const liveAccounts = unarchived(accounts);
+        return (acc) => {
+            if (!acc) return { opps: 0, contacts: 0, activities: 0, subs: 0, total: 0 };
+            const opps = (opportunities || []).filter(o => (o.accountId ? o.accountId === acc.id : o.account === acc.name)).length;
+            const cts = liveContacts.filter(c => c.company === acc.name).length;
+            const acts = (activities || []).filter(x => x.accountId === acc.id).length;
+            const subs = liveAccounts.filter(x => (x.parentAccountId) === acc.id && x.id !== aId && x.id !== bId).length;
+            const tsk = (tasks || []).filter(t => t.accountId === acc.id).length;
+            return { opps, contacts: cts, activities: acts, subs, tasks: tsk, total: opps + cts + acts + subs + tsk };
+        };
+    }, [opportunities, contacts, activities, accounts, tasks, aId, bId]);
 
     // Default survivor = the richer record (more linked items), tie-break older.
     const defaultSurvivorId = useMemo(() => {

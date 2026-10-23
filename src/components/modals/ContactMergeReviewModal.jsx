@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { unarchived } from '../../utils/pickLink.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -60,18 +61,24 @@ export default function ContactMergeReviewModal() {
     const cA = useMemo(() => (contacts || []).find(c => c.id === aId) || null, [contacts, aId]);
     const cB = useMemo(() => (contacts || []).find(c => c.id === bId) || null, [contacts, bId]);
 
-    const countsFor = useMemo(() => (c) => {
-        if (!c) return { opps: 0, activities: 0, tasks: 0, orgChart: 0, total: 0 };
-        const opps = (opportunities || []).filter(o => Array.isArray(o.contactIds) && o.contactIds.includes(c.id)).length;
-        const acts = (activities || []).filter(x => x.contactId === c.id).length;
-        const tsk = (tasks || []).filter(t => t.contactId === c.id).length;
-        const orgChart = (contacts || []).filter(other =>
-            other.id !== c.id && (
-                (Array.isArray(other.managers) && other.managers.some(m => (m?.id ?? m) === c.id)) ||
-                (Array.isArray(other.directReports) && other.directReports.some(d => (d?.id ?? d) === c.id))
-            )).length;
-        return { opps, activities: acts, tasks: tsk, orgChart, total: opps + acts + tsk + orgChart };
-    }, [opportunities, activities, tasks, contacts]);
+    // What each record holds, as the lists show it (state §0.210; Jeff, 18 Oct: "Count what you see"): its org-chart
+    // links are live colleagues — one merged into another is on no list — never the pair itself, by the ids the
+    // window was opened on (the window is always mounted, so a closure over cA / cB would keep its first render's).
+    const countsFor = useMemo(() => {
+        const liveContacts = unarchived(contacts);
+        return (c) => {
+            if (!c) return { opps: 0, activities: 0, tasks: 0, orgChart: 0, total: 0 };
+            const opps = (opportunities || []).filter(o => Array.isArray(o.contactIds) && o.contactIds.includes(c.id)).length;
+            const acts = (activities || []).filter(x => x.contactId === c.id).length;
+            const tsk = (tasks || []).filter(t => t.contactId === c.id).length;
+            const orgChart = liveContacts.filter(other =>
+                other.id !== aId && other.id !== bId && (
+                    (Array.isArray(other.managers) && other.managers.some(m => (m?.id ?? m) === c.id)) ||
+                    (Array.isArray(other.directReports) && other.directReports.some(d => (d?.id ?? d) === c.id))
+                )).length;
+            return { opps, activities: acts, tasks: tsk, orgChart, total: opps + acts + tsk + orgChart };
+        };
+    }, [opportunities, activities, tasks, contacts, aId, bId]);
 
     // Default survivor = the richer record (more linked items), tie-break older.
     const defaultSurvivorId = useMemo(() => {

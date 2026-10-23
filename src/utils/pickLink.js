@@ -271,7 +271,9 @@ export function mergedSearchWords(line, noun = 'account') {
 // one merged into another, the account it was merged into when the list holds it live
 // (survivorOf), else none — and, for a deal with no account id, the LATER live account of its
 // name (lower case, as Reports reads names; the tie the report engine and the industry chart
-// use). An id the list does not hold: none.
+// use) — and, for a name only accounts merged into another have, the one live account they
+// were merged into, none when they lead to more than one (state §0.210). An id the list does
+// not hold: none.
 export function accountOfDeal(deal, accounts) {
     if (!deal) return null;
     const list = Array.isArray(accounts) ? accounts.filter(Boolean) : [];
@@ -282,7 +284,10 @@ export function accountOfDeal(deal, accounts) {
     }
     const name = String(deal.account ?? '').toLowerCase();
     const named = unarchived(list).filter((a) => String(a.name ?? '').toLowerCase() === name);
-    return named.length ? named[named.length - 1] : null;
+    if (named.length) return named[named.length - 1];
+    const survivors = new Map(list.filter((a) => isMergeArchived(a) && String(a.name ?? '').toLowerCase() === name)
+        .map((a) => survivorOf(a, list)).filter(Boolean).map((s) => [idOf(s.id), s]));
+    return survivors.size === 1 ? [...survivors.values()][0] : null;
 }
 
 // What an account <select> or chip shows for the link it holds when the options (the live

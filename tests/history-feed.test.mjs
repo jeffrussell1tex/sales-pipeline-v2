@@ -91,7 +91,7 @@ test('ReportsTab: the History tab reads real columns; PDF export escapes; labels
     assert.ok(src.includes('${esc(opp.stage||\'—\')}'), 'the deal PDF escapes the stage');
     // territory template: a deal's own territory column wins; industry from the accounts prop
     assert.ok(src.includes('territory: o.territory || repToTerr[o.salesRep||o.assignedTo] || null'));
-    assert.ok(src.includes("const ind = o.vertical || acctByName.get((o.account||'').toLowerCase())?.verticalMarket || 'Other';"));
+    assert.ok(src.includes("const ind = o.vertical || accountOfDeal(o, accounts)?.verticalMarket || 'Other';"), 'its account by its link (state §0.210)');
     assert.ok(src.includes('accounts={accounts}\n                                reportsOpps={reportsOpps}') || src.includes('accounts={accounts}\r\n                                reportsOpps={reportsOpps}'), 'SavedReportsTab receives accounts');
     // forecast-vs-actual says quota where it reads quota
     assert.ok(src.includes('Current quarter quota</div>'));

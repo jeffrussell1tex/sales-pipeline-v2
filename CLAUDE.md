@@ -189,10 +189,14 @@ One commit per verified batch; doc patch in the same commit.
   kept shows what still names the one merged into it (`standsFor`); a
   name only a merged-away record has names its survivor (`mergedInto`); a held link the options leave out
   shows as itself (`heldAccountOption`); a deal's account is its link
-  (`accountOfDeal`). Not yet: "# of accounts", the industry chart,
-  Settings' counts and its "View accounts" items, the merge windows' counts
-  and the delete warning, the public API and the quote email — §0.210,
-  next (OPEN_ITEMS §1, §4.7; guide §18b99).
+  (`accountOfDeal`). Since §0.210 the numbers and the server's answers
+  too: "# of accounts" and the report engine (a deal on a merged-away
+  account counts on its survivor), the industry chart, Settings' counts
+  (a persona's by its name or its id; "View accounts" reads "Not
+  available yet"), the merge windows' counts and the delete warning, the
+  public API (`is not true` in its SQL) and the quote email's fallback
+  recipient; Settings → Data's export runs and the backups keep every
+  row, and each tab's Export follows its list (guide §18b99, §18b101).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

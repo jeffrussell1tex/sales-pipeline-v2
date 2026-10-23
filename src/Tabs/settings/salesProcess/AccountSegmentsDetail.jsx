@@ -9,6 +9,7 @@ import { StatusChip } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
+import { unarchived } from '../../../utils/pickLink.js';
 
 const DEFAULT_ACCT_SEGMENTS = [
     { tier:'SMB',        hex:'#8a9a7a', range:'< $10M',       sla:'24h', owner:'SMB teams',   count:312 },
@@ -95,10 +96,12 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     const inpSm = { padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
 
     const { accounts = [] } = useApp();
+    // The live accounts (state §0.210): one merged into another is counted nowhere, as no list shows it.
+    const live = useMemo(() => unarchived(accounts), [accounts]);
     const segCounts = useMemo(() => {
         const byLower = {}; tiers.forEach(t => { byLower[String(t.tier).toLowerCase()] = t.tier; });
         const c = {};
-        for (const a of accounts) {
+        for (const a of live) {
             if (a.parentAccountId) continue;
             const seg = String(a.accountSegment || '').trim().toLowerCase();
             if (!seg) continue;
@@ -106,9 +109,9 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
             if (canon) c[canon] = (c[canon] || 0) + 1;
         }
         return c;
-    }, [accounts, tiers]);
+    }, [live, tiers]);
     const cnt = (t) => segCounts[t.tier] || 0;
-    const topLevelCount = accounts.filter(a => !a.parentAccountId).length;
+    const topLevelCount = live.filter(a => !a.parentAccountId).length;
     const categorized = tiers.reduce((a, t) => a + cnt(t), 0);
     const total = categorized || 1;
 
@@ -227,13 +230,9 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
                                                         {[
                                                             { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
                                                             { label:'Duplicate',  action: () => handleDuplicateTier(i) },
-                                                            { label:'View accounts', note:'Filter Accounts tab by this tier', action: () => {
-                                                                setOpenTierKebab(null);
-                                                                if (setAccountsDeepFilter && setActiveTab) {
-                                                                    setAccountsDeepFilter({ accountSegment: t.tier });
-                                                                    setActiveTab('accounts');
-                                                                }
-                                                            }},
+                                                            // It opened nothing since 85cc230 (7 May): no screen reads the deep filter (state §0.210; Jeff, 18 Oct:
+                                                            // "Grey it out"). Making it work is filed as its own feature (OPEN_ITEMS §4.3).
+                                                            { label:'View accounts', note:'Not available yet', disabled:true, action: () => setOpenTierKebab(null) },
                                                             { label:'Where this is used', note: AUTO_CLASS_RULES.filter(r => r.then === t.tier).length > 0 ? `${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length} auto-classification rule${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length!==1?'s':''}` : 'No rules reference this tier', action: () => setOpenTierKebab(null) },
                                                             { label:'Delete', danger:true, action: () => handleDeleteTier(i) },
                                                         ].map((item, mi) => (

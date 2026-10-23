@@ -34,6 +34,7 @@ import { lossBucketOf } from './lossAnalysis.js';
 import { openStagesOf, CLOSED_STAGES } from './stageOrder.js';
 import { parseLocalDate, isoLocal } from './dateLocal.js';
 import { fiscalStartOf } from './quarters.js';
+import { unarchived, isMergeArchived, survivorOf } from './pickLink.js';
 
 export const REPORT_SOURCES = Object.freeze(['Opportunities', 'Accounts', 'Leads', 'Activity']);
 export const REPORT_PERIODS = Object.freeze([
@@ -291,9 +292,33 @@ const buildContext = (data, today) => {
         if (d && (!lastActivityByOpp.has(a.opportunityId) || lastActivityByOpp.get(a.opportunityId) < d)) lastActivityByOpp.set(a.opportunityId, d);
     }
     const oppsByAccount = new Map();
-    const byName = new Map((Array.isArray(data?.accounts) ? data.accounts : []).map(a => [str(a.name).toLowerCase(), a.id]));
+    // A deal's money goes to the account it stands on (state §0.210): by its id — one merged into another, the
+    // account it was merged into (survivorOf, through the accounts given) — else, for a deal with no id, the live
+    // account of its name (the later of two, as before); a name only accounts merged into another have — a deal no
+    // merge renamed (another case or spacing) or one stored after the merge — the one live account they were merged
+    // into, none when they lead to more than one (mergedInto's rule). A merged-away account is no row of a report, so
+    // no deal is counted on one; a deal whose account's survivor the list does not hold is counted on none.
+    const accts = Array.isArray(data?.accounts) ? data.accounts.filter(Boolean) : [];
+    const accountById = new Map(accts.map(a => [a.id, a]));
+    const byName = new Map(unarchived(accts).map(a => [str(a.name).toLowerCase(), a.id]));
+    const goneTo = new Map();
+    for (const a of accts) {
+        if (!isMergeArchived(a)) continue;
+        const s = survivorOf(a, accts);
+        if (!s) continue;
+        const k = str(a.name).toLowerCase();
+        if (!goneTo.has(k)) goneTo.set(k, new Set());
+        goneTo.get(k).add(s.id);
+    }
+    const nameToId = (name) => {
+        const k = str(name).toLowerCase();
+        if (byName.has(k)) return byName.get(k);
+        const gone = goneTo.get(k);
+        return gone && gone.size === 1 ? [...gone][0] : undefined;
+    };
     for (const o of opps) {
-        const id = o.accountId || byName.get(str(o.account).toLowerCase());
+        const held = o.accountId ? accountById.get(o.accountId) : null;
+        const id = held && isMergeArchived(held) ? survivorOf(held, accts)?.id : (o.accountId || nameToId(o.account));
         if (!id) continue;
         if (!oppsByAccount.has(id)) oppsByAccount.set(id, []);
         oppsByAccount.get(id).push(o);
@@ -329,7 +354,8 @@ export function runReport(def, data, opts = {}) {
     const fiscalStart = fiscalStartOf(opts.fiscalStart);
     const { source, dims, metrics, dropped } = resolveDefinition(def);
     const rowsAll = (source === 'Opportunities' ? data?.opportunities : source === 'Accounts' ? data?.accounts : source === 'Leads' ? data?.leads : data?.activities);
-    const scanned = Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];
+    // A merged-away account is no row of the Accounts source (state §0.210): "# of accounts" counts the live ones.
+    const scanned = source === 'Accounts' ? unarchived(rowsAll) : Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];
     const range = periodRange(def?.period || 'all', fiscalStart, { today, from: def?.from || '', to: def?.to || '' });
     const ctx = { ...buildContext(data, todayDay), settings: data?.settings || {} };
     // The period first, then the row filters (§0.139) — every filter must hold.

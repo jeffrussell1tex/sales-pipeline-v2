@@ -11,6 +11,8 @@
  *   GET /public-api?resource=leads[&page=1&limit=50&status=X]
  *   GET /public-api?resource=tasks[&page=1&limit=50&status=X]
  *
+ * accounts and contacts leave out a record merged into another (Find & merge); total counts what is listed.
+ *
  * Auth header: Authorization: Bearer spt_live_<key>
  *
  * Rate limit: 300 requests / 15 minutes per API key (tracked in-memory per function instance).
@@ -197,6 +199,9 @@ export const handler = async (event) => {
         if (resource === 'accounts') {
             // Org-scoped filters pushed to the DB (filter + count + page in SQL)
             const conds = [eq(accounts.orgId, orgId)];
+            // A merged-away account is answered nowhere, as no screen lists it (state §0.210; Jeff, 18 Oct: "Leave them
+            // out"); NULL reads as not merged. In `conds`, so the total and the page count only what is listed.
+            conds.push(sql`${accounts.mergeArchived} is not true`);
             if (params.tier) conds.push(eq(accounts.accountTier, params.tier));
             const whereExpr = and(...conds);
 
@@ -246,6 +251,8 @@ export const handler = async (event) => {
         if (resource === 'contacts') {
             // Org-scoped filters pushed to the DB (filter + count + page in SQL)
             const conds = [eq(contacts.orgId, orgId)];
+            // A merged-away contact is answered nowhere, as the accounts are not (state §0.210).
+            conds.push(sql`${contacts.mergeArchived} is not true`);
             if (params.company) conds.push(eq(contacts.company, params.company));
             const whereExpr = and(...conds);
 

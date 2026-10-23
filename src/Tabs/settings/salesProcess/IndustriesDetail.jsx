@@ -9,6 +9,7 @@ import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
+import { unarchived } from '../../../utils/pickLink.js';
 
 // The defaults carried a typed `n` per industry (118, 74, 62…) that nothing
 // rendered — the Distribution card counts the org's own accounts — but every
@@ -151,10 +152,12 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     };
 
     const { accounts = [] } = useApp();
+    // The live accounts (state §0.210): one merged into another is counted nowhere, as no list shows it.
+    const live = useMemo(() => unarchived(accounts), [accounts]);
     const counts = useMemo(() => {
         const idx = industries.map(ind => ({ k: ind.k, set: new Set([String(ind.k).toLowerCase(), ...(ind.subs || []).map(s => String(s).toLowerCase())]) }));
         const c = {};
-        for (const a of accounts) {
+        for (const a of live) {
             if (a.parentAccountId) continue;
             const ai = String(a.verticalMarket || a.industry || '').trim().toLowerCase();
             if (!ai) continue;
@@ -162,8 +165,8 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
             if (hit) c[hit.k] = (c[hit.k] || 0) + 1;
         }
         return c;
-    }, [accounts, industries]);
-    const topLevelCount = accounts.filter(a => !a.parentAccountId).length;
+    }, [live, industries]);
+    const topLevelCount = live.filter(a => !a.parentAccountId).length;
     const totalAccounts = topLevelCount || 1;
     const categorized = Object.values(counts).reduce((a, n) => a + n, 0);
     const distItems = [...industries].map(ind => ({ k: ind.k, n: counts[ind.k] || 0 })).sort((a, b) => b.n - a.n);
@@ -280,7 +283,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                                         {/* Apply to accounts group */}
                                                         <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Apply to accounts</div>
                                                         {[
-                                                            { label:'View accounts', sub:'Open in Accounts, filtered', action:() => { setOpenIndKebab(null); if (setAccountsDeepFilter && setActiveTab) { setAccountsDeepFilter({ industry: ind.k }); setActiveTab('accounts'); } } },
+                                                            { label:'View accounts', sub:'Not available yet', action:() => setOpenIndKebab(null), muted:true },
                                                             { label:'Reassign accounts…', sub:'Move accounts to another industry', action:() => setOpenIndKebab(null), muted:true },
                                                             { label:'Re-run auto-tagging', sub:'From company name + website', action:() => setOpenIndKebab(null), muted:true },
                                                         ].map((item,mi) => (

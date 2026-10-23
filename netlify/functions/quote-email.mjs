@@ -123,8 +123,9 @@ export const handler = async (event) => {
                 const primaryName = contactNames[0].split(' (')[0].trim();
                 // Find by matching full name
                 const allContacts = await db.select().from(contacts).where(eq(contacts.orgId, orgId));
+                // A contact merged into another is no recipient (state §0.210): the live contact of the name; NULL reads live.
                 const match = allContacts.find(c =>
-                    `${c.firstName || ''} ${c.lastName || ''}`.trim() === primaryName
+                    c.mergeArchived !== true && `${c.firstName || ''} ${c.lastName || ''}`.trim() === primaryName
                 );
                 if (match) {
                     customerEmail = match.email || null;

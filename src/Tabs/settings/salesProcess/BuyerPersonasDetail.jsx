@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { useApp } from '../../../AppContext';
+import { unarchived } from '../../../utils/pickLink.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
@@ -94,14 +95,17 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     const [editModal, setEditModal] = React.useState(null); // null | { isNew, data }
     const [editErr,   setEditErr]   = React.useState('');
 
-    // ── Contact counts per persona name ──
+    // ── Contact counts per persona value — the live contacts (state §0.210: one merged into another is counted nowhere) ──
     const contactCounts = React.useMemo(() => {
         const map = {};
-        (contacts || []).forEach(c => {
+        unarchived(contacts).forEach(c => {
             if (c.buyerPersona) map[c.buyerPersona] = (map[c.buyerPersona] || 0) + 1;
         });
         return map;
     }, [contacts]);
+    // A persona's contacts: by its name (the contact rail stores the name) or its id (Reports' "Assign persona" stores
+    // the id) — once each, a persona whose id is its name counted once (state §0.210).
+    const countOf = (p) => (contactCounts[p.name] || 0) + (p.id && p.id !== p.name ? contactCounts[p.id] || 0 : 0);
 
     const totalContacts = Object.values(contactCounts).reduce((a, b) => a + b, 0);
 
@@ -217,7 +221,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
 
                         {/* Rows */}
                         {personas.map((p, personaIdx) => {
-                            const count = contactCounts[p.name] || 0;
+                            const count = countOf(p);
                             const isOpen = openKebab === p.id;
                             const isArchived = p.active === false;
                             return (
@@ -295,7 +299,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
                                     <div key={p.id} style={{ padding: '4px 3px', display: 'flex', alignItems: 'center', gap: 7 }}>
                                         <PersonaSwatch p={p} size={17}/>
                                         <span style={{ fontSize: 12, color: T.ink, flex: 1, fontFamily: T.sans }}>{p.name}</span>
-                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>{contactCounts[p.name] || 0}</span>
+                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>{countOf(p)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -306,12 +310,12 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
                     {totalContacts > 0 && (
                         <CSectionCard title="Distribution" description="Contacts assigned to each persona.">
                             <div style={{ display: 'flex', gap: 2, height: 10, borderRadius: 2, overflow: 'hidden', border: `1px solid ${T.border}`, marginBottom: 10 }}>
-                                {personas.filter(p => (contactCounts[p.name] || 0) > 0).map(p => (
-                                    <div key={p.id} style={{ flex: contactCounts[p.name] || 0, background: p.color }} title={`${p.name} · ${contactCounts[p.name] || 0}`}/>
+                                {personas.filter(p => countOf(p) > 0).map(p => (
+                                    <div key={p.id} style={{ flex: countOf(p), background: p.color }} title={`${p.name} · ${countOf(p)}`}/>
                                 ))}
                             </div>
                             {personas.map(p => {
-                                const count = contactCounts[p.name] || 0;
+                                const count = countOf(p);
                                 if (count === 0) return null;
                                 const pct = Math.round((count / totalContacts) * 100);
                                 return (

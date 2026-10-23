@@ -30,7 +30,7 @@ export function useAccounts(deps) {
 
     // An account's sub-accounts as the screens list them — the Accounts tab's badge and drawer, the account rail's
     // Sub-Accounts, App's rollup: one merged away is left out (state §0.206 — Jeff: "Hide them"). The record is
-    // kept, in `accounts` too: the delete's confirm below counts what the server lifts, merged-away rows included.
+    // kept, in `accounts` too (its merge's Undo, the links that resolve through it).
     const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId && !isMergeArchived(a));
 
     // An account's tier fits its parent (state §0.198; D3, D21 "Keep what fits"): accountParent.js
@@ -71,9 +71,10 @@ export function useAccounts(deps) {
         }
         const goingIds = going.map(a => a.id);
         const parentOf = (a) => a.parentAccountId || a.parentId || null;
-        // The sub-accounts the server will promote, as this screen has them: the confirm counts
-        // them. What the Undo puts back is what the server answers (below), never these.
-        const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id));
+        // The sub-accounts the server will promote that the screens list (state §0.210; Jeff, 18 Oct: "Count what you
+        // see"): the confirm counts the live ones — the server also lifts one merged away, which no list shows. What
+        // the Undo puts back is what the server answers (below), never these.
+        const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id) && !isMergeArchived(a));
         const what = going.length === 1 ? `"${going[0].name}"` : `${going.length} accounts`;
         const subLine = children.length
             ? `\n\n${children.length} sub-account${children.length === 1 ? '' : 's'} will move to the top level.` : '';

@@ -256,7 +256,8 @@ export const handler = async (event) => {
         if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';
         ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
 
-        // Soft-archive the loser (kept for restore; reports filter mergeArchived=false).
+        // Soft-archive the loser (kept for its Undo; no screen, report or public-API answer lists a merged-away row —
+        // state §0.210; guide §18b101).
         ops.push(db.update(accounts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now }).where(and(eq(accounts.id, archivedId), eq(accounts.orgId, orgId))));
 
         // Reversible audit log.

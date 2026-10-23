@@ -7,8 +7,8 @@
 // for the same gap with it; "Hide contacts too" — merged-away contacts leave the Contacts tab, an account's People list
 // and the contact counts, in the same batch. The other lists, counts and pickers are the cleanup batch's ("One cleanup
 // batch next"; 18 Oct: "Three steps"): THE GUARD made class-wide first (state §0.208, tests only — T8-T10 here), then
-// every other screen (§0.209, tests/merged-away-cleanup.test.mjs), then the public API, the quote email and the numbers
-// (§0.210).
+// every other screen (§0.209), then the public API, the quote email and the numbers (§0.210) — both
+// tests/merged-away-cleanup.test.mjs's.
 //
 // Before: a merge stored the record merged away (merge_archived, merged_into_id, archived_at), and the merge hook
 // dropped it from the screen — then read the list again, and the accounts and contacts GETs answer every row of the
@@ -216,11 +216,12 @@ test("T2 — the Contacts tab: a merged-away contact is not listed, in All or in
 // ── an account's Sub-Accounts ───────────────────────────────────────────────
 
 const SUBS = ind(4, 'const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId && !isMergeArchived(a));');
-// The delete's confirm: the sub-accounts the server will move to the top level.
+// The delete's confirm: the sub-accounts the server will move to the top level that the screens list (state §0.210).
 const PARENT_OF = ind(8, 'const parentOf = (a) => a.parentAccountId || a.parentId || null;');
-const CHILDREN = ind(8, 'const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id));');
+const CHILDREN = ind(8, 'const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id) && !isMergeArchived(a));');
+const OLD_CHILDREN = ind(8, 'const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id));');
 
-test("T3 — an account's Sub-Accounts: one merged away is not listed — the tab's badge and drawer, the rail's section and App's rollup read the hook's one rule; the delete's confirm counts what the server lifts, merged-away rows included (run as written)", () => {
+test("T3 — an account's Sub-Accounts: one merged away is not listed — the tab's badge and drawer, the rail's section and App's rollup read the hook's one rule; the delete's confirm counts the live sub-accounts it moves — the server lifts a merged-away one too, which no list shows (run as written)", () => {
     const hook = code(read('src/hooks/useAccounts.js'));
     assert.ok(hook.includes("import { isMergeArchived } from '../utils/pickLink.js';"));
     once(hook, SUBS);
@@ -233,12 +234,16 @@ test("T3 — an account's Sub-Accounts: one merged away is not listed — the ta
     assert.deepEqual(subsOf(undefined)('acc_evonik'), [], 'no list yet');
     assert.ok(ids(run([OLD_SUBS], ['accounts'], [ACCOUNTS], 'getSubAccounts')('acc_evonik')).includes('acc_lafayette_dup'),
         "the old line lists Evonik's merged-away site");
-    // accounts.mjs lifts each row naming the deleted account, merged away or not: the confirm reads the whole list.
+    // accounts.mjs lifts each row naming the deleted account, merged away or not; the confirm counts the live ones —
+    // what the Sub-Accounts lists show (state §0.210; Jeff, 18 Oct: "Count what you see"). The Undo puts back what
+    // the server answers, never these.
     order(hook, PARENT_OF, CHILDREN);
     once(hook, CHILDREN);
-    assert.deepEqual(ids(run([PARENT_OF, CHILDREN], ['accounts', 'goingIds'], [ACCOUNTS, ['acc_evonik']], 'children')),
-        ['acc_lafayette', 'acc_lafayette_dup', 'acc_mobile', 'acc_legacy'],
-        "REGRESSION: the delete's confirm leaves out a merged-away sub-account the server lifts — it under-counts");
+    assert.deepEqual(ids(run([PARENT_OF, CHILDREN], ['accounts', 'goingIds', 'isMergeArchived'], [ACCOUNTS, ['acc_evonik'], isMergeArchived], 'children')),
+        ['acc_lafayette', 'acc_mobile', 'acc_legacy'],
+        "REGRESSION: the delete's confirm counts a merged-away sub-account no list shows — \"2 sub-accounts will move\" over a drawer of 1");
+    assert.ok(ids(run([PARENT_OF, OLD_CHILDREN], ['accounts', 'goingIds'], [ACCOUNTS, ['acc_evonik']], 'children')).includes('acc_lafayette_dup'),
+        'the old line counted it');
     const tab = code(read('src/Tabs/AccountsTab.jsx'));
     once(tab, '    const subAccounts = depth === 0 ? getSubAccounts(account.id) : [];');
     assert.ok(tab.includes('onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}'), 'the drawer lists the row\'s own');
@@ -556,11 +561,10 @@ const WHOLE_CONTEXT = {
 };
 
 // Every other read, each with why it may read the whole list and its fate: [the context's key, the read's line (trimmed),
-// how many reads on it, why, fate] — "stay"; "until §0.210" (the numbers step fixes it; the screens step's, "until
-// §0.209", are done — state §0.209). A read not here fails; one here read a different number of times fails ("gone or
-// moved: take it out").
+// how many reads on it, why, fate] — "stay": the cleanup batch's steps that fixed the rest are done (§0.209, the
+// screens; §0.210, the numbers), so every read left here stays, and no reason may name a step to come ("until §0.…").
+// A read not here fails; one here read a different number of times fails ("gone or moved: take it out").
 const STAY = 'stay';
-const NUMBERS = 'until §0.210';
 const BY_NAME = 'matched by name (or email) among the whole list, merged away included — filed: OPEN_ITEMS §4.7, "A record matched by name or email can be a merged-away one"';
 const WHOLE_READS = {
     // ── stay ──
@@ -571,7 +575,7 @@ const WHOLE_READS = {
         ['contacts', 'const scanKey = `${(contacts || []).length}:${(contacts || []).filter(isMergeArchived).length}`;', 2, "the duplicate scan's key, as the accounts' (state §0.207)", STAY],
     ],
     'src/Tabs/HomeTab.jsx': [
-        ['accounts', 'const data = { opportunities: visibleOpportunities || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} };', 1, "Home's reports: the report data handed whole to runReport (reportQuery.js) — its \"# of accounts\" counts merged-away accounts until §0.210", STAY],
+        ['accounts', 'const data = { opportunities: visibleOpportunities || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} };', 1, "Home's reports: the report data handed whole to runReport (reportQuery.js), which leaves merged-away accounts out of the Accounts source and counts a deal on one on its survivor (state §0.210; tests/merged-away-cleanup.test.mjs C15)", STAY],
     ],
     'src/Tabs/TasksTab.jsx': [
         ['accounts', 'account: a.account || resolveActivityAccount(a, opportunities, accounts, contacts),', 1, "the feed's account (resolveActivityAccount, local, :97): by id — the item's own accountId, else its deal's (a merge moves tasks', activities' and deals' accountId, merge.mjs) — else the name it stores; a stale write is the filed edge", STAY],
@@ -580,9 +584,8 @@ const WHOLE_READS = {
         ['accounts', "const account = resolveAccountName(t, opportunities, accounts) || '';", 2, "a task row's account (resolveAccountName, local, :75): by id, as above", STAY],
     ],
     'src/Tabs/ReportsTab.jsx': [
-        ['accounts', 'const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });', 1, "the report builder's data handed whole to runReport — its \"# of accounts\" counts merged-away accounts until §0.210", STAY],
+        ['accounts', 'const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });', 1, "the report builder's data handed whole to runReport, which leaves merged-away accounts out (state §0.210; C15)", STAY],
         ['contacts', 'const oppContacts = (contacts||[]).filter(c =>', 1, "a deal's people by their ids — a contact merge rewrites a deal's contactIds (merge.mjs); a stale whole-row save writing one back is OPEN_ITEMS §4.7's stale-write edge", STAY],
-        ['accounts', 'const acctByName = new Map((accounts||[]).map(a => [(a.name||\'\').toLowerCase(), a]));', 1, "Reports' industry chart takes a deal's account by name — a merged-away twin can be the one", NUMBERS],
     ],
     'src/components/rails/AccountRail.jsx': [
         ['accounts', 'const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);', 1, "an index by id: the Parent field's choices (parentChoices, typedParentRefusal and parentLeftOut read it), and the parent named by its id — a merge moves parentAccountId (merge.mjs), so no row names a merged-away parent", STAY],
@@ -611,31 +614,12 @@ const WHOLE_READS = {
         ['accounts', 'const merged = q ? mergedAwayName(query, customers, accounts) : null;', 1, "New Job's Customer field (CustomerTypeahead): a name only a merged-away account has — resolveLink's 'merged' over the whole list (mergedAwayName, local) — offers no Create and names the account to pick (state §0.209); a check, nothing drawn from the list", STAY],
         ['accounts', 'const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;', 1, "Save Job: the same rule refuses a name only a merged-away account has, in the field's words (state §0.209); a check", STAY],
     ],
-    // ── until §0.210, the numbers ──
-    'src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx': [
-        ['accounts', 'for (const a of accounts) {', 1, "Settings → Account segments' counts count merged-away accounts", NUMBERS],
-        ['accounts', 'const topLevelCount = accounts.filter(a => !a.parentAccountId).length;', 1, "Settings → Account segments' top-level count counts merged-away accounts", NUMBERS],
-    ],
-    'src/Tabs/settings/salesProcess/IndustriesDetail.jsx': [
-        ['accounts', 'for (const a of accounts) {', 1, "Settings → Industries' counts count merged-away accounts", NUMBERS],
-        ['accounts', 'const topLevelCount = accounts.filter(a => !a.parentAccountId).length;', 1, "Settings → Industries' top-level count counts merged-away accounts", NUMBERS],
-    ],
-    'src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx': [
-        ['contacts', '(contacts || []).forEach(c => {', 1, "Settings → Buyer Personas' counts, and its Delete gate, count merged-away contacts", NUMBERS],
-    ],
-    'src/components/modals/MergeReviewModal.jsx': [
-        ['contacts', 'const cts = (contacts || []).filter(c => c.company === acc.name).length;', 1, "the account merge window counts merged-away contacts", NUMBERS],
-        ['accounts', 'const subs = (accounts || []).filter(x => (x.parentAccountId) === acc.id).length;', 1, 'the account merge window counts merged-away sub-accounts', NUMBERS],
-    ],
-    'src/components/modals/ContactMergeReviewModal.jsx': [
-        ['contacts', 'const orgChart = (contacts || []).filter(other =>', 1, "the contact merge window's org-links count counts merged-away colleagues and the pair's other record", NUMBERS],
-    ],
     'src/components/documents/DocumentLinkPicker.jsx': [
         ['accounts', 'const sub = heldLinkSub(l, allAccounts, allContacts);', 1, "a held link's words (heldLinkSub, local): its account found by id in the whole list — one merged away named by the record it was merged into (state §0.209); the offer reads the live lists", STAY],
         ['contacts', 'const sub = heldLinkSub(l, allAccounts, allContacts);', 1, "a held link's words: its contact by id in the whole list, as the accounts'", STAY],
     ],
 };
-const FATES = new Set([STAY, NUMBERS]);
+const FATES = new Set([STAY]);
 
 // The components a list is handed to today, every one — each must be reached (a follow that reaches none proves nothing),
 // and none reached may be left off (a new hand-off is named here when it is first followed).
@@ -1172,7 +1156,10 @@ test("T8 — THE GUARD, class-wide (state §0.208): every file that takes the ap
     const unlisted = named.filter((r) => !listed(r));
     const said = (r) => `${r.file}:${r.at} ${r.key} — ${r.line}`;
     for (const [file, entries] of Object.entries(WHOLE_READS)) {
-        for (const [key, line, , why, fate] of entries) assert.ok(why && FATES.has(fate), `${file}: ${line} — a reason and a fate (${key})`);
+        for (const [key, line, , why, fate] of entries) {
+            assert.ok(why && FATES.has(fate), `${file}: ${line} — a reason and a fate (${key})`);
+            assert.ok(!/until §0\.\d/.test(why), `${file}: ${line} — its reason names a step to come ("until §0.…"); the cleanup batch's steps are done: say why it stays`);
+        }
     }
     const short = Object.entries(WHOLE_READS).flatMap(([file, entries]) => entries
         .filter(([key, line, times]) => named.filter((r) => r.file === file && r.key === key && r.line === line).length !== times)
@@ -1472,9 +1459,9 @@ const SERVER_READS = {
     'netlify/functions/duplicates.mjs': ['filter in JS: the duplicate scans leave merged-away rows out (`!c.mergeArchived`, `!a.mergeArchived`)', 2, 0],
     'netlify/functions/ai-score.mjs': ["follow to the survivor: a deal's people by id, a merged duplicate followed to the contact it was merged into (up to five steps, as contactIndex)", 1, 0],
     'netlify/functions/opportunities.mjs': ["follow to the survivor: a deal's account by id (accountLink), one merged away followed to the account it was merged into; the bulk paths' ids (filed: OPEN_ITEMS §4.7 — they take an account merged away)", 3, 0],
-    'netlify/functions/quote-email.mjs': ["the quote's fallback recipient: the first contact named like the deal's first contact, among every contact of the org, merged-away included — until §0.210", 1, 0],
-    'netlify/functions/public-api.mjs': ["the public API's accounts and contacts answer merged-away rows — until §0.210 (Jeff, 18 Oct: \"Leave them out\")", 4, 0],
-    'netlify/functions/report-deliveries.mjs': ['the engine: loadReportData hands runReport (reportQuery.js) every account the owner may read (all of the org, or their own for a role that sees only its own), whose "# of accounts" counts merged-away rows — until §0.210', 0, 1],
+    'netlify/functions/quote-email.mjs': ["filter in JS: the quote's fallback recipient is the first live contact named like the deal's first contact (`c.mergeArchived !== true`, NULL live — state §0.210; tests/merged-away-cleanup.test.mjs C21)", 1, 0],
+    'netlify/functions/public-api.mjs': ["filter in SQL: the public API's accounts and contacts leave merged-away rows out, in `conds` (`is not true`, NULL live), so its totals count what it lists (state §0.210; Jeff, 18 Oct: \"Leave them out\"; C20)", 4, 0],
+    'netlify/functions/report-deliveries.mjs': ['the engine: loadReportData hands runReport (reportQuery.js) every account the owner may read (all of the org, or their own for a role that sees only its own), and runReport leaves merged-away accounts out of the Accounts source, a deal on one counted on its survivor (state §0.210; C15)', 0, 1],
     'netlify/functions/documents.mjs': ["filed: a document's links resolve by id and follow no merge (resolveLinks; filed: OPEN_ITEMS §4.2, documents.mjs follows no merge)", 0, 2],
     'netlify/functions/email-inbound.mjs': ["filed: an inbound email's contact is the first of every contact with the address, merged-away included (filed: OPEN_ITEMS §4.7, the matched-by-name item)", 1, 0],
 };
@@ -1530,6 +1517,7 @@ test("T10 — the server's reads of either table: every function that imports ac
     assert.deepEqual(Object.keys(found).filter((f) => !Object.hasOwn(SERVER_READS, f)), [], 'REGRESSION: a function reads accounts or contacts and is not named — does it answer merged-away rows? Name it in SERVER_READS with its reason');
     for (const [file, [why, selects, handed]] of Object.entries(SERVER_READS)) {
         assert.ok(why, file);
+        assert.ok(!/until §0\.\d/.test(why), `${file}: its reason names a step to come ("until §0.…"); the cleanup batch's steps are done: say what it reads`);
         assert.deepEqual(found[file], [selects, handed], `${file}: ${selects} select(s) and ${handed} hand-off(s) of either table — a new one (or one gone) is classified here first`);
     }
     // Its rules, on made-up function files: a select and a hand-off counted, a write and a column neither; a function
