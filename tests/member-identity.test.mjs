@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { PAGE_FIELDS } from '../src/utils/memberSave.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -158,10 +159,15 @@ test('the member form sends what it edits — not what it only shows (team, terr
 test('the member profile page (Settings → Users) sends what it edits — never access (active, status) or the login as loaded, nor the member\'s pins', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
-    order(between(profile, '    const handleSave = async () => {', "body:JSON.stringify(toSave) });"),
-        '            const { active: _active, status: _status, clerkUserId: _login, pinnedReports: _pins, ...edited } = form;',
-        '            const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };');
+    // Only what changed (state §0.211): the body is the page's changed fields (memberSave.js), never the form.
+    order(between(profile, '    const handleSave = async () => {', '\n    };'),
+        'const changes = memberChanges(user, form);',
+        'const toSave = { id: user.id, ...changes };',
+        "body:JSON.stringify(toSave) });");
     assert.ok(!/JSON\.stringify\(\{?\s*\.\.\.form/.test(profile), 'the form as loaded is never what is sent');
+    for (const k of ['active', 'status', 'clerkUserId', 'pinnedReports']) {
+        assert.ok(!PAGE_FIELDS.includes(k), `REGRESSION: a save sends ${k} as loaded (memberSave.js PAGE_FIELDS)`);
+    }
 });
 
 test('the Sales Manager tab: no Annual / Quarterly switch saves every member any more (state §0.203), and a refused save shows the server\'s words, naming the member', () => {

@@ -60,6 +60,7 @@ import { getTableColumns } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { NOUNS, MERGES, notInOrg, NOT_AN_ID, linksAsked, linksDecided, productIdsOf, lineProductsCleared, memberLinksCleared } from '../src/utils/linkIds.js';
+import { PAGE_FIELDS } from '../src/utils/memberSave.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -231,8 +232,11 @@ test("T6 — the screens (state §0.205): a forecast call sends only its field �
         ind(8, "if (!await saveUser({ id: userId, [field]: value }, 'forecast call', rep.name)) return false;"), ind(8, 'if (!stillOrg(askedOrg)) return false;'));
     assert.ok(!upd.includes('...rep'), "REGRESSION: the rep's whole cached row — an old team, a stale name, pins — put back");
 
+    // The profile page sends the fields it edits that changed (state §0.211) — the pins are none of them.
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
-    once(s, ind(12, 'const { active: _active, status: _status, clerkUserId: _login, pinnedReports: _pins, ...edited } = form;'));
+    once(s, ind(16, 'const toSave = { id: user.id, ...changes };'));
+    assert.ok(!s.includes('pinnedReports: _pins'), 'no form-less-four body any more: the changed page fields alone');
+    assert.ok(!PAGE_FIELDS.includes('pinnedReports'), "REGRESSION: an Admin's save re-sends the member's pins as loaded (memberSave.js PAGE_FIELDS)");
 
     const bd = code(read('src/Tabs/settings/data/BackupDetail.jsx'));
     once(bd, ind(12, '{showImport  && <ImportBackupModal onClose={()=>setShowImport(false)}/>}'));

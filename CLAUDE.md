@@ -102,7 +102,11 @@ One commit per verified batch; doc patch in the same commit.
   never by dropping the key (that makes `{ id, active, pinnedReports }`
   a Deactivate); an Admin's restore lands a restored member's as filed,
   cleared of any naming no saved report here (`users.mjs`, guide
-  §18b95, §18b98).
+  §18b95, §18b98). The member profile page (Settings → Users) sends only
+  the fields it edits that changed — a Full name with First and Last
+  cleared, a team by its id with its name, the teams' lists moved by id
+  straight after, the role last and alone — and holds the member as
+  stored after a save (`memberSave.js`, guide §18b102).
 
 ## Endpoint and data invariants
 

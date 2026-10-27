@@ -7,7 +7,9 @@ import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 import { memberStatus, invitationEntries } from './memberStatus.js';
 import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
-import { teamIdNamed, teamsWithMembers, teamsWithout } from '../../../utils/teamMembership.js';
+import { teamIdNamed, teamsWithMembers, teamsWithout, teamsWithMemberOn } from '../../../utils/teamMembership.js';
+import { memberChanges, roleChanged, formAfterSave, clause } from '../../../utils/memberSave.js';
+import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, heldManager, heldTerritory } from './memberPickers.js';
 // THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
 // re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
 // which is how a role added on the server went missing here; the server refuses
@@ -901,49 +903,74 @@ const StatusPill = ({ status }) => {
     );
 };
 
-const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
-    const { setSettings, showConfirm } = useApp();
+const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }) => {
+    const { setSettings, showConfirm, setMyProfile } = useApp();
+    // The member as this page holds them (state §0.211): the roster's row it opened on, then the row as stored after
+    // each save — what the title band, the crumb and "Save changes" read (OPEN_ITEMS §4.3, "after a save").
+    const [user, setUser]     = useState(opened);
     const status = memberStatus(user);
     const [form, setForm]     = useState({ ...user });
     const [saving, setSaving] = useState(false);
     const [saved,  setSaved]  = useState(false);
     const [error,  setError]  = useState('');
-    const dirty = JSON.stringify(form) !== JSON.stringify(user);
+    // A team saved on the member whose list move did not land: { teamId } — the next Save tries it again (§0.211).
+    const [listOwed, setListOwed] = useState(null);
+    const dirty = Object.keys(memberChanges(user, form)).length > 0 || roleChanged(user, form) || !!listOwed;
 
-    const allTeams = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
-    const allMgrs  = (settings.users || []).filter(u => u.name && u.id !== user.id).map(u => u.name).sort();
+    const teamOpts = teamOptions(settings.teams);
+    const teamHeld = heldTeam(form, teamOpts);
+    const mgrOpts  = managerOptions(settings.users, user.id);
+    const mgrHeld  = heldManager(form, mgrOpts, settings.users, user.id);
     const allTerr  = [...new Set((settings.territories || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
+    const terrHeld = heldTerritory(form.territory, allTerr);
 
     const [roleNote, setRoleNote] = useState('');
-    // An Admin's Full name is the member's name once it is edited (state §0.196; Jeff:
-    // "Yes, Full name wins"): the server builds the name from First and Last before the
-    // name it is sent (users.mjs sanitize), so editing it clears them.
-    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val, ...(field === 'name' ? { firstName: null, lastName: null } : {}) }));
+    // A Full name typed is sent with First and Last cleared, whatever the page first held (memberSave.js — §0.196;
+    // Jeff: "Yes, Full name wins"): the server builds the name from First and Last first.
+    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
+    // A team is picked by its id and saved with its name (§0.211); unassigned clears both (memberPickers.js).
+    const pickTeam = (id) => setForm(prev => ({ ...prev, ...teamPicked(teamOpts, id) }));
 
     const handleSave = async () => {
         if (!String(form.name ?? '').trim()) { setError('A member needs a name.'); return; }
+        // Only what changed (state §0.211 — Jeff, 15 Oct: "Send only what changed"; 16 Oct: "File it, own batch
+        // next"): the fields this page edits that differ from the member as it holds them — a Full name with First
+        // and Last cleared ("Yes, Full name wins"), a team by its id with its name (memberSave.js). The server keeps
+        // every key it stores that a save leaves out (users.mjs mergeForUpdate): what the member, a forecast call or
+        // the Teams page changed since the page opened stays. Never access, the status, the login or the pins.
+        const changes = memberChanges(user, form);
+        const roleNew = roleChanged(user, form);
+        if (!Object.keys(changes).length && !roleNew && !listOwed) return;
         setSaving(true); setError('');
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+        let row = null;                  // the member as stored, once a request here has landed
+        let move = listOwed;             // the teams' lists to move: one owed from an earlier save, or this save's team
+        let roleLanded = false, teamsNow = null, owedNext = listOwed;
+        const missed = [];               // what did not land, in the server's words
         try {
-            // The member's teamId is the id of the team the form names, on every
-            // save (state §0.168): the form carried the row's teamId as it was
-            // loaded, so a new team kept the old id — the one coaching notes and
-            // the digest read — and comparing with the page's first copy of the
-            // member would keep an id that was already wrong.
-            // Not access (state §0.202 — Jeff, 15 Oct: "Fix in 4b-2a"): the form held
-            // `active` and the status as loaded, so a save made after the member
-            // accepted deactivated them (or switched a deactivated one back on).
-            // Deactivate / Reactivate change access; a sign-in links the login.
-            // Nor the pins (state §0.205): the member's own; the server keeps them whatever a save sends.
-            const { active: _active, status: _status, clerkUserId: _login, pinnedReports: _pins, ...edited } = form;
-            const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };
-            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
-            const d = await resp.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
-            if (!resp.ok) throw new Error(d.error || 'Save failed');
-            // The server trims the name it stores (state §0.196): the roster on screen holds what was stored.
-            const storedName = d.user?.name ?? toSave.name;
-
+            if (Object.keys(changes).length) {
+                const toSave = { id: user.id, ...changes };
+                const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
+                const d = await resp.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
+                if (!resp.ok) throw new Error(d.error || 'Save failed');
+                // The row as stored (state §0.196): the name trimmed or rebuilt, every key this save left out as kept.
+                row = d.user || { ...user, ...toSave };
+                if ('teamId' in changes) move = { teamId: row.teamId || null };
+            }
+            // The teams' lists follow the member's team, by id, straight after the member's row (state §0.211): they
+            // depend on nothing else, and dbWrite never throws, so no later request can leave a saved team unlisted.
+            // The Manager box changes no team's manager (Jeff, 26 Oct: "Only who they report to") — the Teams page does.
+            if (move) {
+                const { teams: moved, changed } = teamsWithMemberOn(settings.teams, user.id, move.teamId);
+                if (!changed) owedNext = null;
+                else {
+                    const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: moved }) });
+                    if (!stillOrg(askedOrg)) return;
+                    if (rt.ok) { teamsNow = moved; owedNext = null; }
+                    else { owedNext = move; missed.push(`Saved, but the team list was not updated \u2014 ${clause(rt.error)}. Save changes tries the list again.`); }
+                }
+            }
             // A role change goes to user-role.mjs, the one path that changes a
             // role: the PUT above keeps the stored one. The role is this org's
             // roster row, which auth.mjs reads per request, cached up to 30
@@ -956,62 +983,45 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // identity from the roster row itself — it used to take this value and
             // hand it straight to the Clerk API, which stopped working the moment
             // users.id stopped being the Clerk id.
-            const priorRole = user.role || 'User';
-            if (form.role && form.role !== priorRole) {
+            if (roleNew) {
                 const rr = await dbFetch('/.netlify/functions/user-role', {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ targetUserId: user.id, role: form.role }),
                 });
                 const rd = await rr.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                if (!rr.ok) throw new Error(rd.error || 'Could not change the role.');
-                setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
-            }
-
-            // Sync team assignment into settings.teams repIds
-            let updatedTeams = settings.teams || [];
-            const oldTeamName = user.team;
-            const newTeamName = form.team;
-            if (oldTeamName !== newTeamName) {
-                updatedTeams = updatedTeams.map(t => {
-                    if (t.name === oldTeamName) return { ...t, repIds: (t.repIds||[]).filter(id => id !== user.id) };
-                    if (t.name === newTeamName) return { ...t, repIds: [...new Set([...(t.repIds||[]), user.id])] };
-                    return t;
-                });
-            }
-
-            // Sync manager into settings.teams managerId
-            const newManagerName = form.manager;
-            if (newManagerName && newTeamName) {
-                const mgr = (settings.users||[]).find(u => u.name === newManagerName);
-                if (mgr) {
-                    updatedTeams = updatedTeams.map(t =>
-                        t.name === newTeamName ? { ...t, managerId: mgr.id } : t
-                    );
+                if (rr.ok) {
+                    roleLanded = true;
+                    row = { ...(row || user), role: form.role, userType: form.role };
+                    setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
+                } else if (!row && !teamsNow) {
+                    throw new Error(rd.error || 'Could not change the role.');
+                } else {
+                    missed.push(`Saved, but the role was not changed \u2014 ${rd.error || 'try again.'}`);
                 }
             }
-
-            // Persist updated teams if changed
-            if (JSON.stringify(updatedTeams) !== JSON.stringify(settings.teams || [])) {
-                // Was fire-and-forget. A failed team sync leaves the user assigned
-                // to a team the roster does not have, which reads as a data bug
-                // rather than a permissions one.
-                const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
-                if (!stillOrg(askedOrg)) return;
-                if (!rt.ok) { setError(`User saved, but the team list was not updated — ${rt.error}`); return; }
-            }
-
-            // Update local settings state
+        } catch (err) {
+            missed.push(row || teamsNow ? `Saved, but not everything \u2014 ${clause(err.message) || 'no answer'}. ${owedNext ? 'Save changes tries again.' : 'Reload to see what was saved.'}` : (err.message || 'Failed to save. Please try again.'));
+        } finally { setSaving(false); }
+        if (!stillOrg(askedOrg)) return;   // a request that failed after an org switch changes nothing here
+        // What landed, set once (state §0.211): the page holds the member as stored, the roster on screen takes the
+        // stored row — never the body sent — and the teams as moved; what did not land still waits for Save.
+        if (row) {
+            setUser(row);
+            setForm(prev => formAfterSave(prev, form, row, roleNew && !roleLanded));
+        }
+        if (row || teamsNow) {
             setSettings(prev => ({
                 ...prev,
-                users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave, name: storedName } : u),
-                teams: updatedTeams,
+                ...(row ? { users: (prev.users||[]).map(u => u.id === row.id ? { ...u, ...row } : u) } : {}),
+                ...(teamsNow ? { teams: teamsNow } : {}),
             }));
-            setForm(prev => ({ ...prev, name: storedName }));
-            setSaved(true); setTimeout(() => setSaved(false), 2500);
-        } catch(err) {
-            setError(err.message || 'Failed to save. Please try again.');
-        } finally { setSaving(false); }
+        }
+        // An Admin's own row: the header's name follows at once, the profile panel when next opened (OPEN_ITEMS §4.3).
+        if (row) setMyProfile(prev => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+        setListOwed(owedNext);
+        if (missed.length) setError(missed.join(' '));
+        else { setSaved(true); setTimeout(() => setSaved(false), 2500); }
     };
 
     // This was labelled "Deactivate" but permanently deleted the row, and it never
@@ -1147,7 +1157,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                             Delete user
                         </button>
                     )}
-                    {dirty && <PeoplePriBtn onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}</PeoplePriBtn>}
+                    {dirty && <PeoplePriBtn onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</PeoplePriBtn>}
                 </div>
             </div>
 
@@ -1194,22 +1204,25 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                             </div>
                             <div>
                                 <label style={lbl}>Team</label>
-                                <select style={sel} value={form.team||''} onChange={e=>handleChange('team',e.target.value)}>
+                                <select style={sel} value={teamHeld ? HELD_TEAM : (form.teamId || '')} onChange={e=>pickTeam(e.target.value)}>
                                     <option value="">— unassigned —</option>
-                                    {allTeams.map(t=><option key={t}>{t}</option>)}
+                                    {teamHeld && <option value={HELD_TEAM} disabled>{teamHeld}</option>}
+                                    {teamOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label style={lbl}>Manager</label>
                                 <select style={sel} value={form.manager||''} onChange={e=>handleChange('manager',e.target.value)}>
                                     <option value="">— none —</option>
-                                    {allMgrs.map(n=><option key={n}>{n}</option>)}
+                                    {mgrHeld && <option value={form.manager} disabled>{mgrHeld}</option>}
+                                    {mgrOpts.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label style={lbl}>Territory</label>
                                 <select style={sel} value={form.territory||''} onChange={e=>handleChange('territory',e.target.value)}>
                                     <option value="">— unassigned —</option>
+                                    {terrHeld && <option value={form.territory} disabled>{terrHeld}</option>}
                                     {allTerr.map(t=><option key={t}>{t}</option>)}
                                 </select>
                             </div>
@@ -1301,7 +1314,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                         so nothing persisted and nothing re-rendered. dispatch_technicians is the
                         source of truth — manage technicians under Dispatch → Technicians. */}
                     {settings?.dispatchEnabled && (
-                        <SectionCard title="Dispatch technician" desc="Field technicians are managed in the Dispatch tab.">
+                        <SectionCard title="Dispatch technician" description="Field technicians are managed in the Dispatch tab.">
                             <div style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans, lineHeight:1.6 }}>
                                 Skills, certifications, employment type, rates and vehicle assignment live on
                                 the technician record, not on the user account — subcontractors can be scheduled

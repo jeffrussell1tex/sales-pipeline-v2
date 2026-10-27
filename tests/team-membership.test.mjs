@@ -101,15 +101,21 @@ test('the import adds its new members to their teams\' lists after the last requ
     assert.ok(m.includes('{isUsers && importWarning && ('), 'the warning is on the results');
 });
 
-test('a team changed on the profile moves the member\'s teamId with the name — on every save', () => {
+test('a team changed on the profile is picked by its id and sent with its name — only when the Team box changed (state §0.211; §0.168\'s every-save derive moved and cleared valid teams)', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
-    assert.ok(profile.includes('const toSave = { ...edited, teamId: teamIdNamed(settings.teams, form.team) };'),   // `edited`: the form less access and login (state §0.202)
-        'REGRESSION: a new team keeps the old teamId — coaching notes and the digest read it');
-    assert.ok(!profile.includes('form.team !== user.team'), 'never compared with the page\'s first copy of the member — an id already wrong would be kept');
+    // §0.168 derived the team's id from the box's NAME on every save: the first team of that name answered, so a
+    // member of a second "East" was moved onto the first, and a member whose team was renamed since lost a valid id.
+    assert.ok(!profile.includes('teamIdNamed('), 'REGRESSION: the team is derived from its name on every save — moved to the first team of the name, or cleared');
+    assert.ok(profile.includes("<select style={sel} value={teamHeld ? HELD_TEAM : (form.teamId || '')} onChange={e=>pickTeam(e.target.value)}>"), 'the Team box picks a team by its id');
+    assert.ok(profile.includes('{teamOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}'));
+    assert.ok(profile.includes('    const pickTeam = (id) => setForm(prev => ({ ...prev, ...teamPicked(teamOpts, id) }));'),
+        'REGRESSION: a new team keeps the old teamId — its name and its id are set together (memberPickers.js teamPicked)');
+    assert.ok(profile.includes("if ('teamId' in changes) move = { teamId: row.teamId || null };"), 'the lists move only on a team change, to the team as stored');
+    assert.ok(profile.includes('teamsWithMemberOn(settings.teams, user.id, move.teamId)'), 'by id — never every team of either name');
     assert.ok(profile.includes('body:JSON.stringify(toSave) });'));
     assert.ok(!profile.includes('body:JSON.stringify(form) });'), 'the form as loaded is not what is saved');
-    assert.ok(profile.includes('users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave, name: storedName } : u),'), 'and the roster on screen holds what was saved');
+    assert.ok(profile.includes('...(row ? { users: (prev.users||[]).map(u => u.id === row.id ? { ...u, ...row } : u) } : {}),'), 'and the roster on screen holds the row as stored');
 });
 
 test('every revoke takes the row off the roster and off its team\'s list', () => {

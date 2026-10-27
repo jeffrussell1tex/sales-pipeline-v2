@@ -400,17 +400,21 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
 
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
-    assert.ok(profile.includes("    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val, ...(field === 'name' ? { firstName: null, lastName: null } : {}) }));"),
+    // The Full name's rule moved from the box to the save (state §0.211): a name sent goes with First and Last
+    // cleared, whatever the page first held (memberSave.js) — tests/member-profile-save.test.mjs S2 runs it.
+    assert.ok(profile.includes('    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val }));'));
+    assert.ok(code(read('src/utils/memberSave.js')).includes("    if ('name' in out) { out.firstName = null; out.lastName = null; }"),
         'REGRESSION (Jeff: "Yes, Full name wins"): an edited Full name loses to the stored First/Last');
     assert.ok(profile.includes("        if (!String(form.name ?? '').trim()) { setError('A member needs a name.'); return; }"));
+    // The page holds the member as stored, and the roster on screen takes the stored row — the name as trimmed.
     order(profile,
         'body:JSON.stringify(toSave) });',
         'const d = await resp.json().catch(() => ({}));',
         'if (!stillOrg(askedOrg)) return;',
         "if (!resp.ok) throw new Error(d.error || 'Save failed');",
-        'const storedName = d.user?.name ?? toSave.name;',
-        '{ ...u, ...toSave, name: storedName }',
-        'setForm(prev => ({ ...prev, name: storedName }));');
+        'row = d.user || { ...user, ...toSave };',
+        'setUser(row);',
+        'u.id === row.id ? { ...u, ...row } : u');
 
     const m = code(read('src/components/modals/UserModal.jsx'));
     assert.ok(m.includes('Back to the form') && !m.includes('Fix Email'), 'a refused name is not an email to fix');

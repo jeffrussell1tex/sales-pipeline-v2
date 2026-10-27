@@ -162,13 +162,39 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        next" — below); a restored member's login link and role stay filed
        ("Keep it filed, named" — §4.6). What it found and left is filed in
        §2.2, §4.3, §4.6, §4.7 and §4.8.
-     - **Then, the member profile page sends only what changed** (§4.3's
-       "The Settings → Users profile page PUTs a member's whole cached
-       row"; Jeff, 16 Oct: "File it, own batch next"; 17 Oct: "Undo,
-       cleanup, profile" — the third, and next: the merge Undo and the
-       merged-records cleanup are done, §0.207-§0.210).
+     - **Then, the member profile page sends only what changed — step A
+       DONE (§0.211; guide §18b102)** (§4.3's "The Settings → Users profile
+       page PUTs a member's whole cached row"; Jeff, 16 Oct: "File it, own
+       batch next"; 17 Oct: "Undo, cleanup, profile" — the third; 26 Oct:
+       "Your change wins", "Only who they report to", "Steps A and B", "Fix
+       the move, file the rest", "File it"). Step A: the page sends the
+       fields it edits that changed — a Full name with First and Last
+       cleared, a team by its id with its name — moves the member between
+       teams' lists by id straight after, sends the role last and alone,
+       holds the member as stored after a save, and says what did not land;
+       the Manager box sets who the member reports to and nothing else.
+       Built 27 Oct; its browser check passed 27 Oct (Accelerep QA, as
+       Jeff and as Karen); committed on dev 27 Oct, not pushed. Next,
+       step B (§0.212): a
+       member's manager stored by id (`profile.managerId`, checked as a
+       member of this org, never themselves), picked by a type-ahead, and
+       read by the band, the Users list and the export (§4.6, "A rename …
+       leaves a rep's `profile.manager` on the old display name"). Filed
+       beside it: the forecast call's one-figure save (§4.6), the page's
+       leave guard and the rest the batch found (§4.3, §4.6, §6), and the
+       teams list saved from the app's copy (with batch 4b-3, below).
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
-     quote templates) and a service plan's visit template (§4.6).
+     quote templates) and a service plan's visit template (§4.6). With it
+     (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
+     P28, P29): the member profile page and TeamModal save the whole teams
+     list from the app's copy, loaded at sign-in, so another Admin's team
+     edit made since is put back (UsersDetail.jsx `handleSave`,
+     TeamsDetail.jsx TeamModal; settings.mjs replaces `teams` whole); a
+     member's team name can differ from the team their id names (the
+     rename cascade skips inactive members, and a member's PUT in it can
+     fail — the Monday digest matches by the name); and two teams of one
+     name can be made (TeamModal checks only that a name is given) — the
+     profile page numbers the second, "East (2)" (§0.211).
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -301,7 +327,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        checks of §0.209 and §0.210 passed in Accelerep QA (23 Oct; §0.208
        was tests and CI only). What the batch found and left is filed in
        §2.2, §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8, §5 and §6.
-       Next in Jeff's order: the member profile page (above).
+       Next in Jeff's order: the member profile page (above) — step A
+       done (§0.211), step B next.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -1882,30 +1909,57 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - Its "Google Calendar · holidays@accelerep.com" row reads
     `settings.googleCalendarConnected`, which nothing sets.
   - Read 10 Oct.
-- **The Settings → Users profile page PUTs a member's whole cached row**
-  (recorded 11 Oct with SalesManagerTab's forecast save; quotas are their
-  own request since §0.203, and every whole-profile write keeps the stored
-  plans). A rename made in another session is undone by its next save (the
-  stale First/Last rebuild the old name), or, since §0.196, refused when
-  another member holds the old name by then. Recommended: partial PUTs, as
-  the Teams page and the profile panel send. Read 11 Oct (§0.196). The
-  4b-2c re-map (16 Oct, read in code): it also re-sends the member's
-  forecast calls, own preferences, email signature and contact fields as
-  loaded, so an Admin's save there puts back a Manager's call or the
-  member's own change made since the page opened, and it derives the team
-  by name (§4.6). Since §0.205 it sends no pins (the server keeps them
-  whatever a save sends), and the forecast save sends only its field,
-  `{ id, forecastCalls }`, its refusal in the server's words with the
-  rep's name — that field is the rep's whole calls map (§4.6). Jeff, 16
-  Oct: the profile page sends only what changed, in its own batch ("File
-  it, own batch next"); 17 Oct: "Undo, cleanup, profile" — the third,
-  after the merged-records cleanup (the merge Undo is done, §0.207 —
-  §1).
-- **The Settings → Users profile page after a save:** its title band and
-  crumb read the member as the page opened, so a rename shows the old name
-  until the page is left; "Save changes" stays (the form is compared with that
-  first copy); and an Admin renaming their own row there keeps the old name
-  in the header until a reload (nothing sets their profile). §0.196.
+- **The Settings → Users profile page PUTs a member's whole cached row —
+  DONE (§0.211; guide §18b102)** (recorded 11 Oct with SalesManagerTab's
+  forecast save; the 4b-2c re-map, 16 Oct). It re-sent the member's own
+  title, phone, email, signature, preferences and timezone, a Manager's
+  forecast calls and the Teams page's team, territory and vertical as the
+  page had loaded them, and derived the team by name on every save. Since
+  §0.211 a save sends the fields the page edits that changed
+  (`memberChanges`, memberSave.js) — a Full name with First and Last
+  cleared, a team by its id with its name — and the server keeps the rest
+  (Jeff, 26 Oct: "Your change wins"). The server's own read-to-write
+  window stays (§4.6, the Pin race).
+- **The Settings → Users profile page after a save — DONE (§0.211):** the
+  page holds the member as stored, so the band, the crumb and "Save
+  changes" follow a save; the Users list takes the stored row; an Admin's
+  own rename reaches the header at once (`setMyProfile`) and the profile
+  panel when next opened.
+- **The Settings → Users profile page has no leave guard** (the profile
+  batch's P16; read in code): AdminView hands UsersDetail no save slot (AdminView.jsx:439), so
+  the crumb's Users and every other way out drop unsaved edits without a
+  word (guide §18b63 rule 4). Jeff, 26 Oct: "File it".
+- **Found by the profile batch** (26 Oct, its map and design —
+  docs/design/profile-batch/DESIGN.md §1; read in code, not run):
+  - The page shows the member as the roster held them at sign-in: only
+    Sync reads the roster again (P21; useSettings.js:116 loads it once; Sync, UsersDetail.jsx:1456). Jeff's
+    "Your change wins" (Q1) left a fresh read on open undone.
+  - Phone shows Mobile when Phone is empty, so clearing Phone shows Mobile
+    again (P22; UsersDetail.jsx:1187).
+  - The Email box says "Managed via Clerk — contact admin to change.",
+    while the member can change it in their own profile panel (P23;
+    UsersDetail.jsx:1179; AppHeader.jsx:633's Save Profile sends `email`).
+  - "Audit log — Last 5 changes" reads `settings.auditLog`, which nothing
+    sets, and "Last login" reads `user.lastLoginAt`, which no function
+    writes (P24; UsersDetail.jsx:1294, :1284).
+  - TeamModal's save drops deactivated and invited members from the
+    roster on screen (P26; TeamsDetail.jsx:24 keeps the `active !== false`
+    rows), and its territory- or vertical-only edit reaches no member's
+    row though the roster on screen shows it (P27; it PUTs only the rows
+    whose team or team id changed, TeamsDetail.jsx:75-78).
+  - A team change on the profile page moves no territory or vertical; the
+    Teams page's Assign does (P30; TeamsDetail.jsx:438; as before §0.211).
+  - The Invite page sends `manager` with each invitation, and the invite
+    path stores none (P39; UsersDetail.jsx:174; users.mjs's invite names no `manager`).
+  - The profile panel's signature box reads empty after the avatar opens
+    the panel: the click refills the panel's form with six keys and no
+    `emailSignature` (P40; AppHeader.jsx:544, :620, :633). Save Profile then sends
+    `emailSignature: undefined`, which JSON drops, so the stored one is
+    kept — but it shows as none.
+  - A Manager or Admin moved to a team on the profile page lands on its
+    member list (`repIds`), as before §0.211; the Teams page lists only
+    non-managers there and counts one who is also the team's manager
+    twice (P41, D16; TeamsDetail.jsx:29-32, :353-357).
 - **The backup page after §0.205** (its reviews, 16 Oct; read in code):
   - The snapshot list reads an import as "Automated" (it tells only
     'manual' apart) and a partial one as "Failed" (it knows only 'ready'
@@ -2337,10 +2391,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (users.mjs; _coaching.mjs). Jeff, 16 Oct: "No, leave it".
 - **A Pin can be undone by a whole-profile save racing it** (the 4b-2
   design, 16 Oct; read in code). Since §0.205 pins are written only by the
-  member's own Pin, and every other save keeps the pins its merge read — a
-  Pin landing between that read and the write is put back. The quota plans
-  take their stored value at write time (`keepQuotaPlans`, §0.203); the
-  same would close this. Jeff, 16 Oct: "Not now, file it".
+  member's own Pin, and every other save keeps the pins the PUT read
+  before its write (`before`) — a Pin landing between that read and the
+  write is put back. The quota plans take their stored value at write time
+  (`keepQuotaPlans`, §0.203); the same would close this. Jeff, 16 Oct:
+  "Not now, file it". Wider (the profile batch's P17, 26 Oct): every Admin
+  or Manager PUT writes every column and the whole profile from its own
+  read (`mergeForUpdate`, users.mjs:280; the write in `upsertUser`, :602), several queries before the write, so any write
+  landing in between is put back — §0.211 ended the profile page's
+  hours-old copy, not these milliseconds. A field-level write (`set` only
+  the columns named, the profile as `coalesce(profile, '{}') || <the keys
+  sent>`, as `?quotas=true` does) would close both; it moves
+  member-identity's PUT-order pin, member-names' and member-links' pins and
+  about 20 harness entries. Jeff's call. Beside it: user-role.mjs writes
+  the whole profile from a read made before its Clerk call (P18), and
+  `PUT ?me` writes the role from its own earlier read (P19).
 - **The member's own Pin reads the member's row again** (§0.205's build;
   read in code): `mergeForUpdate` has read it, and the pin check reads it
   again for the pins it holds — one extra query per Pin. Passing the
@@ -2354,13 +2419,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - The Teams page hides a member whose team was deleted: under no team and
     not under Unassigned (TeamsDetail.jsx).
   - The member profile page derives the team by name on every save, which
-    can clear a valid team and its joined date (UsersDetail.jsx).
+    can clear a valid team and its joined date (UsersDetail.jsx) — DONE
+    (§0.211): it also moved a member of a second team of one name onto
+    the first. A team is now picked by its id and sent with its name, only
+    when the Team box changes.
   - A forecast call sends the rep's whole calls map, so one manager's call
     can put back another's for a different quarter, or the same quarter's
     other figure — a Commit re-sends the Best case as the tab holds it
     (forecastCall.js). Since §0.205 the call sends only that field,
     `{ id, forecastCalls }`, never the rep's whole row; the field is still
-    the whole map.
+    the whole map. Since §0.211 the profile page no longer re-sends the
+    calls. The one-figure save — a server branch that merges one figure,
+    as `?quotas=true` merges one year — is its own small batch (Jeff, 26
+    Oct: "Steps A and B").
   - A 51st Pin does nothing, and a pin of a deleted report can never be
     unpinned (users.mjs; ReportsTab.jsx).
   - The settings PUT keeps a SPIFF list of any shape (settings.mjs) — for
@@ -2369,7 +2440,27 @@ to add meetings. Nothing in the app adds a meeting to Google:
     included (spiff-claims.mjs).
   - The restore double-encodes the lists of a hand-made Dispatch file
     (backup.mjs, JSONB_KEYS).
-  - Stale comments in teamMembership.js and _selfProfile.mjs.
+  - Stale comments in teamMembership.js and _selfProfile.mjs —
+    teamMembership.js's corrected in §0.211 (the digest matches by the
+    team's name, not its id); _selfProfile.mjs's ("The profile panel sends
+    the entire roster row it holds", untrue since §0.196) waits for the
+    profile batch's step B (§0.212), a functions deploy.
+- **Found by the profile batch** (26 Oct, its map — docs/design/
+  profile-batch/DESIGN.md §1; read in code, not run):
+  - A bare `{ id, name }` over a stored First and Last is stored as the
+    old name with a 200 (users.mjs:111 sanitize builds the name from First and
+    Last first); a key the PUT does not know is dropped without a word;
+    and a PUT that changes nothing still writes a `user.updated` row (P20; users.mjs:1130).
+    The profile page always sends the pair, and never an empty PUT.
+  - Deleting a member takes their id off no team's `repIds` or
+    `managerId` — only a revoked invitation's row is taken off its team's
+    list (P31; users.mjs:1141's DELETE; UsersDetail.jsx:857 `dropRevokedRow`).
+  - users-sync fills a blank `team` from Clerk's user-level
+    `publicMetadata`; whether an organization invitation's metadata lands
+    there is unverified (P32; users-sync.mjs:124, :159).
+  - The PUT trims an email but does not lowercase it (P33; users.mjs:113
+    sanitize) — the profile page no longer sends it. A name over 255
+    characters reaches Postgres (reasoned, unverified).
 - **The task rail offers ✓ Complete and Edit to the Dispatcher and
   ReadOnly roles** (§0.199's re-check; read in code): its quick-action bar
   has no role check, while its Delete checks `canEditCrm`; Home opens the
@@ -2521,6 +2612,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
     `profile.manager` on the old display name (the Settings → Users manager
     select stores names, and so would a Manager's `profile.managedReps`,
     which `dealVisibleTo` narrows by). Ids would end it. Read 11 Oct (§0.196).
+    The profile batch's step B (§0.212, §1) stores the manager by id. Its
+    `managerId` could also be `managedReps`' home — a Manager's reps the
+    members whose `managerId` names them (P35; flagged, not wired: Manager
+    scoping is its own decision).
   - users-sync reports every numbered member as name drift on every sync
     ("Pat Smith" in Clerk, "Pat Smith (2)" here). Nothing on screen reads
     `nameDrift` (the drift banner counts created, updated and dbOnly). §0.196.
@@ -3793,3 +3888,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   inbound webhooks, prod's and dev's, and a row proves only that a row was
   written. A standing note.
 - **App.jsx's stray blank lines** left by §0.187. Cosmetic.
+- **The second-role-list scan misses a frozen list** (the profile batch's
+  P38; read in code): tests/roles.test.mjs:149's role-list literal needs `[`
+  straight after `=` or `new Set(`, so `= Object.freeze([` passes it — and
+  src/utils/quoteRules.js:96 already holds `APPROVER_ROLES =
+  Object.freeze(['Manager', 'Admin'])` outside roles.js. A class item:
+  widen the scan, and move APPROVER_ROLES to roles.js or name it there.
+  (The profile page's Manager box reads `canSeeAll`, no list — §0.211.)

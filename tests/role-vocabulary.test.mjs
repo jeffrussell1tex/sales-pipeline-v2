@@ -140,6 +140,8 @@ test('no second role list — only src/utils/roles.js enumerates the roles', () 
         ['src/components/modals/UserModal.jsx', "'../../utils/roles.js'"],
         ['src/utils/roleAccess.js', "'./roles.js'"],
         ['scripts/check-clerk-roles.mjs', "'../src/utils/roles.js'"],
+        // The profile page's Manager box offers by canSeeAll (state §0.211) — no role list of its own.
+        ['src/Tabs/settings/people/memberPickers.js', "'../../../utils/roles.js'"],
     ]) {
         const src = read(f);
         assert.ok(!roleList.test(src), `${f} declares its own role list again`);

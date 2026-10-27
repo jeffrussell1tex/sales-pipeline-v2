@@ -2,8 +2,9 @@
 // §0.168). A membership is three things, and the team editor (TeamsDetail's
 // TeamModal) writes them together: the member's id in the team's `repIds` (the
 // Teams page's list and counts), the team's id in the member's profile `teamId`
-// (coaching notes addressed to a team, the manager digest — _coaching.mjs,
-// digest.mjs) and the team's name in the member's `team`. The invite path wrote
+// (coaching notes addressed to a team — _coaching.mjs) and the team's name in the
+// member's `team` (the Monday digest matches a Manager's reps by it — _jobRoster.mjs
+// teamRepsOf; state §0.211). The invite path wrote
 // the name alone, so an invited member joined on no team's list and with no
 // teamId. Pure, so the rules run under node --test.
 
@@ -46,6 +47,28 @@ export function teamsWithout(teams, memberId) {
         if (!memberId || !t || typeof t !== 'object' || !Array.isArray(t.repIds) || !t.repIds.includes(memberId)) return t;
         changed = true;
         return { ...t, repIds: t.repIds.filter((id) => id !== memberId) };
+    });
+    return { teams: next, changed };
+}
+
+// The teams with `memberId` on the list of the team `teamId` names and on no other (state §0.211) — the member profile
+// page's team change, by id: off every other list, onto the new team's once; null takes the member off every list.
+// An old plain-string entry has no list and is left as it is; a team with no list gets one when it is the member's.
+// `changed` says whether there is anything to save; an untouched team is the same object.
+export function teamsWithMemberOn(teams, memberId, teamId) {
+    let changed = false;
+    const next = (teams || []).map((t) => {
+        if (!memberId || !t || typeof t !== 'object') return t;
+        const held = Array.isArray(t.repIds) ? t.repIds : [];
+        const on = held.includes(memberId);
+        if (teamId && t.id === teamId) {
+            if (on) return t;
+            changed = true;
+            return { ...t, repIds: [...held, memberId] };
+        }
+        if (!on) return t;
+        changed = true;
+        return { ...t, repIds: held.filter((id) => id !== memberId) };
     });
     return { teams: next, changed };
 }
