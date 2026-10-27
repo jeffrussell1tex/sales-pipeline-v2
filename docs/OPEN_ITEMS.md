@@ -174,7 +174,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        holds the member as stored after a save, and says what did not land;
        the Manager box sets who the member reports to and nothing else.
        Built 27 Oct; its browser check passed 27 Oct (Accelerep QA, as
-       Jeff and as Karen); committed on dev 27 Oct, not pushed. Next,
+       Jeff and as Karen); committed on dev and pushed 27 Oct. Next,
        step B (§0.212): a
        member's manager stored by id (`profile.managerId`, checked as a
        member of this org, never themselves), picked by a type-ahead, and
