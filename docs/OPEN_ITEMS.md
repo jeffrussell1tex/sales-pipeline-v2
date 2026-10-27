@@ -487,6 +487,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
+  wishes** (its browser check, 27 Oct — state §0.211): the member
+  "TEST Profile Rep" (a Sales Rep with no email and no login; title
+  "TEST Title B", phone "TEST 555-0102", on "TEST Team West", reporting
+  to Bob Russell) and the teams "TEST Team East", a second "TEST Team
+  East" and "TEST Team West", no manager (West's list holds TEST
+  Profile Rep). Karen's title and phone are back as they were.
 - **§0.209's and §0.210's TEST records in Accelerep QA, Jeff's to
   delete if he wishes** (their browser checks, 23 Oct — state §0.209,
   §0.210): "Tara Other", "Tia Linked", the call "TEST §0.209 pane check
