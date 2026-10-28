@@ -183,7 +183,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        Built 27 Oct; its browser check passed 27 Oct and found a popover's
        close throwing on a resize — fixed with it, the Manager box's list
        and the Users and Industries row menus (two of them shipped);
-       committed on dev 28 Oct, not pushed. Filed
+       committed on dev 28 Oct and pushed 28 Oct. Filed
        beside it: the forecast call's one-figure save (§4.6), the page's
        leave guard and the rest the batch found (§4.3, §4.6, §6), and the
        teams list saved from the app's copy (with batch 4b-3, below).
