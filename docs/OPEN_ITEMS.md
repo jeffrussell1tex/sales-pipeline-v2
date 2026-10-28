@@ -163,7 +163,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        ("Keep it filed, named" — §4.6). What it found and left is filed in
        §2.2, §4.3, §4.6, §4.7 and §4.8.
      - **Then, the member profile page sends only what changed — step A
-       DONE (§0.211; guide §18b102)** (§4.3's "The Settings → Users profile
+       DONE (§0.211; guide §18b102), step B DONE (§0.212)** (§4.3's "The Settings → Users profile
        page PUTs a member's whole cached row"; Jeff, 16 Oct: "File it, own
        batch next"; 17 Oct: "Undo, cleanup, profile" — the third; 26 Oct:
        "Your change wins", "Only who they report to", "Steps A and B", "Fix
@@ -174,12 +174,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        holds the member as stored after a save, and says what did not land;
        the Manager box sets who the member reports to and nothing else.
        Built 27 Oct; its browser check passed 27 Oct (Accelerep QA, as
-       Jeff and as Karen); committed on dev and pushed 27 Oct. Next,
-       step B (§0.212): a
-       member's manager stored by id (`profile.managerId`, checked as a
-       member of this org, never themselves), picked by a type-ahead, and
-       read by the band, the Users list and the export (§4.6, "A rename …
-       leaves a rep's `profile.manager` on the old display name"). Filed
+       Jeff and as Karen); committed on dev and pushed 27 Oct. Step B
+       (§0.212; Jeff, 27 Oct: "Start step B"): a member's manager stored
+       by id (`profile.managerId`, a member of this org, never themselves
+       — the server asks it where a write names it anew, keeps the name
+       and the id paired, and a restore clears a stray one), picked by a
+       type-ahead, and read by the band, the Users list and the export.
+       Built 27 Oct; its browser check passed 27 Oct and found a popover's
+       close throwing on a resize — fixed with it, the Manager box's list
+       and the Users and Industries row menus (two of them shipped);
+       committed on dev 28 Oct, not pushed. Filed
        beside it: the forecast call's one-figure save (§4.6), the page's
        leave guard and the rest the batch found (§4.3, §4.6, §6), and the
        teams list saved from the app's copy (with batch 4b-3, below).
@@ -328,7 +332,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        was tests and CI only). What the batch found and left is filed in
        §2.2, §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8, §5 and §6.
        Next in Jeff's order: the member profile page (above) — step A
-       done (§0.211), step B next.
+       done (§0.211), step B done (§0.212) — committed on dev 28 Oct, not
+       pushed.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -487,13 +492,25 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
+- **The full mutation-harness run on the tree that ships** (guide §18b23
+  part 4; Jeff, 27 Oct: "the full run before each prod ship"): since
+  §0.212 a batch runs its scope (`node scripts/mutate-scope.mjs`), and
+  every entry (`node scripts/mutate-import.mjs`, about 4 h) runs before
+  each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
+  its 3,139 older entries run on its step G's build in four slices and its
+  own seven pre-run on the final tree — no full run on its final tree); §0.212 by its scope alone.
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
   "TEST Title B", phone "TEST 555-0102", on "TEST Team West", reporting
-  to Bob Russell) and the teams "TEST Team East", a second "TEST Team
-  East" and "TEST Team West", no manager (West's list holds TEST
-  Profile Rep). Karen's title and phone are back as they were.
+  to Bob Russell — since §0.212's check, to TEST Profile Manager) and the
+  teams "TEST Team East", a second "TEST Team East" and "TEST Team West",
+  no manager (West's list holds TEST Profile Rep). Karen's title and phone
+  are back as they were.
+- **§0.212's TEST record in Accelerep QA, Jeff's to delete if he wishes**
+  (its browser check, 27 Oct — state §0.212): the member "TEST Profile
+  Manager" (a Manager with no email and no login); TEST Profile Rep reports
+  to it, by id.
 - **§0.209's and §0.210's TEST records in Accelerep QA, Jeff's to
   delete if he wishes** (their browser checks, 23 Oct — state §0.209,
   §0.210): "Tara Other", "Tia Linked", the call "TEST §0.209 pane check
@@ -1687,7 +1704,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   keeps the id asked under that record's own name (:187), which
   `insertLinks` stores (:516-517); it reads neither `mergeArchived` nor
   `mergedIntoId`, and documents.mjs imports nothing from `_links.mjs`,
-  whose `liveIdsInOrg` (:65-74) follows a merge. Upload, a dropped file and
+  whose `liveIdsInOrg` (:66-75) follows a merge. Upload, a dropped file and
   Link existing on a record's Documents tab name the record itself
   (RecordDocuments.jsx:34, :50, :64, :89-93), so on a merged-away
   account's rail — still opened by the Contacts tab's "Open account" (its
@@ -1939,16 +1956,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Found by the profile batch** (26 Oct, its map and design —
   docs/design/profile-batch/DESIGN.md §1; read in code, not run):
   - The page shows the member as the roster held them at sign-in: only
-    Sync reads the roster again (P21; useSettings.js:116 loads it once; Sync, UsersDetail.jsx:1456). Jeff's
+    Sync reads the roster again (P21; useSettings.js:116 loads it once; Sync, UsersDetail.jsx:1529). Jeff's
     "Your change wins" (Q1) left a fresh read on open undone.
   - Phone shows Mobile when Phone is empty, so clearing Phone shows Mobile
-    again (P22; UsersDetail.jsx:1187).
+    again (P22; UsersDetail.jsx:1263).
   - The Email box says "Managed via Clerk — contact admin to change.",
     while the member can change it in their own profile panel (P23;
-    UsersDetail.jsx:1179; AppHeader.jsx:633's Save Profile sends `email`).
+    UsersDetail.jsx:1255; AppHeader.jsx:633's Save Profile sends `email`).
   - "Audit log — Last 5 changes" reads `settings.auditLog`, which nothing
     sets, and "Last login" reads `user.lastLoginAt`, which no function
-    writes (P24; UsersDetail.jsx:1294, :1284).
+    writes (P24; UsersDetail.jsx:1367, :1357).
   - TeamModal's save drops deactivated and invited members from the
     roster on screen (P26; TeamsDetail.jsx:24 keeps the `active !== false`
     rows), and its territory- or vertical-only edit reaches no member's
@@ -1957,7 +1974,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - A team change on the profile page moves no territory or vertical; the
     Teams page's Assign does (P30; TeamsDetail.jsx:438; as before §0.211).
   - The Invite page sends `manager` with each invitation, and the invite
-    path stores none (P39; UsersDetail.jsx:174; users.mjs's invite names no `manager`).
+    path stores none (P39; UsersDetail.jsx:177; users.mjs's invite names no `manager`).
   - The profile panel's signature box reads empty after the avatar opens
     the panel: the click refills the panel's form with six keys and no
     `emailSignature` (P40; AppHeader.jsx:544, :620, :633). Save Profile then sends
@@ -2056,10 +2073,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   customer form draws a stored plan or technician its list no longer holds
   as itself — "Deleted plan (…)" (DispatchTab.jsx:2708-2710), "Unknown
   technician (…)" (:2781) — each a live `<option>`. Guide §18b24.3 says
-  "Render an unmatched value as itself, disabled." (:2934); guide §16's
-  own example (:802) has no `disabled`, though §18b101 rule 4 (:4285)
+  "Render an unmatched value as itself, disabled." (:3007); guide §16's
+  own example (:802) has no `disabled`, though §18b101 rule 4 (:4358)
   cites both for "a select shows it disabled". The role selects
-  (UsersDetail.jsx:38, UserModal.jsx:159) and, since §0.209, the same
+  (UsersDetail.jsx:41, UserModal.jsx:159) and, since §0.209, the same
   form's Linked CRM account (`heldLink`, DispatchTab.jsx:2679) draw theirs
   disabled. Each is drawn only while the draft holds the stale value, so
   it leaves the list once another is picked, and an untouched Save sends
@@ -2071,7 +2088,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `unlisted: true`, so the `.some(...)` at :2697 finds it and the option
   is not drawn, while `.filter(t => !t.unlisted)` (:2700) leaves it out of
   the options — React then shows the first type listed (guide §16's bug;
-  both from 32ef196, 11 Aug; state 0PB.14, :9283, says the select emits
+  both from 32ef196, 11 Aug; state 0PB.14, :9345, says the select emits
   the option). Its untouched Save still sends the stored type; as read,
   the option draws only if the customer list changes under an open form.
   The same shape, enabled, outside the design's list: the technician
@@ -2238,7 +2255,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (`visibleOpportunities`, App.jsx:834-838), the email every pipeline's
   (`runReport` filters by no pipeline; no line here names it). Yet
   report-deliveries.mjs:96-97 says "the table sent is the picture the
-  builder showed", and state §0.135 (ACCELEREP_CURRENT_STATE.md:5861)
+  builder showed", and state §0.135 (ACCELEREP_CURRENT_STATE.md:5863)
   calls the own-only read "the server's rule". It also asks `canSeeAll`
   (the write authority) where the GETs ask `crmReadScope`
   (roles.js:56-60): an owner who became a Dispatcher is sent their own
@@ -2349,9 +2366,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   live account and contact to a Manager (`seesAllRecords`, :5052, :5083,
   :5101). Nothing differs today while no row holds `profile.managedReps`
   (the item above; not re-checked, no database read — users.mjs's sanitize
-  builds no such key, :119-169, but a restore inserts a new member's row
+  builds no such key, :126-177, but a restore inserts a new member's row
   with the file's profile, backup.mjs:443, memberName.js:98-101, and its
-  clean-up keeps every key but the team and pins, _links.mjs:288-292):
+  clean-up keeps every key but the team, the pins and, since §0.212, the
+  manager id, _links.mjs clearMemberLinks):
   `isRepVisible` passes every row for every Manager. App.jsx's
   `visibleActivities` (:855-859) is read nowhere. Recommended: with the
   item above — once who a Manager manages is written, one rule for every
@@ -2375,7 +2393,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   in Account history while an unassigned contact with none is in Contact
   history (`|| !owner`, :5110). The team half (:5084, "or are on the team
   for"; :5088-5089) never runs: a rep's `settings.users` is the directory,
-  `{ id, name, active }` with no team (users.mjs:506-508;
+  `{ id, name, active }` with no team (users.mjs:514-516;
   useSettings.js:116-128), so `myTeam` is the rep alone (:5087) — and the
   server sends a rep no teammate's row anyway. The tab's own gate is by
   name too: a rep's `myTeamMembers` is `new Set([currentUserName])`
@@ -2404,7 +2422,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (`keepQuotaPlans`, §0.203); the same would close this. Jeff, 16 Oct:
   "Not now, file it". Wider (the profile batch's P17, 26 Oct): every Admin
   or Manager PUT writes every column and the whole profile from its own
-  read (`mergeForUpdate`, users.mjs:280; the write in `upsertUser`, :602), several queries before the write, so any write
+  read (`mergeForUpdate`, users.mjs:288; the write in `upsertUser`, :610), several queries before the write, so any write
   landing in between is put back — §0.211 ended the profile page's
   hours-old copy, not these milliseconds. A field-level write (`set` only
   the columns named, the profile as `coalesce(profile, '{}') || <the keys
@@ -2447,27 +2465,73 @@ to add meetings. Nothing in the app adds a meeting to Google:
     included (spiff-claims.mjs).
   - The restore double-encodes the lists of a hand-made Dispatch file
     (backup.mjs, JSONB_KEYS).
-  - Stale comments in teamMembership.js and _selfProfile.mjs —
-    teamMembership.js's corrected in §0.211 (the digest matches by the
-    team's name, not its id); _selfProfile.mjs's ("The profile panel sends
-    the entire roster row it holds", untrue since §0.196) waits for the
-    profile batch's step B (§0.212), a functions deploy.
 - **Found by the profile batch** (26 Oct, its map — docs/design/
   profile-batch/DESIGN.md §1; read in code, not run):
   - A bare `{ id, name }` over a stored First and Last is stored as the
-    old name with a 200 (users.mjs:111 sanitize builds the name from First and
+    old name with a 200 (users.mjs:118 sanitize builds the name from First and
     Last first); a key the PUT does not know is dropped without a word;
-    and a PUT that changes nothing still writes a `user.updated` row (P20; users.mjs:1130).
+    and a PUT that changes nothing still writes a `user.updated` row (P20; users.mjs:1151).
     The profile page always sends the pair, and never an empty PUT.
   - Deleting a member takes their id off no team's `repIds` or
     `managerId` — only a revoked invitation's row is taken off its team's
-    list (P31; users.mjs:1141's DELETE; UsersDetail.jsx:857 `dropRevokedRow`).
+    list (P31; users.mjs:1162's DELETE; UsersDetail.jsx:860 `dropRevokedRow`).
+    Since §0.212 nor off any member's `profile.managerId`: their reports'
+    band, Users list and export then read the stored name, and the box
+    "(no longer a member)"; a revoked invitation leaves it too (users.mjs's
+    DELETE, the revoke).
   - users-sync fills a blank `team` from Clerk's user-level
     `publicMetadata`; whether an organization invitation's metadata lands
     there is unverified (P32; users-sync.mjs:124, :159).
-  - The PUT trims an email but does not lowercase it (P33; users.mjs:113
+  - The PUT trims an email but does not lowercase it (P33; users.mjs:120
     sanitize) — the profile page no longer sends it. A name over 255
     characters reaches Postgres (reasoned, unverified).
+- **Found by the profile batch's step B** (§0.212, 27 Oct — its review, four
+  lenses with a skeptic each; read in code, not run):
+  - A member a restore's file names as their own manager is cleared and
+    counted in "N links that named no record of this organization were
+    cleared." — wrong words for that one (it names this org's member), and
+    the name kept is their own (linkIds.js memberLinksCleared, backup.mjs's
+    notes). Recommended: count them apart, in their own words (Jeff's call).
+  - The manager refusal, "That member is not in your organization — pick
+    one from the list.", reads like the 404 for the member being edited
+    ("… they may have been removed …"), and the page shows the words alone.
+    Recommended: a manager noun for the refusal (Jeff's call on words).
+  - The Manager box's chip for a row from before §0.212 reads "(not
+    linked — remove, then pick them again)": two steps, × and then a
+    search. Recommended: × on that chip puts the name into the search, so
+    Enter relinks.
+  - A pick the server refuses because that manager was removed since the
+    page loaded stays on screen as a plain chip, and the search offers them
+    again (the roster is read at sign-in); the Team box does the same with
+    a team removed since. Recommended: clear the pick on a refusal naming
+    its field, or read the roster again.
+  - The Manager box's list is placed when it opens and at each keystroke:
+    a banner that comes or goes above the form ("✓ Changes saved
+    successfully.") moves the field and leaves the list where it was until
+    the next keystroke — as the house's fixed popovers do (LeadsTab.jsx).
+  - The server keeps a manager's name and id paired (§0.212); a team's it
+    does not — a body naming `team` without `teamId`, or the reverse, keeps
+    the stored other (the profile page pairs them, memberSave.js).
+    Recommended: the same server rule for the team, with batch 4b-3.
+  - The user window's edit save (useUserHandlers.js `handleSaveUser` with
+    `editingUser` set, reached only through `handleEditUser`, which nothing
+    calls — §6, "The member form's edit path has no caller"; the profile
+    batch's P36, DESIGN.md §1) would send `manager` and `managerId` as
+    loaded (UserModal.jsx starts its form from the loaded member).
+    Recommended: strip both beside the team's keys it already strips, if it
+    is ever wired.
+  - A member's own save (`?me`) writes the whole profile from its own read,
+    so an Admin's manager save landing in between is put back — the
+    server's read-to-write window (the Pin race, above); only the quota
+    plans are kept at write time.
+- **Found by step B's browser check** (§0.212, 27 Oct — Jeff's question,
+  measured in the pane): the New User window (UserModal.jsx:85 — opened
+  only by the deal window's "+ New Rep"; the Settings → Users pages add
+  members through Invite users) rounds its corners on the box that scrolls,
+  so on Primary Info, taller than the window, its scrollbar squares the
+  right two (1,002 px of form in a 519 px box, a 16 px scrollbar). A
+  separate task is proposed — every rounded box that is its own scroller,
+  fixed as a class with a scan, after §0.212 is committed.
 - **The task rail offers ✓ Complete and Edit to the Dispatcher and
   ReadOnly roles** (§0.199's re-check; read in code): its quick-action bar
   has no role check, while its Delete checks `canEditCrm`; Home opens the
@@ -2615,14 +2679,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
     reps see the address in every picker. The sync and a no-name invite use
     the address's front part. Recommended: switch to the front part, as its
     own small item.
-  - A rename — what the name refusal asks for — leaves a rep's
-    `profile.manager` on the old display name (the Settings → Users manager
-    select stores names, and so would a Manager's `profile.managedReps`,
-    which `dealVisibleTo` narrows by). Ids would end it. Read 11 Oct (§0.196).
-    The profile batch's step B (§0.212, §1) stores the manager by id. Its
-    `managerId` could also be `managedReps`' home — a Manager's reps the
-    members whose `managerId` names them (P35; flagged, not wired: Manager
-    scoping is its own decision).
+  - A rename — what the name refusal asks for — would leave a Manager's
+    `profile.managedReps` on the old display name, were it written
+    (`dealVisibleTo` narrows by it). Read 11 Oct (§0.196). A member's
+    manager has been stored by id since §0.212 (`profile.managerId`, §1),
+    the readers following the id; `managedReps` could take the same home —
+    a Manager's reps the members whose `managerId` names them (P35;
+    flagged, not wired: Manager scoping is its own decision). So could the
+    deal alerts' manager (_jobRoster.mjs `managerOf`: `managedReps`, then
+    the team), today not the one the profile says the member reports to.
   - users-sync reports every numbered member as name drift on every sync
     ("Pat Smith" in Clerk, "Pat Smith (2)" here). Nothing on screen reads
     `nameDrift` (the drift banner counts created, updated and dbOnly). §0.196.
@@ -2672,6 +2737,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Nothing writes `profile.managedReps`.** A Manager is narrowed only where a
   row holds it, and none does; `managedReps` lives in Clerk's publicMetadata.
   Who a Manager manages needs a home that is written. §0.159 / §0.163.
+  Since §0.212 a member's `profile.managerId` is written and checked — a
+  natural home (P35; the rename item above).
 - **Members' email addresses compare by exact case** (the 4b-2a re-check,
   15 Oct; read in code; older). A create stores the address as typed
   (users.mjs sanitize trims only) and `users_org_email_uq` is
@@ -3064,7 +3131,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   can still hand the panel one: a deal deleted since a backup taken
   before the merge, restored as filed (backup.mjs:352-362) — the
   clean-up keeps a link to any row of the org, merged away or not
-  (_links.mjs:122, :210-212, :230-239), as the restore item in this
+  (_links.mjs:123, :212-214, :232-241), as the restore item in this
   section finds for an account's parent; a copy older than another
   session's merge — the app's deal (its lists are read on load and on an
   org switch, App.jsx:487-504), and after the panel's own add or remove
@@ -3102,7 +3169,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
     too).
   - A member profile the file gives as JSON text is stored as a jsonb
     string; since §0.205 the clean-up counts it right (nothing), but never
-    cleans it — its team and pins stand as filed. Recommended: read a text
+    cleans it — its team, pins and (since §0.212) manager id stand as
+    filed. Recommended: read a text
     profile that parses to an object back into that object as the restore
     stamps the row.
   - A code the database gives every time, outside classes 22 and 23 —
@@ -3253,8 +3321,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   P as its parent — backup.mjs inserts with `onConflictDoNothing` (:355,
   :362), so P, still stored, is skipped and kept — and the clean-up
   (`clearStrayLinks`, backup.mjs:500; `_links.mjs` RESTORE_LINKS'
-  `parentAccountId`, :120) clears a parent only when it names no row of
-  this org (:212, no merge test; the clear :224-226); a merged-away
+  `parentAccountId`, :121) clears a parent only when it names no row of
+  this org (:214, no merge test; the clear :226-228); a merged-away
   account is one. A merge moves its own sub-accounts (merge.mjs:236); a
   restore does not. Since §0.206 C, a live account, is listed nowhere on
   the Accounts tab (App's list is the top level, App.jsx:839-841, and its
@@ -3784,7 +3852,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (§0.199: "restore: a scalar naming a row of this org is cleared" — the
   fixes put the anchor's text into a new clause above its line, the first
   match moved there, and the entry survived with no STALE). The harness and
-  its pre-run tool mutate the first match; 2406 entries today, several by
+  its pre-run tool mutate the first match; 2406 entries then (§0.199), 3,333 on 27 Oct, several by
   design on a text that repeats. Recommended: print AMBIGUOUS for an anchor
   that matches more than once and make each such entry name its line
   uniquely (a fail once none remain).
@@ -3805,6 +3873,46 @@ to add meetings. Nothing in the app adds a meeting to Google:
   entry, whose anchor (` && !isMergeArchived(a));`) the delete warning's
   new line also ends with — was lengthened at its front, to
   `=== accountId && !isMergeArchived(a));`, which only its own line holds.
+  On 27 Oct (§0.212, every entry against the tree) the same seven, and no
+  other. Since §0.212 the scoped run refuses a batch's own anchor that
+  matches more than once (scripts/mutate-scope.mjs: NOT UNIQUE, exit 1,
+  before the baseline); an older entry is still checked only for a missing
+  anchor, and the full run (scripts/mutate-import.mjs) still mutates its
+  first match unwarned.
+- **The scoped harness reads a test's files from its text, so a test that
+  builds its paths at run time is read short** (§0.212's docs check, 27 Oct:
+  every SUITES test run alone with a tracer preloaded — every file its
+  processes read, list or load — against scripts/_scope.mjs `filesOf`; guide
+  §18b23 part 4). 48 of the 152 read files the static read misses, 7,308
+  reads in all, 36 of them 50 or more (the files missed in brackets):
+  function-imports (101), date-local (212), api-surface (99),
+  house-dialogs (205), settings-cards (16), connected-apps (3),
+  activity-view (1), automation-events (2), single-token-file (212),
+  audit-coverage (28), itest-targets-test-db (51), roles (206),
+  dispatch-gate (8), job-roster (3), org-scoping (93), org-roles (308),
+  settings-leave-guard (61), save-buttons (18), late-answers (206),
+  src-scope (214), contact-deals (210), hook-deps (15), activity-save (15),
+  deal-modal-saves (207), layers (209), one-delete-path (202),
+  select-where-tickable (209), border-sides (209), escape-layers (208),
+  document-link-names (211), document-refusals (207), document-access (2),
+  deal-fields (306), ai-score (99), open-states (205), security-closes (213),
+  deal-engagement (301), owner-kept (93), search-match (201), app-name (309),
+  member-names (96), pick-link (206), rail-links (1), task-alerts (209),
+  quota-plan (293), sales-links (364), merged-away-lists (266),
+  merge-undo (195).
+  A batch that edits one of them runs a scope short of Jeff's rule ("every
+  entry caught by a test file it edited"); the full run before the ship
+  still grades what it misses. Step B's five edited suites read none the
+  static read misses; the suite its resize close added,
+  tests/resize-targets.test.mjs, walks src (211 files the static read
+  misses — a 49th), and what it reaches keeps its last grade (a suite added
+  can only turn a run red; guide §18b23 part 4). Recommended: mutate-scope.mjs runs each edited test
+  once with the tracer and adds what it traced to the scope (Jeff's call).
+- **The self-pin scan's floor stays seventeen with nineteen pins** (§0.212
+  added tests/mutate-scope.test.mjs's and tests/resize-targets.test.mjs's;
+  tests/sales-links.test.mjs:783 `pins.length >= 17`). Every earlier pin
+  raised it; these two did not, so two pins lost would go unseen. Raising it edits sales-links.test.mjs, which the
+  static read misses 364 files of (above) — Jeff's call.
 - **An ordering pin of `indexOf` against `indexOf` passes when its first
   text is gone** (§0.199's pre-run: a mutant deleting the restore's clean-up
   survived on one; that pin is fixed). About 60 such pins stand in some 35

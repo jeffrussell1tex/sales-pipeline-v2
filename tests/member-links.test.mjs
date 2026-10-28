@@ -388,8 +388,9 @@ test("T9 — the restore's clean-up, pinned (_links.mjs — state §0.205): a qu
         ind(8, "const held = await db.select({ id: users.id, profile: users.profile, kind: sql`jsonb_typeof(${users.profile})` }).from(users)"),
         ind(12, '.where(and(eq(users.orgId, orgId), inArray(users.id, ids)));'),
         ind(8, "const teams = await liveIdsInOrg('team', held.map((m) => own(m.profile).teamId), orgId);"),
+        ind(8, "const members = await liveIdsInOrg('member', held.map((m) => own(m.profile).managerId), orgId);"),
         ind(8, 'for (const m of held) {'), ind(12, "if (m.kind !== 'object') continue;"),
-        ind(12, 'const done = memberLinksCleared(m.profile, teams, reports);'),
+        ind(12, 'const done = memberLinksCleared(m.profile, teams, reports, members, m.id);'),
         ind(16, "profile: sql`coalesce(${users.profile}, '{}'::jsonb) || ${JSON.stringify(done.patch)}::jsonb`,"),
         ind(16, "teamJoinedAt: 'teamId' in done.patch ? null : sql`${users.teamJoinedAt}`,"),
         ind(12, "}).where(and(eq(users.orgId, orgId), eq(users.id, m.id), sql`jsonb_typeof(${users.profile}) = 'object'`)));"),
@@ -398,7 +399,7 @@ test("T9 — the restore's clean-up, pinned (_links.mjs — state §0.205): a qu
     assert.ok(!mem.includes('inArray(users.id, list)'), "the member read's ids are `ids` — the harness entry \"§0.204 kinds: another org's member counts as this org's (a rule assigns its tasks to them)\" quotes that text, which stays once");
 });
 
-test("T11 — the restore's clean-up, run on made-up rows (_links.mjs's own clearLineProducts and clearMemberLinks — state §0.205): each reads the org's restored rows, asks its own kind — a product, a team, a saved report — writes only what it cleared, in one batch, counts what it cleared — never a member whose profile is stored as anything but an object, which the write would not reach (JSON text a file gave: the review) — and names a field that fails", async () => {
+test("T11 — the restore's clean-up, run on made-up rows (_links.mjs's own clearLineProducts and clearMemberLinks — state §0.205): each reads the org's restored rows, asks its own kind — a product, a team, a saved report, since §0.212 a manager as a member — writes only what it cleared, in one batch, counts what it cleared — never a member whose profile is stored as anything but an object, which the write would not reach (JSON text a file gave: the review) — and names a field that fails", async () => {
     const l = fn('_links');
     const src = ['async function clearLineProducts(orgId, restored, failed) {', 'async function clearMemberLinks(orgId, restored, failed) {']
         .map((head) => between(l, head, '\n}\n')).join('\n');
@@ -424,18 +425,19 @@ test("T11 — the restore's clean-up, run on made-up rows (_links.mjs's own clea
             { id: 'q_b', orgId: 'org_B', lineItems: [{ productId: 'p_gone' }] },
         ],
         users: [
-            { id: 'm1', orgId: 'org_A', profile: { teamId: 'tm_b', pinnedReports: ['rep_a', 'rep_b'], quotaPlans: { 2026: { annual: 1 } } } },
-            { id: 'm2', orgId: 'org_A', profile: { teamId: 'tm_east', pinnedReports: ['rep_a'] } },
-            { id: 'm3', orgId: 'org_A', profile: { teamId: 'tm_east', pinnedReports: ['rep_b', 'rep_a'] } },
+            // since §0.212 each names a manager: m1 a member here (kept), m2 itself (cleared), m3 an id no member holds
+            { id: 'm1', orgId: 'org_A', profile: { teamId: 'tm_b', pinnedReports: ['rep_a', 'rep_b'], quotaPlans: { 2026: { annual: 1 } }, managerId: 'm2' } },
+            { id: 'm2', orgId: 'org_A', profile: { teamId: 'tm_east', pinnedReports: ['rep_a'], manager: 'Em Two', managerId: 'm2' } },
+            { id: 'm3', orgId: 'org_A', profile: { teamId: 'tm_east', pinnedReports: ['rep_b', 'rep_a'], manager: 'Gone Boss', managerId: 'usr_gone' } },
             { id: 'm4', orgId: 'org_A', profile: null },
             // JSON text a file gave: stored a jsonb string, read back parsed — another org's team and report, which the
             // write would not reach (its guard: jsonb_typeof = 'object'), so never counted
-            { id: 'm5', orgId: 'org_A', stored: 'string', profile: { teamId: 'tm_b', pinnedReports: ['rep_b'] } },
-            { id: 'm_b', orgId: 'org_B', profile: { teamId: 'tm_gone', pinnedReports: ['rep_gone'] } },
+            { id: 'm5', orgId: 'org_A', stored: 'string', profile: { teamId: 'tm_b', pinnedReports: ['rep_b'], managerId: 'usr_gone' } },
+            { id: 'm_b', orgId: 'org_B', profile: { teamId: 'tm_gone', pinnedReports: ['rep_gone'], managerId: 'usr_gone' } },
         ],
     };
     // Org A's records by kind — what liveIdsInOrg finds there; org B's none of them.
-    const LIVE = { product: ['p_a'], team: ['tm_east'], report: ['rep_a'] };
+    const LIVE = { product: ['p_a'], team: ['tm_east'], report: ['rep_a'], member: ['m1', 'm2', 'm3', 'm4', 'm5'] };
     const run = ({ fail = false } = {}) => {
         const reads = [], writes = [], batches = [], asks = [];
         const db = {
@@ -471,22 +473,25 @@ test("T11 — the restore's clean-up, run on made-up rows (_links.mjs's own clea
 
     const m = run();
     const mFailed = [];
-    assert.equal(await m.clearMemberLinks('org_A', restored, mFailed), 3,
-        "a team and two pins that name nothing of this org, one each — REGRESSION if more: m5's, stored as text, counted though the write never reaches it");
+    assert.equal(await m.clearMemberLinks('org_A', restored, mFailed), 5,
+        "a team, two pins and (§0.212) two managers that name nothing of this org or the member themselves, one each — REGRESSION if more: m5's, stored as text, counted though the write never reaches it");
     assert.deepEqual(m.asks, [
         { kind: 'team', ids: ['tm_b', 'tm_east', 'tm_east', undefined, 'tm_b'], orgId: 'org_A' },
         { kind: 'report', ids: ['rep_a', 'rep_b', 'rep_a', 'rep_b', 'rep_a', 'rep_b'], orgId: 'org_A' },
-    ], "a team asked as a team, a pin as a saved report — of every member's profile read (m5's too: asked in this org, never written)");
-    assert.deepEqual(m.writes.map((w) => w.ids), [['m1'], ['m3']], 'only the members it cleared, each its own row of this org — never m5');
-    const [w1, w3] = m.writes;
-    for (const w of [w1, w3]) {
+        { kind: 'member', ids: ['m2', 'm2', 'usr_gone', undefined, 'usr_gone'], orgId: 'org_A' },
+    ], "a team asked as a team, a pin as a saved report, a manager as a member — of every member's profile read (m5's too: asked in this org, never written)");
+    assert.deepEqual(m.writes.map((w) => w.ids), [['m1'], ['m2'], ['m3']], 'only the members it cleared, each its own row of this org — never m5');
+    const [w1, w2, w3] = m.writes;
+    for (const w of [w1, w2, w3]) {
         assert.deepEqual(Object.keys(w.set), ['profile', 'teamJoinedAt'], "the profile and the date they joined — never the team's name (B17)");
         assert.equal(w.set.profile.strings.join('?'), "coalesce(?, '{}'::jsonb) || ?::jsonb", 'merged into the profile as stored — the quota plans and every other key kept');
         assert.equal(w.set.profile.values[0], users.profile);
     }
-    assert.deepEqual(JSON.parse(w1.set.profile.values[1]), { teamId: null, pinnedReports: ['rep_a'] });
+    assert.deepEqual(JSON.parse(w1.set.profile.values[1]), { teamId: null, pinnedReports: ['rep_a'] }, 'a manager who is a member here is kept');
     assert.equal(w1.set.teamJoinedAt, null, 'a team cleared clears the date they joined it');
-    assert.deepEqual(JSON.parse(w3.set.profile.values[1]), { pinnedReports: ['rep_a'] }, 'a team that stands is not in the patch');
+    assert.deepEqual(JSON.parse(w2.set.profile.values[1]), { managerId: null }, 'a member restored as their own manager: the id cleared, the name kept');
+    assert.deepEqual(w2.set.teamJoinedAt.values, [users.teamJoinedAt]);
+    assert.deepEqual(JSON.parse(w3.set.profile.values[1]), { pinnedReports: ['rep_a'], managerId: null }, 'a team that stands is not in the patch; a manager no member here is cleared');
     assert.deepEqual(w3.set.teamJoinedAt.values, [users.teamJoinedAt], 'a team that stands keeps the date they joined it, as stored');
     assert.deepEqual(m.batches, [m.writes], 'one batch');
     assert.deepEqual(mFailed, []);

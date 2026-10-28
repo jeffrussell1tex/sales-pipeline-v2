@@ -11,14 +11,14 @@
 //             quote line's product, a rule's assignee (a member) and a claim's SPIFF (an entry of the org's
 //             list, not a row) — a link inside a list or an action checked through a view of the ids it
 //             holds (productIdsOf, assigneesOf, below); since §0.205 a member's team (an entry of the org's
-//             teams list) and pinned reports (saved reports of the org)
+//             teams list) and pinned reports (saved reports of the org); since §0.212 a member's manager (a member)
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
 //   follow    a row merged away links its survivor (E2); false — it is not live (an account's parent:
 //             the single save's placeAccount refuses one, §0.198)
 //   notSelf   the link may not name the row it is on (a job's follow-up or parent job — Jeff, 14 Oct:
-//             "Org check, no self-link"): 400, asked only of an id named anew
+//             "Org check, no self-link"; since §0.212 a member's manager): 400, asked only of an id named anew
 // The rule: a link a write NAMES that the row does not already hold must be a live row of this org —
 // a key the body does not name is not asked (the row keeps it); an id the row holds is never asked again
 // (an untouched link stands, even one whose row was deleted since); one merged away is stored as the row it
@@ -249,11 +249,15 @@ export function lineProductsCleared(lineItems, live) {
 // it; the team's name is a column, kept); a pin that names no saved report of this org, or is no text, is dropped, the
 // rest kept in their order. An empty team or pin names nothing and is kept; pins that are no list are left as they are
 // (every reader reads them as none); a profile that is no object, as it is. teams, reports: liveIdsInOrg's Maps.
-export function memberLinksCleared(profile, teams, reports) {
+// Since §0.212 their manager too: one that names no member of this org (members: liveIdsInOrg's Map), or is no text, or
+// names the member themselves (selfId), is cleared — the name stored with it kept, as a team's is. With no members
+// read, no manager is looked at.
+export function memberLinksCleared(profile, teams, reports, members, selfId) {
     const patch = {};
     let cleared = 0;
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return { patch, cleared };
     if (profile.teamId != null && profile.teamId !== '' && !teams.has(profile.teamId)) { patch.teamId = null; cleared++; }
+    if (members && profile.managerId != null && profile.managerId !== '' && (!members.has(profile.managerId) || profile.managerId === selfId)) { patch.managerId = null; cleared++; }
     if (Array.isArray(profile.pinnedReports)) {
         const kept = profile.pinnedReports.filter((id) => id == null || id === '' || reports.has(id));
         if (kept.length < profile.pinnedReports.length) { patch.pinnedReports = kept; cleared += profile.pinnedReports.length - kept.length; }

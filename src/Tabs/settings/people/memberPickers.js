@@ -40,7 +40,7 @@ export function heldTeam(form, options) {
 
 // Who the Manager box offers: a member of the org with access now whose role holds other members' records — an
 // Admin or a Manager (roles.js canSeeAll; the roles the Teams page offers as a team's manager) — never the member
-// themselves. { id, name }, by name (step B, §0.212, is to store the id).
+// themselves. { id, name }, by name; a pick stores the id with the name (managerPicked — state §0.212).
 export function managerOptions(users, selfId) {
     return (users || [])
         .filter((u) => u && u.name && u.id && u.id !== selfId && canSeeAll(u.role) && memberStatus(u) === 'Active')
@@ -48,17 +48,42 @@ export function managerOptions(users, selfId) {
         .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// The member's manager when the options do not offer them: null, or the words its greyed option shows.
-export function heldManager(form, options, users, selfId) {
-    const name = form?.manager;
-    if (blank(name) || (options || []).some((o) => o.name === name)) return null;
-    const m = (users || []).find((u) => u && u.name === name);
-    if (!m) return `${name} (no member has this name now)`;
-    if (m.id === selfId) return `${name} (this member)`;
+// The form's manager once one is picked from the box: the member's name and id together; '' (none) clears both.
+export function managerPicked(options, id) {
+    const m = (options || []).find((o) => o.id === id);
+    return { manager: m ? m.name : '', managerId: m ? m.id : '' };
+}
+
+// The name of a member's manager as the org names them now (state §0.212): the member the id names, else the name
+// stored with it — a row from before §0.212, or a manager no longer a member. users: the org's roster.
+export function managerNameOf(member, users) {
+    const id = member?.managerId;
+    const m = blank(id) ? null : (users || []).find((u) => u && u.id === id);
+    return (m && m.name) || member?.manager || null;
+}
+
+// Why a member the box does not offer is not offered: the words beside their name.
+const whyNotOffered = (m, selfId) => {
+    if (m.id === selfId) return '(this member)';
     const status = memberStatus(m);
-    if (status === 'Deactivated') return `${name} (deactivated)`;
-    if (status === 'Invited') return `${name} (invited, not yet joined)`;
-    return `${name} (${ROLE_LABEL[m.role] || m.role || 'no role'})`;
+    if (status === 'Deactivated') return '(deactivated)';
+    if (status === 'Invited') return '(invited, not yet joined)';
+    return `(${ROLE_LABEL[m.role] || m.role || 'no role'})`;
+};
+
+// The member's manager when the box does not offer them as stored: null, or the words their greyed chip shows — by
+// the id since §0.212; a name with no id (a row from before it) by the name, and one the box offers is not linked.
+export function heldManager(form, options, users, selfId) {
+    const id = form?.managerId, name = form?.manager;
+    if (!blank(id)) {
+        if ((options || []).some((o) => o.id === id)) return null;
+        const byId = (users || []).find((u) => u && u.id === id);
+        return byId ? `${byId.name} ${whyNotOffered(byId, selfId)}` : name ? `${name} (no longer a member)` : 'Former member';
+    }
+    if (blank(name)) return null;
+    if ((options || []).some((o) => o.name === name)) return `${name} (not linked \u2014 remove, then pick them again)`;
+    const m = (users || []).find((u) => u && u.name === name);
+    return m ? `${name} ${whyNotOffered(m, selfId)}` : `${name} (no member has this name now)`;
 }
 
 // The member's territory when the list does not hold it.

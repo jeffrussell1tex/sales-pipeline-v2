@@ -19,13 +19,20 @@
 // on the same rows, to show the test tells them apart. Pinned: the page's lines that are not run (its boxes, its
 // button, its card).
 // tests/integration/member-profile.itest.mjs guards the server's answers to the bodies the page now sends.
+//
+// And step B (state §0.212 — Jeff, 26 Oct: "Steps A and B"): the manager was stored by NAME (`profile.manager`), so a
+// rename broke "reports to", and the box was a list. Now `profile.managerId` — a member of this org, never the
+// member themselves — is sent with the name, asked by the server where a write names it anew (users.mjs MANAGER_LINK),
+// cleared by a restore where it names no member here, picked by a type-ahead, and read by id by the band, the Users
+// list and the export (S13-S16; I5 in the integration suite, each case shown failing on step A's server).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { PAGE_FIELDS, sameValue, memberChanges, roleChanged, formAfterSave, clause } from '../src/utils/memberSave.js';
 import { NETWORK_ERROR } from '../src/utils/storage.js';
-import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, heldManager, heldTerritory } from '../src/Tabs/settings/people/memberPickers.js';
+import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from '../src/Tabs/settings/people/memberPickers.js';
+import { linksAsked, linksDecided, memberLinksCleared, NOT_AN_ID, namesItself, notInOrg } from '../src/utils/linkIds.js';
 import { teamIdNamed, teamsWithMemberOn } from '../src/utils/teamMembership.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -102,7 +109,7 @@ test('S1 (P1) memberChanges sends the page fields that changed and nothing else 
         forecastCalls: {}, notificationPrefs: {}, emailSignature: 'X', quota: '0', userType: 'Admin', teamJoinedAt: null, vertical: 'Gov' };
     assert.deepEqual(memberChanges(TESS, { ...TESS, ...notSent }), {}, 'REGRESSION: a field the page does not edit is sent as it holds it');
     for (const k of Object.keys(notSent)) assert.ok(!PAGE_FIELDS.includes(k), `${k} is no page field`);
-    assert.deepEqual([...PAGE_FIELDS], ['name', 'title', 'phone', 'team', 'teamId', 'manager', 'territory']);
+    assert.deepEqual([...PAGE_FIELDS], ['name', 'title', 'phone', 'team', 'teamId', 'manager', 'managerId', 'territory']);
     assert.ok(Object.isFrozen(PAGE_FIELDS));
     // '', null and absent are one value — the server stores each as none.
     assert.deepEqual(memberChanges({ ...TESS, title: null }, { ...TESS, title: '' }), {}, "REGRESSION: '' against none reads as a change");
@@ -250,14 +257,14 @@ test('S7 (P3) the Team box: each team of the list once, by name, a second of one
     assert.equal(heldTeam({ team: '', teamId: null }, opts), null);
 });
 
-test('S8 (P12) the Manager box offers members with access whose role is Admin or Manager (roles.js canSeeAll), never the member; a stored manager it does not offer shows as itself with why (OLD :914: every named member but this one)', () => {
+test('S8 (P12) the Manager box offers members with access whose role is Admin or Manager (roles.js canSeeAll), never the member; a stored manager it does not offer shows as itself with why, and a name with no id it offers is not linked (§0.212) (OLD :914: every named member but this one)', () => {
     const opts = managerOptions(USERS, 'usr_tess');
     assert.deepEqual(opts, [{ id: 'usr_bob', name: 'Bob Russell' }, { id: 'usr_jo', name: 'Jo Admin' }],
         'not Ivy (invited), Dee (deactivated), Dan (Dispatcher), Karen (Sales Rep) or Tess herself');
     assert.deepEqual(managerOptions(USERS, 'usr_bob').map((o) => o.id), ['usr_jo'], 'never the member themselves');
     assert.deepEqual(managerOptions([JO, BOB], 'usr_x').map((o) => o.name), ['Bob Russell', 'Jo Admin'], "REGRESSION: the managers in the roster's order, not by name");
     const held = (manager, selfId = 'usr_tess') => heldManager({ manager }, managerOptions(USERS, selfId), USERS, selfId);
-    assert.equal(held('Bob Russell'), null, 'offered: no held option');
+    assert.equal(held('Bob Russell'), 'Bob Russell (not linked — remove, then pick them again)', 'REGRESSION (§0.212): a name with no id that the box offers reads as linked');
     assert.equal(held(''), null);
     assert.equal(held(null), null);
     assert.equal(held('Karen Rep'), 'Karen Rep (Sales Rep)', 'REGRESSION: a held manager reads as none');
@@ -524,11 +531,21 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.equal(r12.state.form.role, 'Manager');
     assert.deepEqual(repIdsOf(r12.state.settings.teams), [[], ['usr_eve'], ['usr_tess'], 'Legacy']);
 
-    // R13 a manager alone: who the member reports to, and no team's manager (Jeff, 26 Oct: "Only who they report to").
-    const r13 = await runSave({ user: { ...TESS, manager: null }, form: { ...TESS, manager: 'Bob Russell' } });
-    assert.deepEqual(r13.calls.map((c) => c.body), [{ id: 'usr_tess', manager: 'Bob Russell' }],
+    // R13 a manager alone: who the member reports to, and no team's manager (Jeff, 26 Oct: "Only who they report to") —
+    // picked as the member, by their id with their name (§0.212).
+    const mgrs = managerOptions(USERS, 'usr_tess');
+    const r13 = await runSave({ user: { ...TESS, manager: null }, form: { ...TESS, ...managerPicked(mgrs, 'usr_bob') } });
+    assert.deepEqual(r13.calls.map((c) => c.body), [{ id: 'usr_tess', manager: 'Bob Russell', managerId: 'usr_bob' }],
         "REGRESSION: every save makes the member's manager their team's manager again");
     assert.equal(r13.state.settings.teams, TEAMS);
+    // R13b a row from before §0.212 — the name, no id — picks the member it names: the id goes, with the name.
+    const r13b = await runSave({ user: TESS, form: { ...TESS, ...managerPicked(mgrs, 'usr_bob') } });
+    assert.deepEqual(r13b.calls.map((c) => c.body), [{ id: 'usr_tess', manager: 'Bob Russell', managerId: 'usr_bob' }],
+        'REGRESSION (§0.212): a manager sent without their name, or their id without the other');
+    // R13c the box cleared: both go, empty.
+    const linked = { ...TESS, managerId: 'usr_bob' };
+    const r13c = await runSave({ user: linked, form: { ...linked, ...managerPicked(mgrs, '') } });
+    assert.deepEqual(r13c.calls.map((c) => c.body), [{ id: 'usr_tess', manager: '', managerId: '' }]);
 
     // R14 a role alone, refused: its words; nothing held; the pick still waits.
     const r14 = await runSave({ user: TESS, form: { ...TESS, role: 'Manager' }, answers: { 'user-role': [{ status: 400, body: { error: 'TEST role refused' } }] } });
@@ -691,7 +708,7 @@ test("S10 OLD — faed240's handleSave on the same rows: the whole form as loade
 
 // ── S11-S12 the page's lines ────────────────────────────────────────────────
 
-test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Save changes" against it (run), picks a team by id, offers held values as themselves, and sets what landed once after the requests', async () => {
+test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Save changes" against it (run), picks a team and (§0.212) a manager by id, offers held values as themselves, and sets what landed once after the requests', async () => {
     const page = between(code(read(UD)), 'const UserProfilePage = ', 'export const UsersDetail = ');
     once(page, ind(0, 'const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }) => {'));
     once(page, ind(4, 'const { setSettings, showConfirm, setMyProfile } = useApp();'));
@@ -708,8 +725,11 @@ test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Sa
     once(page, ind(32, "<select style={sel} value={teamHeld ? HELD_TEAM : (form.teamId || '')} onChange={e=>pickTeam(e.target.value)}>"));
     once(page, ind(36, '{teamHeld && <option value={HELD_TEAM} disabled>{teamHeld}</option>}'));
     once(page, ind(36, '{teamOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}'));
-    once(page, ind(36, '{mgrHeld && <option value={form.manager} disabled>{mgrHeld}</option>}'));
-    once(page, ind(36, '{mgrOpts.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}'));
+    // The Manager box, a type-ahead of one pick since §0.212 (S16): the member by id, their name with it, held as itself.
+    once(page, ind(4, 'const pickManager = (id) => setForm(prev => ({ ...prev, ...managerPicked(mgrOpts, id) }));'));
+    once(page, ind(32, '<MemberTypeahead options={mgrOpts} chosenName={managerNameOf(form, settings.users)} held={mgrHeld}'), "REGRESSION: the chip reads the stored name, not the id's member");
+    once(page, ind(36, 'onPick={pickManager} inputStyle={inp} placeholder="Search Admins and Managers…" />'));
+    assert.ok(!page.includes('value={form.manager'), 'REGRESSION (§0.212): the Manager box a list of names again');
     once(page, ind(36, '{terrHeld && <option value={form.territory} disabled>{terrHeld}</option>}'));
     once(page, ind(20, "{dirty && <PeoplePriBtn onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</PeoplePriBtn>}"));
     assert.ok(!page.includes("'✓ Saved'"), 'the button leaves once nothing waits');
@@ -740,6 +760,143 @@ test("S12 (P25) the Dispatch technician card's line shows — SectionCard takes 
     once(s, ind(24, '<SectionCard title="Dispatch technician" description="Field technicians are managed in the Dispatch tab.">'));
     assert.ok(!/ desc=/.test(s), "REGRESSION: the Dispatch card's line is lost again (`desc=` is no prop of SectionCard)");
     once(s, 'const SectionCard = ({ title, description, headAction, children }) => (');
+});
+
+// ── S13-S16 the manager by id (state §0.212) ────────────────────────────────
+
+const USERS_MJS = 'netlify/functions/users.mjs';
+const MANAGER_LINE = "const MANAGER_LINK = [{ key: 'managerId', kind: 'member', notSelf: true }];";
+const MANAGER_LINK = new Function(`return ${MANAGER_LINE.slice('const MANAGER_LINK = '.length, -1)};`)();
+const MANAGED_PUT = ind(16, 'const managed = await checkLinks(MANAGER_LINK, data, { id: data.id, managerId: before?.profile?.managerId ?? null }, orgId);');
+const MANAGED_NEW = ind(16, 'const managed = await checkLinks(MANAGER_LINK, data, { id: clean.id, managerId: null }, orgId);');
+const PAIR_NAME = ind(16, "if ('manager' in data && !('managerId' in data) && !sameValue(data.manager, before?.profile?.manager)) clean.profile = { ...clean.profile, managerId: null };");
+const PAIR_ID = ind(16, "if ('managerId' in data && !('manager' in data) && !sameValue(data.managerId, before?.profile?.managerId)) clean.profile = { ...clean.profile, manager: null };");
+const MANAGED_REFUSED = ind(16, 'if (managed.error) return { statusCode: managed.status, headers, body: JSON.stringify({ error: managed.error, field: managed.field }) };');
+
+test('S13 (P14) a member\'s manager is a link: a member of this org by id, never themselves, asked only where a write names one anew — the PUT and the create ask it after the team, and sanitize stores it', () => {
+    const s = code(read(USERS_MJS));
+    once(s, MANAGER_LINE, 'the spec, run below');
+    assert.ok(s.includes("const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];\n" + MANAGER_LINE), 'after the team and pin specs (link-ids.test.mjs keeps those two together)');
+    // Run: what each body asks of the stored row { id, managerId }.
+    const stored = { id: 'usr_tess', managerId: 'usr_bob' };
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', phone: '2' }, stored), { asks: [] }, 'a save naming no manager asks nothing');
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: 'usr_bob' }, stored), { asks: [] }, 'the id the row holds is never asked again');
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: '' }, stored), { asks: [] }, "'' clears it, no link");
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: null }, stored), { asks: [] });
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: 'usr_tess' }, stored), { status: 400, error: namesItself('member'), field: 'managerId' },
+        'REGRESSION: a member named their own manager');
+    assert.equal(namesItself('member'), 'A member cannot name itself.');
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: 5 }, stored), { status: 400, error: NOT_AN_ID, field: 'managerId' });
+    const fresh = linksAsked(MANAGER_LINK, { id: 'usr_tess', managerId: 'usr_jo' }, stored);
+    assert.deepEqual(fresh, { asks: [{ key: 'managerId', kind: 'member', shape: 'one', follow: true, fresh: ['usr_jo'] }] }, 'an id named anew is asked, as a member');
+    assert.deepEqual(linksDecided(fresh.asks, { managerId: 'usr_jo' }, () => new Map()), { status: 404, error: notInOrg('member'), field: 'managerId' },
+        "another org's member, or an id no member holds");
+    assert.equal(notInOrg('member'), 'That member is not in your organization — pick one from the list.');
+    assert.deepEqual(linksDecided(fresh.asks, { managerId: 'usr_jo' }, () => new Map([['usr_jo', 'usr_jo']])), { set: {} });
+    // Stored, and asked where each write asks its team.
+    once(s, ind(12, 'managerId:     data.managerId     || null,'), 'REGRESSION: sanitize forgets the manager id — every save, the member\'s own too, wipes it');
+    once(s, MANAGED_PUT);
+    once(s, MANAGED_NEW);
+    assert.equal(s.split('\n').filter((l) => l === MANAGED_REFUSED).length, 2, 'each refused, nothing written');
+    order(s, ind(16, 'const teamed = await checkLinks(TEAM_LINK, data, null, orgId);'), MANAGED_NEW, MANAGED_REFUSED, ind(16, 'const result = await upsertUser(clean);'));
+    order(s, ind(16, 'const teamed = await checkLinks(TEAM_LINK, data, { teamId: before?.profile?.teamId ?? null }, orgId);'), MANAGED_PUT, MANAGED_REFUSED,
+        PAIR_NAME, PAIR_ID, ind(16, 'const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);'));
+    // The create's own id is the minted one: a body's id, however it reads, is never the new row's (the review).
+    assert.deepEqual(linksAsked(MANAGER_LINK, { id: 'usr_x', managerId: 'usr_x' }, { id: 'usr_minted', managerId: null }).asks.map((a) => a.fresh), [['usr_x']],
+        "REGRESSION: a create's body id read as the new row's — refused as naming itself, not looked for");
+    // The PUT keeps the name and the id one manager — run, on the row before (`before`) and the row it writes (`clean`).
+    once(s, PAIR_NAME);
+    once(s, PAIR_ID);
+    const paired = (data, beforeProfile) => {
+        const clean = { profile: { manager: data.manager ?? beforeProfile.manager, managerId: data.managerId ?? beforeProfile.managerId } };
+        new Function('data', 'before', 'clean', 'sameValue', `${PAIR_NAME.trim()}\n${PAIR_ID.trim()}`)(data, { profile: beforeProfile }, clean, sameValue);
+        return clean.profile;
+    };
+    const linked = { manager: 'Bob Russell', managerId: 'usr_bob' };
+    assert.deepEqual(paired({ id: 'usr_tess', manager: 'Jo Admin' }, linked), { manager: 'Jo Admin', managerId: null },
+        'REGRESSION: a name changed alone keeps the old id — every reader names the old manager (a page loaded before §0.212)');
+    assert.deepEqual(paired({ id: 'usr_tess', managerId: 'usr_jo' }, linked), { manager: null, managerId: 'usr_jo' },
+        "REGRESSION: an id changed alone keeps the old name — read once that member is removed");
+    assert.deepEqual(paired({ id: 'usr_tess', manager: 'Bob Russell' }, linked), linked, 'the name sent as it stands unlinks nothing');
+    assert.deepEqual(paired({ id: 'usr_tess', manager: 'Jo Admin', managerId: 'usr_jo' }, linked), { manager: 'Jo Admin', managerId: 'usr_jo' }, 'both: as sent');
+    assert.deepEqual(paired({ id: 'usr_tess', phone: '2' }, linked), linked, 'neither: as stored');
+});
+
+test('S14 (P14) a restore clears a member\'s manager that names no member of this org, or the member themselves — the name kept, the rest as before; with no members read it looks at none', () => {
+    const members = new Map([['usr_bob', 'usr_bob'], ['usr_tess', 'usr_tess']]);
+    const teams = new Map([['team_east', 'team_east']]), reports = new Map();
+    const p = (managerId) => ({ teamId: 'team_east', manager: 'Bob Russell', managerId });
+    assert.deepEqual(memberLinksCleared(p('usr_gone'), teams, reports, members, 'usr_tess'), { patch: { managerId: null }, cleared: 1 },
+        "REGRESSION: a restored member's unknown manager is kept");
+    assert.deepEqual(memberLinksCleared(p('usr_bob'), teams, reports, members, 'usr_tess'), { patch: {}, cleared: 0 }, 'a member of this org is kept');
+    assert.deepEqual(memberLinksCleared(p('usr_tess'), teams, reports, members, 'usr_tess'), { patch: { managerId: null }, cleared: 1 },
+        'REGRESSION: a member restored as their own manager is kept');
+    assert.deepEqual(memberLinksCleared(p(7), teams, reports, members, 'usr_tess'), { patch: { managerId: null }, cleared: 1 }, 'no text names no member');
+    assert.deepEqual(memberLinksCleared(p(''), teams, reports, members, 'usr_tess'), { patch: {}, cleared: 0 }, 'an empty manager names nothing');
+    assert.deepEqual(memberLinksCleared(p('usr_gone'), teams, reports), { patch: {}, cleared: 0 }, 'with no members read, as before §0.212');
+    assert.deepEqual(memberLinksCleared({ teamId: 'team_gone', managerId: 'usr_gone' }, teams, reports, members, 'usr_tess'), { patch: { teamId: null, managerId: null }, cleared: 2 });
+});
+
+test('S15 (P14) the readers name the manager as the org names them now — the member the id names, else the stored name — and a pick sets both; a manager the box does not offer shows by the id why (S8 has the names)', () => {
+    const BOB2 = { ...BOB, name: 'Robert Russell' };   // Bob renamed since
+    const roster = [TESS, BOB2, JO, KAREN, DEE, IVY];
+    assert.equal(managerNameOf({ manager: 'Bob Russell', managerId: 'usr_bob' }, roster), 'Robert Russell', 'REGRESSION: the stale stored name over the id\'s');
+    assert.equal(managerNameOf({ manager: 'Bob Russell', managerId: 'usr_gone' }, roster), 'Bob Russell', 'a manager no longer a member: the stored name');
+    assert.equal(managerNameOf({ manager: 'Bob Russell' }, roster), 'Bob Russell', 'a row from before §0.212 reads as before');
+    assert.equal(managerNameOf({}, roster), null);
+    assert.equal(managerNameOf(null, roster), null);
+    assert.equal(managerNameOf({ managerId: 'usr_bob' }, undefined), null);
+    const opts = managerOptions(USERS, 'usr_tess');
+    assert.deepEqual(managerPicked(opts, 'usr_jo'), { manager: 'Jo Admin', managerId: 'usr_jo' }, 'REGRESSION: a member picked by name, not id');
+    assert.deepEqual(managerPicked(opts, ''), { manager: '', managerId: '' }, 'none clears both');
+    assert.deepEqual(managerPicked(opts, 'usr_karen'), { manager: '', managerId: '' }, 'one the box does not offer is no pick');
+    const held = (managerId, manager, selfId = 'usr_tess') => heldManager({ managerId, manager }, managerOptions(USERS, selfId), USERS, selfId);
+    assert.equal(held('usr_bob', 'Old Name'), null, 'offered: no words');
+    assert.equal(held('usr_karen', 'Karen Rep'), 'Karen Rep (Sales Rep)');
+    assert.equal(held('usr_dee', 'x'), 'Dee Gone (deactivated)', "by the id: the member's name now");
+    assert.equal(held('usr_ivy', 'Ivy Invited'), 'Ivy Invited (invited, not yet joined)');
+    assert.equal(held('usr_tess', 'Tess Undoer'), 'Tess Undoer (this member)');
+    assert.equal(held('usr_gone', 'Old Name'), 'Old Name (no longer a member)', 'REGRESSION: an id no member holds reads as none');
+    assert.equal(held('usr_gone', ''), 'Former member', 'an id no member holds, stored with no name: the house word (documentPeople.js)');
+    assert.equal(held('usr_dee', 'Old Name'), 'Dee Gone (deactivated)', "REGRESSION: a held manager by id shows the stored name, not the member's now");
+    // The three readers, pinned and — the export's line — run.
+    const s = code(read(UD));
+    once(s, ind(28, "{roleLabel(user.role)} · {user.team || '—'} · reports to {managerNameOf(user, settings.users) || '—'}"), 'REGRESSION: the band reports to the stored name');
+    once(s, ind(12, 'manager: managerNameOf(u, settings.users),'), 'REGRESSION: the Users list reads the stored name');
+    const EXPORT = ind(16, "if (f === 'Manager') return `\"${managerNameOf(u, users)||''}\"`;");
+    once(s, EXPORT, 'REGRESSION: the export names the manager by the stored name');
+    const cell = new Function('f', 'u', 'users', 'managerNameOf', `${EXPORT.trim()} return null;`);
+    assert.equal(cell('Manager', { manager: 'Bob Russell', managerId: 'usr_bob' }, roster, managerNameOf), '"Robert Russell"');
+    assert.equal(cell('Manager', {}, roster, managerNameOf), '""');
+});
+
+test('S16 (P14, D15) the Manager box is a type-ahead of one pick at module scope — the shared matcher with its count, a portaled list, Escape marked handled, the chip\'s × clearing the pick', () => {
+    const s = code(read(UD));
+    const box = between(s, 'const MemberTypeahead = ', '\n};');
+    assert.ok(s.indexOf('const MemberTypeahead = ') < s.indexOf('const UserProfilePage = '), 'declared at module scope, before the page that draws it');
+    once(box, 'const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeholder }) => {');
+    once(box, ind(4, 'const { shown, more } = peopleMatching(options, query);'), 'the shared matcher (the search guard holds its "N more" line)');
+    // Placed from the field, closed by a scroll or a resize but not by its own scrollbar or its field's own scroll, a press
+    // in it keeping the focus.
+    once(box, ind(8, 'if (r) setPos({ ...popoverPlacement(r, { width: r.width, height: 220 }), width: r.width });'), 'placed from the field\'s rect');
+    once(box, ind(8, "window.addEventListener('scroll', close, true);"), 'REGRESSION: a scroll leaves the list where the field was');
+    once(box, ind(8, "window.addEventListener('resize', close);"));
+    once(box, ind(8, 'const close = (e) => { if (e && e.target instanceof Node && (e.target === fieldRef.current || (listRef.current && listRef.current.contains(e.target)))) return; setOpen(false); };'),
+        "its own scrollbar and its field's own scroll keep it open — and a resize, whose target is the window, is checked for a node first (REGRESSION: it threw and left the list open; tests/resize-targets.test.mjs)");
+    once(box, ind(16, '<div ref={listRef} onMouseDown={e => e.preventDefault()}'), 'a press in the list keeps the focus in the field');
+    once(box, ind(24, "<div style={{ padding:'8px 10px', fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No Admin or Manager matches.</div>"), 'the words when no one matches');
+    // A pick swaps the field for the chip: the focus goes to its ×, and × back to the field (the review).
+    once(box, ind(4, "const pick = (id) => { onPick(id); setQuery(''); setOpen(false); setRefocusChip(true); };"), 'REGRESSION: a pick drops the focus to the page');
+    once(box, ind(8, 'if (refocusChip && chipRef.current) { chipRef.current.focus(); setRefocusChip(false); }'));
+    once(box, ind(20, "else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }"), "REGRESSION: the box's Escape left unmarked — App's own Escape acts on it too");
+    once(box, ind(20, "if (e.key === 'Enter' && open && shown[0]) { e.preventDefault(); pick(shown[0].id); }"));
+    once(box, ind(12, '{open && pos && createPortal('), 'the list portaled — no ancestor clips or traps it');
+    assert.ok(box.includes("position:'fixed'"), 'and fixed, from the field');
+    once(box, ind(12, "<button ref={chipRef} type=\"button\" onClick={() => { setRefocus(true); onPick(''); }} title={`Remove ${chosenName || 'the manager'}`}"),
+        "REGRESSION: the chip's × clears nothing");
+    once(box, ind(4, 'if (chosenName || held) return ('), 'a chosen or held manager shows as a chip');
+    once(box, ind(12, "<span style={{ color: held ? T.inkMuted : T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{held || chosenName}</span>"),
+        'held words greyed — no new colour');
 });
 
 test('the suites: this file is graded by the harness', () => {

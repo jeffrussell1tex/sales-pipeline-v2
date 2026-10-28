@@ -1,14 +1,15 @@
 // memberSave.js — what the member profile page (Settings → Users) sends (state §0.211 — Jeff, 15 Oct: "Send only
 // what changed"; 16 Oct: "File it, own batch next"). Pure, so the rules run under node --test.
-// The page edits seven fields of the member's flat row (users.mjs flatten: the profile's keys and the columns side
+// The page edits eight fields of the member's flat row (users.mjs flatten: the profile's keys and the columns side
 // by side). A save sends those that differ from the member as the page holds them — the row it opened on, then the
 // row as stored after each save — and nothing else: never access, the status, the login or the pins (§0.202,
 // §0.205), never a field it only shows (the email) or does not show. The server's merge keeps every key it stores
 // that a save leaves out (users.mjs mergeForUpdate). The role is not one of them: user-role.mjs alone changes it.
 
 // A team is two fields: its id (the link — guide §18b98 rule 1) and its name (text the digest, alerts and Reports
-// read), always sent together.
-export const PAGE_FIELDS = Object.freeze(['name', 'title', 'phone', 'team', 'teamId', 'manager', 'territory']);
+// read), always sent together. So is a manager (state §0.212): their id (the link — a member of this org, guide
+// §18b102 rule 9) and their name (text a row from before §0.212 still reads).
+export const PAGE_FIELDS = Object.freeze(['name', 'title', 'phone', 'team', 'teamId', 'manager', 'managerId', 'territory']);
 
 // '', null and absent are one value: the server stores each as none (users.mjs sanitize, `|| null`).
 const blank = (v) => v === null || v === undefined || v === '';
@@ -23,6 +24,8 @@ export function memberChanges(first, form) {
     if ('name' in out) { out.firstName = null; out.lastName = null; }
     // A team is its id and its name together: the server never pairs them.
     if ('team' in out || 'teamId' in out) { out.team = form.team ?? null; out.teamId = form.teamId ?? null; }
+    // A manager likewise — picked as the member, so a name only a row from before §0.212 holds is linked when picked.
+    if ('manager' in out || 'managerId' in out) { out.manager = form.manager ?? null; out.managerId = form.managerId ?? null; }
     return out;
 }
 

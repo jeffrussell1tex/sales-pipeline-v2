@@ -228,8 +228,10 @@ const SPECS = {
     'spiff-claims': ["const CLAIM_LINKS = [{ key: 'opportunityId', kind: 'deal' }, { key: 'spiffId', kind: 'spiff' }];"],
     quotes: ["const QUOTE_LINES = [{ key: 'lineItems', kind: 'product', shape: 'many' }];"],
     automations: ["const RULE_LINKS = [{ key: 'actions', kind: 'member', shape: 'many' }];"],
-    // A member's (§0.205): tests/member-links.test.mjs runs each, and pins where each is asked.
-    users: ["const TEAM_LINK = [{ key: 'teamId', kind: 'team' }];", "const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];"],
+    // A member's (§0.205; their manager since §0.212): tests/member-links.test.mjs and tests/member-profile-save.test.mjs
+    // run each, and pin where each is asked.
+    users: ["const TEAM_LINK = [{ key: 'teamId', kind: 'team' }];", "const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];",
+        "const MANAGER_LINK = [{ key: 'managerId', kind: 'member', notSelf: true }];"],
 };
 
 test('THE GUARD: each endpoint names its links — the fields batch 4 lists and E1\'s CRM extras', () => {
@@ -291,8 +293,9 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
         ['accounts', 'parents', 0, 2], ['dispatch-customers', 'linked', 2, 0], ['dispatch-jobs', 'linked', 2, 0],
         // a sales record's (§0.204): a claim's create and save, a quote's, a rule's — none takes a batch
         ['spiff-claims', 'linked', 2, 0], ['quotes', 'lined', 2, 0], ['automations', 'assigned', 2, 0],
-        // a member's (§0.205): the create's and the PUT's team, the member's own pins
-        ['users', 'teamed', 2, 0], ['users', 'pinned', 1, 0],
+        // a member's (§0.205): the create's and the PUT's team, the member's own pins; since §0.212 the create's and the
+        // PUT's manager
+        ['users', 'teamed', 2, 0], ['users', 'pinned', 1, 0], ['users', 'managed', 2, 0],
     ]) {
         const s = fn(name);
         assert.equal(count(s, ONE(v)), single, `${name}: each single write's refusal is answered`);

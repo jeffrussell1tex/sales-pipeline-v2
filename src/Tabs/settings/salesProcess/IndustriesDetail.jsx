@@ -79,11 +79,12 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const [renamingInd,  setRenamingInd]      = useState(null); // industry key
     const [renameIndVal, setRenameIndVal]     = useState('');
 
-    // Close kebab on click-outside
+    // Close kebab on click-outside, scroll or resize — but not on an event inside it (its own scrollbar).
+    // A resize's target is the window, which `contains` refuses: the node check comes first (state §0.212).
     React.useEffect(() => {
         if (openIndKebab === null) return;
         const handler = (e) => {
-            if (kebabMenuRef.current && e && e.target && kebabMenuRef.current.contains(e.target)) return;
+            if (kebabMenuRef.current && e && e.target instanceof Node && kebabMenuRef.current.contains(e.target)) return;
             setOpenIndKebab(null);
         };
         document.addEventListener('click', handler);

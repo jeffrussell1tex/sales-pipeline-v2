@@ -26,7 +26,7 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 const ADMIN_ONLY = [
     'id', 'orgId', 'clerkUserId', 'name',
     'role', 'userType', 'active', 'status',
-    'team', 'teamId', 'territory', 'vertical', 'manager', 'teamJoinedAt',
+    'team', 'teamId', 'territory', 'vertical', 'manager', 'managerId', 'teamJoinedAt',
     'quota', 'annualQuota', 'q1Quota', 'q2Quota', 'q3Quota', 'q4Quota', 'quotaType',
     'forecastCalls', 'quotaPlans',
 ];

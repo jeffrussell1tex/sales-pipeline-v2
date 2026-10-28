@@ -9,7 +9,10 @@ import { memberStatus, invitationEntries } from './memberStatus.js';
 import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
 import { teamIdNamed, teamsWithMembers, teamsWithout, teamsWithMemberOn } from '../../../utils/teamMembership.js';
 import { memberChanges, roleChanged, formAfterSave, clause } from '../../../utils/memberSave.js';
-import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, heldManager, heldTerritory } from './memberPickers.js';
+import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from './memberPickers.js';
+import { peopleMatching } from '../../../utils/documentPeople.js';
+import { searchKey } from '../../../utils/searchMatch.js';
+import { popoverPlacement } from '../../../utils/popoverPlacement.js';
 // THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
 // re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
 // which is how a role added on the server went missing here; the server refuses
@@ -342,7 +345,7 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
                 if (f === 'Email') return `"${u.email||''}"`;
                 if (f === 'Role') return `"${u.role||''}"`;
                 if (f === 'Team') return `"${u.team||''}"`;
-                if (f === 'Manager') return `"${u.manager||''}"`;
+                if (f === 'Manager') return `"${managerNameOf(u, users)||''}"`;
                 if (f === 'Territory') return `"${u.territory||''}"`;
                 if (f === 'Status') return `"${memberStatus(u)}"`;   // was "Active" for everyone (state §0.164)
                 // Live from Clerk (§0.59) — was smsNotifications.enabled, a
@@ -903,6 +906,79 @@ const StatusPill = ({ status }) => {
     );
 };
 
+// The Manager box (state §0.212 — guide §18b77 rule 1: a choice of people is a type-ahead, never a list of everyone):
+// the chosen member as a chip with an × — greyed, with why, when the box does not offer them as stored — or, with
+// none chosen, a search of the members offered by the shared matcher (fifty, best first, the rest announced). The
+// list is portaled and fixed, from the field's rect (guide §16, the menu rule); its Escape is marked, so App's own
+// Escape leaves the page be (state §0.177).
+const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeholder }) => {
+    const [query, setQuery] = useState('');
+    const [open, setOpen] = useState(false);
+    const [pos, setPos] = useState(null);
+    const [refocus, setRefocus] = useState(false);
+    // A pick swaps the field for the chip: the focus goes to the chip's ×, not to the page.
+    const [refocusChip, setRefocusChip] = useState(false);
+    const chipRef = React.useRef(null);
+    const fieldRef = React.useRef(null);
+    const listRef = React.useRef(null);
+    const { shown, more } = peopleMatching(options, query);
+    const show = (q) => {
+        const r = searchKey(q) && fieldRef.current ? fieldRef.current.getBoundingClientRect() : null;
+        if (r) setPos({ ...popoverPlacement(r, { width: r.width, height: 220 }), width: r.width });
+        setOpen(!!r);
+    };
+    const pick = (id) => { onPick(id); setQuery(''); setOpen(false); setRefocusChip(true); };
+    React.useEffect(() => {
+        if (refocusChip && chipRef.current) { chipRef.current.focus(); setRefocusChip(false); }
+    }, [refocusChip, chosenName, held]);
+    // Closed by a scroll or a resize, which move the field from under it — but not by its own scrollbar, nor by the
+    // field's own scroll as the query outgrows it (a text box scrolls its text, and says so). A resize's target is the
+    // window, which `contains` refuses: the node check comes first (state §0.212, its browser check).
+    React.useEffect(() => {
+        if (!open) return;
+        const close = (e) => { if (e && e.target instanceof Node && (e.target === fieldRef.current || (listRef.current && listRef.current.contains(e.target)))) return; setOpen(false); };
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close);
+        return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+    }, [open]);
+    if (chosenName || held) return (
+        <div style={{ ...inputStyle, display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, cursor:'default' }}>
+            <span style={{ color: held ? T.inkMuted : T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{held || chosenName}</span>
+            <button ref={chipRef} type="button" onClick={() => { setRefocus(true); onPick(''); }} title={`Remove ${chosenName || 'the manager'}`}
+                style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:14, lineHeight:1, padding:0 }}>×</button>
+        </div>
+    );
+    return (
+        <div>
+            <input ref={fieldRef} type="text" value={query} placeholder={placeholder} autoComplete="off" autoFocus={refocus} style={inputStyle}
+                onChange={e => { setQuery(e.target.value); show(e.target.value); }}
+                onFocus={() => show(query)}
+                onBlur={() => setTimeout(() => setOpen(false), 200)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter' && open && shown[0]) { e.preventDefault(); pick(shown[0].id); }
+                    else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }
+                }}/>
+            {open && pos && createPortal(
+                <div ref={listRef} onMouseDown={e => e.preventDefault()}
+                    style={{ position:'fixed', left:pos.left, ...(pos.top != null ? { top:pos.top } : { bottom:pos.bottom }), width:pos.width, maxHeight:220, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, boxShadow:'0 4px 12px rgba(42,38,34,0.12)' }}>
+                    {shown.length === 0 ? (
+                        <div style={{ padding:'8px 10px', fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No Admin or Manager matches.</div>
+                    ) : shown.map(p => (
+                        <div key={p.id} onClick={() => pick(p.id)}
+                            style={{ padding:'8px 10px', cursor:'pointer', borderBottom:`1px solid ${T.border}`, fontWeight:600, fontSize:12.5, color:T.ink, fontFamily:T.sans }}
+                            onMouseEnter={e => { e.currentTarget.style.background = T.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            {p.name}
+                        </div>
+                    ))}
+                    {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position:'sticky', bottom:0, background:T.surface, padding:'6px 10px', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{more} more — keep typing</div>}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
+
 const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }) => {
     const { setSettings, showConfirm, setMyProfile } = useApp();
     // The member as this page holds them (state §0.211): the roster's row it opened on, then the row as stored after
@@ -930,6 +1006,8 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }
     const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
     // A team is picked by its id and saved with its name (§0.211); unassigned clears both (memberPickers.js).
     const pickTeam = (id) => setForm(prev => ({ ...prev, ...teamPicked(teamOpts, id) }));
+    // A manager is picked as the member, by their id with their name; none clears both (§0.212, memberPickers.js).
+    const pickManager = (id) => setForm(prev => ({ ...prev, ...managerPicked(mgrOpts, id) }));
 
     const handleSave = async () => {
         if (!String(form.name ?? '').trim()) { setError('A member needs a name.'); return; }
@@ -1129,7 +1207,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }
                     <div>
                         <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>{user.name}</div>
                         <div style={{ fontSize:13, color:T.inkMid, marginTop:2 }}>
-                            {roleLabel(user.role)} · {user.team || '—'} · reports to {user.manager || '—'}
+                            {roleLabel(user.role)} · {user.team || '—'} · reports to {managerNameOf(user, settings.users) || '—'}
                             <StatusPill status={status}/>
                         </div>
                     </div>
@@ -1212,11 +1290,8 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }
                             </div>
                             <div>
                                 <label style={lbl}>Manager</label>
-                                <select style={sel} value={form.manager||''} onChange={e=>handleChange('manager',e.target.value)}>
-                                    <option value="">— none —</option>
-                                    {mgrHeld && <option value={form.manager} disabled>{mgrHeld}</option>}
-                                    {mgrOpts.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
-                                </select>
+                                <MemberTypeahead options={mgrOpts} chosenName={managerNameOf(form, settings.users)} held={mgrHeld}
+                                    onPick={pickManager} inputStyle={inp} placeholder="Search Admins and Managers…" />
                             </div>
                             <div>
                                 <label style={lbl}>Territory</label>
@@ -1346,11 +1421,12 @@ export const UsersDetail = ({ settings, onBack }) => {
 
     // Close kebab on click-outside, scroll or resize (guide §16, the menu rule) —
     // but not on an event inside it: the menu is portaled to <body>, and its own
-    // scrollbar would close it.
+    // scrollbar would close it. A resize's target is the window, which `contains`
+    // refuses: the node check comes first (state §0.212).
     React.useEffect(() => {
         if (openUserKebab === null) return;
         const handler = (e) => {
-            if (kebabMenuRef.current && e && e.target && kebabMenuRef.current.contains(e.target)) return;
+            if (kebabMenuRef.current && e && e.target instanceof Node && kebabMenuRef.current.contains(e.target)) return;
             setOpenUserKebab(null);
         };
         document.addEventListener('click', handler);
@@ -1491,7 +1567,7 @@ export const UsersDetail = ({ settings, onBack }) => {
             email: u.email || '',
             role: u.role || 'User',
             team: u.team || null,
-            manager: u.manager || null,
+            manager: managerNameOf(u, settings.users),
             lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
             // Tri-state from Clerk: true/false when known, null when unknown
             // (fetch pending/failed, or not a Clerk member yet).

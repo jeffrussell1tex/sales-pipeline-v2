@@ -97,7 +97,7 @@ test('a self-save carrying every administrative field changes only the personal 
         // Everything below must be ignored:
         role: 'Admin', userType: 'Admin',
         quota: 1, annualQuota: 1, q1Quota: 1, quotaType: 'quarterly',
-        team: 'West', teamId: 'team_west', territory: 'South', vertical: 'Energy', manager: OTHER,
+        team: 'West', teamId: 'team_west', territory: 'South', vertical: 'Energy', manager: OTHER, managerId: OTHER,
         active: false, status: 'Inactive',
         clerkUserId: 'clerk_someone_else',
         forecastCalls: { '2026-Q4': { commit: 999999, bestCase: 999999 } },
@@ -121,6 +121,7 @@ test('a self-save carrying every administrative field changes only the personal 
     assert.equal(row.profile.teamId, 'team_east');
     assert.equal(row.profile.vertical ?? null, null);
     assert.equal(row.profile.manager ?? null, null);
+    assert.equal(row.profile.managerId ?? null, null, "who a member reports to is an Admin's or a Manager's to set (§0.212)");
     assert.equal(row.active, true, 'a member cannot deactivate their own row here');
     assert.equal(row.profile.status ?? null, null);
     assert.equal(row.clerkUserId, CLERK_SELF, 'the Clerk link is pinned to the caller');

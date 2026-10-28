@@ -18,9 +18,12 @@ import { nameRefusal, firstFreeName, numbered, nameTakenMessage } from '../../sr
 import { QUOTA_PERIODS, QUOTA_KEYS, cleanQuotaPeriods, cleanQuotaPlans, storedQuota, checkQuotaSave, quotaRefusal, planFromSave, samePlan, quotaYearAllowed } from '../../src/utils/quotaPlan.js';
 import { fiscalStartOf } from '../../src/utils/quarters.js';
 import { currentFiscalYear } from '../../src/utils/reportPeriod.js';
-// A member's team and pinned reports name this org's (state §0.205): asked through the links machinery.
+// A member's team, manager and pinned reports name this org's (state §0.205; the manager since §0.212): asked through
+// the links machinery.
 import { checkLinks, liveIdsInOrg } from './_links.mjs';
 import { notInOrg, NOT_AN_ID } from '../../src/utils/linkIds.js';
+// A manager's name and id, '' and none one value (state §0.212): the PUT keeps the two paired.
+import { sameValue } from '../../src/utils/memberSave.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -30,6 +33,10 @@ const ADMIN_ROLES = ['Admin', 'Manager'];
 // lands a restored member's as filed, cleared of any that name no saved report here (backup.mjs, _links.mjs).
 const TEAM_LINK = [{ key: 'teamId', kind: 'team' }];
 const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];
+// And their manager (state §0.212) — who they report to (Jeff, 26 Oct: "Only who they report to"), a member of this org
+// by id (guide §18b102 rule 9): any of its members, deactivated or invited too (the profile page offers fewer), never
+// the member themselves. An Admin's or a Manager's save sets it; the member's own (?me) never does (_selfProfile.mjs).
+const MANAGER_LINK = [{ key: 'managerId', kind: 'member', notSelf: true }];
 
 // ── Clerk organization invitations (state §0.165) ───────────────────────────
 // Every call names the CALLER's org — the token's, never one from the request —
@@ -143,6 +150,7 @@ export const handler = async (event) => {
             vertical:      data.vertical      || null,
             teamId:        data.teamId        || null,
             manager:       data.manager       || null,
+            managerId:     data.managerId     || null,
             userType:      data.userType      || 'User',
             notificationPrefs: data.notificationPrefs || null,
             digestTime:    data.digestTime    || '08:00',
@@ -426,8 +434,8 @@ export const handler = async (event) => {
             // 'User', which is how Admins quietly lost their roster role.
             //
             // And only the keys a member may change about THEMSELVES reach the
-            // merge (state §0.109, guide §18b34). The client sends the whole row
-            // it holds, so before this every administrative field on it — quota,
+            // merge (state §0.109, guide §18b34). The client sent the whole row it
+            // held until §0.196, so before this every administrative field — quota,
             // team, territory, active, the quarterly quotas, the forecast calls —
             // was rewritten from the caller's own body on every preference
             // toggle, and could be set by a body written by hand. A key the
@@ -931,6 +939,10 @@ export const handler = async (event) => {
                 // org's, or one that names nothing, is 404 naming the field, and nothing is written.
                 const teamed = await checkLinks(TEAM_LINK, data, null, orgId);
                 if (teamed.error) return { statusCode: teamed.status, headers, body: JSON.stringify({ error: teamed.error, field: teamed.field }) };
+                // A new member's manager is a member of this org (state §0.212): another org's, or an id no member holds, is
+                // 404 naming the field. The row's own id is the one minted for it — the body's, if it names one, never is.
+                const managed = await checkLinks(MANAGER_LINK, data, { id: clean.id, managerId: null }, orgId);
+                if (managed.error) return { statusCode: managed.status, headers, body: JSON.stringify({ error: managed.error, field: managed.field }) };
                 const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
@@ -1119,6 +1131,15 @@ export const handler = async (event) => {
                 // save of a rep's team is the org check alone (Jeff, 16 Oct: "No, leave it").
                 const teamed = await checkLinks(TEAM_LINK, data, { teamId: before?.profile?.teamId ?? null }, orgId);
                 if (teamed.error) return { statusCode: teamed.status, headers, body: JSON.stringify({ error: teamed.error, field: teamed.field }) };
+                // The member's manager is a member of this org, never themselves (state §0.212): asked only when the save names
+                // one anew — the one the row holds is never asked again, one removed since too.
+                const managed = await checkLinks(MANAGER_LINK, data, { id: data.id, managerId: before?.profile?.managerId ?? null }, orgId);
+                if (managed.error) return { statusCode: managed.status, headers, body: JSON.stringify({ error: managed.error, field: managed.field }) };
+                // One manager, their name and their id (state §0.212): a save that changes one and names not the other leaves
+                // no stale other — the name alone unlinks the id (a page loaded before §0.212 sends the name alone), the id
+                // alone drops the old name (the readers name the id's member).
+                if ('manager' in data && !('managerId' in data) && !sameValue(data.manager, before?.profile?.manager)) clean.profile = { ...clean.profile, managerId: null };
+                if ('managerId' in data && !('manager' in data) && !sameValue(data.managerId, before?.profile?.managerId)) clean.profile = { ...clean.profile, manager: null };
                 // One name per member of an org (state §0.196) — after the access
                 // checks, so a Manager's deactivate is still the 403 it was.
                 const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);

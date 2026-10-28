@@ -21,6 +21,14 @@
 //       CONTROL: today's body moves the one onto the first team of the name and clears the other's valid team
 //   I4  ISOLATION — A's body naming B's team is refused naming teamId; an A Admin's save of B's member is refused;
 //       B's Admin reads none of A's members; every B row is as seeded at the end
+//   I5a-I5g (step B, state §0.212 — REGRESSION PROOFS: step B changes users.mjs, linkIds.js and _links.mjs; run on
+//       step A's server, each fails — I5a, I5b, I5d and I5g on their own rule, I5c, I5e and I5f because that server
+//       stores no manager id at all) the manager by id: this org's member stored with their name; B's member and an id no
+//       member holds 404, the member themselves 400, a value that is no id 400, each naming managerId, the row as it
+//       was; an id the row holds, of a member removed since, never asked again; a create naming B's member 404, no
+//       row, a body's own id never the new row's; the member's own save (?me) never sets it; a save changing the
+//       name alone unlinks the id, the id alone drops the old name; an Admin's restore clears one naming no member
+//       here or the member themselves, the name kept, and counts it; every B row as seeded
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST)
 if (!process.env.DATABASE_URL_TEST) {
@@ -66,8 +74,9 @@ mock.module('@clerk/backend', {
 });
 
 const { handler: usersHandler } = await import('../../netlify/functions/users.mjs');
+const { handler: backupHandler } = await import('../../netlify/functions/backup.mjs');
 const { db } = await import('../../db/index.js');
-const { settings, users, auditLog } = await import('../../db/schema.js');
+const { settings, users, auditLog, backups } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { memberChanges } = await import('../../src/utils/memberSave.js');
 const { teamIdNamed } = await import('../../src/utils/teamMembership.js');
@@ -77,9 +86,12 @@ const { assertTestSchema } = await import('./_schema-guard.mjs');
 // The words, written out: what the screen shows is part of the rule.
 const NOT_IN_ORG_TEAM = 'That team is not in your organization — pick one from the list.';
 const NOT_A_MEMBER = 'That member is not in your organization — they may have been removed. Reload and try again.';
+const NOT_IN_ORG_MEMBER = 'That member is not in your organization — pick one from the list.';
+const NAMES_ITSELF = 'A member cannot name itself.';
+const NOT_AN_ID = 'A link must name a record by its id.';
 
-const call = async (w, method, body, qs) => {
-    const res = await usersHandler({
+const call = async (w, method, body, qs, handler = usersHandler) => {
+    const res = await handler({
         httpMethod: method,
         headers: { authorization: 'Bearer ' + tokenFor(w.clerk, w.org), 'content-type': 'application/json' },
         queryStringParameters: qs || {},
@@ -140,7 +152,8 @@ const seedOrg = (org) => {
 };
 
 const cleanup = async () => {
-    for (const t of [settings, users, auditLog]) await db.delete(t).where(inArray(t.orgId, ORGS));
+    // backups: I5's restore leaves its "_import" snapshot row (backup.mjs).
+    for (const t of [settings, users, auditLog, backups]) await db.delete(t).where(inArray(t.orgId, ORGS));
 };
 // Org B's rows, whole — taken once seeded, compared at the end.
 const bRows = async () => {
@@ -272,5 +285,105 @@ test("I4 (ISOLATION) A's body naming B's team is 404 naming teamId, A's row as i
     assert.ok(!list.body.users.some((u) => u.id.includes('_mprofile_A_')), "none of A's members");
     const bTess = list.body.users.find((u) => u.id === U(B, 'tess'));
     assert.deepEqual([bTess.phone, bTess.title, bTess.teamId], ['1', 'Rep', TEAM(B, 'east')], "B's Tess as seeded");
+    assert.deepEqual(await bRows(), bSeeded, 'every B row as seeded');
+});
+
+// I5 (P14, state §0.212) the manager by id — one test per rule, run in this order; each, run on step A's server
+// (users.mjs, linkIds.js and _links.mjs as at bc39110), fails (state §0.212 names how).
+const admin = who(A, 'admin');
+const tara = U(A, 'tara');
+
+test("I5a (P14) this org's member, by id, is stored with their name — and the answer carries it", async () => {
+    const set = await call(admin, 'PUT', { id: tara, manager: 'Bob Mprofile', managerId: U(A, 'bob') });
+    assert.equal(set.status, 200, JSON.stringify(set.body));
+    const row = await one(tara);
+    assert.deepEqual([row.profile.manager, row.profile.managerId], ['Bob Mprofile', U(A, 'bob')], 'REGRESSION: sanitize drops the manager id');
+    assert.equal(set.body.user.managerId, U(A, 'bob'), 'what the page now holds');
+});
+
+test("I5b (P14) B's member and an id no member holds 404, the member themselves 400, a value that is no id 400 — each naming managerId, the row as it was", async () => {
+    const row = await one(tara);
+    for (const [body, status, answer, why] of [
+        [{ id: tara, manager: 'Bob Mprofile', managerId: U(B, 'bob') }, 404, { error: NOT_IN_ORG_MEMBER, field: 'managerId' }, 'REGRESSION: a manager of another org is stored'],
+        [{ id: tara, managerId: U(A, 'nobody') }, 404, { error: NOT_IN_ORG_MEMBER, field: 'managerId' }, 'an id no member holds'],
+        [{ id: tara, manager: 'Tara Mprofile', managerId: tara }, 400, { error: NAMES_ITSELF, field: 'managerId' }, 'REGRESSION: a member named their own manager'],
+        [{ id: tara, managerId: 5 }, 400, { error: NOT_AN_ID, field: 'managerId' }, 'a value that is no id'],
+    ]) {
+        const r = await call(admin, 'PUT', body);
+        assert.equal(r.status, status, `${why}: ${JSON.stringify(r.body)}`);
+        assert.deepEqual(r.body, answer, why);
+        assert.deepEqual(await one(tara), row, `${why}: the row as it was`);
+    }
+});
+
+test('I5c (P14) an id the row holds is never asked again — a member removed since too', async () => {
+    const gone = U(A, 'gone');
+    await db.insert(users).values({ id: gone, orgId: A, clerkUserId: CLERK(A, 'gone'), name: 'Gus Mprofile', email: E(A, 'gone'), role: 'Manager', profile: { status: 'Active' } });
+    invalidateRoster();
+    assert.equal((await call(admin, 'PUT', { id: tara, manager: 'Gus Mprofile', managerId: gone })).status, 200);
+    await db.delete(users).where(and(eq(users.orgId, A), eq(users.id, gone)));
+    invalidateRoster();
+    const held = await call(admin, 'PUT', { id: tara, title: 'Lead', manager: 'Gus Mprofile', managerId: gone });
+    assert.equal(held.status, 200, `the held id is not asked again: ${JSON.stringify(held.body)}`);
+    const row = await one(tara);
+    assert.deepEqual([row.profile.title, row.profile.managerId], ['Lead', gone]);
+});
+
+test("I5d (P14) a create naming B's member is 404 naming managerId, and no row is made; one naming this org's is stored", async () => {
+    const rowsBefore = (await db.select({ id: users.id }).from(users).where(eq(users.orgId, A))).length;
+    const refused = await call(admin, 'POST', { firstName: 'Nell', lastName: 'Mprofile', email: E(A, 'nell'), role: 'User', managerId: U(B, 'bob') });
+    assert.equal(refused.status, 404, `REGRESSION: a create stores a manager of another org: ${JSON.stringify(refused.body)}`);
+    assert.deepEqual(refused.body, { error: NOT_IN_ORG_MEMBER, field: 'managerId' });
+    assert.equal((await db.select({ id: users.id }).from(users).where(eq(users.orgId, A))).length, rowsBefore, 'no row');
+    // A body's id is never the new row's (the server mints it): one naming itself as the manager is an id no member holds.
+    const selfish = await call(admin, 'POST', { id: U(A, 'zed'), firstName: 'Zed', lastName: 'Mprofile', email: E(A, 'zed'), role: 'User', managerId: U(A, 'zed') });
+    assert.equal(selfish.status, 404, `REGRESSION: a create's body id read as the new row's: ${JSON.stringify(selfish.body)}`);
+    assert.deepEqual(selfish.body, { error: NOT_IN_ORG_MEMBER, field: 'managerId' });
+    const made = await call(admin, 'POST', { firstName: 'Nell', lastName: 'Mprofile', email: E(A, 'nell'), role: 'User', manager: 'Bob Mprofile', managerId: U(A, 'bob') });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    assert.equal((await one(made.body.user.id)).profile.managerId, U(A, 'bob'));
+});
+
+test("I5e (P14) the member's own save (?me) never sets their manager — the one an Admin set stands", async () => {
+    const tess = U(A, 'tess');
+    assert.equal((await call(admin, 'PUT', { id: tess, manager: 'Bob Mprofile', managerId: U(A, 'bob') })).status, 200);
+    const own = await call(who(A, 'tess'), 'PUT', { id: tess, title: 'Rep (own)', manager: 'Ada Mprofile', managerId: U(A, 'admin') }, ME);
+    assert.equal(own.status, 200, JSON.stringify(own.body));
+    const now = await one(tess);
+    assert.deepEqual([now.profile.title, now.profile.manager, now.profile.managerId], ['Rep (own)', 'Bob Mprofile', U(A, 'bob')],
+        'REGRESSION: a member sets their own manager — or their own save (a timezone, a pin) wipes the one an Admin set');
+});
+
+test('I5f (P14) one manager, their name and their id: a save that changes the name alone (a page loaded before §0.212) unlinks the id; one that changes the id alone drops the old name; the name sent as it stands unlinks nothing', async () => {
+    const rena = U(A, 'rena');
+    assert.equal((await call(admin, 'PUT', { id: rena, manager: 'Bob Mprofile', managerId: U(A, 'bob') })).status, 200);
+    assert.equal((await call(admin, 'PUT', { id: rena, manager: 'Bob Mprofile' })).status, 200);
+    assert.deepEqual([(await one(rena)).profile.manager, (await one(rena)).profile.managerId], ['Bob Mprofile', U(A, 'bob')], 'the name as it stands: still linked');
+    assert.equal((await call(admin, 'PUT', { id: rena, manager: 'Ada Mprofile' })).status, 200);
+    let p = (await one(rena)).profile;
+    assert.deepEqual([p.manager, p.managerId], ['Ada Mprofile', null], "REGRESSION: a name changed alone keeps the old id — every reader names the old manager");
+    assert.equal((await call(admin, 'PUT', { id: rena, managerId: U(A, 'bob') })).status, 200);
+    p = (await one(rena)).profile;
+    assert.deepEqual([p.manager, p.managerId], [null, U(A, 'bob')], 'REGRESSION: an id changed alone keeps the old name');
+});
+
+test("I5g (P14) an Admin's restore clears a manager naming no member here, or the member themselves — the name kept — keeps this org's, and counts it; B's Admin reads none of A's members, and every B row is as seeded", async () => {
+    const R = (w) => U(A, `rst_${w}`);
+    const restore = await call(admin, 'PATCH', { entities: { users: [
+        { id: R('b'), email: E(A, 'rst_b'), name: 'Rob Restored', role: 'User', profile: { manager: 'Bob Elsewhere', managerId: U(B, 'bob') } },
+        { id: R('self'), email: E(A, 'rst_self'), name: 'Sal Restored', role: 'User', profile: { manager: 'Sal Restored', managerId: R('self') } },
+        { id: R('ok'), email: E(A, 'rst_ok'), name: 'Oki Restored', role: 'User', profile: { manager: 'Bob Mprofile', managerId: U(A, 'bob') } },
+    ] } }, undefined, backupHandler);
+    assert.equal(restore.status, 200, JSON.stringify(restore.body));
+    assert.deepEqual([restore.body.imported, restore.body.errors], [3, []]);
+    assert.ok(restore.body.notes.includes('2 links that named no record of this organization were cleared.'),
+        `REGRESSION: a restored member's unknown manager is kept: ${JSON.stringify(restore.body.notes)}`);
+    const rb = await one(R('b'));
+    assert.deepEqual([rb.profile.managerId, rb.profile.manager], [null, 'Bob Elsewhere'], "another org's member cleared, the name kept");
+    assert.equal((await one(R('self'))).profile.managerId, null, 'the member themselves cleared');
+    assert.equal((await one(R('ok'))).profile.managerId, U(A, 'bob'), "this org's kept");
+    const list = await call(who(B, 'admin'), 'GET');
+    assert.equal(list.status, 200, JSON.stringify(list.body));
+    assert.ok(!list.body.users.some((u) => u.id.includes('_mprofile_A_') || String(u.managerId || '').includes('_mprofile_A_')), "none of A's members or managers");
     assert.deepEqual(await bRows(), bSeeded, 'every B row as seeded');
 });

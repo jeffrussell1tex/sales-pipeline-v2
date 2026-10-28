@@ -198,6 +198,7 @@ const GLOBALS = new Set([
     'performance','history','screen','process','globalThis','atob','btoa',
     'prompt','postMessage','open','close','matchMedia','getComputedStyle','scrollTo',
     'requestIdleCallback','MutationObserver','WebSocket','Notification','Worker',
+    'Node',   // a handler's node check before it reads its event's target (guide §16, the menu rule; state §0.212)
 ]);
 
 const declaredNames = (node, out = new Set()) => {

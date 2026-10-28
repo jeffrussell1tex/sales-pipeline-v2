@@ -72,8 +72,13 @@ npm test                 # load-bearing for deploy: function-import graph
 ```
 
 Then: `npm run test:int` (targets `DATABASE_URL_TEST`, not the app DB).
-Then: `node scripts/mutate-import.mjs` — must print `Baseline: green.` first;
-a red baseline reports a false 100% caught.
+Then: the harness, scoped to the batch: `node scripts/mutate-scope.mjs` —
+the stale check over every entry, then the batch's own entries, every older
+entry on a file it changed and every entry on a file a SUITES test it edited
+reads, imports or runs; it must print `Baseline: green.` first (a red baseline
+reports a false 100% caught). Before each prod ship: the full run,
+`node scripts/mutate-import.mjs`, every entry, about 4 h (guide §18b23
+part 4; Jeff, 27 Oct 2026).
 Then: rep-path browser check signed in as Karen (`accelerep@outlook.com`,
 role `User`) — Admin skips every ownership and role branch, so an Admin-only
 pass proves nothing. Read the URL bar and count the orgs before any browser
@@ -104,9 +109,14 @@ One commit per verified batch; doc patch in the same commit.
   cleared of any naming no saved report here (`users.mjs`, guide
   §18b95, §18b98). The member profile page (Settings → Users) sends only
   the fields it edits that changed — a Full name with First and Last
-  cleared, a team by its id with its name, the teams' lists moved by id
-  straight after, the role last and alone — and holds the member as
-  stored after a save (`memberSave.js`, guide §18b102).
+  cleared, a team by its id with its name, a manager by their id with
+  their name, the teams' lists moved by id straight after, the role last
+  and alone — and holds the member as stored after a save
+  (`memberSave.js`, guide §18b102). A member's manager is who they report
+  to — `profile.managerId`, a member of this org, never themselves, and
+  never a team's `managerId` (the Teams page sets that); an Admin's or
+  Manager's save sets it, never their own (`?me`), and the server keeps
+  its name and id paired (guide §18b102 rule 9).
 
 ## Endpoint and data invariants
 
@@ -132,10 +142,11 @@ One commit per verified batch; doc patch in the same commit.
   location id; Dispatch's technician, vehicle, equipment unit, service
   plan or job id; a SPIFF claim's deal and SPIFF (an entry of the org's
   SPIFF list), a quote line's product, an automation's task assignee (a
-  member); a member's team (an entry of the org's teams list) and pinned
-  reports (saved reports of the org)) must name a live row of the org
+  member); a member's team (an entry of the org's teams list), manager (a
+  member of the org, never themselves) and pinned reports (saved reports
+  of the org)) must name a live row of the org
   when the write names it anew: `checkLinks` / `checkBulkLinks`
-  (`_links.mjs`, guide §18b92, §18b94, §18b97, §18b98). An id the row
+  (`_links.mjs`, guide §18b92, §18b94, §18b97, §18b98, §18b102). An id the row
   already holds is never asked again; a screen that
   copies a link leaves off one the server refuses (`saveDroppingRefused`) —
   never a quote's lines, whose null would wipe every line: a New version
@@ -174,6 +185,9 @@ One commit per verified batch; doc patch in the same commit.
 - Popovers: `getBoundingClientRect()` + `position: fixed`, rendered through
   `createPortal(…, document.body)` — an ancestor with a `transform` (a hover
   lift) traps a fixed box inside it (guide §16, the menu rule; state §0.128).
+  A close the resize shares reads the event's target only under
+  `e.target instanceof Node` — a resize's target is the window, which
+  `contains` refuses (state §0.212; tests/resize-targets.test.mjs).
 - A task alert (a popup, the bell) interrupts only the member it is for:
   their own task or one nobody owns, by owner id, once the profile is known,
   from the active org's lists (`src/utils/taskAlerts.js`, guide §18b93).
