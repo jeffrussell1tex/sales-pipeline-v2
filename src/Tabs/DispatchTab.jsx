@@ -6446,8 +6446,8 @@ export default function DispatchTab() {
                                     <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={closeFilter}/>
                                     <div style={{ position:'fixed', top:filterRect.top, left:filterRect.left, zIndex:9999,
                                         background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2,
-                                        boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160, maxHeight:240,
-                                        overflowY:'auto', overscrollBehavior:'contain' }}>
+                                        boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160, overflow:'hidden' }}>
+                                        <div style={{ maxHeight:238, overflowY:'auto', overscrollBehavior:'contain' }}>
                                         {f.items.map((item, i) => {
                                             const isActive = f.active === item.id;
                                             return (
@@ -6465,6 +6465,7 @@ export default function DispatchTab() {
                                                 </button>
                                             );
                                         })}
+                                        </div>
                                     </div>
                                 </>
                             );

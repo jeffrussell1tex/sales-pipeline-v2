@@ -129,9 +129,11 @@ export default function QuickLogFab() {
                         {/* Notes */}
                         <div>
                             <label style={labelStyle}>Notes *</label>
+                            <div style={{ border: inputStyle.border, borderRadius: inputStyle.borderRadius, overflow: 'hidden', background: inputStyle.background }}>
                             <textarea value={quickLogForm.notes} onChange={e => setQuickLogForm(f => ({ ...f, notes: e.target.value }))}
                                 placeholder="What was discussed? Next steps? Important details…" rows={3}
-                                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} />
+                                style={{ ...inputStyle, border: 'none', borderRadius: 0, display: 'block', resize: 'vertical', lineHeight: 1.5 }} />
+                            </div>
                         </div>
 
                         {/* Add to Calendar */}

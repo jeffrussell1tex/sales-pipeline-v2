@@ -109,13 +109,14 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
             onClick={onClose}>
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:520, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:520, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
                 onClick={e=>e.stopPropagation()}>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface, zIndex:1 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
                     <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{isEdit ? 'Edit team' : 'New team'}</div>
                     <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1 }}>×</button>
                 </div>
-                <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14 }}>
+                {/* The box clips and only the body scrolls, so the scrollbar keeps the rounded corners (state §0.213). */}
+                <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14, flex:'1 1 auto', minHeight:0, overflowY:'auto' }}>
                     <div>
                         <label style={lbl}>Team name *</label>
                         <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. SMB West" style={inp} autoFocus/>
@@ -189,7 +190,7 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
                     </div>
                     {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
                 </div>
-                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, position:'sticky', bottom:0, background:T.surface }}>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
                     <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     <button onClick={handleSave} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
                         {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}

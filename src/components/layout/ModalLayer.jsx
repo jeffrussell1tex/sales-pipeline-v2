@@ -256,9 +256,11 @@ export default function ModalLayer() {
                 }}>
                     <div onClick={e => e.stopPropagation()} style={{
                         background: T.surface, borderRadius: isMobile ? '0' : '16px', width: isMobile ? '100%' : '540px', maxWidth: isMobile ? '100%' : '95vw', height: isMobile ? '100%' : 'auto',
-                        maxHeight: isMobile ? '100%' : '85vh', overflowY: 'auto',
+                        maxHeight: isMobile ? '100%' : '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
                         boxShadow: '0 25px 60px rgba(0,0,0,0.25)', animation: 'slideUp 0.18s ease'
                     }}>
+                        {/* The panel clips and this box scrolls, so the scrollbar keeps the rounded corners (state §0.213). */}
+                        <div style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
                         {/* Header */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                             padding: '1.25rem 1.5rem', borderBottom: `1px solid ${T.surface2}` }}>
@@ -309,10 +311,11 @@ export default function ModalLayer() {
                                 </div>
                             </div>
                         ))}
-                        <div style={{ padding: '0.75rem 1.5rem', background: T.surface2, borderRadius: '0 0 16px 16px' }}>
+                        <div style={{ padding: '0.75rem 1.5rem', background: T.surface2 }}>
                             <div style={{ fontSize: '0.6875rem', color: T.inkMuted, textAlign: 'center' }}>
                                 Shortcuts are disabled while typing in a field
                             </div>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -373,8 +376,10 @@ export default function ModalLayer() {
                             </div>
                             {n.refused?.notes && (
                                 <>
-                                    <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.625rem', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '30vh', overflowY: 'auto' }}>
+                                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', overflow: 'hidden' }}>
+                                    <div style={{ padding: '0.5rem 0.625rem', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '30vh', overflowY: 'auto' }}>
                                         {n.refused.notes}
+                                    </div>
                                     </div>
                                     <button disabled={showActivityModal || !!taskRailId || quickLogOpen}
                                         title={showActivityModal || taskRailId || quickLogOpen ? 'Finish what is open first' : undefined}
@@ -765,7 +770,8 @@ export default function ModalLayer() {
 
             {confirmModal && (
                 <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '420px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '420px', width: '100%', padding: 0 }}>
+                        <div style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0, padding: isMobile ? '1.25rem' : '2rem' }}>
                         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: confirmModal.danger !== false ? `${T.danger}14` : `${T.info}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                                 <span style={{ fontSize: '1.5rem' }}>{confirmModal.danger !== false ? '\u26A0\uFE0F' : '\u2139\uFE0F'}</span>
@@ -787,6 +793,7 @@ export default function ModalLayer() {
                                 onMouseLeave={e => e.target.style.opacity = '1'}
                             >{confirmModal.danger !== false ? 'Delete' : 'Confirm'}</button>
                         </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -797,7 +804,8 @@ export default function ModalLayer() {
                 const submit = () => { const v = value.trim(); if (!v) return; const fn = promptModal.onSubmit; setPromptModal(null); fn(v); };
                 return (
                     <div className="modal-overlay" onClick={() => setPromptModal(null)}>
-                        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '460px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '460px', width: '100%', padding: 0 }}>
+                            <div style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0, padding: isMobile ? '1.25rem' : '2rem' }}>
                             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: '700', color: T.ink }}>{promptModal.title}</h3>
                             {promptModal.help && <p style={{ color: T.inkMid, fontSize: '0.85rem', margin: '0 0 1rem 0', lineHeight: '1.5' }}>{promptModal.help}</p>}
                             {promptModal.label && <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.375rem' }}>{promptModal.label}</label>}
@@ -814,6 +822,7 @@ export default function ModalLayer() {
                                     style={{ padding: '0.625rem 1.5rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface, color: T.inkMid, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                 <button onClick={submit} disabled={!value.trim()}
                                     style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: '#1c1917', color: T.surface, fontWeight: '600', fontSize: '0.875rem', cursor: value.trim() ? 'pointer' : 'default', opacity: value.trim() ? 1 : 0.5, fontFamily: 'inherit' }}>{promptModal.submitLabel || 'Save'}</button>
+                            </div>
                             </div>
                         </div>
                     </div>

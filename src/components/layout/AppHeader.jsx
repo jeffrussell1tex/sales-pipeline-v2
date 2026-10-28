@@ -502,7 +502,9 @@ export default function AppHeader({
                         )}
                     </button>
                     {showNotifications && (
-                        <div style={{ position: isMobile ? 'fixed' : 'absolute', top: isMobile ? 0 : 40, right: 0, left: isMobile ? 0 : 'auto', bottom: isMobile ? 0 : 'auto', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, boxShadow: '0 8px 24px rgba(42,38,34,0.14)', minWidth: isMobile ? 'unset' : 350, maxWidth: isMobile ? 'unset' : 400, maxHeight: isMobile ? '100%' : 500, overflowY: 'auto', zIndex: 1000, fontFamily: T.sans }}>
+                        <div style={{ position: isMobile ? 'fixed' : 'absolute', top: isMobile ? 0 : 40, right: 0, left: isMobile ? 0 : 'auto', bottom: isMobile ? 0 : 'auto', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, boxShadow: '0 8px 24px rgba(42,38,34,0.14)', minWidth: isMobile ? 'unset' : 350, maxWidth: isMobile ? 'unset' : 400, maxHeight: isMobile ? '100%' : 500, overflow: 'hidden', display: 'flex', flexDirection: 'column', zIndex: 1000, fontFamily: T.sans }}>
+                            {/* The dropdown clips and this box scrolls, so the scrollbar keeps the rounded corners (state §0.213). */}
+                            <div style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
                             <div style={{ padding: '0.875rem 1rem', borderBottom: `1px solid ${T.border}`, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: T.ink }}>
                                 <span>Notifications ({notifications.length})</span>
                                 <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
@@ -520,6 +522,7 @@ export default function AppHeader({
                                     </div>
                                 ))
                             }
+                            </div>
                         </div>
                     )}
                 </div>

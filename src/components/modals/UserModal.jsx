@@ -32,6 +32,8 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
     // accepted a choice, and it discarded it silently — so on edit it now says so.
     const isExistingUser = !!(user && user.id);
     const [activeUserTab, setActiveUserTab] = useState('primary');
+    // The Notes box clips its textarea, so the textarea's own focus ring (index.css .form-group) would be cut off: the box draws it.
+    const [notesFocused, setNotesFocused] = useState(false);
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
 
@@ -82,7 +84,10 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
         <div {...clickCatcherProps} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: T.surface, borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: `1px solid ${T.border}`, padding: '1.5rem', overflowY: 'auto' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: T.surface, borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+            {/* The window clips and the box inside it scrolls, so the scrollbar keeps the rounded corners (state §0.213).
+                The resize handles sit in that box, beside its scrollbar — in the window they would lie over its arrows. */}
+            <div style={{ height: '100%', overflowY: 'auto', padding: '1.5rem', position: 'relative' }}>
                 <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, marginBottom: '1rem' }}>{user ? 'Edit User' : 'New User'}</h2>
 
                 <div style={{ display: 'flex', background: T.surface2, borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
@@ -186,8 +191,11 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         <div className="form-group"><label>ZIP Code</label><input type="text" value={formData.zip || ''} onChange={e => handleChange('zip', e.target.value)} /></div>
                         <div className="form-group"><label>Country</label><input type="text" value={formData.country || ''} onChange={e => handleChange('country', e.target.value)} /></div>
                         <div className="form-group full"><label>Notes</label>
+                            <div onFocus={() => setNotesFocused(true)} onBlur={() => setNotesFocused(false)}
+                                style={{ border: `1px solid ${T.border}`, borderRadius: '6px', overflow: 'hidden', boxShadow: notesFocused ? '0 0 0 3px rgba(28,25,23,0.07)' : 'none' }}>
                             <textarea value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
-                                rows="4" style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                                rows="4" style={{ display: 'block', width: '100%', padding: '0.5rem 0.75rem', border: 'none', borderRadius: 0, boxShadow: 'none', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                            </div>
                         </div>
                     </div>
                     )}
@@ -316,6 +324,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                     </div>
                 </form>
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
+            </div>
         </div>
         </>
     );

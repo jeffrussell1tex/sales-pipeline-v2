@@ -519,7 +519,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 ...dragOffsetStyle,
                 width: size.w,
                 height: size.h,
-                overflow: 'auto',
+                overflow: 'hidden',   // the body below scrolls; the shell clips, so its corners stay round (state §0.213)
                 background: T.surface,
                 borderRadius: '12px',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
@@ -552,7 +552,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             </h2>
 
             {/* ── Step indicator ── */}
-            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${T.border}`, flexShrink: 0, overflowX: 'auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
                     {visibleLabels.map((label, idx) => {
                         const isDone = idx < currentStepIdx;
@@ -711,7 +711,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 💡 Companies from imported contacts will be auto-added to your Accounts list if they don't already exist.
                             </div>
                         )}
-                        <div style={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: '6px' }}>
+                        <div style={{ border: `1px solid ${T.border}`, borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ overflowX: 'auto', maxHeight: '298px', overflowY: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                 <thead>
                                     <tr>
@@ -734,6 +735,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
                         </div>
                         {previewData.length > 10 && (
                             <div style={{ textAlign: 'center', padding: '12px', color: T.inkMid, fontSize: '14px' }}>
@@ -797,7 +799,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         </p>
 
                         {toInvite.length > 0 && (
-                            <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'auto', maxHeight: '260px', marginBottom: '12px' }}>
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
+                            <div style={{ overflow: 'auto', maxHeight: '258px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                     <thead>
                                         <tr>
@@ -821,6 +824,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                         …and {toInvite.length - INVITES_SHOWN} more
                                     </div>
                                 )}
+                            </div>
                             </div>
                         )}
 
@@ -1100,7 +1104,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             they were sent and turned down — then the rows Review
                             skipped. */}
                         {isUsers && (refusals.length > 0 || conflicts.length > 0) && (
-                            <div style={{ textAlign: 'left', maxWidth: 560, margin: '0 auto 20px', border: `1px solid ${T.border}`, borderRadius: '8px', maxHeight: '220px', overflowY: 'auto' }}>
+                            <div style={{ textAlign: 'left', maxWidth: 560, margin: '0 auto 20px', border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden' }}>
+                            <div style={{ maxHeight: '218px', overflowY: 'auto' }}>
                                 <div style={{ ...thStyle, position: 'sticky', top: 0 }}>Not invited</div>
                                 {[
                                     ...refusals.map(f => ({ email: f.email || '(no address)', why: f.error || 'refused' })),
@@ -1111,6 +1116,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                         <span style={{ color: T.inkMid, textAlign: 'right' }}>{x.why}</span>
                                     </div>
                                 ))}
+                            </div>
                             </div>
                         )}
 

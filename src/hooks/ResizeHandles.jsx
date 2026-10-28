@@ -18,12 +18,16 @@ export default function ResizeHandles({ getResizeHandleProps }) {
         ...extra,
     });
 
+    // A zone's props: the hook's, its style kept under the zone's. The hook's style is `touchAction: 'none'`: without
+    // it, a touch on a handle in a scroller (the New User window's) pans the scroller as it resizes (state §0.213).
+    const zone = (dir, cursor, extra) => { const p = getResizeHandleProps(dir); return { ...p, style: { ...p.style, ...s(cursor, extra) } }; };
+
     return (
         <>
-            <div {...getResizeHandleProps('nw')} style={s('nw-resize', { top: 0,    left: 0  })} />
-            <div {...getResizeHandleProps('ne')} style={s('ne-resize', { top: 0,    right: 0 })} />
-            <div {...getResizeHandleProps('se')} style={s('se-resize', { bottom: 0, right: 0 })} />
-            <div {...getResizeHandleProps('sw')} style={s('sw-resize', { bottom: 0, left: 0  })} />
+            <div {...zone('nw', 'nw-resize', { top: 0,    left: 0  })} />
+            <div {...zone('ne', 'ne-resize', { top: 0,    right: 0 })} />
+            <div {...zone('se', 'se-resize', { bottom: 0, right: 0 })} />
+            <div {...zone('sw', 'sw-resize', { bottom: 0, left: 0  })} />
         </>
     );
 }

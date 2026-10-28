@@ -188,6 +188,15 @@ One commit per verified batch; doc patch in the same commit.
   A close the resize shares reads the event's target only under
   `e.target instanceof Node` — a resize's target is the window, which
   `contains` refuses (state §0.212; tests/resize-targets.test.mjs).
+- A box rounded 6 px or more never scrolls itself: it clips
+  (`overflow: 'hidden'`) and a box inside it scrolls, fitting the box — in a
+  flex column one that can shrink (never `flex: 'none'`, a shrink of 0 or a
+  min height), in
+  a block one with a height or a max height of its own; a rounded textarea
+  sits in a clipping box with no border or radius of its own; `.modal` and
+  `.table-container` clip, and each use holds a box that scrolls (guide
+  §18b103, state §0.213; tests/rounded-scrollers.test.mjs). Under 6 px the
+  corner stands.
 - A task alert (a popup, the bell) interrupts only the member it is for:
   their own task or one nobody owns, by owner id, once the profile is known,
   from the active org's lists (`src/utils/taskAlerts.js`, guide §18b93).

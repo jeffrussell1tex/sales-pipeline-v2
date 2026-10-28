@@ -226,7 +226,9 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                         {/* Paste area */}
                         <div style={{ marginBottom:'1rem' }}>
                             <label style={lblStyle}>Or paste CSV content directly:</label>
-                            <textarea onChange={handlePaste} placeholder={"First Name,Last Name,Company,Email,Source\nJohn,Smith,Acme Corp,john@acme.com,LinkedIn"} style={{ width:'100%', height:'120px', padding:'0.625rem', border:`1px solid ${T.border}`, borderRadius:'8px', fontSize:'0.75rem', fontFamily:'monospace', resize:'vertical', boxSizing:'border-box' }} />
+                            <div style={{ border:`1px solid ${T.border}`, borderRadius:'8px', overflow:'hidden' }}>
+                            <textarea onChange={handlePaste} placeholder={"First Name,Last Name,Company,Email,Source\nJohn,Smith,Acme Corp,john@acme.com,LinkedIn"} style={{ display:'block', width:'100%', height:'120px', padding:'0.625rem', border:'none', borderRadius:0, outlineOffset:'-2px', fontSize:'0.75rem', fontFamily:'monospace', resize:'vertical', boxSizing:'border-box' }} />
+                            </div>
                         </div>
 
                         {/* Expected columns */}
@@ -308,7 +310,8 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                         )}
 
                         {preview.leads.length > 0 ? (
-                            <div style={{ overflowX:'auto', border:`1px solid ${T.border}`, borderRadius:'8px' }}>
+                            <div style={{ border:`1px solid ${T.border}`, borderRadius:'8px', overflow:'hidden' }}>
+                            <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.75rem' }}>
                                     <thead><tr>
                                         {['Name','Company','Email','Source','Status','Score','Est. ARR'].map(h => (
@@ -334,6 +337,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                                         )}
                                     </tbody>
                                 </table>
+                            </div>
                             </div>
                         ) : (
                             <div style={{ textAlign:'center', padding:'2rem', color:T.inkMuted }}>No valid leads to import.</div>

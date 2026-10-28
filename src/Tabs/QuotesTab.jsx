@@ -1136,7 +1136,8 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
 
             {/* Edit form */}
             {isAdmin && editing && (
-                <div className="table-container" style={{ padding: '1.25rem' }}>
+                <div className="table-container">
+                    <div style={{ overflowX: 'auto', padding: '1.25rem' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: T.ink, marginBottom: '1rem', fontFamily: T.sans }}>{editing === 'new' ? 'New Product' : 'Edit Product'}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                         <div><label style={lbl}>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} placeholder="e.g. Enterprise Platform" /></div>
@@ -1158,6 +1159,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={cancel} style={{ background: '#e8e3da', color: T.inkMuted, border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
                         <button onClick={handleSave} disabled={saving} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save Product'}</button>
+                    </div>
                     </div>
                 </div>
             )}

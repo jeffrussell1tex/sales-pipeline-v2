@@ -498,7 +498,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   every entry (`node scripts/mutate-import.mjs`, about 4 h) runs before
   each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
   its 3,139 older entries run on its step G's build in four slices and its
-  own seven pre-run on the final tree — no full run on its final tree); §0.212 by its scope alone.
+  own seven pre-run on the final tree — no full run on its final tree); §0.212 and §0.213 by their scopes alone.
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
@@ -1175,8 +1175,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The profile's Calendar tab reads what Home fetched.** After an org switch
   made from another tab, a connected user sees "Not connected", OFF and
   "Connect Google Calendar", with no Refresh. Read 10 Oct.
-- **Three dialogs on the legacy `.modal` class** (confirm, prompt, blocked
-  delete). The guide wants inline chrome. §0.136, as recorded.
+- **Three dialogs on the legacy `.modal` class** (confirm, prompt, coaching
+  note — the blocked delete is inline-styled; corrected 28 Oct by §0.213's
+  docs check). The guide wants inline chrome. Since §0.213 the class clips
+  and each use holds a box that scrolls (guide §18b103 rule 5). §0.136, as
+  recorded.
 - **Log from calendar is dead code.** Its state and two handlers have no
   caller. Wire it or remove it. §0.175 (a).
 - **A popup a checker opens while ModalLayer's crash notice shows is not
@@ -1696,7 +1699,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `follow = true` by default, linkIds.js:118): the add panel's PUT names
   the contact in the deal's Contacts text (ReportsTab.jsx:6267-6281), so
   the deal links the survivor under that name; the typeahead gives a new
-  job's customer the account's name (DispatchTab.jsx:6731-6735, posted at
+  job's customer the account's name (DispatchTab.jsx:6732-6736, posted at
   :5793-5801); the select sends an id with no name (:2675). For these
   names: as the merges leave names; with the first item above. The fourth
   is not followed: documents.mjs follows no merge. `resolveLinks`
@@ -1800,7 +1803,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   screen only). It
   counts the list as loaded: the app reads the contacts with the org
   (App.jsx:501) and again only after a merge or its Undo
-  (useMerge.js:49-55) or an import's owner overwrite (ModalLayer.jsx:516),
+  (useMerge.js:49-55) or an import's owner overwrite (ModalLayer.jsx:521),
   and Reports keeps its assignment in its own map (`localPersonaMap`,
   ReportsTab.jsx:6343), never in the app's list — so a persona given
   since the list loaded, by another member or by the Admin from Reports,
@@ -1962,7 +1965,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     again (P22; UsersDetail.jsx:1263).
   - The Email box says "Managed via Clerk — contact admin to change.",
     while the member can change it in their own profile panel (P23;
-    UsersDetail.jsx:1255; AppHeader.jsx:633's Save Profile sends `email`).
+    UsersDetail.jsx:1255; AppHeader.jsx:636's Save Profile sends `email`).
   - "Audit log — Last 5 changes" reads `settings.auditLog`, which nothing
     sets, and "Last login" reads `user.lastLoginAt`, which no function
     writes (P24; UsersDetail.jsx:1367, :1357).
@@ -1972,18 +1975,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
     row though the roster on screen shows it (P27; it PUTs only the rows
     whose team or team id changed, TeamsDetail.jsx:75-78).
   - A team change on the profile page moves no territory or vertical; the
-    Teams page's Assign does (P30; TeamsDetail.jsx:438; as before §0.211).
+    Teams page's Assign does (P30; TeamsDetail.jsx:439; as before §0.211).
   - The Invite page sends `manager` with each invitation, and the invite
     path stores none (P39; UsersDetail.jsx:177; users.mjs's invite names no `manager`).
   - The profile panel's signature box reads empty after the avatar opens
     the panel: the click refills the panel's form with six keys and no
-    `emailSignature` (P40; AppHeader.jsx:544, :620, :633). Save Profile then sends
+    `emailSignature` (P40; AppHeader.jsx:547, :623, :636). Save Profile then sends
     `emailSignature: undefined`, which JSON drops, so the stored one is
     kept — but it shows as none.
   - A Manager or Admin moved to a team on the profile page lands on its
     member list (`repIds`), as before §0.211; the Teams page lists only
     non-managers there and counts one who is also the team's manager
-    twice (P41, D16; TeamsDetail.jsx:29-32, :353-357).
+    twice (P41, D16; TeamsDetail.jsx:29-32, :354-358).
 - **The backup page after §0.205** (its reviews, 16 Oct; read in code):
   - The snapshot list reads an import as "Automated" (it tells only
     'manual' apart) and a partial one as "Failed" (it knows only 'ready'
@@ -2039,7 +2042,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   account to the survivor and never renames it (merge.mjs:233), so a
   customer made from an account later merged away — New Job's "CRM
   accounts — not yet in Dispatch" pick (`onPickAccount`,
-  DispatchTab.jsx:6731-6742, its name and id; POSTed by handleSaveNewJob,
+  DispatchTab.jsx:6732-6743, its name and id; POSTed by handleSaveNewJob,
   :5793-5808) or quote -> job's (quote-to-job.mjs:118-125, the deal's
   account name and id) — names the survivor under the old name. The
   build the local `origin/master` ref holds (61ca21a, prod; not fetched)
@@ -2076,7 +2079,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "Render an unmatched value as itself, disabled." (:3007); guide §16's
   own example (:802) has no `disabled`, though §18b101 rule 4 (:4358)
   cites both for "a select shows it disabled". The role selects
-  (UsersDetail.jsx:41, UserModal.jsx:159) and, since §0.209, the same
+  (UsersDetail.jsx:41, UserModal.jsx:164) and, since §0.209, the same
   form's Linked CRM account (`heldLink`, DispatchTab.jsx:2679) draw theirs
   disabled. Each is drawn only while the draft holds the stale value, so
   it leaves the list once another is picked, and an untouched Save sends
@@ -2524,14 +2527,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
     so an Admin's manager save landing in between is put back — the
     server's read-to-write window (the Pin race, above); only the quota
     plans are kept at write time.
-- **Found by step B's browser check** (§0.212, 27 Oct — Jeff's question,
-  measured in the pane): the New User window (UserModal.jsx:85 — opened
-  only by the deal window's "+ New Rep"; the Settings → Users pages add
-  members through Invite users) rounds its corners on the box that scrolls,
-  so on Primary Info, taller than the window, its scrollbar squares the
-  right two (1,002 px of form in a 519 px box, a 16 px scrollbar). A
-  separate task is proposed — every rounded box that is its own scroller,
-  fixed as a class with a scan, after §0.212 is committed.
 - **The task rail offers ✓ Complete and Edit to the Dispatcher and
   ReadOnly roles** (§0.199's re-check; read in code): its quick-action bar
   has no role check, while its Delete checks `canEditCrm`; Home opens the
@@ -2858,6 +2853,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   under its rate limit (300 per 15 minutes) — a size cap bypassed, not a
   leak. Recommended: a value that is not a positive whole number reads as
   the default (`limit` 50, `page` 1), or answers 400.
+- **The deal window offers "+ New Rep" to every role** (§0.213's browser
+  check, 28 Oct — seen as Karen, a Sales Rep, in Accelerep QA; the create
+  read in code, not sent): its Sales Rep list ends in "+ New Rep"
+  (OpportunityModal.jsx:1720-1724), which opens the New User window
+  (ModalLayer.jsx:219-222) for any role, while users.mjs takes a write only
+  from an Admin or a Manager (`ADMIN_ROLES` :28; 403 "Forbidden:
+  insufficient role", :534-537) — so a Sales Rep fills in a form whose
+  Create is refused, and the refusal's dialog opens under the window (§4.8,
+  "Failed to Save User"). Against guide §18b76 (a control is offered to the
+  roles that write). Recommended: offer "+ New Rep" to the roles that write
+  members, and pin it with the role gate's other controls.
 
 ### 4.7 Imports and merge
 
@@ -3255,11 +3261,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first contact of the address, no merge test, no order); a CSV contact
   import's conflict (CsvImportModal.jsx:49-59 — the first contact of the
   email, else of the first and last name, and the company when the row
-  has one; Overwrite writes onto it, :358-360 → ModalLayer.jsx:506-512)
-  and its new companies (ModalLayer.jsx:469-472 — a company only a
+  has one; Overwrite writes onto it, :358-360 → ModalLayer.jsx:511-517)
+  and its new companies (ModalLayer.jsx:474-477 — a company only a
   merged-away account names gets no account); a CSV account import's
   conflict (CsvImportModal.jsx:66 — the first account of the name;
-  Overwrite writes onto it, ModalLayer.jsx:569-577); the lead duplicate
+  Overwrite writes onto it, ModalLayer.jsx:574-582); the lead duplicate
   check (LeadModal.jsx:102-106 — the first contact of the email, over
   every contact, :312); and Dispatch's won-deal jobs
   (`buildWonBridgeJobs`, DispatchTab.jsx:2070, the first account holding
@@ -3738,10 +3744,114 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The reminder modal takes the first click on the Reports tab.** §0.140,
   as recorded.
 - **AccountsTab layout polish.** As recorded.
-- **70 churn-only inline components** (`npm run check:inline -- --churn`;
-  counted 7 Oct, §9 said 76). SalesManagerTab's SubTabs, TeamTab and AuditTab
-  are among them, per §0.84, and AppHeader's search results' `GH` and `RR`,
-  beside §0.194's lines. Opportunistic.
+- **68 churn-only inline components** (`npm run check:inline -- --churn`;
+  28 Oct; 70 on 7 Oct, §9 said 76). SalesManagerTab's SubTabs, TeamTab and
+  AuditTab are among them, per §0.84, and AppHeader's `ST` (AppHeader.jsx:700;
+  its search results' `GH` and `RR` went with §0.209); and the New User window's
+  `Toggle` (UserModal.jsx:207), Reports' `PanelB` (ReportsTab.jsx:1293) and
+  its six `PanelD` (:2773, :2959, :3213, :3411, :3596, :3861 — the same
+  panel declared six times; §0.213's read). Opportunistic.
+- **A quote template's starting blocks are cut off at 260 px and never
+  scroll** (§0.213's read, 28 Oct; read in code, not seen in the pane): a
+  blank template's "Starting blocks" list (QuoteTemplatesDetail.jsx:355,
+  `BlankRequiredBlocks`) sets `maxHeight:260, overflowY:'auto'` and then
+  `overflow:'hidden'` in one style; React sets the keys in order, so the
+  list clips and never scrolls, and its eight rows — the five required
+  (`REQUIRED_BLOCKS` :333) and three optional (:340) — come to about
+  416 px by arithmetic. Recommended (Jeff's call — the window grows): drop
+  the max height and the scroll, keeping the radius and the clip.
+- **The Audit log's filters draw a panel inside a panel** (§0.213's read;
+  read in code, not seen in the pane): `PolicySelect`
+  (security/shared.jsx:142-144) wraps its children in a `DropdownPanel`
+  (:76), and the three filters hand it dropdowns that each draw their own
+  (audit/AuditDetail.jsx:35, :58, :77, through :519-521) — a double border
+  and shadow, and by CSS rules an inner panel 10 px wider than the outer's
+  content box, so a horizontal scrollbar on every filter. And
+  `cloneElement` hands each child an `onClick` (:143) the dropdowns do not
+  take, so picking a filter may not close the menu. Recommended:
+  `PolicySelect` draws its children in its fixed box alone; then try the
+  close in the pane.
+- **The lead import window's resize handles lie outside it** (§0.213's
+  read; read in code, not tried): LeadImportModal.jsx:385 draws
+  `<ResizeHandles>` after the window's box has closed (:384), its sibling
+  in the fragment, so they are placed against the page, not the window,
+  under the click catcher (zIndex 9999, the drag hook's `zIndex - 1`; the
+  handles' own is 10) — its corner resize is likely
+  dead. Recommended: move them into the window, as the New User window has
+  them (guide §18b103 rule 6), and try it in the pane.
+- **The New User window's "Failed to Save User" dialog opens under the
+  window** (§0.213's second review; read in code, and in headless Chromium
+  with the real window bundled from the source — not seen in the pane; as
+  before §0.213): the dialog (UserModal.jsx:70) is fixed at zIndex 9999,
+  and the window is drawn at the drag hook's 10000 (useDraggable.js:33,
+  :216-217), its click catcher at 9999 after the dialog in the page — so
+  the window covers the dialog (the probe's `elementFromPoint` at the
+  dialog's centre returned a label of the window), and a save's refusal is
+  not seen. Recommended: draw the dialog above the window (a zIndex over
+  the hook's, or through the hook's own top), then fail a save in the pane.
+- **The CSV import window's lower-right handle lies over its body's
+  scrollbar** (§0.213's read; seen in §0.213's browser check, 28 Oct; as
+  before §0.213): the body (CsvImportModal.jsx:590, `flex: 1, overflowY:
+  'auto'`) reaches the window's bottom, and the handles (:1142) are the
+  window's children, so the bottom-right one (20 px, zIndex 10) covers the
+  foot of the body's scrollbar, where its down arrow is — in the pane, the
+  window shrunk to 380 px so its body scrolled, `elementFromPoint` at the
+  bar's foot was the handle. Recommended: the handles
+  in the scroller, as the New User window's (guide §18b103 rule 6), or a
+  footer below the body.
+- **A draggable window refuses a sideways swipe** (§0.213's read; read in
+  code, not tried on a device): useDraggable.js's touch guard lets a touch
+  scroll only a scroller with vertical room — it reads `overflowY` and the
+  vertical movement (:61-71) — else it refuses the touch
+  (`preventDefault`, :74), so a sideways swipe on a table that scrolls
+  sideways in a draggable window (the lead import's preview, the CSV
+  import's preview and invite list) is refused. §0.213 let a touch scroll
+  the New User window, whose container had been its scroller (guide
+  §18b103 rule 6). Recommended: the guard reads the swipe's axis and the
+  scroller's room on it; try both on a phone.
+- **The Pipeline list view's sticky header never sticks** (§0.213's read;
+  read in code): ListView.jsx's header (:73, `position: 'sticky'`) binds to
+  the table card, which scrolls (:394) but never down — its parent is auto
+  height (PipelineTab.jsx:887, index.css:1014) — so the header scrolls away
+  with the page; the Quarters rail's scroll (:216) never engages either.
+  Recommended (Jeff's call): bound the list view's height so the table
+  scrolls under its header, or make the header stick to the page.
+- **The profile panel runs off a short window** (§0.213's read; seen in
+  §0.213's browser check, 28 Oct — Jeff's panel in Accelerep QA, a window
+  800 × 600): on a desktop the panel (AppHeader.jsx:558,
+  `.spt-profile-panel`) is placed at top 56 with no bottom and no max
+  height, and its tab body scrolls within 560 px (:600), so the panel was
+  775 px tall, its foot at 831 px — 231 px below the window's — and
+  nothing brings it up. Recommended: a max height on the panel
+  (the window less its top), the panel clipping and its tab body taking
+  the flex share (guide §18b103 rules 3 and 7 — the guard names the panel
+  for its auto height, and its harness entry pins that).
+- **The notices stack shows a light scrollbar beside dark cards**
+  (§0.213's read; read in code): the press notices' stack
+  (ModalLayer.jsx:369, `maxHeight: '70vh', overflowY: 'auto'`, no radius)
+  scrolls once its notices pass 70% of the window, with the native light
+  scrollbar beside the dark (`T.ink`) cards. Cosmetic; no corner is lost.
+  Recommended: nothing until it is seen.
+- **The task rail's status pill has no background** (§0.213's read; read
+  in code, not seen in the pane): `STATUS_COLORS` (TaskRail.jsx:107-111)
+  holds `{ bg, color }`, spread into the pill's style (:516) — `bg` is no
+  CSS property, so the pill draws no background, and Open's
+  `color: '#2a2622'` is `T.ink`, the header's own background (:509), so
+  "Open" would read ink on ink. Recommended: `background` for `bg`, and
+  colours that read on the dark header; look in the pane first.
+- **The app's prompt dialog has no caller** (§0.213's browser check, 28
+  Oct; read in code): `showPrompt` (App.jsx:410) is handed to the context
+  (:1769) and opens `promptModal` (ModalLayer.jsx, a `.modal`), but no
+  screen calls it — so §0.213's prompt-dialog change is held by
+  tests/rounded-scrollers.test.mjs alone, never seen. Recommended (Jeff's
+  call): leave it for the next screen that asks for a name, or remove it
+  with its state (useModalState.js:78-79) and its Escape case.
+- **Three empty folders under src, left by a brace expansion** (§0.213's
+  read; the third found by its docs check): `src/{components` (holding
+  `{modals,ui,tabs},hooks,utils}`), `src/{lib,components` (holding
+  `{modals,settings,tabs,shared}}`) and `src/components/{modals,settings,tabs,shared}`,
+  dated 3 Mar 2026, with no files in any; git tracks none. Recommended:
+  delete all three (Jeff's call).
 
 ---
 
@@ -3905,13 +4015,16 @@ to add meetings. Nothing in the app adds a meeting to Google:
   still grades what it misses. Step B's five edited suites read none the
   static read misses; the suite its resize close added,
   tests/resize-targets.test.mjs, walks src (211 files the static read
-  misses — a 49th), and what it reaches keeps its last grade (a suite added
-  can only turn a run red; guide §18b23 part 4). Recommended: mutate-scope.mjs runs each edited test
+  misses — a 49th), and §0.213's, tests/rounded-scrollers.test.mjs, walks
+  src and index.css (about 203 files it misses — a 50th); what each reaches
+  keeps its last grade (a suite added can only turn a run red; guide §18b23
+  part 4). Recommended: mutate-scope.mjs runs each edited test
   once with the tracer and adds what it traced to the scope (Jeff's call).
-- **The self-pin scan's floor stays seventeen with nineteen pins** (§0.212
-  added tests/mutate-scope.test.mjs's and tests/resize-targets.test.mjs's;
-  tests/sales-links.test.mjs:783 `pins.length >= 17`). Every earlier pin
-  raised it; these two did not, so two pins lost would go unseen. Raising it edits sales-links.test.mjs, which the
+- **The self-pin scan's floor stays seventeen with twenty pins** (§0.212
+  added tests/mutate-scope.test.mjs's and tests/resize-targets.test.mjs's,
+  §0.213 tests/rounded-scrollers.test.mjs's; tests/sales-links.test.mjs:783
+  `pins.length >= 17`). Every earlier pin raised it; these three did not, so
+  three pins lost would go unseen. Raising it edits sales-links.test.mjs, which the
   static read misses 364 files of (above) — Jeff's call.
 - **An ordering pin of `indexOf` against `indexOf` passes when its first
   text is gone** (§0.199's pre-run: a mutant deleting the restore's clean-up

@@ -64,7 +64,8 @@ export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onCl
     return (
         <div className="modal-overlay" onClick={saving ? undefined : onClose}>
             <div className="modal" onClick={e => e.stopPropagation()}
-                style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '520px', width: '100%', padding: isMobile ? '1.25rem' : '1.75rem 2rem', fontFamily: T.sans, background: T.surface }}>
+                style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '520px', width: '100%', padding: 0, fontFamily: T.sans, background: T.surface }}>
+                <div style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0, padding: isMobile ? '1.25rem' : '1.75rem 2rem' }}>
                 <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Coaching note</div>
                 <div style={{ fontSize: 12.5, color: T.inkMid, lineHeight: 1.5, marginBottom: 14 }}>
                     Seen by the people you address, by you, and by Admins. A team note is seen by the team and its manager; someone who joins the team later sees it only if it is dated on or after their first day.
@@ -121,6 +122,7 @@ export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onCl
                         style={{ padding: '8px 16px', border: 'none', borderRadius: T.r, background: ready && !saving ? T.ink : T.borderStrong, color: '#fbf8f3', fontWeight: 600, fontSize: 12.5, cursor: ready && !saving ? 'pointer' : 'default', fontFamily: T.sans }}>
                         {saving ? 'Saving…' : 'Send note'}
                     </button>
+                </div>
                 </div>
             </div>
         </div>
