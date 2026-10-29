@@ -875,6 +875,29 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - personal (per-rep) email templates;
   - templates on a lead;
   - sending from the app (a per-org sending domain, a project of its own).
+- **Notifications off in every org but the real UKG — planned, NOT applied**
+  (Jeff, 29 Oct: "turn off notifications for all users in all environments
+  except the UKG one", then "Not now"). A read-only map (a workflow, five
+  readers and a critic) found 39 paths and where each is switched; a SELECT
+  census (counts only) found 19 members outside the real UKG
+  (`org_3CwnbloUXZQl0e6KtDhXFXRK8UD`, kept on; the dev-instance "UKG"
+  `org_3B8Tg9…` goes off too — Jeff: "Off too"), 17 of them never having
+  saved a setting, so every alert that defaults on is on. The plan, dry-run
+  checked (27 writes, one transaction, each guarded on the value read, a
+  snapshot of every old value first; it refuses if UKG is in it): each
+  member's `profile.notificationPrefs` — the 19 keys the senders read, and
+  any other stored — set `enabled: false` (its mode kept), and
+  `profile.smsNotifications.enabled` false; Slack `enabled: false` in two
+  orgs (the webhook kept); customer notifications, the one sending
+  automation and the one outbound webhook in Accelerep Test; four scheduled
+  report deliveries. The script was in the twenty-fourth session's scratch
+  folder (`notif-off.mjs`); the write was stopped by the permission check,
+  and Jeff chose not now. Not reachable by data: the in-app bell and
+  popups, a report's Send now, a quote sent by hand, Clerk's own emails and
+  texts; and a member added later starts with every default-on alert on (a
+  code change — an org-level switch — if wanted). Env switches
+  (`JOBS_ENABLED`, `RESEND_API_KEY`, `TWILIO_*`) are per site and would
+  stop UKG's too.
 
 ---
 
