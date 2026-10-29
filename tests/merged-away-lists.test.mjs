@@ -504,6 +504,12 @@ const RESOLVERS = {
         'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
     accountOfDeal: [PICK_LINK, "a deal's account by its link, through the whole list: one merged away is named as its survivor; an id-less deal the later LIVE account of its name (state §0.209)",
         'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
+    openDealsByAccount: [PICK_LINK, "the header search's open-deal counts (state §0.214): each open deal once, on the account accountForDeal finds — a deal on a merged-away account counts on its survivor; an id map of counts, no rows",
+        'tests/dispatch-customer.test.mjs', 'openDealsByAccount: each open deal once — by its link, or by the one live account of its name; twins no longer both count an id-less deal'],
+    customerForText: ['src/utils/dispatchCustomer.js', "New Job's typed customer name (state §0.214): the one customer of the name, or the one LIVE account of it not yet in Dispatch (unarchived); a name only merged-away accounts have is refused through resolveLink, never made a customer — a check, nothing drawn from the list",
+        'tests/dispatch-customer.test.mjs', 'customerForText: the one live account of the name not yet in Dispatch; a merged-away name refused; no record of it — Create'],
+    refusalLeads: ['src/utils/dispatchCustomer.js', "what New Job's list leads with under a refusal (state §0.214, the browser check's fix): the records the refusal names, by id — a merged-away name's survivor through survivorOf (a merged-away account is never led: the field drops one by isMergeArchived); ids, no rows drawn",
+        'tests/dispatch-customer.test.mjs', 'refusalLeads: what each refusal names — two customers; two twins and the customers that hold them; a merged-away name\'s survivor and its customers'],
     heldAccountOption: [PICK_LINK, "what a select shows for the link it holds when the live options leave it out: the record found by id in the whole list — merged away, named with its survivor; missing, \"an account you can't open\" (state §0.209)",
         'tests/merged-away-cleanup.test.mjs', "C1 — pickLink helpers: standsFor, mergedInto, mergedSearchWords, accountOfDeal and heldAccountOption on merged-away rows, a chain, a NULL mark, an undone merge and a rep's list (run)"],
     siteLine: [PICK_LINK, "a site's line under the Account picker: its parent looked up by id in the whole list — a parent merged away is held there, so the line says \"a site — pick the account it belongs to\", never \"an account you can't open\"",
@@ -595,6 +601,9 @@ const WHOLE_READS = {
     'src/Tabs/ContactsTab.jsx': [
         ['accounts', 'return (accounts || []).find(a => a.name?.toLowerCase() === activeCompany.name.toLowerCase());', 1, `the Company view's card (CompanyTwoPane's matchedAccount, handed every account) finds its account by name — it lists none; ${BY_NAME}`, STAY],
     ],
+    'src/components/layout/AppHeader.jsx': [
+        ['accounts', 'const accountsById = React.useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);', 1, "the search's account rows: an index by id — each row's parent named by its id (state §0.214); the rows themselves are unarchived(accounts)", STAY],
+    ],
     'src/components/layout/MeetingPrepPanel.jsx': [
         ['accounts', "? (accounts || []).find(a => a.name?.toLowerCase() === (matchedOpp.account || '').toLowerCase())", 1, `the meeting's account by the deal's name — ${BY_NAME}`, STAY],
     ],
@@ -609,10 +618,10 @@ const WHOLE_READS = {
         ['contacts', 'return findDuplicate(form, normalizedLeads, contacts);', 1, `a lead's duplicate warning by name or email — ${BY_NAME}`, STAY],
     ],
     'src/Tabs/DispatchTab.jsx': [
-        ['accounts', 'const exact = [...(customers || []), ...(accounts || [])]', 1, "New Job's create-guard: a name an account already has, merged away included, offers no Create — a check, nothing drawn", STAY],
-        ['accounts', 'opportunities, jobs, customers, accounts,', 1, `Dispatch's won-deal jobs (buildWonBridgeJobs) find their account by name — ${BY_NAME}`, STAY],
-        ['accounts', 'const merged = q ? mergedAwayName(query, customers, accounts) : null;', 1, "New Job's Customer field (CustomerTypeahead): a name only a merged-away account has — resolveLink's 'merged' over the whole list (mergedAwayName, local) — offers no Create and names the account to pick (state §0.209); a check, nothing drawn from the list", STAY],
-        ['accounts', 'const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;', 1, "Save Job: the same rule refuses a name only a merged-away account has, in the field's words (state §0.209); a check", STAY],
+        ['accounts', 'opportunities, jobs, customers, accounts,', 1, "Dispatch's won-deal jobs (buildWonBridgeJobs): each deal's account by accountForDeal — by its link, one merged away as its survivor; an id-less deal the one live account of its name, never the first of two (state §0.214)", STAY],
+        ['accounts', 'const byId = new Map((accounts || []).map(a => [a.id, a]));', 1, "New Job's Customer field: an index by id — a customer row's CRM account and an account row's parent named by their ids (state §0.214); the rows themselves are the live accounts (acctMatches, !isMergeArchived)", STAY],
+        ['accounts', "for (const a of accounts || []) if (unlinkedKeys.has(searchKey(a.name || ''))) linkedAccountIds.add(a.id);", 1, "New Job's Customer field: the accounts a customer linked to no account stands for by its name (dispatchCustomer.js rule 2) leave \"CRM accounts — not yet in Dispatch\" — a merged-away one is marked too, and the rows are the live accounts all the same (acctMatches, !isMergeArchived; the second review of the browser check's fix, state §0.214)", STAY],
+        ['accounts', 'const accountsById = new Map((accounts || []).map(a => [a.id, a]));', 1, "a customer's Linked CRM account options: an index by id — each option's parent named by its id (state §0.214); the options themselves are unarchived(accounts)", STAY],
     ],
     'src/components/documents/DocumentLinkPicker.jsx': [
         ['accounts', 'const sub = heldLinkSub(l, allAccounts, allContacts);', 1, "a held link's words (heldLinkSub, local): its account found by id in the whole list — one merged away named by the record it was merged into (state §0.209); the offer reads the live lists", STAY],
@@ -1460,6 +1469,7 @@ const SERVER_READS = {
     'netlify/functions/ai-score.mjs': ["follow to the survivor: a deal's people by id, a merged duplicate followed to the contact it was merged into (up to five steps, as contactIndex)", 1, 0],
     'netlify/functions/opportunities.mjs': ["follow to the survivor: a deal's account by id (accountLink), one merged away followed to the account it was merged into; the bulk paths' ids (filed: OPEN_ITEMS §4.7 — they take an account merged away)", 3, 0],
     'netlify/functions/quote-email.mjs': ["filter in JS: the quote's fallback recipient is the first live contact named like the deal's first contact (`c.mergeArchived !== true`, NULL live — state §0.210; tests/merged-away-cleanup.test.mjs C21)", 1, 0],
+    'netlify/functions/quote-to-job.mjs': ["follow to the survivor: the deal's account as Dispatch's screen finds it (dispatchCustomer.js customerForDeal through pickLink.js accountForDeal) — by its link, one merged away followed to the account it was merged into; a deal with no account id the one LIVE account of its name — over every account of the org, merge marks included (state §0.214; tests/dispatch-customer.test.mjs)", 1, 0],
     'netlify/functions/public-api.mjs': ["filter in SQL: the public API's accounts and contacts leave merged-away rows out, in `conds` (`is not true`, NULL live), so its totals count what it lists (state §0.210; Jeff, 18 Oct: \"Leave them out\"; C20)", 4, 0],
     'netlify/functions/report-deliveries.mjs': ['the engine: loadReportData hands runReport (reportQuery.js) every account the owner may read (all of the org, or their own for a role that sees only its own), and runReport leaves merged-away accounts out of the Accounts source, a deal on one counted on its survivor (state §0.210; C15)', 0, 1],
     'netlify/functions/documents.mjs': ["filed: a document's links resolve by id and follow no merge (resolveLinks; filed: OPEN_ITEMS §4.2, documents.mjs follows no merge)", 0, 2],

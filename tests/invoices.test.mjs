@@ -15,7 +15,7 @@ import {
     INVOICE_STATUSES, INVOICE_TRANSITIONS, canTransition, isInvoiceEditable, isLiveInvoice, invoiceStatusLabel,
     JOB_LINE_TYPES, DEFAULT_PAYMENT_TERMS, QUOTE_ACCEPTABLE_STATUSES, quoteCanBeAccepted, quoteCanBecomeJob,
     isYmd, todayYmd, addDaysYmd, cleanInvoiceLines, linesFromJobItems, invoiceTotals, dueDateFromTerms,
-    cleanInvoicePatch, mirrorForJob, quoteLineToJobItem, jobFromQuote, resolveCustomerForOpp, fmtMoney,
+    cleanInvoicePatch, mirrorForJob, quoteLineToJobItem, jobFromQuote, fmtMoney,
     BUILTIN_PRODUCT_TYPES, DEFAULT_PRODUCT_TYPES, cleanProductTypes, lineKindFor, productTypeLabel,
     sortInvoicesForList,
 } from '../src/utils/invoices.js';
@@ -245,18 +245,8 @@ test('jobFromQuote: the quote’s name without its version suffix, else the deal
     assert.equal(jobFromQuote({ quoteNumber: 'Q-1' }, null).description, 'From quote Q-1 v1');
 });
 
-test('resolveCustomerForOpp: the customer on the deal’s account first, else the one named like the account, else none', () => {
-    const customers = [
-        { id: 'c1', name: 'Acme Corp', accountId: 'acct_1' },
-        { id: 'c2', name: 'acme corp', accountId: null },
-        { id: 'c3', name: 'Beta', accountId: 'acct_3' },
-    ];
-    assert.equal(resolveCustomerForOpp(customers, { accountId: 'acct_1', account: 'Something else' }).id, 'c1');
-    assert.equal(resolveCustomerForOpp(customers, { accountId: 'acct_missing', account: ' ACME CORP ' }).id, 'c1', 'the first name match');
-    assert.equal(resolveCustomerForOpp(customers, { account: 'Gamma' }), null);
-    assert.equal(resolveCustomerForOpp(customers, null), null);
-    assert.equal(resolveCustomerForOpp(undefined, { account: 'Acme Corp' }), null);
-});
+// The deal's dispatch customer (resolveCustomerForOpp, "the first name match") is Dispatch's one rule since state
+// §0.214 — src/utils/dispatchCustomer.js customerForDeal, run in tests/dispatch-customer.test.mjs.
 
 test('fmtMoney: two places, a thousands separator, a leading minus', () => {
     assert.equal(fmtMoney(761.1), '$761.10');
@@ -306,7 +296,8 @@ test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoi
 
 test('quote-to-job.mjs: technician 403, the one Dispatch gate (the switch and the role) before any read, the quote read BY ORG, Accepted only, one job per quote, the link written on insert, the audit word', () => {
     const f = code(read('netlify/functions/quote-to-job.mjs'));
-    assert.ok(f.includes("import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, resolveCustomerForOpp, cleanProductTypes } from '../../src/utils/invoices.js';"));
+    assert.ok(f.includes("import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, cleanProductTypes } from '../../src/utils/invoices.js';"));
+    assert.ok(f.includes("import { customerForDeal, dealCustomerRefusal } from '../../src/utils/dispatchCustomer.js';"), "the deal's customer by Dispatch's one rule (state §0.214)");
     assert.ok(f.includes("if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot convert quotes.' });"));
     assert.ok(!f.includes('requireWrite') && !f.includes('dispatchEnabledFor'), 'one gate, not a local copy of it');
     const gate = f.indexOf('const gate = await dispatchGate(auth, event, headers);');

@@ -108,7 +108,20 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        same write ("Move them up", D22). It moves only what the move or
        merge would leave on a site: deals already on one stay (§2.4); the
        rest it leaves are §4.2's "D22's edges".
-   - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
+   - **Batch 2 is DONE (§0.214; guide §18b104)** (Jeff, 28 Oct: "Refuse,
+     name both", "Open, ask to pick", "Refuse it"; docs/design/links-batch-2/).
+     Dispatch's customer is found by one rule (dispatchCustomer.js): the one
+     customer linked to the deal's account, else the one of its name — a
+     deal with an account id takes only one linked to no account; two or
+     more is refused, naming each by number (quote -> job a 409, New Job
+     "pick from the list"). A name typed in New Job saves as the one
+     customer or live account of it; two refuse. A refused New Job Save's
+     customer and location are reused by the retry. A second customer for
+     one CRM account, made or linked by Dispatch's customer save, is refused
+     by the server (a merge, a restore or two writes at one instant can
+     still make one — §4.4). The header search's account
+     rows name their parent, and count each open deal once. What it found
+     and left is filed in §4.4.
    - **Batch 3:** CSV import and merge (§4.7).
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
@@ -1689,18 +1702,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.209 none of the four pickers offers a merged-away record — Reports'
   "Select contacts to add to this deal" (`allContacts={unarchived(contacts)}`,
   ReportsTab.jsx:6260), Dispatch's customer typeahead
-  (`!isMergeArchived(a)`, DispatchTab.jsx:348-349), its Linked CRM account
-  select (`unarchived(accounts)`, :2680) and the document link picker
+  (`!isMergeArchived(a)`, DispatchTab.jsx:359-360), its Linked CRM account
+  select (`unarchived(accounts)`, :2715) and the document link picker
   (DocumentLinkPicker.jsx:84-85) list only live ones — so what sends one
   through them is a screen whose lists were loaded before the merge, or a
   hand-made request (the cleanup batch's design, 18 Oct, P30; re-read 23
   Oct; read in code, not run). The first three are followed to the
-  survivor (`checkLinks`, opportunities.mjs:480, dispatch-customers.mjs:249;
+  survivor (`checkLinks`, opportunities.mjs:480, dispatch-customers.mjs:266;
   `follow = true` by default, linkIds.js:118): the add panel's PUT names
   the contact in the deal's Contacts text (ReportsTab.jsx:6267-6281), so
   the deal links the survivor under that name; the typeahead gives a new
-  job's customer the account's name (DispatchTab.jsx:6732-6736, posted at
-  :5793-5801); the select sends an id with no name (:2675). For these
+  job's customer the account's name (DispatchTab.jsx:6811-6815, posted at
+  :5858-5869); the select sends an id with no name (:2710). For these
   names: as the merges leave names; with the first item above. The fourth
   is not followed: documents.mjs follows no merge. `resolveLinks`
   (documents.mjs:167-190) reads the record by id in the org (:176) and
@@ -1965,7 +1978,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     again (P22; UsersDetail.jsx:1263).
   - The Email box says "Managed via Clerk — contact admin to change.",
     while the member can change it in their own profile panel (P23;
-    UsersDetail.jsx:1255; AppHeader.jsx:636's Save Profile sends `email`).
+    UsersDetail.jsx:1255; AppHeader.jsx:641's Save Profile sends `email`).
   - "Audit log — Last 5 changes" reads `settings.auditLog`, which nothing
     sets, and "Last login" reads `user.lastLoginAt`, which no function
     writes (P24; UsersDetail.jsx:1367, :1357).
@@ -1980,7 +1993,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     path stores none (P39; UsersDetail.jsx:177; users.mjs's invite names no `manager`).
   - The profile panel's signature box reads empty after the avatar opens
     the panel: the click refills the panel's form with six keys and no
-    `emailSignature` (P40; AppHeader.jsx:547, :623, :636). Save Profile then sends
+    `emailSignature` (P40; AppHeader.jsx:552, :628, :641). Save Profile then sends
     `emailSignature: undefined`, which JSON drops, so the stored one is
     kept — but it shows as none.
   - A Manager or Admin moved to a team on the profile page lands on its
@@ -2037,127 +2050,127 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ### 4.4 Dispatch
 
 - **A dispatch customer can stand for an account under the name of one
-  merged into it** (the cleanup batch's design, 18 Oct, P35; re-read 23
-  Oct; read in code, no data read): a merge moves a dispatch customer's
-  account to the survivor and never renames it (merge.mjs:233), so a
-  customer made from an account later merged away — New Job's "CRM
-  accounts — not yet in Dispatch" pick (`onPickAccount`,
-  DispatchTab.jsx:6732-6743, its name and id; POSTed by handleSaveNewJob,
-  :5793-5808) or quote -> job's (quote-to-job.mjs:118-125, the deal's
-  account name and id) — names the survivor under the old name. The
-  build the local `origin/master` ref holds (61ca21a, prod; not fetched)
-  still offers an account already merged away there where no customer
-  has its name (its :336 has no `isMergeArchived`), and the create
-  stores its survivor in its place (dispatch-customers.mjs:249-251;
-  linkIds.js:79-100, E2): the same shape, made after the merge;
-  `origin/dev` holds 9870ff0 since the push of 23 Oct, whose :349 has
-  the filter. §0.209 closes that route on this tree only
-  for a screen whose list knows of the merge (:349 and :5782-5784 read the
-  loaded `accounts`, which load with the org, after this session's own
-  merge and on a few saves — App.jsx:500, useMerge.js:26; never on a
-  timer), and keeps a customer already so named the one to pick
-  (`mergedAwayName`, :316-326). A screen loaded before a merge made in
-  another session still offers the account, and the server follows it to
-  the survivor (dispatch-customers.mjs:249-251) — the stale screen §4.2's
-  "A link followed to the record it was merged into keeps the name the
-  screen sent" names. A survivor with a customer of its own then has two,
-  and quote -> job takes the first linked by account id of an unordered
-  read (quote-to-job.mjs:114-116; invoices.js:290-294) — the id step that
-  "Batch 2 of §1 item 1: Dispatch takes the first of a name" above runs
-  before its name step. Whether any such customer exists was not read (the
-  design's §9.1). Recommended: a read-only census, counts only, on Jeff's
-  go — dispatch customers whose name is a merged-away account's and whose
-  account is its survivor, and accounts two or more customers link — then
-  the data decision (rename, combine or leave) with Jeff.
+  merged into it** (the cleanup batch's design, 18 Oct, P35; re-read 28 Oct
+  for §0.214): a merge moves a dispatch customer's account to the survivor
+  and never renames it (merge.mjs:233), so a customer made from an account
+  later merged away names the survivor under the old name. Since §0.214 a
+  survivor that then has two customers is no longer resolved to the first
+  of an unordered read: quote -> job refuses (409, both named) and a won
+  deal's placeholder asks to pick (dispatchCustomer.js customerForDeal), and
+  the server refuses a NEW second customer for one account — the merge
+  itself still makes one. The census of 28 Oct (SELECT counts only, 20:50
+  UTC; docs/design/links-batch-2/ANSWERS.md): no account in any org has two
+  customers, and no customer is linked to a merged-away account; customers
+  NAMED as a merged-away account and linked to its survivor were not
+  counted. Recommended: when a merge leaves a survivor two customers, the
+  data decision (rename, combine or leave) with Jeff — and whether the merge
+  should say so.
 - **Dispatch's escape options for a stale value are enabled where guide
   §18b24.3 says disabled, and the customer type's does not draw** (the
   cleanup batch's design, 18 Oct: DESIGN.md:111, P40's last flag, and
   :1219, completeness F8d; re-read 23 Oct; read in code, not run). The
   customer form draws a stored plan or technician its list no longer holds
-  as itself — "Deleted plan (…)" (DispatchTab.jsx:2708-2710), "Unknown
-  technician (…)" (:2781) — each a live `<option>`. Guide §18b24.3 says
+  as itself — "Deleted plan (…)" (DispatchTab.jsx:2743-2745), "Unknown
+  technician (…)" (:2816) — each a live `<option>`. Guide §18b24.3 says
   "Render an unmatched value as itself, disabled." (:3007); guide §16's
   own example (:802) has no `disabled`, though §18b101 rule 4 (:4358)
   cites both for "a select shows it disabled". The role selects
   (UsersDetail.jsx:41, UserModal.jsx:164) and, since §0.209, the same
-  form's Linked CRM account (`heldLink`, DispatchTab.jsx:2679) draw theirs
+  form's Linked CRM account (`heldLink`, DispatchTab.jsx:2714) draw theirs
   disabled. Each is drawn only while the draft holds the stale value, so
   it leaves the list once another is picked, and an untouched Save sends
-  the stored value either way (`...draft`, :3028; react-dom 18.3.1's
+  the stored value either way (`...draft`, :3063; react-dom 18.3.1's
   `updateOptions` matches the value before it looks at `disabled`): the
   difference is how the open list draws it. The customer type's "Unlisted
-  type (…)" (:2697-2699) is another case: `propertyTypesFor` (:1980-1989)
+  type (…)" (:2732-2734) is another case: `propertyTypesFor` (:2000-2009)
   lists every type still on a customer, the form's own among them, as
-  `unlisted: true`, so the `.some(...)` at :2697 finds it and the option
-  is not drawn, while `.filter(t => !t.unlisted)` (:2700) leaves it out of
+  `unlisted: true`, so the `.some(...)` at :2732 finds it and the option
+  is not drawn, while `.filter(t => !t.unlisted)` (:2735) leaves it out of
   the options — React then shows the first type listed (guide §16's bug;
   both from 32ef196, 11 Aug; state 0PB.14, :9345, says the select emits
   the option). Its untouched Save still sends the stored type; as read,
   the option draws only if the customer list changes under an open form.
   The same shape, enabled, outside the design's list: the technician
-  form's "Unknown login" (DispatchTab.jsx:3583 — pinned word for word by
+  form's "Unknown login" (DispatchTab.jsx:3622 — pinned word for word by
   tests/dispatch-links.test.mjs:267 and quoted by a harness entry,
-  scripts/mutate-import.mjs:11687-11689), a crew's default vehicle
+  scripts/mutate-import.mjs:11670-11672), a crew's default vehicle
   (DispatchCrewsDetail.jsx:232-234) and a service plan's visit template
   (DispatchServicePlansDetail.jsx:150). Recommended: make the customer
   type's test read only the types its select lists (`!t.unlisted`), so its
   value is drawn as itself; then Jeff picks the rule — disabled is the one
   the role selects and §0.209 follow: `disabled` on all six, §16's example
   made to match, and that pin and harness entry updated, in one batch.
-- **Undo of a template a New Job starter applied keeps the template's
-  values** (§0.199's second re-check; older — the base has the same lines;
-  read in code and run on made-up forms). startBridgeJob (a won deal's
-  placeholder) and startPlanVisit (a plan visit) apply the matched template
-  and then store the templated form as `prevForm` (`form = next` before the
-  note), so Undo and the template select's "— None —" put back the same
-  templated form — crew, hours, licence and skills stay, and Create Job
-  saves them — and a switch to a second template builds on the first (the
-  first's skills carry over when the second names none). The comment at
-  `EMPTY_JOB` and state's "Compounding
-  guard" say `prevForm` prevents this; the select's own path stores the
-  right baseline. Recommended: `const before = form;` before applying, and
-  `prevForm: before`, in both starters.
-- **A New Job save refused after it made the customer leaves it, and a
-  retry makes another** (§0.199's re-check; read in code). handleSaveNewJob
-  creates the customer (when none was picked), then the service location
-  (when an address was typed), then the job, and keeps the new ids in
-  locals only: the form still names no customer, so the next press makes a
-  second customer of the same name (and, with an address, a second
-  location). Any failure after the customer is made does it — the
-  location's or the job's; since §0.199 a deal the dispatcher picked from a
-  stale list (deleted elsewhere since) is one, while a won deal's
-  placeholder's copied deal is left off instead. Older than §0.199 for
-  every other failure. Recommended: write the made customer (and location,
-  with the address it was made for) into the form, so a retry reuses them.
-- **Batch 2 of §1 item 1: Dispatch takes the first of a name** (read
-  11 Oct over 7e68f26):
-  - A won deal's job placeholder finds its account with `a.id ===
-    o.accountId || a.name === o.account` in one find (DispatchTab.jsx
-    buildWonBridgeJobs), so a same-named account earlier in the list beats
-    the deal's own id. The dispatch customer is found the same way. The New
-    Job form saves both.
-  - Quote -> job takes the first dispatch customer with the deal's account
-    name (invoices.js resolveCustomerForOpp, over an unordered org list in
-    quote-to-job.mjs) unless a customer is linked to the deal's account id.
-    57 of 85 deals carry an `accountId` (SELECT 12 Oct; UKG 15 of 17), so
-    the id step runs for most deals, and finds a customer only where one is
-    linked by `accountId`.
-  - New Job's "CRM accounts — not yet in Dispatch" hides an account
-    whenever a customer has its name, so one twin vanishes once the other
-    is linked. The customer form's "Linked CRM account" select lists bare
-    names (the map; not re-read).
-  - What these do with two matches (open New Job with no customer picked,
-    or refuse quote -> job and name both) is designed with Jeff in batch 2.
-- **A new job's customer is made from typed text** (batch 2). handleSaveNewJob POSTs a
-  new dispatch customer whenever none was picked, so "Acme Inc" typed
-  beside a saved "Acme, Inc." makes a second; the field's `linkedNames`
-  compares raw lower-cased names, so that account still shows under "CRM
-  accounts — not yet in Dispatch". §0.194 gave the field's two groups the
-  matcher and a count, and left its exact check, Create and save as they
-  were. The field lists on focus, so since §0.194 punctuation alone ("-")
-  lists the first six of each group, as the empty field does (the old
-  filter listed only names holding "-"), and Create “-” is offered as
-  before. Read 9 Oct.
+- **One customer for one CRM account is read, then written** (§0.214; read
+  in code): dispatch-customers.mjs asks for another customer of the account
+  before its insert, with no index under it, so two creates at one instant
+  can both pass (quote-to-job.mjs's create is read, then written, the same
+  way); merge.mjs (:233) moves a merged-away account's customer onto the
+  survivor whether it has one or not; and an Admin's backup restore inserts
+  the file's customers by their ids with no such check (backup.mjs's
+  `upsertChunked`), so a restored customer can land on an account another
+  customer now holds. An index (unique on org and
+  account, where an account is set) would close the race but make such a
+  merge fail. Jeff decides; quote -> job and the placeholder refuse a deal
+  two customers stand for either way.
+- **A rep's Dispatch screen may find a deal's account where the server finds
+  two** (§0.214's second review; read in code and run on made-up rows): for
+  a deal with no account id, the won deal's placeholder reads the screen's
+  accounts — for a Sales Rep (where the org opens Dispatch to reps) their own
+  and unowned ones — and quote -> job every account of the org. A twin of the
+  deal's name owned by another rep is then one account on the screen and two
+  on the server. The placeholder takes the customer linked to the visible
+  twin, else the one of the deal's name linked to no account, else its Save
+  makes a customer linked to the visible twin; quote -> job takes the one
+  customer of the deal's name, whichever account it is linked to, and
+  refuses when none has the name or two do. So one can refuse where the
+  other saves, and with a customer of the name linked to the hidden twin the
+  two take different customers. Recommended: resolve a placeholder's customer on the server
+  (send the deal, not an account found by name), as quote -> job does.
+- **A New Job retry with a changed address leaves the first location** (§0.214's
+  second review; read in code): a Save refused after it made the customer's
+  location, retried with another address, makes a second location (no longer
+  a second default) — the first stays on the customer. Recommended: update
+  the made location in place on such a retry.
+- **Two live accounts of one name with no parent still read alike** (§0.214's
+  docs check; read in code): `parentNote` is '' for an account with no
+  parent (accountParent.js), so a customer's Linked CRM account option is the
+  bare name (only one another customer holds adds "— in Dispatch as …"), the
+  header search's row adds only the owner and the open-deal count, and New
+  Job's "CRM accounts — not yet in Dispatch" rows only city and state — yet
+  New Job's refusal says "each row names its parent"
+  (dispatchCustomer.js `typedCustomerRefusal`). The census's demo org with 3
+  live account names held by two or more accounts was not read for parents.
+  Recommended: a second distinguishing word (city, owner or number) wherever
+  no parent is set, and refusal words that match the rows.
+  The same where the parent is outside a Sales Rep's list (§0.214's tenth
+  review, run on made-up rows): `parentNote` needs the parent in the
+  screen's list, so a rep's twins under another rep's Shell read alike too.
+- **The "no new customer" hold is the screen's, from a won deal's placeholder
+  alone** (§0.214, Jeff 29 Oct: "No new customer"; its ninth review, read in
+  code): New Job holds a deal two customers stand for only when it opened
+  from that deal's placeholder (`refusedDeal`). The same deal picked by hand
+  in Linked Opportunity (from + New job, a plan visit, or another deal's
+  placeholder) is not held, and a typed new name makes a customer for it;
+  dispatch-jobs.mjs checks only that the deal is live. quote -> job refuses
+  the same deal (409). Recommended: the job save (or New Job on any deal
+  picked) asks the deal's customers by `customerForDeal`, as quote -> job does.
+- **A deal's account text can differ from its account's name, and rule 2
+  then misses the account's own customer** (§0.214's eighth and tenth
+  reviews, read in code and run on made-up rows): the bulk deal create
+  (opportunities.mjs POST with an array) stores `account` as sent — the
+  single create and the edit set it from the account (`accountLink`). For a
+  deal on an account id, rule 2 reads the deal's text alone (so a rep's
+  screen, which may lack another rep's account, and quote -> job agree), so a
+  customer linked to no account and of the ACCOUNT's own name is not found:
+  the placeholder and quote -> job make a second customer, which New Job's
+  list counts as standing for that account beside the first. A deal still on
+  a merged-away account id reads the merged-away text the same way.
+  Recommended: the bulk create brings the account's name as the single one
+  does; resolve a placeholder's customer on the server (the item above).
+- **quote -> job says "linked to no account" for a deal on a merged-away
+  account whose merge chain leads nowhere** (§0.214's tenth review): the
+  words fit a deleted account; for a broken chain they should say the
+  account was merged and its survivor is gone.
 - **Technician mode loads four lists TechnicianView never shows.**
   §0.172 (c).
 - **DispatchTab's job-template note** calls `equipmentIds` FK ids; they are
@@ -2273,7 +2286,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   ask Jeff whether the email should also follow the tab's name scope and
   the active pipeline; with it, update the pins at
   tests/report-delivery.test.mjs:173-174 and THE GUARD's entry for this
-  file (tests/merged-away-lists.test.mjs:1464).
+  file (tests/merged-away-lists.test.mjs:1471).
 - **Home's "On Your Plate" and greeting counts, and the phone's Tasks badge,
   count the whole org's tasks for an Admin** (§0.200's map, read in code;
   Jeff, 13 Oct: "File them"). Home reads `visibleTasks` — for an Admin every
@@ -2355,7 +2368,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   and read it nowhere (accounts.mjs:136, contacts.mjs:29,
   activities.mjs:51, tasks.mjs:30), and leads never meet it. The header
   search reads the app's whole lists (`unarchived(accounts)`,
-  `unarchived(contacts)`, `opportunities`, AppHeader.jsx:462-464): it would
+  `unarchived(contacts)`, `opportunities`, AppHeader.jsx:467-469): it would
   list accounts and contacts the Accounts and Contacts tabs hide, and the
   deals naming no rep, which the server sends (roles.js:87) and
   `isRepVisible` hides (App.jsx:793). Home's pinned reports run deals over
@@ -2406,7 +2419,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deals, activities and tasks under a picked record are narrowed by name
   too (not traced further). Recommended: pass a rep's two lists through
   as the server granted them, as `isRepVisible` does — one rule for both
-  pickers; C3 (tests/merged-away-cleanup.test.mjs:344-357, run with a
+  pickers; C3 (tests/merged-away-cleanup.test.mjs:356-369, run with a
   by-name fixture) and tests/roles.test.mjs:186-187 move with it. Whether
   the tab's gate goes the same way is Jeff's call (§0.71 left its leads
   half, which drops unassigned leads, as his call).
@@ -2885,7 +2898,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   :137; activities.mjs:120, tasks.mjs:94), but a task's chip keeps the
   name sent (linkIds.js:69; guide §18b92 rule 3). Latent since §0.209: no
   opener reaches such a rail. The header search lists live contacts and
-  opens a merged-away name's survivor (AppHeader.jsx:463, :468, :479); the
+  opens a merged-away name's survivor (AppHeader.jsx:468, :473, :484); the
   Contacts tab reads `unarchived` (ContactsTab.jsx:672-675; its openers
   :207, :289-290, :562, :614-615); an account's People reads
   `shownContacts` (AccountRail.jsx:281, :954); "Open existing"
@@ -2963,7 +2976,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   18 Oct counted links by id only, docs/design/cleanup-batch/DESIGN.md:8-10).
   The D22 test pins a live twin only
   (tests/account-parent.test.mjs:532-536). THE GUARD records the
-  accounts.mjs half "for batch 3" (tests/merged-away-lists.test.mjs:1453);
+  accounts.mjs half "for batch 3" (tests/merged-away-lists.test.mjs:1459);
   its merge.mjs reason (:1457) says the merge reads both records "by
   id", which :217 does not (nor :173, the sub-accounts by parent, nor
   the Undo's `treeOf`, :352-355, every account of the org). Recommended
@@ -2999,7 +3012,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `accountId` show is unverified. No test pins the links it stores:
   email-inbound.itest.mjs reads no `accountId`, and THE GUARD's T10
   names only the file's one contacts read, as filed
-  (tests/merged-away-lists.test.mjs:1466). Recommended (a functions
+  (tests/merged-away-lists.test.mjs:1473). Recommended (a functions
   batch, with batch 3): the insert's links go through `checkLinks` with
   `ACTIVITY_LINKS`, as the activities endpoint's create does — a
   merged-away account or contact stored as its survivor — except that
@@ -3029,7 +3042,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   into a site, both lines say the deals go to the account above it.
   SPIFF claims are in the app's context (App.jsx:1852; the window does
   not take them from `useApp`, :42-47); Dispatch's lists are not (none
-  in App.jsx — the tab loads its own, DispatchTab.jsx:5624-5625, and
+  in App.jsx — the tab loads its own, DispatchTab.jsx:5677-5678, and
   §4.2 files that a merge reads neither again), so a Dispatch count
   needs a read, or the words name the kind with no count.
 - **UKG holds 10 merge logs still 'merged' but 8 merged-away records,
@@ -3125,7 +3138,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   lands on the merged-away row, not its survivor (contacts.mjs:195-218
   writes the row its id names and reads no merge mark; its sanitize,
   :40-72, builds no merge column, so the mark stays). THE GUARD names the
-  read to stay (tests/merged-away-lists.test.mjs:588) because "a stale
+  read to stay (tests/merged-away-lists.test.mjs:592) because "a stale
   whole-row save writing one back is OPEN_ITEMS §4.7's stale-write edge"
   — but that edge is an activity's or a task's held pair; a deal holds
   none, the merge rewrites the ids of every deal that names the contact
@@ -3218,7 +3231,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   contacts (ReportsTab.jsx:5095 on 7ee14fe) — until §0.209, which closed
   both: the header search lists live records, a name only a merged-away
   contact has drawing one row that opens its survivor
-  (AppHeader.jsx:462-468), and Activity History's `visibleContacts` lists
+  (AppHeader.jsx:467-473), and Activity History's `visibleContacts` lists
   live contacts only (ReportsTab.jsx:5098-5100). That covered a contact named further down
   the list, and one whose `contactId` a later save wrote back (a Save
   that changed its contacts, or a stale whole-row save). An account's
@@ -3267,15 +3280,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   conflict (CsvImportModal.jsx:66 — the first account of the name;
   Overwrite writes onto it, ModalLayer.jsx:574-582); the lead duplicate
   check (LeadModal.jsx:102-106 — the first contact of the email, over
-  every contact, :312); and Dispatch's won-deal jobs
-  (`buildWonBridgeJobs`, DispatchTab.jsx:2070, the first account holding
-  the deal's id or its name — §4.4's "Dispatch takes the first of a
-  name"). Each can take a merged-away twin that shares the survivor's, or
+  every contact, :312). (Dispatch's won-deal jobs read the deal's link
+  since §0.214 — `accountForDeal`, DispatchTab.jsx:2092.) Each can take a
+  merged-away twin that shares the survivor's, or
   a live twin's, name or email (UKG's two "Evonik - Lafayette" sites, one
   merge-archived — SELECT 9 Oct, not re-checked since). THE GUARD names
   each client read as staying, filed here by this bold line
-  (tests/merged-away-lists.test.mjs `BY_NAME`, :568), and T10 names the
-  inbound email's as filed here (:1466). Reports' three lookups by name
+  (tests/merged-away-lists.test.mjs `BY_NAME`, :572), and T10 names the
+  inbound email's as filed here (:1473). Reports' three lookups by name
   were the cleanup batch's, and read the deal's link now: the
   Opportunity history's account since §0.209 (ReportsTab.jsx:5858,
   `accountOfDeal`), the industry chart's (:3949, `accountOfDeal`) and
@@ -3292,7 +3304,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   or `mergedIntoId`; its `unarchived` and `standsFor` read the lists it
   shows). Since §0.209 the header search opens none itself: a name only a
   merged-away record has is one row naming its survivor, which opens that
-  (`mergedInto`, AppHeader.jsx:467, :478), or, when the list holds no one
+  (`mergedInto`, AppHeader.jsx:472, :483), or, when the list holds no one
   survivor, a line that opens nothing (:48-50). Four routes still open
   one: the Contacts tab's company card "Open account" (`matchedAccount`,
   ContactsTab.jsx:365-368, the first account of the company's name among
@@ -3333,20 +3345,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
   restore does not. Since §0.206 C, a live account, is listed nowhere on
   the Accounts tab (App's list is the top level, App.jsx:839-841, and its
   parent is hidden, AccountsTab.jsx:600); the header search
-  (AppHeader.jsx:462) and links still reach it. Its rail then names P as
+  (AppHeader.jsx:467) and links still reach it. Its rail then names P as
   live: the Parent Account row (AccountRail.jsx:773-780) and the edit
   chip (:691-703) draw P's name from `accountsById`, every account
   (:267), with nothing saying it was merged away (`HIDDEN_ACCOUNT` only
   where the list lacks it), and a save that leaves the field untouched
   keeps it (:382, by design — state §0.198's D12, D16, as the rail's
   comment at :357-361 says). Opened from the header search
-  (AppHeader.jsx:478; `openAccountRail`, App.jsx:1706, stacks the
+  (AppHeader.jsx:483; `openAccountRail`, App.jsx:1706, stacks the
   parent), C's rail opens P's own, a merged-away one (the item above),
   on ← Back (`handleBack`, AccountRail.jsx:455-461) and on its close
   (`closeRail`, :432-438: the ×, :576; Escape or a click outside when
   not editing, :485, :532). THE GUARD names the rail's `accountsById` to
   stay because "no row names a merged-away parent"
-  (tests/merged-away-lists.test.mjs:591) — untrue after such a restore.
+  (tests/merged-away-lists.test.mjs:595) — untrue after such a restore.
   None at the census (16 Oct 21:13 UTC; not run since). The file must be
   one kept from before the merge: a download is made fresh from current
   data (backup.mjs:166-178, `collectOrgData`). The same restore can land
@@ -3725,9 +3737,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
   sites.
-- **The header search's account rows show no parent** (batch 2 of §1 item
-  1), and the open-deal count beside each counts deals by name (AppHeader,
-  read 11 Oct), so two twins show the same count.
 - **Twins are still easy to make** (the map, 11 Oct; not re-read):
   - The account picker's Create checks only the caller's list, so a rep
     can create a second account under the name of one another rep owns.
@@ -3746,7 +3755,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **AccountsTab layout polish.** As recorded.
 - **68 churn-only inline components** (`npm run check:inline -- --churn`;
   28 Oct; 70 on 7 Oct, §9 said 76). SalesManagerTab's SubTabs, TeamTab and
-  AuditTab are among them, per §0.84, and AppHeader's `ST` (AppHeader.jsx:700;
+  AuditTab are among them, per §0.84, and AppHeader's `ST` (AppHeader.jsx:705;
   its search results' `GH` and `RR` went with §0.209); and the New User window's
   `Toggle` (UserModal.jsx:207), Reports' `PanelB` (ReportsTab.jsx:1293) and
   its six `PanelD` (:2773, :2959, :3213, :3411, :3596, :3861 — the same
@@ -3818,9 +3827,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   scrolls under its header, or make the header stick to the page.
 - **The profile panel runs off a short window** (§0.213's read; seen in
   §0.213's browser check, 28 Oct — Jeff's panel in Accelerep QA, a window
-  800 × 600): on a desktop the panel (AppHeader.jsx:558,
+  800 × 600): on a desktop the panel (AppHeader.jsx:563,
   `.spt-profile-panel`) is placed at top 56 with no bottom and no max
-  height, and its tab body scrolls within 560 px (:600), so the panel was
+  height, and its tab body scrolls within 560 px (:605), so the panel was
   775 px tall, its foot at 831 px — 231 px below the window's — and
   nothing brings it up. Recommended: a max height on the panel
   (the window less its top), the panel clipping and its tab body taking
@@ -3905,11 +3914,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `handleEditContact` (:990) and `handleEditAccount` (:1019) are in
   "Unused code left in the files §0.198 edited" (this section). Removing
   `allContacts` empties THE GUARD's CARRIED: its two entries
-  (tests/merged-away-lists.test.mjs:1049, APP_READS; :1089, CARRIED,
+  (tests/merged-away-lists.test.mjs:1055, APP_READS; :1095, CARRIED,
   whose text says it is filed) go together (NOTES-STEP-A.md:70-74), and
   with them CARRIED's check (:1203-1205), its self-test (:1423-1430,
   which expects four reads of `allContacts`) and the harness entry that
-  names CARRIED as its catcher (scripts/mutate-import.mjs:13937-13940, a
+  names CARRIED as its catcher (scripts/mutate-import.mjs:13936-13939, a
   read of `rollup.allContacts.length` at ContactsTab.jsx:508) — or
   CARRIED keeps a key to guard. The `c.opportunityId` test sits under a
   line THE GUARD names (:588, `const oppContacts =
@@ -3989,6 +3998,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   before the baseline); an older entry is still checked only for a missing
   anchor, and the full run (scripts/mutate-import.mjs) still mutates its
   first match unwarned.
+  On 28 Oct (§0.214) an eighth, and it showed the cost: §0.199's "each job
+  send goes out whatever the org" (DispatchTab.jsx) quoted a line New
+  Job's new customer send also holds, deeper indented and first; its
+  mutant removed that guard, which nothing pinned, and SURVIVED the
+  scoped run (2,104/2,106). Re-pointed to an anchor only its line holds;
+  after it, the same seven, and no other.
 - **The scoped harness reads a test's files from its text, so a test that
   builds its paths at run time is read short** (§0.212's docs check, 27 Oct:
   every SUITES test run alone with a tracer preloaded — every file its

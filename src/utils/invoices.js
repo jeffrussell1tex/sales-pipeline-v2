@@ -282,22 +282,6 @@ export function jobFromQuote(quote, opp) {
     return { title: title.slice(0, 500), description };
 }
 
-/**
- * The dispatch customer for an opportunity: the one linked to its account,
- * else the one whose name matches its account name — the bridge's own rule
- * (DispatchTab buildWonBridgeJobs). Null means "create one".
- */
-export function resolveCustomerForOpp(customers, opp) {
-    const list = Array.isArray(customers) ? customers : [];
-    if (opp?.accountId) {
-        const byAccount = list.find(c => c.accountId && c.accountId === opp.accountId);
-        if (byAccount) return byAccount;
-    }
-    const name = String(opp?.account || '').trim().toLowerCase();
-    if (!name) return null;
-    return list.find(c => String(c.name || '').trim().toLowerCase() === name) || null;
-}
-
 /** Money the app's way: $1,234.50 — always two places on an invoice. */
 export const fmtMoney = (n) => {
     const v = num(n, 0);

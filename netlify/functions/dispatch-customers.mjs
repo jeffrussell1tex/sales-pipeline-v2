@@ -1,11 +1,28 @@
 import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, ne, sql } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
 import { checkLinks } from './_links.mjs';
+import { accountInDispatch } from '../../src/utils/dispatchCustomer.js';
+
+// One customer for one CRM account (state §0.214; Jeff, 28 Oct: "Refuse it"): a write that names an account
+// anew — one the customer does not already hold — is refused (409, nothing written) while another customer of
+// this org stands for it, naming that customer. A business with several sites under one account keeps one
+// customer and a service location for each. An account the row already holds is never asked again, as a link
+// held is not (state §0.199). Read, then written: two writes at the same instant can still both pass (no index —
+// a merge moves a customer onto its survivor, which may hold one; OPEN_ITEMS §4.4).
+async function accountTaken(orgId, accountId, selfId) {
+    if (!accountId) return null;
+    const [other] = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name, customerNumber: dispatchCustomers.customerNumber })
+        .from(dispatchCustomers)
+        .where(and(eq(dispatchCustomers.orgId, orgId), eq(dispatchCustomers.accountId, accountId), ne(dispatchCustomers.id, selfId)))
+        .limit(1);
+    return other || null;
+}
+const takenReply = (other) => ({ statusCode: 409, headers, body: JSON.stringify({ error: accountInDispatch(other), field: 'accountId' }) });
 
 // A customer's CRM account: a live account of this org when a write names it anew (state §0.199) — and since
 // §0.201 its service plan and preferred technician.
@@ -249,6 +266,10 @@ export const handler = async (event) => {
             const linked = await checkLinks(CUSTOMER_LINKS, data, priorCust || null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             Object.assign(data, linked.set);
+            if (data.accountId && data.accountId !== priorCust?.accountId) {
+                const other = await accountTaken(orgId, data.accountId, data.id);
+                if (other) return takenReply(other);
+            }
 
             // The number is issued INSIDE the retry, not before it: on a collision
             // the whole read-max-then-insert has to run again, otherwise every
@@ -318,6 +339,10 @@ export const handler = async (event) => {
                 const linked = await checkLinks(CUSTOMER_LINKS, data, held, orgId);
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
                 Object.assign(data, linked.set);
+                if (data.accountId && data.accountId !== held.accountId) {
+                    const other = await accountTaken(orgId, data.accountId, id);
+                    if (other) return takenReply(other);
+                }
             }
             const updates = { updatedAt: new Date() };
             ['accountId','name','contactName','contactPhone','contactEmail','customerType',

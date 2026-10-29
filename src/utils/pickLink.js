@@ -290,6 +290,33 @@ export function accountOfDeal(deal, accounts) {
     return survivors.size === 1 ? [...survivors.values()][0] : null;
 }
 
+// The account a deal stands on where it is sure (state §0.214; batch 2): its account id's (accountOfDeal); for a
+// deal with no account id, the ONE live account whose name reads as the deal's (resolveLink's typed rule — case,
+// spacing and punctuation ignored), or the one live account a name only merged-away accounts have leads to.
+// Two live accounts of the name — UKG's twin "Shell - Port Allen" — or none: null, never the first or the last.
+export function accountForDeal(deal, accounts) {
+    if (!deal) return null;
+    if (idOf(deal.accountId)) return accountOfDeal(deal, accounts);
+    const text = String(deal.account ?? '');
+    if (text.trim() === '') return null;
+    const r = resolveLink({ text, records: accounts });
+    if (r.how === 'typed') return r.record;
+    return r.refusal === 'merged' ? mergedInto(text, accounts)?.into || null : null;
+}
+
+// The open deals each account stands for (state §0.214): a Map of account id to count, every deal counted once —
+// on the account accountForDeal finds: by its link (one merged away counts on the account it was merged into), or,
+// for a deal with no account id, on the one live account of its name. Neither Closed Won nor Closed Lost is open.
+export function openDealsByAccount(deals, accounts) {
+    const out = new Map();
+    for (const o of Array.isArray(deals) ? deals : []) {
+        if (!o || o.stage === 'Closed Won' || o.stage === 'Closed Lost') continue;
+        const a = accountForDeal(o, accounts);
+        if (a) out.set(idOf(a.id), (out.get(idOf(a.id)) || 0) + 1);
+    }
+    return out;
+}
+
 // What an account <select> or chip shows for the link it holds when the options (the live
 // accounts) leave it out — itself, disabled (guide §16, §18b24.3): { label, note }. One merged
 // away: "<name> (merged into <survivor>)" and the note naming what to pick; one the list does

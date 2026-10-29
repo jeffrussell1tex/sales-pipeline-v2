@@ -7,7 +7,14 @@ header search's account rows.
 
 **Status:** the map was read 28 Oct 2026 over `7b97754`, read only. Claude
 read every line cited below; no data was read. The questions are in §3. Jeff
-answered them the same day, and the census is in ANSWERS.md. Nothing is built.
+answered them the same day, and the census is in ANSWERS.md. Built the same day as state §0.214
+(guide §18b104). The two reviews changed the design in two places: the rule takes the accounts and works out
+the deal's account itself, on the screen and the server alike (§2 "The one rule"; quote -> job reads the org's
+accounts), and a deal with no account id whose name is no one account's reads that name as a typed name is read
+(rule 4). The browser check (28-29 Oct) found New Job's refusal pointing at an empty list; the fix (Jeff: "Fix it
+first") makes the list hold every record a refusal names, and Jeff refined Q1 on 29 Oct ("No new customer"): a won
+deal two customers stand for makes no new customer while New Job carries it — the name typed over refuses too
+(guide §18b104 rules 9-10).
 
 ---
 

@@ -153,6 +153,19 @@ One commit per verified batch; doc patch in the same commit.
   whose copied line names no product of this org is refused whole.
   A technician's login is a member of THIS org, stored as their Clerk id
   (`techLogin.js`) — never the app id the picker sends.
+- A dispatch customer is found by one rule, on the screen and the server
+  (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
+  its link (`accountForDeal`), then the one customer linked to it — never
+  the first of a name; a name typed in New Job is one customer or account,
+  or a refusal — or, when no record has the name, a new customer; two
+  customers for a deal are refused, naming both (quote ->
+  job a 409 that writes nothing). One customer for one CRM account: the
+  customer create and edit refuse an account another customer holds.
+  New Job's list holds every record its refusal names, first, by id
+  (`refusalLeads`); a won deal two customers stand for makes no new
+  customer while New Job carries it — a keystroke clears its words, never
+  that (`dealHolds`; Jeff, 29 Oct: "No new customer"; guide §18b104 rules
+  9-10).
 - A merge's Undo (`merge.mjs`; the rule in `src/utils/mergeUndo.js`) puts
   back only what still holds what the merge wrote — a deal's account id
   and name together, the survivor's restored name cascaded by account id

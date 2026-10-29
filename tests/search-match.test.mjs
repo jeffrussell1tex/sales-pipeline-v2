@@ -486,16 +486,18 @@ test("the header's search, the quick log, the deal window's mentions, Reports, T
     // (The Tasks tab's contact picker asked it too, until it went with the task view nothing opened: D20.)
     const d = read('src/Tabs/DispatchTab.jsx');
     assert.ok(d.includes('    const byName = { text: x => x.name, limit: 6 };'), 'six a group (Jeff, 9 Oct: "Keep 6 per group")');
-    assert.ok(d.includes('const { shown: custMatches, more: custMore } = matchSearch(customers, query, byName);'));
-    assert.ok(d.includes('const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])'));
+    assert.ok(d.includes('const { shown: custFound, more: custMore } = matchSearch((customers || []).filter(c => !leadSet.has(c.id)), query, { ...byName, also: c => [byId.get(c.accountId)?.name] });'),
+        'the six, and a customer found by its account\'s name below those of its own (tests/dispatch-customer.test.mjs)');
+    assert.ok(d.includes('const { shown: acctFound, more: acctMore } = matchSearch((accounts || [])'));
     // Its field lists on focus (it never waited for typing), so only punctuation typed reads as
     // nothing typed: the first six of each group and their counts, as the empty field lists them
-    // (the old filter listed only names holding "-"). Its exact check and its Create are as they were.
+    // (the old filter listed only names holding "-"). Its Create is the one rule its Save reads since state §0.214
+    // (customerForText, run in tests/dispatch-customer.test.mjs): Create only where no record has the name typed —
+    // punctuation alone too, as before.
     const field = between(d, 'const CustomerTypeahead = (', '// ── Score badge');
     assert.ok(field.includes('onFocus={() => setOpen(true)}'), 'it lists on focus');
-    assert.ok(field.includes('const exact = [...(customers || []), ...(accounts || [])]'), 'its exact check is as it was');
-    assert.ok(field.includes(".some(x => (x.name || '').trim().toLowerCase() === q);"), 'raw lower case, as it was');
-    assert.ok(field.includes('const showCreate = q.length > 0 && !exact;'), 'and its Create');
+    assert.ok(field.includes('const typed = q ? customerForText(query, customers, accounts) : null;'), 'the typed name by the one rule');
+    assert.ok(field.includes("const showCreate = !refusal && typed?.how === 'create';"), 'and its Create');
     const nine = Array.from({ length: 9 }, (_, i) => ({ id: `d${i}`, name: i % 3 ? `Acme ${i}` : `Acme - West ${i}` }));
     const six = { text: (x) => x.name, limit: 6 };
     assert.deepEqual(matchSearch(nine, '-', six), matchSearch(nine, '', six), '"-" lists as the empty field does');

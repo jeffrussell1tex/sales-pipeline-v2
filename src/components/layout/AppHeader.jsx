@@ -7,7 +7,7 @@ import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
 import { T } from '../../tokens.js';
 import { matchSearch, searchKey } from '../../utils/searchMatch.js';
-import { unarchived, mergedInto, mergedSearchWords } from '../../utils/pickLink.js';
+import { unarchived, mergedInto, mergedSearchWords, openDealsByAccount, parentLabel } from '../../utils/pickLink.js';
 
 // ── Design tokens ────────────────────────────────────────────
 
@@ -84,6 +84,11 @@ export default function AppHeader({
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
     const isTechnician = userRole === 'Technician';
+    // The search's account rows (state §0.214): each account's open deals, every deal counted once on the account it
+    // stands on — by its link (one merged away on the account it was merged into); a deal with no account id on the
+    // one live account of its name, on neither of two (it counted on both twins) — and each account's parent by id.
+    const openDealsOf = React.useMemo(() => openDealsByAccount(opportunities, accounts), [opportunities, accounts]);
+    const accountsById = React.useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
 
     // ⌘K / Ctrl-K opens search palette from anywhere
     useEffect(() => {
@@ -475,7 +480,7 @@ export default function AppHeader({
                                 if (noHits) return <div style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No results found</div>;
                                 return (
                                     <>
-                                        {showA && <div><SearchGroup label="Accounts"/>{mA.map(a => { const od = opportunities.filter(o => (o.accountId ? o.accountId === a.id : (o.account||'').toLowerCase() === (a.name||'').toLowerCase()) && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return <SearchRow key={'sa-'+a.id} primary={a.name} secondary={a.accountOwner ? `${a.accountOwner}${od > 0 ? ` · ${od} open deal${od>1?'s':''}` : ''}` : undefined} meta="Account" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(a); }, 100); } }}/>; })}{lineA && <MergedSearchLine line={lineA} noun="account" meta="Account" onOpen={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(lineA.into); }, 100); } }}/>}{moreA > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreA} more — keep typing</div>}</div>}
+                                        {showA && <div><SearchGroup label="Accounts"/>{mA.map(a => { const od = openDealsOf.get(a.id) || 0; const sub = [parentLabel(a, accountsById.get(a.parentAccountId)), a.accountOwner, od > 0 ? `${od} open deal${od>1?'s':''}` : ''].filter(Boolean).join(' · '); return <SearchRow key={'sa-'+a.id} primary={a.name} secondary={sub || undefined} meta="Account" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(a); }, 100); } }}/>; })}{lineA && <MergedSearchLine line={lineA} noun="account" meta="Account" onOpen={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(lineA.into); }, 100); } }}/>}{moreA > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreA} more — keep typing</div>}</div>}
                                         {showC && <div><SearchGroup label="Contacts"/>{mC.map(c => <SearchRow key={'sc-'+c.id} primary={`${c.firstName} ${c.lastName}`} secondary={[c.title,c.company].filter(Boolean).join(' · ')} meta="Contact" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(c); }, 100); } }}/>)}{lineC && <MergedSearchLine line={lineC} noun="contact" meta="Contact" onOpen={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(lineC.into); }, 100); } }}/>}{moreC > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreC} more — keep typing</div>}</div>}
                                         {mO.length > 0 && <div><SearchGroup label="Opportunities"/>{mO.map(o => <SearchRow key={'so-'+o.id} primary={o.opportunityName || o.account || 'Unnamed'} secondary={`${o.account} · ${o.stage}`} meta={`$${(o.arr||0).toLocaleString()}`} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); { const askedOrg = requestOrg(); setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(o); setShowModal(true); }, 150); } }}/>)}{moreO > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreO} more — keep typing</div>}</div>}
                                     </>

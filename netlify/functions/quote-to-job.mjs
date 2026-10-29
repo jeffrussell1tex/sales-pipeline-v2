@@ -9,8 +9,10 @@
 //   the quote is THIS org's (404 otherwise — never a probe);
 //   the quote is Accepted (422); no job already carries this quote (409, with
 //   the job). Then, server-side and org-scoped: the dispatch customer is
-//   resolved from the opportunity (its account, else its account's name) or
-//   created; the job is inserted with quote_id, opportunity_id, account_id,
+//   resolved from the opportunity by the one rule Dispatch's screens read
+//   (dispatchCustomer.js customerForDeal, state §0.214): the one customer linked
+//   to its account, else the one of its account's name — or created; two or more
+//   is a 409 naming them, nothing written (Jeff, 28 Oct: "Refuse, name both"); the job is inserted with quote_id, opportunity_id, account_id,
 //   the quote's lines as its line items (net price each), a status-history
 //   row, and an audit row that names the quote.
 // GET ?quoteId=   → 200 { job: { …, invoice } | null } — the linked job and its
@@ -26,7 +28,7 @@
 // any job does.
 import { db } from '../../db/index.js';
 import {
-    quotes, opportunities, products, invoices,
+    quotes, opportunities, products, invoices, accounts,
     dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory, dispatchCustomers,
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
@@ -37,7 +39,8 @@ import { dealAccess } from './_dealAccess.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { nextJobNumber, normaliseJob } from './dispatch-jobs.mjs';
 import { nextCustomerNumber } from './dispatch-customers.mjs';
-import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, resolveCustomerForOpp, cleanProductTypes } from '../../src/utils/invoices.js';
+import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, cleanProductTypes } from '../../src/utils/invoices.js';
+import { customerForDeal, dealCustomerRefusal } from '../../src/utils/dispatchCustomer.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -111,9 +114,29 @@ export const handler = async (event) => {
             : [null];
 
         // ── the customer: resolved in THIS org, else created ─────────────────
-        const orgCustomers = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name, accountId: dispatchCustomers.accountId })
+        const orgCustomers = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name, accountId: dispatchCustomers.accountId,
+            customerNumber: dispatchCustomers.customerNumber })
             .from(dispatchCustomers).where(eq(dispatchCustomers.orgId, orgId));
-        let customer = resolveCustomerForOpp(orgCustomers, opp);
+        // The deal's account as Dispatch's screen finds it — by its link (one merged away: its survivor), a deal with
+        // no account id the one live account of its name — from this org's accounts, merge marks included.
+        const orgAccounts = await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived,
+            mergedIntoId: accounts.mergedIntoId, parentAccountId: accounts.parentAccountId })
+            .from(accounts).where(eq(accounts.orgId, orgId));
+        // Two or more customers stand for the deal — linked to its account, or of its account's name: none is taken
+        // (the read is unordered, so "the first" was any of them), and nothing is written (state §0.214).
+        const found = customerForDeal(orgCustomers, opp, orgAccounts);
+        // The 409 names what it refuses over: the customers, or — a deal on no account whose name two live accounts
+        // have, or only accounts merged into others — those accounts.
+        if (found.refusal) {
+            const named = (found.matches || []).map(({ id, name, customerNumber }) => (found.refusal === 'many' && found.of !== 'account' ? { id, name, customerNumber } : { id, name }));
+            return reply(409, { error: dealCustomerRefusal(found, 'server'),
+                [found.refusal === 'many' && found.of !== 'account' ? 'customers' : 'accounts']: named });
+        }
+        // The account a made customer and the job link to: the one the deal stands on, where the org still holds it
+        // live — a deal on an account deleted since (or merged into a chain that leads nowhere) links none; it stored
+        // the dead id, which no write may name (§0.214's eighth review; CLAUDE.md, a link names a live row).
+        const linkTo = orgAccounts.some((a) => a.id === found.accountId && a.mergeArchived !== true) ? found.accountId : null;
+        let customer = found.customer || null;
         let customerCreated = false;
         if (!customer) {
             const name = String(opp?.account || opp?.opportunityName || quote.name || 'Customer').trim().slice(0, 255);
@@ -122,13 +145,13 @@ export const handler = async (event) => {
                 const customerNumber = await nextCustomerNumber(orgId);
                 await db.insert(dispatchCustomers).values({
                     id, orgId, customerNumber, name,
-                    accountId: opp?.accountId ?? null,
+                    accountId: linkTo,   // the account the deal stands on (state §0.214)
                     customerType: 'commercial',
                     tags: JSON.stringify([]),
                     createdAt: new Date(), updatedAt: new Date(),
                 });
             }, { label: 'customer number' });
-            customer = { id, name, accountId: opp?.accountId ?? null };
+            customer = { id, name, accountId: linkTo };
             customerCreated = true;
             await auditAs(orgId, userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: id, entityName: name, detail: `from quote ${quote.quoteNumber}` });
         }
@@ -142,7 +165,7 @@ export const handler = async (event) => {
             await db.insert(dispatchJobs).values({
                 id: jobId, orgId, jobNumber,
                 customerId: customer.id,
-                accountId: opp?.accountId ?? customer.accountId ?? null,
+                accountId: linkTo || customer.accountId || null,
                 opportunityId: quote.opportunityId ?? null,
                 quoteId: quote.id,
                 title, description,

@@ -42,8 +42,9 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import {
     unarchived, isMergeArchived, survivorOf, resolveLink, linkRefusal, standsFor, mergedInto, mergedSearchWords, accountOfDeal,
-    heldAccountOption, HIDDEN_ACCOUNT, HIDDEN_DEAL,
+    heldAccountOption, HIDDEN_ACCOUNT, HIDDEN_DEAL, openDealsByAccount,
 } from '../src/utils/pickLink.js';
+import { customerForText, typedCustomerRefusal, DEAL_NEEDS_PICK } from '../src/utils/dispatchCustomer.js';
 import { matchSearch, searchKey } from '../src/utils/searchMatch.js';
 import { linkedToContact, taskDay } from '../src/utils/historyFeed.js';
 import { runReport } from '../src/utils/reportQuery.js';
@@ -259,14 +260,19 @@ const H_LINES = [
     S(32) + 'const showC = mC.length > 0 || !!lineC;',
 ];
 const OLD_H_ACCOUNTS = "const { shown: mA, more: moreA } = matchSearch(accounts, globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });";
-const OD = "const od = opportunities.filter(o => (o.accountId ? o.accountId === a.id : (o.account||'').toLowerCase() === (a.name||'').toLowerCase()) && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;";
+// The header's count since state §0.214: openDealsByAccount (pickLink.js), worked out once per list change — each open
+// deal once, on its link's account (one merged away: its survivor), an id-less deal on the one live account of its name.
+const OD = "    const openDealsOf = React.useMemo(() => openDealsByAccount(opportunities, accounts), [opportunities, accounts]);";
+const OD_ROW = "const od = openDealsOf.get(a.id) || 0;";
+// §0.209's line: by the link, an id-less deal by its lower-case name — on each twin.
+const OD_209 = "const od = opportunities.filter(o => (o.accountId ? o.accountId === a.id : (o.account||'').toLowerCase() === (a.name||'').toLowerCase()) && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;";
 const OLD_OD = "const od = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;";
 
 test('C2 — the header search: a merged-away account or contact is not listed; a name only it has, typed in full, is one row naming the record it was merged into, which opens it — or, for a rep without that record, the words alone; "No results found" and each group decided with that row counted (run as written)', () => {
     const h = code(read(HEADER));
     order(h, ...H_LINES);
     for (const l of H_LINES) once(h, l);
-    assert.ok(h.includes("import { unarchived, mergedInto, mergedSearchWords } from '../../utils/pickLink.js';"));
+    assert.ok(h.includes("import { unarchived, mergedInto, mergedSearchWords, openDealsByAccount, parentLabel } from '../../utils/pickLink.js';"));
     const search = (globalSearch, accounts = ACCOUNTS, contacts = CONTACTS) => run(H_LINES,
         ['matchSearch', 'unarchived', 'mergedInto', 'accounts', 'contacts', 'opportunities', 'globalSearch'],
         [matchSearch, unarchived, mergedInto, accounts, contacts, DEALS, globalSearch],
@@ -311,11 +317,17 @@ test('C2 — the header search: a merged-away account or contact is not listed; 
 
 test('C14 — the riders (Q7, Jeff: "Fix both now"): the header\'s "N open deals" and Reports → Account history read a deal by its account link — by name only for an old deal with none (run as written)', () => {
     const h = code(read(HEADER));
-    assert.equal(count(h, OD), 1, "the header's open-deal count");
-    const od = (a) => run([OD], ['opportunities', 'a'], [DEALS, a], 'od');
+    order(h, OD);
+    assert.equal(count(h, OD_ROW), 1, "the header's open-deal count, read from the map");
+    const od = (a, deals = DEALS) => run([OD, OD_ROW], ['React', 'openDealsByAccount', 'opportunities', 'accounts', 'a'], [{ useMemo }, openDealsByAccount, deals, ACCOUNTS, a], 'od');
     const unit = ACCOUNTS.find((a) => a.id === 'acc_shell_unit');
     const site = ACCOUNTS.find((a) => a.id === 'acc_shell_site');
-    assert.deepEqual([od(unit), od(site)], [2, 2], "each twin: its own deal by id, and the old id-less deal of the name");
+    assert.deepEqual([od(unit), od(site)], [1, 1], "each twin: its own deal by id — the old id-less deal of their one name counts on neither (state §0.214)");
+    // An OPEN deal still on "Resinall, Inc." by id (a stale id) counts on the account it was merged into; §0.209's line
+    // counted it on neither.
+    const stale = [...DEALS, { id: 'opp_stale', opportunityName: 'Stale', account: 'Resinall, Inc.', accountId: 'acc_resinall_inc', stage: 'Proposal' }];
+    assert.deepEqual([od(RESINALL, stale), run([OD_209], ['opportunities', 'a'], [stale, RESINALL], 'od')], [2, 1], 'Resinall: its own open deal, and the one still on "Resinall, Inc." by id');
+    assert.deepEqual([run([OD_209], ['opportunities', 'a'], [DEALS, unit], 'od'), run([OD_209], ['opportunities', 'a'], [DEALS, site], 'od')], [2, 2], "§0.209's line: each twin counted the id-less deal");
     assert.deepEqual([run([OLD_OD], ['opportunities', 'a'], [DEALS, unit], 'od'), run([OLD_OD], ['opportunities', 'a'], [DEALS, site], 'od')], [3, 3], 'the old line: each twin counted all three');
     // Reports → Account history: its feed's deals and its KPIs' deals.
     const r = read('src/Tabs/ReportsTab.jsx');
@@ -462,37 +474,49 @@ const DISPATCH = 'src/Tabs/DispatchTab.jsx';
 
 test('C8 — Dispatch → New Job → Customer: no merged-away account offered; a name only one has offers no Create, the line under the field names the account to pick, and Save Job refuses it — unless a dispatch customer has the name (run as written)', () => {
     const d = code(read(DISPATCH));
-    assert.ok(d.includes("import { isMergeArchived, resolveLink, linkRefusal, unarchived, heldAccountOption } from '../utils/pickLink.js';"));
+    assert.ok(d.includes("import { isMergeArchived, unarchived, heldAccountOption, accountForDeal } from '../utils/pickLink.js';"));
+    assert.ok(d.includes("import { customerForDeal, customerForText, dealCustomerRefusal, typedCustomerRefusal, refusalLeads, DEAL_NEEDS_PICK } from '../utils/dispatchCustomer.js';"));
     const ROWS = [
-        S(4) + 'const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])',
-        S(8) + ".filter(a => !isMergeArchived(a) && !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);",
+        S(4) + 'const { shown: acctFound, more: acctMore } = matchSearch((accounts || [])',
+        S(8) + '.filter(a => !holdAccounts && !acctLeadSet.has(a.id) && !isMergeArchived(a) && !linkedAccountIds.has(a.id)), query, byName);',
     ];
     order(d, ...ROWS);
-    const rows = (query) => ids(run(ROWS, ['matchSearch', 'isMergeArchived', 'accounts', 'linkedAccountIds', 'linkedNames', 'query', 'byName'],
-        [matchSearch, isMergeArchived, ACCOUNTS, new Set(), new Set(), query, { text: (x) => x.name, limit: 6 }], 'acctMatches'));
+    const rows = (query) => ids(run(ROWS, ['matchSearch', 'isMergeArchived', 'accounts', 'linkedAccountIds', 'query', 'byName', 'holdAccounts', 'acctLeadSet'],
+        [matchSearch, isMergeArchived, ACCOUNTS, new Set(), query, { text: (x) => x.name, limit: 6 }, false, new Set()], 'acctFound'));
     assert.deepEqual(rows('Resinall'), ['acc_resinall'], 'REGRESSION: "CRM accounts — not yet in Dispatch" lists "Resinall, Inc."');
-    const mergedAwayName = runSlice(initOf(read(DISPATCH), null, 'mergedAwayName'), { resolveLink, searchKey });
-    const gone = mergedAwayName('Resinall, Inc.', [], ACCOUNTS);
-    assert.equal(linkRefusal(gone), '“Resinall, Inc.” was merged into “Resinall” — pick “Resinall”.');
-    assert.equal(linkRefusal(mergedAwayName('resinall inc', [], ACCOUNTS)), '“resinall inc” was merged into “Resinall” — pick “Resinall”.', 'the text as typed, as the account picker words it');
-    assert.equal(mergedAwayName('Resinall, Inc.', [{ name: 'Resinall Inc' }], ACCOUNTS), null, 'a dispatch customer has the name: it is that customer\'s to pick');
-    assert.equal(mergedAwayName('Resinall', [], ACCOUNTS), null, 'a live name');
-    assert.equal(mergedAwayName('Brand New Co', [], ACCOUNTS), null, 'a new name: Create, as before');
-    assert.equal(mergedAwayName('Resinall, Inc.', [], undone(ACCOUNTS, 'acc_resinall_inc')), null, 'Undo: a live account again');
-    // The field: no Create, the line under it.
-    once(d, S(4) + 'const merged = q ? mergedAwayName(query, customers, accounts) : null;');
-    once(d, S(20) + "{merged ? linkRefusal(merged) : 'New customer — will be created on save'}");
-    once(d, S(20) + '{showCreate && !merged && (');
+    // The field: the one rule its Save reads (customerForText, state §0.214) — no Create for a merged-away name, the line
+    // under it naming the account to pick.
+    const FIELD = [
+        S(4) + 'const typed = q ? customerForText(query, customers, accounts) : null;',
+        S(4) + "const showCreate = !refusal && typed?.how === 'create';",
+        S(4) + "const typedRefusal = typed?.refusal ? typedCustomerRefusal(typed) : '';",
+    ];
+    order(d, ...FIELD);
+    const field = (query, customers = [], accounts = ACCOUNTS) => run(FIELD, ['q', 'query', 'customers', 'accounts', 'customerForText', 'typedCustomerRefusal', 'refusal'],
+        [query.trim().toLowerCase(), query, customers, accounts, customerForText, typedCustomerRefusal, ''], '{ showCreate, typedRefusal }');
+    assert.deepEqual(field('Resinall, Inc.'), { showCreate: false, typedRefusal: '“Resinall, Inc.” was merged into “Resinall” — pick “Resinall”.' });
+    assert.deepEqual(field('resinall inc'), { showCreate: false, typedRefusal: '“resinall inc” was merged into “Resinall” — pick “Resinall”.' }, 'the text as typed, as the account picker words it');
+    assert.deepEqual(field('Resinall, Inc.', [{ id: 'dcust_1', name: 'Resinall Inc' }]), { showCreate: false, typedRefusal: '' }, 'a dispatch customer has the name: it saves as that customer');
+    assert.deepEqual(field('Resinall'), { showCreate: false, typedRefusal: '' }, 'a live name: that account');
+    assert.deepEqual(field('Brand New Co'), { showCreate: true, typedRefusal: '' }, 'a new name: Create, as before');
+    assert.deepEqual(field('Resinall, Inc.', [], undone(ACCOUNTS, 'acc_resinall_inc')), { showCreate: false, typedRefusal: '' }, 'Undo: a live account again');
+    once(d, S(20) + '{refusal || typedRefusal || typedCustomerLine(typed)}');
+    once(d, S(20) + '{showCreate && (');
     // Save Job: refused in the same words, nothing sent.
     const SAVE = [
-        S(8) + 'const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;',
-        S(8) + 'if (gone) { setNewJobError(linkRefusal(gone)); return; }',
+        S(8) + 'let typed = null;',
+        S(8) + 'if (!newJobForm.customerId && !newJobForm.accountId) {',
+        S(12) + 'if (newJobForm.customerRefusal && placeholderOn(newJobForm)) { setNewJobError(newJobForm.customerRefusal); return; }',
+        S(12) + 'typed = customerForText(custName, customers, accounts);',
+        S(8) + '}',
+        S(8) + "if (dealHolds(newJobForm) && !newJobForm.customerId && !typed?.customer) { setNewJobError(DEAL_NEEDS_PICK); return; }",
+        S(8) + 'if (typed?.refusal) { setNewJobError(typedCustomerRefusal(typed)); return; }',
     ];
     order(d, S(8) + "if (address && !city) { setNewJobError('City is required when a job address is entered.'); return; }", ...SAVE, S(8) + 'setNewJobSaving(true);');
     const save = (custName, form = {}) => {
         let said = null;
-        const out = run(SAVE, ['newJobForm', 'mergedAwayName', 'custName', 'customers', 'accounts', 'setNewJobError', 'linkRefusal'],
-            [form, mergedAwayName, custName, [], ACCOUNTS, (m) => { said = m; }, linkRefusal], "'sent'");
+        const out = run(SAVE, ['newJobForm', 'customerForText', 'custName', 'customers', 'accounts', 'setNewJobError', 'typedCustomerRefusal', 'placeholderOn', 'dealHolds', 'DEAL_NEEDS_PICK'],
+            [form, customerForText, custName, [], ACCOUNTS, (m) => { said = m; }, typedCustomerRefusal, () => false, () => false, DEAL_NEEDS_PICK], "'sent'");
         return [out ?? 'refused', said];
     };
     assert.deepEqual(save('Resinall, Inc.'), ['refused', '“Resinall, Inc.” was merged into “Resinall” — pick “Resinall”.'], 'REGRESSION: Save Job makes a second customer for Resinall');
@@ -501,7 +525,7 @@ test('C8 — Dispatch → New Job → Customer: no merged-away account offered; 
     // The line as it stood offered the row.
     const OLD_ROWS = [ROWS[0], S(8) + ".filter(a => !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);"];
     assert.ok(ids(run(OLD_ROWS, ['matchSearch', 'accounts', 'linkedAccountIds', 'linkedNames', 'query', 'byName'],
-        [matchSearch, ACCOUNTS, new Set(), new Set(), 'Resinall', { text: (x) => x.name, limit: 6 }], 'acctMatches')).includes('acc_resinall_inc'), 'the old line');
+        [matchSearch, ACCOUNTS, new Set(), new Set(), 'Resinall', { text: (x) => x.name, limit: 6 }], 'acctFound')).includes('acc_resinall_inc'), 'the old line');
 });
 
 test('C9 — Dispatch → a customer\'s "Linked CRM account": no merged-away account offered; a link to one shows as itself, disabled, with its note — never "— Not linked —" — and offers no address to copy; the record view\'s chip says the same (run as written)', () => {
@@ -526,12 +550,12 @@ test('C9 — Dispatch → a customer\'s "Linked CRM account": no merged-away acc
     order(d,
         S(20) + '<option value="">— Not linked —</option>',
         S(20) + '{heldLink && <option value={draft.accountId} disabled>{heldLink.label}</option>}',
-        S(20) + '{unarchived(accounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}',
+        S(20) + '{unarchived(accounts).map(a => <option key={a.id} value={a.id} disabled={takenBy.has(a.id)}>{accountOptionLabel(a, accountsById, takenBy)}</option>)}',
         S(16) + '</select>',
         S(16) + '{heldLink?.note && <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{heldLink.note}</div>}',
     );
     assert.ok(!d.includes('{(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}'), 'REGRESSION: the select offers every account, merged-away included');
-    assert.ok(d.includes('const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft, linkedAccount, heldLink, copyFromAccount,'));
+    assert.ok(d.includes('const CustomerEditForm = ({ draft, set, accounts, accountsById, takenBy, techs, plans, propertyTypes, planOnDraft, linkedAccount, heldLink, copyFromAccount,'));
     // The record view's chip.
     once(d, S(36) + '{(linkedAccount || selHeld) && (');
     assert.equal(count(d, 'Linked to account · {selHeld ? selHeld.label : linkedAccount.name}'), 1);
@@ -862,29 +886,28 @@ test("C21 — the quote email's fallback recipient is the live contact of the de
 
 test("C22 — Dispatch's New Job Customer field opens only with a row to show: a near spelling of a merged-away name — no exact name, so no Create — opens no empty box (§0.209's defect; Jeff, 23 Oct: \"File it, fix in §0.210\") (the condition and the field's pieces, from the file, run)", () => {
     const d = code(read(DISPATCH));
-    const OPEN = S(12) + '{open && (custMatches.length > 0 || acctMatches.length > 0 || (showCreate && !merged)) && (';
+    const OPEN = S(12) + '{open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (';
     once(d, OPEN);
     // The condition the pinned line holds — run, never a copy.
     const cond = OPEN.trim().replace(/^\{open && /, '').replace(/ && \($/, '');
     const opens = (state, c = cond) => runSlice(c, state);
-    // The field's own pieces, sliced from CustomerTypeahead: `exact`, `showCreate`, `merged` over its customers and accounts.
+    // The field's own pieces, sliced from CustomerTypeahead: `typed` and `showCreate` over its customers and accounts —
+    // the one rule its Save reads (customerForText, state §0.214), so a refused name offers no Create.
     const src = read(DISPATCH);
-    const mergedAwayName = runSlice(initOf(src, null, 'mergedAwayName'), { resolveLink, searchKey });
     const accts = [{ id: 'acc_co', name: 'TEST Undo Co' }, { id: 'acc_inc', name: 'TEST Undo, Inc.', mergeArchived: true, mergedIntoId: 'acc_co' }];
     const field = (query, customers = []) => {
         const q = (query || '').trim().toLowerCase();
-        const exact = runSlice(initOf(src, 'CustomerTypeahead', 'exact'), { customers, accounts: accts, q });
-        const showCreate = runSlice(initOf(src, 'CustomerTypeahead', 'showCreate'), { q, exact });
-        const merged = runSlice(initOf(src, 'CustomerTypeahead', 'merged'), { q, query, customers, accounts: accts, mergedAwayName });
-        return { custMatches: [], acctMatches: [], showCreate, merged };
+        const typed = runSlice(initOf(src, 'CustomerTypeahead', 'typed'), { q, query, customers, accounts: accts, customerForText });
+        const showCreate = runSlice(initOf(src, 'CustomerTypeahead', 'showCreate'), { typed, refusal: '' });
+        return { custMatches: [], acctMatches: [], showCreate, typed };
     };
     const near = field('test undo inc');
-    assert.deepEqual([near.showCreate, !!near.merged], [true, true], 'the near spelling: not exact (Create would show), yet merged');
+    assert.deepEqual([near.showCreate, near.typed.refusal], [false, 'merged'], 'the near spelling: a name only the merged-away account has — no Create');
     assert.equal(opens(near), false, 'REGRESSION: "test undo inc" opens an empty box under the merged line');
-    assert.equal(opens(field('TEST Undo, Inc.')), false, 'the name in full: exact, no Create, no box');
+    assert.equal(opens(field('TEST Undo, Inc.')), false, 'the name in full: no Create, no box');
     assert.equal(opens(field('Brand New Co')), true, 'a new name: its Create row');
     assert.equal(opens({ ...near, acctMatches: [{ id: 'a' }] }), true, 'rows to show');
-    assert.equal(opens(near, cond.replace('(showCreate && !merged)', 'showCreate')), true, 'the old condition opened it');
+    assert.equal(opens({ ...near, showCreate: true }), true, "§0.209's Create (not an exact name) opened it");
 });
 
 test('C-self — the suites: this file is graded by the harness', () => {

@@ -15,7 +15,9 @@ import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines,
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
 import { matchSearch, searchKey } from '../utils/searchMatch.js';
-import { isMergeArchived, resolveLink, linkRefusal, unarchived, heldAccountOption } from '../utils/pickLink.js';
+import { isMergeArchived, unarchived, heldAccountOption, accountForDeal } from '../utils/pickLink.js';
+import { parentNote } from '../utils/accountParent.js';
+import { customerForDeal, customerForText, dealCustomerRefusal, typedCustomerRefusal, refusalLeads, DEAL_NEEDS_PICK } from '../utils/dispatchCustomer.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 // Dispatch keeps its own base radius (4, not the app's 3) — the one deliberate
@@ -146,6 +148,13 @@ const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid,
 // skipped rather than written. A minLicense the org has since renamed would
 // otherwise fall through to the first <option> and silently downgrade the job's
 // requirement from Master to Apprentice.
+// The fields a template sets — applyJobTemplate's, every one. Its Undo, and a switch to another template, put back
+// these alone from the form as it stood before it (prevForm) and keep the rest as it stands now (state §0.214): the
+// customer a refused Save made and wrote into the form, its location, and whatever was typed since — they were lost
+// to the old form, and the retry made the customer and the location again.
+const TEMPLATE_FIELDS = ['crewSize', 'durationHrs', 'priority', 'minLicense', 'needSkills', 'equipCategories', 'requiredVehicleType'];
+const withoutTemplate = (prevForm, form) => ({ ...form, ...Object.fromEntries(TEMPLATE_FIELDS.map(k => [k, prevForm[k]])) });
+
 const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [], equipCategories = [], vehicleTypes = [] } = {}) => {
     const applied = [];
     const skipped = [];
@@ -313,17 +322,16 @@ const unitLabel = (id, units = []) => {
 };
 
 // ── Customer typeahead ───────────────────────────────────────────────
-// A name only an account merged into another has — and no dispatch customer has (state §0.209): the account
-// picker's refusal ("“X” was merged into “Y” — pick “Y”."), never a new customer of that name, which would be a
-// second customer for the account it was merged into. A customer already named so (one made before the merge,
-// which a merge re-links but never renames — merge.mjs) is that customer's to pick. The field and its Save read
-// this one rule.
-const mergedAwayName = (text, customers, accounts) => {
-    const r = resolveLink({ text, records: accounts || [] });
-    if (r.refusal !== 'merged') return null;
-    const key = searchKey(text);
-    return (customers || []).some((c) => searchKey(c.name || '') === key) ? null : r;
-};
+// A name typed and not picked is decided by one rule, in the field and at its Save (state §0.214;
+// dispatchCustomer.js customerForText): the one customer of the name, or the one live account of it not yet in
+// Dispatch, saves as that record; two or more refuse; a name only an account merged into another has refuses
+// (state §0.209); no record of the name makes a new customer.
+// What the line under the field says for a typed name the rule saves as a record.
+const typedCustomerLine = (r) => r.how === 'customer'
+    ? `Saves as the dispatch customer “${r.customer.name}”${r.customer.customerNumber ? ` (${r.customer.customerNumber})` : ''}`
+    : r.how === 'account'
+        ? `Saves as the CRM account “${r.account.name}” — a linked dispatch customer will be created`
+        : 'New customer — will be created on save';
 
 // Defined at module scope on purpose: a component declared inside DispatchTab
 // would be a new type on every render, remounting the input and losing focus
@@ -331,29 +339,75 @@ const mergedAwayName = (text, customers, accounts) => {
 // A job needs a real customerId (FK, notNull). Free text alone cannot produce
 // one, so the field either resolves to an existing customer or offers to create
 // a new one, which the save handler POSTs before the job.
-const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAccountId, onQueryChange, onPick, onPickAccount, onCreateIntent }) => {
+// A won deal's placeholder refusal belongs to its deal: its starter marks the form with the deal (`refusedDeal`), and
+// its words, its leads and its hold stand while the form's deal is that one — another deal picked drops them all (the
+// eighth review: they stood over the next deal). A deal two customers stand for makes no new customer while New Job
+// carries it (Jeff, 29 Oct: "No new customer") — a keystroke clears the placeholder's words, never that.
+const placeholderOn = (form) => !!form?.refusedDeal && form.refusedDeal === form.opportunityId;
+const dealHolds = (form) => placeholderOn(form) && !!form.customerRefusalLeads?.hold;
+
+// What the field's list leads with when nothing does: no customer, no account, no hold.
+const NO_LEADS = { customerIds: [], accountIds: [], hold: false };
+
+const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAccountId, placeholderRefusal, dealHold, placeholderLeads, onQueryChange, onPick, onPickAccount, onCreateIntent }) => {
     const [open, setOpen] = React.useState(false);
     const q = (query || '').trim().toLowerCase();
 
     const byName = { text: x => x.name, limit: 6 };   // the shared matcher, six a group (Jeff, 9 Oct: "Keep 6 per group"), the rest announced (state §0.194)
+    // Each row names what tells two of one name apart (state §0.214): a customer's number and its CRM account, an
+    // account's parent ("unit of Shell", "site of Shell" — the account picker's words, accountParent.js parentNote).
+    const byId = new Map((accounts || []).map(a => [a.id, a]));
 
-    // Group 1 — existing dispatch customers (already have a customerNumber).
-    const { shown: custMatches, more: custMore } = matchSearch(customers, query, byName);
+    // The name as typed, by the one rule its Save reads (state §0.214): Create only where no record has the name; a
+    // refusal — two of the name, or a name only an account merged into another has (state §0.209) — offers none and
+    // says why under the field.
+    const typed = q ? customerForText(query, customers, accounts) : null;
+    // The refusal under the field: a won deal's placeholder's; once a keystroke cleared it on a deal two customers stand
+    // for, the deal's — but for a customer typed in full, which saves as itself (the eighth review: it read refused).
+    const refusal = placeholderRefusal || (dealHold && typed?.how !== 'customer' ? DEAL_NEEDS_PICK : '');
+    // No Create while a won deal's placeholder says two customers stand for it: one is picked, or the name typed over.
+    const showCreate = !refusal && typed?.how === 'create';
+    const typedRefusal = typed?.refusal ? typedCustomerRefusal(typed) : '';
+
+    // Group 1 — existing dispatch customers (already have a customerNumber), found by their own name or — ranked
+    // below every row its name answers — by their CRM account's: a refusal names the customers that stand for an
+    // account under names of their own, and the list it points to holds them (the browser check, 28 Oct: a won deal's
+    // two customers of other names, and the list empty under its refusal). Every record the line under the field
+    // names leads — customers here, accounts below — by id, before the usual six (the reviews of that fix: past the
+    // six, on an account the screen lacks, a twin held by a customer of another name, a merged-away name's survivor —
+    // each was still not in the list): a won deal's placeholder's (`placeholderLeads`, worked out on the deal — found
+    // on its account, which a rep's list or a deleted account leaves this screen without, so no name finds them),
+    // else the typed name's — the one customer it saves as, or what its refusal names (dispatchCustomer.js refusalLeads).
+    const leads = refusal ? (placeholderLeads || NO_LEADS)
+        : typed?.how === 'customer' ? { ...NO_LEADS, customerIds: [typed.customer.id] }
+        : typed?.refusal ? { ...refusalLeads(typed, customers, accounts), hold: false }
+        : NO_LEADS;
+    const leadRows = leads.customerIds.map(id => (customers || []).find(c => c.id === id)).filter(Boolean);
+    const leadSet = new Set(leadRows.map(c => c.id));
+    const { shown: custFound, more: custMore } = matchSearch((customers || []).filter(c => !leadSet.has(c.id)), query, { ...byName, also: c => [byId.get(c.accountId)?.name] });
+    const custMatches = [...leadRows, ...custFound];
 
     // Group 2 — CRM accounts with no dispatch customer yet. Picking one creates
     // the dispatch customer on save, linked back via accountId, so the same
-    // company is not duplicated across the CRM and Dispatch.
+    // company is not duplicated across the CRM and Dispatch. An account is in Dispatch when a customer links it by
+    // id — never because a customer has its name, which hid an account's twin once the other was linked (state §0.214)
+    // — or when a customer linked to no account has its name (searchKey), which stands for it by the rule Save reads
+    // (dispatchCustomer.js rule 2): offered here, its pick skipped the refusal of two such customers and saved a third
+    // (the second review of the browser check's fix).
     const linkedAccountIds = new Set((customers || []).map(c => c.accountId).filter(Boolean));
-    const linkedNames      = new Set((customers || []).map(c => (c.name || '').trim().toLowerCase()));
-    const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])
-        .filter(a => !isMergeArchived(a) && !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);
-
-    const exact = [...(customers || []), ...(accounts || [])]
-        .some(x => (x.name || '').trim().toLowerCase() === q);
-    const showCreate = q.length > 0 && !exact;
-    // A name only an account merged into another has (state §0.209): no Create, and the line under the field says
-    // which account to pick.
-    const merged = q ? mergedAwayName(query, customers, accounts) : null;
+    const unlinkedKeys = new Set((customers || []).filter(c => !c.accountId).map(c => searchKey(c.name || '')).filter(Boolean));
+    for (const a of accounts || []) if (unlinkedKeys.has(searchKey(a.name || ''))) linkedAccountIds.add(a.id);
+    // None while New Job carries a won deal two customers stand for (`dealHold`; Jeff, 29 Oct: "No new customer"):
+    // an account's pick makes a customer, which Save refuses — its own account, named otherwise than the deal's account
+    // text, was offered and saved a third (the third review), and held while its customers are deleted since too (the
+    // eighth). A refusal that names accounts — two twins, a merged-away name's survivor — leads with those not yet in
+    // Dispatch, by id.
+    const holdAccounts = !!dealHold;
+    const acctLead = holdAccounts ? [] : leads.accountIds.map(id => byId.get(id)).filter(a => a && !isMergeArchived(a) && !linkedAccountIds.has(a.id));
+    const acctLeadSet = new Set(acctLead.map(a => a.id));
+    const { shown: acctFound, more: acctMore } = matchSearch((accounts || [])
+        .filter(a => !holdAccounts && !acctLeadSet.has(a.id) && !isMergeArchived(a) && !linkedAccountIds.has(a.id)), query, byName);
+    const acctMatches = [...acctLead, ...acctFound];
 
     const inputSt = { width: '100%', padding: '8px 10px', border: `1px solid ${selectedId ? T.ok : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' };
     const rowSt   = { padding: '7px 10px', fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer', borderBottom: `1px solid ${T.border}` };
@@ -374,34 +428,41 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                     Existing dispatch customer selected
                 </div>
             )}
+            {/* An account picked, then its won deal two customers stand for picked again: Save refuses it, in the deal's
+                words (the ninth review: this line promised a customer). */}
             {!selectedId && selectedAccountId && (
-                <div style={{ marginTop: 4, fontSize: 11, color: T.info, fontWeight: 600, fontFamily: T.sans }}>
-                    CRM account — a linked dispatch customer will be created on save
+                <div style={{ marginTop: 4, fontSize: 11, color: dealHold ? T.inkMuted : T.info, fontWeight: dealHold ? 400 : 600, fontFamily: T.sans }}>
+                    {dealHold ? DEAL_NEEDS_PICK : 'CRM account — a linked dispatch customer will be created on save'}
                 </div>
             )}
+            {/* A won deal's placeholder two customers stand for says so until a customer is picked or the name typed
+                over (`refusal`, state §0.214); else the typed name's answer. */}
             {!selectedId && !selectedAccountId && query.trim() && (
                 <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                    {merged ? linkRefusal(merged) : 'New customer — will be created on save'}
+                    {refusal || typedRefusal || typedCustomerLine(typed)}
                 </div>
             )}
-            {/* Open only with a row to show (state §0.210): a near spelling of a merged-away name offers no Create
-                (`merged`), so it alone opened an empty box (§0.209's defect; Jeff, 23 Oct: "File it, fix in §0.210"). */}
-            {open && (custMatches.length > 0 || acctMatches.length > 0 || (showCreate && !merged)) && (
+            {/* Open only with a row to show (state §0.210): a near spelling of a merged-away name offers no Create, so
+                it alone opened an empty box (§0.209's defect; Jeff, 23 Oct: "File it, fix in §0.210"). */}
+            {open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3,
                     background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
                     boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>
                     {custMatches.length > 0 && (
                         <div style={hdrSt}>Dispatch customers</div>
                     )}
-                    {custMatches.map(c => (
+                    {custMatches.map(c => { const acct = c.accountId ? byId.get(c.accountId) : null; return (
                         <div key={c.id} style={rowSt}
                             onMouseDown={e => { e.preventDefault(); onPick(c); setOpen(false); }}>
                             <span style={{ fontWeight: 500 }}>{c.name}</span>
                             {c.customerNumber && (
                                 <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>{c.customerNumber}</span>
                             )}
+                            {acct && (
+                                <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>{`${acct.name}${parentNote(acct, byId)}`}</span>
+                            )}
                         </div>
-                    ))}
+                    ); })}
                     {custMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{custMore} more — keep typing</div>}
                     {acctMatches.length > 0 && (
                         <div style={hdrSt}>CRM accounts — not yet in Dispatch</div>
@@ -410,6 +471,9 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                         <div key={a.id} style={rowSt}
                             onMouseDown={e => { e.preventDefault(); onPickAccount(a); setOpen(false); }}>
                             <span style={{ fontWeight: 500 }}>{a.name}</span>
+                            {a.parentAccountId && byId.has(a.parentAccountId) && (
+                                <span style={{ fontSize: 11, color: T.inkMuted }}>{parentNote(a, byId)}</span>
+                            )}
                             {(a.city || a.state) && (
                                 <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>
                                     {[a.city, a.state].filter(Boolean).join(', ')}
@@ -418,7 +482,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                         </div>
                     ))}
                     {acctMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{acctMore} more — keep typing</div>}
-                    {showCreate && !merged && (
+                    {showCreate && (
                         <div style={{ ...rowSt, borderBottom: 'none', color: T.info, fontWeight: 600 }}
                             onMouseDown={e => { e.preventDefault(); onCreateIntent(); setOpen(false); }}>
                             + Create “{query.trim()}”
@@ -2067,12 +2131,18 @@ const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, template
     return (opportunities || [])
         .filter(o => o.stage === 'Closed Won' && !claimed.has(o.id))
         .map(o => {
-            const account = (accounts || []).find(a => a.id === o.accountId || a.name === o.account) || null;
+            // The deal's account by its id — by its name only for a deal with none, and then only the one live
+            // account of the name; never the first of a name (state §0.214; pickLink.js accountForDeal).
+            const account = accountForDeal(o, accounts);
             // A dispatch customer may already exist for this account, in which case
-            // its address and preferences are real data rather than blanks.
-            const cust = (customers || []).find(c =>
-                (account && c.accountId === account.id) ||
-                (o.account && (c.name || '').trim().toLowerCase() === String(o.account).trim().toLowerCase())) || null;
+            // its address and preferences are real data rather than blanks. The one rule quote -> job reads, on the
+            // same deal and the accounts this screen holds (dispatchCustomer.js customerForDeal): the one customer
+            // linked to the deal's account, else the one of its name linked to no account; two or more — none, and
+            // New Job says so (Jeff, 28 Oct: "Open, ask to pick"). Its accountId is the account a made customer links
+            // to: the deal's, by its link even where this screen does not hold it (a rep's list) — never a twin found
+            // by name at Save.
+            const found = customerForDeal(customers, o, accounts);
+            const cust = found.customer || null;
             const tmpl = matchTemplateForOpp(o, account, templates, cust);
 
             const crew = parseInt(tmpl?.crew, 10);
@@ -2085,7 +2155,9 @@ const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, template
                 templateId:      tmpl?.id || null,
                 templateName:    tmpl ? (tmpl.name || tmpl.ctype || 'Untitled template') : null,
                 customerId:      cust?.id || null,
-                accountId:       account?.id || null,
+                accountId:       found.accountId || cust?.accountId || null,
+                customerRefusal: found.refusal ? dealCustomerRefusal(found) : '',
+                customerRefusalLeads: found.refusal ? { ...refusalLeads(found, customers, accounts), hold: found.refusal === 'many' && found.of !== 'account' } : null,
                 customer:        cust?.name || o.account || o.opportunityName || 'Unknown',
                 title:           o.opportunityName || 'Won opportunity',
                 address:         cust?.serviceAddress || '',
@@ -2664,7 +2736,15 @@ const shortDate = (iso) => iso ? fromYmd(iso).toLocaleDateString('en-US', { mont
 // to be declared inside CustomersView and picked them up from the parent scope;
 // hoisting it to module scope (correct — it was remounting on every keystroke)
 // left those two references dangling, and `copyFromAccount` never existed at all.
-const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft, linkedAccount, heldLink, copyFromAccount,
+// A "Linked CRM account" option (state §0.214): the account's name, its parent where it has one — twins told
+// apart ("Shell - Port Allen · site of Shell") — and, for an account another customer already stands for, that
+// customer: the option is disabled, as the server refuses a second customer for one account (Jeff, 28 Oct: "Refuse it").
+const accountOptionLabel = (a, byId, takenBy) => {
+    const other = takenBy.get(a.id);
+    return `${a.name}${parentNote(a, byId)}${other ? ` — in Dispatch as ${other.customerNumber || other.name}` : ''}`;
+};
+
+const CustomerEditForm = ({ draft, set, accounts, accountsById, takenBy, techs, plans, propertyTypes, planOnDraft, linkedAccount, heldLink, copyFromAccount,
     prefTech, prefMissing, prefOptions, saving, status, onSave, onCancel }) => (
     <div style={{ maxWidth: 620 }}>
             <CustFieldRow label="Name *">
@@ -2677,7 +2757,7 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, p
                     {/* A link the options leave out — an account merged into another, one you can't open, one deleted — shows as
                         itself, disabled, never as "— Not linked —" (guide §16, §18b24.3); an untouched Save keeps it (state §0.209). */}
                     {heldLink && <option value={draft.accountId} disabled>{heldLink.label}</option>}
-                    {unarchived(accounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    {unarchived(accounts).map(a => <option key={a.id} value={a.id} disabled={takenBy.has(a.id)}>{accountOptionLabel(a, accountsById, takenBy)}</option>)}
                 </select>
                 {heldLink?.note && <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{heldLink.note}</div>}
                 {linkedAccount && (
@@ -3067,6 +3147,10 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
     // deleted — shown as itself, disabled, on the form and the record view (state §0.209; guide §16, §18b24.3).
     const draftHeld = draft ? heldAccountOption(draft.accountId, accounts) : null;
     const selHeld = selected ? heldAccountOption(selected.accountId, accounts) : null;
+    // The options' words (state §0.214): each account's parent, found by id, and the account another customer
+    // already stands for — not the one being edited.
+    const accountsById = new Map((accounts || []).map(a => [a.id, a]));
+    const takenBy = new Map((customers || []).filter(c => c.accountId && c.id !== draft?.id).map(c => [c.accountId, c]));
 
     // Copies the CRM account's address onto the service address. Never overwrites
     // silently — a service address that is already filled in is usually a site
@@ -3246,7 +3330,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                 {/* ── RIGHT: the service-customer record ─────────────────── */}
                 <div style={{ minHeight: 0, overflow: 'auto', padding: '18px 24px 24px' }}>
                     {editing && draft ? (
-                        <CustomerEditForm draft={draft} set={set} accounts={accounts} techs={techs} plans={plans}
+                        <CustomerEditForm draft={draft} set={set} accounts={accounts} accountsById={accountsById} takenBy={takenBy} techs={techs} plans={plans}
                             propertyTypes={propertyTypes}
                             heldLink={draftHeld} linkedAccount={draftAccount && !isMergeArchived(draftAccount) ? draftAccount : null} copyFromAccount={copyFromAccount}
                             planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
@@ -5383,7 +5467,14 @@ export default function DispatchTab() {
     const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
         opportunityId: '', opportunityCopied: false, needSkills: [], equipCategories: [], requiredVehicleType: '',
-        servicePlanId: '', planDueDate: '' };
+        servicePlanId: '', planDueDate: '',
+        // customerRefusal: a won deal's placeholder two customers stand for — said under the field and refused at Save
+        // until a customer is picked or the name typed over. madeCustomerId and madeLocation: the customer and the
+        // service location ({ id, key }) a Save made before it was refused, so a retry with the same customer and
+        // address reuses them (state §0.214). customerRefusalLeads: the records that refusal names, which lead the
+        // field's list while it stands, and whether it holds the CRM accounts back (dispatchCustomer.js refusalLeads).
+        // refusedDeal: the won deal that refusal belongs to (placeholderOn; dealHolds — no new customer for it).
+        customerRefusal: '', customerRefusalLeads: null, madeCustomerId: '', madeLocation: null, refusedDeal: '' };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
     // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
     // as it stood before the template was applied, so Undo — and switching to a
@@ -5536,7 +5627,12 @@ export default function DispatchTab() {
             ...EMPTY_JOB,
             customer:       row.customer || '',
             customerId:     row.customerId || '',
-            accountId:      row.accountId  || '',
+            // Two customers stand for the deal (state §0.214): no account either, so Save makes no third customer
+            // for it — the dispatcher picks one, and the pick brings its account.
+            accountId:      row.customerRefusal ? '' : (row.accountId || ''),
+            customerRefusal: row.customerRefusal || '',
+            customerRefusalLeads: row.customerRefusalLeads || null,
+            refusedDeal:    row.customerRefusal ? (row.opportunityId || '') : '',
             opportunityId:  row.opportunityId,
             opportunityCopied: true,   // the won deal's own, copied — not picked: left off if the server refuses it (state §0.199)
             title:          row.title || '',
@@ -5546,10 +5642,13 @@ export default function DispatchTab() {
         let note = null;
         const tmpl = (settings?.dispatchJobTemplates || []).find(t => t.id === row.templateId);
         if (tmpl) {
+            // The form as it stood before the template (state §0.214; OPEN_ITEMS §4.4): its Undo puts the template's
+            // fields back to it — `prevForm: form` after `form = next` held the templated form, so Undo undid nothing.
+            const before = form;
             const { next, applied, skipped } = applyJobTemplate(form, tmpl, { skills, licLevels, equipCategories, vehicleTypes });
             form = next;
             note = { id: tmpl.id, name: templateLabel(tmpl), applied, skipped,
-                equip: (next.equipCategories || []).join(', '), prevForm: form };
+                equip: (next.equipCategories || []).join(', '), prevForm: before };
         }
         setNewJobForm(form);
         setAppliedTemplate(note);
@@ -5578,10 +5677,13 @@ export default function DispatchTab() {
         };
         let note = null;
         if (tmpl) {
+            // The form as it stood before the template (state §0.214; OPEN_ITEMS §4.4): its Undo puts the template's
+            // fields back to it — `prevForm: form` after `form = next` held the templated form, so Undo undid nothing.
+            const before = form;
             const { next, applied, skipped } = applyJobTemplate(form, tmpl, { skills, licLevels, equipCategories, vehicleTypes });
             form = next;
             note = { id: tmpl.id, name: templateLabel(tmpl), applied, skipped,
-                equip: (next.equipCategories || []).join(', '), prevForm: form };
+                equip: (next.equipCategories || []).join(', '), prevForm: before };
         }
         setNewJobForm(form);
         setAppliedTemplate(note);
@@ -5771,6 +5873,9 @@ export default function DispatchTab() {
     // Everything the form collects is now sent; previously address, crew size,
     // min licence and skills existed only in optimistic local state and vanished
     // on refresh.
+    // New Job does not close while its Save runs (state §0.214): the Save goes on, and wrote the customer and location
+    // it made into whichever New Job was opened next.
+    const closeNewJob = () => { if (!newJobSaving) setShowNewJobForm(false); };
     const handleSaveNewJob = async () => {
         const custName = newJobForm.customer.trim();
         const title    = newJobForm.title.trim();
@@ -5779,38 +5884,59 @@ export default function DispatchTab() {
         if (!custName) { setNewJobError('Customer is required.'); return; }
         if (!title)    { setNewJobError('Job title is required.'); return; }
         if (address && !city) { setNewJobError('City is required when a job address is entered.'); return; }
-        // A name only an account merged into another has makes no customer (state §0.209): refused in the field's words.
-        const gone = !newJobForm.customerId && !newJobForm.accountId ? mergedAwayName(custName, customers, accounts) : null;
-        if (gone) { setNewJobError(linkRefusal(gone)); return; }
+        // A name typed and not picked saves by the field's one rule (state §0.214; dispatchCustomer.js
+        // customerForText): the one customer of the name, or the one live account of it not yet in Dispatch, is that
+        // record; two or more, or a name only an account merged into another has (state §0.209), is refused in the
+        // field's words. A won deal's placeholder two customers stand for is refused until one is picked.
+        // A deal two customers stand for says its own words first: the field holds the accounts a typed name's refusal
+        // would point to (the eighth review).
+        let typed = null;
+        if (!newJobForm.customerId && !newJobForm.accountId) {
+            if (newJobForm.customerRefusal && placeholderOn(newJobForm)) { setNewJobError(newJobForm.customerRefusal); return; }
+            typed = customerForText(custName, customers, accounts);
+        }
+        if (dealHolds(newJobForm) && !newJobForm.customerId && !typed?.customer) { setNewJobError(DEAL_NEEDS_PICK); return; }
+        if (typed?.refusal) { setNewJobError(typedCustomerRefusal(typed)); return; }
 
         setNewJobSaving(true);
         setNewJobError('');
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         try {
             // 1 — resolve the customer FK
-            let customerId  = newJobForm.customerId;
+            let customerId  = newJobForm.customerId || typed?.customer?.id || '';
+            const custAccountId = newJobForm.accountId || typed?.customer?.accountId || typed?.account?.id || '';
+            const custLabel = typed?.customer?.name || typed?.account?.name || custName;   // a record typed in full, under its own spelling
             let createdCust = null;
             if (!customerId) {
                 const newCustId = 'dcust_' + crypto.randomUUID();
-                const cres = await dbFetch('/.netlify/functions/dispatch-customers', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: newCustId,
-                        name: custName,
-                        accountId: newJobForm.accountId || null,
-                    }),
-                });
-                const cdata = await cres.json();
-                if (!cres.ok) throw new Error(cdata?.error || 'Could not create the customer.');
+                // A won deal's account, copied onto its placeholder, is left off when the server says it names no live
+                // account — deleted since (state §0.214): the customer is made as before, unlinked. Only a 404 is
+                // dropped: the 409 for an account another customer stands for is said under the form.
+                let cdata = null;
+                const { answer: cans } = await saveDroppingRefused(async (body) => {
+                    if (!stillOrg(askedOrg)) return undefined;
+                    const r = await dbFetch('/.netlify/functions/dispatch-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    cdata = await r.json();
+                    return { ok: r.ok, status: r.status, field: cdata?.field };
+                }, { id: newCustId, name: custLabel, accountId: custAccountId || null }, newJobForm.opportunityCopied ? ['accountId'] : []);
+                if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
+                if (!cans.ok) throw new Error(cdata?.error || 'Could not create the customer.');
                 createdCust = cdata.customer;
                 customerId  = createdCust?.id || newCustId;
                 setCustomers(prev => [...prev, createdCust].filter(Boolean));
+                // The made customer is the form's now (state §0.214; OPEN_ITEMS §4.4): a Save refused after this point
+                // and pressed again reuses it — it made a second customer of the same name.
+                if (stillOrg(askedOrg)) {
+                    setNewJobForm(f => ({ ...f, customer: createdCust?.name || custLabel, customerId, accountId: createdCust?.accountId || custAccountId || '',
+                        customerRefusal: '', madeCustomerId: customerId }));
+                }
             }
 
-            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
-            // 2 — optional service location
+            // 2 — optional service location — the one a refused Save made for this customer and address, when there is one
             let locationId = null;
-            if (address) {
+            const locKey = [customerId, address, city, newJobForm.state.trim(), newJobForm.zip.trim()].join('\n');
+            if (address && newJobForm.madeLocation?.key === locKey) locationId = newJobForm.madeLocation.id;
+            else if (address) {
                 const locId = 'dloc_' + crypto.randomUUID();
                 const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5818,12 +5944,15 @@ export default function DispatchTab() {
                         id: locId, customerId, name: address, address, city,
                         state: newJobForm.state.trim() || null,
                         zip:   newJobForm.zip.trim()   || null,
-                        isDefault: !!createdCust,
+                        // The customer's first location is its default — once: a retry with another address after a
+                        // refused Save made one for it marks this one no default.
+                        isDefault: !!createdCust || (newJobForm.madeCustomerId === customerId && !newJobForm.madeLocation),
                     }),
                 });
                 const ldata = await lres.json();
                 if (!lres.ok) throw new Error(ldata?.error || 'Could not save the job address.');
                 locationId = ldata.location?.id || locId;
+                if (stillOrg(askedOrg)) setNewJobForm(f => ({ ...f, madeLocation: { id: locationId, key: locKey } }));
             }
 
             if (!stillOrg(askedOrg)) return;
@@ -5833,7 +5962,7 @@ export default function DispatchTab() {
                 id:              jobId,
                 customerId,
                 locationId,
-                accountId:       newJobForm.accountId || createdCust?.accountId || null,
+                accountId:       createdCust ? (createdCust.accountId || null) : (custAccountId || null),   // the made customer's, as the server kept it
                 title,
                 trade:           newJobForm.trade   || null,
                 jobType:         newJobForm.jobType || null,
@@ -5853,8 +5982,8 @@ export default function DispatchTab() {
             // The CRM account a job copies from its customer, and the deal a won deal's placeholder copies, are
             // left off when the server says they name no live record — deleted since (a create asks every link
             // it names, state §0.199) — and the job is saved without them. A deal the dispatcher picked is
-            // theirs: its refusal, like anything else refused, is said under the form (a retry then makes the
-            // customer again — OPEN_ITEMS §4.4). An org switch stops it: the next POST would carry the new
+            // theirs: its refusal, like anything else refused, is said under the form (a retry reuses the customer
+            // and location this Save made — state §0.214). An org switch stops it: the next POST would carry the new
             // org's token.
             let data = null;
             const { answer, sent } = await saveDroppingRefused(async (body) => {
@@ -5873,7 +6002,7 @@ export default function DispatchTab() {
                 customerId,
                 locationId,
                 opportunityId:   sent.opportunityId || null,   // the deal it was saved with — none, if it was left off
-                customer:        custName,
+                customer:        createdCust?.name || custLabel,
                 address:         address || '',
                 needSkills:      newJobForm.needSkills || [],
                 crewSize:        parseInt(newJobForm.crewSize) || 1,
@@ -6659,7 +6788,7 @@ export default function DispatchTab() {
             {/* ── New Job modal ──────────────────────────────────────────────── */}
             {showNewJobForm && (
                 <>
-                    <div onClick={() => setShowNewJobForm(false)}
+                    <div onClick={closeNewJob}
                         style={{ position: 'fixed', inset: 0, background: 'rgba(42,38,34,0.45)', zIndex: 1000 }} />
                     <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                         zIndex: 1001, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r + 2,
@@ -6667,7 +6796,7 @@ export default function DispatchTab() {
                         {/* Header */}
                         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>New Job</div>
-                            <button onClick={() => setShowNewJobForm(false)}
+                            <button onClick={closeNewJob}
                                 style={{ background: 'none', border: 'none', fontSize: 18, color: T.inkMuted, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
                         </div>
                         {/* Body */}
@@ -6681,7 +6810,7 @@ export default function DispatchTab() {
                                             const list = settings?.dispatchJobTemplates || [];
                                             // Switching templates re-applies from the pre-template
                                             // form, never from the already-templated one.
-                                            const base = appliedTemplate ? appliedTemplate.prevForm : newJobForm;
+                                            const base = appliedTemplate ? withoutTemplate(appliedTemplate.prevForm, newJobForm) : newJobForm;
                                             const t = list.find(x => x.id === e.target.value);
                                             if (!t) { setNewJobForm(base); setAppliedTemplate(null); return; }
                                             const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels, equipCategories, vehicleTypes });
@@ -6703,7 +6832,7 @@ export default function DispatchTab() {
                                                     Applied <strong style={{ color: T.ink }}>{appliedTemplate.name}</strong>
                                                     {appliedTemplate.applied.length > 0 && ` — ${appliedTemplate.applied.join(', ')}`}
                                                 </span>
-                                                <span onClick={() => { setNewJobForm(appliedTemplate.prevForm); setAppliedTemplate(null); }}
+                                                <span onClick={() => { setNewJobForm(f => withoutTemplate(appliedTemplate.prevForm, f)); setAppliedTemplate(null); }}
                                                     style={{ color: T.info, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Undo</span>
                                             </div>
                                             {appliedTemplate.equip && (
@@ -6727,13 +6856,17 @@ export default function DispatchTab() {
                                     query={newJobForm.customer}
                                     selectedId={newJobForm.customerId}
                                     selectedAccountId={newJobForm.accountId}
-                                    onQueryChange={v => setNewJobForm(f => ({ ...f, customer: v, customerId: '', accountId: '' }))}
-                                    onPick={c => setNewJobForm(f => ({ ...f, customer: c.name, customerId: c.id, accountId: c.accountId || '' }))}
+                                    placeholderRefusal={placeholderOn(newJobForm) ? newJobForm.customerRefusal : ''}
+                                    dealHold={dealHolds(newJobForm)}
+                                    placeholderLeads={newJobForm.customerRefusalLeads}
+                                    onQueryChange={v => setNewJobForm(f => ({ ...f, customer: v, customerId: '', accountId: '', customerRefusal: '' }))}
+                                    onPick={c => setNewJobForm(f => ({ ...f, customer: c.name, customerId: c.id, accountId: c.accountId || '', customerRefusal: '' }))}
                                     onPickAccount={a => setNewJobForm(f => ({
                                         ...f,
                                         customer:  a.name,
                                         customerId: '',
                                         accountId:  a.id,
+                                        customerRefusal: '',
                                         // Prefill the service address from the CRM account, but only
                                         // where the form is still empty so typing is never clobbered.
                                         address: f.address || a.address || '',
@@ -6741,7 +6874,7 @@ export default function DispatchTab() {
                                         state:   f.state   || a.state   || '',
                                         zip:     f.zip     || a.zip     || '',
                                     }))}
-                                    onCreateIntent={() => setNewJobForm(f => ({ ...f, customerId: '', accountId: '' }))} />
+                                    onCreateIntent={() => setNewJobForm(f => ({ ...f, customerId: '', accountId: '', customerRefusal: '' }))} />
                             </div>
                             {/* Title */}
                             <div>
@@ -6935,7 +7068,7 @@ export default function DispatchTab() {
                         </div>
                         {/* Footer */}
                         <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                            <button onClick={() => setShowNewJobForm(false)}
+                            <button onClick={closeNewJob}
                                 style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                                 Cancel
                             </button>
