@@ -122,7 +122,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      still make one — §4.4). The header search's account
      rows name their parent, and count each open deal once. What it found
      and left is filed in §4.4.
-   - **Batch 3:** CSV import and merge (§4.7).
+   - **Batch 3:** CSV import and merge (§4.7) — **designed and answered,
+     not built** (docs/design/links-batch-3: the map read 29 Oct over
+     `aeafb2d`, the design and its critics, Jeff's twelve answers of
+     29 Oct, each the Recommended, and the census). Four steps: 3a the
+     account import, screen and server together; 3b the contact and deal
+     imports; 3c the merge's links; 3d the merge's placement.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -898,6 +903,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   code change — an org-level switch — if wanted). Env switches
   (`JOBS_ENABLED`, `RESEND_API_KEY`, `TWILIO_*`) are per site and would
   stop UKG's too.
+- **UKG's accounts and deals that break the house tier rules** (batch 3's
+  census, 29 Oct, counts only — docs/design/links-batch-3/ANSWERS.md): 12
+  accounts stored as tier `account` under an `account` parent (D3: a
+  sub-account ranks below its parent), and 6 deals linked by id to 6
+  sites (D22: a deal stands on an account, its site as Site Name) — three
+  open, three Closed Lost. How they came to be is not known (no audit
+  entry). Nothing changes them; batch 3d's merge refusal (Jeff, 29 Oct,
+  Q8: "Refuse it") would refuse a merge that moves one of the twelve.
+  Jeff's data decision: leave them, or fix each by hand (how each screen
+  would re-fit them is not read yet — read before advising a fix).
 
 ---
 
@@ -3509,7 +3524,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   by name too, as a move reads one (accounts.mjs `dealLifts`, D22); the
   second needs a write the merge never made.
 - **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
-  over 7e68f26):
+  over 7e68f26; re-read 29 Oct over `aeafb2d` — docs/design/links-batch-3,
+  which holds what still holds, what changed and the design Jeff answered):
   - The account import gives a sub-account the first account whose name
     matches the Parent Account cell, in any case and any tier, with
     existing accounts searched before the file's own parents, a
@@ -3583,10 +3599,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
   As recorded.
-- **The accounts / contacts bulk POST is unbatched.** It breaks above ~1,872
-  rows, and one bad row kills the batch. As recorded.
-- **`onConflictDoNothing()` in the bulk POST can never fire,** so a repeated
-  import inserts a new set. Decide where name dedupe belongs. As recorded.
 - **Past merges offers an Undo again until its list is read again**
   (§0.210's browser check, 23 Oct; read in code): after an Undo's
   answer, the row says so ("Merge undone — “Tess Undoer” is its own
