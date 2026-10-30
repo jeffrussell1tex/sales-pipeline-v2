@@ -1679,7 +1679,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   id since Q11. A Sales Rep's list holds unowned contacts, so hers stay in
   her list. **DECIDED by Jeff, 30 Oct: "Imported contacts become the
   owners"** — a new contact an import makes is the importer's, by id, as a
-  deal's blank Sales Rep is (Q11). **DONE (§0.217, `a8c1fce`):** one
+  deal's blank Sales Rep is (Q11). **DONE (§0.217, `a8c1fce`, pushed to dev 30 Oct):** one
   rule for both bulk creates (`_lib.mjs importerOwners`); the import's copy
   holds the stamped name (`heldAsStamped`). The same day:
   "Skip ship and lets keep working" (prod waits) and "Leave test records in
