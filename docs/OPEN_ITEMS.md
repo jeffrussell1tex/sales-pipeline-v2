@@ -132,7 +132,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
      bulk overwrite moving and renaming nothing. **3b built (§0.216; guide
-     §18b106), its browser check PASSED as Jeff and as Karen, NOT committed** (Jeff, 30 Oct:
+     §18b106), its browser check PASSED as Jeff and as Karen, committed `ef075eb` (30 Oct, on Jeff's word, "Commit it"), NOT pushed** (Jeff, 30 Oct:
      "begin"; Q13 "Refuse both", Q14 "Keep what's stored"): the contact
      and deal imports' names each one record or the row refused at
      Preview; a contact linked by id, a new company made once; a deal on
@@ -1663,7 +1663,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing, then answer the stored row) must first check the caller may READ
   that row — answering it to anyone who names its id would let a rep read
   another rep's deal. Recorded, not changed.
-- **An import's owner report is not shown — DONE (§0.216, NOT committed) but
+- **An import's owner report is not shown — DONE (§0.216, `ef075eb`) but
   for one path:** bulkClient keeps each chunk's `ambiguousOwners` and
   `unmatchedOwners`, and the Results say them (`describeOwners`) for the
   contact and deal imports and the account Overwrite. The account import's
@@ -2221,7 +2221,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A deal's account text can differ from its account's name, and rule 2
   then misses the account's own customer** (§0.214's eighth and tenth
   reviews, read in code and run on made-up rows): the bulk deal create
-  stored `account` as sent until §0.216 (NOT committed), which gives a row
+  stored `account` as sent until §0.216 (`ef075eb`), which gives a row
   naming an account id that account's own name (`bulkDealLinks`), as the
   single create and the edit do (`accountLink`); a deal stored before then
   keeps its text. For a
@@ -3318,7 +3318,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   account merged into it, and the Documents tab a document linked to
   either. The data move stays batch 3's.
 - **A CSV overwrite batch empties the Account of a row that names none — DONE
-  (§0.216, NOT committed):** the accounts, contacts and deals bulk PUTs hand
+  (§0.216, `ef075eb`):** the accounts, contacts and deals bulk PUTs hand
   `partialRows` the stored rows, so a key one row leaves out and another
   sends is written as stored, never empty (guide §18b106 rule 8).
 - **A new activity prefilled from a contact or deal on a merged-away account,
@@ -3553,7 +3553,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   import's parent and conflicts, and the accounts bulk paths' parent rule —
   are §0.215's (3a, committed `321643e`); the second bullet's deal conflict and
   the third bullet — the contact and deal imports and the deals bulk paths
-  — are §0.216's (3b, NOT committed); the rest are 3c-3d's —
+  — are §0.216's (3b, `ef075eb`); the rest are 3c-3d's —
   docs/design/links-batch-3,
   which holds what still holds, what changed and the design Jeff answered):
   - The account import gives a sub-account the first account whose name
@@ -3568,10 +3568,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - A conflict is the first existing account of the same name
     (CsvImportModal.jsx), and Overwrite writes onto that one. The row
     shows the name and phone only. A deal's conflict was the first deal with
-    the same name and account name — since §0.216 (3b, NOT committed) one
+    the same name and account name — since §0.216 (3b, `ef075eb`) one
     deal of the name on the deal's account, two refusing the row
     (planDealImport).
-  - **Done by §0.216 (3b, NOT committed):** the contact import made an
+  - **Done by §0.216 (3b, `ef075eb`):** the contact import made an
     account for each company not in the caller's list (exact spelling within
     the file), posted contacts with no `accountId`, and its Overwrite changed
     `company` while keeping the stored `accountId`; deals imported with the

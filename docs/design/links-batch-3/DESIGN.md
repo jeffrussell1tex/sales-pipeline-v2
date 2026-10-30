@@ -18,7 +18,7 @@ build changed §2 in four places: the overwrite sends neither the name nor the
 Parent Account (a stale screen's name would refuse the whole request); a name
 of no letter or digit is refused; the bulk create refuses an id sent twice; and
 a bulk create's tier the rule does not know is fitted, as the single create
-fits it, not refused with `UNKNOWN_TIER`. Step 3b built 30 Oct as state §0.216
+fits it, not refused with `UNKNOWN_TIER`. Step 3b built 30 Oct as state §0.216 (browser check PASSED; committed `ef075eb`)
 (guide §18b106), from a read-only map over `306be1f` (four readers, each checked
 by a critic) and Jeff's two answers to its gaps (Q13, Q14 in ANSWERS.md),
 through seven review workflows; its build changed §2: an Overwrite's blank cell
