@@ -1677,7 +1677,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
   bulk create stamps an owner by name only, so every imported contact is
   unassigned — as before 3b; a deal's blank Sales Rep is the importer's by
   id since Q11. A Sales Rep's list holds unowned contacts, so hers stay in
-  her list. Jeff's call: the importer by id, as for deals, or as it is.
+  her list. **DECIDED by Jeff, 30 Oct: "Imported contacts become the
+  owners"** — a new contact an import makes is the importer's, by id, as a
+  deal's blank Sales Rep is (Q11). **DONE (§0.217, NOT committed):** one
+  rule for both bulk creates (`_lib.mjs importerOwners`); the import's copy
+  holds the stamped name (`heldAsStamped`). The same day:
+  "Skip ship and lets keep working" (prod waits) and "Leave test records in
+  QA - we may need them again" (the TEST3a and TEST3b rows stay).
+- **A new company the contact import makes has no owner** (found building
+  §0.217, 30 Oct). The import's new accounts go with no owner, as the
+  account import's rows do (accounts.mjs's import rule); §0.217 made only
+  the contacts the importer's. Jeff's call: the importer by id for the new
+  companies too, or as it is.
 - **A lost reason cannot be edited after the save** (Jeff's OxyChem, 9 Oct: the
   note was not stored and there is no way to add it after). The deal window
   shows `lostReason` read-only. §0.193.

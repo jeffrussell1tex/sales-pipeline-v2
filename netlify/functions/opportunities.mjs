@@ -12,7 +12,7 @@ import { dispatchAutomations } from './dispatch-automations.mjs';
 import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
 } from './_lib.mjs';
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -253,20 +253,6 @@ async function bulkDealLinks(rows, orgId, priors = null, asked = () => true) {
     return { rows: out };
 }
 
-// A deal a bulk create names no Sales Rep for is the importer's, by id (state §0.216; Jeff, 29 Oct, Q11: "Importer,
-// by id"): a row that sends no salesRep and an ownerId is that member's — a member of THIS org (rosterUserById), its
-// name stamped with its id, never resolved by a name another member may share. An id that is no member of this org
-// refuses the request whole, naming its rows. A row naming a Sales Rep is resolved by name, as before.
-const OWNER_NOT_MEMBER = 'That owner is not a member of your organization.';
-async function importerOwners(rows, orgId) {
-    const sent = rows.map((d) => (String(d?.salesRep ?? '').trim() === '' && d?.ownerId ? String(d.ownerId) : null));
-    const members = new Map();
-    for (const id of new Set(sent.filter(Boolean))) members.set(id, await rosterUserById(id, orgId));
-    const strangers = rows.filter((d, i) => sent[i] && !members.get(sent[i])).map((d) => d.id);
-    if (strangers.length) return { status: 400, error: OWNER_NOT_MEMBER, field: 'ownerId', ids: strangers };
-    return { memberOf: (i) => (sent[i] ? members.get(sent[i]) : null) };
-}
-
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 // Whether sales reps see UNASSIGNED deals (§0.151) is read in _dealAccess.mjs now,
@@ -335,13 +321,14 @@ export const handler = async (event) => {
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
                 const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);
                 if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
-                const importer = await importerOwners(people.rows, orgId);
+                // A deal naming no Sales Rep with an ownerId is that member's, by id (Q11, state §0.216 — importerOwners, _lib.mjs).
+                const importer = await importerOwners(people.rows, orgId, 'opportunity');
                 if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
                 const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
-                owned.rows = owned.rows.map((r, i) => { const m = importer.memberOf(i); return m ? { ...r, ownerId: m.id, salesRep: m.name || null } : r; });
+                owned.rows = importer.stamp(owned.rows);
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;

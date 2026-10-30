@@ -20,7 +20,8 @@ import {
 } from '../src/utils/importReceipt.js';
 import { partialRows } from '../netlify/functions/_sanitize.mjs';
 import { makeBulkClient, BULK_CHUNK } from '../src/utils/bulkClient.js';
-import { buildOpportunityRow } from '../src/utils/importRows.js';
+import { buildOpportunityRow, newContactRow, heldAsStamped } from '../src/utils/importRows.js';
+import { importerAsks, importerDecides, OWNER_NOT_MEMBER } from '../src/utils/importerOwner.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -449,6 +450,53 @@ test("Q11 (state §0.216): a new deal with no Sales Rep is the importer's, by id
     assert.ok(!('ownerId' in over) && !('salesRep' in over), 'an overwrite sends what the file fills, no owner');
 });
 
+test("IMPORTED CONTACTS BECOME THE OWNERS (state §0.217; Jeff, 30 Oct): a new contact is the importer's, by id — the server stamps the member's name; a row naming a rep keeps it; with no profile yet, no owner, as before; the app reads them back", () => {
+    const made = newContactRow({ firstName: 'Ann', lastName: 'Lee', company: 'Shell', accountId: 'shell' }, 'usr_jeff');
+    assert.deepEqual(made, { firstName: 'Ann', lastName: 'Lee', company: 'Shell', accountId: 'shell', ownerId: 'usr_jeff' }, 'the importer by id, no name sent (REGRESSION: every imported contact unassigned)');
+    const named = newContactRow({ firstName: 'Ann', assignedRep: 'Karen Russell' }, 'usr_jeff');
+    assert.ok(!('ownerId' in named), 'a rep named: resolved by name, as before');
+    assert.equal(newContactRow({ firstName: 'Ann', assignedRep: '  ' }, 'usr_jeff').ownerId, 'usr_jeff', 'a blank rep is no rep');
+    assert.ok(!('ownerId' in newContactRow({ firstName: 'Ann' }, '')), 'before the profile is known: no owner, as before');
+    assert.ok(!('ownerId' in newContactRow({ firstName: 'Ann' })));
+    const ml = code(read('src/components/layout/ModalLayer.jsx'));
+    const contacts = ml.slice(ml.indexOf('onImportContacts={async'), ml.indexOf('onImportAccounts={async'));
+    assert.ok(contacts.includes('owned = res.landed.some((c) => c.ownerId);') && contacts.includes('if (owned) loadContacts(() => {});'), 'the app reads back the names the server stamped');
+    assert.ok(contacts.indexOf('if (owned) loadContacts(() => {});') > contacts.indexOf('phases.push(receiptFromUpdate(ow));'), 'once the overwrite is answered');
+    assert.ok(!contacts.slice(contacts.indexOf('const overwritesWithIds')).slice(0, 300).includes('newContactRow'), 'an overwrite keeps its owner');
+});
+
+test("THE IMPORTER RULE, RUN (state §0.217, the review): only a row naming no owner is asked by id; an id no member of this org has refuses the request whole, naming its rows; a member's id and name go on the row together; an import's own copy holds the name the server stamped", () => {
+    const rows = [
+        { id: 'r1', ownerId: 'usr_k' },                                  // asked
+        { id: 'r2', assignedRep: 'Other Rep', ownerId: 'usr_k' },        // a rep named: by name
+        { id: 'r3', assignedRep: '  ', ownerId: 'usr_k' },               // a blank name is none
+        { id: 'r4' },                                                    // nothing to ask
+    ];
+    const sent = importerAsks(rows, 'assignedRep');
+    assert.deepEqual(sent, ['usr_k', null, 'usr_k', null]);
+    assert.deepEqual(importerAsks([{ id: 'd', salesRep: '', ownerId: 'usr_k' }], 'salesRep'), ['usr_k'], "the deal's own owner name");
+    const karen = { id: 'usr_k', name: 'Karen Russell' };
+    const ok = importerDecides(rows, sent, new Map([['usr_k', karen]]), 'assignedRep');
+    assert.ok(!ok.error);
+    const owned = rows.map((r) => ({ ...r, ownerId: r.id === 'r2' ? 'usr_other' : null }));   // as stampOwnerIds left them
+    assert.deepEqual(ok.stamp(owned).map((r) => [r.id, r.ownerId, r.assignedRep ?? null]), [
+        ['r1', 'usr_k', 'Karen Russell'], ['r2', 'usr_other', 'Other Rep'], ['r3', 'usr_k', 'Karen Russell'], ['r4', null, null],
+    ], 'the id and the name together; a rep named keeps the name resolver\'s answer');
+    for (const [members, why] of [[new Map([['usr_k', null]]), 'no member of this org (another org\'s member reads as none)'], [new Map(), 'never read']]) {
+        assert.deepEqual(importerDecides(rows, sent, members, 'assignedRep'), { status: 400, error: OWNER_NOT_MEMBER, field: 'ownerId', ids: ['r1', 'r3'] }, why);
+    }
+    assert.equal(OWNER_NOT_MEMBER, 'That owner is not a member of your organization.');
+
+    const landed = [{ id: 'a', ownerId: 'usr_k' }, { id: 'b', ownerId: 'usr_k', assignedRep: 'Karen R' }, { id: 'c', ownerId: null }, { id: 'd', ownerId: 'usr_x' }];
+    assert.deepEqual(heldAsStamped(landed, 'assignedRep', 'usr_k', 'Karen Russell').map((r) => r.assignedRep ?? null), ['Karen Russell', 'Karen R', null, null], "the importer's own rows with no name take theirs — REGRESSION: a blank name, and a save of it unassigned the contact");
+    assert.equal(heldAsStamped(landed, 'assignedRep', '', 'Karen Russell'), landed, 'no id: nothing to hold');
+    assert.equal(heldAsStamped(landed, 'assignedRep', 'usr_k', ''), landed, 'no name: nothing to hold');
+    assert.equal(heldAsStamped([{ id: 'e', ownerId: 'usr_k', salesRep: '' }], 'salesRep', 'usr_k', 'Karen Russell')[0].salesRep, 'Karen Russell', 'a deal likewise');
+    const ml = code(read('src/components/layout/ModalLayer.jsx'));
+    assert.ok(ml.includes("setContacts(prev => [...prev, ...heldAsStamped(res.landed, 'assignedRep', currentUserId, currentUser)]);"), "the contact import's copy");
+    assert.ok(ml.includes("setOpportunities(prev => [...prev, ...heldAsStamped(res.landed, 'salesRep', currentUserId, currentUser)]);"), "the deal import's copy");
+});
+
 test("THE GUARD (state §0.216): the modal plans the contact and deal imports at Preview, an Overwrite sends the cells the file fills, and the Results count the new companies and say the owner names", () => {
     const m = code(read('src/components/modals/CsvImportModal.jsx'));
     assert.ok(m.includes(": importType === 'contacts' ? planContactImport(mapped.records, mapped.rowNumbers, accounts, contacts)"), "the caller's whole lists — merged-away rows name their survivors");
@@ -463,7 +511,7 @@ test("THE GUARD (state §0.216): the modal plans the contact and deal imports at
     assert.ok(contacts.includes('if (co && co.key && !made.has(co.key)) made.set(co.key, { id: crypto.randomUUID(), name: co.name });'), 'a new company made ONCE per name, for the rows sent — a skipped row makes none');
     assert.ok(contacts.includes('for (const c of [...newContacts, ...overwrites]) {'), "an overwrite's new Company is made too (Q4)");
     assert.ok(contacts.includes('return { ...row, company: to.name, accountId: to.id };'), 'every contact linked by id, its Company the account\'s own name (REGRESSION: no contact was ever linked)');
-    assert.ok(contacts.includes('...paired(c),') && contacts.includes('const { _existingId, ...row } = paired(c);'), 'new and overwritten alike');
+    assert.ok(contacts.includes('...newContactRow(paired(c), currentUserId),') && contacts.includes('const { _existingId, ...row } = paired(c);'), 'new and overwritten alike — a new one the importer\'s (§0.217), an overwrite never');
     assert.ok(contacts.includes("if (companies < newAccts.length) {") && contacts.includes("}, 'contact');"), 'a company that did not save: no contact sent, every contact counted not saved, the companies apart');
     assert.ok(contacts.includes('return settle(mergeReceipts(...phases, { ...emptyReceipt(), companies }), \'contact\');'), 'the companies never summed into the contacts');
     assert.ok(!contacts.includes('existingNames') && !contacts.includes('newCompanies'), 'no whole-list name compare left');
@@ -474,17 +522,26 @@ test("THE GUARD (state §0.216): the modal plans the contact and deal imports at
     assert.ok(deals.includes('if (!isClean(receipt) && created) loadOpportunities(() => {});'), 'and before a failure is said');
 });
 
-test("THE GUARD (state §0.216): the deals bulk create stamps the importer by id as a member of this org, and every bulk overwrite fills a left-out key from its stored row", () => {
-    const o = read('netlify/functions/opportunities.mjs');
-    const own = o.slice(o.indexOf('async function importerOwners(rows, orgId) {'), o.indexOf('// ── Handler'));
-    assert.ok(own.includes("const sent = rows.map((d) => (String(d?.salesRep ?? '').trim() === '' && d?.ownerId ? String(d.ownerId) : null));"), 'only a row naming no Sales Rep');
+test("THE GUARD (state §0.216, §0.217): the deals and contacts bulk creates stamp the importer by id as a member of this org — one rule, _lib.mjs importerOwners — and every bulk overwrite fills a left-out key from its stored row", () => {
+    const lib = read('netlify/functions/_lib.mjs');
+    const own = lib.slice(lib.indexOf('export async function importerOwners(rows, orgId, entity) {'), lib.indexOf('export async function ownerIdForUpdate('));
+    assert.ok(own.includes('const nameKey = ownerNameKeyFor(entity);'), "the entity's own owner name: salesRep, assignedRep");
+    assert.ok(own.includes('const sent = importerAsks(rows, nameKey);'), 'the pure rule asks (src/utils/importerOwner.js — run below)');
     assert.ok(own.includes('for (const id of new Set(sent.filter(Boolean))) members.set(id, await rosterUserById(id, orgId));'), 'a member of THIS org');
-    assert.ok(own.includes("if (strangers.length) return { status: 400, error: OWNER_NOT_MEMBER, field: 'ownerId', ids: strangers };"), 'another id refuses the request, naming its rows');
-    const post = o.slice(o.indexOf('// Bulk insert — body is an array'), o.indexOf('// Single insert'));
-    assert.ok(post.includes('const importer = await importerOwners(people.rows, orgId);') && post.indexOf('const importer = await importerOwners(') < post.indexOf('const result = await bulkInsert('));
-    assert.ok(post.includes('if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };'), "the refusal is answered, naming its rows — never a 500 from a stranger's id");
-    assert.ok(post.includes('owned.rows = owned.rows.map((r, i) => { const m = importer.memberOf(i); return m ? { ...r, ownerId: m.id, salesRep: m.name || null } : r; });'), "the member's id and name together — never one without the other");
-    assert.ok(o.includes("const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize, priors), 'opportunity', { table: opportunities, orgId });"));
+    assert.ok(own.includes('return importerDecides(rows, sent, members, nameKey);'), 'and decides');
+    assert.ok(lib.includes("import { importerAsks, importerDecides } from '../../src/utils/importerOwner.js';"));
+    assert.ok(!/async function importerOwners/.test(read('netlify/functions/opportunities.mjs').replace(/\/\/.*$/gm, '')), 'one rule: no copy left in the deals endpoint');
+    for (const [file, rows, entity, from] of [
+        ['netlify/functions/opportunities.mjs', 'people.rows', 'opportunity', '// Bulk insert — body is an array'],
+        ['netlify/functions/contacts.mjs', 'linked.rows', 'contact', '// Bulk insert — body is an array'],
+    ]) {
+        const src = read(file);
+        const post = src.slice(src.indexOf(from), src.indexOf('// Single insert'));
+        assert.ok(post.includes(`const importer = await importerOwners(${rows}, orgId, '${entity}');`) && post.indexOf('const importer = await importerOwners(') < post.indexOf('const result = await bulkInsert('), `${file}: asked before anything is written`);
+        assert.ok(post.includes('if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };'), `${file}: the refusal is answered, naming its rows — never a 500 from a stranger's id`);
+        assert.ok(post.includes('owned.rows = importer.stamp(owned.rows);') && post.indexOf('owned.rows = importer.stamp(owned.rows);') < post.indexOf('const result = await bulkInsert('), `${file}: the member stamped on the rows written`);
+    }
+    assert.ok(read('netlify/functions/opportunities.mjs').includes("const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize, priors), 'opportunity', { table: opportunities, orgId });"));
     const san = read('netlify/functions/_sanitize.mjs');
     assert.ok(san.includes('export function partialRows(rows, sanitize, stored = null) {'));
     assert.ok(san.includes('if (was) for (const key of supplied) if (!Object.hasOwn(row, key) && Object.hasOwn(was, key)) filled[key] = was[key];') && san.includes('const full = sanitize({ ...filled, ...row });'));

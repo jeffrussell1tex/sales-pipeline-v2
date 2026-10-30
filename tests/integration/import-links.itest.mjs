@@ -59,6 +59,7 @@ const ORGS = [A, B];
 const ID = (s) => 'itest_imp3_' + s;
 
 const USR_ADMIN = 'usr_itest_imp3_admin', USR_REP = 'usr_itest_imp3_rep', USR_REP2 = 'usr_itest_imp3_rep2';
+const USR_B = 'usr_itest_imp3_b';   // a member of org B only (§0.217)
 const WHO = {
     admin: { user: 'clerk_itest_imp3_admin', role: 'Admin' },
     karen: { user: 'clerk_itest_imp3_rep', role: 'User' },
@@ -104,6 +105,7 @@ before(async () => {
         { id: USR_ADMIN, orgId: A, clerkUserId: WHO.admin.user, name: 'Ada Imp', email: 'ada@itest-imp3.local', role: 'Admin' },
         { id: USR_REP, orgId: A, clerkUserId: WHO.karen.user, name: 'Karen Imp', email: 'karen@itest-imp3.local', role: 'User' },
         { id: USR_REP2, orgId: A, clerkUserId: 'clerk_itest_imp3_rep2', name: 'Other Rep', email: 'other@itest-imp3.local', role: 'User' },
+        { id: USR_B, orgId: B, clerkUserId: 'clerk_itest_imp3_b', name: 'Bea Imp', email: 'bea@itest-imp3.local', role: 'Admin' },
     ]);
     await db.insert(accounts).values([
         { id: SHELL, orgId: A, name: 'Shell', accountTier: 'account' },
@@ -256,6 +258,24 @@ test("3b, Q11: a new deal naming no Sales Rep is the importer's by id — a memb
     assert.equal(r.status, 400, JSON.stringify(r.body));
     assert.deepEqual(r.body, { error: 'That owner is not a member of your organization.', field: 'ownerId', ids: [ID('q_stranger')] });
     assert.equal(await deal(ID('q_ok')), undefined, 'refused whole');
+});
+
+test("§0.217: a new contact naming no rep is the importer's by id — a member of this org, its name stamped with it; a rep named is resolved by name; a member of org B, or no member, refuses the request whole, nothing written", async () => {
+    const newCon = (k, extra = {}) => ({ id: ID(k), firstName: 'Imp', lastName: k, ...extra });
+    const con = async (id) => (await db.select().from(contacts).where(eq(contacts.id, id)))[0];
+    let r = await call(WHO.karen, 'POST', [newCon('c_mine', { ownerId: USR_REP }), newCon('c_named', { assignedRep: 'Other Rep', ownerId: USR_REP }), newCon('c_none')], A, contactsFn);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const mine = await con(ID('c_mine'));
+    assert.deepEqual([mine.ownerId, mine.assignedRep], [USR_REP, 'Karen Imp'], 'the id and the name together (REGRESSION: the id dropped, the contact unassigned)');
+    const named = await con(ID('c_named'));
+    assert.deepEqual([named.ownerId, named.assignedRep], [USR_REP2, 'Other Rep'], 'a name sent wins');
+    assert.equal((await con(ID('c_none'))).ownerId, null, 'no id, no name: unassigned, as before');
+    for (const stranger of [USR_B, 'usr_itest_imp3_nobody']) {
+        r = await call(WHO.admin, 'POST', [newCon('c_ok'), newCon('c_stranger', { ownerId: stranger })], A, contactsFn);
+        assert.equal(r.status, 400, JSON.stringify(r.body));
+        assert.deepEqual(r.body, { error: 'That owner is not a member of your organization.', field: 'ownerId', ids: [ID('c_stranger')] }, stranger === USR_B ? "org B's member is none of A's" : 'no member at all');
+        assert.equal(await con(ID('c_ok')), undefined, 'refused whole');
+    }
 });
 
 test("3b: a deals bulk overwrite links by the same rule, keeps a key one row leaves out (Q14), and asks only a deal the caller may save", async () => {

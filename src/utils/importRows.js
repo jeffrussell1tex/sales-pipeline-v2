@@ -113,8 +113,8 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
     const merged = { ...CREATE_DEFAULTS, ...csvColumns };
     merged.opportunityName = merged.opportunityName || merged.account || 'Imported Deal';
     // A blank Sales Rep is the importer's, by id (state §0.216; Jeff, 29 Oct, Q11: "Importer, by id"): their app id
-    // goes as `ownerId` with no name, and the server stamps the member's name with it (opportunities.mjs
-    // importerOwners) — the importer's NAME, resolved by name, left the deal unowned where another member shared it.
+    // goes as `ownerId` with no name, and the server stamps the member's name with it (_lib.mjs importerOwners)
+    // — the importer's NAME, resolved by name, left the deal unowned where another member shared it.
     // Before the profile is known there is no id: the name, as before.
     const byImporter = !merged.salesRep && !!currentUserId;
     merged.salesRep        = merged.salesRep        || (byImporter ? '' : currentUser);
@@ -139,4 +139,32 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
         comments:     [],
         contactIds:   [],
     };
+}
+
+/**
+ * A new contact the CSV import makes is the importer's, by id (state §0.217; Jeff, 30 Oct: "Imported contacts become
+ * the owners"), as a deal's blank Sales Rep is (Q11): their app id goes as `ownerId` with no name, and the server
+ * stamps the member's name with it (_lib.mjs importerOwners). A row naming a rep keeps it; before the profile is known
+ * there is no id, and the contact is saved with no owner, as before. An overwrite never comes here: it keeps its owner.
+ * @param {Object} row               a contact the import sends new
+ * @param {string} [currentUserId]   the importer's app id (users.id)
+ */
+export function newContactRow(row, currentUserId = '') {
+    const byImporter = !String(row?.assignedRep ?? '').trim() && !!currentUserId;
+    return byImporter ? { ...row, ownerId: currentUserId } : row;
+}
+
+/**
+ * The rows an import sent the importer's id with and no name, as the server stored them: that id with the importer's
+ * own name — the name the server stamps is the member's (users.name), which is `currentUser` whenever the profile,
+ * and so the id, is known. Until the read-back lands, or if it fails, the app's copy held a blank name, and a save
+ * of one (a contact's rail sends `assignedRep` as it holds it) unassigned the record (the review of §0.217).
+ * @param {Object[]} rows            the rows the server took (bulkClient's `landed`)
+ * @param {string}   nameKey         'assignedRep' (contacts) or 'salesRep' (deals)
+ * @param {string}   [currentUserId] the importer's app id
+ * @param {string}   [currentUser]   the importer's name
+ */
+export function heldAsStamped(rows, nameKey, currentUserId = '', currentUser = '') {
+    if (!currentUserId || !String(currentUser).trim()) return rows;
+    return rows.map((r) => (r.ownerId === currentUserId && !String(r[nameKey] ?? '').trim() ? { ...r, [nameKey]: currentUser } : r));
 }

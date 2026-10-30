@@ -10,6 +10,7 @@ import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBI
 import { streamAudit } from './_auditStream.mjs';
 // One name per member of an org (state §0.196) — the pure rule the screens share.
 import { firstFreeName, numbered } from '../../src/utils/memberName.js';
+import { importerAsks, importerDecides } from '../../src/utils/importerOwner.js';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -370,10 +371,12 @@ export async function stampOwnerId(row, entity, { clerkUserId, orgId }) {
  * Names that are ambiguous or match nobody are REPORTED, not guessed at, and the
  * row is still imported — unowned. 18b16: a row you alter must say so.
  *
- * One importer decided otherwise for its own rows: the deal import sends a new
- * deal with no Sales Rep as the importer's, BY ID (state §0.216; Jeff, 29 Oct,
- * Q11: "Importer, by id"), and opportunities.mjs stamps that member after this
- * runs (importerOwners). Here a blank owner still stays unassigned.
+ * Two importers decided otherwise for their own rows: the deal import sends a
+ * new deal with no Sales Rep as the importer's, BY ID (state §0.216; Jeff, 29
+ * Oct, Q11: "Importer, by id"), and the contact import every new contact
+ * (state §0.217; Jeff, 30 Oct: "Imported contacts become the owners"); each
+ * endpoint stamps that member after this runs (importerOwners, below). Here a
+ * blank owner still stays unassigned.
  */
 export async function stampOwnerIds(rows, entity, { clerkUserId, orgId, defaultToCaller = false }) {
     const nameKey = ownerNameKeyFor(entity);
@@ -398,6 +401,19 @@ export async function stampOwnerIds(rows, entity, { clerkUserId, orgId, defaultT
         out.push({ ...row, ownerId });
     }
     return { rows: out, ambiguousOwners: [...ambiguous], unmatchedOwners: [...unmatched] };
+}
+
+// A row a bulk create sends with no owner name and an ownerId is that member's — a member of THIS org
+// (rosterUserById), its name stamped with its id, never resolved by a name another member may share (the deal
+// import, state §0.216, Q11; the contact import, state §0.217). An id that is no member of this org refuses the
+// request whole, naming its rows. A row naming an owner is resolved by name (stampOwnerIds), as before. The rule is
+// src/utils/importerOwner.js (pure, run by its unit test); here only the members are read, in this org.
+export async function importerOwners(rows, orgId, entity) {
+    const nameKey = ownerNameKeyFor(entity);
+    const sent = importerAsks(rows, nameKey);
+    const members = new Map();
+    for (const id of new Set(sent.filter(Boolean))) members.set(id, await rosterUserById(id, orgId));
+    return importerDecides(rows, sent, members, nameKey);
 }
 
 /**

@@ -4,7 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../../utils/sto
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
-import { buildOpportunityRow } from '../../utils/importRows';
+import { buildOpportunityRow, newContactRow, heldAsStamped } from '../../utils/importRows';
 import { importLevels, sendLevels } from '../../utils/importParents.js';
 import { teamsWithMembers } from '../../utils/teamMembership.js';
 import {
@@ -513,16 +513,19 @@ export default function ModalLayer() {
                             return { ...row, company: to.name, accountId: to.id };
                         };
 
-                        // Phase 2: new contacts.
+                        // Phase 2: new contacts — each the importer's, by id (state §0.217; Jeff, 30 Oct: "Imported
+                        // contacts become the owners"); the server stamps the member's name, read back below.
                         const contactsWithIds = newContacts.map((c) => ({
-                            ...paired(c),
+                            ...newContactRow(paired(c), currentUserId),
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
+                        let owned = false;
                         if (contactsWithIds.length > 0) {
                             const res = await bulk.postNew('/.netlify/functions/contacts', contactsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
-                            if (res.landed.length > 0) setContacts(prev => [...prev, ...res.landed]);
+                            if (res.landed.length > 0) setContacts(prev => [...prev, ...heldAsStamped(res.landed, 'assignedRep', currentUserId, currentUser)]);
+                            owned = res.landed.some((c) => c.ownerId);
                             phases.push(receiptFromInsert(res));
                         }
 
@@ -540,6 +543,8 @@ export default function ModalLayer() {
                             if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
+                        // The app's copy holds the id it sent, not the name the server stamped with it: read them back.
+                        if (owned) loadContacts(() => {});
 
                         return settle(mergeReceipts(...phases, { ...emptyReceipt(), companies }), 'contact');
                     }}
@@ -663,7 +668,7 @@ export default function ModalLayer() {
                             onProgress(0, totalProgress);
                             const res = await bulk.postNew('/.netlify/functions/opportunities', oppsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
-                            if (res.landed.length > 0) setOpportunities(prev => [...prev, ...res.landed]);
+                            if (res.landed.length > 0) setOpportunities(prev => [...prev, ...heldAsStamped(res.landed, 'salesRep', currentUserId, currentUser)]);
                             created = res.landed.length;
                             const receipt = receiptFromInsert(res);
                             phases.push(receipt);

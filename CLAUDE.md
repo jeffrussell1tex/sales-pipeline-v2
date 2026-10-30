@@ -171,8 +171,10 @@ One commit per verified batch; doc patch in the same commit.
   Account one account the deal window takes (a site typed in full its
   Site Name), a duplicate one contact or one deal; the deals bulk paths
   link each row by the single save's rule (`dealAccount.js`
-  dealLinkDecided); a new deal's blank Sales Rep is the importer's by id —
-  an Overwrite's blank keeps the stored owner (guide §18b106).
+  dealLinkDecided); a new deal's blank Sales Rep, and every new contact,
+  is the importer's by id — one rule, `_lib.mjs importerOwners` over
+  `importerOwner.js` — and an Overwrite's blank keeps the stored owner
+  (guide §18b106, §18b107).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

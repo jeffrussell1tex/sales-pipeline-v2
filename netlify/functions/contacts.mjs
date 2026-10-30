@@ -5,7 +5,7 @@ import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './
 import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -115,7 +115,13 @@ export const handler = async (event) => {
                 const taken = new Set((await db.select({ id: contacts.id }).from(contacts).where(and(eq(contacts.orgId, orgId), inArray(contacts.id, batchIds)))).map(r => r.id));
                 const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { also: { kind: 'contact', ids: new Set(batchIds.filter(id => !taken.has(id))) } });
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
+                // A contact naming no rep with an ownerId is that member's, by id — the contact import's new contacts
+                // are the importer's (state §0.217; Jeff, 30 Oct: "Imported contacts become the owners"); an id that
+                // is no member of this org refuses the request whole (importerOwners, _lib.mjs).
+                const importer = await importerOwners(linked.rows, orgId, 'contact');
+                if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
                 const owned = await stampOwnerIds(linked.rows.map(d => sanitize(d)), 'contact', { clerkUserId: userId, orgId });
+                owned.rows = importer.stamp(owned.rows);
                 const result = await bulkInsert({ table: contacts, rows: owned.rows, orgId });
                 // A row of the batch that did not land leaves no link to it: an org-chart entry naming one is
                 // cleared (state §0.199 — the batch's own rows were counted live).
