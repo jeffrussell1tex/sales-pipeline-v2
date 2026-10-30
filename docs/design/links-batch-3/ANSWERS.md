@@ -27,6 +27,20 @@
 - **Q12, SPIFF claims renamed org-wide by a merge:** "Fold it in". Only claims
   on a deal of the merge, and claims with no deal by name.
 
+## Jeff's answers for step 3b (30 Oct 2026, in chat; each the Recommended)
+
+Two gaps the read-only map of the contact and deal imports found (a workflow:
+four readers, each checked by a critic, over `306be1f`):
+
+- **Q13, two new rows of one file that are the same contact (same email) or
+  the same deal (same name on the same account):** "Refuse both". As Q6 for
+  accounts: both rows refused at Preview, the rest import.
+- **Q14, an Overwrite's blank cell** (a mapped column, an empty cell — today a
+  blank Sales Rep unassigns the deal, a blank Stage sets Discovery, a blank
+  ARR sets 0, and so on for contacts and accounts): "Keep what's stored". An
+  Overwrite writes only the cells the file fills, on all three imports, as Q4
+  already keeps a blank Company (a deal's blank Account refuses the row — Q3).
+
 ## The census
 
 Read only, run 29 Oct 2026 at 21:10:23 UTC on the shared Neon `main` branch

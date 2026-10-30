@@ -131,8 +131,61 @@ export function isHiddenAccount(accountId, accounts) {
     return !!accountId && !(Array.isArray(accounts) ? accounts : []).some((a) => a && a.id === accountId);
 }
 
-// The deals endpoint's bulk overwrite (a CSV's — importRows.js sends `{ id, ...fromCsv }`,
-// an Account name and never an id): a row that sends an account NAME and no id unlinks its
+// The deals endpoint's bulk link (state §0.216 — batch 3b; guide §18b106): a row's account id, decided by the single
+// save's rule (opportunities.mjs accountLink) over accounts read for the whole batch — the bulk paths asked only that
+// an id was one of the org's, so an id merged away was stored as sent and a site taken, the name kept as the row sent
+// it (docs/design/links-batch-3, I5). The same branches, in the same order, as accountLink:
+//   - no accountId key: {} (the row as sent); an empty id while the deal holds one: { keep } — the link as stored,
+//     `lifted` (its Site Name kept too) when the Account text sent is not the stored one;
+//   - no id, or the id the deal holds: {};
+//   - an id that is no text: { refused: 'notInOrg' };
+//   - the walk, MERGE_HOPS merges on: a step that reaches the id the deal holds is { keep }; none live at the end,
+//     { refused: 'notInOrg' };
+//   - a site whose account the deal holds, or whose name its Site Name holds while the account it holds is no site
+//     (D22's lift), { keep, lifted }; any other site, { refused: 'site' };
+//   - else { id, name }: the account linked and its own name.
+// data: the row as sent; stored: the deal's stored row (accountId, account, site) or null for a new deal; byId: the
+// accounts read for the batch — every id a row names and every step of its walk, and the account each deal holds —
+// in the caller's org only (a row of another org is never in it, so it reads as none).
+export const DEAL_LINK_HOPS = 5;
+export function dealLinkDecided(data, stored, byId) {
+    if (!data || !('accountId' in data)) return {};
+    const storedId = stored?.accountId || null;
+    const id = data.accountId || null;
+    if (!id && storedId) return { keep: true, lifted: 'account' in data && (data.account || null) !== (stored.account || null) };
+    if (!id || id === storedId) return {};
+    if (typeof id !== 'string') return { refused: 'notInOrg' };
+    const read = (k) => (byId && typeof byId.get === 'function' ? byId.get(k) : null) || null;
+    let acct = null;
+    const seen = new Set();
+    for (let next = id; next && !seen.has(next) && seen.size <= DEAL_LINK_HOPS;) {
+        if (storedId && next === storedId) return { keep: true };
+        seen.add(next);
+        acct = read(next);
+        next = acct && acct.mergeArchived === true ? acct.mergedIntoId : null;
+    }
+    if (!acct || acct.mergeArchived === true) return { refused: 'notInOrg' };
+    if (acct.accountTier === 'site' && storedId && acct.parentAccountId === storedId) return { keep: true, lifted: true };
+    if (acct.accountTier === 'site' && storedId && stored.site && stored.site === acct.name && read(storedId)?.accountTier !== 'site') return { keep: true, lifted: true };
+    if (acct.accountTier === 'site') return { refused: 'site' };
+    return { id: acct.id, name: acct.name };
+}
+
+// The ids the batched reads must hold for dealLinkDecided: the ids each row names anew and the one its deal holds.
+export function dealLinkAsks(rows, priors) {
+    const out = new Set();
+    for (const r of Array.isArray(rows) ? rows : []) {
+        if (!r || !('accountId' in r) || typeof r.accountId !== 'string' || !r.accountId) continue;
+        const held = priors && typeof priors.get === 'function' ? priors.get(r.id)?.accountId || null : null;
+        if (r.accountId === held) continue;
+        out.add(r.accountId);
+        if (held) out.add(held);
+    }
+    return [...out];
+}
+
+// The deals endpoint's bulk overwrite, for a row that sends an Account name and no id (an API
+// caller's; the CSV import sends its account by id since state §0.216 — bulkDealLinks): a row that sends an account NAME and no id unlinks its
 // deal when the name is not the one stored, as a single save does (opportunities.mjs) — the
 // deal named after one account and linked by id to another drifted, and the next rename of
 // the old account named it back. Once any row of the batch unlinks, every other row that

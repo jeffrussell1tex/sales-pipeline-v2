@@ -49,7 +49,16 @@ export const emptyReceipt = () => ({
     refused:     0,      // a name in the row is no one record (state §0.215) — refused at Preview, never sent
     attempted:   0,      // created + updated + failed
     error:       null,   // fatal transport/server message, if any
+    // Outside the invariant too (state §0.216). `companies`: the new accounts the contact import made for its rows'
+    // Companies — accounts, never counted as contacts (they were summed into `created`, and a 5-contact import that
+    // made 2 read "7 contacts created"). The owner names: those the server matched to no member, or to more than
+    // one — each name once (bulkClient.js), said on the Results, never a failure.
+    companies:   0,
+    ambiguousOwners: [],
+    unmatchedOwners: [],
 });
+
+const OWNER_KEYS = ['ambiguousOwners', 'unmatchedOwners'];
 
 // Combine the phases of one import — new records, then overwrites — into a single
 // receipt. Every import has at least two phases and the contacts importer has
@@ -64,6 +73,7 @@ export const mergeReceipts = (...parts) => {
         if (!p) continue;
         for (const k of Object.keys(out)) {
             if (k === 'error') continue;
+            if (OWNER_KEYS.includes(k)) { out[k] = [...new Set([...out[k], ...(Array.isArray(p[k]) ? p[k] : [])])]; continue; }
             out[k] += p[k] || 0;
         }
         if (!out.error && p.error) out.error = p.error;
@@ -80,7 +90,7 @@ export const mergeReceipts = (...parts) => {
 // sent at all — and the old code reported only failed.length, which silently
 // omitted them. On a 1,500-row import failing at chunk 2, that is the difference
 // between "400 failed" and the truth, which is 1,100.
-export const receiptFromInsert = ({ attempted = 0, landed = [], error = null } = {}) => {
+export const receiptFromInsert = ({ attempted = 0, landed = [], error = null, ambiguousOwners = [], unmatchedOwners = [] } = {}) => {
     const created = landed.length;
     return {
         ...emptyReceipt(),
@@ -88,6 +98,7 @@ export const receiptFromInsert = ({ attempted = 0, landed = [], error = null } =
         failed: Math.max(0, attempted - created),
         attempted,
         error: error || null,
+        ambiguousOwners, unmatchedOwners,
     };
 };
 
@@ -98,6 +109,7 @@ export const receiptFromInsert = ({ attempted = 0, landed = [], error = null } =
 // stay in the transport result for the caller that needs them (state application).
 export const receiptFromUpdate = ({
     attempted = 0, updated = 0, notFound = [], forbidden = [], discrepancy = 0, error = null,
+    ambiguousOwners = [], unmatchedOwners = [],
 } = {}) => ({
     ...emptyReceipt(),
     updated,
@@ -107,7 +119,19 @@ export const receiptFromUpdate = ({
     discrepancy,
     attempted,
     error: error || null,
+    ambiguousOwners, unmatchedOwners,
 });
+
+// The Results' lines for the owner names (state §0.216): null for none. A name no member has, or one more than one
+// member has, is not guessed at — its rows were saved with no owner (an overwrite naming one more than one member
+// has keeps the owner it had).
+export const describeOwners = (r) => {
+    const q = (list) => list.map((n) => `“${n}”`).join(', ');
+    const lines = [];
+    if (r?.unmatchedOwners?.length) lines.push(`No member is named ${q(r.unmatchedOwners)} — those rows were saved with no owner. Set the owner on each record's page.`);
+    if (r?.ambiguousOwners?.length) lines.push(`More than one member is named ${q(r.ambiguousOwners)} — those rows were saved with no owner (an overwrite kept the owner it had). Set the owner on each record's page.`);
+    return lines.length ? lines : null;
+};
 
 // Rows the user chose to skip, rows the mapper dropped, and rows a name refused. None was sent.
 export const receiptFromPreflight = ({ skipped = 0, dropped = 0, refused = 0 } = {}) => ({

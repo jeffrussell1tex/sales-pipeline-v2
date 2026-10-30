@@ -225,7 +225,7 @@ test("bulk: a row naming another org's account refuses the batch; this org's is 
     const bad = await call(A, 'POST', [{ id: ID('bulk1'), opportunityName: 'B1', accountId: B_ACCT }]);
     assert.equal(bad.status, 400);
     assert.equal(bad.body.error, NOT_IN_ORG);
-    assert.deepEqual(bad.body.accountIds, [B_ACCT]);
+    assert.deepEqual([bad.body.field, bad.body.ids], ['accountId', [ID('bulk1')]], 'naming its rows (state §0.216 — the single rule per row)');
     assert.equal(await rowOf(ID('bulk1')), undefined, 'nothing imported');
     const ok = await call(A, 'POST', [{ id: ID('bulk2'), opportunityName: 'B2', account: 'INEOS Acetyls', accountId: INEOS }]);
     assert.equal(ok.status, 201);

@@ -164,12 +164,14 @@ export const handler = async (event) => {
                     // sanitize put the columns straight back.
                 // The owner id moves with the owner name (state §0.193).
                 // Each link a row names anew is one of this org's; one a contact already holds is not
-                // asked again (state §0.199).
-                const stored = await db.select({ id: contacts.id, accountId: contacts.accountId, managers: contacts.managers, directReports: contacts.directReports })
+                // asked again (state §0.199). The stored rows are read whole: a key one row leaves out (a blank
+                // cell, Q14 — state §0.216) is filled from its stored row, never written empty.
+                const stored = await db.select()
                     .from(contacts).where(and(eq(contacts.orgId, orgId), inArray(contacts.id, data.map(d => d.id))));
-                const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });
+                const storedById = new Map(stored.map(r => [r.id, r]));
+                const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { held: storedById });
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
-                const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize), 'contact', { table: contacts, orgId });
+                const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize, storedById), 'contact', { table: contacts, orgId });
                 const result = await bulkUpsert({
                     table: contacts,
                     rows: keyed.rows,

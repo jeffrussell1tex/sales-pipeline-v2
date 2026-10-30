@@ -131,7 +131,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, pushed to dev 30 Oct (`29e2f44..722ed8d`), NOT shipped**: the
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
-     bulk overwrite moving and renaming nothing. 3b, 3c and 3d to come.
+     bulk overwrite moving and renaming nothing. **3b built (§0.216; guide
+     §18b106), its browser check PASSED as Jeff and as Karen, NOT committed** (Jeff, 30 Oct:
+     "begin"; Q13 "Refuse both", Q14 "Keep what's stored"): the contact
+     and deal imports' names each one record or the row refused at
+     Preview; a contact linked by id, a new company made once; a deal on
+     its account by id; the deals bulk paths linked by the single save's
+     rule; a blank Sales Rep the importer's by id; an Overwrite's blank
+     cell keeps what is stored. 3c and 3d to come.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -1656,11 +1663,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing, then answer the stored row) must first check the caller may READ
   that row — answering it to anyone who names its id would let a rep read
   another rep's deal. Recorded, not changed.
-- **An import's owner report is not shown.** The bulk POST (create) and, since
-  §0.193, the bulk PUT (overwrite) answer `ambiguousOwners` and
-  `unmatchedOwners`; bulkClient and the results tile read neither, so a row
-  whose rep was not set (an ambiguous or unknown name) is not named to the
-  user. §0.193's review.
+- **An import's owner report is not shown — DONE (§0.216, NOT committed) but
+  for one path:** bulkClient keeps each chunk's `ambiguousOwners` and
+  `unmatchedOwners`, and the Results say them (`describeOwners`) for the
+  contact and deal imports and the account Overwrite. The account import's
+  new rows still drop them: `importParents.js sendLevels` builds its own
+  answer without them, so `receiptFromInsert(res)` in ModalLayer's account
+  handler has none (found by §0.216's docs check; 3a's path, left so the
+  scoped harness graded the tree as built). Recommended: sendLevels carries
+  each level's names. §0.193's review; §0.216.
+- **A contact a CSV import makes has no owner** (found by §0.216's browser
+  check, 30 Oct). The contact file has no owner column, and the contacts
+  bulk create stamps an owner by name only, so every imported contact is
+  unassigned — as before 3b; a deal's blank Sales Rep is the importer's by
+  id since Q11. A Sales Rep's list holds unowned contacts, so hers stay in
+  her list. Jeff's call: the importer by id, as for deals, or as it is.
 - **A lost reason cannot be edited after the save** (Jeff's OxyChem, 9 Oct: the
   note was not stored and there is no way to add it after). The deal window
   shows `lostReason` read-only. §0.193.
@@ -2204,16 +2221,18 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A deal's account text can differ from its account's name, and rule 2
   then misses the account's own customer** (§0.214's eighth and tenth
   reviews, read in code and run on made-up rows): the bulk deal create
-  (opportunities.mjs POST with an array) stores `account` as sent — the
-  single create and the edit set it from the account (`accountLink`). For a
+  stored `account` as sent until §0.216 (NOT committed), which gives a row
+  naming an account id that account's own name (`bulkDealLinks`), as the
+  single create and the edit do (`accountLink`); a deal stored before then
+  keeps its text. For a
   deal on an account id, rule 2 reads the deal's text alone (so a rep's
   screen, which may lack another rep's account, and quote -> job agree), so a
   customer linked to no account and of the ACCOUNT's own name is not found:
   the placeholder and quote -> job make a second customer, which New Job's
   list counts as standing for that account beside the first. A deal still on
   a merged-away account id reads the merged-away text the same way.
-  Recommended: the bulk create brings the account's name as the single one
-  does; resolve a placeholder's customer on the server (the item above).
+  Recommended: resolve a placeholder's customer on the server (the item
+  above).
 - **quote -> job says "linked to no account" for a deal on a merged-away
   account whose merge chain leads nowhere** (§0.214's tenth review): the
   words fit a deleted account; for a broken chain they should say the
@@ -3298,10 +3317,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   account's People list and Activity tab a contact linked by id to an
   account merged into it, and the Documents tab a document linked to
   either. The data move stays batch 3's.
-- **A CSV overwrite batch empties the Account of a row that names none** while
-  another row names one (partialRows sets the union of the keys a batch
-  sends; the re-check). Every row of a CSV names an Account today, so no screen
-  sends that shape.
+- **A CSV overwrite batch empties the Account of a row that names none — DONE
+  (§0.216, NOT committed):** the accounts, contacts and deals bulk PUTs hand
+  `partialRows` the stored rows, so a key one row leaves out and another
+  sends is written as stored, never empty (guide §18b106 rule 8).
 - **A new activity prefilled from a contact or deal on a merged-away account,
   neither it nor its survivor in a rep's list**, is saved linked to the
   merged-away account (the sweep). Batch 3's move of contacts' `accountId`
@@ -3318,14 +3337,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is saved (`checkDuplicate`, AccountRail.jsx:316-339, called at :385-388,
   among every account; its Open existing button, :648, opens the first
   match); an inbound email's contact (email-inbound.mjs:332-337 — the
-  first contact of the address, no merge test, no order); a CSV contact
-  import's conflict (CsvImportModal.jsx:49-59 — the first contact of the
-  email, else of the first and last name, and the company when the row
-  has one; Overwrite writes onto it, :358-360 → ModalLayer.jsx:511-517)
-  and its new companies (ModalLayer.jsx:474-477 — a company only a
-  merged-away account names gets no account); a CSV account import's
-  conflict (CsvImportModal.jsx:66 — the first account of the name;
-  Overwrite writes onto it, ModalLayer.jsx:574-582); the lead duplicate
+  first contact of the address, no merge test, no order); (the CSV
+  imports' conflicts and the contact import's new companies match live
+  records only since §0.215 and §0.216 — importLinks.js planAccountImport,
+  planContactImport, planDealImport); the lead duplicate
   check (LeadModal.jsx:102-106 — the first contact of the email, over
   every contact, :312). (Dispatch's won-deal jobs read the deal's link
   since §0.214 — `accountForDeal`, DispatchTab.jsx:2092.) Each can take a
@@ -3537,7 +3552,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   its first bullet and the second bullet's account half — the account
   import's parent and conflicts, and the accounts bulk paths' parent rule —
   are §0.215's (3a, committed `321643e`); the second bullet's deal conflict and
-  the rest are 3b-3d's — docs/design/links-batch-3,
+  the third bullet — the contact and deal imports and the deals bulk paths
+  — are §0.216's (3b, NOT committed); the rest are 3c-3d's —
+  docs/design/links-batch-3,
   which holds what still holds, what changed and the design Jeff answered):
   - The account import gives a sub-account the first account whose name
     matches the Parent Account cell, in any case and any tier, with
@@ -3550,18 +3567,25 @@ to add meetings. Nothing in the app adds a meeting to Google:
     the single POST and PUT only (§0.198).
   - A conflict is the first existing account of the same name
     (CsvImportModal.jsx), and Overwrite writes onto that one. The row
-    shows the name and phone only. A deal's conflict is the first deal with
-    the same name and account name.
-  - The contact import makes an account for each company not in the
-    caller's list (exact spelling within the file), posts contacts with no
-    `accountId`, and its Overwrite changes `company` while keeping the stored
-    `accountId`. Deals import with the account name only (the map; not
-    re-read). Since §0.198 the deals bulk POST and PUT refuse another org's
-    account id, and an Overwrite that renames a deal's account, naming no
-    id, unlinks it as a single save does; they still take a site, or an
-    account merged away, as a deal's account. Recommended: the single save's
-    rules on bulk rows (a site refused, a merged-away id followed to the
-    account it was merged into).
+    shows the name and phone only. A deal's conflict was the first deal with
+    the same name and account name — since §0.216 (3b, NOT committed) one
+    deal of the name on the deal's account, two refusing the row
+    (planDealImport).
+  - **Done by §0.216 (3b, NOT committed):** the contact import made an
+    account for each company not in the caller's list (exact spelling within
+    the file), posted contacts with no `accountId`, and its Overwrite changed
+    `company` while keeping the stored `accountId`; deals imported with the
+    account name only; the deals bulk POST and PUT took a site, or an account
+    merged away, as a deal's account. Now a Company is one account linked by
+    id, or a new company made once per `searchKey`, and an Overwrite
+    re-links (Q4); a deal's Account is one account the deal window takes,
+    sent by id; the deals bulk paths decide each row by the single save's
+    rule (`bulkDealLinks` → `dealAccount.js dealLinkDecided`): a site
+    refused, a merged-away id stored on its survivor under its name. An
+    Overwrite that renames a deal's account naming no id still unlinks it
+    (`bulkAccountLinks`). The contacts bulk paths still take any account id
+    of the org, a merged-away one followed (`_links.mjs`); no screen sends
+    one (guide §18b106).
   - An account merge rewrites contacts' account names by name alone, and
     since §0.198 moves deals' `accountId` to the survivor (D14) — up to the
     account above it, Site Name the site, when the survivor is a site (D22)
@@ -3793,6 +3817,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - The account CSV import, likewise: a Sales Rep's import plans over her
     own list, so a name another rep's account has is a new account (Jeff,
     29 Oct, batch 3's Q2: "Leave it, decide later" — to decide with these).
+    So do the contact and deal imports since §0.216: a Company only another
+    rep's account has is a new company, an Account only another rep's
+    account has refuses a new deal — her own contacts and deals standing on
+    such an account are matched and keep their link when the row's Company
+    or Account reads as the name they store (guide §18b106 rule 6).
 - **With Create off, a partly typed name reads as refused beside the row that
   matches it** (§0.198's pane check, 12 Oct). New Task's Account and an
   account's Parent show the matching row AND the foot "“pane shell chem” isn't

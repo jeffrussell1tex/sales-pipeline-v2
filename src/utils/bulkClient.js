@@ -30,6 +30,16 @@ const errorFrom = (status, body, fallback) => {
     return `${fallback} (${status}).`;
 };
 
+// The owner names each chunk's answer says no member matched, or more than one did (_lib.mjs stampOwnerIds,
+// rekeyBulkOwners: those rows were saved with no owner, or an overwrite kept its own) — kept across the chunks, each
+// name once, for the receipt to say (state §0.216; Jeff, 29 Oct, Q11). They were dropped here, and no screen said them.
+const ownerNames = () => ({ ambiguous: new Set(), unmatched: new Set() });
+const addOwners = (names, body) => {
+    for (const n of Array.isArray(body?.ambiguousOwners) ? body.ambiguousOwners : []) names.ambiguous.add(n);
+    for (const n of Array.isArray(body?.unmatchedOwners) ? body.unmatchedOwners : []) names.unmatched.add(n);
+};
+const ownersOut = (names) => ({ ambiguousOwners: [...names.ambiguous], unmatchedOwners: [...names.unmatched] });
+
 // dbFetch returns a Response and NEVER throws on 4xx/5xx (guide 18b1), so every
 // path here checks res.ok. A body that is not JSON is not an exception either —
 // a proxy 502 is HTML.
@@ -54,6 +64,7 @@ export function makeBulkClient(fetchFn) {
     const postNew = async (url, items, { onProgress, progressOffset = 0, progressTotal = items.length, stillOrg } = {}) => {
         const landed = [];
         const failed = [];
+        const owners = ownerNames();
         let error = null, done = 0;
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
@@ -63,6 +74,7 @@ export function makeBulkClient(fetchFn) {
             const body = await readJson(r);
 
             if (!r.ok) { error = errorFrom(r.status, body, 'Bulk import failed'); break; }
+            addOwners(owners, body);
 
             if (Array.isArray(body?.insertedIds)) {
                 const ids = new Set(body.insertedIds);
@@ -79,7 +91,7 @@ export function makeBulkClient(fetchFn) {
         }
         // `attempted` is the caller's whole list. Rows in chunks after a fatal
         // error were never sent, and reporting only `failed` would omit them.
-        return { landed, failed, error, attempted: items.length };
+        return { landed, failed, error, attempted: items.length, ...ownersOut(owners) };
     };
 
     // ── PUT overwrites, reporting exactly which ids the server accepted ──────
@@ -103,6 +115,7 @@ export function makeBulkClient(fetchFn) {
         const appliedIds = [];
         const notFound = [];
         const forbidden = [];
+        const owners = ownerNames();
         let updated = 0, discrepancy = 0, error = null, done = 0;
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
@@ -112,6 +125,7 @@ export function makeBulkClient(fetchFn) {
             const body = await readJson(r);
 
             if (!r.ok) { error = errorFrom(r.status, body, 'Bulk update failed'); break; }
+            addOwners(owners, body);
 
             const chunkNotFound  = Array.isArray(body?.notFound)  ? body.notFound  : [];
             const chunkForbidden = Array.isArray(body?.forbidden) ? body.forbidden : [];
@@ -133,7 +147,7 @@ export function makeBulkClient(fetchFn) {
             done += chunk.length;
             report(onProgress, progressOffset, done, progressTotal);
         }
-        return { appliedIds, updated, notFound, forbidden, discrepancy, error, attempted: items.length };
+        return { appliedIds, updated, notFound, forbidden, discrepancy, error, attempted: items.length, ...ownersOut(owners) };
     };
 
     return { postNew, putBulk };

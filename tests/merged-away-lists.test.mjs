@@ -546,6 +546,10 @@ const RESOLVERS = {
         'tests/account-parent.test.mjs', 'the reason for a name twins share is the same in either list order — self, then one under it, then a site, then merged away, then too deep — at the Save and on the list (F8)'],
     planAccountImport: ['src/utils/importLinks.js', "the account import's names at Preview (state §0.215): a row's own name and its Parent Account each one live account or refused — a merged-away account is never matched, its name names the account it was merged into",
         'tests/import-links.test.mjs', 'a Parent Account that is a site, or a name only a merged-away account has, or no account at all, refuses the row — each said; never imported with no parent (REGRESSION: silent)'],
+    planContactImport: ['src/utils/importLinks.js', "the contact import's Company and duplicate at Preview (state §0.216): a Company one live account of any tier, or a new company — a merged-away account is never matched, its name names the account it was merged into; the duplicate one live contact, an email only a merged-away contact has naming the one it was merged into",
+        'tests/import-links.test.mjs', "THE CONTACT IMPORT (state §0.216): a Company is one account or a new company made once, never the first of a name — twins, a merged-away name and punctuation refused; a duplicate is one contact by email, else by name at its Company; two rows on one contact, or two new rows of one email (Q13), refused"],
+    planDealImport: ['src/utils/importLinks.js', "the deal import's Account and duplicate at Preview (state §0.216): one live account the deal window takes — a merged-away account is never matched, its name names the account it was merged into; a deal on an account merged away stands on the one it was merged into",
+        'tests/import-links.test.mjs', "THE DEAL IMPORT (state §0.216): an Account is one account the deal window takes — a site typed in full its account, the site its Site Name; none (Q3), twins, a site out of reach and a merged-away name refused; a duplicate is one deal of the name on that account; two rows on one deal, or two new rows of one deal (Q13), refused"],
     contactIndex: ['src/utils/dealEngagement.js', "the deals' people indexed once: a merged duplicate folds into the contact it was merged into — its answer's `list` is every contact it was given, so it CARRIES the list: its answer is bound to a name and scanned as the list (Home's `directory`, read only as dealCommittee's argument)",
         'tests/deal-engagement.test.mjs', "a merged duplicate reads as the contact it was merged into — its touches fold in, its id stands with the survivor's", 'carries'],
     dealCommittee: ['src/utils/dealEngagement.js', "a deal's committee: a merged duplicate reads as the contact it was merged into",
@@ -606,12 +610,6 @@ const WHOLE_READS = {
     ],
     'src/components/layout/MeetingPrepPanel.jsx': [
         ['accounts', "? (accounts || []).find(a => a.name?.toLowerCase() === (matchedOpp.account || '').toLowerCase())", 1, `the meeting's account by the deal's name — ${BY_NAME}`, STAY],
-    ],
-    'src/components/modals/CsvImportModal.jsx': [
-        ['contacts', 'contacts || [],', 1, `the import's duplicate check (detectDuplicates) by name or email — ${BY_NAME}`, STAY],
-    ],
-    'src/components/layout/ModalLayer.jsx': [
-        ['accounts', 'const existingNames = accounts.map(a => a.name.toLowerCase());', 1, `the contact import's new companies: a company an account already has is not made again — ${BY_NAME}`, STAY],
     ],
     'src/components/modals/LeadModal.jsx': [
         ['contacts', 'return findDuplicate(form, normalizedLeads, contacts);', 1, `a lead's duplicate warning by name or email — ${BY_NAME}`, STAY],
@@ -1466,7 +1464,7 @@ const SERVER_READS = {
     'netlify/functions/_links.mjs': [`${KEEP}: a link names a row of the org by id — a merged-away one is a row, its link named by its survivor on screen (guide §18b99)`, 0, 7],
     'netlify/functions/duplicates.mjs': ['filter in JS: the duplicate scans leave merged-away rows out (`!c.mergeArchived`, `!a.mergeArchived`)', 2, 0],
     'netlify/functions/ai-score.mjs': ["follow to the survivor: a deal's people by id, a merged duplicate followed to the contact it was merged into (up to five steps, as contactIndex)", 1, 0],
-    'netlify/functions/opportunities.mjs': ["follow to the survivor: a deal's account by id (accountLink), one merged away followed to the account it was merged into; the bulk paths' ids (filed: OPEN_ITEMS §4.7 — they take an account merged away)", 3, 0],
+    'netlify/functions/opportunities.mjs': ["follow to the survivor: a deal's account by id (accountLink), one merged away followed to the account it was merged into — the bulk paths' too, by the same rule over the accounts read for the batch (bulkDealLinks, state §0.216)", 3, 0],
     'netlify/functions/quote-email.mjs': ["filter in JS: the quote's fallback recipient is the first live contact named like the deal's first contact (`c.mergeArchived !== true`, NULL live — state §0.210; tests/merged-away-cleanup.test.mjs C21)", 1, 0],
     'netlify/functions/quote-to-job.mjs': ["follow to the survivor: the deal's account as Dispatch's screen finds it (dispatchCustomer.js customerForDeal through pickLink.js accountForDeal) — by its link, one merged away followed to the account it was merged into; a deal with no account id the one LIVE account of its name — over every account of the org, merge marks included (state §0.214; tests/dispatch-customer.test.mjs)", 1, 0],
     'netlify/functions/public-api.mjs': ["filter in SQL: the public API's accounts and contacts leave merged-away rows out, in `conds` (`is not true`, NULL live), so its totals count what it lists (state §0.210; Jeff, 18 Oct: \"Leave them out\"; C20)", 4, 0],

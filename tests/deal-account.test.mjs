@@ -34,6 +34,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, dealKeeps, isHiddenAccount, HIDDEN_ACCOUNT_WORDS, bulkAccountLinks,
+    dealLinkDecided, dealLinkAsks, DEAL_LINK_HOPS,
 } from '../src/utils/dealAccount.js';
 import { siteOutOfReach, HIDDEN_ACCOUNT } from '../src/utils/pickLink.js';
 import { contactsToAdd } from '../src/utils/buyingCommittee.js';
@@ -478,17 +479,69 @@ test("THE ENDPOINT: a deal keeps the account id; a new one must be this org's ac
     assert.ok(put.includes("else if ('account' in data && !('accountId' in data) && searchKey(clean.account || '') !== searchKey(existing.account || '')) clean.accountId = null;"), 'a name sent without an id unlinks — one that reads as another name, not another case or spacing (the pre-ship round)');
     assert.ok(s.includes("import { searchKey } from '../../src/utils/searchMatch.js';"));
     assert.ok(put.includes("            else if ('account' in data && !('accountId' in data) && existing.accountId) clean.account = existing.account;"), 'the same name in another case or spacing keeps the stored spelling — on a linked deal (the fix review, the re-check)');
-    const ids = between(s, 'async function accountIdsNotInOrg(rows, orgId, held = null) {', '\n}\n');
-    assert.ok(ids.includes('.where(and(eq(accounts.orgId, orgId), inArray(accounts.id, asked)))'), 'this org only');
-    assert.ok(ids.includes('r.accountId !== (held?.get(r.id)?.accountId ?? null)'), 'an id a deal already holds is not asked again (D13)');
+    // The bulk paths (state §0.216 — batch 3b): each row by the single save's rule, dealLinkDecided, over the accounts
+    // read for the batch (they asked only that an id was the org's — one merged away stored as sent, a site taken).
+    const bulk = between(s, 'async function bulkDealLinks(rows, orgId, priors = null, asked = () => true) {', '\n}\n');
+    assert.ok(bulk.includes('}).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, want)));'), 'REGRESSION: every read in this org only');
+    assert.ok(bulk.includes('for (let want = dealLinkAsks(ask, priors), hop = 0; want.length && hop <= MERGE_HOPS; hop++) {'), 'a read per merge step, MERGE_HOPS on, the batch at once');
+    assert.ok(bulk.includes('want = [...new Set(found.filter((a) => a.mergeArchived === true && a.mergedIntoId && !byId.has(a.mergedIntoId)).map((a) => a.mergedIntoId))];'), 'each next step: the accounts the merged-away ones were merged into, not yet read');
+    assert.ok(bulk.includes('mergeArchived: accounts.mergeArchived, mergedIntoId: accounts.mergedIntoId,') && bulk.includes('id: accounts.id, name: accounts.name, accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,'), "what accountLink reads, read for the batch");
+    assert.ok(bulk.includes('const link = dealLinkDecided(r, stored, byId);'));
+    assert.ok(bulk.includes("if (link.refused === 'notInOrg') { notInOrg.push(r.id); return r; }") && bulk.includes("if (link.refused === 'site') { sites.push(r.id); return r; }"));
+    assert.ok(bulk.includes('if (link.id) return { ...r, accountId: link.id, account: link.name };'), 'the account linked, and its own name — one merged away, the account it was merged into');
+    assert.ok(bulk.includes('if (link.keep) return { ...r, accountId: stored.accountId, account: stored.account, ...(link.lifted ? { site: stored.site } : {}) };'), 'the link as stored, its Site Name too where lifted');
+    assert.ok(bulk.includes('if (!r || !asked(r)) return r;'), 'a row not asked goes as sent: bulkUpsert answers it forbidden or not found');
+    assert.ok(bulk.includes("if (notInOrg.length) return { status: 400, error: ACCOUNT_NOT_IN_ORG, field: 'accountId', ids: notInOrg };") && bulk.includes("if (sites.length) return { status: 400, error: ACCOUNT_IS_SITE, field: 'accountId', ids: sites };"), 'refused whole, naming its rows');
     const bulkPost = between(s, 'if (Array.isArray(data)) {', 'const owned = await stampOwnerIds(');
-    assert.ok(bulkPost.includes('const strays = await accountIdsNotInOrg(data, orgId);'), 'a bulk create naming another org\'s account is refused whole');
+    assert.ok(bulkPost.includes('const linked = await bulkDealLinks(data, orgId);') && bulkPost.indexOf('const linked = await bulkDealLinks(data, orgId);') < bulkPost.indexOf('const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);'), 'a bulk create: every row asked, before its contacts');
+    assert.ok(bulkPost.includes("if (new Set(data.map(d => d.id)).size !== data.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.' }) };"), 'a row sent twice is refused (state §0.216)');
     const bulkPut = between(s, 'const priors = new Map(priorRows.map(r => [r.id, r]));', 'const staged = applyStageChanges(bulkAccountLinks(data, priors), priors, importDate);');
-    assert.ok(bulkPut.includes('const strays = await accountIdsNotInOrg(data, orgId, priors);'), 'a bulk overwrite too, against the ids the deals hold');
-    assert.ok(between(s, 'const priorRows = await db', '.from(opportunities)').includes('accountId:        opportunities.accountId,'));
-    assert.ok(between(s, 'const priorRows = await db', '.from(opportunities)').includes('account:          opportunities.account,'), 'G6: the stored name, to tell a renamed account');
-    assert.ok(s.includes("import { bulkAccountLinks } from '../../src/utils/dealAccount.js';"), "G6: a CSV overwrite's renamed account unlinks, as a single save does");
-    assert.equal(count(s, 'if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };'), 2);
+    assert.ok(bulkPut.includes('const mayAsk = (r) => !priors.has(r.id) || mayMutate({ ownerId: priors.get(r.id).ownerId, callerId, canSeeAll: canSeeAll(userRole) });'), "a bulk overwrite asks every deal but one the caller may not save — never tells her of an account she can't open; a row not stored yet asked too (the review of 3b)");
+    assert.ok(bulkPut.includes('const linked = await bulkDealLinks(data, orgId, priors, mayAsk);') && bulkPut.includes('data.splice(0, data.length, ...linked.rows);'), 'against the ids the deals hold');
+    assert.ok(between(s, 'const priorRows = await db', '.from(opportunities)').includes('.select()'), 'G6 and the bulk link: the stored rows whole — the name, the id, the Site Name and the owner');
+    assert.ok(s.includes("import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';"), "G6: a CSV overwrite's renamed account unlinks, as a single save does");
+    assert.ok(s.includes("import { ownerColumnOf, mayMutate } from './_ownership.mjs';"));
+    assert.equal(count(s, 'if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };'), 2);
+    assert.ok(!s.includes('accountIdsNotInOrg'), 'the id-only check is gone');
+});
+
+test("THE BULK LINK, run (state §0.216): dealLinkDecided decides each row as accountLink does — a merge followed, a site refused, the account's own name, the held id never asked again, D22's lifts kept", () => {
+    const byId = new Map([
+        ['shell', { id: 'shell', name: 'Shell', accountTier: 'account' }],
+        ['tc', { id: 'tc', name: 'Texas City', accountTier: 'site', parentAccountId: 'shell' }],
+        ['bt', { id: 'bt', name: 'Baytown', accountTier: 'site', parentAccountId: 'other' }],
+        ['old', { id: 'old', name: 'Old Co', mergeArchived: true, mergedIntoId: 'shell' }],
+        ['gone', { id: 'gone', name: 'Gone', mergeArchived: true, mergedIntoId: 'nowhere' }],
+        ['loop1', { id: 'loop1', name: 'L1', mergeArchived: true, mergedIntoId: 'loop2' }],
+        ['loop2', { id: 'loop2', name: 'L2', mergeArchived: true, mergedIntoId: 'loop1' }],
+        ['sitey', { id: 'sitey', name: 'Held Site', accountTier: 'site', parentAccountId: 'shell' }],
+    ]);
+    assert.deepEqual(dealLinkDecided({ id: 'd', stage: 'X' }, null, byId), {}, 'no accountId key: as sent');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'shell' }, null, byId), { id: 'shell', name: 'Shell' }, 'its own name');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'old' }, null, byId), { id: 'shell', name: 'Shell' }, 'merged away: the account it was merged into (F2)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'gone' }, null, byId), { refused: 'notInOrg' }, 'merged into none live here');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'loop1' }, null, byId), { refused: 'notInOrg' }, 'a loop ends');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'other-org' }, null, byId), { refused: 'notInOrg' }, "another org's: never read, so none (§0.166)");
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 42 }, null, byId), { refused: 'notInOrg' }, 'no text');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'tc' }, null, byId), { refused: 'site' }, "a site is never a deal's account (D5)");
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: '' }, null, byId), {}, 'none, none held');
+    const held = { accountId: 'shell', account: 'Shell', site: 'Baytown' };
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'shell' }, held, byId), {}, 'the id held: not asked again (D13)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: '' }, held, byId), { keep: true, lifted: false }, 'no id while it holds one: kept');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: '', account: 'Elsewhere' }, held, byId), { keep: true, lifted: true }, 'its Site Name kept where the text sent is not the stored one');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: '', account: 'Shell' }, held, byId), { keep: true, lifted: false }, 'the stored text sent: its Site Name as sent');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'old' }, { accountId: 'old', account: 'Old Co' }, byId), {}, 'the merged-away id it holds: as held (D13)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'old' }, { accountId: 'shell', account: 'Shell' }, byId), { keep: true }, 'a walk reaching the id it holds: untouched (G2)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'tc' }, { accountId: 'shell', account: 'Shell' }, byId), { keep: true, lifted: true }, 'a site whose account it holds (D22)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'bt' }, held, byId), { keep: true, lifted: true }, 'a site its Site Name holds, its account no site (H5)');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'bt' }, { ...held, site: 'Elsewhere' }, byId), { refused: 'site' }, 'H5 only for the site its Site Name names');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'bt' }, { accountId: 'sitey', account: 'Held Site', site: 'Baytown' }, byId), { refused: 'site' }, 'H5 not when the account it holds is a site (UKG\'s six)');
+    const chain = new Map([...byId, ...Array.from({ length: 7 }, (_, k) => [`m${k}`, { id: `m${k}`, name: `M${k}`, mergeArchived: true, mergedIntoId: k === 6 ? 'shell' : `m${k + 1}` }])]);
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'm2' }, null, chain), { id: 'shell', name: 'Shell' }, 'five merges on: followed');
+    assert.equal(DEAL_LINK_HOPS, 5, "the single save's MERGE_HOPS (opportunities.mjs)");
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'm1' }, null, chain), { refused: 'notInOrg' }, 'six merges on: one past the limit');
+    assert.deepEqual(dealLinkDecided({ id: 'd', accountId: 'm0' }, null, chain), { refused: 'notInOrg' }, 'seven merges on: past MERGE_HOPS, refused as accountLink refuses it');
+    assert.deepEqual(dealLinkAsks([{ id: 'd1', accountId: 'old' }, { id: 'd2', accountId: 'shell' }, { id: 'd3', stage: 'X' }, { id: 'd4', accountId: 7 }], new Map([['d1', { accountId: 'sitey' }], ['d2', { accountId: 'shell' }]])), ['old', 'sitey'], 'each id named anew and the one its deal holds; one held, none asked');
 });
 
 test('THE CLOSED LOST SAVE: the list takes the deal as stored, not the copy sent; dbWrite hands back what the write answered', () => {
@@ -520,7 +573,7 @@ test('G6: a CSV overwrite that names a deal\'s account with no id unlinks it whe
     const kept = [{ id: 'd1', account: 'INEOS Acetyls', stage: 'Won' }, { id: 'd2', notes: 'y' }];
     assert.equal(bulkAccountLinks(kept, priors), kept, 'nothing renamed: the batch as sent, no id added');
     const sent = [{ id: 'd1', account: 'Shell', accountId: 'k' }, { id: 'd2', account: 'Elsewhere' }];
-    assert.deepEqual(bulkAccountLinks(sent, priors), [{ id: 'd1', account: 'Shell', accountId: 'k' }, { id: 'd2', account: 'Elsewhere', accountId: null }], 'a row that names its id keeps what it sends (accountIdsNotInOrg checked it)');
+    assert.deepEqual(bulkAccountLinks(sent, priors), [{ id: 'd1', account: 'Shell', accountId: 'k' }, { id: 'd2', account: 'Elsewhere', accountId: null }], 'a row that names its id keeps what it sends (bulkDealLinks decided it)');
     assert.deepEqual(bulkAccountLinks([{ id: 'gone', account: 'X' }], priors), [{ id: 'gone', account: 'X', accountId: null }], 'a deal not stored: bulkUpsert reports it not found');
     assert.equal(bulkAccountLinks([{ id: 'd3', account: '' }], new Map([['d3', { account: null, accountId: 'k' }]])).length, 1);
     assert.deepEqual(bulkAccountLinks([{ id: 'd3', account: '' }], new Map([['d3', { account: null, accountId: 'k' }]])), [{ id: 'd3', account: '' }], 'an empty name is the stored none: no change');

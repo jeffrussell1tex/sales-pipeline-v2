@@ -322,14 +322,14 @@ test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anyt
         'const swept = await clearStrayLinks(orgId, new Map([[contacts, result.insertedIds]]));', 'result.linksCleared = swept.cleared;',
         'if (swept.failed.length) result.linksNotChecked = swept.failed;'),
         'a row that did not land leaves no link to it (the review, server S2), and the answer says how many it cleared and a field it could not check (the fix review, server F3; the re-check, proof R2)');
-    assert.ok(c.includes('const stored = await db.select({ id: contacts.id, accountId: contacts.accountId, managers: contacts.managers, directReports: contacts.directReports })'), 'every link the overwrite holds is read (the review, tests S4)');
-    assert.ok(c.includes('const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });'));
-    assert.ok(c.includes("const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize), 'contact', { table: contacts, orgId });"));
+    assert.ok(c.includes('const stored = await db.select()\n                    .from(contacts).where(and(eq(contacts.orgId, orgId), inArray(contacts.id, data.map(d => d.id))));'), 'every link the overwrite holds is read (the review, tests S4) — the stored rows whole, in this org (state §0.216)');
+    assert.ok(c.includes('const storedById = new Map(stored.map(r => [r.id, r]));') && c.includes('const linked = await checkBulkLinks(CONTACT_LINKS, data, orgId, { held: storedById });'));
+    assert.ok(c.includes("const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize, storedById), 'contact', { table: contacts, orgId });"), 'a key one row leaves out is its stored value (Q14)');
     const o = fn('opportunities');
-    assert.ok(o.includes('const people = await checkBulkLinks(DEAL_LINKS, data, orgId);'));
+    assert.ok(o.includes('const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);'), "a create's contacts asked of the rows as linked (state §0.216)");
     assert.ok(o.includes("const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });"));
     assert.ok(o.includes('const people = await checkBulkLinks(DEAL_LINKS, data, orgId, { held: priors });'));
-    assert.ok(o.includes('contactIds:       opportunities.contactIds,'), 'the stored contacts are read with the priors');
+    assert.ok(o.includes('const priorRows = await db\n                    .select()\n                    .from(opportunities)'), 'the stored contacts are read with the priors — the stored rows whole (state §0.216)');
     assert.ok(o.includes('data.splice(0, data.length, ...people.rows);'));
     const ac = fn('accounts');
     assert.ok(ac.includes('const taken = new Set((await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, batchIds)))).map(r => r.id));'));
@@ -342,7 +342,7 @@ test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anyt
     // An overwrite names no parent at all since §0.215 (Q9): one that does is refused before anything is read.
     assert.ok(inOrder(ac, "const moving = data.filter(d => 'parentAccountId' in d).map(d => d.id);",
         "if (moving.length) return { statusCode: 400, headers, body: JSON.stringify({ error: BULK_MOVE, field: 'parentAccountId', ids: moving }) };",
-        'const stored = await db.select({ id: accounts.id, name: accounts.name, ownerId: accounts.ownerId })'), 'an overwrite naming a parent is refused, naming its rows, before the stored rows are read');
+        'const stored = await db.select()\n                    .from(accounts)'), 'an overwrite naming a parent is refused, naming its rows, before the stored rows are read');
     assert.ok(!ac.includes('{ held: new Map(stored.map(r => [r.id, r])) }'), 'no parent left for the overwrite to ask about');
 });
 

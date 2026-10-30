@@ -42,8 +42,15 @@
  *     and the reconciliation is not ours to depend on. A uniform shape has no
  *     such question in it.
  *  2. If any row in the file supplies a column, that column is part of what this
- *     import describes. A row that left it blank is asserting blank, not
- *     asserting nothing — the user mapped that column.
+ *     import describes.
+ *
+ * A row that leaves out a key another row of the request sends asserts nothing
+ * about it (state §0.216; Jeff, 30 Oct, Q14: "Keep what's stored" — an Overwrite
+ * sends only the cells the file fills, csvMapping.js filledCells): given the
+ * request's STORED rows, such a row takes that key from its stored row, so the
+ * uniform shape writes the value it already has. Without them a left-out key was
+ * written as sanitize's default — a blank cell's '' or null, a deal's 'Discovery'
+ * — over a value no cell named.
  *
  * Note the asymmetry that makes this safe: a column NOT MAPPED in the CSV never
  * appears in any row, so it is never written and the stored value survives. A
@@ -59,9 +66,12 @@
  *
  * @param {Object[]} rows      raw payload rows, before sanitize
  * @param {(row:Object)=>Object} sanitize  the endpoint's own full-row sanitizer
+ * @param {Map<string,Object>} [stored]  the rows as stored, by id, read in the
+ *   caller's org: a key the request supplies and a row leaves out is that row's
+ *   stored value
  * @returns {Object[]} sanitized rows carrying only the supplied columns
  */
-export function partialRows(rows, sanitize) {
+export function partialRows(rows, sanitize, stored = null) {
     if (!Array.isArray(rows) || rows.length === 0) return [];
     if (typeof sanitize !== 'function') {
         throw new TypeError('partialRows requires the endpoint sanitize function');
@@ -79,8 +89,12 @@ export function partialRows(rows, sanitize) {
         for (const key of Object.keys(row)) supplied.add(key);
     }
 
+    const storedOf = (row) => (stored && typeof stored.get === 'function' && row && typeof row === 'object' ? stored.get(row.id) : null) || null;
     return rows.map(row => {
-        const full = sanitize(row);
+        const was = storedOf(row);
+        const filled = {};
+        if (was) for (const key of supplied) if (!Object.hasOwn(row, key) && Object.hasOwn(was, key)) filled[key] = was[key];
+        const full = sanitize({ ...filled, ...row });
         const out = {};
         for (const key of Object.keys(full)) {
             if (supplied.has(key)) out[key] = full[key];

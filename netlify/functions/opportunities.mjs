@@ -12,14 +12,14 @@ import { dispatchAutomations } from './dispatch-automations.mjs';
 import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,
 } from './_lib.mjs';
-import { ownerColumnOf } from './_ownership.mjs';
+import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 import { applyStageChanges } from './_stage.mjs';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
-import { bulkAccountLinks } from '../../src/utils/dealAccount.js';
+import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
 import { checkLinks, checkBulkLinks } from './_links.mjs';
 
@@ -215,19 +215,56 @@ async function heldSite(storedId, orgId) {
     return held?.accountTier === 'site';
 }
 
-// The account ids a batch names that are not this org's accounts — one read, in this org.
-// held: a bulk overwrite's stored rows by id; an id a deal already holds is not asked again
-// (D13). An import names none today (importRows.js); a batch that names a stray is refused
-// whole, before anything is written.
-async function accountIdsNotInOrg(rows, orgId, held = null) {
-    const fresh = rows.filter((r) => r && r.accountId && r.accountId !== (held?.get(r.id)?.accountId ?? null));
-    const ids = [...new Set(fresh.map((r) => r.accountId))];
-    const asked = ids.filter((id) => typeof id === 'string');
-    const found = asked.length
-        ? await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, asked)))
-        : [];
-    const have = new Set(found.map((r) => r.id));
-    return ids.filter((id) => !have.has(id));
+// A batch's account links (state §0.216 — batch 3b; guide §18b106): each row's by the single save's rule —
+// dealLinkDecided (src/utils/dealAccount.js) runs accountLink's branches, in its order — over the accounts read for the
+// whole batch, in this org: every id a row names anew and every step of its merge walk, a step a read (MERGE_HOPS
+// on), and the account each of those deals holds. A row whose id is merged away is stored on the account it was
+// merged into, under its own name; a row naming the id its deal holds is not asked again (D13). The bulk paths asked
+// only that an id was the org's — an id merged away was stored as sent, a site taken, the name kept as the row sent
+// it (OPEN_ITEMS §4.7, I5). A row naming none of this org's accounts, or a site, refuses the request whole, naming
+// its rows, before anything is written (the CSV import refused it at Preview). asked: (row) => whether a row is
+// asked — a bulk overwrite asks only the deals the caller may save, so a refusal never tells her of an account she
+// can't open; priors: the stored rows by id.
+async function bulkDealLinks(rows, orgId, priors = null, asked = () => true) {
+    const ask = rows.filter((r) => r && asked(r));
+    const byId = new Map();
+    for (let want = dealLinkAsks(ask, priors), hop = 0; want.length && hop <= MERGE_HOPS; hop++) {
+        const found = await db.select({
+            id: accounts.id, name: accounts.name, accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,
+            mergeArchived: accounts.mergeArchived, mergedIntoId: accounts.mergedIntoId,
+        }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, want)));
+        for (const a of found) byId.set(a.id, a);
+        want = [...new Set(found.filter((a) => a.mergeArchived === true && a.mergedIntoId && !byId.has(a.mergedIntoId)).map((a) => a.mergedIntoId))];
+    }
+    const notInOrg = [];
+    const sites = [];
+    const out = rows.map((r) => {
+        if (!r || !asked(r)) return r;
+        const stored = priors?.get(r.id) || null;
+        const link = dealLinkDecided(r, stored, byId);
+        if (link.refused === 'notInOrg') { notInOrg.push(r.id); return r; }
+        if (link.refused === 'site') { sites.push(r.id); return r; }
+        if (link.id) return { ...r, accountId: link.id, account: link.name };
+        if (link.keep) return { ...r, accountId: stored.accountId, account: stored.account, ...(link.lifted ? { site: stored.site } : {}) };
+        return r;
+    });
+    if (notInOrg.length) return { status: 400, error: ACCOUNT_NOT_IN_ORG, field: 'accountId', ids: notInOrg };
+    if (sites.length) return { status: 400, error: ACCOUNT_IS_SITE, field: 'accountId', ids: sites };
+    return { rows: out };
+}
+
+// A deal a bulk create names no Sales Rep for is the importer's, by id (state §0.216; Jeff, 29 Oct, Q11: "Importer,
+// by id"): a row that sends no salesRep and an ownerId is that member's — a member of THIS org (rosterUserById), its
+// name stamped with its id, never resolved by a name another member may share. An id that is no member of this org
+// refuses the request whole, naming its rows. A row naming a Sales Rep is resolved by name, as before.
+const OWNER_NOT_MEMBER = 'That owner is not a member of your organization.';
+async function importerOwners(rows, orgId) {
+    const sent = rows.map((d) => (String(d?.salesRep ?? '').trim() === '' && d?.ownerId ? String(d.ownerId) : null));
+    const members = new Map();
+    for (const id of new Set(sent.filter(Boolean))) members.set(id, await rosterUserById(id, orgId));
+    const strangers = rows.filter((d, i) => sent[i] && !members.get(sent[i])).map((d) => d.id);
+    if (strangers.length) return { status: 400, error: OWNER_NOT_MEMBER, field: 'ownerId', ids: strangers };
+    return { memberOf: (i) => (sent[i] ? members.get(sent[i]) : null) };
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -291,15 +328,20 @@ export const handler = async (event) => {
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ opportunities: [], inserted: 0, failed: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
-                // An account named by id is one of this org's (accountLink, above).
-                const strays = await accountIdsNotInOrg(data, orgId);
-                if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
-                const people = await checkBulkLinks(DEAL_LINKS, data, orgId);
+                // One row per deal: a row sent twice could land either copy (state §0.216, as the accounts bulk create).
+                if (new Set(data.map(d => d.id)).size !== data.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.' }) };
+                // Each row's account by the single save's rule (bulkDealLinks, above): its own name with it.
+                const linked = await bulkDealLinks(data, orgId);
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
+                const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);
                 if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
+                const importer = await importerOwners(people.rows, orgId);
+                if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
                 const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
+                owned.rows = owned.rows.map((r, i) => { const m = importer.memberOf(i); return m ? { ...r, ownerId: m.id, salesRep: m.name || null } : r; });
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;
@@ -389,27 +431,26 @@ export const handler = async (event) => {
                 // Stamping the date unconditionally would be worse -- see _stage.mjs
                 // for why a same-file re-import must not reset every clock.
                 const importDate = new Date().toISOString().slice(0, 10);
-                // stageChangedDate is selected as well as stage and stageHistory:
+                // The stored rows WHOLE (state §0.216): stageChangedDate, stage and stageHistory —
                 // applyStageChanges backfills the derived columns of untouched rows
-                // from the STORED values when any row in the batch moves. Drop it
-                // from this select and the backfill writes null. See _stage.mjs.
+                // from the STORED values when any row in the batch moves; drop one
+                // and the backfill writes null (see _stage.mjs) — the account link's
+                // accountId, account and site, the owner the link check asks about,
+                // and every column partialRows fills a row's left-out key from.
                 const priorRows = await db
-                    .select({
-                        id:               opportunities.id,
-                        stage:            opportunities.stage,
-                        stageHistory:     opportunities.stageHistory,
-                        stageChangedDate: opportunities.stageChangedDate,
-                        accountId:        opportunities.accountId,
-                        account:          opportunities.account,
-                        contactIds:       opportunities.contactIds,
-                    })
+                    .select()
                     .from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
                 const priors = new Map(priorRows.map(r => [r.id, r]));
-                // An account named by id is one of this org's; one a deal already holds is not
-                // asked again (accountLink, above).
-                const strays = await accountIdsNotInOrg(data, orgId, priors);
-                if (strays.length) return { statusCode: 400, headers, body: JSON.stringify({ error: ACCOUNT_NOT_IN_ORG, accountIds: strays }) };
+                // Each row's account by the single save's rule (bulkDealLinks, above); one a deal already holds is not
+                // asked again. Only a deal the caller may save is asked: one she may not is answered forbidden by
+                // bulkUpsert whatever it names, so a refusal never tells her of an account she can't open.
+                // A row no deal of this org stores yet is asked too: nothing of another rep's to tell, and its link is still
+                // checked should the deal be written before bulkUpsert reads it (the review of 3b).
+                const mayAsk = (r) => !priors.has(r.id) || mayMutate({ ownerId: priors.get(r.id).ownerId, callerId, canSeeAll: canSeeAll(userRole) });
+                const linked = await bulkDealLinks(data, orgId, priors, mayAsk);
+                if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
+                data.splice(0, data.length, ...linked.rows);   // the rows as linked: an id merged away, its survivor, by name
                 // Each contact a row names anew is one of this org's; one the deal already holds is not
                 // asked again (state §0.199).
                 const people = await checkBulkLinks(DEAL_LINKS, data, orgId, { held: priors });
@@ -429,7 +470,8 @@ export const handler = async (event) => {
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
                 // The owner id moves with the owner name (state §0.193).
-                const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize), 'opportunity', { table: opportunities, orgId });
+                // A key one row leaves out (a blank cell, Q14) is filled from its stored row, never written empty.
+                const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize, priors), 'opportunity', { table: opportunities, orgId });
                 const result = await bulkUpsert({
                     table: opportunities,
                     rows: keyed.rows,

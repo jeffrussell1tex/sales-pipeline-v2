@@ -1,6 +1,11 @@
 // tests/integration/import-links.itest.mjs
 //
-// Batch 3a of OPEN_ITEMS §1 item 1 (state §0.215; guide §18b105; Jeff, 29 Oct, Q9: "Refuse it"). Against the test
+// Batches 3a and 3b of OPEN_ITEMS §1 item 1 (state §0.215, §0.216; guide §18b105, §18b106). 3b, at the end: the deals
+// bulk paths link each row by the single save's rule — an id merged away stored on its survivor under its own name, a
+// site or another org's account refused whole, naming the rows — and a new deal with no Sales Rep is the importer's
+// by id, a member of this org (Q11); every bulk overwrite fills a key one row leaves out from its stored row (Q14).
+//
+// Batch 3a (state §0.215; guide §18b105; Jeff, 29 Oct, Q9: "Refuse it"). Against the test
 // database: the accounts bulk create places each row by the single save's rule — a parent that is a site, the row
 // itself, or two rows naming each other refuse the request whole, naming the rows, nothing written; a unit under
 // an account, a site under a unit, the batch's own parent first; a top-level row an account whatever it asks — and
@@ -41,6 +46,8 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 });
 
 const accountsFn = (await import('../../netlify/functions/accounts.mjs')).handler;
+const contactsFn = (await import('../../netlify/functions/contacts.mjs')).handler;
+const dealsFn = (await import('../../netlify/functions/opportunities.mjs')).handler;
 const { db } = await import('../../db/index.js');
 const { settings, users, accounts, contacts, opportunities } = await import('../../db/schema.js');
 const { eq, inArray } = await import('drizzle-orm');
@@ -62,9 +69,11 @@ const WHO = {
 const SHELL = ID('shell'), PA_UNIT = ID('pa_unit'), PA_SITE = ID('pa_site'), ACME = ID('acme');
 const B_SHELL = ID('b_shell'), B_SITE = ID('b_site');
 const DEAL = ID('deal'), CON = ID('con');
+// 3b: an account merged into Shell; a deal another rep owns; a second contact.
+const OLD = ID('old'), D_OTHER = ID('d_other'), CON2 = ID('con2');
 
-const call = async (who, method, body, org = A) => {
-    const res = await accountsFn({
+const call = async (who, method, body, org = A, fn = accountsFn) => {
+    const res = await fn({
         httpMethod: method,
         headers: { 'x-test-org': org, 'x-test-role': who.role, 'x-test-user': who.user, 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -100,12 +109,19 @@ before(async () => {
         { id: SHELL, orgId: A, name: 'Shell', accountTier: 'account' },
         { id: PA_UNIT, orgId: A, name: 'Shell - Port Allen', parentAccountId: SHELL, accountTier: 'business_unit' },
         { id: PA_SITE, orgId: A, name: 'Shell - Port Allen', parentAccountId: PA_UNIT, accountTier: 'site' },
-        { id: ACME, orgId: A, name: 'Acme, Inc.', accountTier: 'account', ownerId: USR_REP2, accountOwner: 'Other Rep' },
+        { id: ACME, orgId: A, name: 'Acme, Inc.', accountTier: 'account', ownerId: USR_REP2, accountOwner: 'Other Rep', website: 'acme.example' },
+        { id: OLD, orgId: A, name: 'Old Shell', accountTier: 'account', mergeArchived: true, mergedIntoId: SHELL },
         { id: B_SHELL, orgId: B, name: 'Shell', accountTier: 'account' },
         { id: B_SITE, orgId: B, name: 'Shell - Port Allen', parentAccountId: B_SHELL, accountTier: 'site' },
     ]);
-    await db.insert(opportunities).values([{ id: DEAL, orgId: A, opportunityName: 'Acme deal', pipelineId: 'default', account: 'Acme, Inc.', accountId: ACME, stage: 'Qualification', contactIds: [] }]);
-    await db.insert(contacts).values([{ id: CON, orgId: A, firstName: 'Cy', lastName: 'Acme', company: 'Acme, Inc.', accountId: ACME }]);
+    await db.insert(opportunities).values([
+        { id: DEAL, orgId: A, opportunityName: 'Acme deal', pipelineId: 'default', account: 'Acme, Inc.', accountId: ACME, stage: 'Qualification', contactIds: [] },
+        { id: D_OTHER, orgId: A, opportunityName: 'Other deal', pipelineId: 'default', account: 'Shell', accountId: SHELL, stage: 'Proposal', contactIds: [], ownerId: USR_REP2, salesRep: 'Other Rep', notes: 'kept' },
+    ]);
+    await db.insert(contacts).values([
+        { id: CON, orgId: A, firstName: 'Cy', lastName: 'Acme', company: 'Acme, Inc.', accountId: ACME },
+        { id: CON2, orgId: A, firstName: 'Di', lastName: 'Shell', company: 'Shell', accountId: SHELL, phone: '111', title: 'Buyer' },
+    ]);
     bSeeded = await bRows();
 });
 
@@ -204,6 +220,73 @@ test("org A's overwrite naming org B's account is not found — never refused as
     const r = await call(WHO.admin, 'PUT', [{ id: B_SHELL, name: 'Not Shell' }]);
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual([r.body.updated, r.body.notFound], [0, [B_SHELL]]);
+});
+
+// ── 3b (state §0.216) ──────────────────────────────────────────────────────────────────────────────────────────
+const deal = async (id) => (await db.select().from(opportunities).where(eq(opportunities.id, id)))[0];
+const newDeal = (k, extra = {}) => ({ id: ID(k), opportunityName: k, pipelineId: 'default', stage: 'Discovery', ...extra });
+
+test("3b: a deals bulk create links each row by the single save's rule — an id merged away stored on its survivor under its own name; a site, or another org's account, refuses the request whole, naming the rows, nothing written (REGRESSION: stored as sent)", async () => {
+    let r = await call(WHO.admin, 'POST', [newDeal('i_old', { accountId: OLD, account: 'Old Shell' })], A, dealsFn);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const d = await deal(ID('i_old'));
+    assert.deepEqual([d.accountId, d.account], [SHELL, 'Shell'], 'the account it was merged into, and that account\'s own name');
+    r = await call(WHO.admin, 'POST', [newDeal('i_ok', { accountId: SHELL, account: 'Shell' }), newDeal('i_site', { accountId: PA_SITE, account: 'Shell - Port Allen' })], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual([r.body.field, r.body.ids], ['accountId', [ID('i_site')]]);
+    assert.match(r.body.error, /A site can’t be a deal’s account/);
+    assert.equal(await deal(ID('i_ok')), undefined, 'refused whole');
+    r = await call(WHO.admin, 'POST', [newDeal('i_b', { accountId: B_SHELL, account: 'Shell' })], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual([r.body.field, r.body.ids], ['accountId', [ID('i_b')]], "org B's account is none of A's");
+    assert.equal(await deal(ID('i_b')), undefined);
+    r = await call(WHO.admin, 'POST', [newDeal('i_dup'), newDeal('i_dup')], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.equal(r.body.error, 'A row id is sent twice in one batch.');
+});
+
+test("3b, Q11: a new deal naming no Sales Rep is the importer's by id — a member of this org, its name stamped with it; another id refuses the request; a Sales Rep named is resolved by name", async () => {
+    let r = await call(WHO.admin, 'POST', [newDeal('q_mine', { accountId: SHELL, ownerId: USR_REP }), newDeal('q_named', { accountId: SHELL, salesRep: 'Other Rep', ownerId: USR_REP })], A, dealsFn);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const mine = await deal(ID('q_mine'));
+    assert.deepEqual([mine.ownerId, mine.salesRep], [USR_REP, 'Karen Imp'], 'the id and the name together');
+    const named = await deal(ID('q_named'));
+    assert.deepEqual([named.ownerId, named.salesRep], [USR_REP2, 'Other Rep'], 'a name sent wins');
+    r = await call(WHO.admin, 'POST', [newDeal('q_ok', { accountId: SHELL }), newDeal('q_stranger', { accountId: SHELL, ownerId: 'usr_itest_imp3_nobody' })], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual(r.body, { error: 'That owner is not a member of your organization.', field: 'ownerId', ids: [ID('q_stranger')] });
+    assert.equal(await deal(ID('q_ok')), undefined, 'refused whole');
+});
+
+test("3b: a deals bulk overwrite links by the same rule, keeps a key one row leaves out (Q14), and asks only a deal the caller may save", async () => {
+    let r = await call(WHO.admin, 'PUT', [{ id: DEAL, accountId: OLD, account: 'Old Shell', stage: 'Proposal' }, { id: D_OTHER, opportunityName: 'Other deal renamed' }], A, dealsFn);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const [d1, d2] = [await deal(DEAL), await deal(D_OTHER)];
+    assert.deepEqual([d1.accountId, d1.account, d1.stage], [SHELL, 'Shell', 'Proposal'], 'an id merged away: its survivor, by name');
+    assert.deepEqual([d2.opportunityName, d2.stage, d2.accountId, d2.account, d2.notes, d2.ownerId], ['Other deal renamed', 'Proposal', SHELL, 'Shell', 'kept', USR_REP2], "the keys it left out are its own — REGRESSION: the union set its stage to Discovery and unlinked it");
+    r = await call(WHO.karen, 'PUT', [{ id: D_OTHER, accountId: PA_SITE }], A, dealsFn);
+    assert.equal(r.status, 200, JSON.stringify(r.body), "another rep's deal is not asked — answered forbidden, never refused as a site");
+    assert.deepEqual([r.body.updated, r.body.forbidden], [0, [D_OTHER]]);
+    r = await call(WHO.admin, 'PUT', [{ id: D_OTHER, accountId: PA_SITE }], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual([r.body.field, r.body.ids], ['accountId', [D_OTHER]]);
+    assert.equal((await deal(D_OTHER)).accountId, SHELL);
+    r = await call(WHO.karen, 'PUT', [{ id: ID('not_yet'), accountId: B_SHELL }], A, dealsFn);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual([r.body.field, r.body.ids], ['accountId', [ID('not_yet')]], 'a deal not stored yet is asked too: its link checked should it be written before the write reads it (the review of 3b)');
+});
+
+test('3b, Q14: the contacts and accounts bulk overwrites keep a key one row leaves out — never written empty by the union', async () => {
+    let r = await call(WHO.admin, 'PUT', [{ id: CON, phone: '222' }, { id: CON2, firstName: 'Diane' }], A, contactsFn);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const [c1, c2] = await Promise.all([CON, CON2].map(async (id) => (await db.select().from(contacts).where(eq(contacts.id, id)))[0]));
+    assert.deepEqual([c1.phone, c1.firstName, c1.accountId], ['222', 'Cy', ACME]);
+    assert.deepEqual([c2.firstName, c2.phone, c2.title, c2.company, c2.accountId], ['Diane', '111', 'Buyer', 'Shell', SHELL], 'REGRESSION: its phone blanked by the union');
+    r = await call(WHO.admin, 'PUT', [{ id: SHELL, phone: 'p1' }, { id: ACME, notes: 'n1' }]);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const [s, a] = [await one(SHELL), await one(ACME)];
+    assert.deepEqual([s.phone, s.notes], ['p1', null]);
+    assert.deepEqual([a.notes, a.phone, a.website], ['n1', '555', 'acme.example'], "REGRESSION: Acme's phone blanked by the union");
 });
 
 test("org B's rows — the same names — are as seeded", async () => {

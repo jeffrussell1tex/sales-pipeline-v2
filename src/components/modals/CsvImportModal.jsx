@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { autoMapHeaders } from '../../utils/csvAutoMap';
-import { mapCsvRows, describeDropped } from '../../utils/csvMapping';
-import { planAccountImport, describeRefused } from '../../utils/importLinks.js';
+import { mapCsvRows, describeDropped, filledCells } from '../../utils/csvMapping';
+import { planAccountImport, planContactImport, planDealImport, describeRefused } from '../../utils/importLinks.js';
 import {
     mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
-    receiptFromError, emptyReceipt,
+    receiptFromError, emptyReceipt, describeOwners,
 } from '../../utils/importReceipt';
 import { USER_IMPORT_FIELDS, userConflicts, inviteFrom, roleLabelOf } from '../../utils/userImport.js';
 import { DEFAULT_INVITE_EXPIRY_DAYS } from '../../utils/inviteExpiry.js';
@@ -22,8 +22,6 @@ const secBtn = { padding:'8px 16px', background:T.surface, color:T.ink, border:`
 // Duplicate detection helpers
 // ---------------------------------------------------------------------------
 
-const norm = (s) => (s || '').toString().trim().toLowerCase();
-
 // Conflict rows rendered at once. Each carries a <select>, so an unpaged
 // same-file re-import rendered 1,504 of them and froze the tab on every
 // state change.
@@ -33,49 +31,13 @@ const CONFLICTS_PER_PAGE = 100;
 const INVITES_SHOWN = 100;
 
 /**
- * Given the incoming mapped records and the existing DB records already in
- * React state, return an array of conflict objects:
- *   { incomingIndex, incoming, existing, matchReason, action }
- * where action starts as 'skip'. An account's are the plan's (planned — src/utils/importLinks.js
- * planAccountImport, state §0.215): one account of the name, never the first of two.
+ * The conflicts the plan found, as an array of
+ *   { incomingIndex, incoming, existing, note, matchReason, action }
+ * where action starts as 'skip' — one record of the name, never the first of two (src/utils/importLinks.js:
+ * planAccountImport, state §0.215; planContactImport and planDealImport, state §0.216). The contact and deal
+ * imports took the first contact of the email or name, and the first deal of the name and account text.
  */
-const detectDuplicates = (incoming, existingContacts, existingOpps, importType, planned) => {
-    const conflicts = [];
-
-    if (importType === 'accounts') return planned || conflicts;
-    if (importType === 'contacts') {
-        incoming.forEach((rec, idx) => {
-            // Primary match: email (non-blank)
-            let match = null;
-            let reason = '';
-            if (rec.email?.trim()) {
-                match = existingContacts.find(c => norm(c.email) === norm(rec.email));
-                if (match) reason = 'same email';
-            }
-            // Fallback: first + last + company
-            if (!match && rec.firstName?.trim() && rec.lastName?.trim()) {
-                match = existingContacts.find(c =>
-                    norm(c.firstName) === norm(rec.firstName) &&
-                    norm(c.lastName)  === norm(rec.lastName)  &&
-                    (rec.company ? norm(c.company) === norm(rec.company) : true)
-                );
-                if (match) reason = 'name match';
-            }
-            if (match) conflicts.push({ incomingIndex: idx, incoming: rec, existing: match, matchReason: reason, action: 'skip' });
-        });
-    } else if (importType === 'opportunities') {
-        incoming.forEach((rec, idx) => {
-            if (!rec.opportunityName?.trim()) return;
-            const match = existingOpps.find(o =>
-                norm(o.opportunityName) === norm(rec.opportunityName) &&
-                norm(o.account) === norm(rec.account)
-            );
-            if (match) conflicts.push({ incomingIndex: idx, incoming: rec, existing: match, matchReason: 'same name + account', action: 'skip' });
-        });
-    }
-
-    return conflicts;
-};
+const detectDuplicates = (importType, planned) => planned || [];
 
 // The account import's rows a name refused (state §0.215), at Preview and on the Results: the row in the file,
 // the field, the cell, and why. The box clips and its list scrolls inside it (state §0.213).
@@ -319,13 +281,17 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // say so — an accounts CSV run through the CONTACTS importer produced a green
     // tick, "Import Complete!" and 0 imported. The rule is unchanged; the silence
     // is not.
-    // An account import's names are each one record or a refusal (src/utils/importLinks.js, state §0.215): its own
-    // name one account (the conflict) or none, its Parent Account one account or one row of the file — the rows a
-    // name refused leave the records, and are listed at Preview.
+    // An import's names are each one record or a refusal (src/utils/importLinks.js): an account's own name one
+    // account (the conflict) or none, its Parent Account one account or one row of the file (state §0.215); a
+    // contact's Company one account or a new company, its duplicate one contact; a deal's Account one account, its
+    // duplicate one deal (state §0.216) — the rows a name refused leave the records, and are listed at Preview.
     const getMapped = () => {
         const mapped = mapCsvRows(csvRows, appFields, fieldMapping, csvLines);
-        if (importType !== 'accounts') return mapped;
-        const plan = planAccountImport(mapped.records, mapped.rowNumbers, accounts);
+        const plan = importType === 'accounts' ? planAccountImport(mapped.records, mapped.rowNumbers, accounts)
+            : importType === 'contacts' ? planContactImport(mapped.records, mapped.rowNumbers, accounts, contacts)
+            : importType === 'opportunities' ? planDealImport(mapped.records, mapped.rowNumbers, accounts, opportunities)
+            : null;
+        if (!plan) return mapped;
         return { ...mapped, records: plan.records, conflicts: plan.conflicts, refused: plan.refused, mapped: mapped.records };
     };
     const getMappedData = () => getMapped().records;
@@ -348,13 +314,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             setStep('conflicts');
             return;
         }
-        const found = detectDuplicates(
-            data,
-            contacts || [],
-            opportunities || [],
-            importType,
-            planned
-        );
+        const found = detectDuplicates(importType, planned);
         if (found.length > 0) {
             setConflicts(found);
             setConflictPage(0);
@@ -404,10 +364,11 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         // Records that are not conflicted at all → always INSERT
         const newRecords = data.filter((_, idx) => !conflictIndexSet.has(idx));
 
-        // Records the user chose to overwrite → UPDATE (carry existing id)
+        // Records the user chose to overwrite → UPDATE (carry existing id) — the cells the file fills: a blank one
+        // keeps what is stored (state §0.216; Jeff, 30 Oct, Q14: "Keep what's stored"; csvMapping.js filledCells).
         const overwrites = resolvedConflicts
             .filter(c => c.action === 'overwrite')
-            .map(c => ({ ...c.incoming, _existingId: c.existing.id }));
+            .map(c => ({ ...filledCells(c.incoming), _existingId: c.existing.id }));
 
         const skippedCount = resolvedConflicts.filter(c => c.action === 'skip').length;
 
@@ -467,8 +428,14 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     // Called from the preview step when there are no duplicates detected
     // (fast path — also used by handleCheckDuplicates when 0 conflicts found)
-    const previewMap  = (step === 'preview' || step === 'conflicts')
-        ? ((importing || step === 'conflicts') && checkedMap ? checkedMap : getMapped())
+    // The plan the Preview shows, worked out once for the file, its mapping and the lists — never on every render: a
+    // drag of this window re-renders it on every mouse move, and the contact and deal plans read every row against
+    // every record (the review of 3b).
+    const onPreview = step === 'preview' || step === 'conflicts';
+    const previewPlan = useMemo(() => (onPreview ? getMapped() : null),
+        [onPreview, importType, csvRows, csvLines, fieldMapping, accounts, contacts, opportunities]);   // eslint-disable-line react-hooks/exhaustive-deps
+    const previewMap  = onPreview
+        ? ((importing || step === 'conflicts') && checkedMap ? checkedMap : previewPlan)
         : { records: [], dropped: [], unmappedRequired: [] };
     const previewData = previewMap.records;
     // Surfaced at PREVIEW, not at Results: this is the last step where the user
@@ -772,7 +739,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         <RefusedList rows={previewRefused} />
                         {importType === 'contacts' && previewData.length > 0 && (
                             <div style={{ fontSize: '13px', color: T.ok, marginBottom: '16px', padding: '8px 12px', background: 'rgba(77,107,61,0.10)', borderRadius: '6px' }}>
-                                💡 Companies from imported contacts will be auto-added to your Accounts list if they don't already exist.
+                                💡 A Company that names one of your accounts links the contact to it. A Company no account has is added to your Accounts list — once, however many rows name it.
                             </div>
                         )}
                         <div style={{ border: `1px solid ${T.border}`, borderRadius: '6px', overflow: 'hidden' }}>
@@ -1148,7 +1115,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             {isUsers
                                 ? describeReceipt(r, 'invitation', { created: 'sent', failed: 'not sent', skipped: 'skipped', none: 'No invitation was sent' })
                                 : describeReceipt(r, importType === 'contacts' ? 'contact' : importType === 'accounts' ? 'account' : 'opportunity')}
-                            {clean && importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
+                            {importType === 'contacts' && r.companies > 0 && ` ${r.companies} new compan${r.companies === 1 ? 'y was' : 'ies were'} added to your Accounts list.`}
                         </p>
 
                         {/* Results breakdown */}
@@ -1171,6 +1138,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 Parent Account is not changed by an overwrite — {parentsIgnored} row{parentsIgnored === 1 ? '' : 's'} named one. Move each account on its own page.
                             </p>
                         )}
+                        {/* The owner names the server matched to no member, or to more than one (state §0.216; Q11). */}
+                        {(describeOwners(r) || []).map(line => (
+                            <p key={line} style={{ color: T.warn, fontSize: '12.5px', marginBottom: '16px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+                                {line}
+                            </p>
+                        ))}
 
                         {isUsers && importWarning && (
                             <p style={{ color: T.warn, fontSize: '12.5px', marginBottom: '16px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>

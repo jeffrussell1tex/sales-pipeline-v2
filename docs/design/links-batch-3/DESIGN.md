@@ -18,7 +18,20 @@ build changed §2 in four places: the overwrite sends neither the name nor the
 Parent Account (a stale screen's name would refuse the whole request); a name
 of no letter or digit is refused; the bulk create refuses an id sent twice; and
 a bulk create's tier the rule does not know is fitted, as the single create
-fits it, not refused with `UNKNOWN_TIER`. 3b-3d to come.
+fits it, not refused with `UNKNOWN_TIER`. Step 3b built 30 Oct as state §0.216
+(guide §18b106), from a read-only map over `306be1f` (four readers, each checked
+by a critic) and Jeff's two answers to its gaps (Q13, Q14 in ANSWERS.md),
+through seven review workflows; its build changed §2: an Overwrite's blank cell
+is not sent, on all three imports, and every bulk overwrite fills a left-out key
+from the stored row (Q14 — the union rule made a client-side "whole pairs" rule
+7 unsafe alone); a deal's duplicate counts a deal an older import saved on a
+site of its account; a blank Opportunity Name is the Account as typed; a Sales
+Rep's own contact or deal on an account outside her list is matched and keeps
+its stored link (Q2 left her lists as they are); the deals bulk paths decide
+each row by a pure copy of `accountLink`'s branches over accounts read for the
+batch (`dealLinkDecided` — `accountLink` itself unchanged); Q11's importer id
+goes as `ownerId`, checked as a member of the org and stamped with its name;
+the deals bulk create refuses an id sent twice. 3c and 3d to come.
 
 ---
 

@@ -470,32 +470,52 @@ export default function ModalLayer() {
                         const askedOrg = requestOrg();
                         const still = () => stillOrg(askedOrg);
 
-                        // Phase 1: companies referenced by the incoming contacts.
-                        const existingNames = accounts.map(a => a.name.toLowerCase());
-                        const newCompanies = [...new Set(
-                            newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
-                        )];
-                        if (newCompanies.length > 0) {
-                            const newAccts = newCompanies.map((name) => ({
-                                id: crypto.randomUUID(), name,
+                        // Phase 1: the new companies the rows sent name — each Company no account has, made ONCE for
+                        // every row whose Company reads as it, under its first row's spelling, top level, no owner
+                        // (src/utils/importLinks.js planContactImport, state §0.216). A skipped row makes none. It was
+                        // every Company met in no case of the whole list — a merged-away account too — "Acme" and "ACME"
+                        // two of them, and no contact was linked to any account.
+                        const made = new Map();   // the Company's searchKey → { id, name }
+                        for (const c of [...newContacts, ...overwrites]) {
+                            const co = c._company;
+                            if (co && co.key && !made.has(co.key)) made.set(co.key, { id: crypto.randomUUID(), name: co.name });
+                        }
+                        let companies = 0;
+                        if (made.size > 0) {
+                            const newAccts = [...made.values()].map(({ id, name }) => ({
+                                id, name,
                                 verticalMarket: '', address: '', city: '', state: '',
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             const acc = await bulk.postNew('/.netlify/functions/accounts', newAccts, { stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             if (acc.landed.length > 0) setAccounts(prev => [...prev, ...acc.landed]);
-                            const accReceipt = receiptFromInsert(acc);
-                            // A contact whose company failed would point at an
-                            // account that does not exist, so this stops rather
-                            // than importing them orphaned — and reports the
-                            // company figures as company figures.
-                            if (!isClean(accReceipt)) throw new ImportError(accReceipt, 'company');
-                            phases.push(accReceipt);
+                            companies = acc.landed.length;
+                            // A contact whose company failed would point at an account that does not exist, so this
+                            // stops rather than importing them orphaned: every contact is counted as not saved, and the
+                            // companies apart — they were counted, and named, as contacts.
+                            if (companies < newAccts.length) {
+                                const total = newContacts.length + overwrites.length;
+                                throw new ImportError({
+                                    ...emptyReceipt(), failed: total, attempted: total, companies,
+                                    error: `${newAccts.length - companies} of ${newAccts.length} new companies did not save${acc.error ? ` (${acc.error})` : ''}, so no contact was sent.`,
+                                }, 'contact');
+                            }
                         }
+                        // A row's Company as the pair it saves: an account of the list, or a new company — its id with
+                        // its own name. A row with no Company sends none.
+                        const paired = (c) => {
+                            const { _company: co, ...row } = c;
+                            if (!co) return row;
+                            // A Company the plan could not check (an account outside a rep's list): the stored pair stands.
+                            if (co.keep) { const { company: _held, ...kept } = row; return kept; }
+                            const to = co.id ? co : made.get(co.key);
+                            return { ...row, company: to.name, accountId: to.id };
+                        };
 
                         // Phase 2: new contacts.
                         const contactsWithIds = newContacts.map((c) => ({
-                            ...c,
+                            ...paired(c),
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
@@ -506,14 +526,13 @@ export default function ModalLayer() {
                             phases.push(receiptFromInsert(res));
                         }
 
-                        // Phase 3: overwrites — state applied from appliedIds.
+                        // Phase 3: overwrites — state applied from appliedIds. A Company the file fills re-links the
+                        // contact (Q4: "Re-link it"); a blank one is not sent, and the stored pair stands.
                         if (overwrites.length > 0) {
-                            const overwritesWithIds = overwrites.map((c) => ({
-                                ...c,
-                                id: c._existingId,
-                                updatedAt: new Date().toISOString(),
-                                _existingId: undefined,
-                            }));
+                            const overwritesWithIds = overwrites.map((c) => {
+                                const { _existingId, ...row } = paired(c);
+                                return { ...row, id: _existingId, updatedAt: new Date().toISOString() };
+                            });
                             const ow = await bulk.putBulk('/.netlify/functions/contacts', overwritesWithIds, { onProgress, progressOffset: contactsWithIds.length, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setContacts, overwritesWithIds, ow.appliedIds);
@@ -522,7 +541,7 @@ export default function ModalLayer() {
                             phases.push(receiptFromUpdate(ow));
                         }
 
-                        return settle(mergeReceipts(...phases), 'contact');
+                        return settle(mergeReceipts(...phases, { ...emptyReceipt(), companies }), 'contact');
                     }}
                     onImportAccounts={async (newAccounts, overwrites = []) => {
                         const totalProgress = newAccounts.length + overwrites.length;
@@ -609,15 +628,34 @@ export default function ModalLayer() {
                         // unconditionally — reassigning the deal's rep, zeroing
                         // its implementation cost and blanking next steps,
                         // products, territory and vertical on every import.
-                        const buildOpp = (o, existingId) => buildOpportunityRow(o, {
-                            existingId,
-                            currentUser,
-                            pipelineId: activePipelineId,
-                            today,
-                            newId: () => crypto.randomUUID(),
-                        });
+                        // A deal goes on the account its row's Account names, by id with the account's own name
+                        // (src/utils/importLinks.js planDealImport, state §0.216) — it went by the text alone, stored
+                        // with no id: a site typed in full is its account, the site its Site Name (an overwrite is a
+                        // deal on that same account: with no site typed, its Site Name stands). A blank Sales Rep is
+                        // the importer's, by id (Q11).
+                        const buildOpp = (o, existingId) => {
+                            const { _link: link, ...csv } = o;
+                            const row = buildOpportunityRow(csv, {
+                                existingId,
+                                currentUser,
+                                currentUserId,
+                                pipelineId: activePipelineId,
+                                today,
+                                newId: () => crypto.randomUUID(),
+                            });
+                            if (!link) return row;
+                            // A rep's own deal on an account outside her list: the stored pair stands, neither sent.
+                            if (link.keep) { const { account: _held, ...kept } = row; return kept; }
+                            return { ...row, account: link.name, accountId: link.id, ...(link.site ? { site: link.site } : {}) };
+                        };
 
                         const phases = [];
+
+                        // The deals the POST landed: the server stamps each one's owner id (a blank Sales Rep the
+                        // importer's, Q11) and its account's own name, so the list reads them again as stored — once
+                        // every request is answered, never while the overwrite is in flight (the review of 3b: a read
+                        // begun before it could answer after it and put the old deals back).
+                        let created = 0;
 
                         // POST new opps
                         if (newOpps.length > 0) {
@@ -626,8 +664,10 @@ export default function ModalLayer() {
                             const res = await bulk.postNew('/.netlify/functions/opportunities', oppsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             if (res.landed.length > 0) setOpportunities(prev => [...prev, ...res.landed]);
+                            created = res.landed.length;
                             const receipt = receiptFromInsert(res);
                             phases.push(receipt);
+                            if (!isClean(receipt) && created) loadOpportunities(() => {});
                             if (!isClean(receipt)) throw new ImportError(mergeReceipts(...phases), 'opportunity');
                         }
 
@@ -653,6 +693,7 @@ export default function ModalLayer() {
                             if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
+                        if (created) loadOpportunities(() => {});
 
                         return settle(mergeReceipts(...phases), 'opportunity');
                     }}

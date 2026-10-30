@@ -341,7 +341,9 @@ export const handler = async (event) => {
                 if (moving.length) return { statusCode: 400, headers, body: JSON.stringify({ error: BULK_MOVE, field: 'parentAccountId', ids: moving }) };
                 // Only a row the caller may save is asked about its name: one she may not is answered forbidden by
                 // bulkUpsert whatever it says, so a refusal never tells her the name of an account she can't open.
-                const stored = await db.select({ id: accounts.id, name: accounts.name, ownerId: accounts.ownerId })
+                // The stored rows are read whole: a key one row leaves out (a blank cell, Q14 — state §0.216) is filled
+                // from its stored row by partialRows, never written empty.
+                const stored = await db.select()
                     .from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, data.map(d => d.id))));
                 const storedName = new Map(stored.filter(r => mayMutate({ ownerId: r.ownerId, callerId, canSeeAll: canSeeAll(userRole) })).map(r => [r.id, r.name || '']));
                 const renaming = data.filter(d => 'name' in d && storedName.has(d.id) && searchKey(d.name) !== searchKey(storedName.get(d.id))).map(d => d.id);
@@ -350,7 +352,7 @@ export const handler = async (event) => {
                 // the keys sent, and a row without one would be stored 'Unnamed Account' (the review of 3a).
                 const anyName = data.some(d => 'name' in d);
                 const asSent = data.map(({ accountTier: _tier, ...d }) => (anyName && storedName.has(d.id) ? { ...d, name: storedName.get(d.id) } : d));
-                const keyed = await rekeyBulkOwners(partialRows(asSent, sanitize), 'account', { table: accounts, orgId });
+                const keyed = await rekeyBulkOwners(partialRows(asSent, sanitize, new Map(stored.map(r => [r.id, r]))), 'account', { table: accounts, orgId });
                 const result = await bulkUpsert({
                     table: accounts,
                     rows: keyed.rows,

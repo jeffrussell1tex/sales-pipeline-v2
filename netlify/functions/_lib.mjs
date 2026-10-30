@@ -369,6 +369,11 @@ export async function stampOwnerId(row, entity, { clerkUserId, orgId }) {
  *
  * Names that are ambiguous or match nobody are REPORTED, not guessed at, and the
  * row is still imported — unowned. 18b16: a row you alter must say so.
+ *
+ * One importer decided otherwise for its own rows: the deal import sends a new
+ * deal with no Sales Rep as the importer's, BY ID (state §0.216; Jeff, 29 Oct,
+ * Q11: "Importer, by id"), and opportunities.mjs stamps that member after this
+ * runs (importerOwners). Here a blank owner still stays unassigned.
  */
 export async function stampOwnerIds(rows, entity, { clerkUserId, orgId, defaultToCaller = false }) {
     const nameKey = ownerNameKeyFor(entity);

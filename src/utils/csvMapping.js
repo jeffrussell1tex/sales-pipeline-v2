@@ -137,6 +137,21 @@ export function mapCsvRows(csvRows, appFields, fieldMapping, lineNumbers) {
     return { records, dropped, unmappedRequired, rowNumbers };
 }
 
+// What an Overwrite sends of a record: the cells the file fills (state §0.216; Jeff, 30 Oct, Q14: "Keep what's
+// stored"). A mapped column's empty cell is in the record as '' (above) and wrote over what was stored — a blank
+// Sales Rep unassigned the deal, a blank Stage set Discovery, a blank ARR 0 — so an Overwrite leaves it out, as an
+// unmapped column is left out, and the server keeps the stored value (partialRows' stored rows: a key another row of
+// the request sends is filled from the stored row, never written empty). A key that is no text — the plan's own
+// annotations — is kept.
+export function filledCells(record) {
+    const out = {};
+    for (const [key, value] of Object.entries(record || {})) {
+        if (typeof value === 'string' && value.trim() === '') continue;
+        out[key] = value;
+    }
+    return out;
+}
+
 /**
  * One line for the preview banner. Returns null when there is nothing to say, so
  * the caller can render conditionally without duplicating the logic.

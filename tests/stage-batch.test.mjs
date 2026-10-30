@@ -156,6 +156,7 @@ test('opportunities.mjs selects stageChangedDate into priors', () => {
     const at = src.indexOf('const priorRows');
     assert.notEqual(at, -1, 'priors query not found — this assertion needs repointing');
     const block = src.slice(at, at + 800);
-    assert.match(block, /stageChangedDate/, 'the priors SELECT must carry stageChangedDate');
-    assert.match(block, /stageHistory/, 'the priors SELECT must carry stageHistory');
+    // Since state §0.216 the priors are the stored rows WHOLE (a bare select()), so every column — these two with
+    // them — is read; a projection that names columns must name both again.
+    assert.match(block, /^const priorRows = await db\s*\.select\(\)\s*\.from\(opportunities\)/, 'the priors SELECT reads the stored rows whole — stageChangedDate and stageHistory with them');
 });

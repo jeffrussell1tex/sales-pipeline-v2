@@ -124,7 +124,12 @@ One commit per verified batch; doc patch in the same commit.
   columns unless the endpoint merges first —
   `sanitize({ ...existing, ...data })` (the users/leads pattern). Check this
   shape on every endpoint before trusting its PUT; it has been wrong three
-  times (the third: `saved-reports`, 14 Sep 2026 — state §0.135).
+  times (the third: `saved-reports`, 14 Sep 2026 — state §0.135). The
+  accounts, contacts and deals bulk PUTs hand `partialRows` the stored rows,
+  read whole in the org: a key
+  one row leaves out and another sends is filled from its stored row,
+  never written empty — an import's Overwrite sends only the cells the
+  file fills (`filledCells`; guide §18b106 rule 8).
 - `bulkUpsert` must fail closed: `undefined` reads as `null` and can treat
   every owned row as unassigned.
 - Every `settings.extra` key must appear in BOTH the GET response object and
@@ -160,7 +165,14 @@ One commit per verified batch; doc patch in the same commit.
   file; rows sent by depth (`importParents.js` sendLevels); an overwrite
   sends neither the name nor the Parent Account. The accounts bulk POST
   places every new row by the parent rule (`accountParent.js` placeBulkRows);
-  the bulk PUT moves and renames nothing (guide §18b105).
+  the bulk PUT moves and renames nothing (guide §18b105). The contact and
+  deal imports likewise (planContactImport, planDealImport): a contact's
+  Company one account (linked by id) or a new company made once, a deal's
+  Account one account the deal window takes (a site typed in full its
+  Site Name), a duplicate one contact or one deal; the deals bulk paths
+  link each row by the single save's rule (`dealAccount.js`
+  dealLinkDecided); a new deal's blank Sales Rep is the importer's by id —
+  an Overwrite's blank keeps the stored owner (guide §18b106).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never
