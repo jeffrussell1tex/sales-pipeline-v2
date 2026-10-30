@@ -298,6 +298,38 @@ export function placeAccount(rows, { selfId = null, selfName = '', parentId = nu
     return { tiers: moved.tiers };
 }
 
+// A bulk create's rows placed by the single save's rule (state §0.215 — batch 3a; guide §18b105): each new row's
+// parent checked by placeAccount over the org's accounts AND the batch's own new rows as they will stand, parents
+// first (parentsFirst), so a row may stand under another row of the batch at any depth — never under a site, never
+// itself, never a row under it (two rows naming each other) — and each takes the tier placeAccount gives it: the
+// tier it asks for where that fits under its parent, else the lowest above it; at the top level, an account. A CSV
+// sent every sub-account as a business unit, under a unit or a site alike (docs/design/links-batch-3, I2).
+//   orgRows  the org's accounts (id, name, parentAccountId, accountTier, mergeArchived).
+//   rows     the batch as sent (id, name, parentAccountId, accountTier).
+//   newIds   the batch's ids no row of the org holds — the rows whose inserts will land; a row of an id the org
+//            holds is placed as stored (its insert writes nothing).
+// { tiers: Map(id → tier) } for each new row, or { status, error, ids } — the first refusal's status and words
+// (parentRefusal), and the id of every row refused: the whole request is refused, as checkBulkLinks refuses it.
+export function placeBulkRows(orgRows, rows, newIds) {
+    const own = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && newIds && newIds.has(r.id));
+    // One row of an id is placed, so an id twice is refused: the other could land unplaced (the review of 3a).
+    const twice = [...new Set(own.map((r) => r.id).filter((id, k, all) => all.indexOf(id) !== k))];
+    if (twice.length) return { status: 400, error: 'A row id is sent twice in one batch.', ids: twice };
+    const list = new Map(rowsOf(orgRows).map((a) => [a.id, a]));
+    for (const r of own) list.set(r.id, { id: r.id, name: r.name || '', parentAccountId: r.parentAccountId || null, accountTier: null, mergeArchived: false });
+    const tiers = new Map();
+    const refused = [];
+    for (const r of parentsFirst(own)) {
+        const placed = placeAccount([...list.values()], { selfId: r.id, selfName: r.name || '', parentId: r.parentAccountId || null, tier: r.accountTier || null });
+        if (placed.error) { refused.push({ id: r.id, status: placed.status, error: placed.error }); continue; }
+        const tier = placed.tiers.get(r.id);
+        tiers.set(r.id, tier);
+        list.set(r.id, { ...list.get(r.id), accountTier: tier });
+    }
+    if (refused.length) return { status: refused[0].status, error: refused[0].error, ids: refused.map((x) => x.id) };
+    return { tiers };
+}
+
 // What a restore says of a tier the rule does not know: none is stored (SELECT 12 Oct, all 829
 // accounts: account, business unit or site), so only a forged request meets it.
 export const UNKNOWN_TIER = 'That is not an account tier — an account, a business unit or a site.';

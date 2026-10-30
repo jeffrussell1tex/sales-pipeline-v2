@@ -62,13 +62,19 @@ const isMapped = (colIdx) => colIdx !== undefined && colIdx !== '' && colIdx >= 
  *   records: Object[],
  *   dropped: {rowNumber:number, sample:string}[],
  *   unmappedRequired: string[],
+ *   rowNumbers: number[],
  * }}
  */
-export function mapCsvRows(csvRows, appFields, fieldMapping) {
+export function mapCsvRows(csvRows, appFields, fieldMapping, lineNumbers) {
     const fields = appFields || [];
     const required = fields.filter(f => f.required);
+    // Each row's line in the file (the modal's parse keeps them — a blank line it drops still counts in Excel, state
+    // §0.215); none given: the row's place, + 2.
+    const lineOf = (idx) => (Array.isArray(lineNumbers) && lineNumbers[idx]) || idx + 2;
 
     const records = [];
+    // Each record's row in the file, as the user sees it (state §0.215): a refusal names it.
+    const rowNumbers = [];
     const dropped = [];
 
     (csvRows || []).forEach((row, idx) => {
@@ -95,6 +101,7 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
             const bad = unreadableDay(fields, fieldMapping, record);
             if (bad.length === 0) {
                 records.push(record);
+                rowNumbers.push(lineOf(idx));
             } else {
                 // Same row numbering and sample as a required-field drop, plus
                 // what was wrong: the field and the cell, verbatim, so the user
@@ -105,14 +112,15 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
                     reason: 'date',
                     field:  bad[0].label,
                     value:  (record[bad[0].key] || '').trim(),
-                    rowNumber: idx + 2
+                    rowNumber: lineOf(idx)
                 });
             }
         } else {
             dropped.push({
-                // +2, not +1: row 1 of the file is the header, so this is the
-                // number the user will see in Excel when they go to fix it.
-                rowNumber: idx + 2,
+                // The row's line in the file (blank lines counted; else +2,
+                // not +1: row 1 is the header), the number the user will see
+                // in Excel when they go to fix it.
+                rowNumber: lineOf(idx),
                 sample: (row || []).filter(Boolean).slice(0, 3).join(', ').slice(0, 60),
             });
         }
@@ -126,7 +134,7 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
         .filter(f => !isMapped(fieldMapping?.[f.key]))
         .map(f => f.label);
 
-    return { records, dropped, unmappedRequired };
+    return { records, dropped, unmappedRequired, rowNumbers };
 }
 
 /**

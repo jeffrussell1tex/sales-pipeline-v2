@@ -387,16 +387,23 @@ test('a bulk overwrite asks only what each row names anew — a held link kept, 
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual((await one(opportunities, D_HELD)).contactIds, [C_B, GONE, C1], 'the held two kept, the new one its survivor');
 
+    // An overwrite names no parent since §0.215 (Jeff, 29 Oct, Q9: "Refuse it"): one naming any — org B's, or the
+    // one it holds — is refused whole, naming its rows; one naming none keeps the parent it holds.
     r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k'), parentAccountId: B_ACCT }]);
     assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.deepEqual(r.body.ids, [ID('bulk_k')]);
     assert.equal((await one(accounts, ID('bulk_k'))).parentAccountId, ID('bulk_p'), 'unchanged');
-    r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k'), parentAccountId: ID('bulk_p'), notes: 'kept' }]);
+    r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k'), parentAccountId: ID('bulk_p'), notes: 'not kept' }]);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.equal((await one(accounts, ID('bulk_k'))).notes, null, 'refused whole');
+    r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k'), notes: 'kept' }]);
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.equal((await one(accounts, ID('bulk_k'))).notes, 'kept');
+    const k = await one(accounts, ID('bulk_k'));
+    assert.deepEqual([k.notes, k.parentAccountId], ['kept', ID('bulk_p')]);
 });
 
-test('a bulk overwrite keeps the parent and the org chart a row already holds — stray ones, stored before batch 4 (the review, tests S4)', async () => {
-    let r = await call('accounts', WHO.admin, 'PUT', [{ id: A_HELD, parentAccountId: GONE, notes: 'held parent kept' }]);
+test('a bulk overwrite keeps the parent and the org chart a row already holds — stray ones, stored before batch 4 (the review, tests S4); since §0.215 an overwrite names no parent, so the one held stands', async () => {
+    let r = await call('accounts', WHO.admin, 'PUT', [{ id: A_HELD, notes: 'held parent kept' }]);
     assert.equal(r.status, 200, JSON.stringify(r.body));
     let row = await one(accounts, A_HELD);
     assert.deepEqual([row.notes, row.parentAccountId], ['held parent kept', GONE], 'held: not asked again');
@@ -430,8 +437,9 @@ test('the bulk account paths read no legacy `parentId`: a parent sent so is neve
     let r = await call('accounts', WHO.admin, 'POST', [{ id: ID('bulk_k6'), name: 'K6', parentId: B_ACCT }]);
     assert.equal(r.status, 201, JSON.stringify(r.body));
     assert.equal((await one(accounts, ID('bulk_k6'))).parentAccountId, null);
-    r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k6'), parentAccountId: '', parentId: B_ACCT }]);
+    r = await call('accounts', WHO.admin, 'PUT', [{ id: ID('bulk_k6'), parentId: B_ACCT, notes: 'k6' }]);
     assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal((await one(accounts, ID('bulk_k6'))).notes, 'k6');
     assert.equal((await one(accounts, ID('bulk_k6'))).parentAccountId, null);
 });
 

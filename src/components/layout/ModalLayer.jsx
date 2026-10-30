@@ -5,7 +5,7 @@ import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
 import { buildOpportunityRow } from '../../utils/importRows';
-import { importPasses, subsAfterParents } from '../../utils/importParents.js';
+import { importLevels, sendLevels } from '../../utils/importParents.js';
 import { teamsWithMembers } from '../../utils/teamMembership.js';
 import {
     mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
@@ -530,27 +530,23 @@ export default function ModalLayer() {
                         const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
                         const still = () => stillOrg(askedOrg);
 
-                        // Pass 1: the file's top-level accounts. Pass 2: its sub-accounts, each under the parent its
-                        // Parent Account names — a live account, a row of the file, or the account a merged-away one
-                        // was merged into, never the merged-away one (src/utils/importParents.js, state §0.199) — sent
-                        // once the parents have landed: one whose file parent did not save goes with no parent (the
+                        // The rows a name did not refuse at Preview, each under the parent planned there — an account
+                        // of the list, or a row of the file (src/utils/importLinks.js, state §0.215) — sent by depth:
+                        // the file's top-level accounts, then the rows under them, then the rows under those
+                        // (src/utils/importParents.js). A row whose file parent did not save goes with no parent (the
                         // receipt names the parents lost), never naming a row that is not there — the server refuses
-                        // a request whose parent is no live row of the org.
-                        const { parents: parentsWithIds, subs: subsWithIds } = importPasses(newAccounts, accounts, () => crypto.randomUUID());
-                        const allWithIds = [...parentsWithIds, ...subsWithIds];
+                        // a request whose parent is no live row of the org; a failed request sends no level after it.
+                        const levels = importLevels(newAccounts, () => crypto.randomUUID());
+                        const allWithIds = levels.flat();
 
                         if (allWithIds.length > 0) {
                             onProgress(0, totalProgress);
-                            const first = await bulk.postNew('/.netlify/functions/accounts', parentsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
-                            if (!stillOrg(askedOrg)) return stopped();
-                            // Commit what actually saved before surfacing the failure.
-                            if (first.landed.length > 0) setAccounts(prev => [...prev, ...first.landed]);
-                            const second = first.error
-                                ? { landed: [], failed: [], error: null, attempted: 0 }
-                                : await bulk.postNew('/.netlify/functions/accounts', subsAfterParents(subsWithIds, parentsWithIds, first.landed), { onProgress, progressOffset: parentsWithIds.length, progressTotal: totalProgress, stillOrg: still });
-                            if (!stillOrg(askedOrg)) return stopped();
-                            if (second.landed.length > 0) setAccounts(prev => [...prev, ...second.landed]);
-                            const res = { landed: [...first.landed, ...second.landed], failed: [...first.failed, ...second.failed], error: first.error || second.error, attempted: allWithIds.length };
+                            // Each level's landed rows reach the screen as they land — before a failure is said.
+                            const sentLevels = await sendLevels(levels,
+                                (rows, offset) => bulk.postNew('/.netlify/functions/accounts', rows, { onProgress, progressOffset: offset, progressTotal: totalProgress, stillOrg: still }),
+                                { stillOrg: still, onLanded: (landed) => setAccounts(prev => [...prev, ...landed]) });
+                            if (sentLevels.stopped) return stopped();
+                            const { res } = sentLevels;
 
                             // parentAccountId is a plain text column, not a
                             // foreign key, so a sub-account whose parent failed
@@ -559,22 +555,30 @@ export default function ModalLayer() {
                             // re-import fixes the cause, not the symptom. This is
                             // the one piece of prose that survives, because it
                             // identifies ROWS rather than reporting a count.
-                            const lostParents = res.failed.filter(f => parentsWithIds.some(p => p.id === f.id));
+                            const lostParents = res.failed.filter(f => allWithIds.some(r => r.parentAccountId === f.id));
+                            // Only the sub-accounts that landed under a lost parent landed without it: a level after a
+                            // failed request was never sent (the review of 3a).
+                            const lostIds = new Set(lostParents.map(p => p.id));
+                            const parentOf = new Map(allWithIds.map(r => [r.id, r.parentAccountId]));
+                            const orphaned = res.landed.filter(r => lostIds.has(parentOf.get(r.id)));
                             const receipt = receiptFromInsert(res);
                             if (lostParents.length > 0) {
                                 receipt.error = [
                                     receipt.error,
-                                    `${lostParents.length} of the failures are parent accounts (${lostParents.slice(0, 3).map(p => p.name).join(', ')}${lostParents.length > 3 ? '…' : ''}), so any sub-accounts under them imported without a parent link.`,
+                                    `${lostParents.length} of the failures are parent accounts (${lostParents.slice(0, 3).map(p => p.name).join(', ')}${lostParents.length > 3 ? '…' : ''})${orphaned.length ? `, so ${orphaned.length} sub-account${orphaned.length === 1 ? '' : 's'} under them imported without a parent link` : ''}.`,
                                 ].filter(Boolean).join(' ');
                             }
                             phases.push(receipt);
                             if (!isClean(receipt)) throw new ImportError(mergeReceipts(...phases), 'account');
                         }
 
-                        // Overwrites — PUT with the existing id, state from appliedIds
+                        // Overwrites — PUT with the existing id, state from appliedIds. The account keeps its name (the
+                        // row matched it as its name reads — state §0.215; the server refuses a bulk rename, and a name
+                        // sent from a screen loaded before another session's rename would refuse the whole request) and
+                        // where it stands: neither its name nor its Parent Account is sent (Q5, said on the Results).
                         if (overwrites.length > 0) {
                             const overwritesWithIds = overwrites.map(a => {
-                                const { parentAccount: _drop, _existingId, ...rest } = a;
+                                const { parentAccount: _drop, name: _name, _existingId, ...rest } = a;
                                 return { ...rest, id: _existingId };
                             });
                             const ow = await bulk.putBulk('/.netlify/functions/accounts', overwritesWithIds, { onProgress, progressOffset: allWithIds.length, progressTotal: totalProgress, stillOrg: still });

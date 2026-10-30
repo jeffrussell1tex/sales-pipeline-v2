@@ -655,7 +655,7 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
 test("accounts.mjs: a parent is checked against THIS org's rows when a create names one and when a save moves it — after the ownership check, before the write; the tiers fit, written to this org's rows only and handed back; a save that leaves the parent keeps the stored tier", () => {
     const src = read('netlify/functions/accounts.mjs');
     assert.ok(src.includes("import { eq, asc, and, or, isNull, inArray } from 'drizzle-orm';"));
-    assert.ok(src.includes("import { placeAccount, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';"));
+    assert.ok(src.includes("import { placeAccount, placeBulkRows, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';"));
     assert.ok(src.includes('    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,\n'), "J6: a restore's owner is read in this org's roster");
     const rule = between(src, "// ── An account's parent and tier", 'export const handler');
     assert.ok(!/readScope|getCallerId|crmReadScope/.test(rule), "the org's rows decide, never the caller's read scope");

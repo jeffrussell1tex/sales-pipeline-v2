@@ -71,10 +71,13 @@ business unit.
 
 UKG's six deals on a site (a follow-up count): six different sites, each with
 a parent; three open (Evaluation 1, Qualification 2), three Closed Lost; four
-carry a Site Name; four were updated since 1 Oct. How they came to stand on a
-site — before D22's lift (§0.198), a site made since by a path that lifts
-nothing, or a write the rule does not see — is **not known** (not read); the
-audit log holds no tier entries for UKG.
+carry a Site Name; four were updated since 1 Oct. How they came to be was not
+read. They are likely the legacy rows the code already names: accounts.mjs says
+"UKG's deals on sites stay until changed by hand" (from before D22's lift,
+§0.198), and src/utils/accountParent.js's header counts 13 tier-'account' rows
+under an account at its read of 12 Oct, stored before the rule and kept until
+moved. Whether today's six deals and twelve accounts are those rows was not read
+(noted 29 Oct, §0.215, once the build read those comments).
 
 **What it says for the design:**
 

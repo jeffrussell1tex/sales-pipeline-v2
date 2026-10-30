@@ -12,7 +12,13 @@ data and the Undo; proof). Claude re-read the claims the design rests on
 merge.mjs:150-262 and :612-617). No data was read. The critics changed the
 design in eight places, marked **(critic)** below. The questions are in §3.
 Jeff answered all twelve the same day, each the Recommended, and the census
-ran (SELECT counts only, 21:10:23 UTC) — both in ANSWERS.md. Not built.
+ran (SELECT counts only, 21:10:23 UTC) — both in ANSWERS.md. Step 3a built
+29 Oct as state §0.215 (guide §18b105), through five review workflows; its
+build changed §2 in four places: the overwrite sends neither the name nor the
+Parent Account (a stale screen's name would refuse the whole request); a name
+of no letter or digit is refused; the bulk create refuses an id sent twice; and
+a bulk create's tier the rule does not know is fitted, as the single create
+fits it, not refused with `UNKNOWN_TIER`. 3b-3d to come.
 
 ---
 

@@ -7,17 +7,26 @@ import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,
 } from './_lib.mjs';
-import { ownerColumnOf } from './_ownership.mjs';
+import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { openDealOfAccount, openDealOfAnyAccount, openDealRefusal, dealLabel } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
 import { checkBulkLinks, clearStrayLinks } from './_links.mjs';
-import { placeAccount, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';
+import { placeAccount, placeBulkRows, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';
+import { searchKey } from '../../src/utils/searchMatch.js';
 
-// A bulk row's parent: a live account of this org, or one of the batch's own (state §0.199). One merged
-// away is refused, as the single save's placeAccount refuses it (§0.198); the rest of the parent rule on
-// the bulk paths is batch 3's (OPEN_ITEMS §4.7).
+// A bulk create's parent: a live account of this org, or one of the batch's own (state §0.199). One merged
+// away is refused, as the single save's placeAccount refuses it (§0.198); then the rest of the single save's
+// rule, row by row — no site, no loop, the tier that fits (placeBulkRows, state §0.215).
 const PARENT_LINK = [{ key: 'parentAccountId', kind: 'account', follow: false }];
+
+// A bulk overwrite moves no account and renames none (state §0.215 — Jeff, 29 Oct, Q9: "Refuse it"): a move runs
+// the parent rule, re-fits the branch and moves deals up off a site (D21, D22), and a rename carries the new name
+// to the deals and contacts linked by id — the single PUT does each, after its ownership check; a batch would do
+// them for rows the caller was refused. The CSV's overwrite sends neither its Parent Account nor its name
+// (ModalLayer.jsx).
+const BULK_MOVE = 'An overwrite never moves an account — move each one on its own page.';
+const BULK_RENAME = 'An overwrite never renames an account — rename each one on its own page.';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -82,7 +91,8 @@ async function resolveTerritory(orgId, account) {
 // The rule is the account rail's own (src/utils/accountParent.js placeAccount), run on THIS
 // org's rows: a parent another org holds is not found — the 404 a missing one gets, so
 // nothing leaks — and never on the caller's read scope: a rep keeps a parent she can't open
-// (D1, D16). The bulk paths (a CSV's) store a parent unchecked until batch 3.
+// (D1, D16). A bulk create's rows are placed by the same rule (placeBulkRows, state §0.215); a bulk overwrite
+// moves no account (BULK_MOVE).
 const orgTreeOf = (orgId) => db.select({
     id: accounts.id, name: accounts.name, parentAccountId: accounts.parentAccountId,
     accountTier: accounts.accountTier, mergeArchived: accounts.mergeArchived,
@@ -218,13 +228,23 @@ export const handler = async (event) => {
                 // A parent among the batch's own new rows needs no read; an id this org already holds is no new
                 // row (its insert will not land), so a parent naming it is asked as any parent is (state §0.199).
                 const batchIds = data.map(d => d.id);
+                // An id twice in one batch is refused: the rule places one row of an id, and the insert, splitting a
+                // failed chunk, could land the other — under a site (the review of 3a).
+                const repeated = [...new Set(batchIds.filter((id, k) => batchIds.indexOf(id) !== k))];
+                if (repeated.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.', field: 'id', ids: repeated }) };
                 const taken = new Set((await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, batchIds)))).map(r => r.id));
-                const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { also: { kind: 'account', ids: new Set(batchIds.filter(id => !taken.has(id))) } });
+                const newIds = new Set(batchIds.filter(id => !taken.has(id)));
+                const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { also: { kind: 'account', ids: newIds } });
                 if (parents.error) return { statusCode: parents.status, headers, body: JSON.stringify({ error: parents.error, field: parents.field, ids: parents.ids }) };
+                // Each new row placed by the single save's rule, over this org's accounts and the batch's own rows:
+                // no site, no loop, the tier that fits (state §0.215) — any row refused refuses the request, naming
+                // its rows; with no parent named, nothing is read: each is a top-level account.
+                const placed = placeBulkRows(data.some(d => d.parentAccountId) ? await orgTreeOf(orgId) : [], data, newIds);
+                if (placed.error) return { statusCode: placed.status, headers, body: JSON.stringify({ error: placed.error, field: 'parentAccountId', ids: placed.ids }) };
                 // Rules read once for the batch, not once per row.
                 const rules = await loadTerritoryRules(orgId);
                 const rows = data.map(d => {
-                    const clean = sanitize(d);
+                    const clean = { ...sanitize(d), ...(placed.tiers.has(d.id) ? { accountTier: placed.tiers.get(d.id) } : {}) };
                     return { ...clean, ...(applyTerritoryRules(rules, clean) || {}) };
                 });
                 // Chunked with per-row isolation by bisection — see bulkInsert in
@@ -313,13 +333,24 @@ export const handler = async (event) => {
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
                 // The owner id moves with the owner name (state §0.193).
-                // A parent a row names anew is a live account of this org; one the account already holds is
-                // not asked again (state §0.199).
-                const stored = await db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId })
+                // No row moves or renames its account (state §0.215, Q9): a row naming a parent is refused, and so is
+                // one whose name is not its account's (searchKey — case, spacing and punctuation); a name that reads
+                // as its account's is stored in the account's own spelling, and a tier sent is not stored — the
+                // stored one stands, as the single PUT keeps it when the parent does not change.
+                const moving = data.filter(d => 'parentAccountId' in d).map(d => d.id);
+                if (moving.length) return { statusCode: 400, headers, body: JSON.stringify({ error: BULK_MOVE, field: 'parentAccountId', ids: moving }) };
+                // Only a row the caller may save is asked about its name: one she may not is answered forbidden by
+                // bulkUpsert whatever it says, so a refusal never tells her the name of an account she can't open.
+                const stored = await db.select({ id: accounts.id, name: accounts.name, ownerId: accounts.ownerId })
                     .from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, data.map(d => d.id))));
-                const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });
-                if (parents.error) return { statusCode: parents.status, headers, body: JSON.stringify({ error: parents.error, field: parents.field, ids: parents.ids }) };
-                const keyed = await rekeyBulkOwners(partialRows(data, sanitize), 'account', { table: accounts, orgId });
+                const storedName = new Map(stored.filter(r => mayMutate({ ownerId: r.ownerId, callerId, canSeeAll: canSeeAll(userRole) })).map(r => [r.id, r.name || '']));
+                const renaming = data.filter(d => 'name' in d && storedName.has(d.id) && searchKey(d.name) !== searchKey(storedName.get(d.id))).map(d => d.id);
+                if (renaming.length) return { statusCode: 400, headers, body: JSON.stringify({ error: BULK_RENAME, field: 'name', ids: renaming }) };
+                // Once any row sends a name, every row the caller may save carries its own: partialRows writes the union of
+                // the keys sent, and a row without one would be stored 'Unnamed Account' (the review of 3a).
+                const anyName = data.some(d => 'name' in d);
+                const asSent = data.map(({ accountTier: _tier, ...d }) => (anyName && storedName.has(d.id) ? { ...d, name: storedName.get(d.id) } : d));
+                const keyed = await rekeyBulkOwners(partialRows(asSent, sanitize), 'account', { table: accounts, orgId });
                 const result = await bulkUpsert({
                     table: accounts,
                     rows: keyed.rows,

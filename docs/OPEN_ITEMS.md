@@ -127,7 +127,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      `aeafb2d`, the design and its critics, Jeff's twelve answers of
      29 Oct, each the Recommended, and the census). Four steps: 3a the
      account import, screen and server together; 3b the contact and deal
-     imports; 3c the merge's links; 3d the merge's placement.
+     imports; 3c the merge's links; 3d the merge's placement. **3a built
+     (§0.215; guide §18b105), its browser check PASSED, NOT committed**: the
+     account import's names each one record or the row refused at Preview,
+     sent by depth; the accounts bulk create placed by the parent rule, the
+     bulk overwrite moving and renaming nothing. 3b, 3c and 3d to come.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -908,8 +912,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   accounts stored as tier `account` under an `account` parent (D3: a
   sub-account ranks below its parent), and 6 deals linked by id to 6
   sites (D22: a deal stands on an account, its site as Site Name) — three
-  open, three Closed Lost. How they came to be is not known (no audit
-  entry). Nothing changes them; batch 3d's merge refusal (Jeff, 29 Oct,
+  open, three Closed Lost. Both are likely legacy rows the code already
+  names: src/utils/accountParent.js's header counts 13 tier-'account'
+  rows under an account at its read of 12 Oct (stored before the rule,
+  kept until moved), and accounts.mjs says "UKG's deals on sites stay
+  until changed by hand" (from before D22's lift, §0.198). Whether
+  today's twelve and six are those rows was not read (a SELECT of their
+  ids and created dates would say). Nothing changes them; batch 3d's merge refusal (Jeff, 29 Oct,
   Q8: "Refuse it") would refuse a merge that moves one of the twelve.
   Jeff's data decision: leave them, or fix each by hand (how each screen
   would re-fit them is not read yet — read before advising a fix).
@@ -3524,7 +3533,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   by name too, as a move reads one (accounts.mjs `dealLifts`, D22); the
   second needs a write the merge never made.
 - **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
-  over 7e68f26; re-read 29 Oct over `aeafb2d` — docs/design/links-batch-3,
+  over 7e68f26; re-read 29 Oct over `aeafb2d` — docs/design/links-batch-3;
+  its first bullet and the second bullet's account half — the account
+  import's parent and conflicts, and the accounts bulk paths' parent rule —
+  are §0.215's (3a, NOT committed); the second bullet's deal conflict and
+  the rest are 3b-3d's — docs/design/links-batch-3,
   which holds what still holds, what changed and the design Jeff answered):
   - The account import gives a sub-account the first account whose name
     matches the Parent Account cell, in any case and any tier, with
@@ -3777,6 +3790,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
     can create a second account under the name of one another rep owns.
   - Renaming an account to another account's name runs no duplicate
     check (AccountRail checks only a new account).
+  - The account CSV import, likewise: a Sales Rep's import plans over her
+    own list, so a name another rep's account has is a new account (Jeff,
+    29 Oct, batch 3's Q2: "Leave it, decide later" — to decide with these).
 - **With Create off, a partly typed name reads as refused beside the row that
   matches it** (§0.198's pane check, 12 Oct). New Task's Account and an
   account's Parent show the matching row AND the foot "“pane shell chem” isn't
@@ -3926,6 +3942,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ---
 
 ## 6. Tooling, tests and housekeeping
+
+- **The harness runs each mutant with no time limit** (§0.215's fourth
+  review, run in a scratch copy): scripts/mutate-import.mjs and
+  scripts/mutate-scope.mjs run `node --test` through `execSync` with no
+  `timeout`, so a mutant that makes the code under test loop forever hangs
+  the run — no summary, and its mutant left on disk (stopping a run leaves
+  it). §0.215 had one; it was re-pointed. Recommended: a per-mutant timeout
+  (minutes), reported as its own outcome, a hang counted as caught but
+  said, and the mutant restored.
 
 - **Dead code the cleanup batch's maps found** (the cleanup batch's
   design, 18 Oct, P40g; re-read 23 Oct, read in code): App's

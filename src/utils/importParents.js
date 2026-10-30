@@ -1,53 +1,69 @@
 // src/utils/importParents.js
 //
-// The accounts CSV import's parents (state §0.199 — the review of batch 4). A sub-account's Parent Account is
-// found by its name among the live accounts and the file's own top-level rows; one merged away is never a parent
-// — a name only a merged-away account has names the account it was merged into (`survivorOf`, as a picker does
-// since §0.198). The importer sends the file's top-level rows first and its sub-accounts once those have landed:
-// a sub-account whose file parent did not save is sent with no parent — the receipt names the parents lost —
-// never naming a row that is not there, which the server refuses for the whole request (a link names a live
-// row of the org, §0.199). Which of two live accounts sharing a name is the parent is batch 3's (OPEN_ITEMS §4.7).
+// The accounts CSV import's sending, by depth (state §0.199; §0.215 — batch 3a). Which account a sub-account's
+// Parent Account names is decided at Preview, one record or a refusal (src/utils/importLinks.js
+// planAccountImport); here the rows it kept are sent parents first: the file's top-level rows, then the rows under
+// them, then the rows under those — any depth (Account > Unit > Site). A row whose parent is a row of the file
+// that did not save is sent with no parent — the receipt names the parents lost — never naming a row that is not
+// there, which the server refuses for the whole request (a link names a live row of the org, §0.199).
 
-import { unarchived, survivorOf, isMergeArchived } from './pickLink.js';
-
-const nameKey = (s) => String(s || '').toLowerCase();
-
-// The parent a sub-account's Parent Account names: a live account of that name, else a top-level row of the
-// file, else the account one merged away was merged into — or none.
-export function importParentId(name, accounts, fileParents) {
-    const key = nameKey(name);
-    if (!key) return null;
-    const all = Array.isArray(accounts) ? accounts : [];
-    const live = unarchived(all).find((a) => nameKey(a.name) === key);
-    if (live) return live.id;
-    const own = (Array.isArray(fileParents) ? fileParents : []).find((p) => nameKey(p.name) === key);
-    if (own) return own.id;
-    const merged = all.find((a) => isMergeArchived(a) && nameKey(a.name) === key);
-    const survivor = merged ? survivorOf(merged, all) : null;
-    return survivor ? survivor.id : null;
+// The rows planAccountImport kept as new (each with `_ref` and `_parent`), as the levels the import sends:
+// [[top-level rows], [rows under them], …], each row with its new id and the parent it names — an account's id,
+// or a row of the file's new id — and none of the plan's own keys or the Parent Account column. makeId: a new
+// row's id, taken in the file's order.
+export function importLevels(rows, makeId) {
+    const list = Array.isArray(rows) ? rows : [];
+    const idOf = new Map(list.map((r) => [r._ref, makeId()]));
+    const byRef = new Map(list.map((r) => [r._ref, r]));
+    const depth = new Map();
+    const depthOf = (r, seen = new Set()) => {
+        if (depth.has(r._ref)) return depth.get(r._ref);
+        const up = r._parent && r._parent.ref !== undefined ? byRef.get(r._parent.ref) : null;
+        const d = up && !seen.has(r._ref) ? depthOf(up, new Set([...seen, r._ref])) + 1 : 0;
+        depth.set(r._ref, d);
+        return d;
+    };
+    const levels = [];
+    for (const r of list) {
+        const { parentAccount: _drop, _ref, _parent, _tier, ...rest } = r;
+        const parentAccountId = !_parent ? null : _parent.id !== undefined ? _parent.id : idOf.get(_parent.ref) ?? null;
+        const d = depthOf(r);
+        (levels[d] = levels[d] || []).push({ ...rest, id: idOf.get(_ref), parentAccountId, ...(_tier ? { accountTier: parentAccountId ? _tier : 'account' } : {}) });
+    }
+    return levels.filter(Boolean);
 }
 
-// The import's two passes: the file's top-level rows (no parent), and its sub-accounts, each with the parent
-// its Parent Account names, or none. makeId: a new row's id.
-export function importPasses(newAccounts, accounts, makeId) {
-    const rows = Array.isArray(newAccounts) ? newAccounts : [];
-    const parents = rows.filter((a) => !a.parentAccount?.trim()).map((a) => {
-        const { parentAccount: _drop, ...rest } = a;
-        return { ...rest, id: makeId(), parentAccountId: null };
-    });
-    const subs = rows.filter((a) => a.parentAccount?.trim()).map((a) => {
-        const { parentAccount: _drop, ...rest } = a;
-        return { ...rest, id: makeId(), parentAccountId: importParentId(a.parentAccount, accounts, parents) };
-    });
-    return { parents, subs };
+// The levels sent in order (state §0.215): post(rows, offset) — the client's postNew for one level, answering
+// { landed, failed, error } — each level once the one above has answered, its rows under a file parent that did not
+// land sent with none (levelAfterLanded); a request that failed sends no level after it, and its error is the
+// answer's. stillOrg() — the org that started the import is still on screen (state §0.175): once it is not, the
+// levels stop and the answer says so ({ stopped: true }). onLanded(rows) — each level's landed rows, as they land.
+// { stopped, res: { landed, failed, error, attempted } } — attempted, every row of every level.
+export async function sendLevels(levels, post, { stillOrg = () => true, onLanded = () => {} } = {}) {
+    const list = Array.isArray(levels) ? levels : [];
+    const all = list.flat();
+    const fileIds = new Set(all.map((r) => r.id));
+    const landedIds = new Set();
+    const res = { landed: [], failed: [], error: null, attempted: all.length };
+    let sent = 0;
+    for (const level of list) {
+        if (res.error) break;
+        const out = await post(levelAfterLanded(level, fileIds, landedIds), sent);
+        if (!stillOrg()) return { stopped: true, res };
+        if (out.landed.length > 0) onLanded(out.landed);
+        for (const r of out.landed) landedIds.add(r.id);
+        res.landed.push(...out.landed);
+        res.failed.push(...out.failed);
+        res.error = out.error;
+        sent += level.length;
+    }
+    return { stopped: false, res };
 }
 
-// The sub-accounts as sent once the file's parents have been: one whose parent is a row of the file that did not
-// land names no parent.
-export function subsAfterParents(subs, parents, landed) {
-    const fileIds = new Set((Array.isArray(parents) ? parents : []).map((p) => p.id));
-    const saved = new Set((Array.isArray(landed) ? landed : []).map((r) => r.id));
-    return (Array.isArray(subs) ? subs : []).map((s) => (s.parentAccountId && fileIds.has(s.parentAccountId) && !saved.has(s.parentAccountId)
-        ? { ...s, parentAccountId: null }
-        : s));
+// A level as sent once the levels above it have been: a row whose parent is a row of the file (fileIds) that did
+// not land (landedIds) names no parent — at the top level, an account (the server stores one there whatever is asked).
+export function levelAfterLanded(level, fileIds, landedIds) {
+    return (Array.isArray(level) ? level : []).map((r) => (r.parentAccountId && fileIds.has(r.parentAccountId) && !landedIds.has(r.parentAccountId)
+        ? { ...r, parentAccountId: null, ...('accountTier' in r ? { accountTier: 'account' } : {}) }
+        : r));
 }

@@ -221,7 +221,7 @@ test('BULK AND MERGE: a writer that changes the owner name moves the owner id wi
     assert.ok(fn.includes('? { ...row, [nameKey]: prior[nameKey], [idKey]: kept }'), '...and the stored NAME with it — never one without the other');
     assert.ok(fn.includes('if (ownerId === null) unmatched.add(supplied);'));
     assert.ok(fn.includes('out.push(held && prior') && fn.includes(': { ...row, [idKey]: ownerId });'), 'every row carries the column (bulkUpsert sets the union of keys)');
-    for (const [f, entity, table, rows] of [['accounts', 'account', 'accounts', 'partialRows(data, sanitize)'], ['contacts', 'contact', 'contacts', 'partialRows(linked.rows, sanitize)'], ['opportunities', 'opportunity', 'opportunities', 'partialRows(staged.rows, sanitize)']]) {
+    for (const [f, entity, table, rows] of [['accounts', 'account', 'accounts', 'partialRows(asSent, sanitize)'], ['contacts', 'contact', 'contacts', 'partialRows(linked.rows, sanitize)'], ['opportunities', 'opportunity', 'opportunities', 'partialRows(staged.rows, sanitize)']]) {
         const s = read(`netlify/functions/${f}.mjs`);
         assert.ok(s.includes(`const keyed = await rekeyBulkOwners(${rows}, '${entity}', { table: ${table}, orgId });`), f);
         assert.ok(s.includes('rows: keyed.rows,'), `${f}: the keyed rows are written`);

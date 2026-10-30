@@ -46,6 +46,7 @@ export const emptyReceipt = () => ({
     discrepancy: 0,      // server's own count disagreed with its own id lists (reason)
     skipped:     0,      // user chose skip at the conflicts step — never sent
     dropped:     0,      // mapper discarded before the request — never sent
+    refused:     0,      // a name in the row is no one record (state §0.215) — refused at Preview, never sent
     attempted:   0,      // created + updated + failed
     error:       null,   // fatal transport/server message, if any
 });
@@ -108,11 +109,12 @@ export const receiptFromUpdate = ({
     error: error || null,
 });
 
-// Rows the user chose to skip, and rows the mapper dropped. Neither was sent.
-export const receiptFromPreflight = ({ skipped = 0, dropped = 0 } = {}) => ({
+// Rows the user chose to skip, rows the mapper dropped, and rows a name refused. None was sent.
+export const receiptFromPreflight = ({ skipped = 0, dropped = 0, refused = 0 } = {}) => ({
     ...emptyReceipt(),
     skipped,
     dropped,
+    refused,
 });
 
 // ── Predicates ───────────────────────────────────────────────────────────────
@@ -120,7 +122,7 @@ export const receiptFromPreflight = ({ skipped = 0, dropped = 0 } = {}) => ({
 // Everything the user asked to save, saved. `dropped` counts against this: an
 // import that discarded six rows before sending them is not a clean import, and
 // treating it as one is exactly how "Import Complete! · 0 imported" happened.
-export const isClean = (r) => !r.error && r.failed === 0 && r.dropped === 0;
+export const isClean = (r) => !r.error && r.failed === 0 && r.dropped === 0 && !r.refused;
 
 // Something landed AND something did not.
 export const isPartial = (r) => (r.created + r.updated) > 0 && !isClean(r);
@@ -164,6 +166,7 @@ export const describeReceipt = (r, noun = 'record', words = {}) => {
             : `${r.failed} ${w.failed}`);
     }
     if (r.dropped) tail.push(`${plural(r.dropped, 'row')} skipped before sending — required fields were empty`);
+    if (r.refused) tail.push(`${plural(r.refused, 'row')} refused — each is listed below with why`);
     if (r.skipped) tail.push(`${r.skipped} ${w.skipped}`);
 
     const body = tail.length ? `${saved}. ${tail.join('. ')}.` : `${saved}.`;

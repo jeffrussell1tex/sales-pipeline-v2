@@ -3,6 +3,7 @@ import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { autoMapHeaders } from '../../utils/csvAutoMap';
 import { mapCsvRows, describeDropped } from '../../utils/csvMapping';
+import { planAccountImport, describeRefused } from '../../utils/importLinks.js';
 import {
     mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
     receiptFromError, emptyReceipt,
@@ -35,11 +36,13 @@ const INVITES_SHOWN = 100;
  * Given the incoming mapped records and the existing DB records already in
  * React state, return an array of conflict objects:
  *   { incomingIndex, incoming, existing, matchReason, action }
- * where action starts as 'skip'.
+ * where action starts as 'skip'. An account's are the plan's (planned — src/utils/importLinks.js
+ * planAccountImport, state §0.215): one account of the name, never the first of two.
  */
-const detectDuplicates = (incoming, existingContacts, existingAccounts, existingOpps, importType) => {
+const detectDuplicates = (incoming, existingContacts, existingOpps, importType, planned) => {
     const conflicts = [];
 
+    if (importType === 'accounts') return planned || conflicts;
     if (importType === 'contacts') {
         incoming.forEach((rec, idx) => {
             // Primary match: email (non-blank)
@@ -60,12 +63,6 @@ const detectDuplicates = (incoming, existingContacts, existingAccounts, existing
             }
             if (match) conflicts.push({ incomingIndex: idx, incoming: rec, existing: match, matchReason: reason, action: 'skip' });
         });
-    } else if (importType === 'accounts') {
-        incoming.forEach((rec, idx) => {
-            if (!rec.name?.trim()) return;
-            const match = existingAccounts.find(a => norm(a.name) === norm(rec.name));
-            if (match) conflicts.push({ incomingIndex: idx, incoming: rec, existing: match, matchReason: 'same name', action: 'skip' });
-        });
     } else if (importType === 'opportunities') {
         incoming.forEach((rec, idx) => {
             if (!rec.opportunityName?.trim()) return;
@@ -79,6 +76,29 @@ const detectDuplicates = (incoming, existingContacts, existingAccounts, existing
 
     return conflicts;
 };
+
+// The account import's rows a name refused (state §0.215), at Preview and on the Results: the row in the file,
+// the field, the cell, and why. The box clips and its list scrolls inside it (state §0.213).
+const REFUSED_SHOWN = 200;
+function RefusedList({ rows }) {
+    if (!rows || rows.length === 0) return null;
+    return (
+        <div style={{ textAlign: 'left', border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
+            <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                {rows.slice(0, REFUSED_SHOWN).map((r) => (
+                    <div key={`${r.rowNumber}-${r.field}`} style={{ padding: '8px 12px', borderBottom: `1px solid ${T.border}`, fontSize: '12.5px', color: T.ink }}>
+                        <span style={{ fontWeight: 600 }}>Row {r.rowNumber}</span>
+                        <span style={{ color: T.inkMid }}> · {r.field} “{r.value}”</span>
+                        <div style={{ color: T.warn, marginTop: 2 }}>{r.why}</div>
+                    </div>
+                ))}
+                {rows.length > REFUSED_SHOWN && (
+                    <div style={{ padding: '8px 12px', fontSize: '12.5px', color: T.inkMid }}>…and {rows.length - REFUSED_SHOWN} more</div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Display helper: human-readable label for a record in the conflicts table
@@ -109,6 +129,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     const { size, getResizeHandleProps } = useResizable(800, 580, 520, 380);
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
+    // Each data row's row in the file (Excel's number, blank rows counted): what a dropped or refused row is named by.
+    const [csvLines, setCsvLines] = useState([]);
     const [fieldMapping, setFieldMapping] = useState({});
     const [mappingConfidence, setMappingConfidence] = useState({});
     const [parseError, setParseError] = useState('');
@@ -118,6 +140,14 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     const [refusals, setRefusals] = useState([]);
     // A team list the import could not save after the invitations went out.
     const [importWarning, setImportWarning] = useState(null);
+    // The account import's rows a name refused at Preview, each with its row and why (state §0.215), and how many
+    // overwrites carried a Parent Account an overwrite does not change (Q5: "Ignore it and say so").
+    const [refusedRows, setRefusedRows] = useState([]);
+    const [parentsIgnored, setParentsIgnored] = useState(0);
+    // The plan Check for Duplicates read, kept for the Conflicts step and the import it starts: the accounts it
+    // lands reach the list as they land, and planning again would turn the rows still being sent into conflicts
+    // (the review of 3a).
+    const [checkedMap, setCheckedMap] = useState(null);
     const [importing, setImporting] = useState(false);
     // Escape closes it, as its × does — never mid-import (state §0.186) — while no layer
     // above the draggable windows is open.
@@ -226,9 +256,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 }
             }
             if (current) lines.push(current);
-            return lines.filter(l => l.trim());
+            // Each record with its row in the file — Excel's row number, a blank row counted (state §0.215: a refusal
+            // names the row to fix).
+            return lines.map((l, i) => ({ l, row: i + 1 })).filter(x => x.l.trim());
         };
-        const lines = splitLines(text);
+        const records = splitLines(text);
+        const lines = records.map(x => x.l);
         if (lines.length < 2) { setParseError('CSV must have a header row and at least one data row.'); return; }
 
         const parseLine = (line) => {
@@ -250,10 +283,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         };
 
         const headers = parseLine(lines[0]);
-        const rows = lines.slice(1).map(parseLine).filter(r => r.some(cell => cell));
+        const body = records.slice(1).map(x => ({ cells: parseLine(x.l), row: x.row })).filter(x => x.cells.some(cell => cell));
+        const rows = body.map(x => x.cells);
 
         setCsvHeaders(headers);
         setCsvRows(rows);
+        setCsvLines(body.map(x => x.row));
 
         // Header matching lives in src/utils/csvAutoMap.js: weighted aliases,
         // deny rules and a global one-to-one assignment. It replaced an inline
@@ -284,7 +319,15 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // say so — an accounts CSV run through the CONTACTS importer produced a green
     // tick, "Import Complete!" and 0 imported. The rule is unchanged; the silence
     // is not.
-    const getMapped = () => mapCsvRows(csvRows, appFields, fieldMapping);
+    // An account import's names are each one record or a refusal (src/utils/importLinks.js, state §0.215): its own
+    // name one account (the conflict) or none, its Parent Account one account or one row of the file — the rows a
+    // name refused leave the records, and are listed at Preview.
+    const getMapped = () => {
+        const mapped = mapCsvRows(csvRows, appFields, fieldMapping, csvLines);
+        if (importType !== 'accounts') return mapped;
+        const plan = planAccountImport(mapped.records, mapped.rowNumbers, accounts);
+        return { ...mapped, records: plan.records, conflicts: plan.conflicts, refused: plan.refused, mapped: mapped.records };
+    };
     const getMappedData = () => getMapped().records;
 
     // ---------------------------------------------------------------------------
@@ -293,7 +336,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // ---------------------------------------------------------------------------
 
     const handleCheckDuplicates = () => {
-        const { records: data, dropped } = getMapped();
+        const checked = getMapped();
+        setCheckedMap(checked);
+        const { records: data, dropped, conflicts: planned, refused = [] } = checked;
         // A team member's row is an invitation — an email Clerk sends — so this
         // import always stops at Review, even with nothing to skip: nothing is
         // sent until the Admin has read who gets one and pressed Send (state §0.167).
@@ -306,9 +351,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         const found = detectDuplicates(
             data,
             contacts || [],
-            accounts || [],
             opportunities || [],
-            importType
+            importType,
+            planned
         );
         if (found.length > 0) {
             setConflicts(found);
@@ -317,7 +362,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         } else {
             // No duplicates — go straight to import
             setConflicts([]);
-            runImport(data, [], dropped.length);
+            runImport(data, [], dropped.length, refused);
         }
     };
 
@@ -338,11 +383,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // Passes { newRecords, overwrites } to the ModalLayer callback.
     // ---------------------------------------------------------------------------
 
-    const runImport = async (data, resolvedConflicts, droppedCount = 0) => {
+    const runImport = async (data, resolvedConflicts, droppedCount = 0, refused = []) => {
         setImporting(true);
         setImportProgress(0);
         setRefusals([]);
         setImportWarning(null);
+        setRefusedRows(refused);
+        // An overwrite keeps the account where it stands: its Parent Account cell is not sent (Q5), and said.
+        setParentsIgnored(importType === 'accounts'
+            ? resolvedConflicts.filter(c => c.action === 'overwrite' && (c.incoming.parentAccount || '').trim() !== '').length
+            : 0);
         window.__importProgressCb = (done, total) => setImportProgress(Math.round((done / total) * 100));
 
         // Build a Set of incoming indices that are conflicts
@@ -364,7 +414,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         // Rows the user skipped, and rows the mapper never sent. Neither is a
         // failure; both belong on the receipt, because an import that discarded
         // six rows before sending them is not a clean import.
-        const preflight = receiptFromPreflight({ skipped: skippedCount, dropped: droppedCount });
+        const preflight = receiptFromPreflight({ skipped: skippedCount, dropped: droppedCount, refused: refused.length });
 
         try {
             let result;
@@ -411,20 +461,24 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     // Called from the conflicts step "Import" button
     const handleImportFromConflicts = () => {
-        const { records, dropped } = getMapped();
-        runImport(records, conflicts, dropped.length);
+        const { records, dropped, refused = [] } = checkedMap || getMapped();
+        runImport(records, conflicts, dropped.length, refused);
     };
 
     // Called from the preview step when there are no duplicates detected
     // (fast path — also used by handleCheckDuplicates when 0 conflicts found)
     const previewMap  = (step === 'preview' || step === 'conflicts')
-        ? getMapped()
+        ? ((importing || step === 'conflicts') && checkedMap ? checkedMap : getMapped())
         : { records: [], dropped: [], unmappedRequired: [] };
     const previewData = previewMap.records;
     // Surfaced at PREVIEW, not at Results: this is the last step where the user
     // can still fix the column mapping, and it is the step where "0 valid
     // records" used to render as an unremarkable count above an enabled button.
-    const droppedNotice = describeDropped(previewMap, csvRows.length);
+    // The mapper's own records (an account import's before its plan refused any): a file whose other rows a name
+    // refused is not "every row missing its required fields".
+    const droppedNotice = describeDropped({ ...previewMap, records: previewMap.mapped || previewMap.records }, csvRows.length);
+    const previewRefused = previewMap.refused || [];
+    const refusedNotice = describeRefused(previewRefused, csvRows.length);
 
     // Declared below previewData and conflicts because both are read here at
     // render time — see coding guide 18b0.
@@ -706,6 +760,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 {previewData.length === 0 ? '\u26d4' : '\u26a0\ufe0f'} {droppedNotice}
                             </div>
                         )}
+                        {refusedNotice && (
+                            <div style={{
+                                fontSize: '13px', marginBottom: '8px', padding: '10px 12px',
+                                background: 'rgba(184,115,51,0.10)', border: `1px solid ${T.warn}`, color: T.warn,
+                                borderRadius: '6px', textAlign: 'left',
+                            }}>
+                                {refusedNotice}
+                            </div>
+                        )}
+                        <RefusedList rows={previewRefused} />
                         {importType === 'contacts' && previewData.length > 0 && (
                             <div style={{ fontSize: '13px', color: T.ok, marginBottom: '16px', padding: '8px 12px', background: 'rgba(77,107,61,0.10)', borderRadius: '6px' }}>
                                 💡 Companies from imported contacts will be auto-added to your Accounts list if they don't already exist.
@@ -952,7 +1016,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             look broken. */}
                         {previewData.length > 0 && conflicts.length === previewData.length && bulkMode === 'skip' && (
                             <div style={{ fontSize: '13px', color: T.warn, background: 'rgba(184,115,51,0.10)', border: '1px solid rgba(184,115,51,0.20)', borderRadius: T.r, padding: '10px 14px', marginBottom: '12px' }}>
-                                Every record in this file already exists. With all duplicates set to
+                                {previewRefused.length > 0
+                                    ? `Every row of this file that can be imported already exists (${previewRefused.length} refused — listed at Preview).`
+                                    : 'Every record in this file already exists.'} With all duplicates set to
                                 Skip, nothing will be imported. Choose <strong>Overwrite all</strong> to
                                 refresh the existing {entityLabel} with the values from this file.
                             </div>
@@ -982,7 +1048,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                                 </td>
                                                 <td style={tdStyle}>
                                                     <div style={{ color: T.ink }}>{exLabel.primary}</div>
-                                                    <div style={{ fontSize: '12px', color: T.inkMuted }}>{c.matchReason}</div>
+                                                    <div style={{ fontSize: '12px', color: T.inkMuted }}>{c.note ? `${c.note} · ${c.matchReason}` : c.matchReason}</div>
                                                 </td>
                                                 <td style={tdStyle}>
                                                     <select
@@ -1064,6 +1130,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         { n: r.updated,   label: 'overwritten', color: T.info,  show: r.updated > 0 },
                         { n: r.skipped,   label: 'skipped',   color: T.inkMid,  show: r.skipped > 0 },
                         { n: r.dropped,   label: 'not sent',  color: T.warn,    show: r.dropped > 0 },
+                        { n: r.refused,   label: 'refused',   color: T.warn,    show: r.refused > 0 },
                         { n: r.failed,    label: 'failed',    color: T.danger,  show: r.failed > 0 },
                     ].filter(t => t.show);
 
@@ -1093,6 +1160,17 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 </div>
                             ))}
                         </div>
+
+                        {refusedRows.length > 0 && (
+                            <div style={{ maxWidth: 560, margin: '0 auto' }}>
+                                <RefusedList rows={refusedRows} />
+                            </div>
+                        )}
+                        {parentsIgnored > 0 && (
+                            <p style={{ color: T.inkMid, fontSize: '12.5px', marginBottom: '16px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+                                Parent Account is not changed by an overwrite — {parentsIgnored} row{parentsIgnored === 1 ? '' : 's'} named one. Move each account on its own page.
+                            </p>
+                        )}
 
                         {isUsers && importWarning && (
                             <p style={{ color: T.warn, fontSize: '12.5px', marginBottom: '16px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>

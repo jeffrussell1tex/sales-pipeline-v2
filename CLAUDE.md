@@ -153,6 +153,14 @@ One commit per verified batch; doc patch in the same commit.
   whose copied line names no product of this org is refused whole.
   A technician's login is a member of THIS org, stored as their Clerk id
   (`techLogin.js`) — never the app id the picker sends.
+- An account CSV import's names are each one record or the row is refused,
+  at Preview, by the file's row (`src/utils/importLinks.js`
+  planAccountImport): its own name one live account (the conflict) or none,
+  its Parent Account one account of the caller's list or one new row of the
+  file; rows sent by depth (`importParents.js` sendLevels); an overwrite
+  sends neither the name nor the Parent Account. The accounts bulk POST
+  places every new row by the parent rule (`accountParent.js` placeBulkRows);
+  the bulk PUT moves and renames nothing (guide §18b105).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

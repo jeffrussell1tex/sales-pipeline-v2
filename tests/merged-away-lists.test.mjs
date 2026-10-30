@@ -544,8 +544,8 @@ const RESOLVERS = {
         'tests/account-parent.test.mjs', 'the reason for a name twins share is the same in either list order — self, then one under it, then a site, then merged away, then too deep — at the Save and on the list (F8)'],
     typedParentRefusal: ['src/utils/accountParent.js', 'a Parent typed in full and not picked: refused by its reason, merged away among them',
         'tests/account-parent.test.mjs', 'the reason for a name twins share is the same in either list order — self, then one under it, then a site, then merged away, then too deep — at the Save and on the list (F8)'],
-    importPasses: ['src/utils/importParents.js', "the account import's parents by name: a merged-away account is never a parent — its name names the account it was merged into",
-        'tests/import-parents.test.mjs', 'importPasses: the top-level rows with no parent, the sub-accounts each with the parent its name finds — the Parent Account column dropped'],
+    planAccountImport: ['src/utils/importLinks.js', "the account import's names at Preview (state §0.215): a row's own name and its Parent Account each one live account or refused — a merged-away account is never matched, its name names the account it was merged into",
+        'tests/import-links.test.mjs', 'a Parent Account that is a site, or a name only a merged-away account has, or no account at all, refuses the row — each said; never imported with no parent (REGRESSION: silent)'],
     contactIndex: ['src/utils/dealEngagement.js', "the deals' people indexed once: a merged duplicate folds into the contact it was merged into — its answer's `list` is every contact it was given, so it CARRIES the list: its answer is bound to a name and scanned as the list (Home's `directory`, read only as dealCommittee's argument)",
         'tests/deal-engagement.test.mjs', "a merged duplicate reads as the contact it was merged into — its touches fold in, its id stands with the survivor's", 'carries'],
     dealCommittee: ['src/utils/dealEngagement.js', "a deal's committee: a merged duplicate reads as the contact it was merged into",
@@ -609,7 +609,6 @@ const WHOLE_READS = {
     ],
     'src/components/modals/CsvImportModal.jsx': [
         ['contacts', 'contacts || [],', 1, `the import's duplicate check (detectDuplicates) by name or email — ${BY_NAME}`, STAY],
-        ['accounts', 'accounts || [],', 1, `the import's duplicate check (detectDuplicates) by name — ${BY_NAME}`, STAY],
     ],
     'src/components/layout/ModalLayer.jsx': [
         ['accounts', 'const existingNames = accounts.map(a => a.name.toLowerCase());', 1, `the contact import's new companies: a company an account already has is not made again — ${BY_NAME}`, STAY],

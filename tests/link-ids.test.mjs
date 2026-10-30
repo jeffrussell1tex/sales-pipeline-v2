@@ -290,7 +290,7 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
     const BULK = (v) => `if (${v}.error) return { statusCode: ${v}.status, headers, body: JSON.stringify({ error: ${v}.error, field: ${v}.field, ids: ${v}.ids }) };`;
     for (const [name, v, single, bulkN] of [
         ['contacts', 'linked', 2, 2], ['activities', 'linked', 2, 0], ['tasks', 'linked', 2, 0], ['opportunities', 'people', 2, 2],
-        ['accounts', 'parents', 0, 2], ['dispatch-customers', 'linked', 2, 0], ['dispatch-jobs', 'linked', 2, 0],
+        ['accounts', 'parents', 0, 1], ['dispatch-customers', 'linked', 2, 0], ['dispatch-jobs', 'linked', 2, 0],
         // a sales record's (§0.204): a claim's create and save, a quote's, a rule's — none takes a batch
         ['spiff-claims', 'linked', 2, 0], ['quotes', 'lined', 2, 0], ['automations', 'assigned', 2, 0],
         // a member's (§0.205): the create's and the PUT's team, the member's own pins; since §0.212 the create's and the
@@ -333,13 +333,17 @@ test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anyt
     assert.ok(o.includes('data.splice(0, data.length, ...people.rows);'));
     const ac = fn('accounts');
     assert.ok(ac.includes('const taken = new Set((await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), inArray(accounts.id, batchIds)))).map(r => r.id));'));
-    assert.ok(ac.includes("const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { also: { kind: 'account', ids: new Set(batchIds.filter(id => !taken.has(id))) } });"), "a create's parent may be one of the batch's own new rows");
+    assert.ok(ac.includes('const newIds = new Set(batchIds.filter(id => !taken.has(id)));'));
+    assert.ok(ac.includes("const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { also: { kind: 'account', ids: newIds } });"), "a create's parent may be one of the batch's own new rows");
     assert.ok(inOrder(ac, 'const result = await bulkInsert({ table: accounts, rows: owned.rows, orgId });', 'if (result.failed.length) {',
         'const swept = await clearStrayLinks(orgId, new Map([[accounts, result.insertedIds]]));', 'result.linksCleared = swept.cleared;',
         'if (swept.failed.length) result.linksNotChecked = swept.failed;'),
         'a parent row that did not land leaves no link to it, and the answer says so');
-    assert.ok(ac.includes('const stored = await db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId })'), 'the parent the overwrite holds is read');
-    assert.ok(ac.includes('const parents = await checkBulkLinks(PARENT_LINK, data, orgId, { held: new Map(stored.map(r => [r.id, r])) });'));
+    // An overwrite names no parent at all since §0.215 (Q9): one that does is refused before anything is read.
+    assert.ok(inOrder(ac, "const moving = data.filter(d => 'parentAccountId' in d).map(d => d.id);",
+        "if (moving.length) return { statusCode: 400, headers, body: JSON.stringify({ error: BULK_MOVE, field: 'parentAccountId', ids: moving }) };",
+        'const stored = await db.select({ id: accounts.id, name: accounts.name, ownerId: accounts.ownerId })'), 'an overwrite naming a parent is refused, naming its rows, before the stored rows are read');
+    assert.ok(!ac.includes('{ held: new Map(stored.map(r => [r.id, r])) }'), 'no parent left for the overwrite to ask about');
 });
 
 test('THE GUARD: each single create answers 409 for an id another org holds — it crashed on the key (a 500 that said the id was taken elsewhere)', () => {
