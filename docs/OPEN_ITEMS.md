@@ -132,7 +132,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
      bulk overwrite moving and renaming nothing. **3b built (§0.216; guide
-     §18b106), its browser check PASSED as Jeff and as Karen, committed `ef075eb` (30 Oct, on Jeff's word, "Commit it"), NOT pushed** (Jeff, 30 Oct:
+     §18b106), its browser check PASSED as Jeff and as Karen, committed `ef075eb` (30 Oct, on Jeff's word, "Commit it"); pushed to dev 30 Oct on Jeff's word ("Push to dev"): `306be1f..94f266f` at 15:20:53 UTC, accelerep.netlify.app serving `index-D2hmxC5q.js` (the local build's hash) from 15:21:45 UTC, the Tests run GREEN (gates, unit, integration; completed 15:22:49 UTC); NOT shipped** (Jeff, 30 Oct:
      "begin"; Q13 "Refuse both", Q14 "Keep what's stored"): the contact
      and deal imports' names each one record or the row refused at
      Preview; a contact linked by id, a new company made once; a deal on
