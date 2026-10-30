@@ -128,7 +128,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      29 Oct, each the Recommended, and the census). Four steps: 3a the
      account import, screen and server together; 3b the contact and deal
      imports; 3c the merge's links; 3d the merge's placement. **3a built
-     (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, NOT pushed**: the
+     (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, pushed to dev 30 Oct (`29e2f44..722ed8d`), NOT shipped**: the
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
      bulk overwrite moving and renaming nothing. 3b, 3c and 3d to come.
