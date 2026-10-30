@@ -128,7 +128,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      29 Oct, each the Recommended, and the census). Four steps: 3a the
      account import, screen and server together; 3b the contact and deal
      imports; 3c the merge's links; 3d the merge's placement. **3a built
-     (§0.215; guide §18b105), its browser check PASSED, NOT committed**: the
+     (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, NOT pushed**: the
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
      bulk overwrite moving and renaming nothing. 3b, 3c and 3d to come.
@@ -3536,7 +3536,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   over 7e68f26; re-read 29 Oct over `aeafb2d` — docs/design/links-batch-3;
   its first bullet and the second bullet's account half — the account
   import's parent and conflicts, and the accounts bulk paths' parent rule —
-  are §0.215's (3a, NOT committed); the second bullet's deal conflict and
+  are §0.215's (3a, committed `321643e`); the second bullet's deal conflict and
   the rest are 3b-3d's — docs/design/links-batch-3,
   which holds what still holds, what changed and the design Jeff answered):
   - The account import gives a sub-account the first account whose name
