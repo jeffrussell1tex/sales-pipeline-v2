@@ -138,7 +138,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Preview; a contact linked by id, a new company made once; a deal on
      its account by id; the deals bulk paths linked by the single save's
      rule; a blank Sales Rep the importer's by id; an Overwrite's blank
-     cell keeps what is stored. 3c and 3d to come.
+     cell keeps what is stored. **3c built (§0.218; guide §18b108), its
+     browser check PASSED as Jeff, NOT committed** (Jeff, 30 Oct: Q15 "Still
+     on survivor", Q16 "Skip if shared", Q17 "Show it to pick", Q18 all
+     three): contacts moved by id and back with their own company; renames
+     within the pair; a claim with its deal; a contact's Company with its
+     account; two merges at once refused; each record counted once. 3d to
+     come.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -1684,6 +1690,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   holds the stamped name (`heldAsStamped`). The same day:
   "Skip ship and lets keep working" (prod waits) and "Leave test records in
   QA - we may need them again" (the TEST3a and TEST3b rows stay).
+- **Twin accounts at the top level read alike in the contact merge's
+  Company options** (§0.218's browser check, 30 Oct): each option names its
+  account's level or parent ("TEST3c Shared · top level" twice), which
+  tells twins apart under different parents but not two top-level twins.
+  Recommended: add what else tells them apart (owner, city, the account's
+  own id tail). Low.
+- **A contact merge moves tasks and activities by value** (§0.218's map):
+  its batch updates by predicate, not by the ids it logged, and reads each
+  deal's contacts unguarded, so a row linked mid-merge moves unlogged and
+  its Undo leaves it; the account merge's other id moves likewise.
+  Recommended: write by the snapshotted ids, as 3c's contact move does.
 - **A new company the contact import makes has no owner** (found building
   §0.217, 30 Oct). The import's new accounts go with no owner, as the
   account import's rows do (accounts.mjs's import rule); §0.217 made only
@@ -3445,7 +3462,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   at :591 names the restore.
 - **What §0.207's merge Undo leaves** (its design, reviews and re-checks,
   17–18 Oct; each read in code, or run where said):
-  - **Two concurrent merges of one record merged away both commit** (the
+  - **Two concurrent merges of one record merged away both commit — DONE (§0.218, NOT committed: the batch opens with a claim on both records, each live and as read; Q18)** (the
     server map; reasoned from the code, not run): each passes the merge's
     check that the record is live, the second's archive write overwrites
     `mergedIntoId`, and two logs read 'merged' for one record. Since
@@ -3512,7 +3529,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     need the guard below. Recommended: the generation counter the five list
     loads now have (guide §18b100 rule 6).
   - **An account merge's audit count counts a lifted deal two or three
-    times** (the server map): the summary adds every rewrite's ids, and a
+    times — DONE (§0.218, NOT committed: each record once, `recordsTouched`; Q18)** (the server map): the summary adds every rewrite's ids, and a
     deal moved by id or by name and then lifted (D22) is in both, so "N
     references repointed" reads more than were moved.
 - **Deals by name alone that a merge's Undo leaves on a site by their
@@ -3647,7 +3664,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
   As recorded.
-- **Past merges offers an Undo again until its list is read again**
+- **Past merges offers an Undo again until its list is read again — DONE (§0.218, NOT committed: the mark released only after a read that landed; Q18)**
   (§0.210's browser check, 23 Oct; read in code): after an Undo's
   answer, the row says so ("Merge undone — “Tess Undoer” is its own
   record again.") beside an enabled Undo until the list's reload

@@ -207,7 +207,15 @@ One commit per verified batch; doc patch in the same commit.
   written) when the merge was undone, either record was deleted, the
   survivor was merged into another record since, or the record merged
   away is no longer merged into it; its claim and un-archive each abort
-  the batch unless they wrote their row (guide §18b100).
+  the batch unless they wrote their row (guide §18b100). Since §0.218 a
+  merge writes by link: the record merged away's contacts move by id and
+  its Undo puts each back with its own company while on the survivor;
+  renames stay within the pair, a record with no id renamed only where no
+  third live account has the name; a SPIFF claim follows its deal; a
+  contact merge's Company and account id travel together, the link
+  checked; a merge's batch opens with a claim on both records, live and
+  as read, so two merges at once never both land (`mergeLinks.js`,
+  guide §18b108).
 
 ## Frontend conventions
 

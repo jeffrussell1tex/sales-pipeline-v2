@@ -41,6 +41,54 @@ four readers, each checked by a critic, over `306be1f`):
   Overwrite writes only the cells the file fills, on all three imports, as Q4
   already keeps a blank Company (a deal's blank Account refuses the row — Q3).
 
+## Jeff's answers for step 3c (30 Oct 2026, in chat)
+
+A read-only map of the account and contact merges (a workflow: four readers
+— the account merge, the Undo, the contact merge, the windows — each checked
+by a critic, over `8e02c19`; 18 corrections) found these gaps. Jeff's answers,
+each the Recommended:
+
+- **Q15, the Undo of a contact the account merge moved by id:** "Still on
+  survivor". Every moved contact still linked to the survivor goes back with
+  its own logged company text, even if the survivor was renamed since (as a
+  deal's id move is put back today); one re-linked elsewhere since is kept
+  and counted.
+- **Q16, a record with no account id whose text names the merged-away account
+  when a third live account has that name:** "Skip if shared". Contacts,
+  deals and SPIFF claims are renamed by name only when no live account
+  outside the pair has the name (the D22 lift's test); otherwise left and
+  counted.
+- **Q17, a contact merge where the two contacts' Company reads alike but
+  their links differ, or only one is linked:** "Show it to pick". The window
+  compares by link: two accounts are a conflict (each account's level or
+  parent shown); a link only the record merged away has fills; the Company
+  text and the account id travel together.
+- **Q18, the small merge fixes the design offered to 3c:** all three — the
+  audit's double count (each record counted once), two merges at once (a
+  claim, as the Undo's, so the second is refused), and Past merges' busy mark.
+
+**Taken as recommended (the map's answers, following the design and the house
+rules):** an account merge moves only the contacts on the merged-away id
+(not those of records merged into it before — DESIGN "What does not change"),
+by their snapshotted ids, each logged with its own old `accountId` and
+`company`; the contacts name rename is scoped to `accountId` null or the
+survivor, so a moved contact is logged and put back once; a deal moved by id
+takes the survivor's name in the same statement (`dealsOfMerge` unchanged); a
+SPIFF claim is renamed when its deal is a deal of the merge (`dealsOfMerge`,
+read in this org) or it has no live deal, and only when its text is one of
+the merge's names — a claim on a deal the D22 lift moves takes that deal's new
+account name; the contact merge's pair is derived on the server from the
+record whose Company won, checked by `checkLinks` (a merged-away account
+followed, its current name written), and a dead account refuses the merge
+(409, nothing written, naming the Company); the contact merge's Undo puts the
+pair back only while both still hold what the merge wrote; the account window
+counts contacts as the rail reads them and names Dispatch, SPIFF claims and
+the D22 lift in words; both windows' words corrected, the Undo sentence one
+pinned tail; the app re-reads SPIFF claims after a merge and its Undo. Filed,
+not in 3c: the contact merge's tasks and activities moved by value (a row
+linked mid-merge is moved unlogged) and the per-deal `contactIds` write's
+unguarded read; the same race on the account merge's other id moves.
+
 ## The census
 
 Read only, run 29 Oct 2026 at 21:10:23 UTC on the shared Neon `main` branch

@@ -4,6 +4,7 @@ import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { unarchived } from '../../utils/pickLink.js';
+import { companyCase, companyResolved, companyOption } from '../../utils/mergeWindow.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -46,7 +47,7 @@ function StatRow({ counts }) {
 export default function ContactMergeReviewModal() {
     const {
         contactMergeModal, setContactMergeModal,
-        contacts, opportunities, activities, tasks,
+        contacts, accounts, opportunities, activities, tasks,
         handleContactMerge, mergeSaving, mergeError, setMergeError,
         escapeBlocked,
     } = useApp();
@@ -114,6 +115,16 @@ export default function ContactMergeReviewModal() {
     const conflicts = []; // both non-empty + differ -> user picks
     const fills = [];     // survivor empty + archived has value -> auto-applied
     for (const [label, key] of FIELDS) {
+        // The Company by its link (state §0.218; Jeff, 30 Oct: Q17 "Show it to pick"): two accounts are a conflict, each
+        // option naming its account's level or parent so twins of one name can be told apart; a link only the record
+        // merged away has fills; the same link stands whatever its text (mergeWindow.js companyCase).
+        if (key === 'company') {
+            const { kind } = companyCase(survivor, archived);
+            const s = companyOption(survivor, accounts), a = companyOption(archived, accounts);
+            if (kind === 'conflict') conflicts.push({ label, key, sv: s.text, av: a.text, svNote: s.note, avNote: a.note });
+            else if (kind === 'fill') fills.push({ label, key, av: a.text });
+            continue;
+        }
         const sv = survivor[key], av = archived[key];
         if (has(sv) && has(av) && norm(sv) !== norm(av)) conflicts.push({ label, key, sv, av });
         else if (!has(sv) && has(av)) fills.push({ label, key, av });
@@ -122,10 +133,12 @@ export default function ContactMergeReviewModal() {
     const buildResolved = () => {
         const resolved = {};
         for (const f of conflicts) {
-            if ((choices[f.key] || 'survivor') === 'archived') resolved[f.key] = f.av;
+            if (f.key !== 'company' && (choices[f.key] || 'survivor') === 'archived') resolved[f.key] = f.av;
         }
-        for (const f of fills) resolved[f.key] = f.av; // fill gaps from the archived record
-        return resolved;
+        for (const f of fills) if (f.key !== 'company') resolved[f.key] = f.av; // fill gaps from the archived record
+        // The Company and its account id travel together, the picked record's pair (mergeWindow.js companyResolved; the
+        // server's contract is mergeLinks.js contactPairOf — a pair neither contact holds is refused).
+        return { ...resolved, ...companyResolved(survivor, archived, choices.company || 'survivor') };
     };
 
     const onMerge = async () => {
@@ -177,7 +190,7 @@ export default function ContactMergeReviewModal() {
 
                 <div style={{ padding: '1.1rem 1.25rem 0.5rem' }}>
                     <div style={{ fontSize: 12, color: C.muted, marginBottom: '0.75rem' }}>
-                        Choose the record that survives. The other is archived and its related items are re-linked to the survivor. You can undo the merge afterward under Past merges on this page.
+                        Choose the record that survives. The other is archived, and its opportunities, activities, tasks and org-chart places move to the survivor. You can undo the merge afterward under Past merges on this page.
                     </div>
 
                     {mergeError && (
@@ -223,11 +236,11 @@ export default function ContactMergeReviewModal() {
                                             <span style={{ fontSize: 12, color: C.muted }}>{f.label}</span>
                                             <label style={radioLabel(choice === 'survivor')} onClick={() => setChoices(p => ({ ...p, [f.key]: 'survivor' }))}>
                                                 <input type="radio" readOnly checked={choice === 'survivor'} style={{ accentColor: C.ink }} />
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(f.sv)}</span>
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(f.sv)}{f.svNote ? <span style={{ color: C.faint }}> · {f.svNote}</span> : null}</span>
                                             </label>
                                             <label style={radioLabel(choice === 'archived')} onClick={() => setChoices(p => ({ ...p, [f.key]: 'archived' }))}>
                                                 <input type="radio" readOnly checked={choice === 'archived'} style={{ accentColor: C.ink }} />
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(f.av)}</span>
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(f.av)}{f.avNote ? <span style={{ color: C.faint }}> · {f.avNote}</span> : null}</span>
                                             </label>
                                         </div>
                                     );
@@ -243,9 +256,9 @@ export default function ContactMergeReviewModal() {
                     )}
                 </div>
 
-                {/* Re-link summary */}
+                {/* What the merge moves (state §0.218: the window's words say what merge.mjs does) */}
                 <div style={{ margin: '0.9rem 1.25rem 0', padding: '0.6rem 0.8rem', background: C.warnBg, border: `1px solid ${C.warnBorder}`, borderRadius: C.r, fontSize: 12, color: '#7a5a2c', lineHeight: 1.45 }}>
-                    Merging re-links <b style={{ fontWeight: 700 }}>{aCounts.opps} opportunities</b>, <b style={{ fontWeight: 700 }}>{aCounts.activities} activities</b>, <b style={{ fontWeight: 700 }}>{aCounts.tasks} tasks</b>{aCounts.orgChart ? <>, and <b style={{ fontWeight: 700 }}>{aCounts.orgChart} org-chart link{aCounts.orgChart > 1 ? 's' : ''}</b></> : null} from “{displayName(archived)}” to “{displayName(survivor)}”, then archives “{displayName(archived)}”.
+                    Merging puts “{displayName(survivor)}” in place of “{displayName(archived)}” on <b style={{ fontWeight: 700 }}>{aCounts.opps} opportunities</b>, <b style={{ fontWeight: 700 }}>{aCounts.activities} activities</b>, <b style={{ fontWeight: 700 }}>{aCounts.tasks} tasks</b>{aCounts.orgChart ? <>, and <b style={{ fontWeight: 700 }}>{aCounts.orgChart} org-chart link{aCounts.orgChart > 1 ? 's' : ''}</b></> : null}, then archives “{displayName(archived)}”. A Company moves with its account: the survivor keeps its own unless you pick the other's above, or only the other has an account.
                 </div>
 
                 {/* Footer */}

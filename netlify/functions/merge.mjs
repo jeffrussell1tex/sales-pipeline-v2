@@ -8,6 +8,8 @@ import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
 import { UNDO_CHANGED, undoRefusal, upIdOf, orgChartUnion, survivorRestore, undoPlaces, dealsByIdOf, survivorRowsOf, undoKept, undoDetail } from '../../src/utils/mergeUndo.js';
 import { rankOf } from '../../src/utils/accountParent.js';
+import { idlessNamesOf, claimRenames, contactPairOf, companyGone, recordsTouched } from '../../src/utils/mergeLinks.js';
+import { MERGE_HOPS } from '../../src/utils/linkIds.js';
 
 // ── Notes on atomicity ────────────────────────────────────────────────────────
 // This project runs drizzle-orm/neon-http (@netlify/neon). That driver has NO
@@ -58,6 +60,46 @@ const TABLE_BY_NAME = {
     tasks, activities, opportunities, spiffClaims, dispatchCustomers,
     dispatchJobs, accounts, contacts,
 };
+
+// A merge's batch (Jeff, 30 Oct: Q18 — two merges at once). Its claim — the record merged away archived and the survivor
+// held, each only while live — aborts the batch (22012) unless it wrote its row; a stricter isolation level's conflict
+// (40001) or a deadlock (40P01) wrote nothing too. The two records are read again and the refusal said (409): null when
+// the batch landed. Any other failure is the handler's 500.
+export const MERGE_CHANGED = 'One of these records changed while the merge was being made. Please re-open and review again.';
+async function mergeBatch(ops, { table, survivorId, archivedId, orgId, headers }) {
+    try { await db.batch(ops); return null; }
+    catch (e) {
+        if (!['22012', '40001', '40P01'].includes(String(e?.cause?.code || e?.code || ''))) throw e;
+        const rows = await db.select({ id: table.id, mergeArchived: table.mergeArchived }).from(table).where(and(eq(table.orgId, orgId), inArray(table.id, [survivorId, archivedId])));
+        const now = (id) => rows.find((r) => r.id === id);
+        const error = now(archivedId)?.mergeArchived === true ? 'That record has already been merged.'
+            : now(survivorId)?.mergeArchived === true ? 'The survivor was archived by a prior merge — refresh and try again.'
+            : MERGE_CHANGED;
+        return { statusCode: 409, headers, body: JSON.stringify({ error }) };
+    }
+}
+
+// A record as read with its last edit as text — the stamp the merge's claim asserts in the batch (the review of §0.218:
+// two merges sharing a survivor, or a chain, both committed, the second from a stale read — its survivor fields written
+// back over the first's rename). Never a Date: the driver reads it in the function's own time zone. unstamped: the row as
+// the log keeps it.
+const stamped = (t) => ({ ...getTableColumns(t), stamp: sql`${t.updatedAt}::text` });
+const unstamped = (row) => (row ? (({ stamp: _stamp, ...rest }) => rest)(row) : row);
+const asStamped = (t, row) => sql`${t.updatedAt}::text = ${row.stamp}`;
+
+// An account as it stands now in this org, a merged-away one followed to the account it was merged into (MERGE_HOPS
+// hops, as a link check follows one — linkIds.js): null when none is live at the end — deleted, or not this org's.
+async function liveAccountOf(id, orgId) {
+    let at = id;
+    for (let hop = 0; at && hop <= MERGE_HOPS; hop += 1) {
+        const [row] = await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived, mergedIntoId: accounts.mergedIntoId })
+            .from(accounts).where(and(eq(accounts.id, at), eq(accounts.orgId, orgId)));
+        if (!row) return null;
+        if (row.mergeArchived !== true) return row;
+        at = row.mergedIntoId;
+    }
+    return null;
+}
 
 export const handler = async (event) => {
     const headers = {
@@ -116,8 +158,9 @@ export const handler = async (event) => {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'Cannot merge a record into itself.' }) };
         }
 
-        const [surv] = await db.select().from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId)));
-        const [arch] = await db.select().from(accounts).where(and(eq(accounts.id, archivedId), eq(accounts.orgId, orgId)));
+        const [survRead] = await db.select(stamped(accounts)).from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId)));
+        const [archRead] = await db.select(stamped(accounts)).from(accounts).where(and(eq(accounts.id, archivedId), eq(accounts.orgId, orgId)));
+        const surv = unstamped(survRead), arch = unstamped(archRead);
         if (!surv) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Survivor account not found.' }) };
         if (!arch) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Account to archive not found.' }) };
         if (arch.mergeArchived) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That record has already been merged.' }) };
@@ -174,17 +217,31 @@ export const handler = async (event) => {
         const childIds = kids.map((k) => k.id);
         if (childIds.length) rewrites.push({ table: 'accounts', column: 'parentAccountId', kind: 'id', ids: childIds, oldValue: archivedId, newValue: survivorId, tiers: Object.fromEntries(kids.map((k) => [k.id, k.accountTier ?? null])) });
 
+        // Contacts on the record merged away, moved to the survivor by id with its name — the ids read here, each with its
+        // own company as it stood (state §0.218; batch 3c, DESIGN "Account merge, links"): an Undo puts each back, with
+        // its own text, while it still stands on the survivor (Jeff, 30 Oct: Q15 "Still on survivor"). They stayed on
+        // the record merged away by id, renamed by name alone. Only those on its own id: a contact left on a record
+        // merged into it before stays (DESIGN "What does not change").
+        const moving = await db.select({ id: contacts.id, company: contacts.company }).from(contacts).where(and(eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId)));
+        if (moving.length) rewrites.push({ table: 'contacts', column: 'accountId', kind: 'idPair', ids: moving.map((c) => c.id), oldValue: archivedId, newValue: survivorId, rows: moving.map((c) => ({ id: c.id, old: { company: c.company ?? null } })) });
+
         // name-based references: rewrite each old name value separately, so an undo puts each back by its own value.
-        // A deal carries the account's id since §0.198, so its name is rewritten only where it
-        // is one of the two accounts' — the archived one's (which this batch moves to the
-        // survivor first) or the survivor's — or names no account by id: merging one of two
-        // same-named accounts (UKG's "Shell - Port Allen" twins) no longer renames the other
-        // twin's deals, which would keep that twin's id under the survivor's name.
-        const dealsOfMerge = () => or(isNull(opportunities.accountId), inArray(opportunities.accountId, [archivedId, survivorId]));
+        // A deal carries the account's id since §0.198, and a contact since this batch, so its name is rewritten only
+        // where it is one of the two accounts' by id — or names no account by id under a name no live account outside the
+        // pair has (idlessNamesOf — Jeff, 30 Oct: Q16 "Skip if shared"; one under a name a third account shares could be
+        // that account's): merging one of two same-named accounts (UKG's "Shell - Port Allen" twins) never renames the
+        // other twin's deals or contacts, which would keep that twin's id under the survivor's name. A contact on the
+        // record merged away is moved by id above, with its name: never renamed here too.
+        const named = await db.select({ id: accounts.id, name: accounts.name }).from(accounts).where(and(inArray(accounts.name, nameOldValues), eq(accounts.orgId, orgId), or(isNull(accounts.mergeArchived), eq(accounts.mergeArchived, false))));
+        const idlessNames = idlessNamesOf(nameOldValues, named, [archivedId, survivorId]);
+        const ofMergeBy = (table, col, pair) => () => (idlessNames.length
+            ? or(inArray(table.accountId, pair), and(isNull(table.accountId), inArray(col, idlessNames)))
+            : inArray(table.accountId, pair));
+        const dealsOfMerge = ofMergeBy(opportunities, opportunities.account, [archivedId, survivorId]);
+        const contactsOfMerge = ofMergeBy(contacts, contacts.company, [survivorId]);
         const nameTargets = [
             { name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account, scope: dealsOfMerge },
-            { name: 'spiffClaims', table: spiffClaims, column: 'account', col: spiffClaims.account },
-            { name: 'contacts', table: contacts, column: 'company', col: contacts.company },
+            { name: 'contacts', table: contacts, column: 'company', col: contacts.company, scope: contactsOfMerge },
         ];
         for (const t of nameTargets) {
             for (const oldVal of nameOldValues) {
@@ -224,20 +281,47 @@ export const handler = async (event) => {
             if (lifted.length) rewrites.push({ table: 'opportunities', column: 'accountId', kind: 'lift', ids: lifted.map((d) => d.id), rows: lifted.map((d) => ({ id: d.id, old: { accountId: d.accountId ?? null, account: d.account ?? null, site: d.site ?? null } })) });
         }
 
+        // SPIFF claims, each to the name its deal will carry — a claim on a deal of the merge (dealsOfMerge's rule, its deal
+        // read in this org), the survivor's, or the account above the site for a deal the lift moves; one with no live
+        // deal by its own name, where the merge renames a record with no id by it (Jeff, 29 Oct: Q12 "Fold it in"; they
+        // were renamed org-wide by name, a twin's claims too). Read after the lift, which names the deals it moves.
+        const claims = await db.select({ id: spiffClaims.id, account: spiffClaims.account, opportunityId: spiffClaims.opportunityId }).from(spiffClaims).where(and(inArray(spiffClaims.account, nameOldValues), eq(spiffClaims.orgId, orgId)));
+        const claimDealIds = [...new Set(claims.map((c) => c.opportunityId).filter(Boolean))];
+        const claimDeals = claimDealIds.length ? await db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account }).from(opportunities).where(and(inArray(opportunities.id, claimDealIds), eq(opportunities.orgId, orgId))) : [];
+        const claimWrites = claimRenames(claims, new Map(claimDeals.map((d) => [d.id, d])), { pair: [archivedId, survivorId], idlessNames, lifted: new Set(lifted.map((d) => d.id)), survName, upName: up?.name ?? survName });
+        for (const w of claimWrites) rewrites.push({ table: 'spiffClaims', column: 'account', kind: 'name', ids: w.ids, oldValue: w.oldValue, newValue: w.newValue });
+
         // ── Build the atomic batch ─────────────────────────────────────────────
         const now = new Date();
-        const ops = [];
+        // The claim (Jeff, 30 Oct: Q18 — two merges at once): the record merged away archived — only while it is live and
+        // as read — and the survivor, only while it is live and as read, each aborting the whole batch unless it wrote its row, and holding that
+        // row's lock from then on, as an Undo's claim does. Two merges of one record sent together: the second waits on
+        // the first, then writes nothing (409). They both committed, the second's archive overwriting the first's
+        // survivor (OPEN_ITEMS §4.7).
+        const ops = [
+            writesItsRow(db.update(accounts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now })
+                .where(and(eq(accounts.id, archivedId), eq(accounts.orgId, orgId), or(isNull(accounts.mergeArchived), eq(accounts.mergeArchived, false)), asStamped(accounts, archRead)))
+                .returning({ id: accounts.id })),
+            writesItsRow(db.update(accounts).set({ updatedAt: now })
+                .where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId), or(isNull(accounts.mergeArchived), eq(accounts.mergeArchived, false)), asStamped(accounts, survRead)))
+                .returning({ id: accounts.id })),
+        ];
 
         ops.push(db.update(tasks).set({ accountId: survivorId, updatedAt: now }).where(and(eq(tasks.accountId, archivedId), eq(tasks.orgId, orgId))));
         ops.push(db.update(activities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(activities.accountId, archivedId), eq(activities.orgId, orgId))));
         ops.push(db.update(dispatchCustomers).set({ accountId: survivorId, updatedAt: now }).where(and(eq(dispatchCustomers.accountId, archivedId), eq(dispatchCustomers.orgId, orgId))));
         ops.push(db.update(dispatchJobs).set({ accountId: survivorId, updatedAt: now }).where(and(eq(dispatchJobs.accountId, archivedId), eq(dispatchJobs.orgId, orgId))));
-        ops.push(db.update(opportunities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));
+        // A deal moved by its id takes the survivor's name with it, in the same statement — a deal's account id and name
+        // move together (state §0.218; DESIGN "the deal pairing"): one whose text was not one of the two names kept it.
+        ops.push(db.update(opportunities).set({ accountId: survivorId, account: survName, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));
         ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));
+        // Contacts on the record merged away, by the ids read, each still on it: the survivor's id and name together.
+        if (moving.length) ops.push(db.update(contacts).set({ accountId: survivorId, company: survName, updatedAt: now }).where(and(inArray(contacts.id, moving.map((c) => c.id)), eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId))));
 
         ops.push(db.update(opportunities).set({ account: survName, updatedAt: now }).where(and(inArray(opportunities.account, nameOldValues), eq(opportunities.orgId, orgId), dealsOfMerge())));
-        ops.push(db.update(spiffClaims).set({ account: survName, updatedAt: now }).where(and(inArray(spiffClaims.account, nameOldValues), eq(spiffClaims.orgId, orgId))));
-        ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId))));
+        // Each SPIFF claim of the merge by the ids read, each still under the name read (claimRenames).
+        for (const w of claimWrites) ops.push(db.update(spiffClaims).set({ account: w.newValue, updatedAt: now }).where(and(inArray(spiffClaims.id, w.ids), eq(spiffClaims.account, w.oldValue), eq(spiffClaims.orgId, orgId))));
+        ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId), contactsOfMerge())));
         // D22: the merged-away account's deals, on a site now, moved up — after the id and name
         // rewrites above, so this is what they hold.
         if (lifted.length) ops.push(db.update(opportunities).set({ accountId: up.id, account: up.name, site: survName, updatedAt: now }).where(and(inArray(opportunities.id, lifted.map((d) => d.id)), eq(opportunities.orgId, orgId))));
@@ -256,9 +340,8 @@ export const handler = async (event) => {
         if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';
         ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
 
-        // Soft-archive the loser (kept for its Undo; no screen, report or public-API answer lists a merged-away row —
-        // state §0.210; guide §18b101).
-        ops.push(db.update(accounts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now }).where(and(eq(accounts.id, archivedId), eq(accounts.orgId, orgId))));
+        // The loser is soft-archived by the batch's first statement, the claim (kept for its Undo; no screen, report or
+        // public-API answer lists a merged-away row — state §0.210; guide §18b101).
 
         // Reversible audit log.
         const logId = 'mrg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -279,10 +362,11 @@ export const handler = async (event) => {
             performedById: userId,
         }));
 
-        await db.batch(ops);
+        const refused = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });
+        if (refused) return refused;
 
         const [updatedSurvivor] = await db.select().from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId)));
-        const summary = rewrites.reduce((acc, r) => { acc[r.table] = (acc[r.table] || 0) + r.ids.length; return acc; }, {});
+        const summary = recordsTouched(rewrites, (r) => r.table);
         // The merge log is the undo record; the audit log is the who-did-what record (§0.143).
         await auditAs(orgId, userId, { action: 'account.merged', entityType: 'account', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
 
@@ -415,6 +499,25 @@ const accountRestores = (log, orgId, now, ops, restores, subs) => {
             }
             continue;
         }
+        // A contact the merge moved from the record merged away by id (state §0.218): back to it, with its own company as
+        // it stood, while it still stands on the survivor — whatever its company now (Jeff, 30 Oct: Q15 "Still on
+        // survivor", as a deal moved by its id comes back); one linked elsewhere since is kept, named here, so counted.
+        // One statement per company it comes back with.
+        if (rw.kind === 'idPair') {
+            const byCompany = new Map();
+            for (const row of (rw.rows || [])) {
+                const k = JSON.stringify(row.old?.company ?? null);
+                if (!byCompany.has(k)) byCompany.set(k, { company: row.old?.company ?? null, ids: [] });
+                byCompany.get(k).ids.push(row.id);
+            }
+            for (const { company, ids } of byCompany.values()) {
+                restores.push({ table: rw.table, ids, at: ops.length });
+                ops.push(db.update(table).set({ [rw.column]: rw.oldValue, company, updatedAt: now })
+                    .where(and(inArray(table.id, ids), eq(table.orgId, orgId), eq(table[rw.column], rw.newValue)))
+                    .returning({ id: table.id }));
+            }
+            continue;
+        }
         // Each row the merge moved, back where it still holds what the merge wrote. Never the survivor's own parent:
         // the merge wrote it again after this rewrite, and its restore is the survivor's (undoOps). A deal moved by its
         // id comes back with its account's name; a deal named by its account's name alone comes back by name only
@@ -424,6 +527,10 @@ const accountRestores = (log, orgId, now, ops, restores, subs) => {
         const dealId = rw.table === 'opportunities' && rw.column === 'accountId';
         const dealName = rw.table === 'opportunities' && rw.column === 'account';
         const contactName = rw.table === 'contacts' && rw.column === 'company';
+        // A SPIFF claim back under its old name only with its deal (the review of §0.218 — the claim takes the name its
+        // deal carries): one with no deal, or a deal gone, by its name; one whose deal stays where it stands now — moved
+        // since, or kept off a site — stays with it, counted kept. The deal restores run before it (the log's order).
+        const claimName = rw.table === 'spiffClaims' && rw.column === 'account';
         // A deal by name alone the merge renamed from the name of the record merged away goes back under that name — on
         // it by its name — so only while that is no site, as by its id (the re-check, 18 Oct; one whose name another
         // account shares too stays as well, counted). Never asked where the merge left the name as it was (the twins; a
@@ -446,7 +553,8 @@ const accountRestores = (log, orgId, now, ops, restores, subs) => {
         ops.push(db.update(table).set({ [rw.column]: rw.oldValue, ...(dealId ? { account: nameNow(log.archivedId, orgId) } : {}), updatedAt: now })
             .where(and(inArray(table.id, writes), eq(table.orgId, orgId), eq(table[rw.column], rw.newValue), ...(dealName ? [isNull(table.accountId)] : []),
                 ...(dealId || toArchivedName ? [notASite(log.archivedId, orgId)] : []),
-                ...(contactName ? [or(isNull(table.accountId), sql`${table.accountId} <> ${log.survivorId}`)] : [])))
+                ...(contactName ? [or(isNull(table.accountId), sql`${table.accountId} <> ${log.survivorId}`)] : []),
+                ...(claimName ? [sql`(${table.opportunityId} is null or not exists (select 1 from ${opportunities} where ${opportunities.id} = ${table.opportunityId} and ${opportunities.orgId} = ${orgId}) or exists (select 1 from ${opportunities} where ${opportunities.id} = ${table.opportunityId} and ${opportunities.orgId} = ${orgId} and ${opportunities.account} = ${rw.oldValue}))`] : [])))
             .returning({ id: table.id }));
     }
 };
@@ -527,7 +635,7 @@ export function undoOps(kind, log, rows, orgId, now) {
             .returning({ id: records.id }));
     }
     // An account survivor's name back: its deals and contacts by id take its name as it now stands, as the accounts
-    // PUT's rename does (accounts.mjs:424-431) — a deal's account id and account name move together (Jeff, 17 Oct: Q3) —
+    // PUT's rename does (accounts.mjs's rename cascade) — a deal's account id and account name move together (Jeff, 17 Oct: Q3) —
     // only while the survivor stands (standsNow). One the merge never left on the survivor — a deal it moved up, a deal
     // or contact by name alone — was linked there since: its name taken with its id, never counted put back (since —
     // survivorRowsOf; the re-check, 17 Oct) — nor one the deal id restore left there, the record merged away a site
@@ -612,8 +720,9 @@ const reverseAccountMerge = (args) => undoMergeLog({ ...args, kind: 'account' })
 const reverseContactMerge = (args) => undoMergeLog({ ...args, kind: 'contact' });
 
 // ── Contact merge ──────────────────────────────────────────────────────────────
-// Contacts have no single name column (firstName/lastName) and no account FK
-// (linked to accounts by company NAME). The new rewrite wrinkle vs accounts is
+// Contacts have no single name column (firstName/lastName). A contact's account is its accountId with its Company
+// beside it — one pair, the survivor's or the record merged away's (state §0.218; Jeff, 30 Oct: Q17 "Show it to
+// pick"; contactPairOf). The new rewrite wrinkle vs accounts is
 // JSONB references: opportunities.contactIds (array of ids) and every other
 // contact's managers/directReports ({id,name} arrays). Those are rewritten per
 // affected row, with each row's pre-merge array snapshotted: an undo puts it back while it is still the array written.
@@ -627,8 +736,9 @@ async function mergeContacts({ body, orgId, userId, headers }) {
     if (!survivorId || !archivedId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'survivorId and archivedId are required.' }) };
     if (survivorId === archivedId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Cannot merge a record into itself.' }) };
 
-    const [surv] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
-    const [arch] = await db.select().from(contacts).where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId)));
+    const [survRead] = await db.select(stamped(contacts)).from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
+    const [archRead] = await db.select(stamped(contacts)).from(contacts).where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId)));
+    const surv = unstamped(survRead), arch = unstamped(archRead);
     if (!surv) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Survivor contact not found.' }) };
     if (!arch) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact to archive not found.' }) };
     if (arch.mergeArchived) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That record has already been merged.' }) };
@@ -644,6 +754,19 @@ async function mergeContacts({ body, orgId, userId, headers }) {
     // The owner id with the owner name (§0.193), decided before anything is written.
     const owner = 'assignedRep' in resolved ? mergedOwnerId('assignedRep', resolved, surv, arch) : null;
     if (owner?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: owner.error }) };
+    // The Company with its account id, one pair, decided before anything is written (Q17): the survivor's stands, or
+    // the record merged away's travels — its link checked in this org, a merged-away account followed to the one it was
+    // merged into and written under that account's name as it stands; none live at the end refuses the merge (409,
+    // nothing written). The text was written alone, and the survivor kept its own link or none.
+    const pair = contactPairOf(resolvedFields, surv, arch);
+    if (pair?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: pair.error }) };
+    delete resolved.company;
+    if (pair?.from === 'archived') {
+        const live = pair.accountId ? await liveAccountOf(pair.accountId, orgId) : null;
+        if (pair.accountId && !live) return { statusCode: 409, headers, body: JSON.stringify({ error: companyGone(pair.company) }) };
+        resolved.accountId = live ? live.id : null;
+        resolved.company = live ? live.name : pair.company;
+    }
 
     const nameOf = (c) => [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || c.email || c.id;
     const survFirst = resolved.firstName != null ? resolved.firstName : surv.firstName;
@@ -653,7 +776,16 @@ async function mergeContacts({ body, orgId, userId, headers }) {
 
     const now = new Date();
     const rewrites = [];
-    const ops = [];
+    // The claim (Q18), as the account merge's: the record merged away archived, and the survivor held, each only while
+    // live — or the whole batch writes nothing (mergeBatch).
+    const ops = [
+        writesItsRow(db.update(contacts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now })
+            .where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId), or(isNull(contacts.mergeArchived), eq(contacts.mergeArchived, false)), asStamped(contacts, archRead)))
+            .returning({ id: contacts.id })),
+        writesItsRow(db.update(contacts).set({ updatedAt: now })
+            .where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId), or(isNull(contacts.mergeArchived), eq(contacts.mergeArchived, false)), asStamped(contacts, survRead)))
+            .returning({ id: contacts.id })),
+    ];
 
     // 1) scalar id FK rewrites: tasks.contactId, activities.contactId
     const idTargets = [
@@ -722,8 +854,7 @@ async function mergeContacts({ body, orgId, userId, headers }) {
     if (owner) survSet.ownerId = owner.ownerId;   // the id with the name (§0.193)
     ops.push(db.update(contacts).set(survSet).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId))));
 
-    // 5) Soft-archive the loser.
-    ops.push(db.update(contacts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now }).where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId))));
+    // 5) The loser is soft-archived by the batch's first statement, the claim.
 
     // 6) Reversible audit log.
     const logId = 'mrg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -735,11 +866,11 @@ async function mergeContacts({ body, orgId, userId, headers }) {
         status: 'merged', performedBy, performedById: userId,
     }));
 
-    await db.batch(ops);
+    const refused = await mergeBatch(ops, { table: contacts, survivorId, archivedId, orgId, headers });
+    if (refused) return refused;
 
     const [updatedSurvivor] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
-    const summary = {};
-    for (const r of rewrites) summary[r.table + '.' + r.column] = (r.ids ? r.ids.length : (r.rows ? r.rows.length : 0));
+    const summary = recordsTouched(rewrites, (r) => r.table + '.' + r.column);
     await auditAs(orgId, userId, { action: 'contact.merged', entityType: 'contact', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
 
     return { statusCode: 200, headers, body: JSON.stringify({ contact: updatedSurvivor, archivedId, mergeLogId: logId, rewriteSummary: summary }) };

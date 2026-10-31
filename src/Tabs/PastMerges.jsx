@@ -28,19 +28,24 @@ export default function PastMerges({ entityType, version }) {
         setError(null);
         try { const d = await fmRef.current(entityType); if (gen === loadGen.current) setData(d); }
         catch (e) { if (gen === loadGen.current) setError(`Past merges did not load — ${e?.message || 'No answer from the server.'}`); }
+        return gen === loadGen.current;   // its answer set: no later load overtook it (an Undo's busy mark waits on this)
     }, [entityType]);
 
     // On open, and again after each merge and each Undo: the scan's key moves with both.
     useEffect(() => { load(); }, [load, version]);
 
-    // Busy while its request is out, released after; its answer said on its row; the list read again. The record is
-    // named for the words when the answer could not be read (undoWords).
+    // Busy while its request is out; its answer said on its row; the list read again — and released only once that read
+    // has answered (state §0.218; Jeff, 30 Oct: Q18), or the row offered its Undo again over the merge it had just
+    // undone until the list came back, and a second click sent a second Undo (refused, 409). The record is named for the
+    // words when the answer could not be read (undoWords).
     const onUndo = (m) => showConfirm(undoConfirmWords(m), async () => {
         setBusyId(m.id);
         const r = await undoMerge(m.id, entityType, m.archivedName);
-        setBusyId(null);
         if (r?.words) setSaid((s) => ({ ...s, [m.id]: r.words }));
-        load();
+        // Read again until a read after this Undo lands — one a later load overtook dropped its answer, and the row offered
+        // its Undo again on the list from before it (the review of §0.218) — then released.
+        for (let tries = 0; tries < 3 && !(await load()); tries += 1) { /* overtaken: read again */ }
+        setBusyId(null);
     }, false);
 
     const merges = data?.merges || [];

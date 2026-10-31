@@ -90,7 +90,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 
 const { handler: mergeFn } = await import('../../netlify/functions/merge.mjs');
 const { db } = await import('../../db/index.js');
-const { accounts, contacts, opportunities, tasks, activities, mergeLog, auditLog, users } = await import('../../db/schema.js');
+const { accounts, contacts, opportunities, tasks, activities, mergeLog, auditLog, users, spiffClaims } = await import('../../db/schema.js');
 const { eq, and, inArray, sql, getTableColumns } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
@@ -163,7 +163,7 @@ const capture = async (label, kind, logId) => {
 
 const cleanup = async () => {
     for (const o of [A, B]) {
-        for (const t of [tasks, activities, opportunities, contacts, accounts, mergeLog, auditLog, users]) await db.delete(t).where(eq(t.orgId, o));
+        for (const t of [tasks, activities, opportunities, contacts, accounts, mergeLog, auditLog, users, spiffClaims]) await db.delete(t).where(eq(t.orgId, o));
     }
     invalidateRoster(A); invalidateRoster(B);
 };
@@ -560,11 +560,12 @@ const h6 = async (tag, sub = 'business_unit') => {
     return { P, D, S, L };
 };
 // A log as every merge wrote it before this batch (the re-check, 17 Oct): no onSurvivor on its name rewrites, no tiers
-// on its children — what an Undo of a merge made before this batch ships reads.
+// on its children — what an Undo of a merge made before this batch ships reads. Nor (state §0.218) a contacts move by id:
+// a merge before 3c left the record merged away's contacts on it by id.
 const loggedBefore = async (L) => {
     const log = await logOf(L);
-    await db.update(mergeLog).set({ rewrites: log.rewrites.map(({ onSurvivor: _on, tiers: _tiers, ...rw }) => rw) }).where(and(eq(mergeLog.id, L), eq(mergeLog.orgId, A)));
-    assert.ok((await logOf(L)).rewrites.every((rw) => !('onSurvivor' in rw) && !('tiers' in rw)), 'the log as written before this batch');
+    await db.update(mergeLog).set({ rewrites: log.rewrites.filter((rw) => rw.kind !== 'idPair').map(({ onSurvivor: _on, tiers: _tiers, ...rw }) => rw) }).where(and(eq(mergeLog.id, L), eq(mergeLog.orgId, A)));
+    assert.ok((await logOf(L)).rewrites.every((rw) => !('onSurvivor' in rw) && !('tiers' in rw) && rw.kind !== 'idPair'), 'the log as written before this batch');
 };
 
 test("I14 — the house parent rule (the review, 17 Oct; restorePlace — D3 \"No self, no loops, no sites\", D21): what an Undo puts back under the record merged away goes back only where a delete's Undo would put it back, the rest kept and counted (Q3: \"Keep later edits\") — (a) a business unit added under the lifted site since: the site stays a top-level account; (b) the record merged away moved under the survivor since: no loop, and a site of its own goes back under it; (c) the record merged away made a site since: nothing goes under a site; (d) in the batch itself: an account added under the survivor after the Undo read the accounts keeps the survivor where it stands, and the record merged away moved after it writes nothing", async () => {
@@ -704,17 +705,19 @@ test("I17 — a contact's company is put back by name only while the contact is 
         await db.insert(contacts).values([person(K, 'Kay', 'Zero', { company: `${n} Old` }), person(K2, 'Kit', 'Zero', { company: `${n} Old`, accountId: X }),
             person(K3, 'Kim', 'Zero', { company: `${n} Old` })]);
         const L = await merge(Y, X);
-        assert.deepEqual([await linkOf(K), await linkOf(K2), await linkOf(K3)], [[null, `${n} New`], [X, `${n} New`], [null, `${n} New`]],
-            `${tag}: merged — renamed by name; the merge moves no contact's id`);
+        assert.deepEqual([await linkOf(K), await linkOf(K2), await linkOf(K3)], [[null, `${n} New`], [Y, `${n} New`], [null, `${n} New`]],
+            `${tag}: merged — by name alone renamed; the one on the record merged away by id moved to the survivor with its name (state §0.218 — REGRESSION: left on X by id)`);
         if (before04) await loggedBefore(L);
-        // since: K and K2 linked to the survivor on the contact rail — its id with its own name (contactCompany)
-        await db.update(contacts).set({ accountId: Y, company: `${n} New` }).where(inArray(contacts.id, [K, K2]));
+        // since: K linked to the survivor on the contact rail — its id with its own name (contactCompany); K2 there already
+        await db.update(contacts).set({ accountId: Y, company: `${n} New` }).where(inArray(contacts.id, [K]));
         const u = await undo(L);
         assert.equal(u.status, 200, JSON.stringify(u.body));
-        assert.deepEqual([await linkOf(K), await linkOf(K2), await linkOf(K3)], [[Y, `${n} New`], [Y, `${n} New`], [null, `${n} Old`]],
-            'REGRESSION: a contact linked to the survivor by id since is put back under the merged-away name — its company split from its id');
+        // K2: moved by the merge, still on the survivor — back to X with its own company (Q15); on a log before 3c, which
+        // never moved it, it stays where it stands, uncounted (a merge then never moved it).
+        assert.deepEqual([await linkOf(K), await linkOf(K2), await linkOf(K3)], [[Y, `${n} New`], before04 ? [Y, `${n} New`] : [X, `${n} Old`], [null, `${n} Old`]],
+            'REGRESSION: a contact linked to the survivor by id since is put back under the merged-away name — its company split from its id; or the contact the merge moved left on the survivor');
         if (before04) assert.deepEqual([u.body.keptLinks, u.body.keptFields], [0, []], 'a log written before this batch cannot tell a contact linked since from one on the survivor at the merge: counted put back (listed back)');
-        else assert.deepEqual([u.body.keptLinks, u.body.keptFields], [2, []], 'REGRESSION: two contacts linked to the survivor since counted as put back — no change kept said over two kept');
+        else assert.deepEqual([u.body.keptLinks, u.body.keptFields], [1, []], 'one contact linked to the survivor since, counted kept; the one the merge moved, put back');
     }
     // (b) the twins: X and Z share a name; Y's own contact carried that name at the merge
     const [X, Z, Y, KX, KZ, KY, KL] = ['i17b_x', 'i17b_z', 'i17b_y', 'i17b_kx', 'i17b_kz', 'i17b_ky', 'i17b_kl'].map(ID);
@@ -724,12 +727,13 @@ test("I17 — a contact's company is put back by name only while the contact is 
         person(KY, 'Yan', 'Gee', { company: 'I17b Shell PA', accountId: Y }), person(KL, 'Lou', 'Gee', { company: 'I17b Shell PA' }),
     ]);
     const L = await merge(Y, X);
-    assert.deepEqual([await linkOf(KZ), await linkOf(KY)], [[Z, 'I17b Shell'], [Y, 'I17b Shell']], "merged: every contact of the name renamed, the other twin's too (the merge renames contacts by name)");
+    assert.deepEqual([await linkOf(KX), await linkOf(KZ), await linkOf(KY), await linkOf(KL)], [[Y, 'I17b Shell'], [Z, 'I17b Shell PA'], [Y, 'I17b Shell'], [null, 'I17b Shell PA']],
+        "merged (state §0.218): X's contact moved to the survivor by id with its name; the other twin's left as it stands (REGRESSION: renamed by name); the survivor's own renamed; one with no id under the name the twin shares left (Q16 — REGRESSION: renamed)");
     const u = await undo(L);
     assert.equal(u.status, 200, JSON.stringify(u.body));
     assert.deepEqual([u.body.keptLinks, u.body.keptFields], [0, []], "REGRESSION: twins merged and undone with nothing changed — the survivor's own contact counted kept");
     assert.deepEqual([await linkOf(KX), await linkOf(KZ), await linkOf(KY), await linkOf(KL)], [[X, 'I17b Shell PA'], [Z, 'I17b Shell PA'], [Y, 'I17b Shell'], [null, 'I17b Shell PA']],
-        "REGRESSION: the other twin's contact left under the survivor's name, or the survivor's own renamed apart from its id");
+        "REGRESSION: X's contact left on the survivor, the other twin's under the survivor's name, or the survivor's own renamed apart from its id");
 });
 
 test("I18 — D22 (the re-check, 17 Oct): of two deals a merge into a site moved up, one moved by hand onto the survivor once it stopped being a site stays there, kept and counted — never moved back by the deal id restore, whose move the lift overwrote in the merge's own batch; the other comes back by its lift; (b) the merge renamed the survivor, so its name comes back and is cascaded over its deals by id: the deal moved onto it takes it with its id, still counted kept", async () => {
@@ -1000,4 +1004,144 @@ test("I22 — a deal by name alone never goes back to the record merged away whi
 
     const now = await bRows();
     for (const k of Object.keys(B_SEEDED)) assert.equal(now[k], B_SEEDED[k], `org B's ${k}: as seeded, after I22`);
+});
+
+
+// ── 3c (state §0.218; batch 3c of OPEN_ITEMS §1 item 1) — the merge's links ─────────────────────────────────────────
+const claim = (id, opportunityId, account, org = A) => ({ id, orgId: org, spiffId: 'spf_itest_mundo', opportunityId, account, repName: 'Mundo Rep', status: 'pending' });
+const claimOf = async (id) => (await one(spiffClaims, id)).account;
+
+test("I23 — 3c (Q15, Q16, Q12, Q18): an account merge moves the record merged away's contacts to the survivor by id, each with the survivor's name, and its Undo puts each back with its own company; a deal moved by id takes the survivor's name; a claim follows its deal, one with no deal by name; a record with no id under a name a third live account shares is left; each record counted once; org B's namesakes untouched", async () => {
+    const [X, Y, CX, CL, DX, DX2, K1, K2] = ['i23_x', 'i23_y', 'i23_cx', 'i23_cl', 'i23_dx', 'i23_dx2', 'i23_k1', 'i23_k2'].map(ID);
+    const [BX, BC, BK] = ['i23_bx', 'i23_bc', 'i23_bk'].map(ID);
+    await db.insert(accounts).values([acct(X, 'I23 Old'), acct(Y, 'I23 New'), { id: BX, name: 'I23 Old', orgId: B }]);
+    await db.insert(contacts).values([person(CX, 'Cee', 'Ex', { company: 'Old I23 Inc.', accountId: X }), person(CL, 'Cee', 'Ell', { company: 'I23 Old' }),
+        { id: BC, firstName: 'Bea', lastName: 'I23', company: 'I23 Old', accountId: BX, orgId: B }]);
+    await db.insert(opportunities).values([opp(DX, X, 'drifted text'), opp(DX2, X, 'I23 Old')]);
+    await db.insert(spiffClaims).values([claim(K1, DX, 'I23 Old'), claim(K2, null, 'I23 Old'), claim(BK, null, 'I23 Old', B)]);
+    const r = await call(A, { entityType: 'account', survivorId: Y, archivedId: X, performedBy: 'Sent Name' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const L = r.body.mergeLogId;
+    assert.deepEqual([await linkOf(CX), await linkOf(CL)], [[Y, 'I23 New'], [null, 'I23 New']], "the record merged away's contact moved by id with the survivor's name (REGRESSION: left on X by id); one by name alone renamed");
+    assert.deepEqual([await deal(DX), await deal(DX2)], [[Y, 'I23 New', null], [Y, 'I23 New', null]], "a deal moved by id takes the survivor's name (REGRESSION: kept 'drifted text')");
+    assert.deepEqual([await claimOf(K1), await claimOf(K2)], ['I23 New', 'I23 New'], "a claim on the merge's deal, and one with no deal, take the survivor's name");
+    assert.deepEqual([r.body.rewriteSummary.opportunities, r.body.rewriteSummary.contacts], [2, 2], 'each record counted once (Q18 — REGRESSION: the deal moved by id and renamed counted twice)');
+    assert.deepEqual([await linkOf(BC), await claimOf(BK), (await one(accounts, BX)).name], [[BX, 'I23 Old'], 'I23 Old', 'I23 Old'], "org B's namesakes untouched");
+    const u = await undo(L);
+    assert.equal(u.status, 200, JSON.stringify(u.body));
+    assert.deepEqual([await linkOf(CX), await linkOf(CL)], [[X, 'Old I23 Inc.'], [null, 'I23 Old']], 'the moved contact back to X with its OWN company as it stood (Q15)');
+    assert.deepEqual([await deal(DX), await deal(DX2)], [[X, 'I23 Old', null], [X, 'I23 Old', null]], "each deal back on X under X's name");
+    assert.deepEqual([await claimOf(K1), await claimOf(K2), u.body.keptLinks], ['I23 Old', 'I23 Old', 0], 'the claims back; nothing kept');
+
+    // Q15: a moved contact the survivor renamed since still goes back — with its own text; one re-linked elsewhere is kept
+    const [X2, Y2, CA, CB, OTHER] = ['i23_x2', 'i23_y2', 'i23_ca', 'i23_cb', 'i23_other'].map(ID);
+    await db.insert(accounts).values([acct(X2, 'I23c Old'), acct(Y2, 'I23c New'), acct(OTHER, 'I23c Other')]);
+    await db.insert(contacts).values([person(CA, 'Ann', 'Ay', { company: 'I23c Old', accountId: X2 }), person(CB, 'Bo', 'Bee', { company: 'I23c Old', accountId: X2 })]);
+    const L2 = await merge(Y2, X2);
+    await db.update(contacts).set({ company: 'I23c Renamed' }).where(eq(contacts.id, CA));               // the survivor's rename cascade, as it writes
+    await db.update(contacts).set({ accountId: OTHER, company: 'I23c Other' }).where(eq(contacts.id, CB)); // re-linked on the rail
+    const u2 = await undo(L2);
+    assert.equal(u2.status, 200, JSON.stringify(u2.body));
+    assert.deepEqual([await linkOf(CA), await linkOf(CB), u2.body.keptLinks], [[X2, 'I23c Old'], [OTHER, 'I23c Other'], 1], 'still on the survivor: back with its own text, whatever its company now ("Still on survivor"); re-linked elsewhere: kept, counted');
+
+    // Q16: a third live account shares the merged-away name — no record with no id renamed by it; the third's own left
+    const [X3, Y3, T3, CL3, DL3, DT3, K3, K4] = ['i23_x3', 'i23_y3', 'i23_t3', 'i23_cl3', 'i23_dl3', 'i23_dt3', 'i23_k3', 'i23_k4'].map(ID);
+    await db.insert(accounts).values([acct(X3, 'I23b Old'), acct(Y3, 'I23b New'), acct(T3, 'I23b Old')]);
+    await db.insert(contacts).values(person(CL3, 'Lou', 'Ell', { company: 'I23b Old' }));
+    await db.insert(opportunities).values([opp(DL3, null, 'I23b Old'), opp(DT3, T3, 'I23b Old')]);
+    await db.insert(spiffClaims).values([claim(K3, null, 'I23b Old'), claim(K4, DT3, 'I23b Old')]);
+    const L3 = await merge(Y3, X3);
+    assert.deepEqual([await linkOf(CL3), await deal(DL3), await deal(DT3), await claimOf(K3), await claimOf(K4)],
+        [[null, 'I23b Old'], [null, 'I23b Old', null], [T3, 'I23b Old', null], 'I23b Old', 'I23b Old'],
+        "Q16 \"Skip if shared\": the contact, deal and claim with no id left under the name the third account shares (REGRESSION: renamed); the third's deal and its claim left (REGRESSION: its claim renamed org-wide by name)");
+    assert.equal((await undo(L3)).status, 200);
+});
+
+test("I24 — 3c (Q18): two merges of one record sent together — one 200, one 409 that wrote nothing: the record merged into one survivor, one merge log 'merged' for it", async () => {
+    const [X, Y, Z] = ['i24_x', 'i24_y', 'i24_z'].map(ID);
+    await db.insert(accounts).values([acct(X, 'I24 Old'), acct(Y, 'I24 New'), acct(Z, 'I24 Other')]);
+    const send = (s) => call(A, { entityType: 'account', survivorId: s, archivedId: X, performedBy: 'Sent Name' });
+    const [a, b] = await Promise.all([send(Y), send(Z)]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409], JSON.stringify([a.body, b.body]));
+    const lost = a.status === 409 ? a : b, won = a.status === 200 ? Y : Z;
+    assert.equal(lost.body.error, 'That record has already been merged.');
+    assert.deepEqual(live(await one(accounts, X)).slice(0, 2), [true, won], 'merged into the one that landed (REGRESSION: the second overwrote its survivor)');
+    const logs = await db.select().from(mergeLog).where(and(eq(mergeLog.orgId, A), eq(mergeLog.archivedId, X)));
+    assert.deepEqual(logs.map((l) => [l.survivorId, l.status]), [[won, 'merged']], 'one log (REGRESSION: two read merged)');
+});
+
+test("I25 — 3c (Q17): a contact merge carries the Company and account id as one pair — the record merged away's link picked over the survivor's of the same text (UKG's twins), and its Undo puts the survivor's back; a merged-away account followed, under its name as it stands; a dead link refuses the merge, nothing written; a link neither contact holds refused", async () => {
+    const [AU, AS, M, N] = ['i25_au', 'i25_as', 'i25_m', 'i25_n'].map(ID);
+    await db.insert(accounts).values([acct(AU, 'I25 Shell PA', { accountTier: 'business_unit' }), acct(AS, 'I25 Shell PA', { accountTier: 'site' }),
+        acct(N, 'I25 Kept'), acct(M, 'I25 Gone', { mergeArchived: true, mergedIntoId: N })]);
+    const [S, R, S2, R2, S3, R3] = ['i25_s', 'i25_r', 'i25_s2', 'i25_r2', 'i25_s3', 'i25_r3'].map(ID);
+    await db.insert(contacts).values([
+        person(S, 'Sam', 'Twin', { company: 'I25 Shell PA', accountId: AU }), person(R, 'Sam', 'Twin', { company: 'I25 Shell PA', accountId: AS }),
+        person(S2, 'Fay', 'Follow', { company: 'I25 Foo' }), person(R2, 'Fay', 'Follow', { company: 'I25 Gone', accountId: M }),
+        person(S3, 'Dee', 'Dead', { company: 'I25 Here' }), person(R3, 'Dee', 'Dead', { company: 'I25 Nowhere', accountId: ID('i25_nope') }),
+    ]);
+    const L = await merge(S, R, { resolvedFields: { accountId: AS } }, 'contact');
+    assert.deepEqual(await linkOf(S), [AS, 'I25 Shell PA'], 'the picked link with its name (REGRESSION: the survivor kept its own link beside the text)');
+    assert.equal((await undo(L)).status, 200);
+    assert.deepEqual(await linkOf(S), [AU, 'I25 Shell PA'], "the Undo puts the survivor's pair back together");
+    await merge(S2, R2, { resolvedFields: { accountId: M } }, 'contact');
+    assert.deepEqual(await linkOf(S2), [N, 'I25 Kept'], 'a merged-away account followed, its name as it stands');
+    const dead = await call(A, { entityType: 'contact', survivorId: S3, archivedId: R3, resolvedFields: { accountId: ID('i25_nope') } });
+    assert.deepEqual([dead.status, dead.body.error], [409, '“I25 Nowhere” no longer exists — keep the survivor\'s Company, or link the contact to an account first.']);
+    assert.deepEqual([await linkOf(S3), (await one(contacts, R3)).mergeArchived ?? false], [[null, 'I25 Here'], false], 'nothing written');
+    // Another org's account, carried by a contact of A: none of A's — refused as dead, nothing written (the review of §0.218).
+    const [BA, S4, R4] = ['i25_ba', 'i25_s4', 'i25_r4'].map(ID);
+    await db.insert(accounts).values({ id: BA, name: 'I25 B Account', orgId: B });
+    await db.insert(contacts).values([person(S4, 'Bo', 'Cross', { company: 'I25 Here' }), person(R4, 'Bo', 'Cross', { company: 'I25 B Account', accountId: BA })]);
+    const cross = await call(A, { entityType: 'contact', survivorId: S4, archivedId: R4, resolvedFields: { accountId: BA } });
+    assert.deepEqual([cross.status, await linkOf(S4)], [409, [null, 'I25 Here']], "org B's account is no link of A's: refused, nothing written (REGRESSION: its id carried across orgs)");
+    const stray = await call(A, { entityType: 'contact', survivorId: S3, archivedId: R3, resolvedFields: { accountId: AU } });
+    assert.deepEqual([stray.status, stray.body.error], [400, 'The Company must be one of the two contacts being merged.'], 'a link neither contact holds');
+});
+
+
+test("I26 — 3c's review (Q18): two merges into one survivor sent together, each renaming it — never both from a stale read: whatever lands, every deal and contact on the survivor by id carries its name as it stands (REGRESSION: the second wrote its old name back over the first's rename, the first's deals and contacts left under a name it no longer has)", async () => {
+    for (const run of [0, 1, 2]) {
+        const [X1, X2, Y, D1, D2, C1] = [`i26_${run}_x1`, `i26_${run}_x2`, `i26_${run}_y`, `i26_${run}_d1`, `i26_${run}_d2`, `i26_${run}_c1`].map(ID);
+        await db.insert(accounts).values([acct(X1, `I26 ${run} One`), acct(X2, `I26 ${run} Two`), acct(Y, `I26 ${run} Y`)]);
+        await db.insert(opportunities).values([opp(D1, X1, `I26 ${run} One`), opp(D2, X2, `I26 ${run} Two`)]);
+        await db.insert(contacts).values(person(C1, 'Cy', 'Race', { company: `I26 ${run} One`, accountId: X1 }));
+        const send = (x, name) => call(A, { entityType: 'account', survivorId: Y, archivedId: x, performedBy: 'Sent Name', resolvedFields: { name } });
+        const answers = await Promise.all([send(X1, `I26 ${run} One`), send(X2, `I26 ${run} Two`)]);
+        assert.ok(answers.every((a) => [200, 409].includes(a.status)) && answers.some((a) => a.status === 200), JSON.stringify(answers.map((a) => a.body)));
+        const yName = (await one(accounts, Y)).name;
+        const onY = [...(await db.select().from(opportunities).where(and(eq(opportunities.orgId, A), eq(opportunities.accountId, Y)))),
+            ...(await db.select().from(contacts).where(and(eq(contacts.orgId, A), eq(contacts.accountId, Y))))];
+        for (const r of onY) assert.equal(r.account ?? r.company, yName, `run ${run}: ${r.id} on the survivor by id under another name`);
+        for (const a of answers.filter((x) => x.status === 409)) assert.ok(['One of these records changed while the merge was being made. Please re-open and review again.', 'The survivor was archived by a prior merge — refresh and try again.', 'One of these records changed since you opened the merge. Please re-open and review again.'].includes(a.body.error), a.body.error);
+    }
+});
+
+test("I27 — 3c's review: a SPIFF claim on a deal a merge into a site moved up takes the account above's name, and its Undo puts it back with its deal — but stays with its deal where the deal was moved since, counted kept; a contact merge's Company and link come back together, or stay together where either half was edited since", async () => {
+    const [TOP, X, Y, D, D2, K, K2, OTHER] = ['i27_top', 'i27_x', 'i27_y', 'i27_d', 'i27_d2', 'i27_k', 'i27_k2', 'i27_other'].map(ID);
+    await db.insert(accounts).values([acct(TOP, 'I27 Top'), acct(X, 'I27 Old', { parentAccountId: TOP, accountTier: 'business_unit' }), acct(Y, 'I27 Site', { parentAccountId: TOP, accountTier: 'site' }), acct(OTHER, 'I27 Other')]);
+    await db.insert(opportunities).values([opp(D, X, 'I27 Old'), opp(D2, X, 'I27 Old')]);
+    await db.insert(spiffClaims).values([claim(K, D, 'I27 Old'), claim(K2, D2, 'I27 Old')]);
+    const L = await merge(Y, X);
+    assert.deepEqual([await deal(D), await claimOf(K)], [[TOP, 'I27 Top', 'I27 Site'], 'I27 Top'], "the deal moved up (D22); its claim takes the name the deal carries (REGRESSION: the survivor's)");
+    await db.update(opportunities).set({ accountId: OTHER, account: 'I27 Other', site: null }).where(eq(opportunities.id, D2));   // moved by hand since
+    await db.update(spiffClaims).set({ account: 'I27 Top' }).where(eq(spiffClaims.id, K2));
+    const u = await undo(L);
+    assert.equal(u.status, 200, JSON.stringify(u.body));
+    assert.deepEqual([await deal(D), await claimOf(K)], [[X, 'I27 Old', null], 'I27 Old'], 'the deal and its claim back together');
+    assert.deepEqual([await deal(D2), await claimOf(K2)], [[OTHER, 'I27 Other', null], 'I27 Top'], "REGRESSION (the review of §0.218): the claim put back under the old name while its deal stays where it was moved");
+    assert.ok(u.body.keptLinks >= 2, 'the deal and its claim each counted kept');
+
+    // A contact merge: twins of one text, the other's link picked; the account renamed since — the Company the merge
+    // left alike now differs: the pair stays together, never the link alone back (the review of §0.218).
+    const [AU, AS, S, R] = ['i27_au', 'i27_as', 'i27_s', 'i27_r'].map(ID);
+    await db.insert(accounts).values([acct(AU, 'I27 Shell'), acct(AS, 'I27 Shell')]);
+    await db.insert(contacts).values([person(S, 'Sue', 'Pair', { company: 'I27 Shell', accountId: AU }), person(R, 'Sue', 'Pair', { company: 'I27 Shell', accountId: AS })]);
+    const LC = await merge(S, R, { resolvedFields: { accountId: AS } }, 'contact');
+    assert.deepEqual(await linkOf(S), [AS, 'I27 Shell']);
+    await db.update(contacts).set({ company: 'I27 Shell Corp' }).where(eq(contacts.id, S));   // the account's rename cascade, as it writes
+    const uc = await undo(LC);
+    assert.equal(uc.status, 200, JSON.stringify(uc.body));
+    assert.deepEqual(await linkOf(S), [AS, 'I27 Shell Corp'], 'REGRESSION: the link alone put back beside a Company renamed since — the pair split');
+    assert.ok(uc.body.keptFields.includes('accountId'), 'the link kept, and said');
 });

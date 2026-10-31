@@ -463,7 +463,7 @@ function App() {
     // Duplicate merge — scans, merges, a merge's Undo and the org's past merges, exposed via context (state §0.207).
     // Called after offerUndo, which it is handed: named before its declaration, it would be read in its TDZ.
     const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge,
-        findContactDuplicates, handleContactMerge, findMerges, undoMerge } =
+        findContactDuplicates, handleContactMerge, findMerges, undoMerge, listsRead } =
         useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });
 
     // Populate refs so data hooks can call these safely
@@ -707,6 +707,20 @@ dbFetch('/.netlify/functions/users?me=true')
         load();
         return () => { cancelled = true; };
     }, [activeOrgId]);
+
+    // And again each time a merge or its Undo reads the lists again (state §0.218; useMerge's listsRead): an account
+    // merge renames the claims on its deals, and its Undo names them back — a list kept from before showed the old name.
+    // An answer a later read overtook is dropped (the cleanup), and so is one for an org switched away from.
+    useEffect(() => {
+        if (!listsRead || !activeOrgId) return;
+        let cancelled = false;
+        const askedOrg = requestOrg();
+        dbFetch('/.netlify/functions/spiff-claims')
+            .then(r => (r.ok ? r.json() : null))
+            .then(data => { if (!cancelled && stillOrg(askedOrg) && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+            .catch(err => console.warn('spiff-claims load error:', err.message));
+        return () => { cancelled = true; };
+    }, [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps -- the org's own load is the effect above
 
     // Coaching notes (state §0.82) — the server returns only what this caller may see.
     const { coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });

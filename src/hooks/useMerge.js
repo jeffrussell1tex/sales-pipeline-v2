@@ -13,6 +13,8 @@ import { mergeWords, undoWords, mergedNoticeWords } from '../utils/mergeUndo.js'
 //   - offerUndo / setUndoToast : App's Undo toast — a merge's shape, its notice and its error
 //   - currentUser  : display name sent with the merge (merge_log.performed_by; Past merges names the
 //                    member by the server's own id first)
+// Answers, beside the handlers, `listsRead`: a count moved each time the lists are read again after a merge or its
+// Undo — App's SPIFF claims effect keys on it (state §0.218).
 // No audit row of its own: merge.mjs writes account.merged / contact.merged, with the Undo's id (Jeff, 17 Oct:
 // Q6 "Drop the screen's row" — guide §18b42 rule 5, one send, one row).
 export function useMerge(deps) {
@@ -45,13 +47,17 @@ export function useMerge(deps) {
     // merge moves tasks', activities' and deals' contact and other contacts' org charts (merge.mjs). A list kept
     // from before sends the old link back with its next whole-row save — and each load drops an answer a later
     // load overtook, so a merge's reload landing after its Undo's never puts the merge back on screen. SPIFF
-    // claims (read once per org) and Dispatch's own lists are not read again here (OPEN_ITEMS §4.7).
+    // claims too (state §0.218 — the map's answers, 30 Oct): an account merge renames the claims on its deals, and its
+    // Undo names them back; App reads them again whenever `listsRead` moves (its SPIFF claims effect — App holds the
+    // claims and its load). Dispatch's own lists are not in the app's context and are not read again here.
+    const [listsRead, setListsRead] = useState(0);
     const refreshAfter = (entityType) => {
         if (entityType === 'account') refreshAccounts();
         refreshContacts();
         refreshOpportunities();
         refreshTasks();
         refreshActivities();
+        setListsRead((n) => n + 1);
     };
 
     const performedBy = () => currentUser?.name || currentUser?.fullName || null;
@@ -198,5 +204,6 @@ export function useMerge(deps) {
         findDuplicates, handleMerge,
         findContactDuplicates, handleContactMerge,
         findMerges, undoMerge,
+        listsRead,
     };
 }

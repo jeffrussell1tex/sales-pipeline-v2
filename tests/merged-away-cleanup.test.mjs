@@ -48,6 +48,7 @@ import { customerForText, typedCustomerRefusal, DEAL_NEEDS_PICK } from '../src/u
 import { matchSearch, searchKey } from '../src/utils/searchMatch.js';
 import { linkedToContact, taskDay } from '../src/utils/historyFeed.js';
 import { runReport } from '../src/utils/reportQuery.js';
+import { contactsByAccount } from '../src/utils/mergeWindow.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -801,17 +802,30 @@ test('C18 — the merge windows and the delete warning count what the lists show
     const acc = read('src/components/modals/MergeReviewModal.jsx');
     assert.ok(code(acc).includes("import { unarchived } from '../../utils/pickLink.js';"));
     once(code(acc), S(4) + '}, [opportunities, contacts, activities, accounts, tasks, aId, bId]);', 'the account window\'s counts are worked out again when it opens on another pair');
-    const accCounts = (aId, bId, memo = anyMemo(acc, 'countsFor')) => runSlice(memo, { unarchived, opportunities: DEALS, contacts: CONTACTS, activities: ACTIVITIES, accounts: ACCOUNTS, tasks: [], aId, bId })();
+    const accCounts = (aId, bId, memo = anyMemo(acc, 'countsFor'), contacts = CONTACTS) => runSlice(memo, { unarchived, contactsByAccount, opportunities: DEALS, contacts, activities: ACTIVITIES, accounts: ACCOUNTS, tasks: [], aId, bId })();
     const countsFor = accCounts('acc_resinall', 'acc_resinall_inc');
     const resinall = countsFor(RESINALL);
     assert.deepEqual([resinall.opps, resinall.contacts], [1, 3], 'REGRESSION: the account window counts a merged-away contact (Lee twice) — or a deal by name');
+    // A contact counts where an account's rail reads it (state §0.218 — contactsByAccount, railLinks.js linkedAccount): by its
+    // account id under any Company text, else the ONE live account its Company names — an id-less contact on twins of a
+    // name counts on neither. §0.210's `company === name` counted the first nowhere and the second on both.
+    const MORE = [...CONTACTS, { id: 'con_moved', company: 'Old Name', accountId: 'acc_gamma' }, { id: 'con_twin', company: 'Shell - Port Allen', accountId: null }];
+    const byRail = accCounts('acc_resinall', 'acc_resinall_inc', anyMemo(acc, 'countsFor'), MORE);
+    const twinsOf = (f) => ['acc_gamma', 'acc_shell_unit', 'acc_shell_site'].map((id) => f(ACCOUNTS.find((a) => a.id === id)).contacts);
+    assert.deepEqual(twinsOf(byRail), [1, 0, 0], 'REGRESSION: the account window counts a contact by its Company text, not as the rail reads it');
+    const byText = accCounts('acc_resinall', 'acc_resinall_inc', asWas(anyMemo(acc, 'countsFor'), [
+        ['const contactsOn = contactsByAccount(contacts, accounts);', 'const liveContacts = unarchived(contacts);'],
+        ['contactsOn.get(acc.id) || 0', 'liveContacts.filter(c => c.company === acc.name).length'],
+    ]), MORE);
+    assert.deepEqual(twinsOf(byText), [0, 1, 1], "§0.210's lines, on the same rows");
     assert.equal(countsFor(ACCOUNTS.find((a) => a.id === 'acc_evonik')).subs, 2, 'REGRESSION: the account window counts a merged-away sub-account');
     assert.equal(countsFor(ACCOUNTS.find((a) => a.id === 'acc_shell_site')).opps, 2, 'deals by id, by name only for a deal with none — not the unit\'s');
     // A unit and its own site of one name (the scan offers them): the site is no sub-account the merge re-links.
     const unit = ACCOUNTS.find((a) => a.id === 'acc_shell_unit');
     assert.equal(accCounts('acc_shell_unit', 'acc_shell_site')(unit).subs, 0, 'REGRESSION: the account window counts the pair\'s other record as a sub-account');
     const OLD_ACC = asWas(anyMemo(acc, 'countsFor'), [
-        ['const liveContacts = unarchived(contacts);', 'const liveContacts = contacts;'],
+        ['const contactsOn = contactsByAccount(contacts, accounts);', 'const liveContacts = contacts;'],
+        ['contactsOn.get(acc.id) || 0', 'liveContacts.filter(c => c.company === acc.name).length'],
         ['const liveAccounts = unarchived(accounts);', 'const liveAccounts = accounts;'],
         ['(o.accountId ? o.accountId === acc.id : o.account === acc.name)', 'o.account === acc.name'],
         [' && x.id !== aId && x.id !== bId', ''],

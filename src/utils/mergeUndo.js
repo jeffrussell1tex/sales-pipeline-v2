@@ -96,6 +96,14 @@ export function survivorRestore(entityType, log, current) {
     // The owner id went with the owner name (§0.193): back with it, kept with it.
     const ownerKey = entityType === 'contact' ? 'assignedRep' : 'accountOwner';
     if (ownerKey in set && 'ownerId' in snap) set.ownerId = snap.ownerId ?? null;
+    // A contact's Company and account id went together (state §0.218; Jeff, 30 Oct: Q17 — one pair): back together
+    // while both hold what the merge wrote, kept together when either was edited since.
+    // Either half edited since — one the merge changed, or one it left as it was (the review of §0.218: a Company the
+    // merge left alike beside a link it changed, renamed since) — keeps both.
+    if (entityType === 'contact' && ('company' in wrote || 'accountId' in wrote)) {
+        const edited = ['company', 'accountId'].some((k) => k in wrote && !same(current?.[k], wrote[k]));
+        if (edited) for (const k of ['company', 'accountId']) if (k in set) { delete set[k]; keptFields.push(k); }
+    }
     return { set, keptFields };
 }
 

@@ -512,13 +512,13 @@ test("F3: an account merge renames only its own deals and those with no account 
     const now = async (id) => { const r = await rowOf(id); return [r.accountId, r.account]; };
     assert.deepEqual(await now(ID('m_unit')), [CHEM, 'Shell Chemicals'], "the merged-away twin's deal: the survivor's id and name (D14)");
     assert.deepEqual(await now(ID('m_site')), [TS, 'Port Allen Twin'], "the OTHER twin's deal: untouched — its id names the site, so its name stays the site's");
-    assert.deepEqual(await now(ID('m_none')), [null, 'Shell Chemicals'], 'a deal with no id, named as the merged-away account: renamed, as before');
+    assert.deepEqual(await now(ID('m_none')), [null, 'Port Allen Twin'], "a deal with no id under a name the other live twin shares: left — it could be the twin's (Jeff, 30 Oct: Q16 'Skip if shared', state §0.218; it was renamed)");
     assert.deepEqual(await now(ID('m_chem')), [CHEM, 'Shell Chemicals']);
     assert.deepEqual(await now(ID('m_b')), [null, 'Port Allen Twin'], "org B's deal of the name: never touched");
     const u = await mergeFn(ev(A, 'POST', { reverse: true, mergeLogId: JSON.parse(m.body).mergeLogId }));
     assert.equal(u.statusCode, 200, u.body);
     assert.deepEqual(await now(ID('m_unit')), [TU, 'Port Allen Twin'], 'undone: back on its twin, its name with it');
-    assert.deepEqual(await now(ID('m_none')), [null, 'Port Allen Twin']);
+    assert.deepEqual(await now(ID('m_none')), [null, 'Port Allen Twin'], 'never renamed, so never put back');
     assert.deepEqual(await now(ID('m_site')), [TS, 'Port Allen Twin'], 'the twin\'s deal: still untouched');
 });
 

@@ -583,15 +583,18 @@ test('G6: a CSV overwrite that names a deal\'s account with no id unlinks it whe
 test("THE MERGE: a merged-away account's deals follow it to the survivor by id, as its tasks and activities do, and only they (and deals with no id) take its name; the undo puts them back; the screen reads the deals again (D14, F3)", () => {
     const g = read('netlify/functions/merge.mjs');
     assert.ok(g.includes("{ name: 'opportunities', table: opportunities, column: 'accountId', col: opportunities.accountId },"), 'snapshotted for the undo');
-    assert.ok(g.includes('ops.push(db.update(opportunities).set({ accountId: survivorId, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));'));
+    assert.ok(g.includes('ops.push(db.update(opportunities).set({ accountId: survivorId, account: survName, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));'), "a deal moved by id takes the survivor's name in the same statement (state §0.218 — it kept a text that was not one of the two names)");
     // F3: the deals' NAME rewrite (and its snapshot) only touches the deals of the two accounts merged, or of none
     assert.ok(g.includes("import { eq, and, or, isNull, inArray, desc, sql, getTableColumns } from 'drizzle-orm';"));
-    assert.ok(g.includes('const dealsOfMerge = () => or(isNull(opportunities.accountId), inArray(opportunities.accountId, [archivedId, survivorId]));'), "a twin's deals are not the merge's: their id names the twin");
+    assert.ok(g.includes('const dealsOfMerge = ofMergeBy(opportunities, opportunities.account, [archivedId, survivorId]);'), "a twin's deals are not the merge's: their id names the twin");
+    assert.ok(g.includes('? or(inArray(table.accountId, pair), and(isNull(table.accountId), inArray(col, idlessNames)))') && g.includes(': inArray(table.accountId, pair));'), 'a deal with no id by name only where no live account outside the pair has it (Q16, state §0.218)');
+    assert.ok(g.includes('const idlessNames = idlessNamesOf(nameOldValues, named, [archivedId, survivorId]);'));
     assert.ok(g.includes("{ name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account, scope: dealsOfMerge },"));
     assert.ok(g.includes('const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId), ...(t.scope ? [t.scope()] : [])));'), 'the snapshot, the same deals: the undo puts back exactly what was renamed');
     assert.ok(g.includes('ops.push(db.update(opportunities).set({ account: survName, updatedAt: now }).where(and(inArray(opportunities.account, nameOldValues), eq(opportunities.orgId, orgId), dealsOfMerge())));'));
     assert.ok(g.indexOf('ops.push(db.update(opportunities).set({ accountId: survivorId') < g.indexOf('ops.push(db.update(opportunities).set({ account: survName'), "the ids move first in the batch, so the archived account's deals are the survivor's when renamed");
-    assert.ok(g.includes('ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId))));'), "contacts still by name: their account id stays for batch 3");
+    assert.ok(g.includes('ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId), contactsOfMerge())));'), "contacts by name only where their id is the survivor's or none (state §0.218)");
+    assert.ok(g.includes('if (moving.length) ops.push(db.update(contacts).set({ accountId: survivorId, company: survName, updatedAt: now }).where(and(inArray(contacts.id, moving.map((c) => c.id)), eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId))));'), "the record merged away's contacts by id, with the survivor's name (state §0.218 — REGRESSION: left on it by id)");
     assert.ok(g.includes('const table = TABLE_BY_NAME[rw.table];') && between(g, 'const TABLE_BY_NAME = {', '};').includes('opportunities'), 'the undo reverses every snapshotted rewrite, this one too');
     // D22: a merge into a site moves the merged-away account's deals up to the account above it, in the batch; the undo puts each back
     assert.ok(g.includes("const survTier = 'accountTier' in resolved ? resolved.accountTier : surv.accountTier;"), "the survivor's tier once merged");
@@ -604,7 +607,7 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(g.includes('? or(eq(opportunities.accountId, archivedId), and(isNull(opportunities.accountId), eq(opportunities.account, archName)))'));
     assert.ok(g.includes("if (lifted.length) rewrites.push({ table: 'opportunities', column: 'accountId', kind: 'lift', ids: lifted.map((d) => d.id), rows: lifted.map((d) => ({ id: d.id, old: { accountId: d.accountId ?? null, account: d.account ?? null, site: d.site ?? null } })) });"), 'logged as they were, after every other rewrite');
     const liftOp = g.indexOf('if (lifted.length) ops.push(db.update(opportunities).set({ accountId: up.id, account: up.name, site: survName, updatedAt: now }).where(and(inArray(opportunities.id, lifted.map((d) => d.id)), eq(opportunities.orgId, orgId))));');
-    assert.ok(liftOp > g.indexOf('ops.push(db.update(opportunities).set({ account: survName') && liftOp < g.indexOf('await db.batch(ops);'), 'after the id and name rewrites, in the same batch');
+    assert.ok(liftOp > g.indexOf('ops.push(db.update(opportunities).set({ account: survName') && liftOp < g.indexOf('const refused = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });'), 'after the id and name rewrites, in the same batch (sent through mergeBatch since §0.218)');
     // the undo (state §0.207): each deal back to its own account, id and Site Name, in this org — while it is still where
     // the lift put it; one moved up from the account merged away under that account's name as it stands (C2)
     const undoLift = between(g, 'const accountRestores = (log, orgId, now, ops, restores, subs) => {', 'const contactRestores = ');

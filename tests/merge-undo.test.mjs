@@ -45,6 +45,13 @@
 // Jeff's third set (18 Oct, b13/jeff-answers.md): Past merges' confirm in his corrected text — "Use the corrected
 // text": what the merge moved goes back except what cannot go back where it was, which stays and is counted (T10).
 //
+// Batch 3c's screen half (state §0.218; Jeff, 30 Oct: Q17 "Show it to pick", Q18, and the map's answers): the contact
+// window compares the Company by its link and sends the picked pair (T22, mergeWindow.js run and the window's own
+// loop run as written, each pair fed to the server's contactPairOf); the account window counts contacts as an
+// account's rail reads them and its words say what merge.mjs does (T23); the SPIFF claims read again after a merge and
+// its Undo (T24); Past merges' busy mark released only after the list read again answers (T15); both windows' words
+// re-pinned, one shared Undo tail, no "re-link" (T13).
+//
 // Run here: mergeUndo.js on made-up rows (T1-T6, T10, T17, T18, T21), held to the merge's own code where it models it
 // (T4, T5); the REAL hook through React's own renderer, fetch stubbed, an org switch while a request is out among the
 // answers (T7, T8); the five loads, each loader's lines run as written (T16), and Past merges' and the scans' (T20);
@@ -571,7 +578,7 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
         ind(8, 'ops.push(db.update(table).set({ [rw.column]: rw.oldValue, ...(dealId ? { account: nameNow(log.archivedId, orgId) } : {}), updatedAt: now })'),
         ind(12, '.where(and(inArray(table.id, writes), eq(table.orgId, orgId), eq(table[rw.column], rw.newValue), ...(dealName ? [isNull(table.accountId)] : []),'),
         ind(16, '...(dealId || toArchivedName ? [notASite(log.archivedId, orgId)] : []),'),
-        ind(16, '...(contactName ? [or(isNull(table.accountId), sql`${table.accountId} <> ${log.survivorId}`)] : [])))'));
+        ind(16, '...(contactName ? [or(isNull(table.accountId), sql`${table.accountId} <> ${log.survivorId}`)] : []),'));
     // A contact merge's links
     const cr = between(g, 'const contactRestores = (log, orgId, now, ops, restores) => {', 'export function undoOps(');
     order(cr,
@@ -581,11 +588,12 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
         ind(16, 'restores.push({ table: rw.table, ids: [row.id], at: ops.length });'),
         ind(16, 'ops.push(db.update(table).set({ [rw.column]: row.old, updatedAt: now })'),
         ind(20, '.where(and(eq(table.id, row.id), eq(table.orgId, orgId), sql`${table[rw.column]} = ${JSON.stringify(row.new)}::jsonb`))'));
-    for (const [what, s] of [['an account merge', ar], ['a contact merge', cr]]) {
-        assert.equal(count(s, 'ops.push(db.update(table).set('), 2, what);
-        assert.equal(count(s, 'updatedAt: now })'), 2, `${what}: every restore stamped, as the merge stamps the rows it moves`);
-        assert.equal(count(s, '.returning({ id: table.id })'), 2, `${what}: every restore answers the rows it wrote, which undoKept counts`);
-        assert.equal(count(s, 'restores.push('), 2, `${what}: every restore counted`);
+    // An account merge's three restores — the lift, a contact moved by id with its own company (state §0.218), the rest.
+    for (const [what, s, n] of [['an account merge', ar, 3], ['a contact merge', cr, 2]]) {
+        assert.equal(count(s, 'ops.push(db.update(table).set('), n, what);
+        assert.equal(count(s, 'updatedAt: now })'), n, `${what}: every restore stamped, as the merge stamps the rows it moves`);
+        assert.equal(count(s, '.returning({ id: table.id })'), n, `${what}: every restore answers the rows it wrote, which undoKept counts`);
+        assert.equal(count(s, 'restores.push('), n, `${what}: every restore counted`);
     }
     const ub = between(g, 'export const undoBatch = ', 'const undoMergeLog = ');
     order(ub,
@@ -719,7 +727,7 @@ test("T11 — the toast: four shapes in one slot — an error, a notice, a merge
     const USE_MERGE = ind(8, 'useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });');
     once(a, USE_MERGE, 'REGRESSION: the merge hook is handed no toast, or no deal, task or activity load');
     assert.ok(a.indexOf(USE_MERGE) > a.indexOf(ind(4, 'const offerUndo = (toast) => {')), 'called after offerUndo: named before its declaration it is read in its TDZ');
-    order(a, ind(4, 'const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge,'), ind(8, 'findContactDuplicates, handleContactMerge, findMerges, undoMerge } ='), USE_MERGE);
+    order(a, ind(4, 'const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge,'), ind(8, 'findContactDuplicates, handleContactMerge, findMerges, undoMerge, listsRead } ='), USE_MERGE);
     assert.equal(count(a, '\n        findMerges, undoMerge,\n'), 1, 'REGRESSION: the screens are handed no Undo — Past merges cannot list or undo');
     assert.ok(!/\breverse(Contact)?Merge\b/.test(a), 'the old reverses, which no screen called, gone from the context');
     // the hook reads what App hands it, and App takes what the hook returns
@@ -729,7 +737,7 @@ test("T11 — the toast: four shapes in one slot — an error, a notice, a merge
     const names = (s) => s.split(',').map((x) => x.trim().split(':')[0].trim()).filter(Boolean).sort();
     assert.deepEqual(names(USE_MERGE.slice(USE_MERGE.indexOf('({') + 2, USE_MERGE.lastIndexOf('})'))), names(DEPS.slice(DEPS.indexOf('{') + 1, DEPS.indexOf('}'))));
     assert.deepEqual(names(between(h, ind(4, 'return {\n'), ind(4, '};')).replace(/return \{|\};/g, '').replace(/\n/g, ',')),
-        names('mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, findContactDuplicates, handleContactMerge, findMerges, undoMerge'));
+        names('mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, findContactDuplicates, handleContactMerge, findMerges, undoMerge, listsRead'));
 });
 
 const SCAN = [[DS, 'accounts', 'acctCountRef', 'account'], [CS, 'contacts', 'countRef', 'contact']];
@@ -763,7 +771,10 @@ test("T12 — the scan pages: the scan's key is the list's length and its merged
 const srcFiles = (dir = 'src') => readdirSync(new URL(`${dir}/`, ROOT), { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? srcFiles(`${dir}/${e.name}`) : /\.(jsx?|mjs|ts)$/.test(e.name) ? [`${dir}/${e.name}`] : []));
 const SCAN_COPY = 'merge them into one record. A merge can be undone under Past merges below, unless one of its two records was deleted or merged again since.';
-const WINDOW_COPY = 're-linked to the survivor. You can undo the merge afterward under Past merges on this page.';
+// The one tail both merge windows share (re-pinned on purpose, state §0.218): each window's own words before it are
+// pinned apart — T22 and T23 — since the old shared words said every link was "re-linked", which the account merge
+// never did of its contacts (DESIGN I8).
+const WINDOW_COPY = 'You can undo the merge afterward under Past merges on this page.';
 
 test('T13 — the copy says what is offered (Q8): no file under src says a merge is "fully reversible" or "Reversible afterward"; the merge windows, the scan pages and Settings\' two rows say where the Undo is; no screen sends a merge audit row (Q6)', () => {
     const files = srcFiles();
@@ -772,7 +783,10 @@ test('T13 — the copy says what is offered (Q8): no file under src says a merge
         assert.ok(!/fully reversible|Reversible afterward|30-day undo/i.test(t), `REGRESSION: ${rel} says a merge is fully reversible — no age limit and no exact Undo (Q2, Q3)`);
         assert.ok(!/addAudit\??\.?\(\s*'merge'/.test(t), `REGRESSION: ${rel} sends the merge screen's own audit row — two rows per merge (Q6)`);
     }
-    for (const rel of ['src/components/modals/MergeReviewModal.jsx', 'src/components/modals/ContactMergeReviewModal.jsx']) assert.equal(count(read(rel), WINDOW_COPY), 1, `${rel}: the window says where the Undo is`);
+    for (const rel of ['src/components/modals/MergeReviewModal.jsx', 'src/components/modals/ContactMergeReviewModal.jsx']) {
+        assert.equal(count(read(rel), WINDOW_COPY), 1, `${rel}: the window says where the Undo is`);
+        assert.ok(!/re-?link/i.test(code(read(rel))), `REGRESSION: ${rel} says the merge "re-links" what it moves — the account merge's words said so of contacts it never moved (DESIGN I8; state §0.218)`);
+    }
     for (const rel of [DS, CS]) assert.equal(count(read(rel), SCAN_COPY), 1, `${rel}: the page says when a merge can be undone`);
     const cat = read('src/Tabs/settings/catalogue.js');
     for (const kind of ['accounts', 'contacts']) assert.equal(count(cat, `desc:'Scan ${kind} for likely duplicates and merge them — and undo a merge'`), 1, `Settings' ${kind} row`);
@@ -814,9 +828,14 @@ test("T15 — Past merges (Q1, Q2): each Undo confirmed in the app's confirm, ne
     assert.ok(confirm && confirm.arguments.length === 3 && confirm.arguments[2].type === 'BooleanLiteral' && confirm.arguments[2].value === false,
         'REGRESSION: its confirm is the red Delete dialog — showConfirm\'s third argument false (ModalLayer: "Delete" in red unless danger is false; App defaults danger = true)');
     const cb = confirm.arguments[1];
-    const last = cb.body.body[cb.body.body.length - 1];
-    assert.ok(cb.async && last.type === 'ExpressionStatement' && last.expression.type === 'CallExpression' && last.expression.callee.name === 'load',
-        'REGRESSION: not read again after its own Undo — the row still offers it');
+    // Its last two statements (state §0.218; Jeff, 30 Oct: Q18 — Past merges' busy mark): the list read again, awaited,
+    // then the busy mark released — released first, the row offered its Undo again until the list answered.
+    // The review of §0.218: read again until a read after the Undo lands (one a later load overtook dropped its answer),
+    // at most three times — then released.
+    const [reread, release] = cb.body.body.slice(-2);
+    assert.ok(cb.async && reread.type === 'ForStatement' && src.slice(reread.start, reread.end).startsWith('for (let tries = 0; tries < 3 && !(await load()); tries += 1)'),
+        'REGRESSION: not read again after its own Undo, the read not awaited, or released on a read a later load overtook — the row still offers it');
+    assert.equal(src.slice(release.start, release.end), 'setBusyId(null);', 'REGRESSION: the busy mark released before the list read again answered — the Undo offered again over the merge it just undid');
     assert.deepEqual(disabled, ['disabled={anyBusy}'], 'REGRESSION: its Undo is never disabled — two Undos out at once, the second answering 409');
     const CAN = ind(4, "const canUndo = m.status === 'merged' && !m.refusal;");
     once(src, CAN);
@@ -829,15 +848,22 @@ test("T15 — Past merges (Q1, Q2): each Undo confirmed in the app's confirm, ne
         const fn = new Function('setBusyId', 'undoMerge', 'm', 'entityType', 'setSaid', 'load', `return (${src.slice(cb.start, cb.end)});`)(
             (v) => calls.push(['busy', v]), async (...a) => { calls.push(['undo', ...a]); return answer; },
             { id: 'mrg_1', archivedName: 'Resinall, Inc.', survivorName: 'Resinall' }, 'account',
-            (f) => calls.push(['said', f({ mrg_0: 'an earlier row' })]), () => calls.push(['load']));
+            (f) => calls.push(['said', f({ mrg_0: 'an earlier row' })]), async () => { calls.push(['load']); await tick(); calls.push(['loaded']); return lands.length ? lands.shift() : true; });
         await fn();
         return calls;
     };
+    let lands = [];
     assert.deepEqual(await runUndo({ ok: false, words: 'Merge not undone — This merge has already been undone.' }), [
-        ['busy', 'mrg_1'], ['undo', 'mrg_1', 'account', 'Resinall, Inc.'], ['busy', null],
-        ['said', { mrg_0: 'an earlier row', mrg_1: 'Merge not undone — This merge has already been undone.' }], ['load'],
-    ], 'REGRESSION: after its first Undo every Undo stays disabled (busy never released), a refused or lost Undo says nothing under its row, or the record goes unnamed for its words');
-    assert.deepEqual((await runUndo({ ok: false, words: null })).map((c) => c[0]), ['busy', 'undo', 'busy', 'load'], 'an answer after an org switch: no words said');
+        ['busy', 'mrg_1'], ['undo', 'mrg_1', 'account', 'Resinall, Inc.'],
+        ['said', { mrg_0: 'an earlier row', mrg_1: 'Merge not undone — This merge has already been undone.' }], ['load'], ['loaded'], ['busy', null],
+    ], 'REGRESSION: after its first Undo every Undo stays disabled (busy never released), its busy mark released before the list read again answered (state §0.218), a refused or lost Undo says nothing under its row, or the record goes unnamed for its words');
+    assert.deepEqual((await runUndo({ ok: false, words: null })).map((c) => c[0]), ['busy', 'undo', 'load', 'loaded', 'busy'], 'an answer after an org switch: no words said');
+    lands = [false, true];
+    assert.deepEqual((await runUndo({ ok: true, words: 'done' })).map((c) => c[0]), ['busy', 'undo', 'said', 'load', 'loaded', 'load', 'loaded', 'busy'],
+        'REGRESSION (the review of §0.218): released on a read a later load overtook — its answer dropped, the Undo offered again on the list from before it');
+    lands = [false, false, false, false];
+    assert.deepEqual((await runUndo({ ok: true, words: 'done' })).filter((c) => c[0] === 'load').length, 3, 'never more than three reads');
+    lands = [];
     once(src, ind(4, "const { findMerges, undoMerge, showConfirm } = useApp();"));
     once(src, ind(8, "catch (e) { if (gen === loadGen.current) setError(`Past merges did not load — ${e?.message || 'No answer from the server.'}`); }"), 'amend 63: never the browser\'s words');
     once(src, ind(4, 'useEffect(() => { load(); }, [load, version]);'), 'read again on the scan\'s key');
@@ -1077,10 +1103,12 @@ test("T20 — Past merges' list and both scans drop an answer a later load overt
         const pending = [], sets = [], errors = [];
         const load = new Function('loadGen', 'fmRef', 'entityType', 'setData', 'setError', `return (${callbackOf(read(PM), 'load')});`)(
             { current: 0 }, { current: () => new Promise((res, rej) => pending.push({ res, rej })) }, 'account', (d) => sets.push(d), (e) => errors.push(e));
-        load(); load();
+        const said = [load(), load()];
         pending[1].res('second'); await settle();
         pending[0].res('first'); await settle();
         assert.deepEqual(sets, ['second'], 'REGRESSION: Past merges — an answer a later load overtook lands after it: the merge listed standing, its Undo offered');
+        // the review of §0.218: a load says whether its answer was set — the Undo's busy mark waits on it (T15)
+        assert.deepEqual(await Promise.all(said), [false, true], 'REGRESSION: an overtaken load said to have landed — the Undo released on the list from before it');
         sets.length = 0; errors.length = 0; pending.length = 0;
         load(); load();
         pending[1].res('second'); await settle();
@@ -1158,4 +1186,161 @@ test("T21 — undoPlaces never puts a deal on a site (Jeff, 18 Oct: \"Leave such
         { table: 'opportunities', column: 'accountId', kind: 'lift', ids: ['d_up'], rows: [] },
     ] }), ['d1'], 'REGRESSION: a deal the lift moved up, or a task, or a deal renamed by name alone, read as one the deal id restore moves back');
     assert.deepEqual(U.dealsByIdOf({}), [], 'no rewrites: none');
+});
+
+// ── batch 3c's screen half (state §0.218; Jeff, 30 Oct: Q17 "Show it to pick", Q18; the map's answers) ──────────────
+// Made-up rows: UKG's two "Shell - Port Allen" (a business unit and its own site); "Resinall, Inc." merged into
+// "Resinall"; a contact merged away.
+const W_ACCOUNTS = [
+    { id: 'a_shell', name: 'Shell', parentAccountId: null, accountTier: 'account' },
+    { id: 'a_unit', name: 'Shell - Port Allen', parentAccountId: 'a_shell', accountTier: 'business_unit' },
+    { id: 'a_site', name: 'Shell - Port Allen', parentAccountId: 'a_unit', accountTier: 'site' },
+    { id: 'a_old', name: 'Resinall, Inc.', parentAccountId: null, mergeArchived: true, mergedIntoId: 'a_res' },
+    { id: 'a_res', name: 'Resinall', parentAccountId: null, accountTier: 'account' },
+];
+const W_CONTACTS = [
+    { id: 'k_unit', company: 'Shell - Port Allen', accountId: 'a_unit' },
+    { id: 'k_site', company: 'Shell - Port Allen', accountId: 'a_site' },
+    { id: 'k_twin', company: 'Shell - Port Allen', accountId: null },
+    { id: 'k_old', company: 'Resinall, Inc.', accountId: 'a_old' },
+    { id: 'k_typed', company: 'resinall', accountId: null },
+    { id: 'k_renamed', company: 'Old text', accountId: 'a_res' },
+    { id: 'k_gone', company: 'Resinall', accountId: 'a_res', mergeArchived: true, mergedIntoId: 'k_renamed' },
+];
+const wc = (id, over = {}) => ({ ...W_CONTACTS.find((c) => c.id === id), ...over });
+
+test('T22 — the contact window\'s Company by its link (Q17, Jeff, 30 Oct: "Show it to pick"; mergeWindow.js, run, and the window\'s own field loop and buildResolved, run as written): two accounts are a conflict — each option naming its account\'s level or parent, a merged-away one the account it was merged into; a link only the record merged away has fills; the same link stands whatever its text; one link, the survivor\'s pair stands; neither linked, the text as before — and what the window sends is the pair the server takes (contactPairOf)', async () => {
+    const { companyCase, companyResolved, companyOption } = await import('../src/utils/mergeWindow.js');
+    const { contactPairOf, PAIR_NOT_OURS } = await import('../src/utils/mergeLinks.js');
+    // the options
+    assert.deepEqual(companyOption(wc('k_unit'), W_ACCOUNTS), { text: 'Shell - Port Allen', note: 'unit of Shell' });
+    assert.deepEqual(companyOption(wc('k_site'), W_ACCOUNTS), { text: 'Shell - Port Allen', note: 'site of Shell - Port Allen' }, 'REGRESSION: twins of one name offered as two identical options');
+    assert.deepEqual(companyOption(wc('k_old'), W_ACCOUNTS), { text: 'Resinall, Inc.', note: 'merged into “Resinall”' }, 'a merged-away account: the one the server links (followed)');
+    assert.deepEqual(companyOption(wc('k_old'), W_ACCOUNTS.filter((a) => a.id !== 'a_res')), { text: 'Resinall, Inc.', note: 'merged into another account' });
+    assert.deepEqual(companyOption({ company: '', accountId: 'a_res' }, W_ACCOUNTS), { text: 'Resinall', note: 'top level' }, 'no text: its account\'s name');
+    assert.deepEqual(companyOption({ company: 'Zeta', accountId: 'a_nowhere' }, W_ACCOUNTS), { text: 'Zeta', note: "an account you can't open" });
+    assert.deepEqual(companyOption({ company: 'Zeta', accountId: null }, W_ACCOUNTS), { text: 'Zeta', note: '' });
+    // each case: [survivor, archived, its case, what is sent picking the survivor's, picking the other's, the server's pair for each]
+    const CASES = [
+        ['two links, one text (the twins)', wc('k_unit'), wc('k_site'), { kind: 'conflict', byLink: true },
+            { accountId: 'a_unit', company: 'Shell - Port Allen' }, { accountId: 'a_site', company: 'Shell - Port Allen' },
+            { from: 'survivor' }, { from: 'archived', accountId: 'a_site', company: 'Shell - Port Allen' }],
+        ['a link only the record merged away has: a fill', wc('k_twin'), wc('k_old'), { kind: 'fill', byLink: true },
+            { accountId: 'a_old', company: 'Resinall, Inc.' }, { accountId: 'a_old', company: 'Resinall, Inc.' },
+            { from: 'archived', accountId: 'a_old', company: 'Resinall, Inc.' }, { from: 'archived', accountId: 'a_old', company: 'Resinall, Inc.' }],
+        ['the same link, another text: the survivor\'s pair stands', wc('k_renamed'), wc('k_gone', { mergeArchived: false }), { kind: null, byLink: true },
+            {}, {}, null, null],
+        ['a link only the survivor has: its pair stands', wc('k_renamed'), wc('k_twin'), { kind: null, byLink: true },
+            { accountId: 'a_res', company: 'Old text' }, { accountId: 'a_res', company: 'Old text' }, { from: 'survivor' }, { from: 'survivor' }],
+        ['neither linked, two texts: the text as before', wc('k_twin'), wc('k_typed'), { kind: 'conflict', byLink: false },
+            {}, { company: 'resinall' }, null, { from: 'archived', accountId: null, company: 'resinall' }],
+        ['neither linked, one text: a fill', wc('k_twin', { company: '' }), wc('k_typed'), { kind: 'fill', byLink: false },
+            { company: 'resinall' }, { company: 'resinall' }, { from: 'archived', accountId: null, company: 'resinall' }, { from: 'archived', accountId: null, company: 'resinall' }],
+        ['neither linked, texts alike', wc('k_twin'), wc('k_twin', { id: 'k_twin2', company: 'shell - port allen ' }), { kind: null, byLink: false }, {}, {}, null, null],
+    ];
+    for (const [why, s, a, kase, sentS, sentA, pairS, pairA] of CASES) {
+        assert.deepEqual(companyCase(s, a), kase, why);
+        assert.deepEqual(companyResolved(s, a, 'survivor'), sentS, `${why}: sent, the survivor's picked`);
+        assert.deepEqual(companyResolved(s, a, 'archived'), sentA, `${why}: sent, the other's picked`);
+        assert.deepEqual(contactPairOf(sentS, s, a), pairS, `${why}: the server's pair, the survivor's picked`);
+        assert.deepEqual(contactPairOf(sentA, s, a), pairA, `${why}: the server's pair, the other's picked`);
+        for (const sent of [sentS, sentA]) assert.notDeepEqual(contactPairOf(sent, s, a), { error: PAIR_NOT_OURS }, `${why}: never a pair the server refuses`);
+    }
+    // the window's own field loop and buildResolved, run as written: its Company row by link, its pair sent
+    const src = code(read(CMRM));
+    once(src, "import { companyCase, companyResolved, companyOption } from '../../utils/mergeWindow.js';");
+    once(src, ind(8, 'contacts, accounts, opportunities, activities, tasks,'), 'the window reads the accounts its options name');
+    const FIELDS = between(src, 'const FIELDS = [', '];');
+    const helpers = [ind(0, "const norm = (v) => String(v ?? '').trim().toLowerCase();"), ind(0, "const has = (v) => String(v ?? '').trim() !== '';")];
+    for (const h of helpers) once(src, h);
+    const body = between(src, ind(4, 'const conflicts = []; // both non-empty + differ -> user picks'), '\n    };\n');
+    const win = (survivor, archived, choices = {}) => new Function('survivor', 'archived', 'accounts', 'choices', 'companyCase', 'companyResolved', 'companyOption',
+        `${FIELDS}\n${helpers.join('\n')}\n${body}\nreturn { conflicts, fills, resolved: buildResolved() };`)(survivor, archived, W_ACCOUNTS, choices, companyCase, companyResolved, companyOption);
+    const twins = win({ ...wc('k_unit'), title: 'Buyer' }, { ...wc('k_site'), title: 'Lead buyer' }, { company: 'archived', title: 'archived' });
+    assert.deepEqual(twins.conflicts.map((f) => [f.key, f.sv, f.svNote, f.av, f.avNote]), [
+        ['title', 'Buyer', undefined, 'Lead buyer', undefined],
+        ['company', 'Shell - Port Allen', 'unit of Shell', 'Shell - Port Allen', 'site of Shell - Port Allen'],
+    ], 'REGRESSION: two contacts on twin accounts of one name merged with no question — the Company compared as text alone');
+    assert.deepEqual(twins.resolved, { title: 'Lead buyer', accountId: 'a_site', company: 'Shell - Port Allen' }, 'REGRESSION: the other\'s Company picked sends its text alone — the survivor keeps its own link (DESIGN I7)');
+    assert.deepEqual(win(wc('k_unit'), wc('k_site')).resolved, { accountId: 'a_unit', company: 'Shell - Port Allen' }, 'the survivor\'s kept: its own pair, sent');
+    const fill = win(wc('k_twin'), wc('k_old'));
+    assert.deepEqual([fill.conflicts, fill.fills.map((f) => [f.key, f.av]), fill.resolved], [[], [['company', 'Resinall, Inc.']], { accountId: 'a_old', company: 'Resinall, Inc.' }],
+        'REGRESSION: a link only the record merged away has is a text conflict or nothing — its account never carried');
+    assert.deepEqual(win(wc('k_renamed'), wc('k_gone', { mergeArchived: false })).resolved, {}, 'the same link, another text: no question, nothing sent');
+    assert.deepEqual(win(wc('k_twin'), wc('k_typed'), { company: 'archived' }).resolved, { company: 'resinall' }, 'neither linked: the text as before');
+    // its words (re-pinned on purpose, state §0.218): the shared Undo tail is T13's
+    once(src, ind(24, "Choose the record that survives. The other is archived, and its opportunities, activities, tasks and org-chart places move to the survivor. You can undo the merge afterward under Past merges on this page."), 'the window says what moves');
+    once(src, ind(20, "Merging puts “{displayName(survivor)}” in place of “{displayName(archived)}” on <b style={{ fontWeight: 700 }}>{aCounts.opps} opportunities</b>, <b style={{ fontWeight: 700 }}>{aCounts.activities} activities</b>, <b style={{ fontWeight: 700 }}>{aCounts.tasks} tasks</b>{aCounts.orgChart ? <>, and <b style={{ fontWeight: 700 }}>{aCounts.orgChart} org-chart link{aCounts.orgChart > 1 ? 's' : ''}</b></> : null}, then archives “{displayName(archived)}”. A Company moves with its account: the survivor keeps its own unless you pick the other's above, or only the other has an account."), 'the window\'s summary: what the merge puts in place, and the Company with its account');
+    once(src, ind(48, '<span style={{ overflow: \'hidden\', textOverflow: \'ellipsis\', whiteSpace: \'nowrap\' }}>{String(f.av)}{f.avNote ? <span style={{ color: C.faint }}> · {f.avNote}</span> : null}</span>'), 'REGRESSION: the options drawn without what tells twins apart');
+});
+
+test('T23 — the account window counts contacts as an account\'s rail reads them (railLinks.js linkedAccount; contactsByAccount, run): by the account id — one merged away counts on the one it was merged into — else the ONE live account the Company names, never twins; a contact merged away counts nowhere; and its words say what merge.mjs does: contacts and deals moved by their link with the survivor\'s name, the SPIFF claims on them renamed, Dispatch\'s customers and jobs moved, into a site the deals moved up (D22)', async () => {
+    const { contactsByAccount } = await import('../src/utils/mergeWindow.js');
+    const on = contactsByAccount(W_CONTACTS, W_ACCOUNTS);
+    assert.deepEqual(Object.fromEntries(on), { a_unit: 1, a_site: 1, a_res: 3 },
+        'REGRESSION: a contact counted by its Company text — the twins each counted three (the id-less one on both), Resinall none, a merged-away contact counted');
+    // the old rule, on the same rows: `company === name` over the live contacts
+    const old = (acc) => W_CONTACTS.filter((c) => !isMergeArchived(c) && c.company === acc.name).length;
+    assert.deepEqual(W_ACCOUNTS.filter((a) => !isMergeArchived(a)).map((a) => [a.id, old(a)]), [['a_shell', 0], ['a_unit', 3], ['a_site', 3], ['a_res', 0]], 'the old rule');
+    const src = code(read(MRM));
+    once(src, "import { contactsByAccount, mergeMoves } from '../../utils/mergeWindow.js';");
+    once(src, ind(8, 'const contactsOn = contactsByAccount(contacts, accounts);'));
+    once(src, ind(12, 'const cts = contactsOn.get(acc.id) || 0;'), 'REGRESSION: the account window counts contacts by `company === name`');
+    // The summary (the review of §0.218): what merge.mjs moves by id — every deal and contact linked to the record merged
+    // away, a contact merged away too — and the name it writes, the picked one; the cards keep "what you see".
+    const { mergeMoves } = await import('../src/utils/mergeWindow.js');
+    const X = { id: 'a_x', name: 'Old X' }, Y = { id: 'a_y', name: 'Y' };
+    const rows = {
+        opportunities: [{ accountId: 'a_x' }, { accountId: 'a_x' }, { accountId: null, account: 'Old X' }, { accountId: 'a_y' }],
+        contacts: [{ accountId: 'a_x' }, { accountId: 'a_x', mergeArchived: true }, { accountId: null, company: 'Old X' }],
+    };
+    assert.deepEqual(mergeMoves(X, Y, rows, {}), { opps: 2, contacts: 2, name: 'Y' }, 'REGRESSION: counted a deal or contact by name alone, which the server never moves by id');
+    assert.equal(mergeMoves(X, Y, rows, { name: 'archived' }).name, 'Old X', "REGRESSION: the summary named the survivor's old name over the one picked");
+    assert.deepEqual(mergeMoves({ id: 'a_z', name: 'Z' }, Y, rows, {}), { opps: 0, contacts: 0, name: 'Y' });
+    assert.deepEqual(mergeMoves(null, Y, {}, {}), { opps: 0, contacts: 0, name: 'Y' });
+    once(src, ind(4, 'const moves = mergeMoves(archived, survivor, { opportunities, contacts }, choices);'));
+    // its words (re-pinned on purpose, state §0.218): the shared Undo tail is T13's
+    const words = between(src, ind(20, 'Merging moves the <b style={{ fontWeight: 700 }}>{moves.opps} opportunities</b>'), ind(20, "{' '}Then “{archived.name}” is archived."));
+    for (const said of ['{moves.contacts} contacts</b> linked to “{archived.name}” to “{moves.name}”', 'each taking that name', 'Those that name “{archived.name}” with no link are renamed too, unless another account has that name.',
+        'The SPIFF claims on those opportunities take the name their opportunity carries', 'Dispatch customers and jobs move to “{moves.name}” too', '“{moves.name}” is a site, so the opportunities from',
+        'go up to the account above it when it has one', 'with “{moves.name}” as their Site Name']) {
+        assert.equal(count(words, said), 1, `REGRESSION: the account window's words leave out, or misstate, what the merge does: ${said}`);
+    }
+    assert.equal(count(words, 'aCounts.opps'), 0, 'the summary never counts what each card shows');
+    assert.equal(count(words, '“{survivor.name}”'), 0, "the summary never names the survivor's old name");
+});
+
+test('T24 — SPIFF claims read again after a merge and after its Undo (state §0.218 — the map\'s answers: an account merge renames the claims on its deals, its Undo names them back): useMerge moves listsRead each time it reads the lists again, App reads the claims on it — its effect run as written: nothing before the first read again or with no org; one read per move; an answer a later read overtook, or for an org switched away from, dropped', async () => {
+    const h = code(read(UM));
+    const after = between(h, ind(4, 'const refreshAfter = (entityType) => {'), ind(4, '};'));
+    once(after, ind(8, 'setListsRead((n) => n + 1);'), 'REGRESSION: the claims are never read again after a merge or its Undo');
+    once(h, ind(4, 'const [listsRead, setListsRead] = useState(0);'));
+    once(h, ind(8, 'listsRead,'), 'the hook hands it to App');
+    const a = code(read(APP));
+    const HEAD = ind(4, 'useEffect(() => {\n        if (!listsRead || !activeOrgId) return;');
+    const effect = between(a, HEAD, ind(4, '}, [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps -- the org\'s own load is the effect above'));
+    const raw = read(APP);
+    assert.ok(raw.indexOf(HEAD) > raw.indexOf('// Spiff claims: once signed in with an active org') && raw.indexOf('// Spiff claims: once signed in with an active org') > 0, 'after the org\'s own load');
+    const fn = effect.slice(effect.indexOf('{') + 1, effect.lastIndexOf('}, [listsRead]'));
+    const runEffect = (listsRead, activeOrgId, org) => {
+        const calls = [], waits = [];
+        const cleanup = new Function('listsRead', 'activeOrgId', 'requestOrg', 'stillOrg', 'dbFetch', 'setSpiffClaims', fn)(
+            listsRead, activeOrgId, () => 'org_qa', () => org.now === 'org_qa',
+            (url) => { calls.push(url); return new Promise((r) => waits.push(r)); }, (v) => calls.push(['set', v]));
+        return { calls, cleanup, answer: async (claims) => { waits.shift()?.({ ok: true, json: async () => ({ spiffClaims: claims }) }); for (let i = 0; i < 5; i++) await tick(); } };
+    };
+    const org = { now: 'org_qa' };
+    assert.deepEqual(runEffect(0, 'org_qa', org).calls, [], 'no merge yet: the org\'s own load reads them');
+    assert.deepEqual(runEffect(1, null, org).calls, [], 'no org: nothing');
+    const one = runEffect(1, 'org_qa', org);
+    await one.answer([{ id: 'cl_1', account: 'Resinall' }]);
+    assert.deepEqual(one.calls, ['/.netlify/functions/spiff-claims', ['set', [{ id: 'cl_1', account: 'Resinall' }]]], 'REGRESSION: the claims kept from before the merge — the old name shown');
+    const overtaken = runEffect(2, 'org_qa', org);
+    overtaken.cleanup();
+    await overtaken.answer([{ id: 'cl_1', account: 'Resinall, Inc.' }]);
+    assert.deepEqual(overtaken.calls, ['/.netlify/functions/spiff-claims'], 'REGRESSION: an answer a later read overtook set');
+    const switched = runEffect(3, 'org_qa', org);
+    org.now = 'org_b';
+    await switched.answer([{ id: 'cl_9' }]);
+    assert.deepEqual(switched.calls, ['/.netlify/functions/spiff-claims'], 'REGRESSION: an answer for an org switched away from set');
 });

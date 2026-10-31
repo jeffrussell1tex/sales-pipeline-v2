@@ -4,6 +4,7 @@ import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { unarchived } from '../../utils/pickLink.js';
+import { contactsByAccount, mergeMoves } from '../../utils/mergeWindow.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -59,14 +60,17 @@ export default function MergeReviewModal() {
     // What each record holds, as the lists show it (state §0.210; Jeff, 18 Oct: "Count what you see"): live contacts
     // and sub-accounts — one merged into another is on no list — and deals by their account link, by name only for
     // a deal with none (the house read rule; the merge moves deals by id). A sub-account is never the pair itself: a site
-    // merged with its own parent is lifted, not re-linked (merge.mjs). The live lists worked out once a change.
+    // merged with its own parent is lifted, not re-linked (merge.mjs). The live lists worked out once a change. A contact
+    // counts on the account an account's rail reads it on (state §0.218 — mergeWindow.js contactsByAccount, railLinks.js
+    // linkedAccount): by its accountId, else the one live account its Company names — never by `company === name`,
+    // which missed a contact linked by id under another text and counted an id-less one on both twins of a name.
     const countsFor = useMemo(() => {
-        const liveContacts = unarchived(contacts);
+        const contactsOn = contactsByAccount(contacts, accounts);
         const liveAccounts = unarchived(accounts);
         return (acc) => {
             if (!acc) return { opps: 0, contacts: 0, activities: 0, subs: 0, total: 0 };
             const opps = (opportunities || []).filter(o => (o.accountId ? o.accountId === acc.id : o.account === acc.name)).length;
-            const cts = liveContacts.filter(c => c.company === acc.name).length;
+            const cts = contactsOn.get(acc.id) || 0;
             const acts = (activities || []).filter(x => x.accountId === acc.id).length;
             const subs = liveAccounts.filter(x => (x.parentAccountId) === acc.id && x.id !== aId && x.id !== bId).length;
             const tsk = (tasks || []).filter(t => t.accountId === acc.id).length;
@@ -104,6 +108,8 @@ export default function MergeReviewModal() {
     const archived = survivorId === accB.id ? accA : accB;
     const sCounts = countsFor(survivor);
     const aCounts = countsFor(archived);
+    // The summary's: what merge.mjs moves by id, and the name it writes (mergeWindow.js mergeMoves; the review of §0.218).
+    const moves = mergeMoves(archived, survivor, { opportunities, contacts }, choices);
 
     // Field analysis relative to the chosen survivor.
     const conflicts = []; // both non-empty + differ -> user picks
@@ -168,7 +174,7 @@ export default function MergeReviewModal() {
 
                 <div style={{ padding: '1.1rem 1.25rem 0.5rem' }}>
                     <div style={{ fontSize: 12, color: C.muted, marginBottom: '0.75rem' }}>
-                        Choose the record that survives. The other is archived and its related items are re-linked to the survivor. You can undo the merge afterward under Past merges on this page.
+                        Choose the record that survives. The other is archived, and what stands on it moves to the survivor. You can undo the merge afterward under Past merges on this page.
                     </div>
 
                     {mergeError && (
@@ -233,9 +239,14 @@ export default function MergeReviewModal() {
                     )}
                 </div>
 
-                {/* Re-link summary */}
+                {/* What the merge moves (state §0.218: the words say what merge.mjs does) — contacts and deals by their link,
+                    each with the survivor's name; the claims on those deals renamed; Dispatch's customers and jobs moved;
+                    into a site, the deals moved up to the account above it (D22). Dispatch and the claims are not in the
+                    app's context, so they are named without counts. */}
                 <div style={{ margin: '0.9rem 1.25rem 0', padding: '0.6rem 0.8rem', background: C.warnBg, border: `1px solid ${C.warnBorder}`, borderRadius: C.r, fontSize: 12, color: '#7a5a2c', lineHeight: 1.45 }}>
-                    Merging re-links <b style={{ fontWeight: 700 }}>{aCounts.opps} opportunities</b>, <b style={{ fontWeight: 700 }}>{aCounts.contacts} contacts</b>, <b style={{ fontWeight: 700 }}>{aCounts.activities} activities</b>{aCounts.tasks ? <>, <b style={{ fontWeight: 700 }}>{aCounts.tasks} tasks</b></> : null}{aCounts.subs ? <>, and <b style={{ fontWeight: 700 }}>{aCounts.subs} sub-accounts</b></> : null} from “{archived.name}” to “{survivor.name}”, then archives “{archived.name}”.
+                    Merging moves the <b style={{ fontWeight: 700 }}>{moves.opps} opportunities</b> and <b style={{ fontWeight: 700 }}>{moves.contacts} contacts</b> linked to “{archived.name}” to “{moves.name}”, each taking that name, with <b style={{ fontWeight: 700 }}>{aCounts.activities} activities</b>{aCounts.tasks ? <>, <b style={{ fontWeight: 700 }}>{aCounts.tasks} tasks</b></> : null}{aCounts.subs ? <> and <b style={{ fontWeight: 700 }}>{aCounts.subs} sub-accounts</b></> : null}. Those that name “{archived.name}” with no link are renamed too, unless another account has that name. The SPIFF claims on those opportunities take the name their opportunity carries, and its Dispatch customers and jobs move to “{moves.name}” too.
+                    {survivor.accountTier === 'site' ? <> “{moves.name}” is a site, so the opportunities from “{archived.name}” go up to the account above it when it has one, with “{moves.name}” as their Site Name.</> : null}
+                    {' '}Then “{archived.name}” is archived.
                 </div>
 
                 {/* Footer */}
