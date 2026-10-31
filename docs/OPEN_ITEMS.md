@@ -139,7 +139,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      its account by id; the deals bulk paths linked by the single save's
      rule; a blank Sales Rep the importer's by id; an Overwrite's blank
      cell keeps what is stored. **3c built (§0.218; guide §18b108), its
-     browser check PASSED as Jeff, NOT committed** (Jeff, 30 Oct: Q15 "Still
+     browser check PASSED as Jeff, committed `98a26e3` (31 Oct, on Jeff's word, "Commit c"), NOT pushed** (Jeff, 30 Oct: Q15 "Still
      on survivor", Q16 "Skip if shared", Q17 "Show it to pick", Q18 all
      three): contacts moved by id and back with their own company; renames
      within the pair; a claim with its deal; a contact's Company with its
@@ -3462,7 +3462,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   at :591 names the restore.
 - **What §0.207's merge Undo leaves** (its design, reviews and re-checks,
   17–18 Oct; each read in code, or run where said):
-  - **Two concurrent merges of one record merged away both commit — DONE (§0.218, NOT committed: the batch opens with a claim on both records, each live and as read; Q18)** (the
+  - **Two concurrent merges of one record merged away both commit — DONE (§0.218, committed `98a26e3`: the batch opens with a claim on both records, each live and as read; Q18)** (the
     server map; reasoned from the code, not run): each passes the merge's
     check that the record is live, the second's archive write overwrites
     `mergedIntoId`, and two logs read 'merged' for one record. Since
@@ -3529,7 +3529,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     need the guard below. Recommended: the generation counter the five list
     loads now have (guide §18b100 rule 6).
   - **An account merge's audit count counts a lifted deal two or three
-    times — DONE (§0.218, NOT committed: each record once, `recordsTouched`; Q18)** (the server map): the summary adds every rewrite's ids, and a
+    times — DONE (§0.218, committed `98a26e3`: each record once, `recordsTouched`; Q18)** (the server map): the summary adds every rewrite's ids, and a
     deal moved by id or by name and then lifted (D22) is in both, so "N
     references repointed" reads more than were moved.
 - **Deals by name alone that a merge's Undo leaves on a site by their
@@ -3664,7 +3664,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
   As recorded.
-- **Past merges offers an Undo again until its list is read again — DONE (§0.218, NOT committed: the mark released only after a read that landed; Q18)**
+- **Past merges offers an Undo again until its list is read again — DONE (§0.218, committed `98a26e3`: the mark released only after a read that landed; Q18)**
   (§0.210's browser check, 23 Oct; read in code): after an Undo's
   answer, the row says so ("Merge undone — “Tess Undoer” is its own
   record again.") beside an enabled Undo until the list's reload
