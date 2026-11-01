@@ -152,7 +152,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      change a moved account's tier; no tier resolved; D22's namesakes live;
      the Undo reads the survivor's deals with no id by its name; the scan
      marks a pair in one hierarchy; the window warns. Batch 3's four steps
-     are built.
+     are built. **§0.220 built, its browser check PASSED as Jeff (a
+     refused merge pressed on his word), NOT committed** (Jeff, 1 Nov: "do
+     that"): the refusal's words read two records of one name apart, each
+     merge card shows its level, the refusal box in the warm colours.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -1709,12 +1712,22 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deal's contacts unguarded, so a row linked mid-merge moves unlogged and
   its Undo leaves it; the account merge's other id moves likewise.
   Recommended: write by the snapshotted ids, as 3c's contact move does.
-- **A merge's refusal names a record of one name twice** (§0.219's browser
-  check, 31 Oct): a chain whose top and site share a name — the duplicate
-  scan's own case — reads "“TEST3d Chain” stands under “TEST3d Mid”, which
-  stands under “TEST3d Chain” — move “TEST3d Chain” first." Recommended:
-  name each with its level where two names match ("the site “X”") — Q7's
-  words were approved as written, so Jeff's call. Low.
+- **A merge's refusal names a record of one name twice — DONE (§0.220,
+  NOT committed; Jeff, 1 Nov: "do that")** (§0.219's browser check, 31
+  Oct): the chain read "“TEST3d Chain” stands under “TEST3d Mid”, which
+  stands under “TEST3d Chain”". Now the merge's two read by their cards'
+  tags — “TEST3d Chain” (survivor), “TEST3d Chain” (archive) — any other
+  by its level or place; each card shows its level (guide §18b110).
+- **Two sub-accounts of one name, one level and one parent read alike in
+  a merge's refusal** (§0.220's review): twin sites under the record
+  merged away are each named "(site of “X”)" — both named for their move,
+  so nothing misleads, but nothing tells them apart. Recommended, if it
+  matters: their owner or an ordinal. Low.
+- **The merge window's summary names a pair of one name alike** (§0.220's
+  browser check, 1 Nov): "Merging moves the 0 opportunities … linked to
+  “TEST3d Chain” to “TEST3d Chain” … Then “TEST3d Chain” is archived."
+  Recommended: the same namer (`namesApart`, the cards' tags). Low, Jeff's
+  call.
 - **A move deep under the record merged away while a merge runs**
   (§0.219's review, reasoned): the batch asserts the record merged away's
   live sub-accounts as read and both records' stamps, but not a move

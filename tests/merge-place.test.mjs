@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mergePlacement, pairHierarchy } from '../src/utils/accountParent.js';
+import { mergePlacement, pairHierarchy, namesApart, levelName } from '../src/utils/accountParent.js';
 import { mergeWarning } from '../src/utils/mergeWindow.js';
 import { dealsByNameOn, survivorRestore, undoPlaces } from '../src/utils/mergeUndo.js';
 
@@ -18,7 +18,7 @@ const place = (rows, survivorId, archivedId) => mergePlacement(rows, { survivorI
 
 test('Q7 (state §0.219): a survivor two or more levels under the record merged away is refused, its chain named — "Refuse, name the chain"; one straight under it goes up (the lift), and the other way round merges', () => {
     const rows = [A('x', 'Shell', null, 'account'), A('u', 'Shell Unit', 'x', 'business_unit'), A('y', 'Port Allen', 'u', 'site')];
-    assert.deepEqual(place(rows, 'y', 'x'), { problem: 'chain', names: ['Port Allen', 'Shell Unit', 'Shell'], error: '“Port Allen” stands under “Shell Unit”, which stands under “Shell” — move “Port Allen” first.' },
+    assert.deepEqual(place(rows, 'y', 'x'), { problem: 'chain', names: ['Port Allen', 'Shell Unit', 'Shell'], error: '“Port Allen” stands under “Shell Unit”, which stands under “Shell” — move “Port Allen” first.', named: ['y', 'u', 'x'] },
         'REGRESSION: the merge closed a loop — X\'s unit moved under its own site');
     assert.equal(place(rows, 'u', 'x'), null, 'straight under it: the survivor goes up (H6), nothing refused');
     assert.equal(place(rows, 'x', 'y'), null, 'the grandparent as the survivor: the site merged into it');
@@ -32,7 +32,7 @@ test('Q8 (state §0.219): a sub-account moved under a site, or whose own account
     const x = A('x', 'Old Co', null, 'account');
     // the survivor a site: nothing can stand under it
     const site = [x, A('y', 'Dock', null, 'site'), A('a', 'Plant', 'x', 'business_unit'), A('b', 'Yard', 'x', 'site')];
-    assert.deepEqual(place(site, 'y', 'x'), { problem: 'place', names: ['Plant', 'Yard'], error: '“Dock” is a site — a site can\'t have accounts under it, and “Plant” and “Yard” stand under “Old Co”. Move them first.' });
+    assert.deepEqual(place(site, 'y', 'x'), { problem: 'place', names: ['Plant', 'Yard'], error: '“Dock” is a site — a site can\'t have accounts under it, and “Plant” and “Yard” stand under “Old Co”. Move them first.', named: ['y', 'x', 'a', 'b'] });
     // a business unit survivor: a site child keeps its tier; a unit child would have to become a site
     const unit = [x, A('y', 'Unit', null, 'business_unit'), A('s', 'Site', 'x', 'site')];
     assert.equal(place(unit, 'y', 'x'), null, 'a site under a business unit: as stored, nothing changes');
@@ -85,7 +85,7 @@ test('Q22 (state §0.219): the window warns before Merge with the server\'s own 
     // the app's whole list: a site merged away under the record merged away refuses nothing (Q19)
     const rows = [A('x', 'Shell', null, 'account'), A('u', 'Shell Unit', 'x', 'business_unit'), A('y', 'Port Allen', 'u', 'site'), { id: 'old', name: 'Merged', parentAccountId: 'x', accountTier: 'site', mergeArchived: true }];
     const byId = new Map(rows.map((a) => [a.id, a]));
-    assert.deepEqual(mergeWarning(rows, byId.get('y'), byId.get('x')), { words: '“Port Allen” stands under “Shell Unit”, which stands under “Shell” — move “Port Allen” first.', swap: 'Shell' },
+    assert.deepEqual(mergeWarning(rows, byId.get('y'), byId.get('x')), { words: '“Port Allen” stands under “Shell Unit”, which stands under “Shell” — move “Port Allen” first.', swap: '“Shell”' },
         'the grandchild kept refuses; the grandparent kept merges');
     assert.equal(mergeWarning(rows, byId.get('x'), byId.get('y')), null);
     // both ways refused: no swap offered
@@ -220,7 +220,53 @@ test("THE WINDOW (state §0.219; Q22): the account merge window warns before Mer
     const w = read('src/components/modals/MergeReviewModal.jsx');
     assert.ok(w.includes('const warning = mergeWarning(accounts, survivor, archived);'));
     assert.ok(w.includes('<b style={{ fontWeight: 700 }}>This merge will be refused as it stands.</b> {warning.words}'));
-    assert.ok(w.includes('{warning.swap ? <> Keeping “{warning.swap}” as the survivor instead would merge them — pick its card above.</> : null}'));
+    assert.ok(w.includes('{warning.swap ? <> Keeping {warning.swap} as the survivor instead would merge them — pick its card above.</> : null}'), 'the swap in quotes from mergeWarning, with its level where the two read alike (state §0.220)');
     assert.ok(w.includes('<button onClick={onMerge} disabled={mergeSaving}'), 'Merge stays pressable: the server decides');
     assert.ok(!/#9c3a2e|T\.danger/.test(between(w, '{warning && (', ')}')), 'red is for deletes only: the warning in the warm warning colours');
+});
+
+test('SAME NAMES (state §0.220 — Jeff, 1 Nov: "do that"; its review): where another record a refusal names reads alike, the two merged are named by their cards\' tags, any other by its level, else its place; as before where none does; the window names the swap from the records the words name, shows each card\'s level, and says the server\'s refusal in the warm colours', () => {
+    // the browser check's chain (Accelerep QA, 31 Oct): two "TEST3d Chain", an account and its site, the unit between
+    const chain = [A('c', 'TEST3d Chain', null, 'account'), A('m', 'TEST3d Mid', 'c', 'business_unit'), A('s', 'TEST3d Chain', 'm', 'site')];
+    assert.deepEqual(place(chain, 's', 'c'), { problem: 'chain', names: ['TEST3d Chain', 'TEST3d Mid', 'TEST3d Chain'],
+        error: '“TEST3d Chain” (survivor) stands under “TEST3d Mid”, which stands under “TEST3d Chain” (archive) — move “TEST3d Chain” (survivor) first.', named: ['s', 'm', 'c'] },
+        'REGRESSION: one name said twice — which record to move unsaid');
+    const byC = new Map(chain.map((a) => [a.id, a]));
+    assert.deepEqual(mergeWarning(chain, byC.get('s'), byC.get('c')), { words: place(chain, 's', 'c').error, swap: '“TEST3d Chain” (archive)' }, 'the swap named as its card is tagged');
+    // the commonest pair (the review): two top-level accounts of one name and one level — a level or a place would say both alike
+    const tops = [A('y', 'Shell', null, 'account'), A('x', ' shell', null, 'account'), A('c', 'Sub', 'x', 'account')];
+    assert.deepEqual(mergeWarning(tops, tops[0], tops[1]), { words: '“Sub” is an account and would have to become a business unit under “Shell” (survivor) — move it first.', swap: '“shell” (archive)' },
+        'REGRESSION: “Shell” (top level) said of both — alike by case and spaces too');
+    // a record between, of the survivor's name: by its level (REGRESSION: the chain's records left out of the list)
+    assert.equal(place([A('x', 'Shell', null, 'account'), A('m', 'Port', 'x', 'business_unit'), A('y', 'Port', 'm', 'site')], 'y', 'x').error,
+        '“Port” (survivor) stands under “Port” (business unit), which stands under “Shell” — move “Port” (survivor) first.');
+    // the record merged away, of a sub-account's name, in a place refusal — and the swap from the same records
+    const kid = [A('y', 'Dock', null, 'site'), A('x', 'Kid', null, 'account'), A('a', 'Kid', 'x', 'business_unit')];
+    assert.deepEqual(mergeWarning(kid, kid[0], kid[1]), { words: '“Dock” is a site — a site can\'t have accounts under it, and “Kid” (business unit) stands under “Kid” (archive). Move it first.', swap: '“Kid” (archive)' },
+        'REGRESSION: “Kid” stands under “Kid”; and one record named two ways in one box');
+    // a level a namesake shares, another not: its place, its parent quoted (REGRESSION: some read as every)
+    assert.equal(place([A('x', 'Plant', null, 'account'), A('m1', 'Plant', 'x', 'business_unit'), A('u', 'Mid', 'm1', 'business_unit'), A('m2', 'Plant', 'u', 'business_unit'), A('y', 'S', 'm2', 'site')], 'y', 'x').error,
+        '“S” stands under “Plant” (unit of “Mid”), which stands under “Mid”, which stands under “Plant” (unit of “Plant”), which stands under “Plant” (archive) — move “S” first.');
+    // the records the words name, only: a twin elsewhere in the org reads as before
+    const twins = [A('a', 'Port', null, 'account'), A('b', 'Port', null, 'account'), A('q', 'Q', 'b', 'business_unit'), A('z', 'Z', 'a', 'site')];
+    assert.equal(place(twins, 'z', 'b').error, '“Z” is a site — a site can\'t have accounts under it, and “Q” stands under “Port”. Move it first.');
+    assert.equal(mergeWarning([A('n', 'North', null, 'account'), A('nu', 'NU', 'n', 'business_unit'), A('ns', 'NS', 'nu', 'site')], A('ns', 'NS', 'nu', 'site'), A('n', 'North', null, 'account')).swap, '“North”', 'none alike: bare');
+    // a record merged away of no name: still offered
+    const blank = [A('y', 'Dock', null, 'site'), A('x', '', null, 'account'), A('a', 'Kid', 'x', 'business_unit')];
+    assert.equal(mergeWarning(blank, blank[0], blank[1]).swap, 'the other record');
+    // namesApart: top level only with no parent; a parent the rows lack, or of no name, its level; no tier reads as an account
+    const byP = new Map([A('p', 'Top', null, 'account'), A('q', ' ', null, 'account')].map((a) => [a.id, a]));
+    const rows = [A('n', 'Q', null, null), A('m', 'Q', 'p', 'account'), A('g', 'Q', 'gone', 'account'), A('b', 'Q', 'q', 'account')];
+    assert.deepEqual(rows.map(namesApart(rows, byP)), ['“Q” (top level)', '“Q” (in “Top”)', '“Q” (account)', '“Q” (account)']);
+    assert.equal(namesApart([A('e', '  ', null, 'site')], byP)(A('e', '  ', null, 'site')), null);
+    assert.deepEqual([levelName('account'), levelName('business_unit'), levelName('site'), levelName(null), levelName('bogus')], ['Account', 'Business unit', 'Site', 'Account', 'Account']);
+    // the window: each card names its level, as the words do; the server's refusal in the warm colours (red is for deletes)
+    const w = read('src/components/modals/MergeReviewModal.jsx');
+    assert.ok(w.includes("import { levelName } from '../../utils/accountParent.js';"));
+    assert.ok(w.includes("<div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{levelName(acc.accountTier)} · {(acc.accountOwner || acc.assignedRep || 'Unassigned')}"), 'REGRESSION: two cards of one name told apart by nothing');
+    for (const f of ['src/components/modals/MergeReviewModal.jsx', 'src/components/modals/ContactMergeReviewModal.jsx']) {
+        const box = between(read(f), '{mergeError && (', '{mergeError}');
+        assert.ok(box.includes("background: C.warnBg, border: `1px solid ${C.warn}`") && box.includes("color: '#7a5a2c'"), f + ': the warm colours');
+        assert.ok(!/#9c3a2e|T\.danger/.test(box), f + ': REGRESSION: a refusal, which writes nothing, in the delete red');
+    }
 });

@@ -10,7 +10,7 @@
 import { unarchived, isMergeArchived, survivorOf, HIDDEN_ACCOUNT } from './pickLink.js';
 import { linkedAccount } from './railLinks.js';
 import { accountNote } from './importLinks.js';
-import { mergePlacement } from './accountParent.js';
+import { mergePlacement, namesApart } from './accountParent.js';
 
 const idOf = (v) => (v == null || v === '' ? null : String(v));
 const has = (v) => String(v ?? '').trim() !== '';
@@ -34,13 +34,17 @@ export function mergeMoves(archived, survivor, { opportunities, contacts } = {},
 // mergePlacement, the rule merge.mjs asks on the org's accounts), and — where keeping the other record would merge —
 // that too. Merge stays pressable: the app's list can be a moment behind the server's, which decides. accounts: the
 // app's list, merged-away rows included (the rule judges live rows only, as the server does). null when nothing stands
-// in the way; else { words, swap } — swap, the name of the record that would merge as the survivor, or null.
+// in the way; else { words, swap } — swap, the record that would merge as the survivor, named as the words name it
+// (namesApart over the records they name — “Shell” (archive) where two read alike, as its card's tag; state §0.220) —
+// or null.
 export function mergeWarning(accounts, survivor, archived) {
     if (!survivor?.id || !archived?.id) return null;
     const refused = mergePlacement(accounts, { survivorId: survivor.id, archivedId: archived.id });
     if (!refused) return null;
     const other = mergePlacement(accounts, { survivorId: archived.id, archivedId: survivor.id });
-    return { words: refused.error, swap: other ? null : String(archived.name ?? '') };
+    const byId = new Map((Array.isArray(accounts) ? accounts.filter(Boolean) : []).map((a) => [a.id, a]));
+    const said = namesApart(refused.named.map((id) => byId.get(id)), byId, { survivorId: survivor.id, archivedId: archived.id });
+    return { words: refused.error, swap: other ? null : said(archived) || 'the other record' };
 }
 
 // How many live contacts stand on each account, as an account's rail reads a contact's account (railLinks.js

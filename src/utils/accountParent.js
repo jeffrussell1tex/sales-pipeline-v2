@@ -396,7 +396,7 @@ function overRefusal(tier, selfName) {
 // accountTier, mergeArchived) as read in this org — the server's, or the merge window's list. null when the merge may
 // be made (or a record is not in the rows); else { problem: 'chain' | 'place', error, names }.
 const listed = (names) => {
-    const q = names.map((n) => quoted(n) || 'an account');
+    const q = names.map((n) => n || 'an account');
     return q.length < 2 ? q.join('') : `${q.slice(0, -1).join(', ')} and ${q[q.length - 1]}`;
 };
 export function mergePlacement(rows, { survivorId = null, archivedId = null } = {}) {
@@ -404,16 +404,16 @@ export function mergePlacement(rows, { survivorId = null, archivedId = null } = 
     const byIdAll = new Map(all.map((a) => [a.id, a]));
     const y = byIdAll.get(survivorId), x = byIdAll.get(archivedId);
     if (!y || !x || y.id === x.id) return null;
-    const yName = quoted(y.name) || 'The survivor';
     if (y.parentAccountId !== x.id && standsUnder(y.id, x.id, byIdAll)) {
         const chain = [];
         for (let up = byIdAll.get(y.parentAccountId); up && up.id !== x.id && !chain.includes(up); up = byIdAll.get(up.parentAccountId)) chain.push(up);
         const names = [y, ...chain, x].map((a) => a.name || '');
-        return { problem: 'chain', names, error: `${yName} stands under ${[...chain, x].map((a) => quoted(a.name) || 'an account').join(', which stands under ')} — move ${quoted(y.name) || 'it'} first.` };
+        const said = namesApart([y, ...chain, x], byIdAll, { survivorId: y.id, archivedId: x.id });
+        return { problem: 'chain', names, error: `${said(y) || 'The survivor'} stands under ${[...chain, x].map((a) => said(a) || 'an account').join(', which stands under ')} — move ${said(y) || 'it'} first.`, named: [y, ...chain, x].map((a) => a.id) };
     }
     const live = all.filter((a) => !isMergeArchived(a));
     const rankAfter = rankOf(y.parentAccountId === x.id && !x.parentAccountId ? 'account' : y.accountTier) ?? 0;
-    const underSite = [], said = [];
+    const underSite = [], changed = [];
     // A sub-account that ranks above the survivor keeps its tier, and every account under it its parent and tier: the
     // move changes no level in its branch (Q21 — the review of §0.219: a row stored before the rule deeper down, which
     // a height test counted, refused a merge that changes nothing of it). One that does not would have to change.
@@ -421,11 +421,50 @@ export function mergePlacement(rows, { survivorId = null, archivedId = null } = 
         const stored = rankOf(c.accountTier) === null ? 'account' : c.accountTier;
         if (rankOf(stored) > rankAfter) continue;
         if (rankAfter === SITE) underSite.push(c);
-        else said.push({ c, words: `${quoted(c.name) || 'An account'} is ${TIER_WORDS[stored]} and would have to become ${TIER_WORDS[TIERS[rankAfter + 1]]} under ${quoted(y.name) || 'the survivor'} — move it first.` });
+        else changed.push({ c, stored });
     }
-    if (underSite.length) said.unshift(...underSite.map((c) => ({ c })), { words: `${yName} is a site — a site can't have accounts under it, and ${listed(underSite.map((c) => c.name))} ${underSite.length === 1 ? 'stands' : 'stand'} under ${quoted(x.name) || 'the record merged away'}. Move ${underSite.length === 1 ? 'it' : 'them'} first.` });
-    if (!said.length) return null;
-    return { problem: 'place', names: said.filter((s) => s.c).map((s) => s.c.name || ''), error: said.filter((s) => s.words).map((s) => s.words).join(' ') };
+    if (!underSite.length && !changed.length) return null;
+    // The records the words name — the two merged always, as the window's swap names the other — read apart where two
+    // share a name (namesApart).
+    const named = [y, x, ...underSite, ...changed.map((m) => m.c)];
+    const said = namesApart(named, byIdAll, { survivorId: y.id, archivedId: x.id });
+    const words = changed.map(({ c, stored }) => `${said(c) || 'An account'} is ${TIER_WORDS[stored]} and would have to become ${TIER_WORDS[TIERS[rankAfter + 1]]} under ${said(y) || 'the survivor'} — move it first.`);
+    if (underSite.length) words.unshift(`${said(y) || 'The survivor'} is a site — a site can't have accounts under it, and ${listed(underSite.map(said))} ${underSite.length === 1 ? 'stands' : 'stand'} under ${said(x) || 'the record merged away'}. Move ${underSite.length === 1 ? 'it' : 'them'} first.`);
+    return { problem: 'place', names: [...underSite, ...changed.map((m) => m.c)].map((c) => c.name || ''), error: words.join(' '), named: named.map((a) => a.id) };
+}
+
+// An account's level as the screens name it — the merge window's cards (state §0.220): an account with no tier
+// stored is an account, as mergePlacement reads it.
+export const LEVEL_NAMES = { account: 'Account', business_unit: 'Business unit', site: 'Site' };
+export const levelName = (tier) => LEVEL_NAMES[tier] || LEVEL_NAMES.account;
+
+// How words that name several accounts name each (state §0.220 — Jeff, 1 Nov: "do that"; the chain refusal read
+// "“TEST3d Chain” stands under “TEST3d Mid”, which stands under “TEST3d Chain”"): in quotes, and where another of the
+// records named has a name that reads alike (case and spaces aside), with what tells it apart —
+//   - the two a merge names by their cards' tags: “Shell” (survivor), “Shell” (archive) — two records of one name and
+//     one level, both at the top, are the commonest pair (the review of §0.220: a level or a place said both alike);
+//   - any other by its level — “Dock” (business unit) — or, where a record of its name has its level too (a row stored
+//     before the rule), its place: “Kid” (site of “Plant”), “Kid” (top level) — top level only with no parent; a parent
+//     the rows lack, or one of no name, its level.
+// Two of one name, one level and one parent read alike still (a twin pair under one account, each named for its move).
+// records: the accounts the words name; byId: the org's accounts, for a parent's name; survivorId / archivedId: the
+// merge's two. A function of an account → its words, or null for none.
+export function namesApart(records, byId, { survivorId = null, archivedId = null } = {}) {
+    const key = (a) => String(a?.name ?? '').trim().toLowerCase();
+    const level = (a) => levelName(a?.accountTier).toLowerCase();
+    const list = (records || []).filter(Boolean);
+    return (a) => {
+        const q = quoted(a?.name);
+        if (!q) return null;
+        const alike = list.filter((b) => b.id !== a.id && key(b) === key(a));
+        if (!alike.length) return q;
+        if (a.id === survivorId) return `${q} (survivor)`;
+        if (a.id === archivedId) return `${q} (archive)`;
+        if (!alike.some((b) => level(b) === level(a))) return `${q} (${level(a)})`;
+        if (!a.parentAccountId) return `${q} (top level)`;
+        const parent = byId ? byId.get(a.parentAccountId) : null;
+        return quoted(parent?.name) ? `${q} (${parentLabel(a, { name: quoted(parent.name) })})` : `${q} (${level(a)})`;
+    };
 }
 
 // Where two accounts stand to each other in one hierarchy — the duplicate scan's mark (state §0.219; DESIGN "Duplicate

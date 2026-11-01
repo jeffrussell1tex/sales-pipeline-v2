@@ -221,6 +221,9 @@ One commit per verified batch; doc patch in the same commit.
   tier — live rows only, the rows it judged asserted in its batch
   (`mergePlacement`); it resolves no tier; its Undo reads the survivor's
   deals with no id by its name too (`dealsByNameOn`, guide §18b109).
+  Since §0.220 its words read two records of one name apart — the two
+  merged by their cards' tags (survivor, archive), any other by its level,
+  else its place (`namesApart`, guide §18b110).
 
 ## Frontend conventions
 

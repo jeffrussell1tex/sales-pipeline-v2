@@ -5,6 +5,7 @@ import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { unarchived } from '../../utils/pickLink.js';
 import { contactsByAccount, mergeMoves, mergeWarning } from '../../utils/mergeWindow.js';
+import { levelName } from '../../utils/accountParent.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -181,7 +182,7 @@ export default function MergeReviewModal() {
                     </div>
 
                     {mergeError && (
-                        <div style={{ background: `${T.danger}14`, border: '1px solid #9c3a2e', borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#9c3a2e' }}>
+                        <div style={{ background: C.warnBg, border: `1px solid ${C.warn}`, borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#7a5a2c' }}>
                             {mergeError}
                         </div>
                     )}
@@ -198,7 +199,7 @@ export default function MergeReviewModal() {
                                         <span style={{ fontSize: 10, color: C.faint }}>{c.total} linked</span>
                                     </div>
                                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.name}</div>
-                                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{(acc.accountOwner || acc.assignedRep || 'Unassigned')}{acc.industry ? ` · ${acc.industry}` : ''}</div>
+                                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{levelName(acc.accountTier)} · {(acc.accountOwner || acc.assignedRep || 'Unassigned')}{acc.industry ? ` · ${acc.industry}` : ''}</div>
                                     <StatRow acc={acc} counts={c} />
                                 </div>
                             );
@@ -255,7 +256,7 @@ export default function MergeReviewModal() {
                 {warning && (
                     <div style={{ margin: '0.6rem 1.25rem 0', padding: '0.6rem 0.8rem', background: C.warnBg, border: `1px solid ${C.warn}`, borderRadius: C.r, fontSize: 12, color: '#7a5a2c', lineHeight: 1.45 }}>
                         <b style={{ fontWeight: 700 }}>This merge will be refused as it stands.</b> {warning.words}
-                        {warning.swap ? <> Keeping “{warning.swap}” as the survivor instead would merge them — pick its card above.</> : null}
+                        {warning.swap ? <> Keeping {warning.swap} as the survivor instead would merge them — pick its card above.</> : null}
                     </div>
                 )}
 

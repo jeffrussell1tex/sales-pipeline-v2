@@ -201,3 +201,18 @@ moved. Whether today's six deals and twelve accounts are those rows was not read
 - Accelerep Test's 79 id-less contacts whose company names two live accounts
   are demo data; a backfill would refuse them under the rule, as an import
   now would. No backfill is in this batch.
+
+## Jeff's answers for §0.220 (1 November 2026)
+
+After §0.219, two recommendations: fix the chain refusal's words where two
+records share a name, and press a refused merge once in the browser. Jeff:
+"do that". Two choices then asked (AskUserQuestion), each the Recommended:
+
+- **Card level:** "Show level on cards" — each merge card's grey line starts
+  with its level, so the words' tags match what the cards show.
+- **Error box:** "Warm warning box" — the server's refusal in both merge
+  windows in the warm warning colours, not the delete red.
+
+The review changed the words' tags for the two merged from their level to
+their cards' tags (survivor, archive): a level or a place read alike for two
+top-level twins, the commonest pair (state §0.220).

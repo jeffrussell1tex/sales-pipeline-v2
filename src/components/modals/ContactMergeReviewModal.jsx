@@ -194,7 +194,7 @@ export default function ContactMergeReviewModal() {
                     </div>
 
                     {mergeError && (
-                        <div style={{ background: `${T.danger}14`, border: '1px solid #9c3a2e', borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#9c3a2e' }}>
+                        <div style={{ background: C.warnBg, border: `1px solid ${C.warn}`, borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#7a5a2c' }}>
                             {mergeError}
                         </div>
                     )}

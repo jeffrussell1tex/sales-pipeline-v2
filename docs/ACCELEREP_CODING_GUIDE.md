@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 31, 2026 · rules current through **§18b109** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 1, 2026 · rules current through **§18b110** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4496,3 +4496,14 @@ through `dbFetch`.
 8. **The duplicate scan marks a same-name pair in one hierarchy** — one under the other, two or more levels apart, siblings, one tree (`pairHierarchy`) — with each record's level and parent, the outlined button, never "safe to merge"; in the org-wide scan only (an Admin's or a Manager's): the on-create probe reads a rep's own list, where a parent she cannot read would read as none.
 9. **The account merge window warns before Merge** in the refusal's own words (`mergeWindow.js mergeWarning`, the same rule on the app's list), and names the other record where keeping it would merge (Q22); Merge stays pressable — the server decides.
 10. **The guard.** tests/merge-place.test.mjs (new, in SUITES) runs mergePlacement, pairHierarchy, mergeWarning and dealsByNameOn on made-up rows and pins the server, scan and window wiring; T9, T23, THE MERGE, THE GUARD re-pinned on purpose; tests/integration/merge-undo.itest.mjs I28 (each refusal with nothing written, Q19, a tier ignored, D22's live namesakes, the first shape, org B's deal of the name holding nothing, a twin) — each part shown failing with its piece undone; I2 re-seeded (its sub-account a business unit), `retier` rebuilt as a pre-§0.219 log; the harness's §0.219 block.
+
+## 18b110. A Merge's Refusal Reads Two Records Of One Name Apart — The Two Merged By Their Cards' Tags, Any Other By Its Level Or Place (hard rule)
+
+**Origin (§0.220, 1 Nov 2026 — Jeff: "do that", the recommendation after §0.219's browser check; "Show level on cards", "Warm warning box").** §0.219's chain refusal, on the duplicate scan's own pair, read "“TEST3d Chain” stands under “TEST3d Mid”, which stands under “TEST3d Chain” — move “TEST3d Chain” first": one name twice, which to move unsaid. The first fix named each by its level, then its place; the review found the commonest pair — two top-level accounts of one name and one level — read "(top level)" both, and the window's swap named from the pair alone could name one record two ways in one box.
+
+1. **Words that name several accounts name each through `accountParent.js namesApart`**: bare where no other record they name reads alike (trimmed, case aside); else the merge's two by their cards' tags — “X” (survivor), “X” (archive) — always apart; any other by its level, or where a namesake has its level too, its place, its parent quoted ("site of “Plant”"); "top level" only with no parent; a parent the rows lack, or of no name, its level. Two of one name, one level and one parent still read alike (filed).
+2. **The list is the records the words name** — the chain's every record; a place refusal's survivor, record merged away and the sub-accounts it names — never a record elsewhere in the org (a twin there reads as before). `mergePlacement` answers them as `named`.
+3. **The window names the swap from the same records with the same namer** (`mergeWarning`), quoted — the modal adds none; a record of no name "the other record". One record reads one way in one box.
+4. **Each merge card shows its level** (`levelName`: no tier reads as an account, as the rule reads one) — the words' tags are what the cards show.
+5. **A refusal is said in the warm warning colours**, both merge windows' `mergeError` box: it writes nothing; red is for deletes.
+6. **The guard.** tests/merge-place.test.mjs SAME NAMES runs every branch of `namesApart` through `mergePlacement` and `mergeWarning` and pins the cards' level and both boxes; the harness's §0.220 block, each entry proven caught by hand.
