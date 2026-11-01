@@ -153,7 +153,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      the Undo reads the survivor's deals with no id by its name; the scan
      marks a pair in one hierarchy; the window warns. Batch 3's four steps
      are built. **§0.220 built, its browser check PASSED as Jeff (a
-     refused merge pressed on his word), NOT committed** (Jeff, 1 Nov: "do
+     refused merge pressed on his word), committed b8a9f24, NOT pushed** (Jeff, 1 Nov: "do
      that"): the refusal's words read two records of one name apart, each
      merge card shows its level, the refusal box in the warm colours.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
@@ -1713,7 +1713,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   its Undo leaves it; the account merge's other id moves likewise.
   Recommended: write by the snapshotted ids, as 3c's contact move does.
 - **A merge's refusal names a record of one name twice — DONE (§0.220,
-  NOT committed; Jeff, 1 Nov: "do that")** (§0.219's browser check, 31
+  committed b8a9f24; Jeff, 1 Nov: "do that")** (§0.219's browser check, 31
   Oct): the chain read "“TEST3d Chain” stands under “TEST3d Mid”, which
   stands under “TEST3d Chain”". Now the merge's two read by their cards'
   tags — “TEST3d Chain” (survivor), “TEST3d Chain” (archive) — any other
