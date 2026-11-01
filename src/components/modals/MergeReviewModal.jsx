@@ -4,7 +4,7 @@ import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { unarchived } from '../../utils/pickLink.js';
-import { contactsByAccount, mergeMoves } from '../../utils/mergeWindow.js';
+import { contactsByAccount, mergeMoves, mergeWarning } from '../../utils/mergeWindow.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -110,6 +110,9 @@ export default function MergeReviewModal() {
     const aCounts = countsFor(archived);
     // The summary's: what merge.mjs moves by id, and the name it writes (mergeWindow.js mergeMoves; the review of §0.218).
     const moves = mergeMoves(archived, survivor, { opportunities, contacts }, choices);
+    // A merge the server would refuse for its place in the hierarchy, said before Merge is pressed — and the other
+    // record as the survivor, where that would merge (state §0.219; Jeff, 31 Oct: Q22 "Warn, keep Merge").
+    const warning = mergeWarning(accounts, survivor, archived);
 
     // Field analysis relative to the chosen survivor.
     const conflicts = []; // both non-empty + differ -> user picks
@@ -248,6 +251,13 @@ export default function MergeReviewModal() {
                     {survivor.accountTier === 'site' ? <> “{moves.name}” is a site, so the opportunities from “{archived.name}” go up to the account above it when it has one, with “{moves.name}” as their Site Name.</> : null}
                     {' '}Then “{archived.name}” is archived.
                 </div>
+
+                {warning && (
+                    <div style={{ margin: '0.6rem 1.25rem 0', padding: '0.6rem 0.8rem', background: C.warnBg, border: `1px solid ${C.warn}`, borderRadius: C.r, fontSize: 12, color: '#7a5a2c', lineHeight: 1.45 }}>
+                        <b style={{ fontWeight: 700 }}>This merge will be refused as it stands.</b> {warning.words}
+                        {warning.swap ? <> Keeping “{warning.swap}” as the survivor instead would merge them — pick its card above.</> : null}
+                    </div>
+                )}
 
                 {/* Footer */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '1rem 1.25rem 1.2rem' }}>

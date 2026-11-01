@@ -379,6 +379,72 @@ function overRefusal(tier, selfName) {
     return `${quoted(selfName) || 'This account'} has an account under it that can't stand under ${TIER_WORDS[tier]} — it can't be put back as one.`;
 }
 
+// A merge's place in the hierarchy (state §0.219 — batch 3d of OPEN_ITEMS §1 item 1; docs/design/links-batch-3; guide
+// §18b109). An account merge moves the record merged away's sub-accounts under the survivor, and a survivor that stood
+// straight under it goes up to its parent — a top-level one's an account (merge.mjs; H6). It writes no tier on what it
+// moves, so a merge that would leave anything somewhere the rule would not put it is refused, nothing written, saying
+// what to move first — every merge stays exactly undoable (Jeff, 29 Oct: Q7 "Refuse, name the chain", Q8 "Refuse it"):
+//   - the survivor two or more levels under the record merged away (the merge would close a loop), its chain named;
+//   - a sub-account that would stand under a site;
+//   - a sub-account whose tier would have to change under the survivor (it does not rank above it) — one stored before
+//     the rule (UKG's 12 accounts under an account) as well (Jeff, 31 Oct: Q21 "Only what the move changes": one that
+//     keeps its tier keeps its whole branch as it stands — a row deeper down keeps its parent and tier, so the move
+//     changes nothing of it, and it is not judged).
+// The survivor's own lift is not judged (Q20 "Keep the lift allowed"); its sub-accounts are judged against the tier it
+// has after it. Only live accounts are judged (Q19 "Judge live rows only"): one merged away before still moves with the
+// rest, never refusing a merge over a record no screen shows. rows: the org's accounts (id, name, parentAccountId,
+// accountTier, mergeArchived) as read in this org — the server's, or the merge window's list. null when the merge may
+// be made (or a record is not in the rows); else { problem: 'chain' | 'place', error, names }.
+const listed = (names) => {
+    const q = names.map((n) => quoted(n) || 'an account');
+    return q.length < 2 ? q.join('') : `${q.slice(0, -1).join(', ')} and ${q[q.length - 1]}`;
+};
+export function mergePlacement(rows, { survivorId = null, archivedId = null } = {}) {
+    const all = rowsOf(rows);
+    const byIdAll = new Map(all.map((a) => [a.id, a]));
+    const y = byIdAll.get(survivorId), x = byIdAll.get(archivedId);
+    if (!y || !x || y.id === x.id) return null;
+    const yName = quoted(y.name) || 'The survivor';
+    if (y.parentAccountId !== x.id && standsUnder(y.id, x.id, byIdAll)) {
+        const chain = [];
+        for (let up = byIdAll.get(y.parentAccountId); up && up.id !== x.id && !chain.includes(up); up = byIdAll.get(up.parentAccountId)) chain.push(up);
+        const names = [y, ...chain, x].map((a) => a.name || '');
+        return { problem: 'chain', names, error: `${yName} stands under ${[...chain, x].map((a) => quoted(a.name) || 'an account').join(', which stands under ')} — move ${quoted(y.name) || 'it'} first.` };
+    }
+    const live = all.filter((a) => !isMergeArchived(a));
+    const rankAfter = rankOf(y.parentAccountId === x.id && !x.parentAccountId ? 'account' : y.accountTier) ?? 0;
+    const underSite = [], said = [];
+    // A sub-account that ranks above the survivor keeps its tier, and every account under it its parent and tier: the
+    // move changes no level in its branch (Q21 — the review of §0.219: a row stored before the rule deeper down, which
+    // a height test counted, refused a merge that changes nothing of it). One that does not would have to change.
+    for (const c of live.filter((a) => a.parentAccountId === x.id && a.id !== y.id)) {
+        const stored = rankOf(c.accountTier) === null ? 'account' : c.accountTier;
+        if (rankOf(stored) > rankAfter) continue;
+        if (rankAfter === SITE) underSite.push(c);
+        else said.push({ c, words: `${quoted(c.name) || 'An account'} is ${TIER_WORDS[stored]} and would have to become ${TIER_WORDS[TIERS[rankAfter + 1]]} under ${quoted(y.name) || 'the survivor'} — move it first.` });
+    }
+    if (underSite.length) said.unshift(...underSite.map((c) => ({ c })), { words: `${yName} is a site — a site can't have accounts under it, and ${listed(underSite.map((c) => c.name))} ${underSite.length === 1 ? 'stands' : 'stand'} under ${quoted(x.name) || 'the record merged away'}. Move ${underSite.length === 1 ? 'it' : 'them'} first.` });
+    if (!said.length) return null;
+    return { problem: 'place', names: said.filter((s) => s.c).map((s) => s.c.name || ''), error: said.filter((s) => s.words).map((s) => s.words).join(' ') };
+}
+
+// Where two accounts stand to each other in one hierarchy — the duplicate scan's mark (state §0.219; DESIGN "Duplicate
+// scan": a same-name pair in one hierarchy is still offered, marked, never "safe to merge"): 'parent-child' (one
+// straight under the other), 'ancestor' (one two or more levels under the other), 'siblings' (one parent), 'same-tree'
+// (one top account), or null. byId: the accounts the scan read (a Map of id → account).
+export function pairHierarchy(a, b, byId) {
+    if (!a || !b || !byId) return null;
+    if (a.parentAccountId === b.id || b.parentAccountId === a.id) return 'parent-child';
+    if (isUnder(a.id, b.id, byId) || isUnder(b.id, a.id, byId)) return 'ancestor';
+    if (a.parentAccountId && a.parentAccountId === b.parentAccountId) return 'siblings';
+    const topOf = (row) => {
+        const seen = new Set();
+        for (let n = 0; row?.parentAccountId && byId.has(row.parentAccountId) && !seen.has(row.id) && n < PARENT_WALK; n++) { seen.add(row.id); row = byId.get(row.parentAccountId); }
+        return row?.id;
+    };
+    return (a.parentAccountId || b.parentAccountId) && topOf(a) === topOf(b) ? 'same-tree' : null;
+}
+
 // What accounts.mjs says of an Admin's marked PUT — a delete's Undo re-saving a sub-account it
 // lifted — for a row that has a parent now: a delete lifts what it promotes to the top level, so
 // another session moved it since. Refused (409), never run as a move over that session's (the

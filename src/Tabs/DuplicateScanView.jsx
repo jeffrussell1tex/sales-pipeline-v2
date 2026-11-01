@@ -8,7 +8,15 @@ import PastMerges from './PastMerges';
 
 const REL_LABEL = {
     'different-location': 'Looks like different sites / locations',
+    // A same-name pair in one hierarchy (state §0.219 — duplicates.mjs, accountParent.js pairHierarchy): still offered,
+    // marked, never called safe to merge.
+    'parent-child': 'One is under the other',
+    'ancestor': 'One is two or more levels under the other',
+    'siblings': 'Under the same parent',
+    'same-tree': 'In the same hierarchy',
 };
+const IN_HIERARCHY = new Set(['parent-child', 'ancestor', 'siblings', 'same-tree']);
+const LEVEL = { account: 'Account', business_unit: 'Business unit', site: 'Site' };
 
 const fmtLoc = (a) => [a.city, a.state].filter(Boolean).join(', ');
 const ownerOf = (a) => a.accountOwner || a.assignedRep || '';
@@ -16,6 +24,8 @@ const ownerOf = (a) => a.accountOwner || a.assignedRep || '';
 // ── One account's quick facts inside a compare card ─────────────────────────
 function AccountFacts({ a }) {
     const rows = [
+        ['Level', LEVEL[a.accountTier] || ''],
+        ['Parent', a.parentName || ''],
         ['Industry', a.industry],
         ['Owner', ownerOf(a)],
         ['Location', fmtLoc(a)],
@@ -43,6 +53,8 @@ function AccountFacts({ a }) {
 function PairCard({ pair, tier, onMerge }) {
     const reasons = (pair.reasons || []).join(' · ');
     const relLabel = pair.relationship ? REL_LABEL[pair.relationship] || pair.relationship : null;
+    // A pair in one hierarchy is reviewed like a related one: the outlined button, never the dark one.
+    const vetted = tier === 'duplicate' && !IN_HIERARCHY.has(pair.relationship);
     return (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, padding: 16, marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 16 }}>
@@ -63,7 +75,7 @@ function PairCard({ pair, tier, onMerge }) {
                     </span>
                 )}
                 <div style={{ flex: 1 }} />
-                {tier === 'duplicate' ? (
+                {vetted ? (
                     <button onClick={() => onMerge(pair)}
                         style={{ padding: '7px 16px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                         Review &amp; merge
@@ -178,7 +190,7 @@ export default function DuplicateScanView({ onBack }) {
             {/* Tier helper text */}
             <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, marginBottom: 14, lineHeight: 1.5 }}>
                 {tier === 'duplicate'
-                    ? 'Accounts whose names match exactly once normalized (case, punctuation, and Inc/LLC/Corp suffixes ignored). These are safe to merge.'
+                    ? 'Accounts whose names match exactly once normalized (case, punctuation, and Inc/LLC/Corp suffixes ignored). A pair marked as in one hierarchy may be an account and its own sub-account or site — review it in the merge window before confirming.'
                     : 'Accounts that share a domain, phone, or near-identical name — often distinct sites of the same company. Not pre-vetted as duplicates: review each pair in the merge dialog before confirming.'}
             </div>
 

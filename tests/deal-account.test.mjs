@@ -597,12 +597,12 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(g.includes('if (moving.length) ops.push(db.update(contacts).set({ accountId: survivorId, company: survName, updatedAt: now }).where(and(inArray(contacts.id, moving.map((c) => c.id)), eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId))));'), "the record merged away's contacts by id, with the survivor's name (state §0.218 — REGRESSION: left on it by id)");
     assert.ok(g.includes('const table = TABLE_BY_NAME[rw.table];') && between(g, 'const TABLE_BY_NAME = {', '};').includes('opportunities'), 'the undo reverses every snapshotted rewrite, this one too');
     // D22: a merge into a site moves the merged-away account's deals up to the account above it, in the batch; the undo puts each back
-    assert.ok(g.includes("const survTier = 'accountTier' in resolved ? resolved.accountTier : surv.accountTier;"), "the survivor's tier once merged");
+    assert.ok(g.includes('const survTier = surv.accountTier;'), "the survivor's tier once merged — as stored: a merge resolves no tier since §0.219 (one sent is ignored)");
+    assert.ok(!/'accountTier'/.test(between(g, 'const ACCOUNT_FIELDS = [', '];')), 'REGRESSION (state §0.219): a tier sent written unchecked — the merge resolves no tier');
     assert.ok(g.includes('const upId = surv.parentAccountId === archivedId ? (arch.parentAccountId || null) : (surv.parentAccountId || null);'), 'the account it stands under once merged');
     assert.ok(g.includes("? await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived }).from(accounts).where(and(eq(accounts.id, upId), eq(accounts.orgId, orgId)))"), 'read in this org');
     assert.ok(g.includes('if (up && up.mergeArchived !== true) {'), 'a live account to move them up to');
-    assert.ok(g.includes('const named = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.name, archName), eq(accounts.orgId, orgId)));'));
-    assert.ok(g.includes('const byName = named.every((a) => a.id === archivedId || a.id === survivorId);'), "by name only where no other account has the merged-away one's name");
+    assert.ok(g.includes('const byName = idlessNames.includes(archName);'), "by name only where no other LIVE account has the merged-away one's name (state §0.219 — REGRESSION: one merged away before held the deals on the site)");
     assert.ok(g.includes('                .where(and(eq(opportunities.orgId, orgId), byName\n'), "this org's deals only");
     assert.ok(g.includes('? or(eq(opportunities.accountId, archivedId), and(isNull(opportunities.accountId), eq(opportunities.account, archName)))'));
     assert.ok(g.includes("if (lifted.length) rewrites.push({ table: 'opportunities', column: 'accountId', kind: 'lift', ids: lifted.map((d) => d.id), rows: lifted.map((d) => ({ id: d.id, old: { accountId: d.accountId ?? null, account: d.account ?? null, site: d.site ?? null } })) });"), 'logged as they were, after every other rewrite');

@@ -89,6 +89,51 @@ not in 3c: the contact merge's tasks and activities moved by value (a row
 linked mid-merge is moved unlogged) and the per-deal `contactIds` write's
 unguarded read; the same race on the account merge's other id moves.
 
+## Jeff's answers for step 3d (31 Oct 2026, in chat)
+
+A read-only map of the merge's placement (a workflow: five readers — the
+server's placement, the Undo's deals, the duplicate scan, the window, the
+tests and harness — each checked by a critic, over `db51d6a`) found four
+choices the design left open. Jeff's answers, each the Recommended:
+
+- **Q19, the record merged away's sub-accounts merged away earlier (hidden
+  from every list):** "Judge live rows only". The refusals look only at live
+  accounts; a hidden merged-away row still moves with the rest, as today — a
+  merge is never refused over a record no screen shows.
+- **Q20, the survivor's own lift (a site or unit merged with the account
+  above it goes up, and a top-level one becomes an account):** "Keep the lift
+  allowed". Only the moved sub-accounts are judged, against the survivor's
+  level after the lift; the lift stays exactly undoable (survivorRestore).
+- **Q21, a legacy row deep in a moved branch whose fit the move does not
+  change:** "Only what the move changes". A merge is refused only where the
+  move itself changes a row's level; moving a misfit row itself (one of UKG's
+  12) is still refused (Q8).
+- **Q22, the window knowing the server will refuse:** "Warn, keep Merge". The
+  window shows the refusal's words — and, where it would work, that the other
+  record as survivor merges — above the button; Merge stays pressable and the
+  server decides.
+
+**Taken as recommended (the map's answers, following the design and the house
+rules):** the placement is read in this org before the batch, the refusal
+answered with nothing written; the children move by the ids read, each still
+under the record merged away, and the batch aborts (the refusal read again)
+when a live child not read stands there — so no child lands unplaced; a
+survivor two or more levels under the record merged away is refused naming
+the chain (Q7's words); `accountTier` leaves the merge's fields (old logs
+still undo); D22's namesake test counts live accounts only, through 3c's
+`idlessNames`; the Undo's `dealsOn` also reads the survivor's deals with no
+account id by the name it will carry once the Undo is done, where no other
+account live after the Undo has that name (the record merged away counted
+live), leaving out a deal its name restore sends back to the record merged
+away — and `noDealOn` asks the same in the batch, only when that read found
+the name alone (OPEN_ITEMS §4.7's first shape; the second stays filed); the
+duplicate scan marks a same-name pair in one hierarchy with each record's
+level and parent and no longer calls it "safe to merge" — in the org-wide
+scan only, never the create probe (a rep's own list); the contact scan's
+words are left as they are, filed. Found, not settled: the census showed no
+same-name pair in one hierarchy in UKG, while eight code comments name UKG's
+two "Shell - Port Allen" (a unit and its site) — not read which is current.
+
 ## The census
 
 Read only, run 29 Oct 2026 at 21:10:23 UTC on the shared Neon `main` branch

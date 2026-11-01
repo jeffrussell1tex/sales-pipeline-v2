@@ -471,7 +471,7 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
     // rewrite of a table that links by id, which of its rows stood on the survivor by id
     const mh = between(g, 'export const handler = async (event) => {', 'const undoRowsOf = async');
     order(mh,
-        ind(8, 'const kids = await db.select({ id: accounts.id, accountTier: accounts.accountTier }).from(accounts).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId)));'),
+        ind(8, 'const kids = tree.filter((a) => a.parentAccountId === archivedId).map((a) => ({ id: a.id, accountTier: a.accountTier, mergeArchived: a.mergeArchived }));'),
         ind(8, 'const childIds = kids.map((k) => k.id);'),
         ind(8, "if (childIds.length) rewrites.push({ table: 'accounts', column: 'parentAccountId', kind: 'id', ids: childIds, oldValue: archivedId, newValue: survivorId, tiers: Object.fromEntries(kids.map((k) => [k.id, k.accountTier ?? null])) });"),
         ind(16, 'const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId), ...(t.scope ? [t.scope()] : [])));'),
@@ -496,12 +496,18 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
     order(g,
         'const dealsOn = async (id, orgId) => (await db.select({ id: opportunities.id }).from(opportunities)',
         ind(4, '.where(and(eq(opportunities.accountId, id), eq(opportunities.orgId, orgId)))).map((d) => d.id);'));
-    once(g, 'const noDealOn = (id, orgId) => sql`not exists (select 1 from ${opportunities} where ${opportunities.accountId} = ${id} and ${opportunities.orgId} = ${orgId})`;',
-        'REGRESSION: a deal linked to the survivor while the Undo ran is left on it, a site again — or one in another org keeps it where it stands');
+    // and since §0.219 those with no account id by the survivor's names, in this org (mergeUndo.js dealsByNameOn decides)
+    order(g,
+        'const dealsNamed = async (names, orgId) => {',
+        ind(4, "const of = [...new Set(names.filter((n) => n != null && n !== ''))];"),
+        ind(4, 'return of.length ? db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account }).from(opportunities)'),
+        ind(8, '.where(and(isNull(opportunities.accountId), inArray(opportunities.account, of), eq(opportunities.orgId, orgId))) : [];'));
+    once(g, 'const noDealOn = (id, orgId, name = null) => sql`not exists (select 1 from ${opportunities} where (${opportunities.accountId} = ${id}${name != null ? sql` or (${opportunities.accountId} is null and ${opportunities.account} = ${name})` : sql``}) and ${opportunities.orgId} = ${orgId})`;',
+        'REGRESSION: a deal linked to the survivor while the Undo ran — or, since §0.219, saved with no id under the name it gets back — is left on it, a site again; or one in another org keeps it where it stands');
     once(g, "const notASite = (id, orgId) => sql`exists (select 1 from ${accounts} where ${accounts.id} = ${id} and ${accounts.orgId} = ${orgId} and ${accounts.accountTier} is distinct from 'site')`;",
         'REGRESSION: a deal moved back to the record merged away, a site — or the ask without its org (a code rule: every statement names this org; no behaviour — the un-archive before it holds that row in this org by its id)');
-    once(g, "import { UNDO_CHANGED, undoRefusal, upIdOf, orgChartUnion, survivorRestore, undoPlaces, dealsByIdOf, survivorRowsOf, undoKept, undoDetail } from '../../src/utils/mergeUndo.js';");
-    once(g, "import { rankOf } from '../../src/utils/accountParent.js';");
+    once(g, "import { UNDO_CHANGED, undoRefusal, upIdOf, orgChartUnion, survivorRestore, undoPlaces, dealsByIdOf, dealsByNameOn, survivorRowsOf, undoKept, undoDetail } from '../../src/utils/mergeUndo.js';");
+    once(g, "import { rankOf, mergePlacement } from '../../src/utils/accountParent.js';");
     const undoOps = between(g, 'export function undoOps(', 'export const undoBatch = ');
     assert.equal(between(undoOps, ind(4, 'const ops = [\n'), ind(4, '];\n')), [
         ind(4, 'const ops = ['),
@@ -519,7 +525,8 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
     order(undoOps,
         ind(4, "const records = kind === 'contact' ? contacts : accounts;"),
         ind(4, 'const restored = survivorRestore(kind, log, rows.survivor);'),
-        ind(4, "const placed = kind === 'account' ? undoPlaces(log, rows.tree, restored, rows.deals) : null;"),
+        ind(4, "const byName = kind === 'account' ? dealsByNameOn(log, rows.tree, restored, rows.named) : null;"),
+        ind(4, "const placed = kind === 'account' ? undoPlaces(log, rows.tree, restored, rows.deals, byName.ids) : null;"),
         ind(4, 'if (placed?.under) {'),
         ind(8, 'ops.push(db.select({ ok: sql`1 / count(*)` }).from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.id, log.archivedId),'),
         ind(12, 'asRead(accounts.parentAccountId, placed.under.parentAccountId), asRead(accounts.accountTier, placed.under.accountTier))));'),
@@ -532,7 +539,7 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
         ind(8, 'survivorAt = ops.length;'),
         ind(8, 'ops.push(db.update(records).set({ ...set, updatedAt: now })'),
         ind(12, '.where(and(eq(records.id, log.survivorId), eq(records.orgId, orgId), sql`${records.updatedAt}::text = ${rows.survivor.updatedAtText}`,'),
-        ind(16, "...(set.accountTier === 'site' ? [noDealOn(log.survivorId, orgId)] : []),"),
+        ind(16, "...(set.accountTier === 'site' ? [noDealOn(log.survivorId, orgId, byName?.name ?? null)] : []),"),
         ind(16, "...('accountTier' in set ? [nothingUnder(log.survivorId, set.accountTier, orgId)] : [])))"),
         ind(12, '.returning({ id: records.id }));'),
         ind(4, "const deals = kind === 'account' ? survivorRowsOf(log, 'opportunities') : null;"),
@@ -611,7 +618,8 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
         ind(4, 'if (refusal) return { statusCode: 409, headers, body: JSON.stringify({ error: refusal }) };'),
         ind(4, "const tree = kind === 'account' ? await treeOf(orgId) : null;"),
         ind(4, "const deals = kind === 'account' ? await dealsOn(log.survivorId, orgId) : null;"),
-        ind(4, 'const built = undoOps(kind, log, { ...rows, tree, deals }, orgId, new Date());'),
+        ind(4, "const named = kind === 'account' ? await dealsNamed([rows.survivor?.name, log.survivorSnapshot?.name], orgId) : null;"),
+        ind(4, 'const built = undoOps(kind, log, { ...rows, tree, deals, named }, orgId, new Date());'),
         ind(4, 'const done = await undoBatch(built.ops, { log, table, orgId, headers });'),
         ind(4, 'if (done.refused) return done.refused;'),
         ind(4, 'const { keptLinks, keptFields } = undoKept(built, done.results);'));
@@ -1283,7 +1291,7 @@ test('T23 — the account window counts contacts as an account\'s rail reads the
     const old = (acc) => W_CONTACTS.filter((c) => !isMergeArchived(c) && c.company === acc.name).length;
     assert.deepEqual(W_ACCOUNTS.filter((a) => !isMergeArchived(a)).map((a) => [a.id, old(a)]), [['a_shell', 0], ['a_unit', 3], ['a_site', 3], ['a_res', 0]], 'the old rule');
     const src = code(read(MRM));
-    once(src, "import { contactsByAccount, mergeMoves } from '../../utils/mergeWindow.js';");
+    once(src, "import { contactsByAccount, mergeMoves, mergeWarning } from '../../utils/mergeWindow.js';");
     once(src, ind(8, 'const contactsOn = contactsByAccount(contacts, accounts);'));
     once(src, ind(12, 'const cts = contactsOn.get(acc.id) || 0;'), 'REGRESSION: the account window counts contacts by `company === name`');
     // The summary (the review of §0.218): what merge.mjs moves by id — every deal and contact linked to the record merged

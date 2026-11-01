@@ -130,16 +130,17 @@ export function survivorRestore(entityType, log, current) {
 // the record merged away (dealsByIdOf) leave it — but none while the record merged away is a site: merge.mjs moves no
 // deal back to it then (notASite) — by its id, by its lift, or (a deal with no account id) by its name (the re-check,
 // 18 Oct) — so those stay on the survivor too, each counted by its own restore. Where the parent rule keeps the
-// survivor first, its deals are not the deal rule's: none is counted. The survivor's deals are read by id: one by name
-// alone on the survivor does not keep it from going back a site (listed back).
+// survivor first, its deals are not the deal rule's: none is counted. The survivor's deals are read by id, and since
+// §0.219 a deal with no account id by the name the survivor carries once the Undo is done, where no other account has
+// it (dealsByNameOn; OPEN_ITEMS §4.7's first shape — the second, a deal by the name of a site merged away, stays filed).
 //
 // tree: the org's accounts (id, name, parentAccountId, accountTier, mergeArchived); restored: survivorRestore's answer;
 // deals: the ids of the deals on the survivor by id, as read — not a list (not read), and the survivor never goes back
-// a site. Answers its { set, keptFields } — the survivor's parent and tier back together, or kept together — with subs,
+// a site; byName: those dealsByNameOn names, which stay on it whatever the deal id restore moves. Answers its { set, keptFields } — the survivor's parent and tier back together, or kept together — with subs,
 // the sub-accounts that go back, under: the record merged away's parent and tier as read, when anything goes back under
 // it (merge.mjs asserts them), and held: the deals on the survivor that keep it at its level, counted kept (but those
 // the deal id restore names, which it counts).
-export function undoPlaces(log, tree, restored, deals) {
+export function undoPlaces(log, tree, restored, deals, byName = []) {
     const X = log?.archivedId, Y = log?.survivorId;
     const set = { ...restored.set }, keptFields = [...restored.keptFields];
     const keep = (...keys) => { for (const k of keys) if (k in set) { delete set[k]; keptFields.push(k); } };
@@ -166,7 +167,11 @@ export function undoPlaces(log, tree, restored, deals) {
     // back a site.
     const byId = new Set(dealsByIdOf(log));
     const xSite = tierOf(x) === 'site';
-    const staying = Array.isArray(deals) ? deals.filter((id) => xSite || !byId.has(id)) : null;
+    // A deal with no account id by the survivor's name (byName — dealsByNameOn) stays whatever the deal id restore does:
+    // that restore moves only a deal on the survivor by id (the review of §0.219: one moved by id, its id cleared since,
+    // was let go with the restore while the batch's own ask found it, every field kept).
+    const named = Array.isArray(byName) ? byName : [];
+    const staying = Array.isArray(deals) ? [...new Set([...deals.filter((id) => xSite || !byId.has(id)), ...named])] : null;
     let held = [];
     // Each refusal can refuse another — a sub-account kept under the survivor keeps it from going back as a site — so
     // the rule runs again on what is left, until it refuses nothing more.
@@ -181,7 +186,7 @@ export function undoPlaces(log, tree, restored, deals) {
         const out = subs.filter((id) => !fits(after, at(id)));
         if (!survivorOut && !onSite && !out.length) break;
         if (survivorOut || onSite) survivor = false;
-        if (onSite) held = (staying || []).filter((id) => !byId.has(id));
+        if (onSite) held = (staying || []).filter((id) => named.includes(id) || !byId.has(id));
         subs = subs.filter((id) => !out.includes(id));
     }
     if (!survivor) keep('parentAccountId', 'accountTier');
@@ -198,6 +203,33 @@ export function dealsByIdOf(log) {
     const writes = (log?.rewrites || []).filter((rw) => rw.table === 'opportunities' && rw.column === 'accountId');
     const lifted = new Set(writes.filter((rw) => rw.kind === 'lift').flatMap((rw) => rw.ids || []));
     return [...new Set(writes.filter((rw) => rw.kind === 'id').flatMap((rw) => rw.ids || []))].filter((id) => !lifted.has(id));
+}
+
+// The deals with no account id that stand on the survivor by its name once an account merge's Undo is done (state
+// §0.219 — batch 3d; OPEN_ITEMS §4.7's first shape: a lifted survivor went back a site with such a deal naming it,
+// uncounted). The survivor's name after the Undo — its name put back, else as it stands — only where no other account
+// live after the Undo has it: the record merged away counted live, one merged away before never (DESIGN "live
+// accounts"; UKG's twins: neither's by name). Each deal's name after the Undo: a name restore of the merge's that still
+// holds it puts back its old name — but not to the record merged away's while that is a site (merge.mjs notASite), so
+// that one stays. named: the deals of this org with no account id under the survivor's name as it stands or as it was
+// (merge.mjs dealsNamed); not a list, none. { ids, name } — name, asked again in the survivor's statement (noDealOn),
+// or null when none stands alone.
+export function dealsByNameOn(log, tree, restored, named) {
+    const X = log?.archivedId, Y = log?.survivorId;
+    const rows = (Array.isArray(tree) ? tree : []).filter((a) => a && a.id);
+    const y = rows.find((a) => a.id === Y), x = rows.find((a) => a.id === X);
+    const set = restored?.set || {};
+    const name = 'name' in set ? set.name : y?.name;
+    if (!Array.isArray(named) || name == null || name === '') return { ids: [], name: null };
+    if (rows.some((a) => a.id !== Y && (a.id === X || a.mergeArchived !== true) && (a.name ?? '') === name)) return { ids: [], name: null };
+    const xSite = (rankOf(x?.accountTier) === null ? 'account' : x.accountTier) === 'site';
+    const renames = (log?.rewrites || []).filter((rw) => rw.table === 'opportunities' && rw.column === 'account' && rw.kind === 'name');
+    const after = (d) => {
+        const rw = renames.find((r) => (r.ids || []).includes(d.id) && d.account === r.newValue);
+        if (!rw) return d.account;
+        return rw.oldValue === log.archivedName && rw.newValue !== rw.oldValue && xSite ? d.account : rw.oldValue;
+    };
+    return { ids: named.filter((d) => d && d.id && d.accountId == null && after(d) === name).map((d) => d.id), name };
 }
 
 // What an account merge left on the survivor by id, of the deals ('opportunities') or contacts its name rewrites renamed

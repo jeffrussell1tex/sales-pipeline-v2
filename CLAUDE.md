@@ -215,7 +215,12 @@ One commit per verified batch; doc patch in the same commit.
   contact merge's Company and account id travel together, the link
   checked; a merge's batch opens with a claim on both records, live and
   as read, so two merges at once never both land (`mergeLinks.js`,
-  guide §18b108).
+  guide §18b108). Since §0.219 a merge keeps the parent rule: refused
+  (409, nothing written, saying what to move first) where it would close
+  a loop, put an account under a site or change a moved sub-account's
+  tier — live rows only, the rows it judged asserted in its batch
+  (`mergePlacement`); it resolves no tier; its Undo reads the survivor's
+  deals with no id by its name too (`dealsByNameOn`, guide §18b109).
 
 ## Frontend conventions
 

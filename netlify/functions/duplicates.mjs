@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { serverErrorBody, getCallerId } from './_lib.mjs';
 import { crmReadScope } from '../../src/utils/roles.js';
+import { pairHierarchy } from '../../src/utils/accountParent.js';
 
 // ── Duplicate detection for a site-based account model ─────────────────────────
 // Accelerep customers model accounts per site/location: a parent company (e.g.
@@ -14,7 +15,10 @@ import { crmReadScope } from '../../src/utils/roles.js';
 //
 //   tier 'duplicate' (default scan, the ONLY tier pre-staged for one-click merge):
 //     exact name match after stripping case, punctuation, and legal suffixes.
-//     Includes same-named siblings (a genuine double-entry of one sub-account).
+//     A pair in one hierarchy is still offered — a genuine double-entry of one
+//     sub-account, or an account and its own site of one name — marked by the
+//     org-wide scan with how the two stand (state §0.219: never "safe to merge";
+//     the merge refuses what it cannot place).
 //
 //   tier 'related' (opt-in "possibly related" view, never pre-staged):
 //     near-identical name / shared domain / shared phone / substring. Surfaced
@@ -85,7 +89,7 @@ const inHierarchy = (a, b) =>
 const classifyPair = (a, b) => {
     const coreA = normalizeName(a.name), coreB = normalizeName(b.name);
 
-    // Tier 1 — exact identity (safe to pre-stage). Siblings included on purpose.
+    // Tier 1 — exact identity (pre-staged; the org-wide scan marks a pair in one hierarchy).
     if (coreA && coreA === coreB) {
         return { tier: 'duplicate', score: 100, reasons: ['identical name'], relationship: null };
     }
@@ -283,12 +287,18 @@ export const handler = async (event) => {
         const tier = q.tier === 'related' ? 'related' : 'duplicate';
         const MAX_PAIRS = Number(q.limit) > 0 ? Math.min(Number(q.limit), 500) : 200;
 
+        // A same-name pair in one hierarchy marked with how the two stand, and each record with its parent's name (state
+        // §0.219; DESIGN "Duplicate scan") — here only: an Admin's or a Manager's scan reads the whole org, while the
+        // on-create probe reads a rep's own list, where a parent she cannot read would read as none.
+        const byId = new Map(rows.map((a) => [a.id, a]));
+        const withParent = (a) => ({ ...slim(a), parentName: a.parentAccountId ? byId.get(a.parentAccountId)?.name ?? null : null });
         const buckets = { duplicate: [], related: [] };
         for (let i = 0; i < rows.length; i++) {
             for (let j = i + 1; j < rows.length; j++) {
                 const m = classifyPair(rows[i], rows[j]);
                 if (!m) continue;
-                buckets[m.tier].push({ score: m.score, reasons: m.reasons, relationship: m.relationship, a: slim(rows[i]), b: slim(rows[j]) });
+                const relationship = m.tier === 'duplicate' ? pairHierarchy(rows[i], rows[j], byId) : m.relationship;
+                buckets[m.tier].push({ score: m.score, reasons: m.reasons, relationship, a: withParent(rows[i]), b: withParent(rows[j]) });
             }
         }
         buckets.duplicate.sort((x, y) => y.score - x.score);

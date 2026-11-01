@@ -143,8 +143,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      on survivor", Q16 "Skip if shared", Q17 "Show it to pick", Q18 all
      three): contacts moved by id and back with their own company; renames
      within the pair; a claim with its deal; a contact's Company with its
-     account; two merges at once refused; each record counted once. 3d to
-     come.
+     account; two merges at once refused; each record counted once.
+     **3d built (§0.219; guide §18b109), its browser check PASSED as Jeff,
+     NOT committed** (Jeff, 31 Oct: "Then d"; Q19 "Judge live rows only", Q20
+     "Keep the lift allowed", Q21 "Only what the move changes", Q22 "Warn,
+     keep Merge"): a merge refused, nothing written, saying what to move
+     first, where it would close a loop, put an account under a site or
+     change a moved account's tier; no tier resolved; D22's namesakes live;
+     the Undo reads the survivor's deals with no id by its name; the scan
+     marks a pair in one hierarchy; the window warns. Batch 3's four steps
+     are built.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
      batch first"). A member's save never takes the login link, the status
      or the access from the request — access changes only by the
@@ -1701,6 +1709,29 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deal's contacts unguarded, so a row linked mid-merge moves unlogged and
   its Undo leaves it; the account merge's other id moves likewise.
   Recommended: write by the snapshotted ids, as 3c's contact move does.
+- **A merge's refusal names a record of one name twice** (§0.219's browser
+  check, 31 Oct): a chain whose top and site share a name — the duplicate
+  scan's own case — reads "“TEST3d Chain” stands under “TEST3d Mid”, which
+  stands under “TEST3d Chain” — move “TEST3d Chain” first." Recommended:
+  name each with its level where two names match ("the site “X”") — Q7's
+  words were approved as written, so Jeff's call. Low.
+- **A move deep under the record merged away while a merge runs**
+  (§0.219's review, reasoned): the batch asserts the record merged away's
+  live sub-accounts as read and both records' stamps, but not a move
+  further up the survivor's chain — an account above the survivor moved
+  under one of the record merged away's grandchildren between the read
+  and the batch closes a loop the placement never saw. Recommended: assert
+  the survivor's chain as read in the batch. Low (two sessions moving the
+  same tree in the same second).
+- **The contact scan still says "These are safe to merge."**
+  (ContactDuplicateScanView.jsx; §0.219's map): contacts have no
+  hierarchy, so 3d left it; its match is by company text, not the link
+  3c's window compares. Jeff's call whether to align it.
+- **UKG's "Shell - Port Allen" twins: the census and the code disagree**
+  (§0.219's map): the census of 29 Oct counted no same-name pair in one
+  hierarchy in UKG, while eight code comments name its two "Shell - Port
+  Allen" (a unit and its site). Not read which is current; a read-only
+  SELECT would say (Jeff's go).
 - **A new company the contact import makes has no owner** (found building
   §0.217, 30 Oct). The import's new accounts go with no owner, as the
   account import's rows do (accounts.mjs's import rule); §0.217 made only
@@ -3042,7 +3073,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   again. Whether an invoice past draft, which takes no edit
   (invoices.mjs:183-186), moves too is Jeff's call.
 - **D22's "no other account has the name" counts an account merged
-  away** (the cleanup batch's design, 18 Oct, P32; re-read 23 Oct; read
+  away — the merge's half DONE (§0.219, NOT committed: `byName` is 3c's live
+  `idlessNames`; I28 (e)); the accounts.mjs half (`sitesMade`'s `alone`)
+  still open** (the cleanup batch's design, 18 Oct, P32; re-read 23 Oct; read
   in code, not run): a deal with no account id is moved up off a site —
   one a move makes, or one a merge puts it on — by its name only where
   no other account has the name (§4.2, "D22's edges"), and both checks
@@ -3533,7 +3566,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
     deal moved by id or by name and then lifted (D22) is in both, so "N
     references repointed" reads more than were moved.
 - **Deals by name alone that a merge's Undo leaves on a site by their
-  name — batch 3's to close** (Jeff, 18 Oct: "Ship as is, file the edge"
+  name — the first shape DONE (§0.219, NOT committed: the Undo reads the
+  survivor's deals with no id by the name it carries after the Undo,
+  `dealsByNameOn`, and asks it again in its batch; I28 (f)-(h)); the
+  second stays filed** (Jeff, 18 Oct: "Ship as is, file the edge"
   — the Undo leaves such old deals where they are, the rare name-only
   case recorded for the merge batch, batch 3, to close; §0.207's second
   re-check and fifth cross-check, 18 Oct, each run on the test database
@@ -3630,7 +3666,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
     which the merge renamed). None at the census of 16 Oct 21:13 UTC, which
     found no live contact or deal naming a merged-away account, in any
     org; any account merge since can make one.
-  - An account merge re-parents the merged-away account's sub-accounts onto
+  - **Done by §0.219 (3d, NOT committed):** a merge is refused, nothing
+    written, where it would close a loop, put a sub-account under a site or
+    change a moved sub-account's tier (`mergePlacement`; Q7, Q8, Q19-Q21);
+    `accountTier` left the field map; the scan marks such pairs. Was:
+    An account merge re-parents the merged-away account's sub-accounts onto
     the survivor, and lifts the survivor to the merged-away account's parent
     when it stood under it, with no parent rule and no tier re-fit — but a
     survivor lifted to the top level is made an account, the only tier that

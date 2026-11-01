@@ -31,7 +31,15 @@ its stored link (Q2 left her lists as they are); the deals bulk paths decide
 each row by a pure copy of `accountLink`'s branches over accounts read for the
 batch (`dealLinkDecided` — `accountLink` itself unchanged); Q11's importer id
 goes as `ownerId`, checked as a member of the org and stamped with its name;
-the deals bulk create refuses an id sent twice. 3c and 3d to come.
+the deals bulk create refuses an id sent twice. Step 3d built 31 Oct as state
+§0.219 (guide §18b109; ANSWERS.md's Q19-Q22), from a read-only map over
+`db51d6a` (five readers, each checked by a critic), through one review
+workflow; its build changed §2: a moved sub-account that ranks above the
+survivor is not judged (its branch keeps every level — a height test refused a
+legacy row the move changes nothing of), so a refusal says "would have to
+become" or "under a site", never "below a site"; the sub-accounts are the rows
+the placement judged, asserted as read in the batch; the Undo's deals by name
+stay whatever the deal id restore moves.
 
 ---
 

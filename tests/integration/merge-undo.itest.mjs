@@ -91,7 +91,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 const { handler: mergeFn } = await import('../../netlify/functions/merge.mjs');
 const { db } = await import('../../db/index.js');
 const { accounts, contacts, opportunities, tasks, activities, mergeLog, auditLog, users, spiffClaims } = await import('../../db/schema.js');
-const { eq, and, inArray, sql, getTableColumns } = await import('drizzle-orm');
+const { eq, and, inArray, isNull, sql, getTableColumns } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
 // ORG NAMESPACE: this file owns 'itest_mundo_*' — its two orgs, and every id it writes (ids are global keys) — and
@@ -143,7 +143,9 @@ const NAMES = ['I1 First Old', 'I1 First New', 'I2 Old Co', 'I2 New Co', 'I3 Old
     'I19D Unit', 'I19D Other', 'I20 Old Co', 'I20 New Co', 'I20C Old Co', 'I20C New Co', 'I20b Brand', 'I20b Old Name',
     'I21A Plant', 'I21A Dock', 'I21B Plant', 'I21B Dock', 'I21C Co', 'I21C Dock', 'I21H Co', 'I21H Dock', 'I21D Co', 'I21D Dock',
     'I21E Old', 'I21E Site', 'I21F Plant', 'I21F Dock', 'I21G Co', 'I21G Dock',
-    'I22A Top', 'I22A Old', 'I22A New', 'I22B Top', 'I22B Twin', 'I22C Top', 'I22C Old', 'I22C New'];
+    'I22A Top', 'I22A Old', 'I22A New', 'I22B Top', 'I22B Twin', 'I22C Top', 'I22C Old', 'I22C New',
+    'I28A Old', 'I28A New', 'I28A Legacy', 'I28B Shell', 'I28B Unit', 'I28B Site', 'I28C Top', 'I28C Dock', 'I28C Old', 'I28C Plant', 'I28C2 Old', 'I28C2 Hidden',
+    'I28D Old', 'I28D New', 'I28E Top', 'I28E Site', 'I28E Old', 'I28F Plant', 'I28F Dock', 'I28G Plant', 'I28G Dock', 'I28H Plant', 'I28H Dock'];
 const bRows = async () => {
     const out = {};
     for (const [k, t] of Object.entries({ accounts, contacts, opportunities, tasks, activities, mergeLog })) {
@@ -239,7 +241,7 @@ test("I2 — an Undo with nothing changed since puts every link back — tasks, 
     await db.insert(accounts).values([
         acct(X, 'I2 Old Co', { phone: '555-0202', accountOwner: 'X Owner', ownerId: ID('usr_x') }),
         acct(Y, 'I2 New Co', { phone: null, accountOwner: 'Y Owner', ownerId: ID('usr_y') }),
-        acct(CH, 'I2 Child', { parentAccountId: X }),
+        acct(CH, 'I2 Child', { parentAccountId: X, accountTier: 'business_unit' }),
     ]);
     await db.insert(tasks).values(task(T1, { accountId: X }));
     await db.insert(activities).values({ id: A1, subject: 'I2 call', accountId: X, orgId: A });
@@ -409,14 +411,18 @@ test('I8 — two Undos of one merge sent together: one 200, one 409 "already bee
 
 // The Undo's two records as undoRowsOf reads them — the survivor with its last-edited time as text — the org's
 // accounts as undoMergeLog reads them for the parent rule (treeOf), and the survivor's deals by id (dealsOn — Jeff,
-// 18 Oct: an Undo never puts a deal on a site).
+// 18 Oct: an Undo never puts a deal on a site) and with no id by its names (dealsNamed — state §0.219).
 const rowsOf = async (log) => {
     const rows = await db.select({ ...getTableColumns(accounts), updatedAtText: sql`${accounts.updatedAt}::text` }).from(accounts)
         .where(and(eq(accounts.orgId, A), inArray(accounts.id, [log.archivedId, log.survivorId])));
     const tree = await db.select({ id: accounts.id, name: accounts.name, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier, mergeArchived: accounts.mergeArchived })
         .from(accounts).where(eq(accounts.orgId, A));
     const deals = (await db.select({ id: opportunities.id }).from(opportunities).where(and(eq(opportunities.orgId, A), eq(opportunities.accountId, log.survivorId)))).map((d) => d.id);
-    return { archived: rows.find((r) => r.id === log.archivedId), survivor: rows.find((r) => r.id === log.survivorId), tree, deals };
+    const survivor = rows.find((r) => r.id === log.survivorId);
+    const names = [survivor?.name, log.survivorSnapshot?.name].filter(Boolean);
+    const named = names.length ? await db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account }).from(opportunities)
+        .where(and(eq(opportunities.orgId, A), isNull(opportunities.accountId), inArray(opportunities.account, names))) : [];
+    return { archived: rows.find((r) => r.id === log.archivedId), survivor, tree, deals, named };
 };
 
 test("I9 — the batch refuses by itself (C14, B5): an Undo's batch built from a log read as merged, run after the records changed under it, writes nothing and answers 409 in words — the record merged away made live, deleted, or the merge undone and made again (that new merge intact); the abort's code is 22012 where undoBatch reads it (open question 3)", async () => {
@@ -836,15 +842,19 @@ test("I20 — a deal or contact by name alone at the merge, linked to the surviv
 });
 
 // ── Jeff's second set (18 Oct, b13/jeff-answers.md): I21 ──────────────────────────────────────────────────────────
-// A tier a merge was sent (the API takes accountTier; no screen sends it): "<n> Dock", a site under "<n> Top", merged
-// with "<n> Co" — its deal moved to the Dock by id — taking the business-unit tier and Co's phone; no lift (a business
-// unit). extra: more resolved fields.
+// A tier a merge was sent, logged before §0.219 (the API took accountTier then; no screen sent it — since, a tier sent
+// is ignored, so this merge is built as such a log reads): "<n> Dock", a site under "<n> Top", merged with "<n> Co" —
+// its deal moved to the Dock by id — taking the business-unit tier and Co's phone; no lift (a business unit). The merge
+// is made with the Dock a business unit already, and its log then reads the Dock's snapshot a site and the tier
+// resolved, as the old merge wrote them. extra: more resolved fields.
 const retier = async (tag, extra = {}) => {
     const [TOP, D, X, DX] = [`${tag}_top`, `${tag}_dock`, `${tag}_co`, `${tag}_dx`].map(ID);
     const n = tag.toUpperCase();
-    await db.insert(accounts).values([acct(TOP, `${n} Top`), acct(D, `${n} Dock`, { accountTier: 'site', parentAccountId: TOP }), acct(X, `${n} Co`, { phone: '555-0121' })]);
+    await db.insert(accounts).values([acct(TOP, `${n} Top`), acct(D, `${n} Dock`, { accountTier: 'business_unit', parentAccountId: TOP }), acct(X, `${n} Co`, { phone: '555-0121' })]);
     await db.insert(opportunities).values(opp(DX, X, `${n} Co`));
-    const L = await merge(D, X, { resolvedFields: { accountTier: 'business_unit', phone: '555-0121', ...extra } });
+    const L = await merge(D, X, { resolvedFields: { phone: '555-0121', ...extra } });
+    const lg = await logOf(L);
+    await db.update(mergeLog).set({ survivorSnapshot: { ...lg.survivorSnapshot, accountTier: 'site' }, resolvedFields: { ...lg.resolvedFields, accountTier: 'business_unit' } }).where(eq(mergeLog.id, L));
     assert.deepEqual([await place(D), await deal(DX)], [[TOP, 'business_unit'], [D, extra.name || `${n} Dock`, null]], `${tag}: merged — the Dock a business unit, Co's deal on it by id`);
     return { TOP, D, X, DX, L, n };
 };
@@ -1144,4 +1154,78 @@ test("I27 — 3c's review: a SPIFF claim on a deal a merge into a site moved up 
     assert.equal(uc.status, 200, JSON.stringify(uc.body));
     assert.deepEqual(await linkOf(S), [AS, 'I27 Shell Corp'], 'REGRESSION: the link alone put back beside a Company renamed since — the pair split');
     assert.ok(uc.body.keptFields.includes('accountId'), 'the link kept, and said');
+});
+
+// ── 3d: the merge's place (state §0.219; Jeff, 29 Oct: Q7, Q8; 31 Oct: Q19-Q21): I28 ─────────────────────────────────
+test("I28 — 3d: a merge that would close a loop, put an account under a site, or change a moved account's tier is refused (409), nothing written, saying what to move first; a merged-away sub-account refuses nothing (Q19); a tier sent is ignored; D22's namesakes are live accounts; and an Undo reads the survivor's deals with no id by its name (OPEN_ITEMS §4.7's first shape) — in this org: org B's same-named deal with no id holds nothing", async () => {
+    const bBefore = await bRows();   // org B as it stands now — I23 and I25 seed rows of their own there
+    const nothingWritten = async (X, kids, label) => {
+        assert.deepEqual(live(await one(accounts, X)), [false, null, null], `${label}: the record merged away live`);
+        for (const [k, p] of kids) assert.equal((await one(accounts, k)).parentAccountId, p, `${label}: ${k} where it stood`);
+        assert.equal((await db.select().from(mergeLog).where(and(eq(mergeLog.orgId, A), eq(mergeLog.archivedId, X)))).length, 0, `${label}: no log`);
+    };
+    // (a) Q8 / Q21: a row stored before the rule (UKG's 12 — an account under an account) the merge would move
+    const [XA, YA, LA] = ['i28a_old', 'i28a_new', 'i28a_legacy'].map(ID);
+    await db.insert(accounts).values([acct(XA, 'I28A Old'), acct(YA, 'I28A New'), acct(LA, 'I28A Legacy', { parentAccountId: XA, accountTier: 'account' })]);
+    const a = await call(A, { entityType: 'account', survivorId: YA, archivedId: XA });
+    assert.deepEqual([a.status, a.body.error], [409, '“I28A Legacy” is an account and would have to become a business unit under “I28A New” — move it first.'],
+        'REGRESSION: moved under the survivor at a tier the rule would not give it — the merge not exactly undoable');
+    await nothingWritten(XA, [[LA, XA]], '(a)');
+    // (b) Q7: the survivor two levels under the record merged away — the chain named
+    const [XB, UB, YB] = ['i28b_shell', 'i28b_unit', 'i28b_site'].map(ID);
+    await db.insert(accounts).values([acct(XB, 'I28B Shell'), acct(UB, 'I28B Unit', { parentAccountId: XB, accountTier: 'business_unit' }), acct(YB, 'I28B Site', { parentAccountId: UB, accountTier: 'site' })]);
+    const b = await call(A, { entityType: 'account', survivorId: YB, archivedId: XB });
+    assert.deepEqual([b.status, b.body.error], [409, '“I28B Site” stands under “I28B Unit”, which stands under “I28B Shell” — move “I28B Site” first.'],
+        'REGRESSION: the merge closed a loop — the unit moved under its own site');
+    await nothingWritten(XB, [[UB, XB], [YB, UB]], '(b)');
+    // (c) a site survivor: a live sub-account refuses; one merged away before refuses nothing and moves, as before (Q19)
+    const [TC, DC, XC, PC, XC2, HC] = ['i28c_top', 'i28c_dock', 'i28c_old', 'i28c_plant', 'i28c2_old', 'i28c2_hidden'].map(ID);
+    await db.insert(accounts).values([acct(TC, 'I28C Top'), acct(DC, 'I28C Dock', { parentAccountId: TC, accountTier: 'site' }), acct(XC, 'I28C Old'),
+        acct(PC, 'I28C Plant', { parentAccountId: XC, accountTier: 'business_unit' }), acct(XC2, 'I28C2 Old'),
+        acct(HC, 'I28C2 Hidden', { parentAccountId: XC2, accountTier: 'business_unit', mergeArchived: true, mergedIntoId: TC })]);
+    const c = await call(A, { entityType: 'account', survivorId: DC, archivedId: XC });
+    assert.deepEqual([c.status, c.body.error], [409, "“I28C Dock” is a site — a site can't have accounts under it, and “I28C Plant” stands under “I28C Old”. Move it first."]);
+    await nothingWritten(XC, [[PC, XC]], '(c)');
+    await merge(DC, XC2);
+    assert.equal((await one(accounts, HC)).parentAccountId, DC, '(c) a merged-away sub-account moves with the rest, unjudged');
+    // (d) a tier sent is ignored
+    const [XD, YD] = ['i28d_old', 'i28d_new'].map(ID);
+    await db.insert(accounts).values([acct(XD, 'I28D Old'), acct(YD, 'I28D New')]);
+    const LD = await merge(YD, XD, { resolvedFields: { accountTier: 'site' } });
+    assert.equal((await one(accounts, YD)).accountTier, 'account', 'REGRESSION: a tier sent written unchecked — a top-level site');
+    assert.ok(!('accountTier' in ((await logOf(LD)).resolvedFields || {})), 'and not logged as resolved');
+    // (e) D22: an account merged away earlier under the merged-away name does not keep its deals with no id on the site
+    const [TE, YE, XE, ZE, DE] = ['i28e_top', 'i28e_site', 'i28e_old', 'i28e_gone', 'i28e_dn'].map(ID);
+    await db.insert(accounts).values([acct(TE, 'I28E Top'), acct(YE, 'I28E Site', { parentAccountId: TE, accountTier: 'site' }), acct(XE, 'I28E Old'),
+        acct(ZE, 'I28E Old', { mergeArchived: true, mergedIntoId: TE })]);
+    await db.insert(opportunities).values(opp(DE, null, 'I28E Old'));
+    await merge(YE, XE);
+    assert.deepEqual(await deal(DE), [TE, 'I28E Top', 'I28E Site'], 'REGRESSION: the merged-away namesake counted — the deal left on the site by its name');
+    // (f) §4.7's first shape: H6, then a deal with no id saved under the Dock's name — the Undo keeps the Dock an account, counted
+    const [PF, DF, NF] = ['i28f_plant', 'i28f_dock', 'i28f_new'].map(ID);
+    await db.insert(accounts).values([acct(PF, 'I28F Plant'), acct(DF, 'I28F Dock', { parentAccountId: PF, accountTier: 'site' })]);
+    const LF = await merge(DF, PF);
+    assert.deepEqual(await place(DF), [null, 'account'], 'merged: the Dock lifted, an account');
+    await db.insert(opportunities).values(opp(NF, null, 'I28F Dock'));
+    const uf = await undo(LF);
+    assert.equal(uf.status, 200, JSON.stringify(uf.body));
+    assert.deepEqual([await place(DF), await deal(NF)], [[null, 'account'], [null, 'I28F Dock', null]],
+        'REGRESSION (§4.7): the Dock put back a site with a deal on it by its name, uncounted');
+    assert.deepEqual([uf.body.keptLinks, uf.body.keptFields], [1, ['parentAccountId', 'accountTier']], 'the deal that keeps it counted');
+    // (g) the same with no deal of A's: org B's deal with no id under the Dock's name (NAMES) holds nothing — read and asked in this org
+    const [PG, DG] = ['i28g_plant', 'i28g_dock'].map(ID);
+    await db.insert(accounts).values([acct(PG, 'I28G Plant'), acct(DG, 'I28G Dock', { parentAccountId: PG, accountTier: 'site' })]);
+    const ug = await undo(await merge(DG, PG));
+    assert.equal(ug.status, 200, JSON.stringify(ug.body));
+    assert.deepEqual([await place(DG), ug.body.keptLinks, ug.body.keptFields], [[PG, 'site'], 0, []], "REGRESSION: org B's deal of the name held A's survivor");
+    // (h) a twin has the name: the deal with no id is neither's by name ("Skip if shared") — the Dock goes back a site
+    const [PH, DH, TH, NH] = ['i28h_plant', 'i28h_dock', 'i28h_twin', 'i28h_new'].map(ID);
+    await db.insert(accounts).values([acct(PH, 'I28H Plant'), acct(DH, 'I28H Dock', { parentAccountId: PH, accountTier: 'site' }), acct(TH, 'I28H Dock')]);
+    const LH = await merge(DH, PH);
+    await db.insert(opportunities).values(opp(NH, null, 'I28H Dock'));
+    const uh = await undo(LH);
+    assert.equal(uh.status, 200, JSON.stringify(uh.body));
+    assert.deepEqual([await place(DH), uh.body.keptLinks], [[PH, 'site'], 0], "a name a twin shares: not the survivor's by name");
+    const now = await bRows();
+    for (const k of Object.keys(bBefore)) assert.equal(now[k], bBefore[k], `org B's ${k}: untouched by I28`);
 });

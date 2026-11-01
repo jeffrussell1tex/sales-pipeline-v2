@@ -6,8 +6,8 @@ import {
 import { eq, and, or, isNull, inArray, desc, sql, getTableColumns } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
-import { UNDO_CHANGED, undoRefusal, upIdOf, orgChartUnion, survivorRestore, undoPlaces, dealsByIdOf, survivorRowsOf, undoKept, undoDetail } from '../../src/utils/mergeUndo.js';
-import { rankOf } from '../../src/utils/accountParent.js';
+import { UNDO_CHANGED, undoRefusal, upIdOf, orgChartUnion, survivorRestore, undoPlaces, dealsByIdOf, dealsByNameOn, survivorRowsOf, undoKept, undoDetail } from '../../src/utils/mergeUndo.js';
+import { rankOf, mergePlacement } from '../../src/utils/accountParent.js';
 import { idlessNamesOf, claimRenames, contactPairOf, companyGone, recordsTouched } from '../../src/utils/mergeLinks.js';
 import { MERGE_HOPS } from '../../src/utils/linkIds.js';
 
@@ -19,12 +19,13 @@ import { MERGE_HOPS } from '../../src/utils/linkIds.js';
 // reversible log), then commit every rewrite + soft-archive + log insert in ONE
 // db.batch() call so a merge can never half-complete.
 
-// Survivor fields a user is allowed to resolve in the merge modal. parentAccountId
-// and the archive bookkeeping columns are handled structurally, never via this map.
+// Survivor fields a user is allowed to resolve in the merge modal. parentAccountId, accountTier
+// and the archive bookkeeping columns are handled structurally, never via this map — a tier
+// sent is ignored (state §0.219; no screen sent one): the merge's place is the parent rule's.
 const ACCOUNT_FIELDS = [
     'name', 'verticalMarket', 'industry', 'address', 'address2', 'city', 'state',
     'zip', 'country', 'website', 'phone', 'accountOwner', 'assignedRep',
-    'assignedTerritory', 'accountTier', 'notes', 'doNotContact', 'customerTypes',
+    'assignedTerritory', 'notes', 'doNotContact', 'customerTypes',
     'accountSegment', 'description', 'totalEmployees', 'annualRevenue',
     'fiscalYearEnd', 'foundedYear', 'linkedInUrl', 'sicCode', 'naicsCode',
 ];
@@ -178,6 +179,13 @@ export const handler = async (event) => {
         // The owner id with the owner name (§0.193), decided before anything is written.
         const owner = 'accountOwner' in resolved ? mergedOwnerId('accountOwner', resolved, surv, arch) : null;
         if (owner?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: owner.error }) };
+        // The merge's place in the hierarchy (state §0.219 — batch 3d; Jeff, 29 Oct: Q7 "Refuse, name the chain", Q8
+        // "Refuse it"; 31 Oct: Q19-Q21): a merge that would close a loop, put an account under a site, or change a
+        // moved account's tier is refused, nothing written, saying what to move first (accountParent.js mergePlacement,
+        // on the org's accounts as read in this org) — so every merge stays exactly undoable.
+        const tree = await treeOf(orgId);
+        const placement = mergePlacement(tree, { survivorId, archivedId });
+        if (placement) return { statusCode: 409, headers, body: JSON.stringify({ error: placement.error }) };
         const oldSurvName = surv.name;
         const survName = (resolved.name != null && String(resolved.name).trim()) ? resolved.name : oldSurvName;
         const archName = arch.name;
@@ -212,8 +220,11 @@ export const handler = async (event) => {
 
         // Re-parent the archived account's children onto the survivor — each one's tier logged as it stood (state §0.207;
         // the re-check, 17 Oct): an Undo puts one back under the record merged away whatever its rank only at that tier
-        // (mergeUndo.js undoPlaces).
-        const kids = await db.select({ id: accounts.id, accountTier: accounts.accountTier }).from(accounts).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId)));
+        // (mergeUndo.js undoPlaces). The rows the placement judged — the tree it read (state §0.219; the review: a second
+        // read let a child added, moved under it or re-tiered in between pass both) — moved by these ids, each still under
+        // it: a live one not as read here aborts the batch (the claim's refusal), so no sub-account lands where the
+        // placement never put it.
+        const kids = tree.filter((a) => a.parentAccountId === archivedId).map((a) => ({ id: a.id, accountTier: a.accountTier, mergeArchived: a.mergeArchived }));
         const childIds = kids.map((k) => k.id);
         if (childIds.length) rewrites.push({ table: 'accounts', column: 'parentAccountId', kind: 'id', ids: childIds, oldValue: archivedId, newValue: survivorId, tiers: Object.fromEntries(kids.map((k) => [k.id, k.accountTier ?? null])) });
 
@@ -264,15 +275,16 @@ export const handler = async (event) => {
         // this same batch. The log keeps each one's account, id and Site Name as they were, after
         // every other rewrite, so the undo puts them back last, each still where this put it (§0.207). A site with no live
         // account above it keeps them: there is nothing to move them up to.
-        const survTier = 'accountTier' in resolved ? resolved.accountTier : surv.accountTier;
+        const survTier = surv.accountTier;
         const upId = surv.parentAccountId === archivedId ? (arch.parentAccountId || null) : (surv.parentAccountId || null);
         const [up] = survTier === 'site' && upId
             ? await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived }).from(accounts).where(and(eq(accounts.id, upId), eq(accounts.orgId, orgId)))
             : [];
         let lifted = [];
         if (up && up.mergeArchived !== true) {
-            const named = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.name, archName), eq(accounts.orgId, orgId)));
-            const byName = named.every((a) => a.id === archivedId || a.id === survivorId);
+            // By name only where no LIVE account outside the pair has the name (state §0.219; DESIGN "D22's namesakes" —
+            // one merged away before held the deals on the site): 3c's idlessNames, read above in this org.
+            const byName = idlessNames.includes(archName);
             lifted = await db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account, site: opportunities.site })
                 .from(opportunities)
                 .where(and(eq(opportunities.orgId, orgId), byName
@@ -314,7 +326,11 @@ export const handler = async (event) => {
         // A deal moved by its id takes the survivor's name with it, in the same statement — a deal's account id and name
         // move together (state §0.218; DESIGN "the deal pairing"): one whose text was not one of the two names kept it.
         ops.push(db.update(opportunities).set({ accountId: survivorId, account: survName, updatedAt: now }).where(and(eq(opportunities.accountId, archivedId), eq(opportunities.orgId, orgId))));
-        ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));
+        // The sub-accounts by the ids read, each still under the record merged away — and no live one there but as read
+        // (1 / 0: 22012 otherwise, the claim's refusal; state §0.219).
+        const liveKids = kids.filter((k) => k.mergeArchived !== true);
+        ops.push(db.select({ ok: sql`1 / (case when exists (select 1 from ${accounts} where ${accounts.parentAccountId} = ${archivedId} and ${accounts.orgId} = ${orgId} and ${accounts.mergeArchived} is not true${liveKids.length ? sql` and not (${or(...liveKids.map((k) => and(eq(accounts.id, k.id), asRead(accounts.accountTier, k.accountTier ?? null))))})` : sql``}) then 0 else 1 end)` }).from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
+        if (childIds.length) ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(inArray(accounts.id, childIds), eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));
         // Contacts on the record merged away, by the ids read, each still on it: the survivor's id and name together.
         if (moving.length) ops.push(db.update(contacts).set({ accountId: survivorId, company: survName, updatedAt: now }).where(and(inArray(contacts.id, moving.map((c) => c.id)), eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId))));
 
@@ -443,6 +459,15 @@ const treeOf = (orgId) => db.select({
 const dealsOn = async (id, orgId) => (await db.select({ id: opportunities.id }).from(opportunities)
     .where(and(eq(opportunities.accountId, id), eq(opportunities.orgId, orgId)))).map((d) => d.id);
 
+// The deals with no account id under one of these names, in this org: the survivor's name as it stands and as it was —
+// one such deal standing on it by its name once the Undo is done keeps it from going back a site too (state §0.219;
+// mergeUndo.js dealsByNameOn decides which).
+const dealsNamed = async (names, orgId) => {
+    const of = [...new Set(names.filter((n) => n != null && n !== ''))];
+    return of.length ? db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account }).from(opportunities)
+        .where(and(isNull(opportunities.accountId), inArray(opportunities.account, of), eq(opportunities.orgId, orgId))) : [];
+};
+
 // A column as read: none read as none.
 const asRead = (col, v) => (v == null ? isNull(col) : eq(col, v));
 
@@ -458,8 +483,10 @@ const standsNow = (id, orgId) => sql`exists (select 1 from ${accounts} where ${a
 
 // No deal stands on the survivor by id — asked in its own statement when it gets back a site's tier (Jeff, 18 Oct: an
 // Undo never puts a deal on a site): a deal linked to it while the Undo ran keeps it where it stands, every field kept
-// (undoKept), as nothingUnder does. By then the deal id restore has moved the merge's own back.
-const noDealOn = (id, orgId) => sql`not exists (select 1 from ${opportunities} where ${opportunities.accountId} = ${id} and ${opportunities.orgId} = ${orgId})`;
+// (undoKept), as nothingUnder does. By then the deal id restore has moved the merge's own back. And none by the name it
+// gets back with no account id, when that name is the survivor's alone (state §0.219; dealsByNameOn's name): by then the
+// name restores have put the merge's own by name back.
+const noDealOn = (id, orgId, name = null) => sql`not exists (select 1 from ${opportunities} where (${opportunities.accountId} = ${id}${name != null ? sql` or (${opportunities.accountId} is null and ${opportunities.account} = ${name})` : sql``}) and ${opportunities.orgId} = ${orgId})`;
 
 // The record merged away is no site — asked in each statement that moves a deal back to it: the deal id restore, its
 // lift, and the name restore of the deals by name alone the merge renamed from its name (Jeff, 18 Oct; the re-check,
@@ -585,7 +612,8 @@ const contactRestores = (log, orgId, now, ops, restores) => {
 // The Undo's batch, in order: the claim, the un-archive, the survivor's assert, the record merged away's place (when
 // anything goes back under it), the links, the survivor's fields, when an account survivor's name comes back its deals'
 // and contacts' name, and the survivor's own deals and contacts renamed by name read. rows: undoRowsOf's, with tree —
-// the org's accounts (treeOf) — and deals — the survivor's by id (dealsOn) — an account merge's. Exported for the
+// the org's accounts (treeOf) — deals — the survivor's by id (dealsOn) — and named — those with no id by its names
+// (dealsNamed) — an account merge's. Exported for the
 // integration suite, which runs a batch built from a log read as merged after the records changed under it.
 export function undoOps(kind, log, rows, orgId, now) {
     const records = kind === 'contact' ? contacts : accounts;
@@ -607,7 +635,9 @@ export function undoOps(kind, log, rows, orgId, now) {
     // The survivor's fields the merge wrote that nobody has edited since (survivorRestore) — and, an account merge's,
     // what goes back under the record merged away by the house parent rule (undoPlaces; the review, 17 Oct).
     const restored = survivorRestore(kind, log, rows.survivor);
-    const placed = kind === 'account' ? undoPlaces(log, rows.tree, restored, rows.deals) : null;
+    // The survivor's deals: by id, and with no id by the name it carries once the Undo is done (state §0.219).
+    const byName = kind === 'account' ? dealsByNameOn(log, rows.tree, restored, rows.named) : null;
+    const placed = kind === 'account' ? undoPlaces(log, rows.tree, restored, rows.deals, byName.ids) : null;
     // The record merged away where the parent rule read it, while anything goes back under it — after the un-archive,
     // which holds its row from then on (1 / 0: 22012 otherwise, read again as "changed while the merge was being undone").
     if (placed?.under) {
@@ -630,7 +660,7 @@ export function undoOps(kind, log, rows, orgId, now) {
         survivorAt = ops.length;
         ops.push(db.update(records).set({ ...set, updatedAt: now })
             .where(and(eq(records.id, log.survivorId), eq(records.orgId, orgId), sql`${records.updatedAt}::text = ${rows.survivor.updatedAtText}`,
-                ...(set.accountTier === 'site' ? [noDealOn(log.survivorId, orgId)] : []),
+                ...(set.accountTier === 'site' ? [noDealOn(log.survivorId, orgId, byName?.name ?? null)] : []),
                 ...('accountTier' in set ? [nothingUnder(log.survivorId, set.accountTier, orgId)] : [])))
             .returning({ id: records.id }));
     }
@@ -705,10 +735,12 @@ const undoMergeLog = async ({ kind, body, orgId, userId, headers }) => {
     if (refusal) return { statusCode: 409, headers, body: JSON.stringify({ error: refusal }) };
 
     // An account merge's: the org's accounts, on which what goes back under the record merged away meets the parent rule;
-    // and the survivor's deals by id, which keep it from going back a site (Jeff, 18 Oct).
+    // and the survivor's deals by id, and with no id by its names (state §0.219), which keep it from going back a site
+    // (Jeff, 18 Oct).
     const tree = kind === 'account' ? await treeOf(orgId) : null;
     const deals = kind === 'account' ? await dealsOn(log.survivorId, orgId) : null;
-    const built = undoOps(kind, log, { ...rows, tree, deals }, orgId, new Date());
+    const named = kind === 'account' ? await dealsNamed([rows.survivor?.name, log.survivorSnapshot?.name], orgId) : null;
+    const built = undoOps(kind, log, { ...rows, tree, deals, named }, orgId, new Date());
     const done = await undoBatch(built.ops, { log, table, orgId, headers });
     if (done.refused) return done.refused;
     const { keptLinks, keptFields } = undoKept(built, done.results);
