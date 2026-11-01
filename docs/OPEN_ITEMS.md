@@ -139,13 +139,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      its account by id; the deals bulk paths linked by the single save's
      rule; a blank Sales Rep the importer's by id; an Overwrite's blank
      cell keeps what is stored. **3c built (§0.218; guide §18b108), its
-     browser check PASSED as Jeff, committed `98a26e3` (31 Oct, on Jeff's word, "Commit c"), NOT pushed** (Jeff, 30 Oct: Q15 "Still
+     browser check PASSED as Jeff, committed `98a26e3` (31 Oct, on Jeff's word, "Commit c"), pushed to dev 1 Nov, NOT shipped** (Jeff, 30 Oct: Q15 "Still
      on survivor", Q16 "Skip if shared", Q17 "Show it to pick", Q18 all
      three): contacts moved by id and back with their own company; renames
      within the pair; a claim with its deal; a contact's Company with its
      account; two merges at once refused; each record counted once.
      **3d built (§0.219; guide §18b109), its browser check PASSED as Jeff,
-     committed `afb0578` (1 Nov, on Jeff's word, "Commit d"), NOT pushed** (Jeff, 31 Oct: "Then d"; Q19 "Judge live rows only", Q20
+     committed `afb0578` (1 Nov, on Jeff's word, "Commit d"), pushed to dev 1 Nov, NOT shipped** (Jeff, 31 Oct: "Then d"; Q19 "Judge live rows only", Q20
      "Keep the lift allowed", Q21 "Only what the move changes", Q22 "Warn,
      keep Merge"): a merge refused, nothing written, saying what to move
      first, where it would close a loop, put an account under a site or
@@ -3073,7 +3073,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   again. Whether an invoice past draft, which takes no edit
   (invoices.mjs:183-186), moves too is Jeff's call.
 - **D22's "no other account has the name" counts an account merged
-  away — the merge's half DONE (§0.219, committed `afb0578`: `byName` is 3c's live
+  away — the merge's half DONE (§0.219, committed `afb0578`, pushed to dev 1 Nov: `byName` is 3c's live
   `idlessNames`; I28 (e)); the accounts.mjs half (`sitesMade`'s `alone`)
   still open** (the cleanup batch's design, 18 Oct, P32; re-read 23 Oct; read
   in code, not run): a deal with no account id is moved up off a site —
@@ -3495,7 +3495,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   at :591 names the restore.
 - **What §0.207's merge Undo leaves** (its design, reviews and re-checks,
   17–18 Oct; each read in code, or run where said):
-  - **Two concurrent merges of one record merged away both commit — DONE (§0.218, committed `98a26e3`: the batch opens with a claim on both records, each live and as read; Q18)** (the
+  - **Two concurrent merges of one record merged away both commit — DONE (§0.218, committed `98a26e3`, pushed to dev 1 Nov: the batch opens with a claim on both records, each live and as read; Q18)** (the
     server map; reasoned from the code, not run): each passes the merge's
     check that the record is live, the second's archive write overwrites
     `mergedIntoId`, and two logs read 'merged' for one record. Since
@@ -3562,11 +3562,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
     need the guard below. Recommended: the generation counter the five list
     loads now have (guide §18b100 rule 6).
   - **An account merge's audit count counts a lifted deal two or three
-    times — DONE (§0.218, committed `98a26e3`: each record once, `recordsTouched`; Q18)** (the server map): the summary adds every rewrite's ids, and a
+    times — DONE (§0.218, committed `98a26e3`, pushed to dev 1 Nov: each record once, `recordsTouched`; Q18)** (the server map): the summary adds every rewrite's ids, and a
     deal moved by id or by name and then lifted (D22) is in both, so "N
     references repointed" reads more than were moved.
 - **Deals by name alone that a merge's Undo leaves on a site by their
-  name — the first shape DONE (§0.219, committed `afb0578`: the Undo reads the
+  name — the first shape DONE (§0.219, committed `afb0578`, pushed to dev 1 Nov: the Undo reads the
   survivor's deals with no id by the name it carries after the Undo,
   `dealsByNameOn`, and asks it again in its batch; I28 (f)-(h)); the
   second stays filed** (Jeff, 18 Oct: "Ship as is, file the edge"
@@ -3666,7 +3666,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     which the merge renamed). None at the census of 16 Oct 21:13 UTC, which
     found no live contact or deal naming a merged-away account, in any
     org; any account merge since can make one.
-  - **Done by §0.219 (3d, committed `afb0578`):** a merge is refused, nothing
+  - **Done by §0.219 (3d, committed `afb0578`, pushed to dev 1 Nov):** a merge is refused, nothing
     written, where it would close a loop, put a sub-account under a site or
     change a moved sub-account's tier (`mergePlacement`; Q7, Q8, Q19-Q21);
     `accountTier` left the field map; the scan marks such pairs. Was:
@@ -3704,7 +3704,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
   As recorded.
-- **Past merges offers an Undo again until its list is read again — DONE (§0.218, committed `98a26e3`: the mark released only after a read that landed; Q18)**
+- **Past merges offers an Undo again until its list is read again — DONE (§0.218, committed `98a26e3`, pushed to dev 1 Nov: the mark released only after a read that landed; Q18)**
   (§0.210's browser check, 23 Oct; read in code): after an Undo's
   answer, the row says so ("Merge undone — “Tess Undoer” is its own
   record again.") beside an enabled Undo until the list's reload
