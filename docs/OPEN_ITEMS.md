@@ -242,7 +242,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      dev 2 Nov (`0d1f35b..c8f1440`, Tests GREEN), NOT shipped:** each list's
      links and shape, the restore's clean-up, a team note's team,
      integrationRequests the server's. **Step C built 2 Nov (§0.222; guide
-     §18b112; docs/design/links-batch-4b3/STEP-C.md), committed `9ce4dc6`, NOT pushed:** a
+     §18b112; docs/design/links-batch-4b3/STEP-C.md), committed `9ce4dc6`, pushed to dev 2 Nov
+     (`c8f1440..f218421`, Tests GREEN), NOT shipped:** a
      team's name paired with its id, a rename renaming every holder, no new
      duplicate name, a removed member off the lists, TeamModal clearing no
      one it does not hold. Next: D (plans), then B (the stale save — its
@@ -1948,7 +1949,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ### 4.3 Settings
 
 - **TeamModal clears the team of every member its list does not hold by
-  app id — DONE in §0.222 (committed `9ce4dc6` 2 Nov; NOT pushed, NOT shipped)**: the
+  app id — DONE in §0.222 (committed `9ce4dc6`, pushed to dev 2 Nov; NOT shipped)**: the
   window reads a list's entries by app or Clerk id (Jeff's J1) and its save
   sends a member only a join, a leave or the team's new territory
   (`teamSaveMembers`); UKG's count (2 Nov, STEP-C.md §9): a save of its team
