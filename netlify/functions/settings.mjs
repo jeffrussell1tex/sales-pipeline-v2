@@ -22,6 +22,10 @@ import { QUOTA_PERIODS, cleanQuotaPeriods } from '../../src/utils/quotaPlan.js';
 // The ids inside settings (state §0.221): each list's shape, and the links its entries name.
 import { SETTINGS_LISTS, listShapeRefused } from '../../src/utils/linkIds.js';
 import { checkSettingsLinks } from './_links.mjs';
+// A team is one record (state §0.222): no new duplicate name; a rename renames every member holding the team.
+import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js';
+import { sql } from 'drizzle-orm';
+import { invalidateRoster } from './_lib.mjs';
 
 // ── BYOK key quarantine ──────────────────────────────────────────────
 // The org's Anthropic key may only ever live in extra.anthropicApiKey, as
@@ -308,8 +312,15 @@ export const handler = async (event) => {
                 const bad = key in data ? listShapeRefused(key, data[key], existingExtra[key]) : null;
                 if (bad) return { statusCode: bad.status, headers, body: JSON.stringify({ error: bad.error, field: bad.field }) };
             }
+            // No new team of a name another has (state §0.222 — batch 4b-3, step C; Q8): by its repeats, so a pair
+            // stored before this rule stands; nor a name a member's team cannot hold. Refused naming the list, before
+            // anything is read or written.
+            const teamNamed = 'teams' in data ? teamNameRefused(data.teams, existingExtra.teams) : null;
+            if (teamNamed) return { statusCode: teamNamed.status, headers, body: JSON.stringify({ error: teamNamed.error, field: teamNamed.field }) };
             const linked = await checkSettingsLinks(data, existingExtra, orgId);
             if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            // The teams this save renames (state §0.222 — Q7): every member holding one is renamed with it, below.
+            const renames = 'teams' in data ? teamRenames(data.teams, existingExtra.teams) : [];
 
             // One-time migration: if a plaintext key is sitting in the aiSettings
             // blob (incoming or already stored), lift it into the encrypted field.
@@ -456,10 +467,20 @@ export const handler = async (event) => {
                 extra,
                 updatedAt:       new Date(),
             };
-            await db.insert(settings).values(dbRow).onConflictDoUpdate({
+            const upsert = db.insert(settings).values(dbRow).onConflictDoUpdate({
                 target: settings.id, setWhere: eq(settings.orgId, orgId),
                 set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
+            // A renamed team renames every member holding it, by its id — an inactive or an invited member too — in the
+            // save's own transaction (state §0.222 — Q7): only this org's members (a team id is minted on the client,
+            // `team_<ms>`, and may repeat across orgs), and only while the list as written gives the team that name.
+            const renaming = renames.map(({ id, name }) => db.update(users).set({ team: name, updatedAt: new Date() })
+                .where(and(eq(users.orgId, orgId), sql`${users.profile}->>'teamId' = ${id}`, sql`${users.team} is distinct from ${name}`,
+                    sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'teams' @> jsonb_build_array(jsonb_build_object('id', ${id}::text, 'name', ${name}::text)))`))
+                .returning({ id: users.id }));
+            const [, ...renamedRows] = await db.batch([upsert, ...renaming]);
+            const membersRenamed = renamedRows.reduce((n, rows) => n + rows.length, 0);
+            if (membersRenamed) invalidateRoster(orgId);
 
             // Audit the write. Org-wide config changes are exactly the kind of
             // integrity event the audit log exists for. Key material is never
@@ -471,9 +492,12 @@ export const handler = async (event) => {
                 entityType: 'settings',
                 entityId: orgId,
                 entityName: dbRow.companyName || 'Organization settings',
-                detail: keyAction
+                detail: (keyAction
                     ? `BYOK key ${keyAction}` + (changedKeys.length ? `; updated: ${changedKeys.slice(0, 20).join(', ')}` : '')
-                    : `Updated: ${changedKeys.slice(0, 20).join(', ') || '(no fields)'}`,
+                    : `Updated: ${changedKeys.slice(0, 20).join(', ') || '(no fields)'}`)
+                    // A save that renamed members says how many, whatever else it did (state §0.222): a stale tab's list
+                    // put back renames them too.
+                    + (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : ''),
                 userId,
                 userName: callerName,
             });

@@ -88,7 +88,11 @@ One commit per verified batch; doc patch in the same commit.
 ## Identity, ownership, auth
 
 - `users.id` is app-owned `usr_<uuid>`; Clerk identity is `clerk_user_id`.
-  Separate identity spaces — never mix.
+  Separate identity spaces — never mix. The one exception (§0.222, Jeff's
+  J1 "Allow, read only"): a team list's entry that holds a member's Clerk
+  id (stored before members had app ids — UKG's team) is READ as that
+  member (`teamMembership.js` holdsMember/namesMember) — never written
+  where none was, never as a manager (guide §18b112 rule 5).
 - Ownership auth uses `ownerId` on all six Tier 1 tables via
   `assertOwnership()` / `ownerColumnOf()`. `resolveOwnerId` 409s on ambiguity.
 - The `null === null` collision: an unresolvable caller and an unassigned row
@@ -163,7 +167,12 @@ One commit per verified batch; doc patch in the same commit.
   a quote template's products: refused naming the list, the stored list's
   ids held anywhere, each list of records a list with ids of its own; a
   restore cleans the settings row it lands (`checkSettingsLinks`, guide
-  §18b111).
+  §18b111). Since §0.222 a team is one record: the server pairs a
+  member's team name with its id (`teamPaired`); a rename renames every
+  holder by id in the save's transaction; no new duplicate team name; a
+  removed member's ids, app and Clerk, leave every team's and territory's
+  lists in the same request (`removeWithLists`), each screen applying the
+  answer after its org check (guide §18b112).
 - An account CSV import's names are each one record or the row is refused,
   at Preview, by the file's row (`src/utils/importLinks.js`
   planAccountImport): its own name one live account (the conflict) or none,

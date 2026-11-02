@@ -3,6 +3,7 @@
 // value none of its options holds (UsersDetail.jsx, RoleSelect's comment; guide §18b101).
 import { memberStatus } from './memberStatus.js';
 import { ROLE_OPTIONS, canSeeAll } from '../../../utils/roles.js';
+import { nameKey } from '../../../utils/memberName.js';
 
 const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((o) => [o.value, o.label]));
 const blank = (v) => v === null || v === undefined || v === '';
@@ -11,14 +12,15 @@ const blank = (v) => v === null || v === undefined || v === '';
 export const HELD_TEAM = '__held__';
 
 // Every team of the org's list that has an id, by name, sorted; a second team of one name reads "East (2)" (in list
-// order), so each can be told apart. An old plain-string entry has no id and is not offered.
+// order), so each can be told apart — one name as the server judges it since §0.222, case and spaces aside (N16:
+// "east" after "East" reads "east (2)"). An old plain-string entry has no id and is not offered.
 export function teamOptions(teams) {
     const seen = new Map();
     return (teams || [])
         .filter((t) => t && typeof t === 'object' && typeof t.id === 'string' && t.id && t.name)
         .map((t) => {
-            const n = (seen.get(t.name) || 0) + 1;
-            seen.set(t.name, n);
+            const n = (seen.get(nameKey(t.name)) || 0) + 1;
+            seen.set(nameKey(t.name), n);
             return { value: t.id, name: t.name, label: n > 1 ? `${t.name} (${n})` : t.name };
         })
         .sort((a, b) => a.label.localeCompare(b.label));

@@ -22,7 +22,7 @@ export function memberChanges(first, form) {
     // A Full name typed is the member's name (§0.196; Jeff: "Yes, Full name wins"): the server builds the name from
     // First and Last first, so they are cleared with it — always, for they may have been set since the page opened.
     if ('name' in out) { out.firstName = null; out.lastName = null; }
-    // A team is its id and its name together: the server never pairs them.
+    // A team is its id and its name together — and since §0.222 the server pairs them too (teamMembership.js teamPaired).
     if ('team' in out || 'teamId' in out) { out.team = form.team ?? null; out.teamId = form.teamId ?? null; }
     // A manager likewise — picked as the member, so a name only a row from before §0.212 holds is linked when picked.
     if ('manager' in out || 'managerId' in out) { out.manager = form.manager ?? null; out.managerId = form.managerId ?? null; }

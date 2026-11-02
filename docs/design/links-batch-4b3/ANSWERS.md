@@ -33,3 +33,21 @@ Recommended answer. Jeff took every one as Recommended.
   - Q17 the house words per kind;
   - Q18 the write-time merge keeps §0.170's seeding and §0.171's dropping of
     retired keys.
+
+## Step C — teams (2 November 2026)
+
+Asked after step C's map (STEP-C.md §8), through AskUserQuestion, each with a
+Recommended answer (Jeff, "Start please", then every Recommended):
+
+- **J1, a member listed by Clerk id:** "Allow, read only" — the Teams page
+  recognises a held Clerk id as the member it names; it never writes one where
+  none was held, never as a manager; the one exception to CLAUDE.md's "never
+  mix", written into guide §18b112 and CLAUDE.md.
+- **J2, users-sync's team:** "Stop it" — users-sync no longer writes a member's
+  team from Clerk's user metadata (create or fill); `territory`'s same hazard
+  filed.
+- **J3, UKG's count:** "Run it" — SELECT counts only, no names, before step C
+  ships; "do not save UKG's team on the Teams page" kept until it is read.
+- **J4, the rest:** "Take all Recommended" — N1, N2 as the critic amended it,
+  (a) both ids off on removal, N4, N5, N6, N12, N13, N14, N16, N17 as written in
+  STEP-C.md §8.

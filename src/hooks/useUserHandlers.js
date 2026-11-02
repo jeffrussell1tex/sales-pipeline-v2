@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+// A removal's answer (state §0.222): the member off the roster and the lists as the server wrote them.
+import { settingsAfterRemoval, removalNote } from '../utils/teamMembership.js';
 
 export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal }) {
     const [userModalError, setUserModalError] = useState(null);
@@ -26,10 +28,12 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     console.error('Failed to delete user:', errData.error || res.status);
                     return; // Don't remove from local state if DB delete failed
                 }
-                setSettings(prev => ({
-                    ...prev,
-                    users: (prev.users || []).filter(u => u.id !== userId)
-                }));
+                const answer = await res.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
+                setSettings(prev => settingsAfterRemoval(prev, userId, answer));
+                // This handler has no surface of its own (no screen calls it): it logs, as it logs a refusal.
+                const left = removalNote(answer);
+                if (left) console.error('Failed to delete user:', left);
             } catch (err) {
                 console.error('Failed to delete user:', err);
             }

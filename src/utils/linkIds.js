@@ -414,3 +414,44 @@ export function settingsLinkIdsByKind(extra) {
     }
     return out;
 }
+
+// A removed member off the org's team and territory lists (state §0.222 — batch 4b-3, step C; Q9 and (a), Jeff, 2 Nov:
+// "Take all Recommended"): { patch, removed } — patch the lists it changed, {} for none. ids: the member's app id and,
+// when they have one, their Clerk id — a member who rejoins is given a new row with the same Clerk id, which a list
+// holding it would draw back on (teamMembership.js holdsMember). In each team's managerId and repIds and each
+// territory's ownerId and repIds, a one-id field naming them becomes '' (never null, as the restore clears), and a
+// territory whose owner goes reads unassigned, as its screen writes one with no owner (owner, ownerInit, status); a
+// list loses its entries naming them, the rest kept in their order. Every other entry and key — a stray naming no one
+// included (Q3) — as it was.
+export function membersOffLists(extra, ids) {
+    const gone = new Set((Array.isArray(ids) ? ids : []).filter(isEntryId));
+    const patch = {};
+    let removed = 0;
+    if (!gone.size || !extra || typeof extra !== 'object') return { patch, removed };
+    for (const [key, fields] of Object.entries(SETTINGS_LINKS)) {
+        if (!Array.isArray(extra[key])) continue;
+        let touched = false;
+        const next = extra[key].map((e) => {
+            if (!isEntry(e)) return e;
+            let entry = e;
+            for (const { field, kind, shape = 'one' } of fields) {
+                if (kind !== 'member') continue;
+                const v = e[field];
+                if (shape === 'one') {
+                    if (!gone.has(v)) continue;
+                    entry = { ...entry, [field]: '', ...(key === 'territories' ? { owner: 'Unassigned', ownerInit: null, status: 'Unassigned' } : {}) };
+                    removed += 1;
+                    continue;
+                }
+                if (!Array.isArray(v) || !v.some((x) => gone.has(x))) continue;
+                const left = v.filter((x) => !gone.has(x));
+                removed += v.length - left.length;
+                entry = { ...entry, [field]: left };
+            }
+            if (entry !== e) touched = true;
+            return entry;
+        });
+        if (touched) patch[key] = next;
+    }
+    return { patch, removed };
+}

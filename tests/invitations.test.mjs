@@ -81,10 +81,11 @@ test('Revoke and Resend are real calls — Revoke withdraws the invitation in Cl
     assert.ok(resend.includes("if (refused) throw new Error(refused.error || 'Clerk refused the invitation');"), 'a per-invite refusal is shown — the server answers it in `errors`');
     const page = between(screen, 'const UsersPendingPage = ', '\nconst UsersSeatPage = ');
     assert.ok(page.includes('const r = await revokeInvite(e.email);'));
-    // Through one helper since §0.168, which also takes the id off its team's list.
-    assert.ok(page.includes('const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);'));
-    assert.ok(between(screen, 'const dropRevokedRow = async (removedRowId, teams, setSettings) => {', '\n};')
-        .includes('setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== removedRowId) }));'), 'the roster on screen loses the row the server removed');
+    // Since §0.222 the server takes the row's id off the org's lists and answers them; the page applies the answer —
+    // the row off the roster, the lists as written — only while the org that asked is still on screen.
+    assert.ok(page.includes('const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)'));
+    assert.ok(page.includes('if (!stillOrg(askedOrg)) return;\n                setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the Pending page\'s revoke'), 'the roster on screen loses the row the server removed');
+    assert.ok(!screen.includes('dropRevokedRow'), 'REGRESSION: a screen writes the team list of its own after a revoke');
     assert.ok(page.includes('try { await resendInvite(e.row); await loadInvites(); }'), 'Resend, then Clerk\'s new dates');
     assert.ok(page.includes('{e.row && <PeopleSecBtn onClick={() => doResend(e)}>'), 'Resend only for a roster row — an invitation made in Clerk carries no app role');
 });
@@ -133,12 +134,12 @@ test('the server: the pending list and the revoke are an Admin\'s, scoped to the
     assert.ok(rev.includes("await clerk.organizations.revokeOrganizationInvitation({ organizationId: orgId, invitationId: inv.id, requestingUserId: userId });"));
     assert.ok(rev.includes("return { statusCode: 502, headers, body: JSON.stringify({ error: 'Clerk did not revoke the invitation, so it may still be live. Try again.' }) };"), 'REGRESSION: a refused revoke goes on to remove the row');
     assert.ok(rev.includes('const removeRow = isOpenInvitationRow(row);'));
-    assert.ok(rev.includes('await db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId)));'), 'the invitation\'s row goes');
+    assert.ok(rev.includes('revokedOff = await removeWithLists(orgId, [row.id], db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId))));'), 'the invitation\'s row goes, its id off the lists with it (§0.222)');
     assert.ok(rev.includes("await writeAudit(orgId, 'user.invite_revoked',"), 'audited');
 });
 
 test('the server: removing a member is an Admin\'s and never one\'s own; an invitation not yet accepted is revoked, not deleted', () => {
-    const del = between(server, "const id = event.queryStringParameters?.id;", "await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));");
+    const del = between(server, "const id = event.queryStringParameters?.id;", "const deletedOff = deletedRow");
     assert.ok(del.includes("if (userRole !== 'Admin') {\n                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can remove a member.' }) };"), 'REGRESSION: a Manager removes a member — an Admin\'s row demotes them');
     assert.ok(del.includes('if (deletedRow && deletedRow.clerkUserId && deletedRow.clerkUserId === userId) {'), 'REGRESSION: an Admin removes themselves');
     assert.ok(del.includes('if (isOpenInvitationRow(deletedRow)) {'), 'REGRESSION: deleting an invitation\'s row leaves its invitation live');

@@ -7,7 +7,9 @@ import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 import { memberStatus, invitationEntries } from './memberStatus.js';
 import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
-import { teamIdNamed, teamsWithMembers, teamsWithout, teamsWithMemberOn } from '../../../utils/teamMembership.js';
+import { teamIdNamed, teamsWithMembers, teamsWithMemberOn } from '../../../utils/teamMembership.js';
+// A removal's answer (state §0.222): the member off the roster and the lists as the server wrote them.
+import { settingsAfterRemoval, removalNote } from '../../../utils/teamMembership.js';
 import { memberChanges, roleChanged, formAfterSave, clause } from '../../../utils/memberSave.js';
 import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from './memberPickers.js';
 import { peopleMatching } from '../../../utils/documentPeople.js';
@@ -485,9 +487,12 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         showConfirm(`Revoke the invitation to ${e.email}? Its link stops working${e.row ? ' and their row is removed' : ''}. You can invite them again later.`, async () => {
             setBusyEmail(e.email); setActionError('');
             try {
+                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                 const r = await revokeInvite(e.email);
-                const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);
+                if (!stillOrg(askedOrg)) return;
+                setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the Pending page's revoke
                 setClerkInvites(prev => (prev || []).filter(inv => inv.email !== e.email));
+                const note = removalNote(r);
                 if (note) setActionError(note);
             } catch (err) { setActionError(`Could not revoke the invitation to ${e.email}: ${err.message}`); }
             finally { setBusyEmail(null); }
@@ -854,21 +859,9 @@ const revokeInvite = async (email) => {
     if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
     return d;
 };
-// A revoked invitation's row is gone (state §0.165): it leaves the roster on
-// screen and — the invite put it there (§0.168) — its team's list. Returns a
-// sentence when the team list could not be saved, null otherwise.
-const dropRevokedRow = async (removedRowId, teams, setSettings) => {
-    if (!removedRowId) return null;
-    const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-    setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== removedRowId) }));
-    const { teams: remaining, changed } = teamsWithout(teams, removedRowId);
-    if (!changed) return null;
-    const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: remaining }) });
-    if (!stillOrg(askedOrg)) return null;
-    if (!rt.ok) return `The invitation was revoked, but the team list was not updated — ${rt.error}`;
-    setSettings(prev => ({ ...prev, teams: remaining }));
-    return null;
-};
+// A revoked invitation's row is gone (state §0.165), and since §0.222 the server takes its id off the org's team and
+// territory lists in the same request and answers them (users.mjs); each screen applies the answer
+// (teamMembership.js settingsAfterRemoval) — no screen writes the list of its own any more.
 const resendInvite = async (row) => {
     const res = await dbFetch('/.netlify/functions/users', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -979,7 +972,7 @@ const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeh
     );
 };
 
-const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }) => {
+const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail }) => {
     const { setSettings, showConfirm, setMyProfile } = useApp();
     // The member as this page holds them (state §0.211): the roster's row it opened on, then the row as stored after
     // each save — what the title band, the crumb and "Save changes" read (OPEN_ITEMS §4.3, "after a save").
@@ -1142,8 +1135,11 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }
                 const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== user.id) }));
-                onUsers();
+                // Off the roster, and the lists as the server wrote them with their ids off (state §0.222).
+                const deleted = await res.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
+                setSettings(prev => settingsAfterRemoval(prev, user.id, deleted));   // the profile page's delete
+                onRemoved(removalNote(deleted));   // back to the list — the member is gone — saying so if the lists were left
             } catch(err) { setError('Could not delete: ' + err.message); }
         });
     };
@@ -1156,10 +1152,8 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }
                 const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
                 const r = await revokeInvite(user.email);
                 if (!stillOrg(askedOrg)) return;
-                const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);
-                if (!stillOrg(askedOrg)) return;
-                if (note) { setError(note); return; }
-                onUsers();
+                setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the profile page's revoke
+                onRemoved(removalNote(r));   // back to the list — the row is gone — saying so if the lists were left
             } catch(err) { setError('Could not revoke the invitation: ' + err.message); }
         }, false);
     };
@@ -1555,7 +1549,8 @@ export const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'pending')  return <UsersPendingPage  settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers} seats={seats} seatsFailed={seatsFailed}/>;
     if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData} mfaFailed={mfaFailed}/>;
-    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
+    // A removal leaves the member's page for the list, with what it has to say there (state §0.222: the lists left).
+    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} onRemoved={(note) => { setUserActionError(note || ''); onUsers(); }} mfaByEmail={mfaByEmail}/>;
 
     // Map settings.users into the table display format
     const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
@@ -1816,8 +1811,11 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Revoke the invitation to ${u.email || u.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
                                                         try {
+                                                            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                             const r = await revokeInvite(u.email);
-                                                            const note = await dropRevokedRow(r.removedRowId, settings.teams, _setSettings);
+                                                            if (!stillOrg(askedOrg)) return;
+                                                            _setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the row menu's revoke
+                                                            const note = removalNote(r);
                                                             if (note) setUserActionError(note);
                                                         } catch(err) { setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${err.message}`); }
                                                     }, false);
@@ -1829,9 +1827,15 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Permanently delete ${u.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
                                                         try {
+                                                            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                             const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(u.id)}`, { method:'DELETE' });
+                                                            if (!stillOrg(askedOrg)) return;
                                                             if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== u.id) }));
+                                                            const gone = await res.json().catch(() => ({}));
+                                                            if (!stillOrg(askedOrg)) return;
+                                                            _setSettings(prev => settingsAfterRemoval(prev, u.id, gone));   // the row menu's delete
+                                                            const left = removalNote(gone);
+                                                            if (left) setUserActionError(left);
                                                         } catch(err) { setUserActionError(`Could not delete ${u.name}: ${err.message}`); }
                                                     });
                                                 }},

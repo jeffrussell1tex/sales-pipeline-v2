@@ -103,8 +103,9 @@ test('OpportunityModal: the History tab and the notes wait for the save — a fa
 
 const SHARED = new Set(['setOpportunities', 'setAccounts', 'setContacts', 'setTasks', 'setActivities', 'setCoachingNotes',
     'setDocuments', 'setQuotes', 'setProducts', 'setLeads', 'setSpiffClaims', 'setSettings']);
-// A server call: a request, or a helper that sends one and answers with what it saved.
-const SERVER = /\b(dbFetch|dbWrite|putSettings|fetch|postNew|putBulk|saveUser|saveExtra|setMemberActive|uploadNewDocument|uploadNewVersion|handleSave\w*|handleDelete\w*|handleLog\w*|saveDeal\w*|handleMerge|undoMerge|handleContactMerge|softDelete|load[A-Z]\w*)\s*\(/;
+// A server call: a request, or a helper that sends one and answers with what it saved — since §0.222 an invitation's
+// revoke too (UsersDetail.jsx revokeInvite: its answer is the lists as the server wrote them).
+const SERVER = /\b(dbFetch|dbWrite|putSettings|fetch|postNew|putBulk|saveUser|saveExtra|setMemberActive|revokeInvite|uploadNewDocument|uploadNewVersion|handleSave\w*|handleDelete\w*|handleLog\w*|saveDeal\w*|handleMerge|undoMerge|handleContactMerge|softDelete|load[A-Z]\w*)\s*\(/;
 // What sets a shared list without a request of its own, and why that is right.
 const ALLOWED = [
     ['src/components/layout/ModalLayer.jsx', 'setLeads(prev => [...(prev||[]), lead])', 'the lead form saved it (LeadModal) and hands back the saved row'],

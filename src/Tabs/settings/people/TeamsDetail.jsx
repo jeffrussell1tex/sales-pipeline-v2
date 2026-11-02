@@ -5,6 +5,9 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
+// A team is one record (state §0.222): a list's entries read as the members they name, a save sends only what it
+// changes, and no new team takes a name another has.
+import { holdsMember, namesMember, withoutMember, teamNameRefused, teamSaveMembers, rosterAfterTeamSave } from '../../../utils/teamMembership.js';
 
 const AttainBar = ({ pct }) => {
     const color = pct >= 100 ? T.ok : pct >= 60 ? T.warn : T.danger;
@@ -44,25 +47,26 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     const [saving,     setSaving]     = useState(false);
     const [err,        setErr]        = useState('');
 
-    const toggleRep = (id) => setRepIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    // A tick adds the member's app id; an untick takes them off by either id (state §0.222 — a list may hold a member by
+    // the Clerk id it held before members had app ids; it is never written so).
+    const toggleRep = (u) => setRepIds(prev => holdsMember(prev, u) ? withoutMember(prev, u) : [...prev, u.id]);
 
     const handleSave = async () => {
         if (!name.trim()) { setErr('Team name is required.'); return; }
+        const id = isEdit ? team.id : `team_${Date.now()}`;
+        const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
+        const updatedTeams = isEdit ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
+        // No new team of a name another has (state §0.222 — Q8): the server's rule and words, checked here first.
+        const nameRefused = teamNameRefused(updatedTeams, teams);
+        if (nameRefused) { setErr(nameRefused.error); return; }
         setSaving(true); setErr('');
         try {
-            const id = isEdit ? team.id : `team_${Date.now()}`;
-            const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
-            const updatedTeams = isEdit ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
-
-            // Update user team/territory/vertical fields to match — mirrors TeamBuilder.saveTeam
-            const updatedUsers = allUsers.map(u => {
-                const wasInThisTeam = u.teamId === id;
-                const isNowRep      = repIds.includes(u.id);
-                const isNowManager  = managerId === u.id;
-                if (isNowRep || isNowManager) return { ...u, team: saved.name, territory: saved.territory, vertical: saved.vertical, teamId: id };
-                if (wasInThisTeam)            return { ...u, team: '', territory: '', vertical: '', teamId: '' };
-                return u;
-            });
+            // The member saves this save sends (state §0.222 — teamMembership.js teamSaveMembers): a member the list now
+            // holds who is on another team joins; one the Admin took off, on this team, leaves; a changed territory or
+            // vertical goes to the team's members. A holder of the team the list does not hold is left as they are — before
+            // §0.222 every holder the list did not hold by app id was cleared — and a rename is the server's: it renames
+            // every holder by id, an inactive one too.
+            const sends = teamSaveMembers({ opened: isEdit ? team : null, saved, users: allUsers });
 
             // Persist to settings (teams + users)
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
@@ -71,28 +75,23 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
             if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Save failed');
 
-            // Persist changed user rows to /users
-            const changedUsers = updatedUsers.filter((u, i) => {
-                const orig = allUsers[i];
-                return orig && (u.team !== orig.team || u.teamId !== orig.teamId);
-            });
-            // A partial PUT to /users used to REPLACE the row (mergeForUpdate in
-            // users.mjs now merges). The cascade is still reported: a member whose
-            // row did not update is left pointing at the wrong team.
+            // A member whose row did not update is reported by name; one that did is kept as the server answered it.
             const failed = [];
-            for (const u of changedUsers) {
+            const answered = new Map();
+            for (const { u, body } of sends) {
                 if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
+                const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify(body) });
                 if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
+                else answered.set(u.id, r.data?.user || { ...u, ...body });
             }
             if (!stillOrg(askedOrg)) return;
 
+            const renamed = isEdit && team.name !== saved.name ? { id, name: saved.name } : null;
+            setSettings(prev => ({ ...prev, teams: updatedTeams, users: rosterAfterTeamSave(prev.users, answered, renamed) }));
             if (failed.length) {
                 setErr(`Team saved, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
-                setSettings(prev => ({ ...prev, teams: updatedTeams }));
                 return;                                  // stay open so the message is read
             }
-            setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
             onSave(updatedTeams);
             onClose();
         } catch(e) {
@@ -123,7 +122,7 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
                     </div>
                     <div>
                         <label style={lbl}>Manager</label>
-                        <select value={managerId} onChange={e=>setManagerId(e.target.value)} style={sel}>
+                        <select value={managers.find(u => namesMember(managerId, u))?.id ?? managerId} onChange={e=>setManagerId(e.target.value)} style={sel}>
                             <option value="">— Select manager —</option>
                             {managers.map(u => <option key={u.id} value={u.id}>{u.name} · {u.userType || u.role}</option>)}
                         </select>
@@ -164,16 +163,16 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
                         </div>
                     </div>
                     <div>
-                        <label style={lbl}>Sales Reps ({repIds.length} selected)</label>
+                        <label style={lbl}>Sales Reps ({reps.filter(u => holdsMember(repIds, u)).length} selected)</label>
                         {reps.length === 0 ? (
                             <div style={{ fontSize:12, color:T.inkMuted }}>No Sales Rep users found.</div>
                         ) : (
                             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, maxHeight:180, overflowY:'auto', padding:8, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface }}>
                                 {reps.map(u => {
-                                    const selected   = repIds.includes(u.id);
-                                    const otherTeam  = (settings.teams||[]).find(t => t.id !== team?.id && (t.repIds||[]).includes(u.id));
+                                    const selected   = holdsMember(repIds, u);
+                                    const otherTeam  = (settings.teams||[]).find(t => t.id !== team?.id && holdsMember(t.repIds, u));
                                     return (
-                                        <div key={u.id} onClick={() => toggleRep(u.id)}
+                                        <div key={u.id} onClick={() => toggleRep(u)}
                                             style={{ display:'flex', alignItems:'center', gap:7, padding:'6px 8px', borderRadius:4, cursor:'pointer', background: selected ? 'rgba(58,90,122,0.08)' : T.surface2, border: selected ? `1px solid rgba(58,90,122,0.25)` : `1px solid ${T.border}`, userSelect:'none' }}>
                                             <span style={{ width:14, height:14, borderRadius:3, border: selected ? 'none' : `1.5px solid ${T.border}`, background: selected ? T.info : 'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                                                 {selected && <span style={{ color:'#fff', fontSize:9, fontWeight:700 }}>✓</span>}
@@ -216,11 +215,11 @@ const OrgChartView = ({ teams, allUsers }) => {
             {teams.length === 0
                 ? <div style={{ color:T.inkMuted, fontSize:13, padding:16 }}>No teams yet.</div>
                 : teams.map(team => {
-                    const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
-                    // Reps = repIds excluding the manager (prevent double-display)
+                    const manager = allUsers.find(u => namesMember(team.managerId, u) && u.active !== false);
+                    // Reps = repIds excluding the manager (prevent double-display); an entry by app or Clerk id (state §0.222)
                     const reps = allUsers.filter(u =>
-                        (team.repIds||[]).includes(u.id) &&
-                        u.id !== team.managerId &&
+                        holdsMember(team.repIds, u) &&
+                        !namesMember(team.managerId, u) &&
                         u.active !== false
                     );
 
@@ -349,11 +348,11 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     // Unassigned: active users with no teamId
     const unassigned = allUsers.filter(u => !u.teamId && u.active !== false && u.userType !== 'Admin');
 
-    // Member count from repIds
-    const activeUserIds = new Set(allUsers.filter(u => u.active !== false).map(u => u.id));
+    // Member count from repIds — the active members the list holds, by app or Clerk id (state §0.222), and its manager
+    const activeUsers = allUsers.filter(u => u.active !== false);
     const memberCount = (team) => {
-        const activeReps = (team.repIds || []).filter(id => activeUserIds.has(id)).length;
-        const hasActiveManager = team.managerId && activeUserIds.has(team.managerId);
+        const activeReps = activeUsers.filter(u => holdsMember(team.repIds, u)).length;
+        const hasActiveManager = activeUsers.some(u => namesMember(team.managerId, u));
         return activeReps + (hasActiveManager ? 1 : 0);
     };
 
@@ -538,7 +537,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     No teams yet. Click <b>New team</b> to create your first team.
                 </div>
             ) : teams.map((team, i) => {
-                const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
+                const manager = allUsers.find(u => namesMember(team.managerId, u) && u.active !== false);
                 const count   = memberCount(team);
                 return (
                 <div key={team.id}

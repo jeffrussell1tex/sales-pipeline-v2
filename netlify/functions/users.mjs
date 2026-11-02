@@ -21,6 +21,9 @@ import { currentFiscalYear } from '../../src/utils/reportPeriod.js';
 // A member's team, manager and pinned reports name this org's (state §0.205; the manager since §0.212): asked through
 // the links machinery.
 import { checkLinks, liveIdsInOrg } from './_links.mjs';
+// A team is one record (state §0.222): its name paired with its id, and a removed member off the org's lists.
+import { teamNamesInOrg, removeWithLists } from './_links.mjs';
+import { teamPaired } from '../../src/utils/teamMembership.js';
 import { notInOrg, NOT_AN_ID } from '../../src/utils/linkIds.js';
 // A manager's name and id, '' and none one value (state §0.212): the PUT keeps the two paired.
 import { sameValue } from '../../src/utils/memberSave.js';
@@ -37,6 +40,14 @@ const PIN_LINKS = [{ key: 'pinnedReports', kind: 'report', shape: 'many' }];
 // by id (guide §18b102 rule 9): any of its members, deactivated or invited too (the profile page offers fewer), never
 // the member themselves. An Admin's or a Manager's save sets it; the member's own (?me) never does (_selfProfile.mjs).
 const MANAGER_LINK = [{ key: 'managerId', kind: 'member', notSelf: true }];
+
+// The team names a save may need (state §0.222 — a member's team is stored with the name the org's list gives it): the
+// list is read only when the save names a team by its id; otherwise nothing is looked up.
+const teamNameLookup = async (data, orgId) => {
+    if (typeof data?.teamId !== 'string' || !data.teamId) return () => undefined;
+    const names = await teamNamesInOrg(orgId);
+    return (teamId) => names.get(teamId);
+};
 
 // ── Clerk organization invitations (state §0.165) ───────────────────────────
 // Every call names the CALLER's org — the token's, never one from the request —
@@ -683,12 +694,15 @@ export const handler = async (event) => {
                 if (!mine.length && !removeRow) {
                     return { statusCode: 404, headers, body: JSON.stringify({ error: 'No pending invitation for that email in this organization.' }) };
                 }
+                // The row goes, and its id off the org's team and territory lists, in one transaction (state §0.222 — Q9;
+                // an invitation's row has no Clerk id, isOpenInvitationRow). The answer carries the lists as written.
+                let revokedOff = null;
                 if (removeRow) {
-                    await db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
+                    revokedOff = await removeWithLists(orgId, [row.id], db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId))));
                     invalidateRoster(orgId);
                 }
                 await writeAudit(orgId, 'user.invite_revoked', row?.id || email, row?.name || email, userId, await getCallerName(userId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ revoked: mine.length, removedRowId: removeRow ? row.id : null }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ revoked: mine.length, removedRowId: removeRow ? row.id : null, lists: revokedOff?.lists ?? {}, listsLeft: !!revokedOff?.listsLeft }) };
             }
 
             // ── Invite flow ───────────────────────────────────────────────────
@@ -733,6 +747,8 @@ export const handler = async (event) => {
                 const roster = await memberNamesOf(orgId);
                 // The teams the batch names, read once (state §0.205): a new member's team is one of this org's.
                 const liveTeams = await liveIdsInOrg('team', invites.map((i) => i?.teamId), orgId);
+                // And their names as the list gives them now (state §0.222 — Q7): a live team's id names the team stored.
+                const teamNames = await teamNamesInOrg(orgId);
 
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
@@ -853,7 +869,9 @@ export const handler = async (event) => {
                                 email,
                                 name:      rowName ?? email,
                                 userType:  invite.role      || 'User',
-                                team:      invite.team      || null,
+                                // The team's name as the org's list gives it (state §0.222): a live team's id names it; a
+                                // name sent with no live id is kept as sent (N5).
+                                team:      (typeof invite.teamId === 'string' && liveTeams.has(invite.teamId) && teamNames.get(invite.teamId)) || invite.team || null,
                                 // The team's id with its name (state §0.168): teamId is
                                 // what coaching notes read (the manager digest matches by
                                 // the team's name), and the invite stored the name alone.
@@ -939,6 +957,9 @@ export const handler = async (event) => {
                 // org's, or one that names nothing, is 404 naming the field, and nothing is written.
                 const teamed = await checkLinks(TEAM_LINK, data, null, orgId);
                 if (teamed.error) return { statusCode: teamed.status, headers, body: JSON.stringify({ error: teamed.error, field: teamed.field }) };
+                // Its team's name as the org's list gives it (state §0.222 — Q7, the PUT's one rule).
+                const newTeam = teamPaired(data, null, await teamNameLookup(data, orgId));
+                if (newTeam) { clean.team = newTeam.team; clean.profile = { ...clean.profile, teamId: newTeam.teamId }; }
                 // A new member's manager is a member of this org (state §0.212): another org's, or an id no member holds, is
                 // 404 naming the field. The row's own id is the one minted for it — the body's, if it names one, never is.
                 const managed = await checkLinks(MANAGER_LINK, data, { id: clean.id, managerId: null }, orgId);
@@ -1100,8 +1121,13 @@ export const handler = async (event) => {
                 // First day on a team (state §0.82): when profile.teamId changes, stamp
                 // team_joined_at — the floor a team coaching note is read against.
                 // Leaving a team clears it; an unchanged team leaves the column alone.
-                const [before] = await db.select({ profile: users.profile, active: users.active, clerkUserId: users.clerkUserId }).from(users)
+                const [before] = await db.select({ profile: users.profile, active: users.active, clerkUserId: users.clerkUserId, team: users.team }).from(users)
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
+                // One team, its name and its id (state §0.222 — Q7, as a manager's are): a team id is stored with the name
+                // the org's list gives it; a name sent alone that differs unlinks the id. Before the stamp, so a name that
+                // unlinks the team clears the join date with it.
+                const pairedTeam = teamPaired(data, { team: before?.team, teamId: before?.profile?.teamId }, await teamNameLookup(data, orgId));
+                if (pairedTeam) { clean.team = pairedTeam.team; clean.profile = { ...clean.profile, teamId: pairedTeam.teamId }; }
                 const prevTeam = before?.profile?.teamId || null, nextTeam = clean.profile?.teamId || null;
                 if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;
                 // Pins are the member's own (state §0.205 — Jeff, 15 Oct): written only by their own Pin (?me). An Admin's
@@ -1188,10 +1214,14 @@ export const handler = async (event) => {
                         return { statusCode: 502, headers, body: JSON.stringify({ error: 'Clerk did not revoke a pending invitation, so it may still be live. No member was removed — try again.' }) };
                     }
                 }
-                const deleted = await db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id });
+                // Every member goes, and their ids — app and Clerk, read first — off the org's team and territory lists, in
+                // one transaction (state §0.222 — Q9; N7: the strays naming no member stay).
+                const leaving = await db.select({ id: users.id, clerkUserId: users.clerkUserId }).from(users).where(eq(users.orgId, orgId));
+                const clearedOff = await removeWithLists(orgId, leaving.flatMap((u) => [u.id, u.clerkUserId]), db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id }));
+                const deleted = clearedOff.removed;
                 invalidateRoster(orgId);
                 await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length}); ${pending.length} pending invitation(s) revoked`, userId, await getCallerName(userId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length, revoked: pending.length }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length, revoked: pending.length, lists: clearedOff.lists ?? {}, listsLeft: !!clearedOff.listsLeft }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {
@@ -1214,10 +1244,15 @@ export const handler = async (event) => {
             if (isOpenInvitationRow(deletedRow)) {
                 return { statusCode: 409, headers, body: JSON.stringify({ error: 'They have not joined yet. Revoke the invitation instead.', code: 'invitation' }) };
             }
-            await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
+            // The member goes, and their ids — app and Clerk ((a): a member who rejoins gets a new row with the same Clerk
+            // id) — off the org's team and territory lists, in one transaction (state §0.222 — Q9). An id naming no member
+            // of this org removes no one and writes no list (N8).
+            const deletedOff = deletedRow
+                ? await removeWithLists(orgId, [deletedRow.id, deletedRow.clerkUserId], db.delete(users).where(and(eq(users.id, deletedRow.id), eq(users.orgId, orgId))))
+                : null;
             invalidateRoster(orgId);
             await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, await getCallerName(userId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, lists: deletedOff?.lists ?? {}, listsLeft: !!deletedOff?.listsLeft }) };
         }
 
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

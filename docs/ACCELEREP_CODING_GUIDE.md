@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 1, 2026 · rules current through **§18b111** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 2, 2026 · rules current through **§18b112** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4522,3 +4522,16 @@ through `dbFetch`.
 8. **The class.** tests/settings-links.test.mjs S12 classifies every key the PUT stores; a new key fails until named — a list holding ids joins rule 1 or 3, or is named with its reason (its own check, the server's, 4b-4, by design, retired, a value).
 9. **A new integration suite opens with the test-database guard before its first run** — refuse without `DATABASE_URL_TEST`, then point `NETLIFY_DATABASE_URL` at it (§0.221's first run of its new suite went to the shared app database; tests/itest-targets-test-db.test.mjs).
 10. **The guard.** tests/settings-links.test.mjs and tests/integration/settings-links.itest.mjs; the harness's §0.221 block, each entry proven caught by hand.
+
+## 18b112. A Team Is One Record — Its Name Paired With Its Id, A Rename Renames Every Holder, No New Duplicate, A Removed Member Off The Lists, A List Read As What It Holds (hard rule)
+
+**Origin (§0.222, 2 Nov 2026 — batch 4b-3, step C; Jeff: "Start please", J1 "Allow, read only", J2 "Stop it", J3 "Run it", J4 "Take all Recommended").** A member's team was a name and an id the server never paired; a rename reached only the active members the screen listed; two teams could share a name; a removed member stayed on every list; and the Teams page cleared the team of every holder its list did not hold by app id — UKG's team lists its members by Clerk id, so any save of it cleared its 3 members.
+
+1. **The server pairs a member's team** (`teamPaired`), on the PUT, the create and the invite: a team id stores the name the org's list gives it; a name sent alone that differs unlinks the id; a blank id keeps a name sent with it, linked to none (N5); a held id whose team was deleted keeps the name. On the PUT it runs before the join-date stamp. A save naming no team reads nothing (`teamNameLookup`).
+2. **A rename renames every holder by id, in the save's own transaction** (`teamRenames`): this org's members (team ids are minted on the client and repeat across orgs), inactive and invited too, never a join date, only one not already so named, only while the list as written names the team so; the audit says how many. The screens send no member a rename.
+3. **No new team of a name another has** (`teamNameRefused`): by REPEATS, `nameKey` (case and spaces aside) — a pair stored before stands; a rename to a free name, a swap, a delete pass; nor a name over 255 on any team but the one that held it (judged by id). 400 naming `teams`; the Teams page checks first with the same words.
+4. **A removal takes the member's ids — app and Clerk — off every team's and territory's lists in the same transaction** (`membersOffLists`, `removeWithLists`): '' for a one-id field (never null), a territory unassigned, strays kept (Q3); the write lands only while the lists are as read, tried again on a fresh read; nothing to clean is the removal alone. The answer carries the lists; every screen applies them (`settingsAfterRemoval`) after its own org check, and says the note when they were left. Deactivation is no removal (N6).
+5. **The one exception to "never mix" (J1): a list's entry may name a member by the Clerk id it held** before members had app ids. `namesMember` / `holdsMember` read it — READ ONLY: no screen writes a Clerk id where none was, never as a manager; a tick adds the app id; an untick takes either.
+6. **A team's save sends a member only what changes** (`teamSaveMembers`): a join (to a member held by app id, or added in this window — never one held only by a Clerk id from before), a leave (one taken off in the window, on this team), the team's new territory or vertical (N2). A holder the list does not hold is left as they are (N12).
+7. **The Clerk sync writes no team** (J2): Clerk's user metadata is one value for every org a person is in.
+8. **The guard.** tests/team-membership.test.mjs (TeamModal's save run as written; THE CLASS — every removal's own handler), tests/settings-links.test.mjs S9, S14-S17, tests/integration/teams.itest.mjs; the harness's §0.222 block, each entry proven caught by hand.

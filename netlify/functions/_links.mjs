@@ -30,6 +30,8 @@ import { MERGES, liveIds, linksAsked, linksDecided, bulkLinksAsked, bulkLinksDec
 import { listEntryIds } from '../../src/utils/linkIds.js';
 import { productIdsOf, lineProductsCleared, memberLinksCleared } from '../../src/utils/linkIds.js';
 import { settingsLinksAsked, settingsLinksCleared, settingsLinkIdsByKind } from '../../src/utils/linkIds.js';
+import { membersOffLists } from '../../src/utils/linkIds.js';
+import { teamNamesOf } from '../../src/utils/teamMembership.js';
 
 // The table each kind of link names — Dispatch's since §0.201; a quote line's product since §0.204 (any of the
 // org's, an inactive one too: a product is only ever deactivated); a member's pinned report since §0.205 — a saved
@@ -112,6 +114,50 @@ export async function checkSettingsLinks(data, stored, orgId) {
     if (asked.error) return asked;
     if (!asked.asks.length) return { set: {} };
     return linksDecided(asked.asks, data, await liveOfAsks(asked.asks, orgId));
+}
+
+// ── A team is one record (state §0.222 — batch 4b-3, step C) ──────────────────
+
+// The org's team names by id (Q7 — a member's team is stored with the name its list gives it now): the teams list
+// alone, never the rest of the row (its key is in it), from every settings row of the org (there is one).
+export async function teamNamesInOrg(orgId) {
+    const listed = await db.select({ teams: sql`${settings.extra}->'teams'` }).from(settings)
+        .where(eq(settings.orgId, orgId));
+    return teamNamesOf(listed.flatMap((r) => (Array.isArray(r.teams) ? r.teams : [])));
+}
+
+// A member's removal, and their ids off the org's team and territory lists, in one transaction (Q9 — the member
+// DELETE, an invitation's revoke, the Admin clear). removal: the statement removing them, built and not yet run. The
+// lists are read, cleaned (linkIds.js membersOffLists) and written only while they are as read, so a settings save that
+// lands between the read and the write is never put back: the write then lands nothing, and it is tried again on a
+// fresh read, twice at most. Nothing to clean — no settings row, an extra that is no object, a member no list names —
+// is the removal alone. { removed: the removal's own answer, lists: the lists as written ({} for none) } — or lists
+// null and listsLeft when every try met a newer save: the member is removed, the lists still name them.
+// beforeWrite is a test seam (tests/integration/teams.itest.mjs lands a save between the read and the write); no
+// caller passes it.
+export async function removeWithLists(orgId, ids, removal, { beforeWrite = null } = {}) {
+    let removed = null, ran = false;
+    for (let tries = 0; tries < 3; tries++) {
+        const [row] = await db.select({ id: settings.id, extra: settings.extra, asRead: sql`${settings.extra}::text` }).from(settings)
+            .where(eq(settings.orgId, orgId));
+        const cleanable = !!row && !!row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra);
+        const { patch } = cleanable ? membersOffLists(row.extra, ids) : { patch: {} };
+        if (!Object.keys(patch).length) {
+            if (!ran) removed = await removal;
+            return { removed, lists: {} };
+        }
+        const write = db.update(settings).set({ extra: sql`coalesce(${settings.extra}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb` })
+            .where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`,
+                sql`${settings.extra}->'teams' is not distinct from (${row.asRead}::jsonb)->'teams'`,
+                sql`${settings.extra}->'territories' is not distinct from (${row.asRead}::jsonb)->'territories'`))
+            .returning({ id: settings.id });
+        if (beforeWrite) await beforeWrite(tries);
+        let landed;
+        if (ran) landed = await write;
+        else { [removed, landed] = await db.batch([removal, write]); ran = true; }
+        if (landed.length) return { removed, lists: patch };
+    }
+    return { removed, lists: null, listsLeft: true };
 }
 
 // ── The backup restore's clean-up (E4) ────────────────────────────────────────

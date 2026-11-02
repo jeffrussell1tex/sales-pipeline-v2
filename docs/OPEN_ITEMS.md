@@ -241,9 +241,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      built 1 Nov (§0.221; guide §18b111), committed `30d7adf`, pushed to
      dev 2 Nov (`0d1f35b..c8f1440`, Tests GREEN), NOT shipped:** each list's
      links and shape, the restore's clean-up, a team note's team,
-     integrationRequests the server's. Next: step C (teams — the name and
-     id paired, no new duplicate name, a removed member off the lists, and
-     TeamModal's clearing, below), D (plans), then B (the stale save).
+     integrationRequests the server's. **Step C built 2 Nov (§0.222; guide
+     §18b112; docs/design/links-batch-4b3/STEP-C.md), NOT committed:** a
+     team's name paired with its id, a rename renaming every holder, no new
+     duplicate name, a removed member off the lists, TeamModal clearing no
+     one it does not hold. Next: D (plans), then B (the stale save — its
+     tokens must cover step C's rename batch and removal write, §4.3).
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -1945,23 +1948,54 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ### 4.3 Settings
 
 - **TeamModal clears the team of every member its list does not hold by
-  app id — UKG's real members at risk** (§0.221's review, 1 Nov; read in
-  code, not run): its save (TeamsDetail.jsx handleSave) clears the team,
-  territory and vertical of each active member whose team id names this
-  team but whom the list does not hold by `users.id`. UKG's one team lists
-  4 Clerk-shaped ids (the census, 1 Nov), so an Admin's save of that team —
-  even its colour — would clear the team of its 3 members. Pre-existing.
-  Recommended: in step C, clear only a member the Admin took off in the
-  window (and draw a member the list holds by Clerk id as on it); until
-  then, do not save UKG's team on the Teams page. Repairing UKG's stored
-  ids is a write to real data — Jeff's call. High.
+  app id — DONE in §0.222 (built 2 Nov, NOT committed; NOT shipped)**: the
+  window reads a list's entries by app or Clerk id (Jeff's J1) and its save
+  sends a member only a join, a leave or the team's new territory
+  (`teamSaveMembers`); UKG's count (2 Nov, STEP-C.md §9): a save of its team
+  now sends no member a write. Until step C SHIPS, do not save UKG's team
+  on the Teams page (prod runs the old code). Repairing UKG's stored ids is
+  still a write to real data — Jeff's call.
+- **A stale tab's whole teams list renames the holders back** (§0.222's
+  review, 2 Nov): a teams save that names a team as the stored list does
+  not renames every holder (§0.222's rule), so a tab loaded before a rename
+  that saves the whole list — the Invite page and the CSV import
+  (`teamsWithMembers`), the profile page's move (UsersDetail.jsx
+  `teamsWithMemberOn`), the Teams page's Assign popover and team Delete —
+  puts the old name back on the list AND on its members; the audit line
+  says how many. Before §0.222 only the list went back (the members kept
+  the new name, split from it). Step B's tokens close it — they must cover
+  the rename batch and `removeWithLists`' write. Medium.
+- **A member moved by app id keeps a Clerk entry on the old team** (§0.222's
+  review; N13): the profile page's move and the Assign popover move by app
+  id, so a member a list held only by Clerk id (UKG's) stays listed there
+  and the Teams page draws them on the old team too (count, org chart);
+  no write follows since §0.222's join guard. Fix with the moves taking
+  the member off by either id. Low.
+- **The Clerk sync still fills a blank territory from Clerk's user metadata**
+  (J2's other half, filed 2 Nov): one value for every org a person is in.
+  Low.
+- **Settings keyed by a team's NAME are not renamed with it** (N5, filed 2
+  Nov): `assignmentRules[].team`, `pipelines[].teams` (PipelinesDetail.jsx)
+  keep the old name after a rename. Low.
+- **The restore does not pair a restored member's team name with its id**
+  (N4, filed 2 Nov): §0.205 keeps the name as filed. Low.
+- **The Admin clear leaves on the lists a member created between its read
+  and its delete** (§0.222, filed): no screen calls the clear. Low.
+- **A DELETE of an id that is not in this org answers 200 and writes an
+  audit row** (N8, filed 2 Nov): it removes no one and writes no list
+  since §0.222. Low.
+- **The Settings card "N teams" counts the team names members hold, not
+  the teams** (§0.222's browser check, 2 Nov; settingsCards.js:80-82):
+  Accelerep QA's five teams read "3 teams" (two hold no member). Low.
 - **UKG's team and territory lists name members by Clerk id or by no one**
   (the census, 1 Nov): its team's 4 `repIds` are Clerk-shaped (2 are its
   members' Clerk ids, 2 no one's); its territories' 4 `repIds` name no
   member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
   is a write to real data — Jeff's call.
 - **A stale tab's teams save is refused after a member is removed
-  elsewhere** (§0.221's review): a revoke (or, after step C, a delete) in
+  elsewhere** (§0.221's review; since §0.222 a delete and the clear too —
+  the same tab applies the server's lists and is not refused): a revoke or
+  a delete in
   one tab takes the member off the stored list; another tab's next teams
   save re-sends them and is 404 "That member is not in your organization…"
   — words that name the Admin's pick — and the profile page's "Save changes
@@ -2151,11 +2185,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - "Audit log — Last 5 changes" reads `settings.auditLog`, which nothing
     sets, and "Last login" reads `user.lastLoginAt`, which no function
     writes (P24; UsersDetail.jsx:1367, :1357).
-  - TeamModal's save drops deactivated and invited members from the
-    roster on screen (P26; TeamsDetail.jsx:24 keeps the `active !== false`
-    rows), and its territory- or vertical-only edit reaches no member's
-    row though the roster on screen shows it (P27; it PUTs only the rows
-    whose team or team id changed, TeamsDetail.jsx:75-78).
+  - ~~TeamModal's save drops deactivated and invited members from the
+    roster on screen (P26), and its territory- or vertical-only edit
+    reaches no member's row (P27)~~ — DONE in §0.222 (built 2 Nov, NOT
+    committed): the screen keeps every member, renaming holders by id
+    (`rosterAfterTeamSave`), and a changed territory or vertical goes to
+    the team's listed members (`teamSaveMembers`, N2).
   - A team change on the profile page moves no territory or vertical; the
     Teams page's Assign does (P30; TeamsDetail.jsx:439; as before §0.211).
   - The Invite page sends `manager` with each invitation, and the invite
@@ -2787,7 +2822,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     time ("Not now, file it") — both below. The census found no stray to
     keep (the design's D10), and QA's removed-SPIFF claim is approved
     already, so the held link is proved in the itest (D4).
-  - 4b-3 (step A done, §0.221 — the settings lists' links, shape and restore): settings' teams, crews and quote templates' product ids, and a
+  - 4b-3 (step A done, §0.221 — the settings lists' links, shape and restore; step C built, §0.222 — teams): settings' teams, crews and quote templates' product ids, and a
     service plan's `visitTemplateId` (an entry of the org's job templates —
     found by the 15 Oct critic, in no list); and the teams list a restore
     lands where the org had no settings row — its entries' `repIds` and

@@ -710,7 +710,8 @@ test("S10 OLD — faed240's handleSave on the same rows: the whole form as loade
 
 test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Save changes" against it (run), picks a team and (§0.212) a manager by id, offers held values as themselves, and sets what landed once after the requests', async () => {
     const page = between(code(read(UD)), 'const UserProfilePage = ', 'export const UsersDetail = ');
-    once(page, ind(0, 'const UserProfilePage = ({ user: opened, settings, onBack, onUsers, mfaByEmail }) => {'));
+    // Since §0.222 the page is handed onRemoved too: a removal goes back to the list, saying what it has to say there.
+    once(page, ind(0, 'const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail }) => {'));
     once(page, ind(4, 'const { setSettings, showConfirm, setMyProfile } = useApp();'));
     once(page, ind(4, 'const [user, setUser]     = useState(opened);'));
     once(page, ind(4, 'const [listOwed, setListOwed] = useState(null);'));

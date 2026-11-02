@@ -26,7 +26,8 @@ changed the design in eleven places, marked **(critic)**. Questions are in §3,
 each with a Recommended answer; Jeff took every one the same day (ANSWERS.md).
 The census (§4, SELECT counts only) ran 1 Nov at 21:48 UTC. Step A built 1 Nov as
 state §0.221 (guide §18b111), through one review workflow; its build changed
-nothing in §2 Step A.
+nothing in §2 Step A. Step C mapped and built 2 Nov as state §0.222 (guide
+§18b112) — its own plan, Jeff's four answers and UKG's count in STEP-C.md.
 
 ---
 

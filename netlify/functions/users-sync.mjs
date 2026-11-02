@@ -12,7 +12,9 @@
 //         value for every org a person is in and is not read here at all.
 //       - name: NOT synced — a Clerk name change is reported as nameDrift, for
 //         the reason in the note at the update below
-//       - team / territory: fill blanks only — never overwrite an in-app edit
+//       - territory: fill a blank only — never overwrite an in-app edit
+//       - team: NEVER (state §0.222) — Clerk's user-level metadata is one value
+//         for every org a person is in, and it named a team with no id
 //       - quota, profile prefs, and all other DB-only fields: left untouched
 //   • REPORTS db rows whose email is not in Clerk (departed/stale) — never
 //     deletes or deactivates them (manual action only).
@@ -121,7 +123,8 @@ export const handler = async (event) => {
             // which is how a role set in one org overwrote the row in the next.
             const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);
             const role = 'User';
-            const team = cu.publicMetadata?.team ?? null;
+            // No team from Clerk (state §0.222 — J2, Jeff, 2 Nov: "Stop it"): the user's metadata is one value for every org
+            // a person is in, and named a team with no id. A member's team is set in this org, with its id.
             const territory = cu.publicMetadata?.territory ?? null;
 
             if (!existing) {
@@ -137,7 +140,6 @@ export const handler = async (event) => {
                         name:        rowName,
                         email,
                         role,
-                        team,
                         territory,
                         active:      true,
                         profile:     { status: 'Active', userType: role },
@@ -155,8 +157,7 @@ export const handler = async (event) => {
             // email: follow Clerk once the row is linked by identity rather than
             // by address, so an address change is an update and not a departure.
             if (email && existing.email !== email) patch.email = email;
-            // team / territory: fill blanks only — never clobber an in-app assignment.
-            if ((existing.team == null || existing.team === '') && team) patch.team = team;
+            // territory: fill a blank only — never clobber an in-app assignment. Never the team (state §0.222).
             if ((existing.territory == null || existing.territory === '') && territory) patch.territory = territory;
             // Link an unlinked row. The id is NOT touched -- that rewrite is the
             // defect this batch removes.
