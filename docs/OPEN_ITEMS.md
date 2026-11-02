@@ -258,11 +258,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      list from the app's copy, loaded at sign-in, so another Admin's team
      edit made since is put back (UsersDetail.jsx `handleSave`,
      TeamsDetail.jsx TeamModal; settings.mjs replaces `teams` whole); a
-     member's team name can differ from the team their id names (the
+     ~~member's team name can differ from the team their id names (the
      rename cascade skips inactive members, and a member's PUT in it can
      fail — the Monday digest matches by the name); and two teams of one
      name can be made (TeamModal checks only that a name is given) — the
-     profile page numbers the second, "East (2)" (§0.211).
+     profile page numbers the second, "East (2)" (§0.211)~~ — these two
+     DONE in §0.222 (step C: the name paired with the id, a rename renaming
+     every holder, no new duplicate name) (found unmarked 2 Nov); the put-back is step B.
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -1132,8 +1134,8 @@ model's pattern to deals.
   - `onScheduled` and `onHeld` leave `jobsRaw` stale;
   - no touch.
 - **Automations** (§0.124–§0.132):
-  - Slack as an action posts text only;
-  - momentum and score-drop triggers;
+  - ~~Slack as an action posts text only~~ — DONE in §0.132 (Block Kit, `automationSlackMessage`) (found unmarked 2 Nov);
+  - ~~momentum and score-drop triggers~~ — DONE in §0.127 (`opportunity.momentum`, `opportunity.score_drop`, fired by pipeline-alerts.mjs) (found unmarked 2 Nov);
   - a rule fires only when the job raises the signal;
   - the webhooks vocabulary lists `task.overdue` and nothing fires it;
   - `days_overdue` counts UTC days, like every deal signal;
@@ -1776,14 +1778,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   7 Oct). Since §0.193 a save keeps their owner; a reassignment by name needs
   the current name. A rename does not cascade to records' name text (§0.192's
   list). §0.193, read 9 Oct.
-- **From §0.193's design read, as recorded:** a Manager can rename any member,
+- **From §0.193's design read, as recorded:** ~~a Manager can rename any member,
   Admins included (only active/inactive is Admin-gated); a users PUT naming an
   id unknown in the org INSERTS a member with the client's id; the self PUT
   inserts before it updates (a just-deleted member's preference save
-  re-creates them); after a self-rename the app keeps the old name until a
+  re-creates them)~~ (these three DONE in §0.202: a Manager's save reaches
+  only a Sales Rep's row, and every save, the member's own too, is
+  update-only — a 404 for no member (found unmarked 2 Nov)); after a self-rename the app keeps the old name until a
   reload; Kanban's drag and Reports' deal-contact PUTs and the Tasks
-  complete/snooze paths show a refused save nowhere; SalesManagerTab's user
-  save writes its cached name back; users.mjs does not cut a name to 255; a
+  complete/snooze paths show a refused save nowhere; ~~SalesManagerTab's user
+  save writes its cached name back~~ (DONE in §0.205: each save sends only
+  its field (found unmarked 2 Nov)); users.mjs does not cut a name to 255; a
   SPIFF claim edit is authorized by name; the deal form's "Reason Lost" select
   writes a field nothing reads, and the reason dialog's eight categories are
   hard-coded, not the org's "Reasons lost".
@@ -2712,8 +2717,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
     Oct: "Steps A and B").
   - A 51st Pin does nothing, and a pin of a deleted report can never be
     unpinned (users.mjs; ReportsTab.jsx).
-  - The settings PUT keeps a SPIFF list of any shape (settings.mjs) — for
-    4b-3's list.
+  - ~~The settings PUT keeps a SPIFF list of any shape (settings.mjs) — for
+    4b-3's list.~~ — DONE in §0.221 (`SETTINGS_LISTS`, `listShapeRefused`) (found unmarked 2 Nov).
   - The claims GET answers every role, Technician, Dispatcher and Read-only
     included (spiff-claims.mjs).
   - The restore double-encodes the lists of a hand-made Dispatch file
@@ -2725,16 +2730,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
     Last first); a key the PUT does not know is dropped without a word;
     and a PUT that changes nothing still writes a `user.updated` row (P20; users.mjs:1151).
     The profile page always sends the pair, and never an empty PUT.
-  - Deleting a member takes their id off no team's `repIds` or
+  - ~~Deleting a member takes their id off no team's `repIds` or
     `managerId` — only a revoked invitation's row is taken off its team's
-    list (P31; users.mjs:1162's DELETE; UsersDetail.jsx:860 `dropRevokedRow`).
-    Since §0.212 nor off any member's `profile.managerId`: their reports'
+    list (P31; users.mjs:1162's DELETE; UsersDetail.jsx:860 `dropRevokedRow`).~~
+    DONE in §0.222 (`removeWithLists`: the DELETE, the revoke and the clear
+    take the member's ids off every team's and territory's lists) (found unmarked 2 Nov).
+    Still open: since §0.212 nor off any member's `profile.managerId`: their reports'
     band, Users list and export then read the stored name, and the box
     "(no longer a member)"; a revoked invitation leaves it too (users.mjs's
     DELETE, the revoke).
-  - users-sync fills a blank `team` from Clerk's user-level
+  - ~~users-sync fills a blank `team` from Clerk's user-level
     `publicMetadata`; whether an organization invitation's metadata lands
-    there is unverified (P32; users-sync.mjs:124, :159).
+    there is unverified (P32; users-sync.mjs:124, :159).~~ — DONE in §0.222
+    (J2, Jeff: "Stop it": the Clerk sync writes no team; its territory is
+    filed in §4.3) (found unmarked 2 Nov).
   - The PUT trims an email but does not lowercase it (P33; users.mjs:120
     sanitize) — the profile page no longer sends it. A name over 255
     characters reaches Postgres (reasoned, unverified).
@@ -3030,8 +3039,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   from a Manager — and by name, as a claim names its rep: a rep renamed
   since leaves her earlier claims out of her Manager's list (an Admin's
   still holds them), and a removed rep's name taken by a new member of
-  the team brings the old claims in; an account merge renames a
-  same-named twin account's claims' account text. And (§0.204, read in
+  the team brings the old claims in; ~~an account merge renames a
+  same-named twin account's claims' account text~~ (DONE in §0.218: a claim
+  follows its deal (found unmarked 2 Nov)). And (§0.204, read in
   code, not run): a claim stored with a SPIFF or
   rep of only spaces, saved with that field cleared, still meets the NOT
   NULL — a 500 — as the cleared 400 refuses only a set value turned
@@ -3258,8 +3268,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   an account naming no row of the org, which `checkLinks` answers 404
   (`linksDecided`, linkIds.js:136), is stored as none and the email
   still logged, not refused.
-- **The account merge window's words leave out Dispatch, SPIFF claims
-  and where lifted deals go** (the cleanup batch's design, 18 Oct, P36;
+- ~~**The account merge window's words leave out Dispatch, SPIFF claims
+  and where lifted deals go**~~ — DONE in §0.218 (the summary names the
+  SPIFF claims and Dispatch's customers and jobs, a merge into a site says
+  the deals go up to the account above it, and no line says "re-linked")
+  (found unmarked 2 Nov) (the cleanup batch's design, 18 Oct, P36;
   re-read 23 Oct; read in code, not run): its summary
   (MergeReviewModal.jsx:238 — "Merging re-links N opportunities, N
   contacts, N activities", tasks and sub-accounts when any, "from “X” to
@@ -3762,7 +3775,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
     (`bulkAccountLinks`). The contacts bulk paths still take any account id
     of the org, a merged-away one followed (`_links.mjs`); no screen sends
     one (guide §18b106).
-  - An account merge rewrites contacts' account names by name alone, and
+  - **Done by §0.218 (3c, committed `98a26e3`, pushed to dev 1 Nov) (found unmarked 2 Nov):**
+    the record merged away's contacts move to the survivor by id, and renames
+    stay within the pair (a record with no id renamed only where no third live
+    account has the name). Was:
+    An account merge rewrites contacts' account names by name alone, and
     since §0.198 moves deals' `accountId` to the survivor (D14) — up to the
     account above it, Site Name the site, when the survivor is a site (D22)
     — and renames only its own deals and those with no id: a deal with no
