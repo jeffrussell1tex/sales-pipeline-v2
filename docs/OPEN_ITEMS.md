@@ -247,7 +247,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      team's name paired with its id, a rename renaming every holder, no new
      duplicate name, a removed member off the lists, TeamModal clearing no
      one it does not hold. **Step D built 2 Nov (§0.223; guide §18b113;
-     docs/design/links-batch-4b3/STEP-D.md), NOT committed:** a plan's
+     docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`; NOT pushed:** a plan's
      visit template and covered job types this org's entries, the list
      itself stored, the legacy seed skipping what exists. Next: B (the
      stale save — its tokens must cover step C's rename batch and removal
@@ -2461,7 +2461,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Smaller, from §0.201's map:** ~~Settings → Service plans' seed from legacy
   tiers derives `plan_legacy_<tier>` ids, so a second org's seed of a tier
   another org seeded is refused ("That plan id is already in use.")~~ —
-  DONE in §0.223 (random ids, NOT committed); a
+  DONE in §0.223 (random ids; committed `a1de400`, NOT pushed); a
   re-run of Settings → Vehicles & equipment's legacy import resets an
   imported row's technician, holder and status (a full-row upsert); the
   crew builder prints a technician's vehicle id, not its name; the
