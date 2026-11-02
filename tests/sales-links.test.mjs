@@ -211,9 +211,15 @@ const ROWS = {
     ],
     settings: [
         // Each org's teams list too (§0.205): org A's tm_east, an old plain-text team, one with no id, one with an empty id.
+        // And its Dispatch job templates and job types (§0.223): A's own, a seed id (`jt_filter`) both orgs saved, one B
+        // alone holds, a plain-text entry and one with no id.
         { orgId: 'org_A', extra: { spiffs: [{ id: 'sp_on', active: true }, { id: 'sp_off', active: false }, 'sp_text', { name: 'no id' }],
-            teams: [{ id: 'tm_east', name: 'East' }, 'Legacy', { name: 'no id' }, { id: '' }] } },
-        { orgId: 'org_B', extra: { spiffs: [{ id: 'sp_b', active: true }], teams: [{ id: 'tm_b', name: 'B Team' }] } },
+            teams: [{ id: 'tm_east', name: 'East' }, 'Legacy', { name: 'no id' }, { id: '' }],
+            dispatchJobTemplates: [{ id: 'tmpl_a', name: 'Annual service' }, 'tmpl_text', { name: 'no id' }],
+            dispatchJobTypes: [{ id: 'jt_a', name: 'Inspection' }, { id: 'jt_filter', name: 'Filter replacement' }, 'jt_text', { name: 'no id' }] } },
+        { orgId: 'org_B', extra: { spiffs: [{ id: 'sp_b', active: true }], teams: [{ id: 'tm_b', name: 'B Team' }],
+            dispatchJobTemplates: [{ id: 'tmpl_b', name: 'B service' }],
+            dispatchJobTypes: [{ id: 'jt_b', name: 'B type' }, { id: 'jt_filter', name: 'Filter replacement' }, { id: 'jt_compressor', name: 'Compressor' }] } },
         { orgId: 'org_C', extra: null },
     ],
 };
@@ -243,7 +249,8 @@ const readApart = () => {
 
 test("a member and a SPIFF are read apart, in this org (_links.mjs's own reader, run): any member of it, deactivated or invited; any entry of its SPIFF list, an inactive one — another org's never, one naming nothing never; every read scoped to the org", async () => {
     const { LISTS, idsReadApart, reads } = readApart();
-    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs', team: 'teams' }, "a SPIFF is an entry of the settings list `spiffs`, a team of `teams` (§0.205)");
+    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' },
+        "a SPIFF is an entry of the settings list `spiffs`, a team of `teams` (§0.205), a plan's visit template of `dispatchJobTemplates` and its covered job types of `dispatchJobTypes` (§0.223)");
     assert.ok(Object.isFrozen(LISTS));
     const ids = async (kind, list, org) => (await idsReadApart(kind, list, org)).map((r) => r.id).sort();
     assert.deepEqual(await ids('spiff', ['sp_on', 'sp_off', 'sp_b', 'sp_text', 'nope'], 'org_A'), ['sp_off', 'sp_on'],
@@ -277,6 +284,20 @@ test("a team is an entry of this org's teams list (_links.mjs's own reader, run 
     assert.deepEqual([...live], [['tm_east', 'tm_east']], 'as liveIdsInOrg hands it: each id once, text only');
 });
 
+test("a service plan's visit template and covered job types are entries of this org's job templates and job types lists (_links.mjs's own reader, run — state §0.223): an object entry of the org's list, a seed id where the org saved it; another org's, a plain-text entry, one with no id and one naming nothing are none; each list kept apart from the others; every read scoped", async () => {
+    const { idsReadApart, reads } = readApart();
+    const ids = async (kind, list, org) => (await idsReadApart(kind, list, org)).map((r) => r.id).sort();
+    assert.deepEqual(await ids('jobTemplate', ['tmpl_a', 'tmpl_b', 'tmpl_text', 'jt_a', 'nope'], 'org_A'), ['tmpl_a'],
+        "org B's template, a plain-text entry, a job type's id and one naming nothing are no template of A's");
+    assert.deepEqual(await ids('jobType', ['jt_a', 'jt_filter', 'jt_b', 'jt_compressor', 'jt_text', 'tmpl_a', 'tm_east', 'nope'], 'org_A'), ['jt_a', 'jt_filter'],
+        "a seed id A saved counts; B's own, a seed id only B saved (`jt_compressor`), a plain-text entry, a template's or a team's id do not");
+    assert.deepEqual(await ids('jobType', ['jt_a', 'jt_filter', 'jt_b'], 'org_B'), ['jt_b', 'jt_filter'], 'org B reads only its own');
+    assert.deepEqual(await ids('jobType', ['jt_a'], 'org_C'), [], 'a settings row with no list');
+    assert.deepEqual(await ids('jobTemplate', ['tmpl_a'], 'org_none'), [], 'no settings row');
+    assert.equal(reads.length, 5, 'one read each');
+    assert.ok(reads.every((r) => r.table === 'settings' && r.scoped), "each read is the org's settings, with its where");
+});
+
 test("_links.mjs: a product is a TABLES kind, read in the org as every row is; a member, a SPIFF and a team are read apart — the branch is liveIdsInOrg's first line; a member's pinned report is a TABLES kind (§0.205); the member read and the settings read each carry the org clause, the settings read no limit (the lines the harness breaks)", () => {
     const l = fn('_links');
     once(l, "import { listEntryIds } from '../../src/utils/linkIds.js';", 'listEntryIds on an import line of its own (the decisions line stays as pinned)');
@@ -287,7 +308,7 @@ test("_links.mjs: a product is a TABLES kind, read in the org as every row is; a
         'a member, a SPIFF and a team are no TABLES kind (the member-names guard; the restore reads TABLES kinds as columns)');
     once(l, '    product: products,');
     once(l, '    report: savedReports,');
-    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams' });");
+    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' });");
     const reader = between(l, 'async function idsReadApart(kind, list, orgId) {', '\n}\n');
     order(reader,
         "    if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));",

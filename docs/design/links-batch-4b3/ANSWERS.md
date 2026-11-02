@@ -51,3 +51,20 @@ Recommended answer (Jeff, "Start please", then every Recommended):
 - **J4, the rest:** "Take all Recommended" — N1, N2 as the critic amended it,
   (a) both ids off on removal, N4, N5, N6, N12, N13, N14, N16, N17 as written in
   STEP-C.md §8.
+
+## Step D — service plans (2 November 2026)
+
+Asked after step D's map (STEP-D.md §5), through AskUserQuestion, each with a
+Recommended answer (Jeff, "Start step D", then every Recommended):
+
+- **JD1, D2's "a plan exists":** "Name or old id; random" — a plan of the
+  label's name (case and spaces aside) or the old button's id, in this org,
+  any plan, skips the label; new plans get a random id.
+- **JD2, the stored shape:** "Yes, for plans" — a plan's covered job types are
+  stored as a real list; the one stored text row stays until saved; jobs and
+  customers (the same class) filed.
+- **JD3, Karen:** "Check QA, then decide" — QA's `repsCanUseDispatch` read; if
+  on, Karen saves a test plan through the screen; if off, her app loads.
+- **JD4, the rest:** "Take all Recommended" — the stale job-type chip drawn as
+  the template's stale option (the disabled-or-not question kept open); R1,
+  R2, R4, R5, R7 and the jsonb class filed; the GET's list always a list.

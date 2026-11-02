@@ -199,7 +199,30 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
         '                    set: { ...row, createdAt: undefined, techId: undefined, createdBy: undefined },'),
         "a block stays with its technician on a re-POST, as the PUT keeps it — refused, never re-pointed — and its author stays the first create's");
 
-    for (const [name, n] of [['dispatch-jobs', 2], ['dispatch-technicians', 2], ['dispatch-vehicles', 2], ['dispatch-equipment', 2], ['dispatch-customers', 2], ['dispatch-plan-visits', 1], ['dispatch-schedule-blocks', 1]]) {
+    // A service plan's visit template and covered job types (state §0.223 — batch 4b-3, step D; Q11): entries of this
+    // org's job templates and job types lists; the create reads the plan it would overwrite in this org, the update reads
+    // the plan before every write; the list itself stored (JD2); the GET answers a list.
+    const sp = fn('dispatch-service-plans');
+    assert.ok(sp.includes("const PLAN_LINKS = [{ key: 'visitTemplateId', kind: 'jobTemplate' }, { key: 'coveredJobTypes', kind: 'jobType', shape: 'many' }];"));
+    assert.ok(inOrder(sp, '            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, coveredJobTypes: dispatchServicePlans.coveredJobTypes })',
+        '                .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));',
+        '            const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);', REFUSE, '            const row = {'),
+        "the create (an upsert): the plan it would overwrite IN THIS ORG read first, its template and covered types held — another org's id reads none");
+    assert.ok(inOrder(sp, "            const data    = JSON.parse(event.body || '{}');",
+        '            const [current] = await db.select().from(dispatchServicePlans)',
+        '                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));',
+        "            if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+        '            const linked = await checkLinks(PLAN_LINKS, data, current, orgId);', REFUSE,
+        '            const updates = { updatedAt: new Date() };', '            await db.update(dispatchServicePlans).set(updates)'),
+        "the update: the plan read before every write — an id naming no plan of this org 404 before anything is asked; what it holds held");
+    assert.equal(count(sp, 'const [current] = await db.select()'), 1, 'one read of the plan per update — a cadence change reuses it');
+    assert.ok(sp.includes('                coveredJobTypes: coveredToStore(data.coveredJobTypes),'), 'the create stores the list itself (JD2)');
+    assert.ok(sp.includes("            if ('coveredJobTypes' in data) updates.coveredJobTypes = coveredToStore(data.coveredJobTypes);"), 'the update too');
+    assert.ok(!sp.includes('JSON.stringify(data.coveredJobTypes'), 'REGRESSION: covered job types stored as JSON text');
+    assert.ok(sp.includes('        coveredJobTypes: coveredJobTypesOf(row.coveredJobTypes ?? row.covered_job_types),'),
+        "the GET answers a list — a plan stored as text too (the screen filters a list)");
+
+    for (const [name, n] of [['dispatch-jobs', 2], ['dispatch-technicians', 2], ['dispatch-vehicles', 2], ['dispatch-equipment', 2], ['dispatch-customers', 2], ['dispatch-plan-visits', 1], ['dispatch-schedule-blocks', 1], ['dispatch-service-plans', 2]]) {
         assert.equal(count(fn(name), REFUSE), n, `${name}: each check's refusal answered`);
         assert.ok(fn(name).includes("import { checkLinks } from './_links.mjs';"), name);
     }

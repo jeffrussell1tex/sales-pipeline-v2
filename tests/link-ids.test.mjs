@@ -64,8 +64,10 @@ test('the words name the kind, in the deals endpoint\'s; only accounts and conta
     assert.equal(notInOrg('customer'), 'That customer is not in your organization — pick one from the list.');
     assert.equal(notInOrg('location'), 'That service location is not in your organization — pick one from the list.');
     assert.equal(NOT_AN_ID, 'A link must name a record by its id.');
-    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'product', 'member', 'spiff', 'team', 'report'],
-        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs), then a member's two (§0.205 — tests/member-links.test.mjs)");
+    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'jobTemplate', 'jobType', 'product', 'member', 'spiff', 'team', 'report'],
+        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs) and a service plan's two (§0.223 — tests/plan-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs), then a member's two (§0.205 — tests/member-links.test.mjs)");
+    assert.equal(notInOrg('jobTemplate'), 'That job template is not in your organization — pick one from the list.');
+    assert.equal(notInOrg('jobType'), 'That job type is not in your organization — pick one from the list.');
     assert.deepEqual([...MERGES], ['account', 'contact']);
 });
 

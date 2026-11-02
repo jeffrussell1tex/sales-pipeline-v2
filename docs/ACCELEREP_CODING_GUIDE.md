@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 2, 2026 · rules current through **§18b112** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 2, 2026 · rules current through **§18b113** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4535,3 +4535,14 @@ through `dbFetch`.
 6. **A team's save sends a member only what changes** (`teamSaveMembers`): a join (to a member held by app id, or added in this window — never one held only by a Clerk id from before), a leave (one taken off in the window, on this team), the team's new territory or vertical (N2). A holder the list does not hold is left as they are (N12).
 7. **The Clerk sync writes no team** (J2): Clerk's user metadata is one value for every org a person is in.
 8. **The guard.** tests/team-membership.test.mjs (TeamModal's save run as written; THE CLASS — every removal's own handler), tests/settings-links.test.mjs S9, S14-S17, tests/integration/teams.itest.mjs; the harness's §0.222 block, each entry proven caught by hand.
+
+## 18b113. A Service Plan's Links Name This Org's Entries — Its Visit Template And Covered Job Types, The List Itself Stored, The Legacy Seed Skipping What Exists (hard rule)
+
+**Origin (§0.223, 2 Nov 2026 — batch 4b-3, step D; Jeff: "Start step D", JD1-JD4 each the Recommended).** The plans endpoint stored a plan's visit template and covered job types as sent — another org's, or none — and wrote the covered types as JSON text inside a jsonb column; the legacy "Create N plans" made ids from the label, so a re-press overwrote every seeded plan and another org's seed of the label refused this one's.
+
+1. **A plan's `visitTemplateId` and `coveredJobTypes` name entries of THIS org's job templates and job types lists** (`linkIds.js` NOUNS `jobTemplate`, `jobType`; `_links.mjs` LISTS) — any entry with its own text id; the list the org STORED (no unsaved default is effective: the settings GET answers the stored list or none), so a built-in seed id counts only where the org saved it. If 4b-4 ever makes defaults effective, `idsReadApart` follows it.
+2. **Held is what the plan stores** — the create reads the plan it would overwrite IN THIS ORG first (another org's id reads none, so every link is asked), the update reads the plan before every write (404 before anything is asked). A plan stored as JSON text reads back as its list through drizzle, so its ids are held.
+3. **The list itself is stored** (`coveredToStore` — guide §18b62 rule 4), never its JSON text; the GET always answers a list (`coveredJobTypesOf`), so a screen is never handed a string.
+4. **The legacy seed makes only what is missing** (`legacyPlansToCreate`): a label a plan of this org stands for — its name by `nameKey`, or the old button's id — is skipped and counted; labels of one name make one plan; new plans take random ids; the press re-reads the plans, checks the org after the answer and fails closed on a bad read.
+5. **A stale covered type shows as itself** on the plan form ("Deleted job type (<id>)"), as a stale template does; whether such options are disabled is the pending OPEN_ITEMS item.
+6. **The guard.** tests/plan-links.test.mjs, tests/dispatch-links.test.mjs THE GUARD, tests/sales-links.test.mjs, tests/integration/plan-links.itest.mjs; the harness's §0.223 block, each entry proven caught by hand.

@@ -11,7 +11,9 @@
 //             quote line's product, a rule's assignee (a member) and a claim's SPIFF (an entry of the org's
 //             list, not a row) — a link inside a list or an action checked through a view of the ids it
 //             holds (productIdsOf, assigneesOf, below); since §0.205 a member's team (an entry of the org's
-//             teams list) and pinned reports (saved reports of the org); since §0.212 a member's manager (a member)
+//             teams list) and pinned reports (saved reports of the org); since §0.212 a member's manager (a member);
+//             since §0.223 a service plan's visit template and covered job types (entries of the org's job
+//             templates and job types lists)
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
@@ -28,6 +30,9 @@ export const NOUNS = Object.freeze({
     account: 'account', contact: 'contact', deal: 'deal', lead: 'lead', customer: 'customer', location: 'service location',
     // Dispatch's (§0.201): none of them is ever merged away
     technician: 'technician', vehicle: 'vehicle', equipment: 'equipment unit', plan: 'service plan', job: 'job',
+    // A service plan's (state §0.223): its visit template and covered job types — entries of the org's job templates and
+    // job types lists, not rows; neither ever merged away
+    jobTemplate: 'job template', jobType: 'job type',
     // A sales record's (state §0.204): a quote line's product, a rule's assignee, a claim's SPIFF — none ever merged away
     product: 'product', member: 'member', spiff: 'SPIFF',
     // A member's (state §0.205): their team — an entry of the org's teams list — and their pinned reports, saved reports

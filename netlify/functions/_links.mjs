@@ -56,8 +56,10 @@ const SWEPT = Object.freeze({ ...TABLES, quote: quotes });
 // or SWEPT, the columns the restore's clean-up clears (a member's team and manager it clears apart, clearMemberLinks). Every
 // settings row of the org is read, with no limit (there is
 // one, settings_org_id_uniq): a read that lost its org clause would take every org's list each time, never one
-// row at random.
-const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams' });
+// row at random. Since §0.223 a service plan's visit template and covered job types: entries of the org's job templates
+// and job types lists — the lists THIS org stored (no default of either is effective unsaved: the settings GET answers
+// the stored list or none), so a built-in id every org's screen seeds (`jt_*`) counts only where this org saved it.
+const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' });
 async function idsReadApart(kind, list, orgId) {
     if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));
     const rows = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));

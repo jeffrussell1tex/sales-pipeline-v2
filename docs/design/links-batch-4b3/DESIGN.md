@@ -28,6 +28,10 @@ The census (§4, SELECT counts only) ran 1 Nov at 21:48 UTC. Step A built 1 Nov 
 state §0.221 (guide §18b111), through one review workflow; its build changed
 nothing in §2 Step A. Step C mapped and built 2 Nov as state §0.222 (guide
 §18b112) — its own plan, Jeff's four answers and UKG's count in STEP-C.md.
+Step D mapped and built 2 Nov as state §0.223 (guide §18b113) — its plan
+and Jeff's four answers in STEP-D.md; the integration proof in its own
+suite (plan-links.itest.mjs), not settings-links as §5 named (that suite's
+org has Dispatch off and its tests compare A's whole extra).
 
 ---
 

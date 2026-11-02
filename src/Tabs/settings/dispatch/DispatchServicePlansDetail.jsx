@@ -16,6 +16,8 @@ import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+// A legacy label's plan (state §0.223): its name and whether this org has one already — one rule with the tests.
+import { labelise, legacyPlansToCreate } from '../../../utils/planLinks.js';
 
 const CADENCES = [
     { id: 'monthly',    label: 'Monthly',       days: 30,  visits: 12 },
@@ -26,8 +28,6 @@ const CADENCES = [
 ];
 
 const BILLING = ['monthly', 'quarterly', 'annual', 'per_visit'];
-
-const labelise = (v) => String(v || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const cadenceLabel = (id) => (CADENCES.find(c => c.id === id) || {}).label || labelise(id);
 
@@ -70,6 +70,9 @@ const Field = ({ label, hint, children, span }) => (
 const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSave, onDelete, onCancel }) => {
     const cad = CADENCES.find(c => c.id === (draft.cadence || 'annual')) || CADENCES[3];
     const tmplMissing = !!draft.visitTemplateId && !templates.some(t => t.id === draft.visitTemplateId);
+    // A covered job type the list no longer holds shows as itself, as a deleted template does (state §0.223) — unseen, it
+    // was sent back on every save; a click takes it off.
+    const staleTypes = (draft.coveredJobTypes || []).filter(id => !jobTypes.some(jt => jt.id === id));
     const intervalNum = parseInt(draft.intervalDays, 10);
     const customVisits = (draft.cadence === 'custom' && Number.isFinite(intervalNum) && intervalNum > 0)
         ? Math.max(1, Math.round(365 / intervalNum)) : null;
@@ -154,7 +157,7 @@ const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSav
 
             <Field label="Covered job types" span
                 hint="Work of these types is covered by the plan. Anything else bills at the discount below.">
-                {jobTypes.length === 0 ? (
+                {jobTypes.length === 0 && staleTypes.length === 0 ? (
                     <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
                         No job types configured. Add them under Job categories &amp; types.
                     </div>
@@ -175,6 +178,13 @@ const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSav
                                 </span>
                             );
                         })}
+                        {staleTypes.map(id => (
+                            <span key={id} onClick={() => set('coveredJobTypes', (draft.coveredJobTypes || []).filter(x => x !== id))}
+                                style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, cursor: 'pointer', background: `${T.info}20`,
+                                    border: `1px dashed ${T.info}`, color: T.info, fontWeight: 700, fontFamily: T.sans }}>
+                                Deleted job type ({id})
+                            </span>
+                        ))}
                     </div>
                 )}
             </Field>
@@ -247,7 +257,8 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
     const [seeding, setSeeding] = useState(false);
     const [seedMsg, setSeedMsg] = useState('');
 
-    const templates = settings?.dispatchJobTemplates || [];
+    // Only an entry with an id of its own can be a plan's template (state §0.223: one without sent its text as the id).
+    const templates = (settings?.dispatchJobTemplates || []).filter(t => t && t.id);
     const jobTypes  = (settings?.dispatchJobTypes || []).filter(t => t && t.id);
 
     const load = useCallback(async () => {
@@ -326,18 +337,30 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
         setBusy(false);
     };
 
-    // Creates one plan per legacy tier found on customers. Ids derive from the tier
-    // name and the POST upserts on id, so re-running cannot duplicate. It does NOT
-    // assign customers — that stays a deliberate per-customer choice.
+    // Creates a plan for each legacy label no plan of this org stands for — by its name, case and spaces aside, or the id
+    // the button gave it before (state §0.223 — Q12, JD1; legacyPlansToCreate) — read from the server at the press, so a
+    // plan made since in another tab counts. Each gets a random id, as "+ New plan" does: the old id, made from the label,
+    // was global — a re-press overwrote every seeded plan's terms, and another org's seed of the label refused this one's.
+    // It does NOT assign customers — that stays a deliberate per-customer choice.
     const seedFromLegacy = async () => {
         setSeeding(true); setSeedMsg('');
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+        let todo;
+        try {
+            const res = await dbFetch('/.netlify/functions/dispatch-service-plans');
+            const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
+            // Fails closed (the review, 2 Nov): an answer that is no list of plans is no "this org has none" — read so, every
+            // label would get a second plan beside the one it has.
+            if (!res.ok || !Array.isArray(data.plans)) throw new Error(data.error || (res.ok ? 'the answer held no list of plans' : 'HTTP ' + res.status));
+            todo = legacyPlansToCreate(legacyTiers, data.plans);
+        } catch (err) { setSeedMsg(`Nothing created — the plans could not be read: ${err.message}`); setSeeding(false); return; }
         let ok = 0; const failed = [];
-        for (const tier of legacyTiers) {
+        for (const { tier, name } of todo.create) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             const row = {
-                id:      'plan_legacy_' + tier.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-                name:    labelise(tier),
+                id:      'plan_' + crypto.randomUUID(),
+                name,
                 cadence: 'annual',
                 description: `Created from the legacy "${tier}" service agreement. Review the cadence and terms.`,
                 active:  true,
@@ -345,16 +368,21 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-service-plans', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
                 ok++;
             } catch (err) { failed.push(`${tier}: ${err.message}`); }
         }
+        if (!stillOrg(askedOrg)) return;
         await load();
+        const had = todo.existing ? ` ${todo.existing} already had one — left as ${todo.existing === 1 ? 'it was' : 'they were'}.` : '';
         setSeedMsg(failed.length
-            ? `Created ${ok}. ${failed.length} failed — ${failed.join('; ')}`
-            : `Created ${ok} plan${ok === 1 ? '' : 's'}. Assign customers to them from Dispatch → Customers.`);
+            ? `Created ${ok}.${had} ${failed.length} failed — ${failed.join('; ')}`
+            : `Created ${ok} plan${ok === 1 ? '' : 's'}.${had} Assign customers to them from Dispatch → Customers.`);
         setSeeding(false);
     };
+    // The labels still needing a plan, as the screen holds the plans now — the button's count.
+    const legacyToCreate = legacyPlansToCreate(legacyTiers, plans).create.length;
 
     return (
         <CategoryDetailChrome error={loadError} crumb="Service plans" category="Dispatch" title="Service plans"
@@ -368,12 +396,12 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                     <div style={{ fontSize: 12.5, fontFamily: T.sans, color: T.inkMid, lineHeight: 1.6 }}>
                         Found on customers: <strong style={{ color: T.ink }}>{legacyTiers.map(labelise).join(', ')}</strong>.
                         Creating a plan per label gives you somewhere to assign them; the labels themselves are left alone,
-                        and re-running this cannot create duplicates. Customers are <strong style={{ color: T.ink }}>not</strong> reassigned
+                        and a label this organization already has a plan of that name for is skipped. Customers are <strong style={{ color: T.ink }}>not</strong> reassigned
                         automatically — that stays a per-customer decision.
                     </div>
                     <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <button onClick={seedFromLegacy} disabled={seeding} style={{ ...btnPrimary, opacity: seeding ? 0.6 : 1 }}>
-                            {seeding ? 'Creating…' : `Create ${legacyTiers.length} plan${legacyTiers.length === 1 ? '' : 's'}`}
+                        <button onClick={seedFromLegacy} disabled={seeding || legacyToCreate === 0} style={{ ...btnPrimary, opacity: seeding || legacyToCreate === 0 ? 0.6 : 1 }}>
+                            {seeding ? 'Creating…' : legacyToCreate === 0 ? 'Each label has a plan' : `Create ${legacyToCreate} plan${legacyToCreate === 1 ? '' : 's'}`}
                         </button>
                         {seedMsg && <span style={{ fontSize: 12, fontFamily: T.sans, color: T.inkMid }}>{seedMsg}</span>}
                     </div>

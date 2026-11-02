@@ -5,6 +5,13 @@ import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
+import { checkLinks } from './_links.mjs';
+import { coveredJobTypesOf, coveredToStore } from '../../src/utils/planLinks.js';
+
+// A plan's links (state §0.223 — batch 4b-3 of OPEN_ITEMS §1 item 1, step D; Q11): its visit template and covered job
+// types name entries of THIS org's job templates and job types lists ("Any of this org's, refuse"), asked when a write
+// names them anew — a value the plan holds is never asked again.
+const PLAN_LINKS = [{ key: 'visitTemplateId', kind: 'jobTemplate' }, { key: 'coveredJobTypes', kind: 'jobType', shape: 'many' }];
 
 const headers = {
     'Content-Type': 'application/json',
@@ -69,7 +76,8 @@ function normalise(row) {
         // How early the agreement renewal surfaces (state §0.110); null reads as 60 in planVisits.js.
         renewalLeadDays: row.renewalLeadDays ?? row.renewal_lead_days ?? null,
         anchorMode:      row.anchorMode      ?? row.anchor_mode       ?? 'fixed',
-        coveredJobTypes: row.coveredJobTypes ?? row.covered_job_types ?? [],
+        // Always its list (state §0.223): a plan stored before held it as JSON text, and the screen filters a list.
+        coveredJobTypes: coveredJobTypesOf(row.coveredJobTypes ?? row.covered_job_types),
         includedHours:   row.includedHours   ?? row.included_hours    ?? null,
         responseHours:   row.responseHours   ?? row.response_hours    ?? null,
         discountPercent: row.discountPercent ?? row.discount_percent  ?? null,
@@ -115,6 +123,12 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id)   return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
+            // Its links (state §0.223): asked against the plan this upsert would overwrite IN THIS ORG, read first — a value
+            // it holds is never asked again; another org's id reads none, so every link it names is asked.
+            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, coveredJobTypes: dispatchServicePlans.coveredJobTypes })
+                .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));
+            const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
             const cadence = data.cadence ?? 'annual';
             const row = {
@@ -129,7 +143,7 @@ export const handler = async (event) => {
                 leadDays:        Number.isFinite(parseInt(data.leadDays, 10)) ? parseInt(data.leadDays, 10) : 14,
                 renewalLeadDays: Number.isFinite(parseInt(data.renewalLeadDays, 10)) ? Math.max(0, parseInt(data.renewalLeadDays, 10)) : null,
                 anchorMode:      data.anchorMode === 'rolling' ? 'rolling' : 'fixed',
-                coveredJobTypes: JSON.stringify(data.coveredJobTypes ?? []),
+                coveredJobTypes: coveredToStore(data.coveredJobTypes),
                 includedHours:   data.includedHours   ?? null,
                 responseHours:   data.responseHours   ?? null,
                 discountPercent: data.discountPercent ?? null,
@@ -163,6 +177,13 @@ export const handler = async (event) => {
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
 
             const data    = JSON.parse(event.body || '{}');
+            // The plan as stored, read before anything is asked or written (state §0.223): an id naming no plan of this
+            // org is 404 before its links are asked; the links it holds are never asked again.
+            const [current] = await db.select().from(dispatchServicePlans)
+                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
+            if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            const linked = await checkLinks(PLAN_LINKS, data, current, orgId);
+            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             const updates = { updatedAt: new Date() };
 
             [
@@ -175,15 +196,12 @@ export const handler = async (event) => {
                 updates.renewalLeadDays = Number.isFinite(n) ? Math.max(0, n) : null;
             }
 
-            if ('coveredJobTypes' in data) updates.coveredJobTypes = JSON.stringify(data.coveredJobTypes);
+            if ('coveredJobTypes' in data) updates.coveredJobTypes = coveredToStore(data.coveredJobTypes);
 
             // intervalDays and visitsPerYear are derived, so a cadence change has to
             // recompute them — otherwise a plan switched from annual to monthly keeps
             // a 365-day interval and recurrence silently schedules one visit a year.
             if ('cadence' in data || 'intervalDays' in data) {
-                const [current] = await db.select().from(dispatchServicePlans)
-                    .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
-                if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
                 const cadence  = data.cadence ?? current.cadence ?? 'annual';
                 const interval = deriveInterval(cadence, data.intervalDays ?? current.intervalDays);
                 updates.cadence       = cadence;

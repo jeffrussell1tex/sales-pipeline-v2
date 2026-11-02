@@ -172,7 +172,10 @@ One commit per verified batch; doc patch in the same commit.
   holder by id in the save's transaction; no new duplicate team name; a
   removed member's ids, app and Clerk, leave every team's and territory's
   lists in the same request (`removeWithLists`), each screen applying the
-  answer after its org check (guide §18b112).
+  answer after its org check (guide §18b112). Since §0.223 a service
+  plan's visit template and covered job types: entries of the org's job
+  templates and job types lists, as stored, the covered types stored as a
+  list (guide §18b113).
 - An account CSV import's names are each one record or the row is refused,
   at Preview, by the file's row (`src/utils/importLinks.js`
   planAccountImport): its own name one live account (the conflict) or none,

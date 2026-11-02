@@ -246,8 +246,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      (`c8f1440..f218421`, Tests GREEN), NOT shipped:** a
      team's name paired with its id, a rename renaming every holder, no new
      duplicate name, a removed member off the lists, TeamModal clearing no
-     one it does not hold. Next: D (plans), then B (the stale save — its
-     tokens must cover step C's rename batch and removal write, §4.3).
+     one it does not hold. **Step D built 2 Nov (§0.223; guide §18b113;
+     docs/design/links-batch-4b3/STEP-D.md), NOT committed:** a plan's
+     visit template and covered job types this org's entries, the list
+     itself stored, the legacy seed skipping what exists. Next: B (the
+     stale save — its tokens must cover step C's rename batch and removal
+     write, §4.3).
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -2300,7 +2304,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   tests/dispatch-links.test.mjs:267 and quoted by a harness entry,
   scripts/mutate-import.mjs:11670-11672), a crew's default vehicle
   (DispatchCrewsDetail.jsx:232-234) and a service plan's visit template
-  (DispatchServicePlansDetail.jsx:150). Recommended: make the customer
+  (DispatchServicePlansDetail.jsx:150) — and since §0.223 a plan's stale
+  covered job type, drawn as "Deleted job type (<id>)", on, a click taking
+  it off; both read the app's settings copy, so a type or template another
+  Admin added since this tab loaded reads as "Deleted" too (§0.223's
+  review; the wording to be decided with the rule). Recommended: make the customer
   type's test read only the types its select lists (`!t.unlisted`), so its
   value is drawn as itself; then Jeff picks the rule — disabled is the one
   the role selects and §0.209 follow: `disabled` on all six, §16's example
@@ -2429,9 +2437,31 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A customer's plan that names no plan still counts as covered for
   renewals** (`renewalState`, planVisits.js): its renewal alert runs on the
   default lead.
-- **Smaller, from §0.201's map:** Settings → Service plans' seed from legacy
+- **A re-POST of an existing plan rebuilds the whole plan** (§0.223's map,
+  R1): the plans create is a full-row upsert, so a hand-made POST of a
+  plan's id resets every term it leaves out; no screen re-POSTs since
+  §0.223 (random ids). The class: every Dispatch create. Low.
+- **A plan's visit template id is varchar(50)** (§0.223's map, R2): a list
+  entry whose id runs over 50 characters is a 500 on save; screen ids are
+  18. Low.
+- **A deleted job template or type leaves plans naming it** (§0.223's map,
+  R4; held under Q3): the Dispatch tab then says "This plan has no visit
+  template" for a deleted one (DispatchTab.jsx:5690). With 4b-4's delete
+  guards. Low.
+- **The plans DELETE counts only customers** (§0.223's map, R5): jobs
+  (`servicePlanId`) and plan visits (`plan_id`) hold a plan too, so a
+  delete can orphan them. Low.
+- **Nothing reads a plan's covered job types or discount** (§0.223's map,
+  R7): the plan form's "Anything else bills at the discount below" is not
+  kept by any billing. Jeff's call whether to build it.
+- **Dispatch's other jsonb lists are still written as JSON text** (§0.223,
+  JD2's class): a job's co-technicians and reserved units, a customer's
+  lists (dispatch-jobs.mjs, dispatch-customers.mjs) — read back as lists
+  through drizzle; guide §18b62 rule 4 says store the list. Low.
+- **Smaller, from §0.201's map:** ~~Settings → Service plans' seed from legacy
   tiers derives `plan_legacy_<tier>` ids, so a second org's seed of a tier
-  another org seeded is refused ("That plan id is already in use."); a
+  another org seeded is refused ("That plan id is already in use.")~~ —
+  DONE in §0.223 (random ids, NOT committed); a
   re-run of Settings → Vehicles & equipment's legacy import resets an
   imported row's technician, holder and status (a full-row upsert); the
   crew builder prints a technician's vehicle id, not its name; the
@@ -2823,7 +2853,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     time ("Not now, file it") — both below. The census found no stray to
     keep (the design's D10), and QA's removed-SPIFF claim is approved
     already, so the held link is proved in the itest (D4).
-  - 4b-3 (step A done, §0.221 — the settings lists' links, shape and restore; step C built, §0.222 — teams): settings' teams, crews and quote templates' product ids, and a
+  - 4b-3 (step A done, §0.221 — the settings lists' links, shape and restore; step C built, §0.222 — teams; step D built, §0.223 — service plans): settings' teams, crews and quote templates' product ids, and a
     service plan's `visitTemplateId` (an entry of the org's job templates —
     found by the 15 Oct critic, in no list); and the teams list a restore
     lands where the org had no settings row — its entries' `repIds` and
