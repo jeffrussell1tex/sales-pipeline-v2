@@ -19,6 +19,9 @@ import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 // app's own copy, so a read, a save and the app's first paint agree.
 import { settingsSeeds, DEFAULT_SETTINGS } from '../../src/utils/settingsDefaults.js';
 import { QUOTA_PERIODS, cleanQuotaPeriods } from '../../src/utils/quotaPlan.js';
+// The ids inside settings (state §0.221): each list's shape, and the links its entries name.
+import { SETTINGS_LISTS, listShapeRefused } from '../../src/utils/linkIds.js';
+import { checkSettingsLinks } from './_links.mjs';
 
 // ── BYOK key quarantine ──────────────────────────────────────────────
 // The org's Anthropic key may only ever live in extra.anthropicApiKey, as
@@ -296,6 +299,18 @@ export const handler = async (event) => {
                 data.approvalRouting = mode;
             }
 
+            // The ids inside settings (state §0.221 — batch 4b-3, step A; Jeff, 1 Nov: "Take all Recommended"). A list
+            // whose entries are records is a list of them, each with its own id — a value the stored list holds stands
+            // (linkIds.js's listShapeRefused) — and a team's, a territory's, a crew's or a quote template's ids name this
+            // org's members, technicians, vehicles and products: any of the org's, an id the stored list holds never
+            // asked again. Anything else is refused, naming the list, and nothing is written.
+            for (const key of SETTINGS_LISTS) {
+                const bad = key in data ? listShapeRefused(key, data[key], existingExtra[key]) : null;
+                if (bad) return { statusCode: bad.status, headers, body: JSON.stringify({ error: bad.error, field: bad.field }) };
+            }
+            const linked = await checkSettingsLinks(data, existingExtra, orgId);
+            if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+
             // One-time migration: if a plaintext key is sitting in the aiSettings
             // blob (incoming or already stored), lift it into the encrypted field.
             // scrubAiSettings() below then strips it from what we persist, so the
@@ -359,7 +374,9 @@ export const handler = async (event) => {
                 // the form is turned on without one, or a rotate is asked for.
                 webToLead: 'webToLead' in data ? cleanWebToLead(data.webToLead, existingExtra.webToLead, () => randomBytes(24).toString('base64url')) : existingExtra.webToLead || {},
                 emailTemplates: 'emailTemplates' in data ? cleanEmailTemplates(data.emailTemplates) : existingExtra.emailTemplates || [],
-                integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},
+                // The server's own (state §0.221 — Q15): written only by integration-requests.mjs; a save keeps what is
+                // stored, whatever its body says (a body could mark an app requested and block the real request).
+                integrationRequests: existingExtra.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
                 companyLegalName:     'companyLegalName'     in data ? (data.companyLegalName     || null) : existingExtra.companyLegalName     || null,

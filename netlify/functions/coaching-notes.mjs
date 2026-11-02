@@ -26,6 +26,11 @@ import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireRole, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit } from './_lib.mjs';
 import { noteVisibleTo, canDeleteNote, audienceOf, isDay } from './_coaching.mjs';
+import { checkLinks } from './_links.mjs';
+
+// A team note's team is an entry of THIS org's teams list (state §0.221 — Q10): the house link, read from every
+// settings row of the org, refused 404 naming teamId.
+const NOTE_TEAM = Object.freeze([{ key: 'teamId', kind: 'team' }]);
 
 const headers = {
     'Content-Type': 'application/json',
@@ -97,8 +102,8 @@ export const handler = async (event) => {
                 if (unknown.length) return reply(400, { error: `Unknown recipient${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}` });
             }
             if (audience.teamId) {
-                const teams = await teamsOf(orgId);
-                if (!teams.some(t => t && t.id === audience.teamId)) return reply(400, { error: 'Unknown team' });
+                const team = await checkLinks(NOTE_TEAM, { teamId: audience.teamId }, null, orgId);
+                if (team.status) return reply(team.status, { error: team.error, field: team.field });
             }
 
             const values = {

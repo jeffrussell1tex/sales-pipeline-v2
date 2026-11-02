@@ -158,6 +158,12 @@ One commit per verified batch; doc patch in the same commit.
   whose copied line names no product of this org is refused whole.
   A technician's login is a member of THIS org, stored as their Clerk id
   (`techLogin.js`) — never the app id the picker sends.
+  Since §0.221 the ids inside settings lists too — a team's manager and
+  reps, a territory's owner and reps, a crew's members, lead and vehicle,
+  a quote template's products: refused naming the list, the stored list's
+  ids held anywhere, each list of records a list with ids of its own; a
+  restore cleans the settings row it lands (`checkSettingsLinks`, guide
+  §18b111).
 - An account CSV import's names are each one record or the row is refused,
   at Preview, by the file's row (`src/utils/importLinks.js`
   planAccountImport): its own name one live account (the conflict) or none,

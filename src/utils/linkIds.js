@@ -264,3 +264,153 @@ export function memberLinksCleared(profile, teams, reports, members, selfId) {
     }
     return { patch, cleared };
 }
+
+// ── The ids inside settings (state §0.221 — batch 4b-3 of OPEN_ITEMS §1 item 1, step A; Jeff, 1 Nov: "Take all
+// Recommended") ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The lists the org's settings row keeps whose entries name rows by id: each list's fields, the kind each names and
+// its shape (one id, or a list of them). A team's manager and reps and a territory's owner and reps are members of the
+// org (users.id — never a Clerk id); a crew's members and lead are technicians and its default vehicle a vehicle; a
+// quote template's products are products, an inactive one too. Any of the org's counts ("Any of this org's, refuse").
+export const SETTINGS_LINKS = Object.freeze({
+    teams:          Object.freeze([{ field: 'managerId', kind: 'member' }, { field: 'repIds', kind: 'member', shape: 'many' }]),
+    territories:    Object.freeze([{ field: 'ownerId', kind: 'member' }, { field: 'repIds', kind: 'member', shape: 'many' }]),
+    dispatchCrews:  Object.freeze([{ field: 'members', kind: 'technician', shape: 'many' }, { field: 'lead', kind: 'technician' }, { field: 'defaultVehicle', kind: 'vehicle' }]),
+    quoteTemplates: Object.freeze([{ field: 'productIds', kind: 'product', shape: 'many' }]),
+});
+// The settings lists whose entries are records with their own id — those above, and those a row names by an entry's
+// id (a claim's SPIFF, a member's team, a plan's visit template and covered job types): each a list of objects, each
+// with its own text id, no id twice.
+export const SETTINGS_LISTS = Object.freeze(['teams', 'territories', 'spiffs', 'dispatchCrews', 'quoteTemplates', 'dispatchJobTemplates', 'dispatchJobTypes']);
+export const NOT_A_LIST = 'This setting must be a list.';
+export const ENTRY_NEEDS_ID = 'Each entry of this list needs its own id.';
+
+const isEntry = (e) => !!e && typeof e === 'object' && !Array.isArray(e);
+const isEntryId = (id) => typeof id === 'string' && id !== '';
+const sameJson = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// How many times each value occurs (by its JSON).
+const tally = (values) => {
+    const n = new Map();
+    for (const v of values) { const k = JSON.stringify(v ?? null); n.set(k, (n.get(k) || 0) + 1); }
+    return n;
+};
+// More of any value than the stored list holds.
+const moreThan = (sent, stored) => {
+    const had = tally(stored);
+    return [...tally(sent)].some(([k, c]) => c > (had.get(k) || 0));
+};
+
+// What a settings list a body sends is refused for, or null (state §0.221): a list must be null, empty or a list of
+// entries, each an object with a text id of its own, no id twice. A value the stored list already holds is never
+// refused for its shape (an id the row holds is never asked again): a value that is no list stands while it is the
+// stored value; entries with no id of their own stand while the body sends no more of them than the stored list holds
+// (by count — several screens rewrite every entry they save, so an old one never reads the same again); an id twice
+// stands while the stored list holds it as often. { status: 400, error, field: key }.
+export function listShapeRefused(key, sent, stored) {
+    if (sent == null || sent === '' || sent === false) return null;
+    if (!Array.isArray(sent)) return sameJson(sent, stored) ? null : { status: 400, error: NOT_A_LIST, field: key };
+    const had = Array.isArray(stored) ? stored : [];
+    const idless = (list) => list.filter((e) => !isEntry(e) || !isEntryId(e.id)).length;
+    if (idless(sent) > idless(had)) return { status: 400, error: ENTRY_NEEDS_ID, field: key };
+    const ids = (list) => list.filter((e) => isEntry(e) && isEntryId(e.id)).map((e) => e.id);
+    const repeats = (list) => ids(list).filter((id, i, all) => all.indexOf(id) !== i);
+    if (moreThan(repeats(sent), repeats(had))) return { status: 400, error: ENTRY_NEEDS_ID, field: key };
+    return null;
+}
+
+// A list's ids in one field, across its entries — a view, as a quote's lines are (productIdsOf): { ids, bad } — the
+// text ids it names, and every value that names no record by its id (a value that is no text, a list field that is no
+// list, an entry of a list field that is no text). An empty value names none; an entry that is no object names none.
+export function settingsLinkIds(list, field, shape = 'one') {
+    const ids = [];
+    const bad = [];
+    for (const e of Array.isArray(list) ? list : []) {
+        if (!isEntry(e)) continue;
+        const v = e[field];
+        if (v == null || v === '') continue;
+        if (shape === 'one') { (isEntryId(v) ? ids : bad).push(v); continue; }
+        if (!Array.isArray(v)) { bad.push(v); continue; }
+        for (const x of v) {
+            if (x == null || x === '') continue;
+            (isEntryId(x) ? ids : bad).push(x);
+        }
+    }
+    return { ids, bad };
+}
+
+// What a settings save's lists ask (state §0.221): { status: 400, error: NOT_AN_ID, field } — a value that names no
+// record by its id, more of it than the stored list holds (by count: one stored stands, as an id held stands) — or
+// { asks } for linksDecided, one per list field: its key the LIST (a refusal names the list, 'teams'), fresh the ids
+// the body names that the stored list does not hold in that field anywhere (Q1: a rep moved between teams, or an id
+// the list held when it was stored, is never asked again). A list the body does not send is not asked; a value that
+// is no list asks nothing (listShapeRefused judges it). stored: the org's settings extra as stored.
+export function settingsLinksAsked(data, stored) {
+    const asks = [];
+    if (!data || typeof data !== 'object') return { asks };
+    for (const [key, fields] of Object.entries(SETTINGS_LINKS)) {
+        if (!(key in data) || !Array.isArray(data[key])) continue;
+        const had = stored && typeof stored === 'object' ? stored[key] : null;
+        for (const { field, kind, shape = 'one' } of fields) {
+            const sent = settingsLinkIds(data[key], field, shape);
+            const held = settingsLinkIds(had, field, shape);
+            if (moreThan(sent.bad, held.bad)) return { status: 400, error: NOT_AN_ID, field: key };
+            const holds = new Set(held.ids);
+            const fresh = [...new Set(sent.ids.filter((id) => !holds.has(id)))];
+            if (fresh.length) asks.push({ key, kind, shape: 'many', follow: false, fresh });
+        }
+    }
+    return { asks };
+}
+
+// A restored settings row's lists with what names nothing of this org cleared (state §0.221 — the restore clears what
+// it lands): { patch, cleared } — patch the lists to write, {} for none. In each entry, a one-id field that names no
+// row of this org, or is no text, becomes '' (never null — a team with no manager reads '', and null === null would
+// match a viewer whose profile has not loaded); a list field's entries that name none are dropped, the rest kept in
+// their order; a list field that is no list is left as it is. Every other key of an entry, and an entry that is no
+// object, as it was. liveOf(kind): the ids of this org among those named (a Set or liveIdsInOrg's Map).
+export function settingsLinksCleared(extra, liveOf) {
+    const patch = {};
+    let cleared = 0;
+    if (!extra || typeof extra !== 'object') return { patch, cleared };
+    for (const [key, fields] of Object.entries(SETTINGS_LINKS)) {
+        if (!Array.isArray(extra[key])) continue;
+        let changed = false;
+        const next = extra[key].map((e) => {
+            if (!isEntry(e)) return e;
+            let out = e;
+            for (const { field, kind, shape = 'one' } of fields) {
+                const v = e[field];
+                if (v == null || v === '') continue;
+                const live = liveOf(kind);
+                if (shape === 'one') {
+                    if (isEntryId(v) && live.has(v)) continue;
+                    out = { ...out, [field]: '' };
+                    cleared++;
+                    continue;
+                }
+                if (!Array.isArray(v)) continue;
+                const kept = v.filter((x) => x == null || x === '' || (isEntryId(x) && live.has(x)));
+                if (kept.length === v.length) continue;
+                cleared += v.length - kept.length;
+                out = { ...out, [field]: kept };
+            }
+            if (out !== e) changed = true;
+            return out;
+        });
+        if (changed) patch[key] = next;
+    }
+    return { patch, cleared };
+}
+
+// The ids a settings row's lists name, by kind (state §0.221): what the restore's clean-up reads of the org.
+export function settingsLinkIdsByKind(extra) {
+    const out = new Map();
+    if (!extra || typeof extra !== 'object') return out;
+    for (const [key, fields] of Object.entries(SETTINGS_LINKS)) {
+        for (const { field, kind, shape = 'one' } of fields) {
+            const ids = out.get(kind) || [];
+            ids.push(...settingsLinkIds(extra[key], field, shape).ids);
+            out.set(kind, ids);
+        }
+    }
+    return out;
+}

@@ -235,7 +235,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        leave guard and the rest the batch found (§4.3, §4.6, §6), and the
        teams list saved from the app's copy (with batch 4b-3, below).
    - **Batch 4b-3:** the ids inside settings (teams, territories, crews,
-     quote templates) and a service plan's visit template (§4.6). With it
+     quote templates) and a service plan's visit template (§4.6) — designed
+     1 Nov (docs/design/links-batch-4b3: the map, the census, Jeff's answers
+     — every one the Recommended; four steps, A, C, D, then B). **Step A
+     built 1 Nov (§0.221; guide §18b111), NOT committed:** each list's
+     links and shape, the restore's clean-up, a team note's team,
+     integrationRequests the server's. Next: step C (teams — the name and
+     id paired, no new duplicate name, a removed member off the lists, and
+     TeamModal's clearing, below), D (plans), then B (the stale save).
+     With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
      list from the app's copy, loaded at sign-in, so another Admin's team
@@ -1935,6 +1943,29 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.3 Settings
 
+- **TeamModal clears the team of every member its list does not hold by
+  app id — UKG's real members at risk** (§0.221's review, 1 Nov; read in
+  code, not run): its save (TeamsDetail.jsx handleSave) clears the team,
+  territory and vertical of each active member whose team id names this
+  team but whom the list does not hold by `users.id`. UKG's one team lists
+  4 Clerk-shaped ids (the census, 1 Nov), so an Admin's save of that team —
+  even its colour — would clear the team of its 3 members. Pre-existing.
+  Recommended: in step C, clear only a member the Admin took off in the
+  window (and draw a member the list holds by Clerk id as on it); until
+  then, do not save UKG's team on the Teams page. Repairing UKG's stored
+  ids is a write to real data — Jeff's call. High.
+- **UKG's team and territory lists name members by Clerk id or by no one**
+  (the census, 1 Nov): its team's 4 `repIds` are Clerk-shaped (2 are its
+  members' Clerk ids, 2 no one's); its territories' 4 `repIds` name no
+  member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
+  is a write to real data — Jeff's call.
+- **A stale tab's teams save is refused after a member is removed
+  elsewhere** (§0.221's review): a revoke (or, after step C, a delete) in
+  one tab takes the member off the stored list; another tab's next teams
+  save re-sends them and is 404 "That member is not in your organization…"
+  — words that name the Admin's pick — and the profile page's "Save changes
+  tries the list again" fails the same way until a reload. Safer than the
+  old put-back; step B (the 409 and the latest list) closes it.
 - **A buyer persona still in use can be deleted — the settings PUT
   stores the list as sent** (the cleanup batch's design, 18 Oct, P38;
   re-read 23 Oct; read in code, not run): Settings → Buyer Personas
@@ -2755,7 +2786,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     time ("Not now, file it") — both below. The census found no stray to
     keep (the design's D10), and QA's removed-SPIFF claim is approved
     already, so the held link is proved in the itest (D4).
-  - 4b-3: settings' teams, crews and quote templates' product ids, and a
+  - 4b-3 (step A done, §0.221 — the settings lists' links, shape and restore): settings' teams, crews and quote templates' product ids, and a
     service plan's `visitTemplateId` (an entry of the org's job templates —
     found by the 15 Oct critic, in no list); and the teams list a restore
     lands where the org had no settings row — its entries' `repIds` and

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 1, 2026 · rules current through **§18b110** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 1, 2026 · rules current through **§18b111** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4507,3 +4507,18 @@ through `dbFetch`.
 4. **Each merge card shows its level** (`levelName`: no tier reads as an account, as the rule reads one) — the words' tags are what the cards show.
 5. **A refusal is said in the warm warning colours**, both merge windows' `mergeError` box: it writes nothing; red is for deletes.
 6. **The guard.** tests/merge-place.test.mjs SAME NAMES runs every branch of `namesApart` through `mergePlacement` and `mergeWarning` and pins the cards' level and both boxes; the harness's §0.220 block, each entry proven caught by hand.
+
+## 18b111. The Ids Inside Settings Name This Org's — Each List's Links And Shape, Held Ids Never Asked Again, The Restore Cleans The Row It Lands (hard rule)
+
+**Origin (§0.221, 1 Nov 2026 — batch 4b-3, step A; Jeff: "4 b3 is good", the design's answers each the Recommended, "Build step A").** The settings PUT stored every list as sent — a team's reps of another org, a crew's technician of none, a SPIFF list that was a string — and a restore landed a settings row's lists unchecked. The census found UKG's team listing Clerk ids (stored before members had app ids), which a rule that re-asked held ids would have refused on every save.
+
+1. **A list whose entries name rows is in `SETTINGS_LINKS`** (linkIds.js): teams (`managerId`, `repIds` → member), territories (`ownerId`, `repIds` → member), crews (`members`, `lead` → technician; `defaultVehicle` → vehicle), quote templates (`productIds` → product). A member is `users.id`, never a Clerk id. Any of the org's counts — inactive, invited, deactivated (Q2).
+2. **Held is the stored list's ids in that field, anywhere in the list** (Q1): a rep moved between entries, or a stray stored before, is never asked again. A new id naming no row of this org is 404 in the house words, naming the LIST (`field: 'teams'`); a value that names no record by its id is 400 NOT_AN_ID unless the stored list holds as many.
+3. **A list of records is in `SETTINGS_LISTS`**: null, empty, or entries each with a text id of its own, no id twice (`listShapeRefused`). What the stored list holds stands BY COUNT — screens rewrite every entry they save, so "the same entry" is never asked.
+4. **Shape, then links, after the read and the approvals, before anything is built** — a refusal writes nothing, no other key of the body either.
+5. **A restore cleans only the settings row it LANDS** (`restored.get(settings)`): a one id that names nothing here becomes '' (never null — null === null), a list's strays are dropped in order, counted with the links cleared; the lists it changed merged into the stored extra. A row the org already had is never touched.
+6. **A team note's team is the house link** (`checkLinks`, kind `team`): 404 naming `teamId`, every settings row read (Q10).
+7. **`integrationRequests` is the server's** (Q15): the settings PUT keeps the stored value whatever the body says.
+8. **The class.** tests/settings-links.test.mjs S12 classifies every key the PUT stores; a new key fails until named — a list holding ids joins rule 1 or 3, or is named with its reason (its own check, the server's, 4b-4, by design, retired, a value).
+9. **A new integration suite opens with the test-database guard before its first run** — refuse without `DATABASE_URL_TEST`, then point `NETLIFY_DATABASE_URL` at it (§0.221's first run of its new suite went to the shared app database; tests/itest-targets-test-db.test.mjs).
+10. **The guard.** tests/settings-links.test.mjs and tests/integration/settings-links.itest.mjs; the harness's §0.221 block, each entry proven caught by hand.

@@ -112,7 +112,7 @@ test('a rep cannot write; a note needs an audience and a day; an unknown recipie
     assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '2026-09-03' })))).statusCode, 400, 'no audience');
     assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '9/3/2026', recipientIds: [REP1] })))).statusCode, 400, 'not a yyyy-mm-dd day');
     assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '2026-09-03', recipientIds: ['usr_nobody'] })))).statusCode, 400, 'unknown recipient');
-    assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '2026-09-03', teamId: 'no_such_team' })))).statusCode, 400, 'unknown team');
+    assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '2026-09-03', teamId: 'no_such_team' })))).statusCode, 404, 'unknown team: the house link (§0.221)');
     assert.equal((await handler(asMgr(ev(A, 'POST', { id: 'cn_x', text: 'x', date: '2026-09-03', recipientIds: [REP1], teamId: T1 })))).statusCode, 400, 'both');
     assert.equal(await row('cn_x'), undefined);
 });

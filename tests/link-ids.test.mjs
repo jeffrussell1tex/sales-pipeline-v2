@@ -246,8 +246,8 @@ test('THE GUARD: each endpoint names its links — the fields batch 4 lists and 
     assert.ok(l.includes('return liveIds(ids, read, { merges, follow });'), 'the walk is liveIds\'s, as run above');
     assert.ok(l.includes('const merges = MERGES.includes(kind);'));
     assert.ok(l.includes('for (const ask of asks) read.set(ask, await liveIdsInOrg(ask.kind, ask.fresh, orgId, { follow: ask.follow }));'), 'each field read as its spec says — a parent not followed');
-    assert.equal(count(l, '    if (asked.error) return asked;\n'), 2, 'a value that names no record is refused before any read — one write and a batch');
-    assert.equal(count(l, 'db.select('), 9, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204); the restore\'s quote lines and members\' profiles, each read in clearLineProducts and clearMemberLinks (§0.205) — nothing reads around them');
+    assert.equal(count(l, '    if (asked.error) return asked;\n'), 3, 'a value that names no record is refused before any read — one write, a batch, and since §0.221 a settings save');
+    assert.equal(count(l, 'db.select('), 10, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204); the restore\'s quote lines and members\' profiles, each read in clearLineProducts and clearMemberLinks (§0.205); the restored settings row, read in clearSettingsLinks (§0.221) — nothing reads around them');
     const ac = read('netlify/functions/accounts.mjs');
     assert.ok(ac.includes("        parentAccountId:   d.parentAccountId   || null,"), 'the parent stored is the parent checked');
     assert.ok(!ac.includes('d.parentId'), "no legacy `parentId` alias: a parent sent so was stored with no check (the review, server S3)");

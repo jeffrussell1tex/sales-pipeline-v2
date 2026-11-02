@@ -16,8 +16,9 @@
 //   - a bulk write: refused whole, 400, naming the ids, before anything is written.
 // An Admin's backup restore clears, on the rows it restored, every link that names no row of this org
 // (E4: clearStrayLinks) — since §0.205 a quote line's product and a member's team and pins too, since §0.212 their
-// manager — and says how many; a bulk create clears so, after its insert, a link to one of its own rows that did
-// not land.
+// manager, since §0.221 the ids inside a settings row it lands (a team's, a territory's, a crew's, a quote template's)
+// — and says how many; a bulk create clears so, after its insert, a link to one of its own rows that did not land.
+// Since §0.221 a settings save's lists are checked too (checkSettingsLinks).
 import { db } from '../../db/index.js';
 import {
     accounts, contacts, opportunities, leads, tasks, activities, quotes, users, products, settings, savedReports,
@@ -28,6 +29,7 @@ import { and, eq, getTableName, inArray, isNotNull, sql } from 'drizzle-orm';
 import { MERGES, liveIds, linksAsked, linksDecided, bulkLinksAsked, bulkLinksDecided } from '../../src/utils/linkIds.js';
 import { listEntryIds } from '../../src/utils/linkIds.js';
 import { productIdsOf, lineProductsCleared, memberLinksCleared } from '../../src/utils/linkIds.js';
+import { settingsLinksAsked, settingsLinksCleared, settingsLinkIdsByKind } from '../../src/utils/linkIds.js';
 
 // The table each kind of link names — Dispatch's since §0.201; a quote line's product since §0.204 (any of the
 // org's, an inactive one too: a product is only ever deactivated); a member's pinned report since §0.205 — a saved
@@ -99,6 +101,17 @@ export async function checkBulkLinks(spec, rows, orgId, { held = null, also = nu
     if (asked.error) return asked;
     if (!asked.asks.length) return { rows: Array.isArray(rows) ? rows : [] };
     return bulkLinksDecided(asked.asks, rows, await liveOfAsks(asked.asks, orgId));
+}
+
+// A settings save's lists, checked (state §0.221 — batch 4b-3, step A): the ids inside a team, a territory, a crew
+// and a quote template name this org's members, technicians, vehicles and products (linkIds.js's SETTINGS_LINKS) —
+// { set: {} }, or { status, error, field } naming the list, and nothing is written. stored: the org's settings extra
+// as the save read it. Nothing is rewritten: none of these kinds is ever merged away.
+export async function checkSettingsLinks(data, stored, orgId) {
+    const asked = settingsLinksAsked(data, stored);
+    if (asked.error) return asked;
+    if (!asked.asks.length) return { set: {} };
+    return linksDecided(asked.asks, data, await liveOfAsks(asked.asks, orgId));
 }
 
 // ── The backup restore's clean-up (E4) ────────────────────────────────────────
@@ -193,6 +206,7 @@ export async function clearStrayLinks(orgId, restored) {
     // cannot read as a column — read apart, below; counted with the links cleared, a field that fails named.
     cleared += await clearLineProducts(orgId, restored, failed);
     cleared += await clearMemberLinks(orgId, restored, failed);
+    cleared += await clearSettingsLinks(orgId, restored, failed);
     const jobsWithoutCustomer = await countRequired(orgId, restored, dispatchJobs, 'customerId', dispatchCustomers, failed);
     const quotesWithoutDeal = await countRequired(orgId, restored, quotes, 'opportunityId', opportunities, failed);
     const locationsWithoutCustomer = await countRequired(orgId, restored, dispatchServiceLocations, 'customerId', dispatchCustomers, failed);
@@ -325,6 +339,38 @@ async function clearMemberLinks(orgId, restored, failed) {
     } catch (e) {
         failed.push('users.profile');
         console.warn('clearStrayLinks:', 'users', 'profile', e?.cause?.message || e?.message);
+        return 0;
+    }
+}
+
+// A restored settings row's lists (state §0.221 — batch 4b-3, step A): only where the restore LANDED the org's settings
+// row — a row the org already had is left as it is, byte for byte (the insert does nothing over it, so it is not in
+// `restored`). In a team, a territory, a crew and a quote template, what names no member, technician, vehicle or
+// product of this org — as the restore leaves them — is cleared (linkIds.js's settingsLinksCleared decides), counted
+// with the links cleared. Only the lists it changed are written, merged into the row's extra as stored.
+async function clearSettingsLinks(orgId, restored, failed) {
+    const ids = (restored && restored.get(settings)) || [];
+    if (!ids.length) return 0;
+    try {
+        const held = await db.select({ id: settings.id, extra: settings.extra }).from(settings)
+            .where(and(eq(settings.orgId, orgId), inArray(settings.id, ids)));
+        let cleared = 0;
+        const writes = [];
+        for (const row of held) {
+            const byKind = settingsLinkIdsByKind(row.extra);
+            const live = new Map();
+            for (const [kind, named] of byKind) live.set(kind, await liveIdsInOrg(kind, named, orgId, { follow: false }));
+            const done = settingsLinksCleared(row.extra, (kind) => live.get(kind) || new Map());
+            if (!done.cleared) continue;
+            cleared += done.cleared;
+            writes.push(db.update(settings).set({ extra: sql`coalesce(${settings.extra}, '{}'::jsonb) || ${JSON.stringify(done.patch)}::jsonb` })
+                .where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`)));
+        }
+        if (writes.length) await db.batch(writes);
+        return cleared;
+    } catch (e) {
+        failed.push('settings.extra');
+        console.warn('clearStrayLinks:', 'settings', 'extra', e?.cause?.message || e?.message);
         return 0;
     }
 }
