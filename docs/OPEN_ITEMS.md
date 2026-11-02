@@ -2923,7 +2923,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
 - ~~**Two jobs write the whole `settings.extra` back with no lock**~~ — DONE
-  in §0.224 (NOT committed): each merges only its key, guarded on what it
+  in §0.224 (committed `a03b958`; NOT pushed): each merges only its key, guarded on what it
   read (the nightly scoring and Train now; integration requests).
   Was:
   **Two jobs write the whole `settings.extra` back with no lock**
