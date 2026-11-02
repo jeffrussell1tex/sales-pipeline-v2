@@ -250,8 +250,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`, pushed to dev 2 Nov (`f218421..ed394c5`, Tests GREEN), NOT shipped:** a plan's
      visit template and covered job types this org's entries, the list
      itself stored, the legacy seed skipping what exists. **Step B-1 built 2
-     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md), NOT
-     committed:** the server — a settings save writes only its keys, each
+     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md), committed
+     `a03b958`, NOT pushed:** the server — a settings save writes only its keys, each
      with a revision token compared in the write; a stale one refused,
      nothing written, no member renamed; every other writer merges only its
      own. Next: B-2 (the shared sender and the people screens — closes §4.3's
@@ -2182,8 +2182,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The legacy LeadConvBenchmarks panel** could retire if Reports does not
   use it. As recorded.
 - ~~**The nightly lead-model batch's whole-blob settings write** could lose a
-  concurrent Admin save. §0.123, as recorded.~~ — DONE in §0.224 (NOT
-  committed): the model is written as the rules alone, guarded on them as
+  concurrent Admin save. §0.123, as recorded.~~ — DONE in §0.224 (committed
+  `a03b958`; NOT pushed): the model is written as the rules alone, guarded on them as
   read; refused when they changed while it trained (J-B9).
 - **The Company calendar page's "Connected holiday sources" card does
   nothing.**
