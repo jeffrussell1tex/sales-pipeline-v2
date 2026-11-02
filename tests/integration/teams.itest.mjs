@@ -362,7 +362,11 @@ test('REMOVE (the DELETE): the member\'s app and Clerk ids off every team and te
         { id: ID('terr_north'), name: 'North', ownerId: '', owner: 'Unassigned', ownerInit: null, status: 'Unassigned', repIds: [USR.w], reps: 2 },
         { id: ID('terr_south'), name: 'South', ownerId: '', owner: 'Unassigned', status: 'Unassigned', repIds: [] },
     ]);
-    assert.deepEqual(r.body, { success: true, lists: { teams: extra.teams, territories: extra.territories }, listsLeft: false }, 'the lists as written');
+    // The lists as written, and their new revision tokens (state §0.224): random, so read back from the row.
+    const { revs, ...answered } = r.body;
+    assert.deepEqual(answered, { success: true, lists: { teams: extra.teams, territories: extra.territories }, listsLeft: false }, 'the lists as written');
+    assert.deepEqual(Object.keys(revs).sort(), ['teams', 'territories'], 'a token for each list written');
+    assert.deepEqual(revs, { teams: extra.revs.teams, territories: extra.revs.territories }, 'the tokens stored');
     await bUntouched();
 });
 
@@ -378,7 +382,7 @@ test('REMOVE (the DELETE): a Manager\'s, one\'s own, an invitation\'s and anothe
     assert.equal(await extraText(A), extra);
     r = await call('users', WHO.admin, 'DELETE', undefined, { id: USR.n });
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { success: true, lists: {}, listsLeft: false });
+    assert.deepEqual(r.body, { success: true, lists: {}, revs: {}, listsLeft: false });
     assert.equal(await extraText(A), extra, 'a member no list names: the lists as they were');
     await bUntouched();
 });
@@ -433,7 +437,7 @@ test('REMOVE: an org with no settings row — the removal alone', async () => {
     await db.delete(settings).where(eq(settings.orgId, C));
     const r = await call('users', WHO.adminC, 'DELETE', undefined, { id: USR.cx });
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(r.body, { success: true, lists: {}, listsLeft: false });
+    assert.deepEqual(r.body, { success: true, lists: {}, revs: {}, listsLeft: false });
     assert.equal(await rowOf(USR.cx), undefined);
     assert.equal(await extraText(C), null, 'no row made');
     await bUntouched();

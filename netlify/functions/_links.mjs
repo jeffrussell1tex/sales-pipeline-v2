@@ -32,6 +32,9 @@ import { productIdsOf, lineProductsCleared, memberLinksCleared } from '../../src
 import { settingsLinksAsked, settingsLinksCleared, settingsLinkIdsByKind } from '../../src/utils/linkIds.js';
 import { membersOffLists } from '../../src/utils/linkIds.js';
 import { teamNamesOf } from '../../src/utils/teamMembership.js';
+// The settings row's writes carry revision tokens (state §0.224 — batch 4b-3, step B).
+import { revsMinted } from '../../src/utils/settingsRevs.js';
+import { mintRev, extraPatched } from './_settingsRevs.mjs';
 
 // The table each kind of link names — Dispatch's since §0.201; a quote line's product since §0.204 (any of the
 // org's, an inactive one too: a product is only ever deactivated); a member's pinned report since §0.205 — a saved
@@ -133,8 +136,10 @@ export async function teamNamesInOrg(orgId) {
 // lists are read, cleaned (linkIds.js membersOffLists) and written only while they are as read, so a settings save that
 // lands between the read and the write is never put back: the write then lands nothing, and it is tried again on a
 // fresh read, twice at most. Nothing to clean — no settings row, an extra that is no object, a member no list names —
-// is the removal alone. { removed: the removal's own answer, lists: the lists as written ({} for none) } — or lists
-// null and listsLeft when every try met a newer save: the member is removed, the lists still name them.
+// is the removal alone. { removed: the removal's own answer, lists: the lists as written ({} for none), revs: their
+// new revision tokens (state §0.224 — a tab that loaded the lists before is refused its next save of them, shown the
+// latest; the screen that removed the member takes these) } — or lists null and listsLeft when every try met a newer
+// save: the member is removed, the lists still name them.
 // beforeWrite is a test seam (tests/integration/teams.itest.mjs lands a save between the read and the write); no
 // caller passes it.
 export async function removeWithLists(orgId, ids, removal, { beforeWrite = null } = {}) {
@@ -146,9 +151,10 @@ export async function removeWithLists(orgId, ids, removal, { beforeWrite = null 
         const { patch } = cleanable ? membersOffLists(row.extra, ids) : { patch: {} };
         if (!Object.keys(patch).length) {
             if (!ran) removed = await removal;
-            return { removed, lists: {} };
+            return { removed, lists: {}, revs: {} };
         }
-        const write = db.update(settings).set({ extra: sql`coalesce(${settings.extra}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb` })
+        const newRevs = revsMinted(Object.keys(patch), mintRev);
+        const write = db.update(settings).set({ extra: extraPatched(patch, newRevs) })
             .where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`,
                 sql`${settings.extra}->'teams' is not distinct from (${row.asRead}::jsonb)->'teams'`,
                 sql`${settings.extra}->'territories' is not distinct from (${row.asRead}::jsonb)->'territories'`))
@@ -157,9 +163,9 @@ export async function removeWithLists(orgId, ids, removal, { beforeWrite = null 
         let landed;
         if (ran) landed = await write;
         else { [removed, landed] = await db.batch([removal, write]); ran = true; }
-        if (landed.length) return { removed, lists: patch };
+        if (landed.length) return { removed, lists: patch, revs: newRevs };
     }
-    return { removed, lists: null, listsLeft: true };
+    return { removed, lists: null, listsLeft: true, revs: {} };
 }
 
 // ── The backup restore's clean-up (E4) ────────────────────────────────────────
@@ -400,21 +406,25 @@ async function clearSettingsLinks(orgId, restored, failed) {
     const ids = (restored && restored.get(settings)) || [];
     if (!ids.length) return 0;
     try {
-        const held = await db.select({ id: settings.id, extra: settings.extra }).from(settings)
+        const held = await db.select({ id: settings.id, extra: settings.extra, asRead: sql`${settings.extra}::text` }).from(settings)
             .where(and(eq(settings.orgId, orgId), inArray(settings.id, ids)));
         let cleared = 0;
-        const writes = [];
+        const writes = [], counts = [];
         for (const row of held) {
             const byKind = settingsLinkIdsByKind(row.extra);
             const live = new Map();
             for (const [kind, named] of byKind) live.set(kind, await liveIdsInOrg(kind, named, orgId, { follow: false }));
             const done = settingsLinksCleared(row.extra, (kind) => live.get(kind) || new Map());
             if (!done.cleared) continue;
-            cleared += done.cleared;
-            writes.push(db.update(settings).set({ extra: sql`coalesce(${settings.extra}, '{}'::jsonb) || ${JSON.stringify(done.patch)}::jsonb` })
-                .where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`)));
+            counts.push(done.cleared);
+            // Each list only as the restore left it, with a new token (state §0.224): a save landing since is never put
+            // back — its strays then stay (Q3), and are not counted.
+            const asLanded = Object.keys(done.patch).map((key) => sql`(${settings.extra}->${key}::text) is not distinct from ((${row.asRead}::jsonb)->${key}::text)`);
+            writes.push(db.update(settings).set({ extra: extraPatched(done.patch, revsMinted(Object.keys(done.patch), mintRev)) })
+                .where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`, ...asLanded))
+                .returning({ id: settings.id }));
         }
-        if (writes.length) await db.batch(writes);
+        if (writes.length) (await db.batch(writes)).forEach((landed, i) => { if (landed.length) cleared += counts[i]; });
         return cleared;
     } catch (e) {
         failed.push('settings.extra');

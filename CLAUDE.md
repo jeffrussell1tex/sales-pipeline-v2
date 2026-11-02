@@ -78,7 +78,10 @@ entry on a file it changed and every entry on a file a SUITES test it edited
 reads, imports or runs; it must print `Baseline: green.` first (a red baseline
 reports a false 100% caught). Before each prod ship: the full run,
 `node scripts/mutate-import.mjs`, every entry, about 4 h (guide §18b23
-part 4; Jeff, 27 Oct 2026).
+part 4; Jeff, 27 Oct 2026). Jeff may defer a batch's scoped run (2 Nov
+2026): it still runs the stale check (`--list`) and proves its own entries
+by hand, commits marked "harness deferred", and nothing is pushed until one
+scoped run over every deferred batch prints green (guide §18b23 part 4).
 Then: rep-path browser check signed in as Karen (`accelerep@outlook.com`,
 role `User`) — Admin skips every ownership and role branch, so an Admin-only
 pass proves nothing. Read the URL bar and count the orgs before any browser
@@ -137,7 +140,16 @@ One commit per verified batch; doc patch in the same commit.
 - `bulkUpsert` must fail closed: `undefined` reads as `null` and can treat
   every owned row as unassigned.
 - Every `settings.extra` key must appear in BOTH the GET response object and
-  the PUT read-then-merge in `settings.mjs` — missing either silently resets.
+  the PUT's `const extra = {` list in `settings.mjs`, and in `REV_KEYS`
+  (`src/utils/settingsRevs.js`; tests/settings-revs.test.mjs R2) — missing
+  any silently resets. Two keys are the server's, never written from a body:
+  `integrationRequests` (both halves; the PUT keeps the stored one) and
+  `revs` (the GET only). Since §0.224 a writer of the settings row writes
+  only its own keys, merged in SQL with a revision token each — never a
+  whole `extra` from a read (`_settingsRevs.mjs`; guide §18b114); a save
+  naming the tokens it loaded (`ifRevs`) whose token moved is a 409
+  `code: 'stale'`, nothing written, no member renamed; the screens send
+  tokens from B-2 and B-3.
 - Persistent data rule: anything that must survive a refresh is saved via
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.

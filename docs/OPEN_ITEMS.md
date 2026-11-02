@@ -249,9 +249,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      one it does not hold. **Step D built 2 Nov (§0.223; guide §18b113;
      docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`, pushed to dev 2 Nov (`f218421..ed394c5`, Tests GREEN), NOT shipped:** a plan's
      visit template and covered job types this org's entries, the list
-     itself stored, the legacy seed skipping what exists. Next: B (the
-     stale save — its tokens must cover step C's rename batch and removal
-     write, §4.3).
+     itself stored, the legacy seed skipping what exists. **Step B-1 built 2
+     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md), NOT
+     committed:** the server — a settings save writes only its keys, each
+     with a revision token compared in the write; a stale one refused,
+     nothing written, no member renamed; every other writer merges only its
+     own. Next: B-2 (the shared sender and the people screens — closes §4.3's
+     two stale-tab items), then B-3 (every other screen).
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -1991,6 +1995,29 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (N4, filed 2 Nov): §0.205 keeps the name as filed. Low.
 - **The Admin clear leaves on the lists a member created between its read
   and its delete** (§0.222, filed): no screen calls the clear. Low.
+- **No screen can put an invited member on a team's list** (§0.224's map,
+  J-B6): TeamModal picks only active members, the Assign popover only
+  members with no team. An invitation's team is set on its row, and the
+  list names them only once they join and are added. Medium.
+- **A stale tab that already lists a member sends nothing** (§0.224's map,
+  P19): the Invite page, the member import and the profile page's move
+  decide "already listed" from the tab's own copy, so when the stored list
+  no longer holds the member nothing is sent and no token can catch it.
+  Low.
+- **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
+  J-B14): dev and prod share one database; prod's settings PUT, its
+  nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
+  requests still write a whole `extra` from a read, `revs` included, so a
+  key's token can go back to an older value — a stale tab passes once, or
+  a fresh one is refused once. Ship B soon after dev; read which site has
+  `JOBS_ENABLED` before the ship. Medium until shipped.
+- **A stored revision token that is no text refuses every save of its key**
+  (§0.224's review): `revsOf` reads only text tokens while the write's
+  compare reads the stored value as text. No writer stores one. Low.
+- **The J-B3 seed relies on Postgres evaluating `and` in order** (§0.224's
+  review): `jsonb_typeof(col) = 'array' and jsonb_array_length(col) > 0`
+  inside a `case when`; a nested `case` would not. The integration suite
+  proves it today. Low.
 - **A DELETE of an id that is not in this org answers 200 and writes an
   audit row** (N8, filed 2 Nov): it removes no one and writes no list
   since §0.222. Low.
@@ -2154,8 +2181,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   beside the token swatches. §0.130, as recorded.
 - **The legacy LeadConvBenchmarks panel** could retire if Reports does not
   use it. As recorded.
-- **The nightly lead-model batch's whole-blob settings write** could lose a
-  concurrent Admin save. §0.123, as recorded.
+- ~~**The nightly lead-model batch's whole-blob settings write** could lose a
+  concurrent Admin save. §0.123, as recorded.~~ — DONE in §0.224 (NOT
+  committed): the model is written as the rules alone, guarded on them as
+  read; refused when they changed while it trained (J-B9).
 - **The Company calendar page's "Connected holiday sources" card does
   nothing.**
   - Its Connect and Disconnect labels have no handler.
@@ -2893,7 +2922,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a scope such as 'toString' passes the "Unknown scope" check and the read
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
-- **Two jobs write the whole `settings.extra` back with no lock**
+- ~~**Two jobs write the whole `settings.extra` back with no lock**~~ — DONE
+  in §0.224 (NOT committed): each merges only its key, guarded on what it
+  read (the nightly scoring and Train now; integration requests).
+  Was:
+  **Two jobs write the whole `settings.extra` back with no lock**
   (score-leads-batch.mjs, integration-requests.mjs; the 4b-2 map): one
   running beside an Admin's settings save can put back an older SPIFF or
   team list. The timing is not verified. A company's quota periods

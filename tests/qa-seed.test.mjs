@@ -179,7 +179,14 @@ test('the runner: Clerk must name the org, no foreign rows, columns checked, the
     assert.ok(s.includes('.onConflictDoNothing({ target: table.id })'), 'insert-only by default');
     assert.ok(s.includes('setWhere: and(eq(table.orgId, orgId), like(table.id, QA_ID_LIKE)),'), '--reset rewrites only the seed\'s own rows in this org');
     assert.ok(!/\.delete\(|DELETE FROM|TRUNCATE/i.test(s), 'it never deletes');
-    assert.ok(s.includes('const mergedExtra = { ...plan.settings.extra, ...(existingSettings?.extra || {}) };'), 'a key already set in the org wins');
+    // Only the keys it adds, with new revision tokens, and only while each is still missing — a key already set in the
+    // org wins, and a save landing since is never put back (state §0.224).
+    assert.ok(s.includes('const added = Object.keys(plan.settings.extra).filter(k => !(k in (existingSettings?.extra || {})));'), 'a key already set in the org wins');
+    assert.ok(s.includes('const adding = Object.fromEntries(added.map(k => [k, plan.settings.extra[k]]));'), 'only the keys it adds');
+    assert.ok(s.includes('set({ extra: extraPatched(adding, revsMinted(added, mintRev)), updatedAt: new Date() })'), 'merged in SQL, each with a token');
+    assert.ok(s.includes("...added.map(k => sql`(${S.settings.extra}->${k}::text) is null`)))\n        .returning({ id: S.settings.id });"), 'only while each is still missing');
+    assert.ok(!s.includes('mergedExtra'), 'REGRESSION: the whole extra written from the read');
+    assert.ok(s.includes('        .returning({ id: S.settings.id });') && s.includes('    if (!landed.length) die('), 'REGRESSION: a write that landed nothing reported as added — seed rows name settings entries that are not there');
     // The settings row is the APP's: a partial one written here reads back blank
     // wherever a key is missing (the GET's null/[] spread over the defaults).
     assert.ok(s.includes('if (!existingSettings) die('), 'no settings row: refused, the app writes it');
@@ -187,5 +194,5 @@ test('the runner: Clerk must name the org, no foreign rows, columns checked, the
     assert.ok(s.includes('!Object.keys(existingSettings.fieldVisibility || {}).length) die('), 'a partial row (no stages, no field visibility): refused');
     assert.ok(s.indexOf('if (!existingSettings) die(') < s.indexOf('if (!APPLY) {'), 'refused on a dry run too');
     assert.ok(!/insert\(S\.settings\)/.test(s), 'the seed never inserts a settings row');
-    assert.ok(s.includes('.where(and(eq(S.settings.id, existingSettings.id), eq(S.settings.orgId, orgId)));'), 'the merge lands on the row the app reads, in this org');
+    assert.ok(s.includes('.where(and(eq(S.settings.id, existingSettings.id), eq(S.settings.orgId, orgId), ...added.map('), 'the merge lands on the row the app reads, in this org');
 });

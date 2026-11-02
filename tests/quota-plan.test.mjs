@@ -237,6 +237,8 @@ const NOT_READS = [
     ['src/utils/settingsCards.js', 'export function fiscalYearDetail(fiscalYearStart) {'],
     ['src/utils/settingsCards.js', 'const m = parseInt(fiscalYearStart, 10);'],
     ['src/utils/settingsCards.js', "if (item.id === 'fiscal-year') statusDetail = fiscalYearDetail(settings?.fiscalYearStart);"],
+    // The settings PUT's columns a revision token covers (state §0.224): the key's name, not a read of the start.
+    ['src/utils/settingsRevs.js', "export const COLUMN_KEYS = Object.freeze(['companyName', 'companyLogo', 'fiscalYearStart', 'taskTypes', 'verticalMarkets']);"],
 ];
 const STORE = ['netlify/functions/settings.mjs', 'src/utils/settingsDefaults.js'];
 // Quarter arithmetic on the start: quarters.js and reportPeriod.js own it; the Fiscal year page's ribbon draws the

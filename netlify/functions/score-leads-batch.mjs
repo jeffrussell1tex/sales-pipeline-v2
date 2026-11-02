@@ -13,10 +13,13 @@
 // decided leads still applies, and the result says which gate stopped it.
 import { db } from '../../db/index.js';
 import { leads, settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { scoreLead, DEFAULT_LEAD_SCORING, leadFeatures, computeSourceWinRate, trainLeadModel } from './score-lead.mjs';
 import { isDecidedLead } from '../../src/utils/leadScoringDefaults.js';
 import { withHeartbeat } from './_heartbeat.mjs';
+// The model is written as the lead scoring rules alone, with a new revision token (state §0.224 — batch 4b-3, step B).
+import { revsMinted } from '../../src/utils/settingsRevs.js';
+import { mintRev, extraPatched } from './_settingsRevs.mjs';
 
 /** The engine refuses to train on fewer rows than this (trainLeadModel returns null). */
 export const MODEL_MIN_ROWS = 20;
@@ -29,15 +32,20 @@ export const MODEL_MIN_ROWS = 20;
  *   force: train even below the org's minClosedRecords (an Admin's Train now).
  *          Never below MODEL_MIN_ROWS — the engine cannot.
  *
+ *   beforeWrite: a test seam (tests/integration/settings-revs.itest.mjs saves the rules while the model trains);
+ *          no caller passes it.
+ *
  * → { skipped: 'disabled' } when scoring is off for the org, else
- *   { leadsUpdated, decided, modelTrained, reason, leadScoring }
+ *   { leadsUpdated, decided, modelTrained, reason, leadScoring, revs }
  *   reason: null when a model was trained; otherwise why not —
- *     'predictive-off' | 'below-threshold' | 'below-engine-floor' | 'training-failed'
+ *     'predictive-off' | 'below-threshold' | 'below-engine-floor' | 'training-failed' | 'config-changed'
+ *   revs: the rules' new revision token when the model was written (the Train now screen takes it), else {}.
  */
-export async function scoreOrg(orgId, { force = false } = {}) {
-    let cfg = DEFAULT_LEAD_SCORING, srow = null;
+export async function scoreOrg(orgId, { force = false, beforeWrite = null } = {}) {
+    let cfg = DEFAULT_LEAD_SCORING, srow = null, revs = {};
     try {
-        const r = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        const r = await db.select({ id: settingsTable.id, extra: settingsTable.extra, asRead: sql`${settingsTable.extra}::text` })
+            .from(settingsTable).where(eq(settingsTable.orgId, orgId));
         srow = r[0];
         cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
     } catch (e) { /* fall back to defaults */ }
@@ -66,10 +74,21 @@ export async function scoreOrg(orgId, { force = false } = {}) {
             const model = trainLeadModel(trainRows);
             if (model) {
                 model.sourceWinRate = swr;
-                cfg = { ...cfg, predictive: { ...predCfg, model } };
-                const extra = { ...(srow?.extra || {}), leadScoring: cfg };
-                await db.update(settingsTable).set({ extra, updatedAt: new Date() }).where(eq(settingsTable.orgId, orgId));
-                modelTrained = true;
+                const trained = { ...cfg, predictive: { ...predCfg, model } };
+                // The rules alone, and only as this run read them (state §0.224 — J-B9): a change an Admin saved while it
+                // trained is never put back. Then nothing is trained, and the leads are scored on the rules as they stand.
+                const newRevs = revsMinted(['leadScoring'], mintRev);
+                if (beforeWrite) await beforeWrite();
+                const landed = srow ? await db.update(settingsTable).set({ extra: extraPatched({ leadScoring: trained }, newRevs), updatedAt: new Date() })
+                    .where(and(eq(settingsTable.orgId, orgId), sql`jsonb_typeof(${settingsTable.extra}) = 'object'`,
+                        sql`(${settingsTable.extra}->'leadScoring') is not distinct from ((${srow.asRead}::jsonb)->'leadScoring')`))
+                    .returning({ id: settingsTable.id }) : [];
+                if (landed.length) { cfg = trained; modelTrained = true; revs = newRevs; }
+                else {
+                    reason = 'config-changed';
+                    const [now] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId));
+                    cfg = now?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
+                }
             } else reason = 'below-engine-floor';
         } catch (e) { console.warn('lead model training failed for org', orgId, e.message); reason = 'training-failed'; }
     }
@@ -94,7 +113,7 @@ export async function scoreOrg(orgId, { force = false } = {}) {
         }).where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
         leadsUpdated++;
     }
-    return { leadsUpdated, decided: decided.length, threshold, modelTrained, reason, leadScoring: cfg };
+    return { leadsUpdated, decided: decided.length, threshold, modelTrained, reason, leadScoring: cfg, revs };
 }
 
 // The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).

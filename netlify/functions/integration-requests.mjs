@@ -27,7 +27,7 @@
 // renders — so an id the panel can show is exactly an id this accepts.
 import { db } from '../../db/index.js';
 import { settings, users } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { writeAudit, serverErrorBody, ensureRosterRow } from './_lib.mjs';
 import { sendEmail } from './send-email.mjs';
@@ -92,6 +92,10 @@ async function notifyOwner({ app, orgId, orgName, requester, note, requestedAt, 
     }
 }
 
+// A test seam (state §0.224): tests/integration/integration-requests.itest.mjs lands a write between this request's read
+// and its own. No caller sets it.
+export const requestSeam = { beforeWrite: null };
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: HEADERS, body: '' };
     if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
@@ -122,14 +126,25 @@ export const handler = async (event) => {
         const record = { requestedAt, byUserId: userId, byName: requester?.name || null, note: note || null };
         const next = { ...existing, [app.id]: record };
 
-        if (row) {
-            await db.update(settings)
-                .set({ extra: { ...(row.extra || {}), integrationRequests: next }, updatedAt: new Date() })
-                .where(eq(settings.orgId, orgId));
-        } else {
-            // No settings row yet (a workspace that never saved a setting): the
-            // same shape settings.mjs's upsert creates, with only this key.
-            await db.insert(settings).values({ id: orgId, orgId, extra: { integrationRequests: next }, updatedAt: new Date() });
+        if (requestSeam.beforeWrite) await requestSeam.beforeWrite();
+        // This app's request alone, merged into the row as it stands — never the whole row from this read, which would put
+        // back any save landing since (state §0.224 — batch 4b-3, step B) — and only while none is stored for it: of two
+        // requests at once, one lands and the other is answered "already". No revision token: no screen saves the key
+        // (Q15, settings.mjs keeps it).
+        const merged = () => db.update(settings)
+            .set({ extra: sql`(case when jsonb_typeof(${settings.extra}) = 'object' then ${settings.extra} else '{}'::jsonb end) || jsonb_build_object('integrationRequests', (case when jsonb_typeof(${settings.extra}->'integrationRequests') = 'object' then ${settings.extra}->'integrationRequests' else '{}'::jsonb end) || jsonb_build_object(${app.id}::text, ${JSON.stringify(record)}::jsonb))`, updatedAt: new Date() })
+            .where(and(eq(settings.orgId, orgId), sql`(${settings.extra}->'integrationRequests'->${app.id}::text->>'requestedAt') is null`))
+            .returning({ id: settings.id });
+        // No settings row yet (a workspace that never saved a setting): the
+        // same shape settings.mjs's upsert creates, with only this key — or, when another write made the row first, the
+        // merge above.
+        let landed = row ? await merged()
+            : await db.insert(settings).values({ id: orgId, orgId, extra: { integrationRequests: next }, updatedAt: new Date() }).onConflictDoNothing().returning({ id: settings.id });
+        if (!row && !landed.length) landed = await merged();
+        if (!landed.length) {
+            const [now] = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId)).limit(1);
+            const held = now?.extra?.integrationRequests?.[app.id];
+            return json(200, { request: { appId: app.id, ...(held || record) }, already: true, notified: false });
         }
 
         await writeAudit(orgId, {

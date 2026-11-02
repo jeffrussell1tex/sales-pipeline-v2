@@ -52,7 +52,7 @@ mock.module(new URL('../../netlify/functions/send-email.mjs', import.meta.url).h
     },
 });
 
-const { handler } = await import('../../netlify/functions/integration-requests.mjs');
+const { handler, requestSeam } = await import('../../netlify/functions/integration-requests.mjs');
 const { db } = await import('../../db/index.js');
 const { settings, auditLog, users } = await import('../../db/schema.js');
 const { eq, and } = await import('drizzle-orm');
@@ -60,6 +60,7 @@ const { assertTestSchema } = await import('./_schema-guard.mjs');
 
 const ORG_A = 'itest_intreq_A';
 const ORG_B = 'itest_intreq_B';
+const ORG_C = 'itest_intreq_C';   // no settings row until a test's gap makes one (state §0.224)
 
 const call = (org, body, { role, user } = {}) => handler({
     httpMethod: 'POST',
@@ -69,7 +70,7 @@ const call = (org, body, { role, user } = {}) => handler({
 const parse = (r) => ({ status: r.statusCode, body: JSON.parse(r.body || '{}') });
 
 const cleanup = async () => {
-    for (const o of [ORG_A, ORG_B]) {
+    for (const o of [ORG_A, ORG_B, ORG_C]) {
         await db.delete(auditLog).where(eq(auditLog.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
@@ -108,6 +109,60 @@ test('a request is recorded on the org, audited with the caller, and not mailed 
     assert.equal(audits[0].userName, 'Ada Admin');
     assert.equal(audits[0].detail, 'We run marketing in HubSpot.');
     assert.equal(mails.length, 0);
+});
+
+test('a request merges only itself — a key saved in its gap, and its revision token, are never put back (state §0.224)', async () => {
+    requestSeam.beforeWrite = async () => {
+        requestSeam.beforeWrite = null;
+        const now = await extraOf(ORG_A);
+        await db.update(settings).set({ extra: { ...now, competitors: ['Saved meanwhile'], revs: { competitors: 'tok_meanwhile' } } }).where(eq(settings.orgId, ORG_A));
+    };
+    const { status, body } = parse(await call(ORG_A, { appId: 'zapier' }));
+    requestSeam.beforeWrite = null;
+    assert.equal(status, 200, JSON.stringify(body));
+    const extra = await extraOf(ORG_A);
+    assert.deepEqual(extra.competitors, ['Saved meanwhile'], 'another key kept');
+    assert.deepEqual(extra.revs, { competitors: 'tok_meanwhile' }, 'its token kept — a request sets none (Q15)');
+    assert.ok(extra.integrationRequests.hubspot && extra.integrationRequests.zapier, 'both requests');
+    // Put A back as the later tests expect it: one request (hubspot), the Slack key.
+    const { zapier: _z, ...requests } = extra.integrationRequests;
+    await db.update(settings).set({ extra: { slackConfig: extra.slackConfig, integrationRequests: requests } }).where(eq(settings.orgId, ORG_A));
+    await db.delete(auditLog).where(and(eq(auditLog.orgId, ORG_A), eq(auditLog.entityId, 'zapier')));
+});
+
+test('two requests for one app at once: one recorded, the other answered "already" with its time — one audit row (state §0.224)', async () => {
+    let first = null;
+    requestSeam.beforeWrite = async () => {
+        requestSeam.beforeWrite = null;
+        first = parse(await call(ORG_A, { appId: 'zapier' }));
+    };
+    const second = parse(await call(ORG_A, { appId: 'zapier' }));
+    requestSeam.beforeWrite = null;
+    assert.equal(first.status, 200);
+    assert.equal(first.body.already, false);
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    assert.equal(second.body.already, true, 'REGRESSION: the second written over the first');
+    assert.equal(second.body.request.requestedAt, first.body.request.requestedAt, 'the first\'s time');
+    assert.equal((await extraOf(ORG_A)).integrationRequests.zapier.requestedAt, first.body.request.requestedAt);
+    assert.equal((await auditsOf(ORG_A)).filter((a) => a.entityId === 'zapier').length, 1, 'one audit row');
+    const extra = await extraOf(ORG_A);
+    const { zapier: _z, ...requests } = extra.integrationRequests;
+    await db.update(settings).set({ extra: { slackConfig: extra.slackConfig, integrationRequests: requests } }).where(eq(settings.orgId, ORG_A));
+    await db.delete(auditLog).where(and(eq(auditLog.orgId, ORG_A), eq(auditLog.entityId, 'zapier')));
+});
+
+test('a settings row made between a request\'s read and its insert: the request merged into it, the row\'s key kept (state §0.224)', async () => {
+    requestSeam.beforeWrite = async () => {
+        requestSeam.beforeWrite = null;
+        await db.insert(settings).values({ id: ORG_C, orgId: ORG_C, extra: { competitors: ['Made meanwhile'] }, updatedAt: new Date() });
+    };
+    const { status, body } = parse(await call(ORG_C, { appId: 'hubspot' }));
+    requestSeam.beforeWrite = null;
+    assert.equal(status, 200, JSON.stringify(body));
+    assert.equal(body.already, false);
+    const extra = await extraOf(ORG_C);
+    assert.deepEqual(extra.competitors, ['Made meanwhile'], 'the row\'s own key');
+    assert.equal(extra.integrationRequests.hubspot.requestedAt, body.request.requestedAt, 'REGRESSION: the insert broke on the row (a 500)');
 });
 
 test('a second request for the same app is idempotent — first timestamp kept, no second audit row', async () => {

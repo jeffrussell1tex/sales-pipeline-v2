@@ -25,7 +25,8 @@
 //      rewrites rows whose id carries `_qa_` in this org, and nothing else.
 //      Settings are MERGED: a key Jeff already set in the org wins over the seed.
 import { createClerkClient } from '@clerk/backend';
-import { eq, and, like, notLike, inArray, count, desc } from 'drizzle-orm';
+import { eq, and, like, notLike, inArray, count, desc, sql } from 'drizzle-orm';
+import { revsMinted } from '../src/utils/settingsRevs.js';
 import { getTableColumns } from 'drizzle-orm';
 import { buildQaSeed, QA_ID_MARK } from './qa-seed-plan.mjs';
 import { todayYmd } from '../src/utils/invoices.js';
@@ -55,6 +56,8 @@ if (clerkOrg.name !== expectName) die(`${orgId} is "${clerkOrg.name}", not "${ex
 
 const { db } = await import('../db/index.js');
 const S = await import('../db/schema.js');
+// The settings keys it adds are merged in with revision tokens (state §0.224), never the whole row from its read.
+const { mintRev, extraPatched } = await import('../netlify/functions/_settingsRevs.mjs');
 
 // ── 2. the roster ──────────────────────────────────────────────────────────
 const roster = await db.select({ id: S.users.id, clerkUserId: S.users.clerkUserId, name: S.users.name, role: S.users.role, active: S.users.active })
@@ -102,7 +105,6 @@ console.log(`\nAccelerep QA seed — ${clerkOrg.name} (${orgId}), today ${plan.t
 console.log(`Roster: ${roster.length} — ${roster.map(u => `${u.name} (${u.role})`).join(', ')}`);
 console.log(`Owners: deals of ${plan.roles.repA} and ${plan.roles.repB}; Manager ${plan.roles.manager || '— none on the roster'}; Technician ${plan.roles.technician || '— none: the first technician record is unlinked'}${foreign.length ? `; beside existing rows (${foreign.join(', ')})` : ''}`);
 
-const mergedExtra = { ...plan.settings.extra, ...(existingSettings?.extra || {}) };
 const added = Object.keys(plan.settings.extra).filter(k => !(k in (existingSettings?.extra || {})));
 console.log(`settings: the app's row — ${added.length ? 'adds ' + added.join(', ') : 'nothing to add'} (keys already set are kept)`);
 
@@ -117,10 +119,15 @@ for (const [name, table] of TABLES) {
 if (!APPLY) { console.log('\nDry run — nothing written. Re-run with --apply to write.\n'); process.exit(0); }
 
 // ── 6. write: insert-only, or reset the seed's own rows ────────────────────
-// Only when a key is missing: "nothing to add" writes nothing to the org's settings.
+// Only when a key is missing: "nothing to add" writes nothing to the org's settings. Only the keys it adds, each with
+// a new revision token, and only while each is still missing (state §0.224): a save landing since is never put back.
 if (added.length) {
-    await db.update(S.settings).set({ extra: mergedExtra, updatedAt: new Date() })
-        .where(and(eq(S.settings.id, existingSettings.id), eq(S.settings.orgId, orgId)));
+    const adding = Object.fromEntries(added.map(k => [k, plan.settings.extra[k]]));
+    const landed = await db.update(S.settings).set({ extra: extraPatched(adding, revsMinted(added, mintRev)), updatedAt: new Date() })
+        .where(and(eq(S.settings.id, existingSettings.id), eq(S.settings.orgId, orgId), ...added.map(k => sql`(${S.settings.extra}->${k}::text) is null`)))
+        .returning({ id: S.settings.id });
+    // A key saved in the app since the read: nothing written — stopped before a seed row names a settings entry.
+    if (!landed.length) die(`${clerkOrg.name}'s settings changed since this run read them — nothing written. Rerun.`);
 }
 for (const { name, table, rows, fresh } of pending) {
     if (RESET) {

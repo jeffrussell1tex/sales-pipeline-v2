@@ -191,6 +191,9 @@ test('S9 — the settings PUT: read, the approvals, every list\'s shape, its lin
     const at = (needle) => { const i = s.indexOf(needle); assert.ok(i > 0, needle); return i; };
     const order = [
         "const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};",
+        // A stale save (state §0.224): refused straight after the read, before a list's members are asked about.
+        'const readRevs = revsOf(existingExtra);',
+        "if (stale.length) return { statusCode: 409, headers, body: JSON.stringify({ error: STALE_ERROR, code: 'stale', stale }) };",
         'data.approvalRouting = mode;',
         'for (const key of SETTINGS_LISTS) {',
         "const bad = key in data ? listShapeRefused(key, data[key], existingExtra[key]) : null;",
@@ -204,9 +207,11 @@ test('S9 — the settings PUT: read, the approvals, every list\'s shape, its lin
         "const renames = 'teams' in data ? teamRenames(data.teams, existingExtra.teams) : [];",
         'const legacyPlainKey',
         'const extra = {',
-        'const upsert = db.insert(settings).values(dbRow)',
+        'const upsert = db.insert(settings).values({ ...dbRow, extra: { ...settingsSeeds(), ...patch, revs: newRevs } })',
         'const renaming = renames.map(({ id, name }) => db.update(users).set({ team: name, updatedAt: new Date() })',
-        'const [, ...renamedRows] = await db.batch([upsert, ...renaming]);',
+        'try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming]); }',
+        // Refused in its write: nothing renamed, no roster cache dropped, no audit (state §0.224).
+        'if (!landed.length) {',
         'if (membersRenamed) invalidateRoster(orgId);',
         "+ (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : ''),",
     ].map(at);
@@ -215,7 +220,7 @@ test('S9 — the settings PUT: read, the approvals, every list\'s shape, its lin
     // named (the audit's count), and only while the list as written gives the team that name.
     const rename = between(s, 'const renaming = renames.map(({ id, name }) =>', '.returning({ id: users.id }));');
     assert.ok(rename.includes("and(eq(users.orgId, orgId), sql`${users.profile}->>'teamId' = ${id}`, sql`${users.team} is distinct from ${name}`,"), 'REGRESSION: another org\'s holder of the same id string, or a member already so named, is renamed');
-    assert.ok(rename.includes("sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'teams' @> jsonb_build_array(jsonb_build_object('id', ${id}::text, 'name', ${name}::text)))`"), 'only while the list as written names the team so');
+    assert.ok(rename.includes("sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'teams' @> jsonb_build_array(jsonb_build_object('id', ${id}::text, 'name', ${name}::text))\n                        and ${settings.extra}->'revs'->>'teams' = ${newRevs.teams}::text)`"), 'only while the list as written — by THIS save, its own token (state §0.224) — names the team so');
     assert.ok(s.includes("detail: (keyAction\n"), 'the rename count is said whatever else the save did — a key migration too');
     assert.ok(s.includes('integrationRequests: existingExtra.integrationRequests || {},'), 'the stored requests (Q15)');
     assert.doesNotMatch(s, /data\.integrationRequests/, "a body's requests are never read");
@@ -229,8 +234,14 @@ test("S10 — _links.mjs: the settings check, and the restore's branch — only 
     assert.ok(s.includes('const ids = (restored && restored.get(settings)) || [];\n    if (!ids.length) return 0;'), 'only a row the restore landed');
     assert.ok(s.includes('.where(and(eq(settings.orgId, orgId), inArray(settings.id, ids)));'), 'read in the org');
     assert.ok(s.includes("for (const [kind, named] of byKind) live.set(kind, await liveIdsInOrg(kind, named, orgId, { follow: false }));"));
-    assert.ok(s.includes("writes.push(db.update(settings).set({ extra: sql`coalesce(${settings.extra}, '{}'::jsonb) || ${JSON.stringify(done.patch)}::jsonb` })"), 'merged: the lists it changed, every other key as stored');
-    assert.ok(s.includes(".where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`)));"));
+    // Merged: the lists it changed, each with a new token, every other key as stored (state §0.224) — and each list only as
+    // the restore left it, counted only where the write landed.
+    assert.ok(s.includes("writes.push(db.update(settings).set({ extra: extraPatched(done.patch, revsMinted(Object.keys(done.patch), mintRev)) })"), 'merged: the lists it changed, every other key as stored');
+    assert.ok(s.includes(".where(and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`, ...asLanded))"));
+    assert.ok(s.includes("const asLanded = Object.keys(done.patch).map((key) => sql`(${settings.extra}->${key}::text) is not distinct from ((${row.asRead}::jsonb)->${key}::text)`);"), 'REGRESSION: a save landing since the restore is put back');
+    assert.ok(s.includes('if (writes.length) (await db.batch(writes)).forEach((landed, i) => { if (landed.length) cleared += counts[i]; });'), 'counted only where it landed');
+    assert.ok(s.includes("...asLanded))\n                .returning({ id: settings.id }));"), 'REGRESSION: a write that cannot say it landed — nothing ever counted');
+    assert.ok(s.includes('const held = await db.select({ id: settings.id, extra: settings.extra, asRead: sql`${settings.extra}::text` }).from(settings)'), 'REGRESSION: the lists compared against nothing read — nothing ever lands');
     assert.ok(s.includes("failed.push('settings.extra');"));
     // The branch decides and writes in this order: each row's ids by kind, read live, the decision, counted, one batch.
     const body = s.slice(s.indexOf('async function clearSettingsLinks(orgId, restored, failed) {'));
@@ -239,8 +250,8 @@ test("S10 — _links.mjs: the settings check, and the restore's branch — only 
         '            const byKind = settingsLinkIdsByKind(row.extra);',
         '            const done = settingsLinksCleared(row.extra, (kind) => live.get(kind) || new Map());',
         '            if (!done.cleared) continue;',
-        '            cleared += done.cleared;',
-        '        if (writes.length) await db.batch(writes);',
+        '            counts.push(done.cleared);',
+        '        if (writes.length) (await db.batch(writes)).forEach((landed, i) => { if (landed.length) cleared += counts[i]; });',
         '        return cleared;',
     ].map((l) => { const i = fnBody.indexOf(l + '\n'); assert.ok(i > 0, l); return i; });
     assert.deepEqual(steps, [...steps].sort((a, b) => a - b), 'in this order');
@@ -354,14 +365,16 @@ test('S15 — _links.mjs: the team names read in this org (its list alone); a re
     assert.ok(rm.includes('for (let tries = 0; tries < 3; tries++) {'), 'three tries at most');
     assert.ok(rm.includes(".where(eq(settings.orgId, orgId));"), 'the lists of this org');
     assert.ok(rm.includes('const cleanable = !!row && !!row.extra && typeof row.extra === \'object\' && !Array.isArray(row.extra);'));
-    assert.ok(rm.includes('if (!ran) removed = await removal;\n            return { removed, lists: {} };'), 'nothing to clean: the removal alone, run once');
+    assert.ok(rm.includes('if (!ran) removed = await removal;\n            return { removed, lists: {}, revs: {} };'), 'nothing to clean: the removal alone, run once');
+    // The lists written with new revision tokens, answered (state §0.224): a tab that loaded them before is refused.
+    assert.ok(rm.includes('const newRevs = revsMinted(Object.keys(patch), mintRev);\n        const write = db.update(settings).set({ extra: extraPatched(patch, newRevs) })'), 'REGRESSION: the lists written with no new token — a stale tab passes');
     assert.ok(rm.includes("sql`${settings.extra}->'teams' is not distinct from (${row.asRead}::jsonb)->'teams'`"), 'REGRESSION: a teams save landing between the read and the write is put back');
     assert.ok(rm.includes("sql`${settings.extra}->'territories' is not distinct from (${row.asRead}::jsonb)->'territories'`"));
     assert.ok(rm.includes("and(eq(settings.orgId, orgId), eq(settings.id, row.id), sql`jsonb_typeof(${settings.extra}) = 'object'`"));
     assert.ok(rm.includes('else { [removed, landed] = await db.batch([removal, write]); ran = true; }'), 'the removal and the lists in one transaction');
     assert.ok(rm.includes('if (ran) landed = await write;'), 'a later try writes the lists alone — the member is already removed');
-    assert.ok(rm.includes('if (landed.length) return { removed, lists: patch };'));
-    assert.ok(rm.includes('return { removed, lists: null, listsLeft: true };'));
+    assert.ok(rm.includes('if (landed.length) return { removed, lists: patch, revs: newRevs };'));
+    assert.ok(rm.includes('return { removed, lists: null, listsLeft: true, revs: {} };'));
 });
 
 test('S16 — users.mjs: a team\'s name paired with its id on the PUT (before the stamp), the create and the invite; every removal through removeWithLists', () => {
@@ -389,9 +402,11 @@ test('S16 — users.mjs: a team\'s name paired with its id on the PUT (before th
     // The removals (Q9): the DELETE only for a member of this org, both ids; the revoke the row's; the clear every row's.
     assert.ok(u.includes('const deletedOff = deletedRow\n                ? await removeWithLists(orgId, [deletedRow.id, deletedRow.clerkUserId], db.delete(users).where(and(eq(users.id, deletedRow.id), eq(users.orgId, orgId))))\n                : null;'),
         'REGRESSION: a DELETE of another org\'s id edits this org\'s lists, or the Clerk id stays listed');
-    assert.ok(u.includes("body: JSON.stringify({ success: true, lists: deletedOff?.lists ?? {}, listsLeft: !!deletedOff?.listsLeft }) };"));
+    // Each answer carries the lists' new tokens (state §0.224), so the screen that removed the member is not refused.
+    assert.ok(u.includes("body: JSON.stringify({ success: true, lists: deletedOff?.lists ?? {}, revs: deletedOff?.revs ?? {}, listsLeft: !!deletedOff?.listsLeft }) };"));
     assert.ok(u.includes('revokedOff = await removeWithLists(orgId, [row.id], db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId))));'));
-    assert.ok(u.includes('lists: revokedOff?.lists ?? {}, listsLeft: !!revokedOff?.listsLeft'));
+    assert.ok(u.includes('lists: revokedOff?.lists ?? {}, revs: revokedOff?.revs ?? {}, listsLeft: !!revokedOff?.listsLeft'));
+    assert.ok(u.includes('lists: clearedOff.lists ?? {}, revs: clearedOff.revs ?? {}, listsLeft: !!clearedOff.listsLeft'));
     assert.ok(u.includes('const leaving = await db.select({ id: users.id, clerkUserId: users.clerkUserId }).from(users).where(eq(users.orgId, orgId));'));
     assert.ok(u.includes('const clearedOff = await removeWithLists(orgId, leaving.flatMap((u) => [u.id, u.clerkUserId]), db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id }));'));
     assert.ok(u.includes('const deleted = clearedOff.removed;'), 'the clear\'s count is the delete\'s own');

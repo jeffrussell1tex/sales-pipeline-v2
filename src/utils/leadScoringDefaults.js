@@ -68,6 +68,8 @@ export const trainNowMessage = (data) => {
         case 'predictive-off':     return { ok: false, text: 'Turn predictive scoring on and save, then train.' };
         case 'scoring-off':        return { ok: false, text: 'Lead scoring is off for this workspace.' };
         case 'training-failed':    return { ok: false, text: 'Training failed on the server — nothing changed. Try again; if it repeats, check the function log.' };
+        // The rules were saved while the model trained (state §0.224 — J-B9): nothing is written over them.
+        case 'config-changed':     return { ok: false, text: 'The lead scoring rules changed while training — nothing was trained. Train again.' };
         default:                   return { ok: false, text: d.error || 'Nothing was trained.' };
     }
 };

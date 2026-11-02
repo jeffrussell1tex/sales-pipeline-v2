@@ -190,7 +190,21 @@ test('integration-requests accepts only the catalogue, is Admin-only, audits, an
     assert.ok(s.includes("action: 'integration.requested', entityType: 'integration', entityId: app.id, entityName: app.name,"));
     assert.ok(s.includes('const to = process.env.INTEGRATION_REQUESTS_TO;'));
     assert.ok(s.includes('if (!to) return false;'), 'no address, no mail, request still recorded');
-    assert.ok(s.includes('.where(eq(settings.orgId, orgId));'), 'the update is org-scoped');
+    // The one app's request merged into the row as it stands, only while none is stored — never the whole extra from
+    // the read (state §0.224 — batch 4b-3, step B); a request that lands nothing is answered "already".
+    assert.ok(s.includes(".where(and(eq(settings.orgId, orgId), sql`(${settings.extra}->'integrationRequests'->${app.id}::text->>'requestedAt') is null`))"), 'the update is org-scoped, and lands only while none is stored');
+    assert.ok(s.includes("|| jsonb_build_object(${app.id}::text, ${JSON.stringify(record)}::jsonb))`, updatedAt: new Date() })"), 'the one request merged, updatedAt kept');
+    assert.ok(!/\.\.\.\(?row\.extra/.test(s), 'REGRESSION: the whole extra written back from the read');
+    assert.ok(s.includes('.onConflictDoNothing().returning({ id: settings.id });') && s.includes('if (!row && !landed.length) landed = await merged();'), 'a row made meanwhile: merged into');
+    assert.ok(s.includes('if (!landed.length) {') && s.includes('already: true, notified: false });'), 'a request that lands nothing: already');
+    assert.ok(s.includes('let landed = row ? await merged()'), 'a row read: merged into, never inserted');
+    // The test seam (integration-requests.itest.mjs) is set by no caller: declared, read and awaited — nothing else.
+    assert.ok(s.includes('export const requestSeam = { beforeWrite: null };'));
+    assert.equal(s.split('requestSeam.beforeWrite').length - 1, 2, 'never set in the function');
+    // The "already" answer read in this org (the review): another org's request would be answered as this org's.
+    assert.ok(s.includes('const [now] = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId)).limit(1);'), 'REGRESSION: the request re-read from any org');
+    // Q15's real guard since §0.224: the PUT writes only the keys a save wrote, never integrationRequests.
+    assert.ok(read('src/utils/settingsRevs.js').includes("&& k !== 'integrationRequests' && k !== 'anthropicApiKey');"), 'the settings PUT never writes integrationRequests');
 });
 
 test('calendar-connections reports provider availability by env NAME presence, never a value', () => {

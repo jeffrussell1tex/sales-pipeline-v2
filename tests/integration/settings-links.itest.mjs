@@ -70,6 +70,7 @@ const { db } = await import('../../db/index.js');
 const { settings, users, products, dispatchTechnicians, dispatchVehicles, coachingNotes, backups, auditLog } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { NOT_AN_ID, NOT_A_LIST, ENTRY_NEEDS_ID } = await import('../../src/utils/linkIds.js');
+const { REV_KEYS } = await import('../../src/utils/settingsRevs.js');
 const { eq, inArray, sql } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
@@ -320,6 +321,7 @@ test("RESTORE: where the restore lands the org's settings row, what its lists na
             dispatchCrews: [{ id: ID('c_crew'), name: 'C Crew', members: [TECH_B, TECH_C], lead: TECH_B, defaultVehicle: VEH_B }],
             quoteTemplates: [{ id: ID('c_qt'), name: 'C Starter', productIds: [PROD_B, PROD_C] }],
             competitors: ['Kept as filed'],
+            revs: { teams: 'the_file_token', competitors: 'the_file_token' },
         } }],
         users: [{ id: M1, email: E('c_m1'), name: 'Mona Restored', role: 'User' }],
     } };
@@ -334,6 +336,12 @@ test("RESTORE: where the restore lands the org's settings row, what its lists na
     assert.deepEqual(x.dispatchCrews, [{ id: ID('c_crew'), name: 'C Crew', members: [TECH_C], lead: '', defaultVehicle: '' }]);
     assert.deepEqual(x.quoteTemplates, [{ id: ID('c_qt'), name: 'C Starter', productIds: [PROD_C] }]);
     assert.deepEqual(x.competitors, ['Kept as filed'], 'every other key as filed');
+    // Every key a new revision token, never the file's (state §0.224 — J-B13): a tab that loaded before the restore
+    // holds none, and its next save is refused once.
+    assert.deepEqual(Object.keys(x.revs).sort(), [...REV_KEYS].sort(), 'a token for every key');
+    assert.ok(Object.values(x.revs).every((t) => typeof t === 'string' && t !== 'the_file_token'), 'REGRESSION: the file\'s tokens kept');
+    const stale = await call('settings', WHO.adminC, 'PUT', { competitors: ['Stale tab'], ifRevs: { competitors: null } });
+    assert.equal(stale.status, 409, 'a tab that loaded before the restore');
 });
 
 test("RESTORE: a settings row the org already had is left byte for byte — its held strays too — and nothing of it is counted", async () => {

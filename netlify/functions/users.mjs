@@ -702,7 +702,7 @@ export const handler = async (event) => {
                     invalidateRoster(orgId);
                 }
                 await writeAudit(orgId, 'user.invite_revoked', row?.id || email, row?.name || email, userId, await getCallerName(userId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ revoked: mine.length, removedRowId: removeRow ? row.id : null, lists: revokedOff?.lists ?? {}, listsLeft: !!revokedOff?.listsLeft }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ revoked: mine.length, removedRowId: removeRow ? row.id : null, lists: revokedOff?.lists ?? {}, revs: revokedOff?.revs ?? {}, listsLeft: !!revokedOff?.listsLeft }) };
             }
 
             // ── Invite flow ───────────────────────────────────────────────────
@@ -1221,7 +1221,7 @@ export const handler = async (event) => {
                 const deleted = clearedOff.removed;
                 invalidateRoster(orgId);
                 await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length}); ${pending.length} pending invitation(s) revoked`, userId, await getCallerName(userId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length, revoked: pending.length, lists: clearedOff.lists ?? {}, listsLeft: !!clearedOff.listsLeft }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length, revoked: pending.length, lists: clearedOff.lists ?? {}, revs: clearedOff.revs ?? {}, listsLeft: !!clearedOff.listsLeft }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {
@@ -1252,7 +1252,7 @@ export const handler = async (event) => {
                 : null;
             invalidateRoster(orgId);
             await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, await getCallerName(userId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true, lists: deletedOff?.lists ?? {}, listsLeft: !!deletedOff?.listsLeft }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, lists: deletedOff?.lists ?? {}, revs: deletedOff?.revs ?? {}, listsLeft: !!deletedOff?.listsLeft }) };
         }
 
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

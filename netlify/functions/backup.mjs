@@ -15,6 +15,9 @@ import { serverErrorBody, auditAs, memberNamesOf } from './_lib.mjs';
 import { restorableMembers, restoreNotes, droppedErrors } from '../../src/utils/memberName.js';
 import { clearStrayLinks } from './_links.mjs';
 import { invalidateRoster } from './_lib.mjs';
+// A restored settings row's revision tokens are its own (state §0.224 — batch 4b-3, step B).
+import { REV_KEYS, revsMinted } from '../../src/utils/settingsRevs.js';
+import { mintRev } from './_settingsRevs.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -389,6 +392,9 @@ export const handler = async (event) => {
                 const extra = r?.extra && typeof r.extra === 'object' && !Array.isArray(r.extra) ? { ...r.extra } : {};
                 if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };
                 delete extra.anthropicApiKey;
+                // Every key a new revision token, never the file's (state §0.224 — J-B13): a tab of this org that loaded
+                // before the restore landed holds none, and its next save is refused once, shown what landed.
+                extra.revs = revsMinted(REV_KEYS, mintRev);
                 return { ...r, id: orgId, extra };
             });
 

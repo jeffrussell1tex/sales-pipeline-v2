@@ -26,6 +26,10 @@ import { checkSettingsLinks } from './_links.mjs';
 import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js';
 import { sql } from 'drizzle-orm';
 import { invalidateRoster } from './_lib.mjs';
+// The stale settings save (state §0.224 — batch 4b-3, step B): a save writes only its own keys, each with a revision
+// token compared in the write itself.
+import { COLUMN_KEYS, STALE_ERROR, revsOf, ifRevsOf, bodyKeys, revKeysOf, staleKeys, writtenKeys, columnsSent, revsMinted, keysDropped, pick } from '../../src/utils/settingsRevs.js';
+import { mintRev, revUnchanged, extraMerged } from './_settingsRevs.mjs';
 
 // ── BYOK key quarantine ──────────────────────────────────────────────
 // The org's Anthropic key may only ever live in extra.anthropicApiKey, as
@@ -67,8 +71,19 @@ const withoutWebhookUrl = (cfg) => {
     return rest;
 };
 
+// A test seam (state §0.224): tests/integration/settings-revs.itest.mjs lands another save between this PUT's read and
+// its write. No caller sets it.
+export const putSeam = { beforeWrite: null };
+
+// A unique violation on the row's id or its org: two first saves of one org, both inserting (state §0.224).
+const ROW_KEYS = ['settings_pkey', 'settings_org_id_uniq'];
+const lostFirstInsert = (err) => [err, err?.cause].some((e) => e?.code === '23505'
+    && (ROW_KEYS.includes(e?.constraint) || ROW_KEYS.some((c) => String(e?.message || '').includes(`"${c}"`))));
+
 // ── Handler ───────────────────────────────────────────────────────────────────
-export const handler = async (event) => {
+// retry: how many times this save has been tried again on a fresh read (a save that lost its race, J-B15). Never the
+// runtime's own arguments — it passes (event, context, callback): `handler` below calls this with 0.
+const handle = async (event, retry) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
@@ -83,9 +98,10 @@ export const handler = async (event) => {
             const row = rows[0];
             // A key this workspace has never saved reads as the shared default
             // (src/utils/settingsDefaults.js, state §0.170); one it holds, even as
-            // null, is its own — every settings save writes every key it knows, so
-            // only a key no save has written is absent. Until §0.170 the defaults
-            // reached the database only through the app's autosave.
+            // null, is its own. Since §0.224 a save writes only the keys it sends
+            // (and the seeds under the row), so a key no save has sent and no seed
+            // covers is absent and reads through the fallbacks below. Until §0.170
+            // the defaults reached the database only through the app's autosave.
             const ex = { ...settingsSeeds(), ...(row.extra || {}) };
             const saved = (k) => !!row.extra && k in row.extra;
 
@@ -236,6 +252,8 @@ export const handler = async (event) => {
                 // The plaintext key is never included in this response body.
                 anthropicApiKeySet:   !!storedKey,
                 anthropicApiKeyLast4: keyLast4,
+                // Each key's revision token (state §0.224): a screen sends back the one it loaded with each key it saves.
+                revs: revsOf(row.extra),
             }})};
         }
 
@@ -252,7 +270,12 @@ export const handler = async (event) => {
             const forbidden = requireRole(auth, ['Admin'], headers);
             if (forbidden) return forbidden;
 
-            const data = body;
+            // What the save says it loaded (state §0.224): a token, or null for "there was none", for each key it sends —
+            // or nothing at all (Q6: accepted unchecked). Its settings are the body without them.
+            const sent = ifRevsOf(body);
+            if (sent.error) return { statusCode: 400, headers, body: JSON.stringify({ error: sent.error }) };
+            const data = bodyKeys(body);
+            const sentKeys = revKeysOf(data);
 
             // A company's quota periods are quarters or months (state §0.203) — anything
             // else is refused, never stored.
@@ -274,6 +297,11 @@ export const handler = async (event) => {
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))
                 .orderBy(desc(settings.updatedAt));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
+            // A key this save sends whose token has moved since its screen loaded it: refused before anything else is
+            // judged — a stale list's members are never asked about (state §0.224). The screen reads settings again.
+            const readRevs = revsOf(existingExtra);
+            const stale = sent.checked ? staleKeys(sent.revs, readRevs, sentKeys) : [];
+            if (stale.length) return { statusCode: 409, headers, body: JSON.stringify({ error: STALE_ERROR, code: 'stale', stale }) };
             // A key not sent keeps what is stored — and a seeded key never stored
             // is the shared default (state §0.170), so the first screen a new
             // workspace saves writes the defaults with it, never nulls in their place.
@@ -354,8 +382,10 @@ export const handler = async (event) => {
                 return { statusCode: 503, headers, body: JSON.stringify({ error: 'Key encryption is not available. Contact your administrator.' }) };
             }
 
-            // Merge: incoming data wins for any key it explicitly provides,
-            // keys absent from the payload fall back to whatever is in the DB.
+            // The value each key takes when this save writes it (state §0.224 — Jeff's J-B2: the list kept as it was). Only
+            // the keys the save writes are picked from it below; the fallback after each `:` is no longer written — a key
+            // not sent keeps what the row holds at the write, not what this read held. The list is still the PUT's: a
+            // stored key it does not name is dropped (§0.171).
             const extra = {
                 quotaData:        'quotaData'        in data ? (data.quotaData        || null) : base.quotaData                 || null,
                 commissionTiers:  'commissionTiers'  in data ? (data.commissionTiers  || null) : existingExtra.commissionTiers  || null,
@@ -467,25 +497,54 @@ export const handler = async (event) => {
                 extra,
                 updatedAt:       new Date(),
             };
-            const upsert = db.insert(settings).values(dbRow).onConflictDoUpdate({
-                target: settings.id, setWhere: eq(settings.orgId, orgId),
-                set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
-            });
+            // What this save writes (state §0.224 — B1): the keys it sent, and what the PUT derives from them (the approvals
+            // pair's other half, the key set, cleared or moved, the AI blob's scrub) — never the rest of the row, which
+            // another save may have changed since this read. Each key written gets a new token; the tokens this save read
+            // are compared in the write itself, for every key it writes or sent.
+            const aiScrubbed = !('aiSettings' in data) && JSON.stringify(scrubAiSettings(existingExtra.aiSettings) ?? null) !== JSON.stringify(existingExtra.aiSettings ?? null);
+            const written = writtenKeys(data, Object.keys(extra), { keyAction, aiScrubbed });
+            const patch = pick(extra, written);
+            const newRevs = revsMinted([...written, ...COLUMN_KEYS.filter((k) => k in data)], mintRev);
+            const compared = [...new Set([...Object.keys(newRevs), ...sentKeys])];
+            const dropped = keysDropped(existingExtra, new Set([...Object.keys(extra), 'revs']));
+            const upsert = db.insert(settings).values({ ...dbRow, extra: { ...settingsSeeds(), ...patch, revs: newRevs } }).onConflictDoUpdate({
+                target: settings.id,
+                setWhere: and(eq(settings.orgId, orgId), ...compared.map((k) => revUnchanged(k, readRevs[k] ?? null))),
+                set: { orgId, ...columnsSent(data, dbRow), extra: extraMerged(patch, dropped, newRevs), updatedAt: dbRow.updatedAt },
+            }).returning({ id: settings.id });
             // A renamed team renames every member holding it, by its id — an inactive or an invited member too — in the
             // save's own transaction (state §0.222 — Q7): only this org's members (a team id is minted on the client,
-            // `team_<ms>`, and may repeat across orgs), and only while the list as written gives the team that name.
+            // `team_<ms>`, and may repeat across orgs), and only while the list as written gives the team that name — written
+            // by THIS save: the teams token it minted (state §0.224), so a save refused in its write renames no one.
             const renaming = renames.map(({ id, name }) => db.update(users).set({ team: name, updatedAt: new Date() })
                 .where(and(eq(users.orgId, orgId), sql`${users.profile}->>'teamId' = ${id}`, sql`${users.team} is distinct from ${name}`,
-                    sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'teams' @> jsonb_build_array(jsonb_build_object('id', ${id}::text, 'name', ${name}::text)))`))
+                    sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'teams' @> jsonb_build_array(jsonb_build_object('id', ${id}::text, 'name', ${name}::text))
+                        and ${settings.extra}->'revs'->>'teams' = ${newRevs.teams}::text)`))
                 .returning({ id: users.id }));
-            const [, ...renamedRows] = await db.batch([upsert, ...renaming]);
+            if (putSeam.beforeWrite) await putSeam.beforeWrite();
+            // An org's first two saves at once can both insert: the second meets the row the first made, by its id or its
+            // org (one row per org) — a lost race, as a refused write is.
+            let landed = [], renamedRows = [];
+            try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming]); }
+            catch (err) { if (!lostFirstInsert(err)) throw err; }
+            // Nothing landed: another save changed a key this one writes since this read. Nothing of it was written — no
+            // member renamed, no audit. A save that named none of its tokens (Q6 — accepted unchecked), or whose own keys
+            // did not move (it lost only to a key the server derives, or to the row's first insert), is tried again on a
+            // fresh read, twice at most (J-B15); else it is refused, naming the keys that moved.
+            if (!landed.length) {
+                const [now] = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));
+                const moved = compared.filter((k) => (revsOf(now?.extra)[k] ?? null) !== (readRevs[k] ?? null));
+                if ((!sent.checked || !moved.some((k) => sentKeys.includes(k))) && retry < 2) return handle(event, retry + 1);
+                return { statusCode: 409, headers, body: JSON.stringify({ error: STALE_ERROR, code: 'stale', stale: moved }) };
+            }
             const membersRenamed = renamedRows.reduce((n, rows) => n + rows.length, 0);
             if (membersRenamed) invalidateRoster(orgId);
 
             // Audit the write. Org-wide config changes are exactly the kind of
             // integrity event the audit log exists for. Key material is never
             // recorded — only the fact that the key changed.
-            const changedKeys = Object.keys(data).filter(k => k !== 'anthropicApiKey');
+            // The keys the save sent and wrote (state §0.224) — never its tokens, never integrationRequests (the server's).
+            const changedKeys = Object.keys(data).filter(k => k !== 'anthropicApiKey' && (written.includes(k) || COLUMN_KEYS.includes(k)));
             const callerName = await getCallerName(userId, orgId);
             await writeAudit(orgId, {
                 action: keyAction ? 'settings.apikey.' + keyAction : 'settings.updated',
@@ -502,7 +561,9 @@ export const handler = async (event) => {
                 userName: callerName,
             });
 
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey }) };
+            // The new tokens of the keys the save SENT — the screen holds their values. A key the server derived is not
+            // answered: the screen does not hold its new value, so its next save of it is refused once and reads the latest.
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey, revs: pick(newRevs, sentKeys) }) };
         }
 
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
@@ -512,3 +573,7 @@ export const handler = async (event) => {
         return { statusCode: 500, headers, body: serverErrorBody(err, 'settings') };
     }
 };
+
+// The function the runtime calls, with whatever it passes after the event (state §0.224 — the review: a retry count
+// in a third parameter met the runtime's callback, and no save was ever tried again).
+export const handler = (event) => handle(event, 0);

@@ -68,3 +68,39 @@ Recommended answer (Jeff, "Start step D", then every Recommended):
 - **JD4, the rest:** "Take all Recommended" — the stale job-type chip drawn as
   the template's stale option (the disabled-or-not question kept open); R1,
   R2, R4, R5, R7 and the jsonb class filed; the GET's list always a list.
+
+## Step B — the stale save (2 November 2026)
+
+Asked after step B's map (STEP-B.md §6), through AskUserQuestion, each with a
+Recommended answer (Jeff, "Start step B", then every Recommended):
+
+- **J-B1, the split:** "Three commits" — B-1 the server, B-2 the shared
+  sender and the people screens, B-3 every other screen; each with its own
+  gates, harness run and browser check.
+- **J-B4, what a refusal carries:** "Re-read settings once" — the 409 names
+  the keys that moved and carries the words; the screen re-reads settings for
+  the latest values and their tokens together. No copy of the GET's
+  projection.
+- **J-B15, a save with no tokens that loses its own race:** "Retry, then
+  refuse" — the server tries again on a fresh read, twice at most, then
+  answers 409; Q6's "accepted unchecked" kept.
+- **The rest:** "Take all Recommended" — J-B2, J-B3, J-B5 to J-B14 as written
+  in STEP-B.md §6, and the two filings.
+
+### B-2 (2 November 2026)
+
+Asked after B-2's map (STEP-B.md §4a, "Questions for Jeff"), through
+AskUserQuestion:
+
+- **The harness (JB2-12):** "Commit each, harness last" — asked in chat
+  before the map's questions; written into CLAUDE.md's chain and guide §18b23
+  part 4: each batch committed marked "harness deferred", one scoped run over
+  every deferred batch before any push. J-B1's "each with its own harness
+  run" yields to it for B-2 and B-3.
+- **JB2-7 and JB2-8, the two older defects in the lines B-2 rewrites:** "Fix
+  both in B-2" — the Assign popover and the Territory window stop replacing
+  the roster from a filtered copy; Assign lists a member once
+  (`teamsWithMemberOn`), off any other team list holding them by app id; N13
+  (Clerk ids) stays filed.
+- **The rest:** "Take all Recommended" — JB2-1 to JB2-6, JB2-9 to JB2-11 and
+  JB2-13 as written in STEP-B.md §4a.

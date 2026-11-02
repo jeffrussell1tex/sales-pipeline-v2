@@ -47,6 +47,9 @@ export const handler = async (event) => {
                 // The org's saved config after the run — the model on it when trained —
                 // so the panel reflects the server's truth without a reload.
                 leadScoring:  r.leadScoring,
+                // Its new revision token when the model was written (state §0.224), so the panel's next save of the
+                // rules is not refused against this one.
+                revs:         r.revs,
             }),
         };
     } catch (err) {

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 2, 2026 · rules current through **§18b113** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 2, 2026 · rules current through **§18b114** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -383,19 +383,26 @@ Rules:
 
 ## 12. Settings Persistence Rules
 
-Settings follow a **read-then-merge** pattern on PUT to avoid overwriting unrelated fields:
+Since §0.224 (§18b114) every writer of the settings row writes **only its own keys, merged in SQL into the row as it stands, each with a new revision token** — never a whole row built from a read:
 
 ```js
 // WRONG — overwrites everything
 await db.update(settings).set(newData).where(eq(settings.orgId, orgId));
 
-// RIGHT — merge with existing
+// WRONG too (the read-then-merge this section taught until §0.224) — a save landing between the read and the
+// write is put back
 const [existing] = await db.select().from(settings).where(eq(settings.orgId, orgId));
 const merged = { ...existing, ...newData, orgId };
 await db.insert(settings).values(merged).onConflictDoUpdate({ target: settings.id, set: merged });
+
+// RIGHT — your keys alone, guarded on what you read, with their tokens; say whether it landed
+const landed = await db.update(settings)
+    .set({ extra: extraPatched(patch, revsMinted(Object.keys(patch), mintRev)) })   // _settingsRevs.mjs
+    .where(and(eq(settings.orgId, orgId), /* your keys as read */))
+    .returning({ id: settings.id });
 ```
 
-This is critical. A bug where `settings.mjs` PUT overwrote unrelated fields (teams/territories/verticals/pipelines) caused data loss for those fields on every save.
+and the new writer is named in tests/settings-revs.test.mjs R7 (THE GUARD fails on any write of the row it does not name). This is critical: a whole-row write from an older read put back teams, territories, verticals and pipelines (the original bug), and until §0.224 the PUT itself, the nightly scoring and integration requests did the same.
 
 ### Settings authorization
 
@@ -1880,8 +1887,13 @@ passes over the same files.
 ### Rules
 
 - Adding a `settings.extra` key means editing **both** the GET projection and the
-  PUT whitelist in `netlify/functions/settings.mjs`. One without the other is a
-  silent failure in one direction.
+  PUT whitelist in `netlify/functions/settings.mjs`, **and `REV_KEYS`**
+  (`src/utils/settingsRevs.js`; tests/settings-revs.test.mjs R2 fails until it is
+  there — a key with no token is never compared). One without the others is a
+  silent failure in one direction. Two keys are the server's and never written
+  from a body: `integrationRequests` (in both halves; the PUT keeps the stored
+  one, Q15) and `revs` (the GET only — every writer sets it, §18b114). Since
+  §0.224 the PUT writes only the keys a save sends (§18b114).
 - The PUT uses `'key' in data ? … : existingExtra.key` semantics. Preserve that: a
   key sent is applied (including an explicit `''`, `[]` or `null`), a key omitted
   keeps its stored value. Never rebuild the whole object from a partial body.
@@ -2916,6 +2928,16 @@ wait for the full run.
   Its summary line and its own exit code are the result, as the full run's are.
 - **Before each prod ship:** the full run, `node scripts/mutate-import.mjs`, every
   entry, on the tree that ships.
+- **A deferred scope** (Jeff, 2 Nov 2026: "not run the 3+ hour harness check until
+  we are done with our work"; "Commit each, harness last"): while a run of batches is
+  built, Jeff may defer each batch's scoped run. A deferred batch still runs the stale
+  check over every entry (`node scripts/mutate-scope.mjs --list` — an anchor its
+  edits moved would stop the final run some 80 minutes in) and proves each of its own
+  new entries caught by hand; it is committed with "harness deferred" in its commit
+  message and its state section. Nothing is pushed until one scoped run, `--base` the
+  last commit whose scope printed green (so every deferred batch is in its scope),
+  prints `Baseline: green.` and exits 0; the deferred marks then name that run. A
+  survivor it finds is fixed in a commit of its own, before the push.
 - **What a scoped run does not see** — an older entry on a file the batch did not
   change, caught only by a test it did not edit, made to survive through what that
   test reaches: a file or fixture the batch changed (a change to a file F imports can
@@ -4546,3 +4568,16 @@ through `dbFetch`.
 4. **The legacy seed makes only what is missing** (`legacyPlansToCreate`): a label a plan of this org stands for — its name by `nameKey`, or the old button's id — is skipped and counted; labels of one name make one plan; new plans take random ids; the press re-reads the plans, checks the org after the answer and fails closed on a bad read.
 5. **A stale covered type shows as itself** on the plan form ("Deleted job type (<id>)"), as a stale template does; whether such options are disabled is the pending OPEN_ITEMS item.
 6. **The guard.** tests/plan-links.test.mjs, tests/dispatch-links.test.mjs THE GUARD, tests/sales-links.test.mjs, tests/integration/plan-links.itest.mjs; the harness's §0.223 block, each entry proven caught by hand.
+
+## 18b114. A Settings Save Writes Only Its Keys, Each With A Revision Token Compared In The Write — Every Other Writer Merges Only Its Own (hard rule)
+
+**Origin (§0.224, 2 Nov 2026 — batch 4b-3, step B-1; Jeff: "Start step B", J-B1 "Three commits", J-B4 "Re-read settings once", J-B15 "Retry, then refuse", the rest each the Recommended).** The settings PUT rewrote the whole `extra` and every column from its own read; the nightly lead scoring, Train now and integration requests wrote the whole `extra` back from a read made earlier. A save landing in another's gap was put back, a stale tab's teams list renamed the holders back (§0.222), and after a removal a stale tab met the 404 naming the member.
+
+1. **A writer writes only its keys**, merged in SQL into the row as it stands (`_settingsRevs.mjs` `extraMerged` for the PUT — the seeds under the row, a key the PUT no longer keeps dropped by its own list; `extraPatched` for every other writer). Never a whole `extra`, never the columns unsent. The PUT keeps its `const extra = {` list as text (J-B2) and picks what it writes from it (`writtenKeys`): what was sent, plus what it derives — never integrationRequests.
+2. **Every key carries a revision token** (`extra.revs`, 16 random bytes), set anew for every key a writer writes, merged NESTED and last (`revsBumped` — a top-level merge of `revs` would wipe other keys' tokens; a `jsonb_set` on a missing parent writes nothing). The GET answers them. A key with none reads as `null`; a body never writes them (`bodyKeys`).
+3. **A save names the token it loaded for each key it sends** (`ifRevs`; a key with none as explicit `null`, never left out — a key left out reads as "none" and fails closed). A token that moved is a 409 `{ error, code: 'stale', stale: [keys] }`, nothing written: straight after the read (before the shape, name and link checks — a stale tab after a removal meets this, not the 404), and again in the write (`setWhere` comparing the tokens the SERVER read, for every key written or sent, in the same statement). The 409 carries no values (J-B4): the screen reads settings again.
+4. **A write refused writes nothing anywhere**: a member renamed with a team only while the list as written carries THIS save's teams token; no roster reset, no audit.
+5. **Tried again, twice at most, on a fresh read** (J-B15): a save naming no tokens at all (Q6 — accepted unchecked), and one whose own keys did not move (lost only to a key the server derived, or to an org's first insert). The count lives inside (`handle(event, retry)`), never in the runtime's arguments — it calls `handler(event, context, callback)`.
+6. **The answers carry the tokens** of what the caller holds: the PUT's 200 those of the keys SENT (never a derived key's — the screen does not hold its value); a member's removal the lists' (`removeWithLists` → the DELETE, the revoke, the clear); Train now the rules'. A restore mints every key's token, never the file's (J-B13).
+7. **Every other writer is guarded on what it read** (Train now on the rules — refused, `'config-changed'`, when they changed while it trained, J-B9; integration requests on no request stored; the restore's clean-up on each list as it landed; the QA seed on each key still missing) and **says whether it landed** (`.returning`).
+8. **The guard.** tests/settings-revs.test.mjs (R7: every `update`/`insert` of the settings row in a function file, a script or a db script is one named, with its reason), the pins in settings-links, train-now, connected-apps and qa-seed; tests/integration/settings-revs.itest.mjs (the handler called as the runtime calls it; the seams through the real handler); the harness's §0.224 block, each entry proven caught by hand.
