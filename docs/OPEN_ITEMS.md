@@ -242,7 +242,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      dev 2 Nov (`0d1f35b..c8f1440`, Tests GREEN), NOT shipped:** each list's
      links and shape, the restore's clean-up, a team note's team,
      integrationRequests the server's. **Step C built 2 Nov (§0.222; guide
-     §18b112; docs/design/links-batch-4b3/STEP-C.md), NOT committed:** a
+     §18b112; docs/design/links-batch-4b3/STEP-C.md), committed `9ce4dc6`, NOT pushed:** a
      team's name paired with its id, a rename renaming every holder, no new
      duplicate name, a removed member off the lists, TeamModal clearing no
      one it does not hold. Next: D (plans), then B (the stale save — its
@@ -1948,7 +1948,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ### 4.3 Settings
 
 - **TeamModal clears the team of every member its list does not hold by
-  app id — DONE in §0.222 (built 2 Nov, NOT committed; NOT shipped)**: the
+  app id — DONE in §0.222 (committed `9ce4dc6` 2 Nov; NOT pushed, NOT shipped)**: the
   window reads a list's entries by app or Clerk id (Jeff's J1) and its save
   sends a member only a join, a leave or the team's new territory
   (`teamSaveMembers`); UKG's count (2 Nov, STEP-C.md §9): a save of its team
@@ -2187,8 +2187,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
     writes (P24; UsersDetail.jsx:1367, :1357).
   - ~~TeamModal's save drops deactivated and invited members from the
     roster on screen (P26), and its territory- or vertical-only edit
-    reaches no member's row (P27)~~ — DONE in §0.222 (built 2 Nov, NOT
-    committed): the screen keeps every member, renaming holders by id
+    reaches no member's row (P27)~~ — DONE in §0.222 (committed `9ce4dc6`
+    2 Nov): the screen keeps every member, renaming holders by id
     (`rosterAfterTeamSave`), and a changed territory or vertical goes to
     the team's listed members (`teamSaveMembers`, N2).
   - A team change on the profile page moves no territory or vertical; the
