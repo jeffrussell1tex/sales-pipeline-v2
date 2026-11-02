@@ -238,7 +238,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      quote templates) and a service plan's visit template (§4.6) — designed
      1 Nov (docs/design/links-batch-4b3: the map, the census, Jeff's answers
      — every one the Recommended; four steps, A, C, D, then B). **Step A
-     built 1 Nov (§0.221; guide §18b111), committed 30d7adf:** each list's
+     built 1 Nov (§0.221; guide §18b111), committed `30d7adf`, pushed to
+     dev 2 Nov (`0d1f35b..c8f1440`, Tests GREEN), NOT shipped:** each list's
      links and shape, the restore's clean-up, a team note's team,
      integrationRequests the server's. Next: step C (teams — the name and
      id paired, no new duplicate name, a removed member off the lists, and
