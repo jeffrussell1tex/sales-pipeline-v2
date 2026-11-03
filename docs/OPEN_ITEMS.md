@@ -266,7 +266,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Pipelines, the holiday calendar, Edit brand and the Sales Manager
      name their tokens — one save at a time, a stale refusal shown on the
      latest and said. **Step B-3c built 3 Nov (§0.229; guide §18b114
-     rule 12; STEP-B.md §4b), NOT committed, harness deferred:** Connected
+     rule 12; STEP-B.md §4b), committed `5af8c64`, harness deferred, NOT pushed:** Connected
      apps reads the settings prop and names its tokens — every settings
      screen now does. Next: the one scoped run over B-2, all of B-3 and
      §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) before any
@@ -2375,8 +2375,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A workspace created by integration requests keeps `[]` vertical
   markets,** which reads like a list an Admin cleared. §0.170 (c).
 - ~~**Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
-  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229
-  (NOT committed): the panel reads the settings prop and sets the copy
+  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229 (committed `5af8c64`, NOT pushed): the panel reads the settings prop and sets the copy
   once a save lands; Reports sees a Slack save at once.
 - ~~**Pipelines, Company calendar and the quote brand editor** set the app's
   copy first and put back a whole snapshot on failure. §0.170 (e).~~ — the
