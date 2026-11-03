@@ -262,7 +262,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Settings sends the tokens it opened with; a stale refusal shows the
      panel again on the latest and says so, and both leave guards say the
      change was not saved. **Step B-3b built 3 Nov (§0.228; guide §18b114
-     rule 11; STEP-B.md §4b), NOT committed, harness deferred:**
+     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred, NOT pushed:**
      Pipelines, the holiday calendar, Edit brand and the Sales Manager
      name their tokens — one save at a time, a stale refusal shown on the
      latest and said. Next: B-3c (Connected apps), then one scoped run
