@@ -665,3 +665,83 @@ test("B-3b's spiffs through the sender: writeSettings lands with the token its d
         setRequestOrg(null);
     }
 });
+
+// Connected apps' web form through the screens' sender (state §0.229 — batch 4b-3, step B-3c; STEP-B.md §4b §5,
+// Integration 4). Like B-3a's and B-3b's above, this passes on B-1's server and B-2's sender: it covers the key the panel
+// sends, it is not proof of B-3c — the panel's saves are proven run as written in tests/settings-saves.test.mjs. Each
+// save is made as the panel makes it: `putSettings({ webToLead }, opened)`, `opened` the tokens of the copy as the panel
+// opened, the answered token merged (landed — revsAfter), then the latest read through takeLatestSettings to learn the
+// link the PUT minted and the panel reopened on its tokens (reopen(latest.revs)). Turn on: the token answered is the
+// next GET's, the link minted by the server and read back into the copy with the next GET's tokens, the roster kept.
+// New link, from the tokens reopened on: lands, a new link. Another tab turns the form off: this panel's save on the
+// token before it is refused, `.stale` naming `webToLead` alone, nothing written, no audit.
+test("B-3c's web form through the sender: Turn on answers the token the next GET holds, the minted link read back with it; New link from the reopened tokens lands; refused as stale when another tab saved the form first — nothing written", async () => {
+    await seedA();
+    const { putSettings, takeLatestSettings } = await import('../../src/Tabs/settings/shared/saveSettings.js');
+    const { setRequestOrg } = await import('../../src/utils/storage.js');
+    const { STALE_ERROR, revsAfter } = await import('../../src/utils/settingsRevs.js');
+    const { cleanWebToLead, TOKEN_RE } = await import('../../src/utils/webToLead.js');
+    const savedWindow = globalThis.window, savedFetch = globalThis.fetch;
+    globalThis.window = {};               // first: dbFetch reads window.__getClerkToken — none here, the auth mock signs in
+    const sent = [];                      // the bodies the sender PUT, as the handler read them
+    // The database driver queries over fetch too: only the app's own paths are the screen's requests.
+    globalThis.fetch = async (url, opts = {}) => {
+        if (!(typeof url === 'string' && url.startsWith('/.netlify/functions/'))) return savedFetch(url, opts);
+        assert.equal(url, '/.netlify/functions/settings', 'the sender asks the settings function alone');
+        const method = opts.method || 'GET';
+        const body = opts.body === undefined ? undefined : JSON.parse(opts.body);
+        if (method === 'PUT') sent.push(body);
+        const r = await call(A, body, method);
+        return new Response(JSON.stringify(r.body), { status: r.status });
+    };
+    setRequestOrg(A);
+    try {
+        // The panel's copy, as the app loaded it; its tokens as it opened. The form is off, with no link.
+        let copy = { ...(await get(A)), users: ['the roster'] };
+        const setSettings = (f) => { copy = f(copy); };
+        let opened = { ...(copy.revs || {}) };
+        const form = cleanWebToLead(copy.webToLead);
+        assert.deepEqual([form.enabled, form.token], [false, null], 'off, no link');
+
+        // Turn on: the server mints the link; the token answered is the next GET's.
+        const on = await putSettings({ webToLead: { ...form, enabled: true } }, opened);
+        assert.deepEqual(sent.at(-1).ifRevs, { webToLead: opened.webToLead ?? null }, 'the web form\'s token alone, as the panel opened with it');
+        assert.deepEqual(Object.keys(on.revs), ['webToLead'], 'only the key sent');
+        const next = await get(A);
+        assert.equal(on.revs.webToLead, next.revs.webToLead, 'REGRESSION: the token answered is not the next GET\'s — the panel\'s next save refused against its own');
+        assert.ok(next.webToLead.enabled === true && TOKEN_RE.test(next.webToLead.token), 'the link minted by the server');
+        // As the panel lands it, then takes the latest and reopens on its tokens.
+        setSettings((prev) => ({ ...prev, revs: revsAfter(prev.revs, on.revs) }));
+        opened = revsAfter(opened, on.revs);
+        const latest = await takeLatestSettings(setSettings);
+        assert.ok(latest, 'the latest read');
+        opened = { ...(latest.revs || {}) };
+        assert.equal(copy.webToLead.token, next.webToLead.token, 'the minted link in the copy — read, never minted by the screen');
+        assert.deepEqual(copy.revs, (await get(A)).revs, 'REGRESSION: the copy\'s tokens are not the next GET\'s');
+        assert.deepEqual(copy.users, ['the roster'], 'the roster kept');
+
+        // New link, from the tokens the panel reopened on: lands, a new link minted.
+        const rotated = await putSettings({ webToLead: { ...cleanWebToLead(copy.webToLead), rotate: true } }, opened);
+        assert.deepEqual(sent.at(-1).ifRevs, { webToLead: on.revs.webToLead }, 'the token the Turn on answered');
+        const afterRotate = await get(A);
+        assert.equal(rotated.revs.webToLead, afterRotate.revs.webToLead, 'the token answered, the next GET\'s');
+        assert.ok(TOKEN_RE.test(afterRotate.webToLead.token) && afterRotate.webToLead.token !== next.webToLead.token, 'a new link');
+        opened = revsAfter(opened, rotated.revs);
+
+        // Another tab turns the form off; this panel's save on the token before it is refused, nothing written.
+        const off = await call(A, { webToLead: { enabled: false }, ifRevs: { webToLead: opened.webToLead } });
+        assert.equal(off.status, 200, JSON.stringify(off.body));
+        const afterOff = await extraText(A), n = await audits(A);
+        await assert.rejects(putSettings({ webToLead: { ...cleanWebToLead(copy.webToLead), enabled: true } }, opened), (e) => {
+            assert.deepEqual(e.stale, ['webToLead'], 'REGRESSION: a web form saved over one another tab saved first');
+            assert.equal(e.message, STALE_ERROR);
+            return true;
+        });
+        assert.equal(await extraText(A), afterOff, 'nothing written');
+        assert.equal(await audits(A), n, 'no audit');
+        await bUntouched();
+    } finally {
+        globalThis.window = savedWindow; globalThis.fetch = savedFetch;
+        setRequestOrg(null);
+    }
+});

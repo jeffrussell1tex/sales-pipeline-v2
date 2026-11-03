@@ -7,21 +7,25 @@
 // handler (`panelStale`, J-B5), which takes the latest and draws the panel again on it. B-3b converts the rest but one:
 // Pipelines and the calendar (one save in flight; a refusal puts back only the keys it sent, never the tokens), Edit
 // brand (its window takes the latest and stays open, JB3-4) and the Sales Manager (each draft's token taken when it
-// begins; a stale refusal takes the latest and drops the draft, JB3-5). Connected apps, B-3c's, names no tokens until
-// then and is accepted unchecked (Q6).
+// begins; a stale refusal takes the latest and drops the draft, JB3-5). B-3c converts the last, Connected apps (state
+// §0.229 — JB3-3): drawn from the app's copy, its three saves name the tokens it opened with, a stale refusal goes to
+// AdminView (Slack's words ask for the webhook URL again), the web form takes the latest to learn its minted link, and a
+// request lands in the copy only in the org that asked.
 //
-//   S1  the URL: only the sender, the app's load and Connected apps' two GETs hold it
+//   S1  the URL: only the sender and the app's load hold it — no settings screen
 //   S2  every send names its tokens, read from its draft's binding (the render's settings.revs, a window's snapshot, the
-//       panel's own `opened`, the Sales Manager's drafts' own) — never `prev`, never a ref; Connected apps (B-3c) names
-//       none, still listed
+//       panel's own `opened`, the Sales Manager's drafts' own) — never `prev`, never a ref; every settings screen
+//       converted
 //   S3  the sender, run with fetch stubbed: putSettings (its network failure too), writeSettings, takeLatestSettings,
 //       addToSettingsList, the rules
 //   S4  every stale refusal takes the latest, through the one helper or the panel's own panelStale — a guarded panel's
 //       catch hands it there first; the invite and the import read `twice`; Pipelines and the calendar put nothing back
-//       on a stale one, Edit brand and the Sales Manager take the latest themselves (no AdminView around them)
+//       on a stale one, Edit brand and the Sales Manager take the latest themselves (no AdminView around them);
+//       Connected apps' three hand a stale refusal on first, Slack's Save with the webhook words (state §0.229)
 //   S4b AdminView's panelStale, in order, and the one wrapper it remounts
 //   S5  every save that lands merges the tokens it answered, by revsAfter or the panel's landed — the Deletes and
-//       Assign before the members; every setSettings an updater; no snapshot put back
+//       Assign before the members; every setSettings an updater; no snapshot put back — an object set on the copy under
+//       a key no token covers (integrationRequests, Q15) is that key's own, not a list (state §0.229)
 //   S6  TerritoryModal's save, run as written
 //   S7  Teams' Assign (assignTo), run as written
 //   S8  the scanners' own reading on made-up sources; the suites list holds this file
@@ -30,12 +34,14 @@
 //       (one save in flight, its gate shut while AdminView reads the latest, a keys-only rollback) and Pipelines' Add
 //       forms, kept when refused; Edit brand's Save, close and Escape; the Sales Manager's saveExtra,
 //       saveAdminDrafts (partial, over saveExtra's own refusal too), its cards' flights and the flags that lock them,
-//       a SPIFF's Remove answered late, its drafts' setters
+//       a SPIFF's Remove answered late, its drafts' setters; Connected apps' Slack Save, Disconnect, web form and
+//       request, and its copy read for an org that saved no settings (state §0.229)
 //   S11 AdminView's panelStale and guardSave, run as written; Back, another card and Discard
 //   S12 the pins: App's leave guard, the words (J-B11, JB3-2, JB3-8, JB3-4), reopen, one save at a time on every guarded
 //       file (B-3a's by once, the Sales Manager's by its flights), JB3-6, JB3-7a; the gate's release, Edit brand's window
 //       (its token, held while saving), the Sales Manager's drafts' setters; its commission plan and SPIFF board locked
-//       while a save is out (every control in a disabled fieldset, read by the AST; state §0.228)
+//       while a save is out (every control in a disabled fieldset, read by the AST; state §0.228); Connected apps'
+//       webhook words, its reopen on the latest it took, its mount (state §0.229)
 //
 // Every import of saveSettings.js, settingsRevs.js or settingsDefaults.js is an `await import()` inside its test: a
 // static import of a name the sender lacked would kill the file before the scans ran.
@@ -166,8 +172,11 @@ const PIPELINES = 'src/Tabs/settings/salesProcess/PipelinesDetail.jsx';
 const CALENDAR = 'src/Tabs/settings/company/CompanyCalendarDetail.jsx';
 const EDIT_BRAND = 'src/Tabs/settings/quoting/EditBrandModal.jsx';
 const SALES_MANAGER = 'src/Tabs/SalesManagerTab.jsx';
-// The sends, file by file, each converted: B-2's people screens (state §0.225), B-3a's panels (state §0.226) and B-3b's
-// (state §0.228).
+// B-3c's (state §0.229): Connected apps — drawn from the app's copy, its three saves (Slack's Save and Disconnect, the
+// web form) naming the tokens it opened with; no leave guard (its saves are clicks, each button held while one is out).
+const CONNECTED_APPS = 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx';
+// The sends, file by file, each converted: B-2's people screens (state §0.225), B-3a's panels (state §0.226), B-3b's
+// (state §0.228) and B-3c's (state §0.229).
 const SITES = {
     'src/Tabs/settings/people/TeamsDetail.jsx': { putSettings: 1, writeSettings: 2 },          // Delete; the window, Assign
     'src/Tabs/settings/people/TerritoriesDetail.jsx': { putSettings: 1, writeSettings: 2 },    // Delete; the window, the CSV
@@ -178,16 +187,13 @@ const SITES = {
     [CALENDAR]: { putSettings: 2 },                     // persistHolidays (Add, Delete); Sync
     [EDIT_BRAND]: { writeSettings: 1 },                 // the window's Save
     [SALES_MANAGER]: { writeSettings: 1 },              // saveExtra: the commission plan, the SPIFF board
+    [CONNECTED_APPS]: { putSettings: 3 },               // Slack's Save and Disconnect; the web form
 };
 const SITE_FILES = Object.keys(SITES);
-// The panel B-3c converts, with its putSettings calls: it still names no tokens — one argument — and is accepted
-// unchecked (Q6). Converted, it comes off this list; B-3c empties it.
-const B3_PENDING = {
-    'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 3,
-};
-// The named GETs: the app's load, and the Connected apps panel's own load and re-read (B-3c's). B-3b moved the two
-// direct sends (the Sales Manager's, Edit brand's) into the sender (state §0.228): no file but these holds the URL.
-const NAMED_GETS = { 'src/hooks/useSettings.js': 1, 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 2 };
+// The named GET: the app's load. B-3b moved the two direct sends (the Sales Manager's, Edit brand's) into the sender
+// (state §0.228); B-3c took out Connected apps' own load and re-read — it reads the app's copy, and its web form takes
+// the latest through the sender (state §0.229): no file but these holds the URL.
+const NAMED_GETS = { 'src/hooks/useSettings.js': 1 };
 const URL_HOLDERS = { [SENDER]: 1, ...NAMED_GETS };
 
 const SETTINGS_URL_ALL = /functions\/settings(?![\w/-])/g;
@@ -460,7 +466,7 @@ const landsWith = (fn, fnAnc, id = null) => {
 // One file's setSettings updaters: an object writing a list (teams, territories, or a key computed) writes `revs` too —
 // or the function around it lands its send's tokens by the panel's landed (landsWith; FlatList's computed key) — and
 // `revs` is only ever revsAfter(<prev>.revs, …) — the held tokens kept key by key, the answered ones set over them.
-const updaterFaults = (file, src) => {
+const updaterFaults = (file, src, tokenKeys = null) => {
     const out = [];
     walk(astOf(src).program, (n, anc) => {
         if (!isCall(n) || !/^_?setSettings$/.test(calleeName(n) || '') || !isFn(n.arguments[0])) return;
@@ -475,7 +481,13 @@ const updaterFaults = (file, src) => {
             const at = `${file}:${o.loc.start.line}`;
             const keys = o.properties.map((p) => (p.type === 'ObjectProperty' ? (p.computed ? '[computed]' : keyName(p)) : null));
             const revs = o.properties.find((p) => keyName(p) === 'revs');
-            if (keys.some((k) => k === 'teams' || k === 'territories' || k === '[computed]') && !revs && !landsHere()) out.push(`${at}: a list set without its token — the next save sends the old one and is refused`);
+            // The value of a key no token covers, set on the copy itself (`{ ...<prev>, <key>: { … } }`): that key's own
+            // object, not a list of the copy — integrationRequests, the server's own (Q15), keyed by app id (Connected
+            // apps' request, state §0.229). Read only where the caller hands the keys a token covers (REV_KEYS).
+            const holder = oanc.at(-1), copy = oanc.at(-2);
+            const untokened = !!tokenKeys && holder?.type === 'ObjectProperty' && holder.value === o && keyName(holder) !== null && !tokenKeys.has(keyName(holder))
+                && copy?.type === 'ObjectExpression' && copy.properties.some((p) => p.type === 'SpreadElement' && p.argument.type === 'Identifier' && p.argument.name === prev);
+            if (keys.some((k) => k === 'teams' || k === 'territories' || k === '[computed]') && !revs && !untokened && !landsHere()) out.push(`${at}: a list set without its token — the next save sends the old one and is refused`);
             if (revs) {
                 const v = revs.value;
                 const ok = isCall(v) && calleeName(v) === 'revsAfter' && v.arguments.length === 2 && (chainOf(v.arguments[0]) || []).join('.') === `${prev}.revs`;
@@ -517,7 +529,7 @@ const landFaults = (file, src) => {
 
 // ── S1 ───────────────────────────────────────────────────────────────────────
 
-test('S1 — the URL: the sender, the app\'s load and Connected apps\' two GETs hold it — no other file, none of the converted screens', () => {
+test('S1 — the URL: the sender and the app\'s load hold it — no other file, no settings screen (state §0.229)', () => {
     const got = {};
     for (const f of srcFiles()) {
         const n = urlCount(read(f));
@@ -540,27 +552,18 @@ test('S1 — the URL: the sender, the app\'s load and Connected apps\' two GETs 
 
 // ── S2 ───────────────────────────────────────────────────────────────────────
 
-test('S2 — every send names its tokens, read from its draft\'s binding — a panel\'s own opened, by the scope; the Sales Manager\'s drafts\' own; Connected apps (B-3c) names none, still listed', () => {
-    const faults = [], sites = {}, pending = {};
+test('S2 — every send names its tokens, read from its draft\'s binding — a panel\'s own opened, by the scope; the Sales Manager\'s drafts\' own; every settings screen converted (state §0.229)', () => {
+    const faults = [], sites = {};
     for (const f of srcFiles()) {
         if (f === SENDER) continue;
         const src = read(f);
         if (!/\b(putSettings|writeSettings|addToSettingsList)\(/.test(src)) continue;
-        if (f in B3_PENDING) {
-            walk(astOf(src).program, (n) => {
-                if (!isCall(n) || !SENDS.has(calleeName(n))) return;
-                if (calleeName(n) === 'putSettings' && n.arguments.length === 1) pending[f] = (pending[f] || 0) + 1;
-                else faults.push(`${f}:${n.loc.start.line}: listed as B-3's, yet names tokens — converted, take it off B3_PENDING`);
-            });
-            continue;
-        }
         const { out, counts } = sendFaults(f, src);
         faults.push(...out);
         if (Object.keys(counts).length) sites[f] = counts;
     }
     assert.deepEqual(faults, []);
-    assert.deepEqual(sites, SITES, 'every send outside the pending list is one of B-2\'s, B-3a\'s or B-3b\'s, each named here');
-    assert.deepEqual(pending, B3_PENDING, 'the panel listed as B-3c\'s still sends, unchecked — a stale entry hides nothing');
+    assert.deepEqual(sites, SITES, 'every send is one of B-2\'s, B-3a\'s, B-3b\'s or B-3c\'s, each named here');
     // B-3a's sends name the tokens their panel opened with (state §0.226).
     for (const f of B3A_FILES) {
         walk(astOf(read(f)).program, (n) => {
@@ -568,9 +571,11 @@ test('S2 — every send names its tokens, read from its draft\'s binding — a p
         });
     }
     // B-3b's (state §0.228): Pipelines' and the calendar's sends name the tokens their panel opened with, the Sales
-    // Manager's the tokens its drafts began with, Edit brand's the token its window opened with.
+    // Manager's the tokens its drafts began with, Edit brand's the token its window opened with. B-3c's (state §0.229):
+    // Connected apps' three, the tokens it opened with.
     for (const [f, send, want, sends] of [[PIPELINES, 'putSettings', 'opened', 1], [CALENDAR, 'putSettings', 'opened', 2],
-        [SALES_MANAGER, 'writeSettings', 'opened', 1], [EDIT_BRAND, 'writeSettings', '{ quoteBrand: base.rev }', 1]]) {
+        [SALES_MANAGER, 'writeSettings', 'opened', 1], [EDIT_BRAND, 'writeSettings', '{ quoteBrand: base.rev }', 1],
+        [CONNECTED_APPS, 'putSettings', 'opened', 3]]) {
         const src = read(f), got = [];
         walk(astOf(src).program, (n) => {
             if (!callsNamed(send)(n)) return;
@@ -946,6 +951,32 @@ test("S4 — B-3b's refusals: Pipelines' and the calendar's stale catch goes to 
     }
 });
 
+// B-3c's refusals (state §0.229): Connected apps registers with no leave guard — its saves are clicks, each button held
+// while its save is out. Slack's Save hands a stale refusal on with the words that ask for the webhook URL again and
+// rethrows to its modal, which AdminView's remount takes away (a typed URL is not kept across the latest, JB3-3);
+// Disconnect and the web form hand it on first and return once it is taken — nothing of the old mount runs after it;
+// unread, the server's words on the card.
+test("S4 — B-3c's refusals: Connected apps' catches hand a stale refusal to panelStale first — Slack's Save with the webhook words, then its rethrow; Disconnect and the web form return once it is taken, else their card says why", () => {
+    const src = read(CONNECTED_APPS), program = astOf(src).program;
+    const got = {};
+    walk(program, (n, anc) => {
+        if (!callsNamed('putSettings')(n)) return;
+        const fnAt = anc.findLastIndex(isFn), decl = anc[fnAt - 1];
+        const name = decl?.type === 'VariableDeclarator' ? decl.id.name : `?${n.loc.start.line}`;
+        let handler = null;
+        for (let k = anc.length - 2; k > fnAt; k--) if (anc[k].type === 'TryStatement' && anc[k + 1] === anc[k].block) { handler = anc[k].handler; break; }
+        const body = handler ? handler.body.body : [];
+        got[name] = body.length ? [src.slice(body[0].start, body[0].end), src.slice(body.at(-1).start, body.at(-1).end)] : [];
+    });
+    assert.deepEqual(got, {
+        handleSaveSlack: ["if (e.stale) await panelStale(e, (config.webhookUrl || '') !== (slackConfig.webhookUrl || '') ? PANEL_CHANGED_WEBHOOK : undefined);", 'throw e;'],
+        handleDisconnectSlack: ['if (e.stale && await panelStale(e)) return;', "note('slack', `Not disconnected — ${e.message}`);"],
+        saveWebForm: ['if (e.stale && await panelStale(e)) return;', "note('webform', `Not saved — ${e.message}`);"],
+    }, 'REGRESSION (J-B5, JB3-3): a stale refusal not handed to AdminView first, the old mount going on over the latest, or Slack\'s words not asking for the URL again');
+    assert.ok(src.includes("import { PANEL_CHANGED_WEBHOOK } from '../../../utils/settingsRevs.js';"), 'the words are the shared ones');
+    assert.ok(!has(program, callsNamed('useRegisterSave')), 'no leave guard — the first-line rule of a guarded panel is not this file\'s');
+});
+
 // ── S4b ──────────────────────────────────────────────────────────────────────
 
 test('S4b — AdminView\'s panelStale, in order: the latest read; tookLatest; only while the asker is open, the guard\'s slot and App\'s flag cleared and the panel remounted; the Provider around the one wrapper', () => {
@@ -965,8 +996,10 @@ test('S4b — AdminView\'s panelStale, in order: the latest read; tookLatest; on
 
 // ── S5 ───────────────────────────────────────────────────────────────────────
 
-test('S5 — every save that lands merges the tokens it answered — by revsAfter, or the panel\'s landed(<its answer>) after the send; every setSettings an updater, no snapshot put back; the Deletes and Assign merge before any member row goes out', () => {
-    const faults = [...SITE_FILES, SENDER, HOOK].flatMap((f) => updaterFaults(f, read(f)));
+test('S5 — every save that lands merges the tokens it answered — by revsAfter, or the panel\'s landed(<its answer>) after the send; every setSettings an updater, no snapshot put back; the Deletes and Assign merge before any member row goes out', async () => {
+    // The keys a token covers: an object set on the copy under any other key (integrationRequests) is that key's own.
+    const { REV_KEYS } = await import('../src/utils/settingsRevs.js');
+    const faults = [...SITE_FILES, SENDER, HOOK].flatMap((f) => updaterFaults(f, read(f), new Set(REV_KEYS)));
     faults.push(...SITE_FILES.flatMap((f) => landFaults(f, read(f))));
     assert.deepEqual(faults, []);
     for (const f of B3A_FILES) {
@@ -977,7 +1010,7 @@ test('S5 — every save that lands merges the tokens it answered — by revsAfte
     // B-3b's (state §0.228): Pipelines' one send and the calendar's two each land by the panel's landed; Edit brand's and
     // the Sales Manager's merge the tokens their send answered as it lands — `revs: revsAfter(<prev>.revs, <w>.revs)` in
     // an updater, in the branch for <w>.ok.
-    for (const [f, sends] of [[PIPELINES, 1], [CALENDAR, 2]]) {
+    for (const [f, sends] of [[PIPELINES, 1], [CALENDAR, 2], [CONNECTED_APPS, 3]]) {   // B-3c's three (state §0.229)
         let lands = 0;
         walk(astOf(read(f)).program, (n) => { if (callsNamed('landed')(n)) lands += 1; });
         assert.equal(lands, sends, `${f}: REGRESSION — a landed save's tokens never merged; the panel's next save refused against its own`);
@@ -1371,6 +1404,30 @@ test('S8 — the scanners read the Sales Manager\'s own tokens, on made-up sourc
         'setSettings(prev => ({ ...prev, [key]: t, users: prev.users.map(u => ({ ...u })) }));',
         'setSettings(prev => ({ ...prev, users: prev.users.map(u => u), teams: t }));',
     ]) assert.ok(updaters(bad) > 0, `not seen: ${bad}`);
+});
+
+// The list rule beside a key no token covers (state §0.229): Connected apps' request puts one app's request into
+// integrationRequests — the server's own (Q15), outside REV_KEYS — keyed by app id. That object is the key's own value,
+// set on the copy; a computed key of the copy itself, or under a key a token covers, is still a list set without its
+// token, and with no keys handed the rule reads as it did.
+test('S8 — the list rule reads an object under a key no token covers as that key\'s own, on made-up sources — only set on the copy, only outside REV_KEYS, only where the caller hands them (state §0.229)', async () => {
+    const { REV_KEYS } = await import('../src/utils/settingsRevs.js');
+    const tokened = new Set(REV_KEYS);
+    assert.ok(!tokened.has('integrationRequests') && tokened.has('quotaData') && tokened.has('connectedApps'), 'integrationRequests carries no token (Q15); quotaData and connectedApps do');
+    const updaters = (body, keys = tokened) => updaterFaults('src/made.jsx', body, keys).length;
+    const REQUEST = 'setSettings(prev => ({ ...prev, integrationRequests: { ...(prev.integrationRequests || {}), [app.id]: data.request } }));';
+    assert.equal(updaters(REQUEST), 0, 'one app\'s request, under the key no token covers');
+    assert.equal(updaters('setSettings((s) => ({ ...s, integrationRequests: { [id]: r } }));'), 0, 'its own binding');
+    assert.ok(updaters(REQUEST, null) > 0, 'no keys handed: read as before');
+    for (const [bad, why] of [
+        ['setSettings(prev => ({ ...prev, [key]: t }));', 'a computed key of the copy'],
+        ['setSettings(prev => ({ ...prev, quotaData: { ...prev.quotaData, [k]: v } }));', 'under a key a token covers'],
+        ['setSettings(prev => ({ ...prev, connectedApps: { ...prev.connectedApps, [id]: true } }));', 'under connectedApps, which a token covers'],
+        ['setSettings(prev => ({ ...prev, integrationRequests: r, [key]: t }));', 'a computed key of the copy beside it'],
+        ['setSettings(prev => ({ ...prev, [k2]: { ...prev[k2], [k]: v } }));', 'under a computed key'],
+        ['setSettings(prev => ({ ...prev, x: { integrationRequests: { [k]: v } } }));', 'not set on the copy'],
+        ['setSettings(prev => ({ ...other, integrationRequests: { [k]: v } }));', 'another object spread, not the copy'],
+    ]) assert.ok(updaters(bad) > 0, `not seen: ${why} — ${bad}`);
 });
 
 test('S8 — the suites list holds this file: the harness grades it', () => {
@@ -2280,6 +2337,222 @@ test("S10 — a SPIFF's Remove answered late, run as written (state §0.228): it
     assert.equal(declOrNull(src, 'AdminTab', 'spiffBoard'), 'React.useRef(null)', 'the board as drawn is one ref across renders');
 });
 
+// ── S10 — B-3c's saves, run as written (state §0.229) ──────────────────────
+
+// Connected apps' handlers as written (JB3-3): the hook and the sender stubbed. putSettings answers `answer` or throws
+// `refusal`, and records the app's copy as it stood when the save went out (never optimistic); panelStale answers
+// `took`; takeLatestSettings answers `latest` — put into the copy through the setter it is handed — or null. Answers
+// the steps in order, the card's notes, what went to AdminView, what it threw and the copy. No URL here is real.
+const CA_COPY = () => ({ connectedApps: { slack: false, kept: 1 }, slackConfig: { webhookUrl: 'https://example.invalid/old-hook', channel: '#old' },
+    integrationRequests: { zoom: { requestedAt: 'R0' } }, competitors: ['kept'], revs: { slackConfig: 'NEWER' } });
+const CA_FORM = { enabled: false, token: null, source: 'Web Form', thankYouUrl: null };
+const runConnected = async (handler, args, { answer = { success: true, revs: { slackConfig: 'S2' } }, refusal = null, took = false, latest = null, scope = {} } = {}) => {
+    const { PANEL_CHANGED_WEBHOOK } = await import('../src/utils/settingsRevs.js');
+    const steps = [], notes = [], handed = [];
+    const opened = { slackConfig: 'OPENED' };
+    const st = { copy: CA_COPY() };
+    const setSettings = (f) => { steps.push(['set', typeof f]); st.copy = typeof f === 'function' ? f(st.copy) : f; };
+    let thrown = null;
+    try {
+        await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', handler), {
+            PANEL_CHANGED_WEBHOOK, opened, setSettings,
+            connectedApps: CA_COPY().connectedApps, webForm: CA_FORM,
+            putSettings: async (...a) => { steps.push(['put', ...a, JSON.parse(JSON.stringify(st.copy))]); if (refusal) throw refusal; return answer; },
+            landed: (a) => steps.push(['landed', a]),
+            reopen: (r) => steps.push(['reopen', r]),
+            takeLatestSettings: async (set) => { steps.push(['take', set === setSettings]); if (latest) set(() => latest); return latest; },
+            panelStale: async (e, words) => { handed.push([e, words]); return took; },
+            setSlackModal: (v) => steps.push(['modal', v]),
+            setBusy: (v) => steps.push(['busy', v]),
+            note: (key, text) => notes.push([key, text]),
+            // The panel's own states and GET before §0.229, kept so old code fails on what it does, not on a missing name.
+            slackConfig: CA_COPY().slackConfig, requests: CA_COPY().integrationRequests,
+            setSlackConfig: (v) => steps.push(['own', 'slackConfig', v]), setConnectedApps: (v) => steps.push(['own', 'connectedApps', v]),
+            setWebForm: (v) => steps.push(['own', 'webForm', v]),
+            dbFetch: async (url) => { steps.push(['get', url]); return { ok: true, status: 200, json: async () => ({ settings: latest }) }; },
+            ...scope,
+        }, ...args);
+    } catch (e) { thrown = e; }
+    return { steps, kinds: steps.map((s) => s[0]), notes, said: notes.filter(([, t]) => t), handed, thrown, opened, copy: st.copy, PANEL_CHANGED_WEBHOOK };
+};
+
+test('S10 — Connected apps\' Slack Save, run as written (JB3-3): the tokens it opened with, never optimistic — the copy set once it lands, then landed, then the modal closed; stale — to AdminView with the webhook words, rethrown to the modal, nothing set; unread, or refused otherwise — rethrown, nothing set', async () => {
+    const CONFIG = { webhookUrl: 'https://example.invalid/new-hook', channel: '#new', enabled: true, alerts: {} };
+    const answer = { success: true, revs: { slackConfig: 'S2', connectedApps: 'C2' } };
+    const ok = await runConnected('handleSaveSlack', [CONFIG], { answer });
+    const put = ok.steps.find((s) => s[0] === 'put');
+    assert.ok(put, `REGRESSION: the save never went through the sender — ${ok.thrown?.message}`);
+    assert.deepEqual(put[1], { slackConfig: CONFIG, connectedApps: { slack: true, kept: 1 } }, 'one PUT: the config, and Slack marked connected beside the other apps');
+    assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
+    assert.deepEqual(put[3], CA_COPY(), 'REGRESSION (state §0.229): optimistic — the copy changed before the save landed');
+    assert.deepEqual(ok.kinds, ['put', 'set', 'landed', 'modal'], 'the send, the mirror, landed, then the modal closed');
+    assert.equal(ok.steps[1][1], 'function', 'the mirror an updater');
+    assert.equal(ok.steps[2][1], answer, 'REGRESSION: landed handed something other than the send\'s answer');
+    assert.equal(ok.steps[3][1], false);
+    assert.deepEqual(ok.copy, { ...CA_COPY(), slackConfig: CONFIG, connectedApps: { slack: true, kept: 1 } }, 'the copy as saved — what Reports\' Slack check reads');
+    assert.deepEqual([ok.thrown, ok.handed, ok.notes], [null, [], []]);
+
+    const refusal = await staleRefusal('slackConfig');
+    const taken = await runConnected('handleSaveSlack', [CONFIG], { refusal, took: true });
+    assert.deepEqual(taken.handed, [[refusal, taken.PANEL_CHANGED_WEBHOOK]], 'REGRESSION (JB3-3): a stale refusal not handed to AdminView, or without the words that ask for the webhook URL again');
+    assert.equal(taken.thrown, refusal, 'rethrown — the modal says it, while it is still there');
+    assert.deepEqual([taken.kinds, taken.copy], [['put'], CA_COPY()], 'REGRESSION: the refused config reaches the copy, or the modal closes as if saved');
+    // The URL unchanged — only the channel changed: the panels' words, never a request for a URL nobody typed (the
+    // correctness critic's finding 1, state §0.229) — Configure fills it again from the latest.
+    const same = await runConnected('handleSaveSlack', [{ ...CONFIG, webhookUrl: CA_COPY().slackConfig.webhookUrl }], { refusal, took: true });
+    assert.deepEqual(same.handed, [[refusal, undefined]], 'REGRESSION (state §0.229): a stale Save that sent the stored URL asked for the webhook URL again — none was typed');
+    const first = await runConnected('handleSaveSlack', [CONFIG], { refusal, took: true, scope: { slackConfig: {} } });
+    assert.deepEqual(first.handed, [[refusal, first.PANEL_CHANGED_WEBHOOK]], 'REGRESSION (state §0.229): the URL typed on a first connect, refused as stale, not asked for again — the remount cleared it');
+    const blank = await runConnected('handleSaveSlack', [{ ...CONFIG, webhookUrl: '' }], { refusal, took: true, scope: { slackConfig: {} } });
+    assert.deepEqual(blank.handed, [[refusal, undefined]], 'no URL stored and none sent: the panels\' words');
+    const unread = await runConnected('handleSaveSlack', [CONFIG], { refusal, took: false });
+    assert.deepEqual([unread.handed.length, unread.thrown, unread.kinds], [1, refusal, ['put']], 'the latest unread: rethrown — the modal shows the server\'s words, the typed URL kept');
+    const refused = await runConnected('handleSaveSlack', [CONFIG], { refusal: new Error('Not a Slack Incoming Webhook URL.') });
+    assert.deepEqual([refused.handed, refused.thrown?.message, refused.kinds, refused.copy], [[], 'Not a Slack Incoming Webhook URL.', ['put'], CA_COPY()], 'a refusal that is not stale: never AdminView\'s, nothing to put back');
+});
+
+test('S10 — Connected apps\' Disconnect, run as written (state §0.229): the tokens it opened with; landed after the mirror; stale — to AdminView, nothing of the old mount after it; unread, or refused otherwise — the words on the Slack card', async () => {
+    const LIVE = { connectedApps: { slack: true, kept: 1 } };
+    const answer = { success: true, revs: { slackConfig: 'S2', connectedApps: 'C2' } };
+    const ok = await runConnected('handleDisconnectSlack', [], { answer, scope: LIVE });
+    const put = ok.steps.find((s) => s[0] === 'put');
+    assert.ok(put, `REGRESSION: the save never went through the sender — ${ok.thrown?.message}`);
+    assert.deepEqual(put[1], { connectedApps: { slack: false, kept: 1 }, slackConfig: {} });
+    assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
+    assert.deepEqual(put[3], CA_COPY(), 'REGRESSION (state §0.229): optimistic — the copy changed before the save landed');
+    assert.deepEqual(ok.kinds, ['busy', 'put', 'set', 'landed', 'busy'], 'held, the send, the mirror, landed, freed');
+    assert.deepEqual([ok.steps[0][1], ok.steps[2][1], ok.steps[3][1], ok.steps[4][1]], ['slack', 'function', answer, null], 'the mirror an updater; landed the send\'s answer');
+    assert.deepEqual(ok.copy, { ...CA_COPY(), connectedApps: { slack: false, kept: 1 }, slackConfig: {} });
+    assert.deepEqual([ok.said, ok.handed, ok.thrown], [[], [], null]);
+    assert.deepEqual(ok.notes, [['slack', '']], 'the card\'s line cleared as it starts');
+
+    const refusal = await staleRefusal('connectedApps');
+    const taken = await runConnected('handleDisconnectSlack', [], { refusal, took: true, scope: LIVE });
+    assert.deepEqual(taken.handed, [[refusal, undefined]], 'REGRESSION (J-B5): a stale refusal not handed to AdminView — with the hook\'s own words: no URL was typed');
+    assert.deepEqual([taken.kinds, taken.said, taken.thrown], [['busy', 'put'], [], null], 'REGRESSION (J-B5): the old mount says words, or sets anything, once the latest is taken');
+    const unread = await runConnected('handleDisconnectSlack', [], { refusal, took: false, scope: LIVE });
+    assert.deepEqual(unread.said, [['slack', `Not disconnected — ${refusal.message}`]], 'the latest unread: the server\'s words on the Slack card');
+    assert.deepEqual([unread.handed.length, unread.kinds, unread.copy], [1, ['busy', 'put', 'busy'], CA_COPY()], 'nothing set, the button freed');
+    const gone = await runConnected('handleDisconnectSlack', [], { refusal: new Error('Server error 500'), scope: LIVE });
+    assert.deepEqual([gone.handed, gone.said], [[], [['slack', 'Not disconnected — Server error 500']]], 'a refusal that is not stale: its words, never AdminView\'s');
+});
+
+test('S10 — Connected apps\' web form, run as written (critic A7): the tokens it opened with; landed, then the latest taken — the minted link and its tokens into the copy as one set — and the panel reopened on its tokens; the latest unread — said on the card; stale — to AdminView; unread — the server\'s words', async () => {
+    const answer = { success: true, revs: { webToLead: 'W2' } };
+    const latest = { ...CA_COPY(), webToLead: { enabled: true, token: 'T'.repeat(32) }, revs: { webToLead: 'W2', slackConfig: 'L' } };
+    const ok = await runConnected('saveWebForm', [{ enabled: true }], { answer, latest });
+    const put = ok.steps.find((s) => s[0] === 'put');
+    assert.ok(put, `REGRESSION: the save never went through the sender — ${ok.thrown?.message}`);
+    assert.deepEqual(put[1], { webToLead: { ...CA_FORM, enabled: true } }, 'the form as drawn, the change over it');
+    assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
+    assert.deepEqual(ok.kinds, ['busy', 'put', 'landed', 'take', 'set', 'reopen', 'busy'], 'REGRESSION (critic A7): landed, then the latest taken, then the panel reopened on it');
+    assert.equal(ok.steps[2][1], answer, 'REGRESSION: landed handed something other than the send\'s answer');
+    assert.equal(ok.steps[3][1], true, 'the latest taken into the app\'s copy, through its setter');
+    assert.equal(ok.steps[5][1], latest.revs, 'REGRESSION: the panel keeps the tokens it opened with — its next save refused against the latest it took');
+    assert.equal(ok.copy, latest, 'the minted link on the card — read, never minted here');
+    assert.deepEqual([ok.said, ok.handed, ok.thrown], [[], [], null]);
+    assert.deepEqual(ok.notes, [['webform', '']], 'the card\'s line cleared as it starts');
+
+    const blind = await runConnected('saveWebForm', [{ rotate: true }], { answer, latest: null });
+    assert.deepEqual(blind.kinds, ['busy', 'put', 'landed', 'take', 'busy'], 'nothing reopened on a read that failed');
+    assert.deepEqual(blind.said, [['webform', 'Saved — the new link could not be read; reload the page to see it.']], 'REGRESSION (critic A7): saved, the new link unread — and the card says nothing');
+
+    const refusal = await staleRefusal('webToLead');
+    const taken = await runConnected('saveWebForm', [{ enabled: false }], { refusal, took: true });
+    assert.deepEqual(taken.handed, [[refusal, undefined]], 'REGRESSION (J-B5): a stale refusal not handed to AdminView');
+    assert.deepEqual([taken.kinds, taken.said, taken.thrown], [['busy', 'put', 'busy'], [], null], 'no read of its own, no words from the old mount');
+    const unread = await runConnected('saveWebForm', [{ enabled: false }], { refusal, took: false });
+    assert.deepEqual(unread.said, [['webform', `Not saved — ${refusal.message}`]], 'the latest unread: the server\'s words on the card');
+    const gone = await runConnected('saveWebForm', [{ enabled: false }], { refusal: new Error('Server error 500') });
+    assert.deepEqual([gone.handed, gone.said, gone.kinds], [[], [['webform', 'Not saved — Server error 500']], ['busy', 'put', 'busy']], 'a refusal that is not stale: its words, never AdminView\'s');
+});
+
+test('S10 — Connected apps\' request, run as written (state §0.229): it lands in the app\'s copy by an updater — the one app\'s request beside the others, whatever landed meanwhile — and only in the org that asked: answered, refused or failed after a switch, nothing set and nothing said', async () => {
+    const APP = { id: 'hubspot', name: 'HubSpot' };
+    const REQ = { requestedAt: '2026-11-03T00:00:00.000Z', byName: 'Ann' };
+    const run = async ({ ok = true, status = 200, body = { request: REQ }, offline = false, switchAt = null } = {}) => {
+        const st = { org: 'org_A', copy: CA_COPY(), sent: [], sets: [], notes: [], busy: [], own: [] };
+        await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', 'requestApp'), {
+            requestOrg: () => st.org, stillOrg: (o) => o === st.org,
+            dbFetch: async (url, opts) => {
+                st.sent.push([url, opts.method, JSON.parse(opts.body)]);
+                // Meanwhile another request lands in the copy.
+                st.copy = { ...st.copy, integrationRequests: { ...st.copy.integrationRequests, salesforce: { requestedAt: 'R1' } } };
+                if (switchAt === 'request') st.org = 'org_B';
+                if (offline) throw new Error('offline');
+                return { ok, status, json: async () => { if (switchAt === 'body') st.org = 'org_B'; return body; } };
+            },
+            setSettings: (f) => { st.sets.push(typeof f); st.copy = typeof f === 'function' ? f(st.copy) : f; },
+            note: (k, t) => st.notes.push([k, t]), setBusy: (v) => st.busy.push(v),
+            setRequests: (f) => st.own.push(f),   // the panel's own state before §0.229 — old code fails on what it sets
+        }, APP);
+        return st;
+    };
+    const ok = await run();
+    assert.deepEqual(ok.sent, [['/.netlify/functions/integration-requests', 'POST', { appId: 'hubspot' }]]);
+    assert.deepEqual(ok.sets, ['function'], 'REGRESSION (state §0.229): the request not set into the app\'s copy, or set with a value — what landed meanwhile put back');
+    assert.deepEqual(ok.copy.integrationRequests, { zoom: { requestedAt: 'R0' }, salesforce: { requestedAt: 'R1' }, hubspot: REQ }, 'REGRESSION: the request not in the copy, or another app\'s lost');
+    assert.deepEqual([ok.copy.revs, ok.copy.competitors], [CA_COPY().revs, ['kept']], 'nothing else touched — no token: integrationRequests carries none (Q15)');
+    assert.deepEqual([ok.notes, ok.busy], [[['hubspot', '']], ['hubspot', null]]);
+    for (const switchAt of ['request', 'body']) {
+        const late = await run({ switchAt });
+        assert.deepEqual([late.sets, late.notes], [[], [['hubspot', '']]], `REGRESSION (state §0.229): answered after a switch (${switchAt}) — the last org's request set into the new org's copy`);
+        const lateRefused = await run({ switchAt, ok: false, status: 400, body: { error: 'Unknown integration.' } });
+        assert.deepEqual([lateRefused.sets, lateRefused.notes], [[], [['hubspot', '']]], `refused after a switch (${switchAt}): nothing said on the new org's screen`);
+    }
+    const lateOffline = await run({ switchAt: 'request', offline: true });
+    assert.deepEqual([lateOffline.sets, lateOffline.notes], [[], [['hubspot', '']]], 'failed after a switch: nothing said on the new org\'s screen');
+    const refused = await run({ ok: false, status: 400, body: { error: 'Unknown integration.' } });
+    assert.deepEqual([refused.sets, refused.notes, refused.busy], [[], [['hubspot', ''], ['hubspot', 'Not requested — Unknown integration.']], ['hubspot', null]], 'refused in the org that asked: said on its row');
+    const offline = await run({ offline: true });
+    assert.deepEqual(offline.notes.at(-1), ['hubspot', 'Not requested — offline']);
+    const bare = await run({ ok: false, status: 503, body: {} });
+    assert.deepEqual(bare.notes.at(-1), ['hubspot', 'Not requested — The server returned 503.']);
+});
+
+// An org that has saved no settings has none of Connected apps' keys (settings.mjs answers `{ settings: null }`, the
+// copy is the defaults — settingsAsLoaded): the panel's own reads of the copy, run as written, read each as empty
+// (critic A1). Its derived values are taken from the component in its order, the render's counts with them.
+test('S10 — Connected apps drawn from the copy (critic A1, state §0.229): for an org that saved no settings — the defaults, no connectedApps, slackConfig, integrationRequests or webToLead — each reads as empty, drawn Off with nothing live; a saved row reads as saved; the copy read there alone', async () => {
+    const { DEFAULT_SETTINGS, settingsAsLoaded } = await import('../src/utils/settingsDefaults.js');
+    const { cleanWebToLead } = await import('../src/utils/webToLead.js');
+    const KEYS = { connectedApps: 'connectedApps', slackConfig: 'slackConfig', integrationRequests: 'requests', webToLead: 'webForm' };
+    for (const k of Object.keys(KEYS)) assert.ok(!(k in DEFAULT_SETTINGS), `${k} is a default now — this case reads what an org with no row has`);
+    const src = read(CONNECTED_APPS), program = astOf(src).program;
+    const DERIVED = ['connectedApps', 'slackConfig', 'requests', 'webForm', 'slackConnected', 'connByProvider', 'liveCount', 'requestedCount'];
+    const decls = [];
+    walk(program, (n) => {
+        const body = componentBody(n, 'ConnectedAppsDetail');
+        if (!body) return;
+        for (const st of body) {
+            if (st.type === 'VariableDeclaration' && st.declarations.every((d) => d.id.type === 'Identifier' && DERIVED.includes(d.id.name))) decls.push(...st.declarations.map((d) => [d.id.name, src.slice(st.start, st.end)]));
+        }
+    });
+    assert.deepEqual(decls.map(([name]) => name), DERIVED, 'REGRESSION (critic A1): the panel holds a copy of its own (a state) — Slack, the requests or the web form not read from the prop');
+    const draw = (settings) => new Function('settings', 'cleanWebToLead', 'cal', 'bcc', 'CALENDARS', `${decls.map(([, t]) => t).join('\n')}\nreturn { ${DERIVED.join(', ')} };`)(
+        settings, cleanWebToLead, null, null, [{ provider: 'google' }, { provider: 'outlook' }]);
+    for (const [label, settings] of [['the defaults', DEFAULT_SETTINGS], ['as loaded with no row', settingsAsLoaded(null, null)]]) {
+        let got = null;
+        assert.doesNotThrow(() => { got = draw(settings); }, `${label}: REGRESSION (critic A1) — a bare read of a key the copy does not have`);
+        assert.deepEqual([got.connectedApps, got.slackConfig, got.requests], [{}, {}, {}], `${label}: each read as empty`);
+        assert.deepEqual(got.webForm, cleanWebToLead(undefined), `${label}: the web form Off, no link`);
+        assert.deepEqual([got.slackConnected, got.liveCount, got.requestedCount], [false, 0, 0], `${label}: nothing live, nothing requested`);
+    }
+    const TOKEN = 'T'.repeat(32);
+    const saved = draw({ ...DEFAULT_SETTINGS, connectedApps: { slack: true }, slackConfig: { webhookUrl: 'https://example.invalid/hook', channel: '#deals' },
+        integrationRequests: { hubspot: { requestedAt: 'R1' }, zoom: {} }, webToLead: { enabled: true, token: TOKEN } });
+    assert.deepEqual([saved.slackConnected, saved.liveCount, saved.requestedCount, saved.webForm.token], [true, 2, 1, TOKEN], 'a saved row read as saved');
+    // The copy's four keys are read there alone: each once, in its own derived value.
+    const reads = [];
+    walk(program, (n, anc) => {
+        if (!isMember(n) || n.object.type !== 'Identifier' || n.object.name !== 'settings' || !(propName(n) in KEYS)) return;
+        if (!anc.some((a) => a.type === 'VariableDeclarator' && a.id.name === 'ConnectedAppsDetail')) return;
+        const into = anc.findLast((a) => a.type === 'VariableDeclarator' && DERIVED.includes(a.id?.name));
+        reads.push([propName(n), into ? into.id.name : null]);
+    });
+    assert.deepEqual(reads, Object.entries(KEYS), 'REGRESSION (critic A1): the copy read past its guarded value — a bare read where the key is not there');
+});
+
 // ── S11 — AdminView's stale handler and leave guard, run as written ─────────
 
 const runPanelStale = async ({ latest = { revs: { k: 'L' } }, take = null, args = [] } = {}) => {
@@ -2698,4 +2971,27 @@ test("S12 — the Sales Manager's commission plan and SPIFF board locked while a
         assert.equal(handed[flag], flag, `${flag}: REGRESSION (state §0.228) — not handed to AdminTab: the card unlocks when the banner flips mid-save`);
         assert.ok(params.includes(flag), `${flag}: AdminTab reads it`);
     }
+});
+
+test('S12 — B-3c\'s pins (state §0.229): the webhook words, verbatim (JB3-3); the web form reopens on the latest it took — the hook\'s own reopen, under that read; the panel mounted with the copy and its setter', async () => {
+    const { PANEL_CHANGED, PANEL_CHANGED_WEBHOOK } = await import('../src/utils/settingsRevs.js');
+    assert.equal(PANEL_CHANGED_WEBHOOK, 'These settings changed since this page loaded — it now shows the latest. Make your change again. Enter the webhook URL again.', 'JB3-3, verbatim');
+    assert.equal(PANEL_CHANGED_WEBHOOK, PANEL_CHANGED + ' Enter the webhook URL again.', 'the panels\' words, then the URL\'s');
+    const src = read(CONNECTED_APPS), program = astOf(src).program;
+    const calls = [];
+    walk(program, (n, anc) => { if (callsNamed('reopen')(n)) calls.push({ n, anc }); });
+    assert.equal(calls.length, 1, 'one reopen — the web form\'s');
+    const { n, anc } = calls[0];
+    assert.equal(hookFault('reopen', anc), null, 'reopen is the panel\'s own');
+    assert.equal(src.slice(n.start, n.end), 'reopen(latest.revs)', 'REGRESSION (critic A7): reopened on tokens other than those of the latest it took');
+    const iff = anc.findLast((a) => a.type === 'IfStatement');
+    assert.ok(iff && iff.test.type === 'Identifier' && iff.test.name === 'latest' && anc.includes(iff.consequent), 'only when the latest was read');
+    const b = bindingOf('latest', anc);
+    const take = b?.decl?.init?.type === 'AwaitExpression' ? b.decl.init.argument : null;
+    assert.ok(b && b.kind === 'const' && callsNamed('takeLatestSettings')(take) && take.arguments.length === 1 && take.arguments[0].name === 'setSettings',
+        'latest is the read the sender took into the app\'s copy');
+    const fn = anc.findLast(isFn);
+    assert.equal(anc[anc.indexOf(fn) - 1]?.id?.name, 'saveWebForm', 'in the web form\'s save');
+    assert.equal(count(withoutComments(read(ADMIN)), '<ConnectedAppsDetail settings={settings} setSettings={setSettings} onBack={onBack}/>'), 1,
+        'REGRESSION (critic A1): the panel mounted without the copy it reads, or its setter');
 });

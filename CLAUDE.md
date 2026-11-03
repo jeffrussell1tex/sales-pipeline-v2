@@ -156,7 +156,9 @@ One commit per verified batch; doc patch in the same commit.
   panel again on the latest and says so (guide §18b114 rule 10);
   since §0.228 Pipelines, Calendar, Edit brand and the Sales Manager too
   — one save at a time, a draft's token taken when it begins (rule 11);
-  Connected apps from B-3c.
+  since §0.229 Connected apps too, reading the settings prop — no settings
+  screen loads its own copy (rule 12). Every settings screen names its
+  tokens.
 - Persistent data rule: anything that must survive a refresh is saved via
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.

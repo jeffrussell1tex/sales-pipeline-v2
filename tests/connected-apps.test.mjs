@@ -59,7 +59,7 @@ test('the modal tests the URL the user typed and saves it enabled', () => {
 
 test('the panel still saves slackConfig and marks slack connected in one PUT', () => {
     const s = code(read(CA));
-    assert.ok(s.includes('await putSettings({ slackConfig: config, connectedApps: nextApps });'));
+    assert.ok(s.includes('const answer = await putSettings({ slackConfig: config, connectedApps: nextApps }, opened);'), 'one PUT, naming the tokens the panel opened with (state §0.229)');
     assert.ok(s.includes('setSlackModal(false);          // only close once the write has landed'));
 });
 
@@ -69,8 +69,14 @@ test('the panel still saves slackConfig and marks slack connected in one PUT', (
 test('a refused Save is shown inside the modal, under the field — not in the panel banner behind it', () => {
     const s = code(read(CA));
     assert.ok(s.includes("            setMsg({ ok: false, text: 'Not saved — ' + e.message });"), 'the modal catches what onSave throws and shows it');
-    assert.ok(s.includes('            throw e;                       // the modal shows it under the field'), 'the panel restores its snapshot and rethrows');
-    assert.ok(s.indexOf('setSlackConfig(cfgSnap);') < s.indexOf('            throw e;'), 'the snapshot is restored before the rethrow');
+    assert.ok(s.includes('            throw e;                       // the modal shows it under the field'), 'the panel rethrows');
+    // Not optimistic since §0.229: the copy changes once the save has landed, so a refusal has nothing to put back; a
+    // stale one is handed to AdminView (J-B5) before the rethrow.
+    assert.ok(!s.includes('cfgSnap') && !s.includes('appSnap'), 'no snapshot kept to put back');
+    const sendAt = s.indexOf('const answer = await putSettings({ slackConfig: config');
+    assert.ok(sendAt >= 0 && sendAt < s.indexOf('setSettings(prev => ({ ...prev, slackConfig: config, connectedApps: nextApps }));'), 'the copy set once the save has landed, never before it');
+    const staleAt = s.indexOf("            if (e.stale) await panelStale(e, (config.webhookUrl || '') !== (slackConfig.webhookUrl || '') ? PANEL_CHANGED_WEBHOOK : undefined);");
+    assert.ok(staleAt >= 0 && staleAt < s.indexOf('            throw e;'), 'a stale refusal handed to AdminView before the rethrow');
     assert.ok(!s.includes('Slack settings not saved'), 'the banner text is gone');
     assert.ok(s.includes('setSaving(true); setMsg(null);'), 'a stale test message is cleared when Save starts');
     assert.doesNotMatch(s, /testMsg/, 'one message slot serves Send test message and Save');
@@ -79,13 +85,14 @@ test('a refused Save is shown inside the modal, under the field — not in the p
 // §0.94 (ninth session, Jeff: "make sure the error codes will show in the
 // correct place for the rest of the connected apps — both currently connected
 // apps and the request ones"): every action reports on its own card or row;
-// the page banner is for the settings load alone, when nothing else is on
-// screen to say it.
-test('every card and row action reports on its own surface — the page banner is for the settings load only', () => {
+// the page banner was for the settings load alone, when nothing else was on
+// screen to say it. Since §0.229 the panel has no settings load — Settings
+// draws it once the org's settings are in — and no page banner.
+test('every card and row action reports on its own surface — no page banner: the panel has no settings load of its own', () => {
     const s = code(read(CA));
     assert.match(s, /^const CardNote = \(\{ text, tone = 'danger' \}\) => text \? \(/m, 'module-scope note (tone: danger for a refusal, ok for a landed Connect — §0.97)');
-    assert.equal((s.match(/setError\(/g) || []).length, 1, 'setError is called once — the settings load');
-    assert.ok(s.includes('setError(`Settings could not be loaded — ${e.message}`)'), 'and it says what failed');
+    assert.equal((s.match(/setError\(/g) || []).length, 0, 'no page banner to set — every action says it on its own card or row (state §0.229)');
+    assert.ok(!s.includes('Settings could not be loaded') && !/\{error && </.test(s), 'the banner, and the settings load it was for, gone');
     assert.ok(s.includes("note('slack', `Not disconnected — ${e.message}`)"), 'Slack Disconnect → the Slack card');
     assert.ok(s.includes("note('cal:' + provider, `Not disconnected — ${r.error}`)"), 'calendar Disconnect → that calendar card');
     assert.ok(s.includes('note(app.id, `Not requested — ${e.message}`)'), 'Request → that row');
@@ -150,7 +157,7 @@ test('the connect mockup is gone: no Morgan Reyes, no INT_APPS, no Authorize, no
 
 test('the panel reads the three real sources and renders the four real integrations', () => {
     const s = code(read(CA));
-    assert.ok(s.includes("dbFetch('/.netlify/functions/settings')"), 'Slack + requests');
+    assert.ok(!s.includes("dbFetch('/.netlify/functions/settings')") && s.includes('const connectedApps = settings?.connectedApps || {};') && s.includes('const requests      = settings?.integrationRequests || {};'), 'Slack + requests: the app\'s copy, from the prop — no settings load of its own (state §0.229)');
     assert.ok(s.includes("dbFetch('/.netlify/functions/calendar-connections')"), 'calendar state');
     assert.ok(s.includes("dbFetch('/.netlify/functions/email-inbound')"), 'the BCC address');
     assert.ok(s.includes("const connectCalendar = (provider, scope) => startCalendarConnect({ provider, scope, from: 'apps' });"), 'Connect is the real OAuth start (calendarConnect.js, state §0.160)');

@@ -235,6 +235,20 @@ test('the scanner sees what it is for: a late set, a late write, a write in an a
     assert.deepEqual(misses, ['1 setAccounts', '2 dbWrite', '3 dbWrite', '4 setUndoToast', '7 setLeads', '9 writeSettings', '12 putSettings', '13 addToSettingsList']);
 });
 
+// Connected apps' request (state §0.229 — batch 4b-3, step B-3c): the panel reads the app's copy now, so a request's
+// answer lands in it (setSettings) — checked against the org that asked first. The file as written is clean; with that
+// check taken out, the scan reports the set: the rule holds this file by its check.
+test('Connected apps\' request lands in the app\'s copy only in the org that asked: as written, clean; its check taken out, the scan reports the set (state §0.229)', () => {
+    const file = 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx';
+    const src = read(file);
+    assert.deepEqual(scanText(file, src), [], 'as written: every late set checked');
+    const CHECK_LINE = /^[ \t]*if \(!stillOrg\(askedOrg\)\) return;[ \t]*\/\/ answered after a switch[^\r\n]*\r?\n/m;
+    assert.equal((src.match(new RegExp(CHECK_LINE.source, 'gm')) || []).length, 1, 'the request\'s check, after its answer is read');
+    const unchecked = scanText(file, src.replace(CHECK_LINE, ''));
+    assert.deepEqual(unchecked.map((v) => v.what), ['setSettings'], 'REGRESSION: the scan misses a late set into the copy');
+    assert.ok(unchecked[0].line.startsWith('setSettings(prev => ({ ...prev, integrationRequests:'), unchecked[0].line);
+});
+
 // ── putSettings — run ────────────────────────────────────────────────────────
 
 test('putSettings answers only in the org that asked: after a switch it never settles; without one it answers, and throws on a refusal', async () => {

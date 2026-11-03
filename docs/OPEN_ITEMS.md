@@ -265,8 +265,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred, NOT pushed:**
      Pipelines, the holiday calendar, Edit brand and the Sales Manager
      name their tokens — one save at a time, a stale refusal shown on the
-     latest and said. Next: B-3c (Connected apps), then one scoped run
-     over B-2, all of B-3 and §0.227 before any push.
+     latest and said. **Step B-3c built 3 Nov (§0.229; guide §18b114
+     rule 12; STEP-B.md §4b), NOT committed, harness deferred:** Connected
+     apps reads the settings prop and names its tokens — every settings
+     screen now does. Next: the one scoped run over B-2, all of B-3 and
+     §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) before any
+     push.
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -2166,6 +2170,38 @@ to add meetings. Nothing in the app adds a meeting to Google:
   says "That change was not saved…" over a change that landed. Nothing is
   lost or written twice. Read the drafts through a ref, or skip a card
   whose flight settled. Low.
+- **Connected apps' one `busy` slot can refuse a user's own second save**
+  (§0.229's review, 3 Nov): every card shares `busy`, so one card's
+  action re-enables another card's button while its save is still out;
+  a second Disconnect (say) then goes with the same tokens and is
+  refused as stale against the first — the panel drawn again with "These
+  settings changed…" over the user's own change. Nothing is lost. One
+  slot per card. Low.
+- **Connected apps' web form: a failed read-back leaves the token ahead
+  of the value** (§0.229's review, 3 Nov): `saveWebForm` merges the
+  answered tokens (`landed`) before it reads the latest; if that read
+  fails, the copy holds the new token with the old value, so the card
+  can show the form on after Turn off, and a New link from it is
+  accepted and turns the form back on. The note "Saved — the new link
+  could not be read…" is also wrong after Turn off. Older in kind (the
+  old code showed the same stale card with no token check). Mirror the
+  sent values before `landed`, and word the note for any save. Low.
+- **Connected apps' calendar Disconnect reads again after an org
+  switch** (§0.229's review, 3 Nov; older): `disconnectCalendar`'s
+  re-read goes out for the new org into an unmounted panel — a wasted
+  request, nothing shown. Low.
+- **Connected apps drawn again on a stale refusal reads its cards again**
+  (§0.229's review, 3 Nov): the J-B5 remount runs the panel's calendar,
+  email-logging and job-status reads again and clears the calendar's
+  return note. Nothing is wrong, three requests are spent. Low.
+- **Connected apps' "Saved — the new link could not be read" note is
+  drawn as a refusal** (§0.229's review, 3 Nov): the card's note takes the
+  danger colour by default, though the save landed. Low.
+- **Two older harness entries' mutants write a setter B-3c removed**
+  (§0.229's review, 3 Nov): the Slack Save and request entries (§0.98,
+  §0.170) mutate to `setError(…)`, which no longer exists; their text pins
+  still catch them, but the mutants describe code that can no longer be.
+  Re-point them to the card's own note (Jeff's call). Low.
 - **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
@@ -2338,10 +2374,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   pipelines". Older than §0.226. Medium.
 - **A workspace created by integration requests keeps `[]` vertical
   markets,** which reads like a list an Admin cleared. §0.170 (c).
-- **Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
-  as unconfigured until a reload. §0.170 (d).
-- **Pipelines, Company calendar and the quote brand editor** set the app's
-  copy first and put back a whole snapshot on failure. §0.170 (e).
+- ~~**Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
+  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229
+  (NOT committed): the panel reads the settings prop and sets the copy
+  once a save lands; Reports sees a Slack save at once.
+- ~~**Pipelines, Company calendar and the quote brand editor** set the app's
+  copy first and put back a whole snapshot on failure. §0.170 (e).~~ — the
+  snapshot and the brand DONE on dev in §0.228 (committed `724e98c`, NOT
+  pushed): Edit brand is no longer optimistic, and Pipelines and the
+  calendar roll back only the keys they sent, never a token. Still open by
+  design: Pipelines and the calendar set the copy before the save lands
+  (one save at a time, JB3-8), which guide §18b63 rule 3 otherwise forbids.
 - **A panel's own Save leaves a refused save's throw unhandled.**
   §0.170 (f). Since §0.226 not on the twenty-six panels it converted:
   `once` hangs `p.then(clear, clear)` on the save it returns, which
@@ -4535,7 +4578,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   misses — a 51st), and §0.225 edits three listed above (deal-modal-saves,
   late-answers, save-buttons), and §0.226 edits those three and
   quota-plan, so the one scoped run over B-2 and B-3 reads them short;
-  §0.227's tests/pain-points.test.mjs walks src too (a 52nd);
+  §0.227's tests/pain-points.test.mjs walks src too (a 52nd); §0.229
+  edits late-answers, connected-apps and settings-saves, all on it;
   what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
   part 4). Recommended: mutate-scope.mjs runs each edited test

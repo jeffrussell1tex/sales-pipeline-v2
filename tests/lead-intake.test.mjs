@@ -155,9 +155,9 @@ test('the Slack switch exists and the template is wired; the card lives in Conne
     assert.ok(slack.includes('    webLead: ({ name, company, email, phone, message }) => ({'));
     const card = code(read('src/Tabs/settings/integrations/ConnectedAppsDetail.jsx'));
     assert.ok(card.includes('const WebFormCard = ({ form, isAdmin, busy, note, onSave }) => {'), 'module scope, data as props');
-    assert.ok(card.includes("                setWebForm(cleanWebToLead(data.settings?.webToLead));"), 'read from the settings load');
-    assert.ok(card.includes('            await putSettings({ webToLead: { ...(webForm || {}), ...patch } });'), 'saved through the settings PUT');
-    assert.ok(card.includes("            const res  = await dbFetch('/.netlify/functions/settings');\n            const data = await res.json();\n            if (!res.ok) throw new Error(data.error || 'Saved, but the form settings could not be re-read');"), 're-read to learn the minted token');
+    assert.ok(card.includes('    const webForm       = cleanWebToLead(settings?.webToLead);'), 'read from the app\'s copy (state §0.229)');
+    assert.ok(card.includes('            const answer = await putSettings({ webToLead: { ...(webForm || {}), ...patch } }, opened);'), 'saved through the settings PUT, naming the tokens the panel opened with');
+    assert.ok(card.includes("            landed(answer);\n            const latest = await takeLatestSettings(setSettings);\n            if (latest) reopen(latest.revs);\n            else note('webform', 'Saved — the new link could not be read; reload the page to see it.');"), 'the latest read to learn the minted token — the copy and its tokens together, the panel reopened on them; unread, said on the card');
     assert.ok(card.includes("            note('webform', `Not saved — ${e.message}`);"), 'the outcome on the card (§18b32)');
     assert.ok(!card.includes('randomBytes') && !card.includes('randomUUID'), 'the client never mints');
     assert.ok(card.includes("<WebFormCard form={webForm} isAdmin={isAdmin} busy={busy === 'webform'} note={notes.webform} onSave={saveWebForm}/>"));

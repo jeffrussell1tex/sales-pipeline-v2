@@ -461,7 +461,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'audit-log')        return <AuditDetail     onBack={onBack}/>;
 
         // Integrations detail pages
-        if (id === 'apps')        return <ConnectedAppsDetail onBack={onBack}/>;
+        if (id === 'apps')        return <ConnectedAppsDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'api-keys')    return <ApiKeysDetail      onBack={onBack}/>;
         if (id === 'webhooks')    return <WebhooksDetail     onBack={onBack}/>;
         if (id === 'automations') return <AutomationsDetail  onBack={onBack}/>;

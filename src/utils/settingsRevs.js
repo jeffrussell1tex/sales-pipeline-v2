@@ -50,6 +50,8 @@ export const TEAM_MOVE_CHANGED_UNREAD = 'Saved, but the team list changed since 
 export const PANEL_CHANGED = 'These settings changed since this page loaded — it now shows the latest. Make your change again.';
 // Features: a typed API key is never kept across the latest — nor shown back (J-B12).
 export const PANEL_CHANGED_KEY = PANEL_CHANGED + ' Enter the API key again.';
+// Connected apps' Slack Save: a typed webhook URL is not kept across the latest either (JB3-3, state §0.229).
+export const PANEL_CHANGED_WEBHOOK = PANEL_CHANGED + ' Enter the webhook URL again.';
 // The leave guards, when "Save changes and continue" was refused as stale and the page took the latest (J-B11,
 // verbatim)…
 export const LEAVE_STALE = 'Another change landed first — the page now shows the latest. Your changes were not saved.';

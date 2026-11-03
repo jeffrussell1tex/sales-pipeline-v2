@@ -25,8 +25,11 @@
 //     a Connect.
 import React, { useState, useEffect } from 'react';
 import { startCalendarConnect } from '../../../utils/calendarConnect.js';
-import { dbFetch, dbWrite } from '../../../utils/storage';
-import { putSettings } from '../shared/saveSettings.js';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { putSettings, takeLatestSettings } from '../shared/saveSettings.js';
+// The saves name the tokens this panel opened with; a stale refusal draws it again on the latest (state §0.229).
+import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { PANEL_CHANGED_WEBHOOK } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { useApp } from '../../../AppContext';
 import { REQUESTABLE_APPS } from '../../../utils/integrationCatalog.js';
@@ -124,8 +127,10 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
     // A refused Save (400 from settings PUT — not a Slack URL; 403 — not an
     // Admin) is shown HERE, under the field the user is looking at. It used to
     // land in the panel's banner behind this open dialog (state §0.92, Jeff's
-    // screenshot). onSave restores the panel's snapshot and rethrows; on
-    // success the panel closes the modal and this component is gone.
+    // screenshot). onSave rethrows a refusal — the panel's copy is changed only
+    // once a save lands (state §0.229); refused as stale, the panel is drawn
+    // again on the latest and this dialog goes with it. On success the panel
+    // closes the modal and this component is gone.
     const handleSave = async () => {
         if (!webhookUrl.trim()) return;
         setSaving(true); setMsg(null);
@@ -353,7 +358,7 @@ const RequestRow = ({ app, request, onRequest, busy, last, note }) => (
     </div>
 );
 
-export const ConnectedAppsDetail = ({ onBack }) => {
+export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
     const { userRole, calConnectResult, setCalConnectResult } = useApp();
     // A Connect that started here comes back here (state §0.97): the outcome is
     // shown on that provider's card and cleared when the panel closes.
@@ -361,44 +366,32 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const isAdmin = userRole === 'Admin';
 
     const [slackModal,    setSlackModal]    = useState(false);
-    const [connectedApps, setConnectedApps] = useState({});   // { slack: true }
-    const [slackConfig,   setSlackConfig]   = useState({});   // { webhookUrl, channel, enabled }
-    const [requests,      setRequests]      = useState({});   // { [appId]: { requestedAt, byUserId, byName, note } }
+    // Slack, the requests and the web form are the app's copy of settings, read from the prop like every other
+    // panel (state §0.229 — JB3-3). An org that has saved no settings has none of these keys (settingsDefaults.js
+    // defines none): each reads as empty, never as a bare read of a key that is not there.
+    const connectedApps = settings?.connectedApps || {};              // { slack: true }
+    const slackConfig   = settings?.slackConfig || {};                // { webhookUrl, channel, enabled }
+    const requests      = settings?.integrationRequests || {};        // { [appId]: { requestedAt, byUserId, byName, note } }
+    const webForm       = cleanWebToLead(settings?.webToLead);        // §0.121 — its token is minted by the settings PUT
     const [cal,           setCal]           = useState(null); // { userConnections, orgConnections, providers }
     const [bcc,           setBcc]           = useState(null); // { address, configured }
-    const [webForm,       setWebForm]       = useState(null); // cleanWebToLead() of settings.webToLead (§0.121)
     const [jobs,          setJobs]          = useState(null); // jobHealth() rows — the Slack card says when alerts last ran (§0.98)
-    const [loading,       setLoading]       = useState(true);
-    const [error,         setError]         = useState('');   // the settings load only — nothing else on screen to say it
     const [busy,          setBusy]          = useState(null); // 'slack' | 'cal' | appId
+    // The tokens as this panel opened (state §0.229): every save names them, a landed save merges what it answered.
+    const { opened, landed, reopen, panelStale } = usePanelRevs(settings, setSettings);
     // Per-surface outcome lines (guide §18b32): 'slack', 'cal:<provider>', or an
     // app id from the catalogue. Each action clears its own key when it starts
     // and writes it on failure; the card or row renders it where the click was.
     const [notes,         setNotes]         = useState({});
     const note = (key, text) => setNotes(prev => ({ ...prev, [key]: text }));
 
-    // Three reads, one panel. Settings carries Slack and the requests;
-    // calendar-connections the real calendar state; email-inbound the address.
-    // (This panel self-fetches settings — pre-existing, and its other two
-    // sources are not settings at all.)
+    // Three reads, one panel: calendar-connections the real calendar state,
+    // email-inbound the address, job-status when the alerts last ran. Slack,
+    // the requests and the web form come from the settings prop (state §0.229):
+    // the panel's own settings load is gone, and with it its Loading… page and
+    // its banner — Settings draws no panel until the org's settings are in.
     useEffect(() => {
         let cancelled = false;
-        const load = async () => {
-            try {
-                const res  = await dbFetch('/.netlify/functions/settings');
-                const data = await res.json();
-                if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
-                setConnectedApps(data.settings?.connectedApps || {});
-                setSlackConfig(data.settings?.slackConfig || {});
-                setRequests(data.settings?.integrationRequests || {});
-                setWebForm(cleanWebToLead(data.settings?.webToLead));
-            } catch (e) {
-                if (!cancelled) setError(`Settings could not be loaded — ${e.message}`);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
         const loadCal = async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/calendar-connections');
@@ -430,7 +423,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 if (res.ok && Array.isArray(data.jobs)) setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now(), { enabled: data.enabled !== false }));
             } catch { /* the line stays absent — the card claims nothing it could not read */ }
         };
-        load(); loadCal(); loadBcc(); loadJobs();
+        loadCal(); loadBcc(); loadJobs();
         return () => { cancelled = true; };
     }, []);
 
@@ -442,30 +435,35 @@ export const ConnectedAppsDetail = ({ onBack }) => {
 
     // ── Slack ──────────────────────────────────────────────────────────────
     // dbFetch resolves for ANY status (guide 18b1); putSettings throws on a
-    // non-2xx so a 403 lands in the error path, not the success path.
+    // non-2xx so a 403 lands in the error path, not the success path. Neither
+    // save is optimistic (state §0.229): the copy changes once the save has
+    // landed, with the tokens it answered (landed). Refused as stale, the panel
+    // is drawn again on the latest (AdminView — J-B5); a typed webhook URL is
+    // not kept across it, and the words above the panel say to enter it again — only
+    // when the URL sent is not the stored one: an unchanged URL comes back from the
+    // latest when Configure opens again, and nothing typed was lost (state §0.229).
     const handleSaveSlack = async (config) => {
-        const cfgSnap = slackConfig, appSnap = connectedApps;
         const nextApps = { ...connectedApps, slack: true };
-        setSlackConfig(config);
-        setConnectedApps(nextApps);
         try {
-            await putSettings({ slackConfig: config, connectedApps: nextApps });
+            const answer = await putSettings({ slackConfig: config, connectedApps: nextApps }, opened);
+            setSettings(prev => ({ ...prev, slackConfig: config, connectedApps: nextApps }));
+            landed(answer);
             setSlackModal(false);          // only close once the write has landed
         } catch (e) {
-            setSlackConfig(cfgSnap);
-            setConnectedApps(appSnap);
+            if (e.stale) await panelStale(e, (config.webhookUrl || '') !== (slackConfig.webhookUrl || '') ? PANEL_CHANGED_WEBHOOK : undefined);
             throw e;                       // the modal shows it under the field — a banner here sits behind the open dialog
         }
     };
     const handleDisconnectSlack = async () => {
-        const appSnap = connectedApps, cfgSnap = slackConfig;
         setBusy('slack'); note('slack', '');
-        setConnectedApps({ ...connectedApps, slack: false });
-        setSlackConfig({});
+        const nextApps = { ...connectedApps, slack: false };
         try {
-            await putSettings({ connectedApps: { ...connectedApps, slack: false }, slackConfig: {} });
+            const answer = await putSettings({ connectedApps: nextApps, slackConfig: {} }, opened);
+            setSettings(prev => ({ ...prev, connectedApps: nextApps, slackConfig: {} }));
+            landed(answer);
         } catch (e) {
-            setConnectedApps(appSnap); setSlackConfig(cfgSnap);
+            // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
+            if (e.stale && await panelStale(e)) return;
             note('slack', `Not disconnected — ${e.message}`);
         }
         setBusy(null);
@@ -484,17 +482,22 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     };
 
     // ── Requests ───────────────────────────────────────────────────────────
+    // The request lands in the app's copy (state §0.229), and only in the org
+    // that asked: an answer after a switch belongs to a panel that is gone.
     const requestApp = async (app) => {
         setBusy(app.id); note(app.id, '');
+        const askedOrg = requestOrg();
         try {
             const res  = await dbFetch('/.netlify/functions/integration-requests', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appId: app.id }),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;   // answered after a switch: the copy on screen is another org's
             if (!res.ok) throw new Error(data.error || `The server returned ${res.status}.`);
-            setRequests(prev => ({ ...prev, [app.id]: data.request }));
+            setSettings(prev => ({ ...prev, integrationRequests: { ...(prev.integrationRequests || {}), [app.id]: data.request } }));
         } catch (e) {
+            if (!stillOrg(askedOrg)) return;
             note(app.id, `Not requested — ${e.message}`);
         }
         setBusy(null);
@@ -502,17 +505,21 @@ export const ConnectedAppsDetail = ({ onBack }) => {
 
 
     // The web-to-lead form (state §0.121). Turn on mints the token SERVER-SIDE
-    // in the settings PUT, so the panel re-reads settings to learn it; the same
-    // read after New link and Turn off. The outcome lands on the card (§18b32).
+    // in the settings PUT, so the panel reads the latest settings to learn it —
+    // one read, the app's copy and its tokens put in together, as a stale
+    // refusal's is (state §0.229); the same read after New link and Turn off.
+    // The outcome lands on the card (§18b32).
     const saveWebForm = async (patch) => {
         setBusy('webform'); note('webform', '');
         try {
-            await putSettings({ webToLead: { ...(webForm || {}), ...patch } });
-            const res  = await dbFetch('/.netlify/functions/settings');
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Saved, but the form settings could not be re-read');
-            setWebForm(cleanWebToLead(data.settings?.webToLead));
+            const answer = await putSettings({ webToLead: { ...(webForm || {}), ...patch } }, opened);
+            landed(answer);
+            const latest = await takeLatestSettings(setSettings);
+            if (latest) reopen(latest.revs);
+            else note('webform', 'Saved — the new link could not be read; reload the page to see it.');
         } catch (e) {
+            // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
+            if (e.stale && await panelStale(e)) return;
             note('webform', `Not saved — ${e.message}`);
         } finally {
             setBusy(null);
@@ -527,13 +534,6 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const requestedCount = Object.values(requests).filter(r => r?.requestedAt).length;
     const alertsJob = jobs ? jobs.find(j => j.job === 'pipeline-alerts') || null : null;
 
-    if (loading) return (
-        <div style={{ fontFamily:T.sans }}>
-            <IntCrumb page="Connected apps" onBack={onBack}/>
-            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
-        </div>
-    );
-
     return (
         <div style={{ fontFamily:T.sans }}>
             {slackModal && <SlackConfigModal existing={slackConfig} onClose={() => setSlackModal(false)} onSave={handleSaveSlack}/>}
@@ -541,8 +541,6 @@ export const ConnectedAppsDetail = ({ onBack }) => {
             <IntCrumb page="Connected apps" onBack={onBack}/>
             <IntTitle title="Connected apps"
                 sub={`${liveCount} live · Slack, calendars, email logging and the web-to-lead form are the integrations that exist; anything else can be requested below`}/>
-
-            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
 
             {/* ── Integrations that exist ── */}
             <div style={{ marginBottom:24 }}>
