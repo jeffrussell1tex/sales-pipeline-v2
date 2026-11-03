@@ -2048,8 +2048,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a Manager on a team's `repIds`, which the window neither draws nor
   counts; its save sends the stored list unchanged (`repIds` kept
   whole), so nothing is dropped. Low.
-- **Pain points library crashes on the seeded default — DONE on dev in
-  §0.227 (NOT committed; guide §18b115)**: every reader of the library
+- **Pain points library crashes on the seeded default — DONE on dev in §0.227 (committed `0ed001e`, NOT pushed; guide §18b115)**: every reader of the library
   goes through `src/utils/painPoints.js`, the loose names one "Pain
   Points" category; the browser check opened it on Accelerep QA's
   seven names. Was (§0.226's plan,
