@@ -258,8 +258,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      list's token through one sender; a stale refusal reads the latest and
      says so — §4.3's two stale-tab items done on dev (a tab loaded before
      it, and prod, still put a list back until they reload or it ships).
-     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md
-     §4b), NOT committed, harness deferred:** every draft panel of
+     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`, harness deferred, NOT pushed:** every draft panel of
      Settings sends the tokens it opened with; a stale refusal shows the
      panel again on the latest and says so, and both leave guards say the
      change was not saved. Next: B-3b (Pipelines, Calendar, Edit brand,
