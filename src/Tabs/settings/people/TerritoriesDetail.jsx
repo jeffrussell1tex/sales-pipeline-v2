@@ -1,15 +1,20 @@
 // settings/people/TerritoriesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { putSettings } from '../shared/saveSettings.js';
+import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
-const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => {
+const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClose }) => {
     // mode: 'new' | 'edit' | 'owner' | 'reps' | 'rule'
     const allUsers   = (settings.users || []).filter(u => u.name);
-    const territories = settings.territories || [];
+    // The list this window builds from and its token, one matched set taken when it opened (state §0.225): a save
+    // another tab landed since is refused, never overwritten. Re-based from this window's own landed save, and from
+    // the latest after a refusal.
+    const [base, setBase] = useState(() => ({ list: settings.territories || [], rev: settings.revs?.territories ?? null }));
+    const territories = base.list;
 
     const [name,    setName]    = useState(territory?.name    || '');
     const [parent,  setParent]  = useState(territory?.parent  || '');
@@ -56,27 +61,46 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => 
             }
 
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
-            const data = await res.json();
+            const w = await writeSettings({ territories: updatedTerritories }, { territories: base.rev });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Save failed');
+            // Another change landed first (state §0.225 — J-B8): the page takes the latest and no member row is sent. An
+            // edit closes and the page says so; a new territory stays open on the latest list, its next Save that list's.
+            if (w.stale) {
+                const latest = await takeLatestSettings(setSettings);
+                const words = latest ? listChanged('territory') : w.error;
+                if (mode !== 'new') { onStale(words); onClose(); return; }
+                if (latest) setBase({ list: latest.territories || [], rev: latest.revs?.territories ?? null });
+                setErr(words);
+                return;
+            }
+            if (!w.ok) throw new Error(w.error || 'Save failed');
+            setBase({ list: updatedTerritories, rev: w.revs.territories ?? null });
 
-            // Persist changed users
+            // Persist changed users. A member whose row did not update is reported by name; one that did is kept as
+            // the server answered it — the roster is mapped by id, never replaced from this window's copy, which
+            // leaves out a member with no name (state §0.225 — JB2-7).
             const changedUsers = updatedUsers.filter((u, i) => allUsers[i] && u.territory !== allUsers[i].territory);
             const failed = [];
+            const answered = new Map();
             for (const u of changedUsers) {
                 if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
                 const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) });
                 if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
+                else answered.set(u.id, r.data?.user || u);
             }
             if (!stillOrg(askedOrg)) return;
 
             if (failed.length) {
                 setErr(`Territory saved, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
-                setSettings(prev => ({ ...prev, territories: updatedTerritories }));
+                setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, w.revs) }));
                 return;
             }
-            setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
+            setSettings(prev => ({
+                ...prev,
+                territories: updatedTerritories,
+                revs: revsAfter(prev.revs, w.revs),
+                users: (prev.users || []).map(u => answered.has(u.id) ? answered.get(u.id) : u),
+            }));
             onClose();
         } catch(e) {
             setErr(e.message || 'Save failed.');
@@ -174,6 +198,8 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
     // `if (res.ok)` and did nothing on failure, and the rep cascade was only
     // console.error'd (state §0.109). Both are reported here, above the table.
     const [deleteErr,     setDeleteErr]     = useState('');
+    // An edit window refused because another change landed first closes; its words show here (state §0.225 — J-B8).
+    const [listNote,      setListNote]      = useState('');
 
     React.useEffect(() => {
         if (openTerrKebab === null) return;
@@ -182,12 +208,15 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
         return () => document.removeEventListener('click', h);
     }, [openTerrKebab]);
 
-    const openModal = (mode, territory = null) => { setOpenTerrKebab(null); setModal({ mode, territory }); };
+    const openModal = (mode, territory = null) => { setOpenTerrKebab(null); setListNote(''); setModal({ mode, territory }); };
 
     const handleImportCSV = () => {
         // The org whose territories the file is merged into (state §0.175): after a
         // switch the merged list — the last org's — would replace the new org's.
         const askedOrg = requestOrg();
+        // The token of that list (state §0.225): an import merged into a list another tab has changed since is refused.
+        const listRev = settings.revs?.territories ?? null;
+        setListNote('');
         const input = document.createElement('input');
         input.type = 'file'; input.accept = '.csv,text/csv';
         input.onchange = async (ev) => {
@@ -214,10 +243,15 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                 });
                 const updated = Array.from(byName.values());
                 if (!stillOrg(askedOrg)) return;
-                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updated }) });
+                const w = await writeSettings({ territories: updated }, { territories: listRev });
                 if (!stillOrg(askedOrg)) return;
-                if (res.ok) { setSettings(prev => ({ ...prev, territories: updated })); window.alert(`Imported ${parsed.length} territor${parsed.length===1?'y':'ies'}.`); }
-                else window.alert('Import failed to save. Please try again.');
+                if (w.ok) { setSettings(prev => ({ ...prev, territories: updated, revs: revsAfter(prev.revs, w.revs) })); window.alert(`Imported ${parsed.length} territor${parsed.length===1?'y':'ies'}.`); }
+                else if (w.stale) {
+                    // Not re-applied (state §0.225): the page takes the latest; choosing the file again imports it on that.
+                    const latest = await takeLatestSettings(setSettings);
+                    window.alert(latest ? listChanged('territory') : `Import failed to save — ${w.error}`);
+                }
+                else window.alert(`Import failed to save — ${w.error}`);
             } catch (e) { console.error('territory CSV import', e); window.alert('Could not import the CSV. Please check the format.'); }
         };
         input.click();
@@ -228,14 +262,19 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
         showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, async () => {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const updatedTerritories = territories.filter(t => t.id !== tr.id);
+            const terrRev = settings.revs?.territories ?? null;   // the token of the list it is built from (state §0.225)
             const reps = allUsers.filter(u => u.territory === tr.name);
-            setDeleteErr('');
+            setDeleteErr(''); setListNote('');
+            let answer;
             try {
-                await putSettings({ territories: updatedTerritories });   // throws on non-2xx
+                answer = await putSettings({ territories: updatedTerritories }, { territories: terrRev });   // throws on non-2xx
             } catch (e) {
+                // Another change landed first (state §0.225): the page takes the latest and says so.
+                if (e.stale) { const latest = await takeLatestSettings(setSettings); if (latest) { setDeleteErr(listChanged('territory')); return; } }
                 setDeleteErr(`Territory not deleted — ${e.message}`);
                 return;
             }
+            setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, answer?.revs) }));
             // The territory is gone; now the rep rows. One that did not update is
             // reported by name, not logged.
             const cleared = new Set(), failed = [];
@@ -247,7 +286,6 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
             if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
-                territories: updatedTerritories,
                 users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, territory: '' } : u),
             }));
             if (failed.length) setDeleteErr(`Territory deleted, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
@@ -278,6 +316,7 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                 territory={modal.territory}
                 settings={settings}
                 setSettings={setSettings}
+                onStale={setListNote}
                 onClose={() => setModal(null)}/>
         )}
 
@@ -318,6 +357,11 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
         {deleteErr && (
             <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
                 {deleteErr}
+            </div>
+        )}
+        {listNote && (
+            <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                {listNote}
             </div>
         )}
 

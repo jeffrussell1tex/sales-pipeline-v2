@@ -24,6 +24,8 @@ import {
 import { clause } from '../src/utils/memberSave.js';
 import { parse } from '@babel/parser';
 import { inviteFrom } from '../src/utils/userImport.js';
+// Since §0.225 (batch 4b-3, step B-2): a teams save names the token its list was read with.
+import { revsAfter, listChanged, STALE_ERROR } from '../src/utils/settingsRevs.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -84,8 +86,11 @@ test('the Invite page sends the team\'s id and adds the new members to their tea
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
     const page = between(s, 'const UsersInvitePage = ', '\nconst UsersExportPage = ');
     assert.ok(page.includes('teamId: teamIdNamed(settings.teams, r.team)'), 'REGRESSION: the invite stores the team\'s name alone');
-    assert.ok(page.includes('const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, sent);'));
-    assert.ok(page.includes("const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: joinedTeams }) });"));
+    // With the list's token as the page loaded it (state §0.225, J-B6): a list another tab saved since is read again and
+    // the members added to it once more (saveSettings.js addToSettingsList); a second refusal is said in Jeff's words.
+    assert.ok(page.includes("const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, sent), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });"));
+    assert.ok(page.includes("if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : ` The team list was not updated — ${added.error}`;"),
+        'REGRESSION: a list refused twice is said as a failed save, or not said');
     assert.ok(page.includes('if (teamNote) throw new Error('), 'a team list that did not save is said, not dropped');
 });
 
@@ -93,8 +98,10 @@ test('the import adds its new members to their teams\' lists after the last requ
     const l = code(read('src/components/layout/ModalLayer.jsx'));
     const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
     assert.ok(h.includes('landed.push(...sent);'));
-    assert.ok(h.includes('teamsWithMembers(settings.teams, landed)'), 'REGRESSION: an imported member is on no team\'s list');
-    assert.ok(h.includes("dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ teams: joinedTeams }) })"));
+    assert.ok(h.includes("const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, landed), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });"),
+        'REGRESSION: an imported member is on no team\'s list');
+    // A second stale refusal is the import's whole warning (state §0.225, J-B6).
+    assert.ok(h.includes('if (added.twice) warning = TEAMS_CHANGED_TWICE;'), 'REGRESSION: a list refused twice is said as a failed save, or not said');
     const m = code(read('src/components/modals/CsvImportModal.jsx'));
     assert.ok(m.includes('setImportWarning(sent?.warning || null);'));
     assert.ok(m.includes('{isUsers && importWarning && ('), 'the warning is on the results');
@@ -360,6 +367,26 @@ test('C3 settingsAfterRemoval: the row off the roster, the teams and territories
     assert.equal(removalNote(undefined), null);
 });
 
+test('C3b settingsAfterRemoval (state §0.225): the tokens answered for the lists it writes merged over the held ones — no other key\'s, never the held set replaced whole', () => {
+    const prev = { users: [{ id: 'a' }, { id: 'b' }], teams: ['old'], territories: ['old'], revs: { teams: 'T1', territories: 'R1', spiffs: 'S1' } };
+    const answer = { lists: { teams: [{ id: 't', repIds: [] }], spiffs: ['NO'] }, revs: { teams: 'T2', territories: 'R2', spiffs: 'S2' }, success: true };
+    const out = settingsAfterRemoval(prev, 'a', answer);
+    assert.deepEqual(out.revs, { teams: 'T2', territories: 'R1', spiffs: 'S1' },
+        'REGRESSION: the written list\'s token is dropped (its next save refused as stale), or a list it did not write takes a token');
+    assert.deepEqual(prev.revs, { teams: 'T1', territories: 'R1', spiffs: 'S1' }, 'the copy handed in is not changed in place');
+    const both = settingsAfterRemoval(prev, 'a', { lists: { teams: [], territories: [] }, revs: { teams: 'T2', territories: 'R2', spiffs: 'S2' } });
+    assert.deepEqual(both.revs, { teams: 'T2', territories: 'R2', spiffs: 'S1' });
+    assert.deepEqual(settingsAfterRemoval({ users: [] }, null, { lists: { teams: [] }, revs: { teams: 'T2' } }).revs, { teams: 'T2' }, 'none held: the answered one');
+    // No token answered, or none that is text: the held tokens stand as they were — C3's answers add no `revs` at all.
+    assert.equal(settingsAfterRemoval(prev, 'a', { lists: { teams: [] } }).revs, prev.revs);
+    assert.equal(settingsAfterRemoval(prev, 'a', { lists: { teams: [] }, revs: { teams: 7 } }).revs, prev.revs);
+    assert.ok(!('revs' in settingsAfterRemoval({ users: [] }, 'a', { lists: { teams: [] }, revs: { teams: null } })));
+    // The lists left as they were (a settings save landed at the same moment): no list written, no token taken.
+    const left = settingsAfterRemoval(prev, 'b', { lists: null, listsLeft: true, revs: { teams: 'T9' } });
+    assert.deepEqual(left, { ...prev, users: [{ id: 'a' }] });
+    assert.equal(left.revs, prev.revs);
+});
+
 // ── TeamModal's handleSave, run as written (as tests/member-profile-save.test.mjs S10 runs the profile page's) ────────
 
 const isFnNode = (n) => n && /^(ArrowFunctionExpression|FunctionExpression|FunctionDeclaration)$/.test(n.type);
@@ -386,8 +413,16 @@ const handlerIn = (src, component, handler) => {
     return out;
 };
 const TEAM_SAVE = handlerIn(read('src/Tabs/settings/people/TeamsDetail.jsx').replace(/\r\n/g, '\n'), 'TeamModal', 'handleSave');
-const runTeamSave = async ({ team, form = {}, teams, users, answers = {} }) => {
-    const calls = [], said = [], state = { settings: { teams, users } };
+// Since §0.225 the window sends its list with the token it opened with (`base`, its list and token as one snapshot)
+// through writeSettings — a stub here that records the body it sends (`ifRevs`: the tokens) and answers in its shape,
+// asked through `answers` as the requests are. The copy's token is 'NEWER', the window's 'OPENED': a save that reads the
+// copy's sends the wrong one. `latest`: what a take-latest reads (null: it could not); `base`: a window re-based before.
+// dbFetch stays in the scope, so a handler that still sends through it fails on what it sends, not on a missing name.
+const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base = null, latest = null }) => {
+    const calls = [], said = [];
+    const held = base || { list: teams, rev: 'OPENED' };
+    const settings = { teams, users, revs: { teams: 'NEWER', territories: 'TERR' } };
+    const state = { settings, base: held, took: 0 };
     const ask = (url, opts = {}) => {
         const to = url.split('/').pop().split('?')[0];
         const body = opts.body ? JSON.parse(opts.body) : undefined;
@@ -396,17 +431,27 @@ const runTeamSave = async ({ team, form = {}, teams, users, answers = {} }) => {
     };
     const opened = team || null;
     const scope = {
-        name: form.name ?? opened?.name ?? '', isEdit: !!opened, team: opened, teams,
+        name: form.name ?? opened?.name ?? '', isEdit: !!opened, team: opened, teams: held.list, base: held, settings,
         territory: form.territory ?? opened?.territory ?? '', vertical: form.vertical ?? opened?.vertical ?? '',
         managerId: form.managerId ?? opened?.managerId ?? '', repIds: form.repIds ?? opened?.repIds ?? [], color: form.color ?? opened?.color ?? '#2a2622',
         allUsers: users.filter((u) => u.name && u.active !== false),
-        teamNameRefused, teamSaveMembers, rosterAfterTeamSave,
+        teamNameRefused, teamSaveMembers, rosterAfterTeamSave, revsAfter, listChanged,
         requestOrg: () => 'org_A', stillOrg: (o) => o === 'org_A',
         dbFetch: async (url, opts) => { const a = ask(url, opts); return { ok: a.ok, status: a.status, json: async () => a.data ?? { error: a.error } }; },
         dbWrite: async (url, opts) => ask(url, opts),
+        // saveSettings.js writeSettings: never throws; { ok, status, error, data }, the answered tokens on a landed save,
+        // the keys that moved on a stale refusal.
+        writeSettings: async (payload, revs) => {
+            const a = ask('/.netlify/functions/settings', { body: JSON.stringify({ ...payload, ifRevs: revs }) });
+            return { ok: a.ok, status: a.status, error: a.error ?? a.data?.error ?? null, data: a.data,
+                ...(a.ok ? { revs: a.revs ?? { teams: 'T2' } } : {}), ...(a.stale ? { stale: a.stale } : {}) };
+        },
+        // saveSettings.js takeLatestSettings: one read; the copy takes the latest, the roster kept; null when unread.
+        takeLatestSettings: async (set) => { state.took++; if (!latest) return null; set((prev) => ({ ...latest, users: prev.users })); return latest; },
         setErr: (v) => said.push(v), setSaving: () => {},
         setSettings: (f) => { state.settings = f(state.settings); },
-        onSave: () => { state.saved = true; }, onClose: () => { state.closed = true; },
+        setBase: (v) => { state.base = v; },
+        onSave: () => { state.saved = true; }, onStale: (words) => { state.stale = words; }, onClose: () => { state.closed = true; },
         Date,
     };
     const names = Object.keys(scope);
@@ -508,4 +553,64 @@ test('C4 handleSave, run as written: a member PUT refused leaves that member as 
     assert.deepEqual(refused.said, ['That member is not in your organization — pick one from the list.']);
     assert.equal(refused.state.settings.users, UKG_USERS, 'the roster untouched');
     assert.notEqual(refused.state.closed, true);
+});
+
+// ── §0.225 — the window's save names the token its list was read with (batch 4b-3, step B-2; Jeff, 2 Nov: every
+// Recommended — STEP-B.md §4a, J-B8). handleSave run as written, as above. ─────────────────────────────────────────────
+
+// What a take-latest reads: another tab recoloured UKG's team and made a team since this window opened.
+const LATEST_TEAMS = [{ ...UKG_TEAM, color: '#3a5a7a' }, { id: 'team_other', name: 'Other', territory: '', vertical: '', managerId: '', repIds: [], color: '#2a2622' }];
+const LATEST = { teams: LATEST_TEAMS, revs: { teams: 'T_LATEST', territories: 'TERR' } };
+const STALE = () => ({ ok: false, status: 409, error: STALE_ERROR, stale: ['teams'] });
+
+test('C5 handleSave, run as written: the list goes with the token the window opened with — not the copy\'s newer one — and a save that lands merges the answered token and holds the list it landed', async () => {
+    const r = await runTeamSave({ team: UKG_TEAM, form: { color: '#4d6b3d' }, teams: [UKG_TEAM], users: UKG_USERS });
+    assert.deepEqual(r.calls[0].body.ifRevs, { teams: 'OPENED' }, 'REGRESSION: the window sends the copy\'s token, or none — another tab\'s save is overwritten');
+    assert.deepEqual(r.state.settings.revs, { teams: 'T2', territories: 'TERR' }, 'REGRESSION: the answered token is dropped — the next save is refused as stale');
+    assert.deepEqual(r.state.base, { list: r.calls[0].body.teams, rev: 'T2' }, 'the window holds the list it landed, with its token');
+    assert.equal(r.state.took, 0, 'nothing read again');
+    // A member PUT that fails after the list landed: the token merged and the window re-based all the same, so Save
+    // again sends the landed list with its own token.
+    const f = await runTeamSave({ team: UKG_TEAM, form: { repIds: [...UKG_TEAM.repIds, 'usr_d'] }, teams: [UKG_TEAM], users: UKG_USERS,
+        answers: { users: () => ({ ok: false, status: 500, error: 'TEST' }) } });
+    assert.deepEqual(f.said, ['Team saved, but 1 member record(s) did not update: D: TEST']);
+    assert.equal(f.state.settings.revs.teams, 'T2');
+    assert.deepEqual(f.state.base, { list: f.calls[0].body.teams, rev: 'T2' });
+});
+
+test('C5 handleSave, run as written: an edit refused as stale takes the latest once, closes with the words on the page, and sends no member anything', async () => {
+    const run = (latest) => runTeamSave({ team: UKG_TEAM, form: { repIds: [...UKG_TEAM.repIds, 'usr_d'] }, teams: [UKG_TEAM], users: UKG_USERS,
+        answers: { settings: STALE }, latest });
+    const r = await run(LATEST);
+    assert.deepEqual(r.calls.map((c) => c.to), ['settings'], 'REGRESSION: a refused list goes on to the member PUTs');
+    assert.equal(r.state.took, 1, 'REGRESSION: the page keeps the copy that was refused');
+    assert.equal(r.state.stale, listChanged('team'), 'REGRESSION: the refusal is not said on the page');
+    assert.equal(r.state.stale, 'The team list changed since this page loaded — it now shows the latest. Make your change again.');
+    assert.equal(r.state.closed, true, 'REGRESSION: an edit refused as stale stays open on a list it cannot save');
+    assert.notEqual(r.state.saved, true);
+    assert.deepEqual(r.said, [], 'the words are the page\'s, the window closed');
+    assert.equal(r.state.settings.teams, LATEST_TEAMS, 'the latest on screen');
+    assert.equal(r.state.settings.users, UKG_USERS, 'the roster as it was');
+    const unread = await run(null);
+    assert.equal(unread.state.took, 1);
+    assert.equal(unread.state.stale, STALE_ERROR, 'the latest unread: the refusal\'s own words');
+    assert.equal(unread.state.closed, true);
+    assert.deepEqual(unread.calls.map((c) => c.to), ['settings']);
+});
+
+test('C5 handleSave, run as written: a new team refused as stale stays open on the latest list and its token, says so, and Save again lands it there', async () => {
+    const form = { name: 'North', repIds: ['usr_d'] };
+    const r = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, answers: { settings: STALE }, latest: LATEST });
+    assert.deepEqual(r.calls.map((c) => c.to), ['settings'], 'no member PUT');
+    assert.equal(r.state.took, 1);
+    assert.deepEqual(r.said, [listChanged('team')], 'the words in the window');
+    assert.notEqual(r.state.closed, true, 'REGRESSION: a new team refused as stale closes — what was typed is lost');
+    assert.equal(r.state.stale, undefined, 'no page note');
+    assert.deepEqual(r.state.base, { list: LATEST_TEAMS, rev: 'T_LATEST' }, 'REGRESSION: the window keeps the refused list and token — Save again is refused again');
+    const again = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, base: r.state.base });
+    assert.deepEqual(again.calls.map((c) => c.to), ['settings', 'users']);
+    assert.deepEqual(again.calls[0].body.ifRevs, { teams: 'T_LATEST' }, 'with the latest list\'s token');
+    assert.deepEqual(again.calls[0].body.teams.map((t) => t.name), ['UKG', 'Other', 'North'], 'the other tab\'s team kept, the new one added');
+    assert.equal(again.calls[0].body.teams[0].color, '#3a5a7a', 'and its colour');
+    assert.equal(again.state.closed, true);
 });

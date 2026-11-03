@@ -1,12 +1,15 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg, stopped } from '../../utils/storage';
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
 import { buildOpportunityRow, newContactRow, heldAsStamped } from '../../utils/importRows';
 import { importLevels, sendLevels } from '../../utils/importParents.js';
 import { teamsWithMembers } from '../../utils/teamMembership.js';
+// The member import's teams save (state §0.225): the one settings sender, with the list's token.
+import { addToSettingsList } from '../../Tabs/settings/shared/saveSettings.js';
+import { TEAMS_CHANGED_TWICE } from '../../utils/settingsRevs.js';
 import {
     mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
 } from '../../utils/importReceipt';
@@ -756,15 +759,14 @@ export default function ModalLayer() {
                         // (state §0.168): the invite stores the team's name and id on
                         // the row, and the Teams page reads the team's own list. The
                         // invitations went out either way, so a failed save is a
-                        // warning, not a failed import.
+                        // warning, not a failed import. A list another tab saved since is
+                        // read again and the members added to it once more (state §0.225,
+                        // J-B6); a second refusal is the warning.
                         let warning = null;
-                        const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, landed);
-                        if (teamsChanged) {
-                            const rt = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ teams: joinedTeams }) });
-                            if (!stillOrg(askedOrg)) return stopped();
-                            if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
-                            else warning = `The invitations went out, but the team list was not updated — ${rt.error}`;
-                        }
+                        const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, landed), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });
+                        if (!stillOrg(askedOrg)) return stopped();
+                        if (added.twice) warning = TEAMS_CHANGED_TWICE;
+                        else if (!added.ok) warning = `The invitations went out, but the team list was not updated — ${added.error}`;
                         return { receipt, refusals, warning };
                     }}
                 />

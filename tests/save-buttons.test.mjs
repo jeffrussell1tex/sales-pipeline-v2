@@ -66,7 +66,8 @@ test('the seeded keys: none the server defaults to empty or off anyway, none it 
 
 test('one copy of the defaults: the hook imports them and keeps none of its own', () => {
     const hook = code(read('src/hooks/useSettings.js'));
-    assert.ok(hook.includes("import { DEFAULT_SETTINGS } from '../utils/settingsDefaults.js';"));
+    // And the load's projection of a read (state §0.225 — settingsAsLoaded, which a take-latest shares).
+    assert.ok(hook.includes("import { DEFAULT_SETTINGS, settingsAsLoaded } from '../utils/settingsDefaults.js';"));
     assert.ok(!/const DEFAULT_SETTINGS\s*=/.test(hook));
 });
 

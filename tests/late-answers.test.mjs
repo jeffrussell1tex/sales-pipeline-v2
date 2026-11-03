@@ -67,8 +67,9 @@ const CALLBACK = /^on(?!(Close|Cancel|Back|Progress|Error)$)[A-Z]\w*$/;
 // non-GET method in its options literal.
 // Helpers that send a write of their own: the client audit row, the SMS and the
 // calendar-event POSTs (src/App.jsx, src/hooks/useOpportunities.js, useTasks.js,
-// useActivities.js). Called after a switch, each would carry the new org's token.
-const WRITING_HELPERS = /^(addAudit|fireMentionSms|fireActivityCalendarEvent|fireCalendarEvent)$/;
+// useActivities.js), and the settings senders (src/Tabs/settings/shared/saveSettings.js —
+// state §0.225, JB2-11). Called after a switch, each would carry the new org's token.
+const WRITING_HELPERS = /^(addAudit|fireMentionSms|fireActivityCalendarEvent|fireCalendarEvent|putSettings|writeSettings|addToSettingsList)$/;
 
 const writeRequest = (call) => {
     const c = call.callee;
@@ -141,9 +142,11 @@ export const scanText = (file, src, shared = sharedSetters()) => {
                 pushedFn = true;
             }
             const here = [...path, node];
-            // putSettings answers only in the org that asked — after a switch it never
-            // settles (src/Tabs/settings/shared/saveSettings.js) — so awaiting it opens no window.
-            const settles = !(node.argument && (node.argument.type === 'CallExpression' || node.argument.type === 'OptionalCallExpression') && node.argument.callee.name === 'putSettings');
+            // The settings senders answer only in the org that asked — after a switch none of them
+            // settles (src/Tabs/settings/shared/saveSettings.js: putSettings, and since §0.225 writeSettings,
+            // addToSettingsList and takeLatestSettings) — so awaiting one opens no window.
+            const settles = !(node.argument && (node.argument.type === 'CallExpression' || node.argument.type === 'OptionalCallExpression')
+                && /^(putSettings|writeSettings|addToSettingsList|takeLatestSettings)$/.test(node.argument.callee.name));
             if (node.type === 'AwaitExpression' && fns.length && settles) fns[fns.length - 1].awaits.push({ end: node.end, path: here });
             // x?.() is an OptionalCallExpression (state §0.207): the merge hook's four late sets and audit rows were
             // invisible to a scan of CallExpression alone.
@@ -219,9 +222,14 @@ test('the scanner sees what it is for: a late set, a late write, a write in an a
         'async function g() { const r = await x(); if (!stillOrg(o)) return; setAccounts([]); }',       // checked
         'function h() { y().then(() => setLeads([])); }',                                                  // late in a .then
         'async function i() { await putSettings({}); setSettings(s => s); }',                            // putSettings never settles after a switch
+        'async function j() { await x(); await writeSettings({}, {}); }',                               // a late settings write (state §0.225)
+        'async function k() { await writeSettings({}, {}); setSettings(s => s); }',                     // writeSettings never settles after a switch
+        'async function l() { await takeLatestSettings(f); setSettings(s => s); }',                     // nor does takeLatestSettings
+        'async function m() { await x(); await putSettings({}); }',                                     // a late putSettings (JB2-11)
+        'async function n() { await x(); await addToSettingsList("teams", f, {}); }',                   // a late addition to a list
     ].join('\n');
     const misses = scanText('src/fixture.js', fixture).map((v) => `${v.at} ${v.what}`);
-    assert.deepEqual(misses, ['1 setAccounts', '2 dbWrite', '3 dbWrite', '4 setUndoToast', '7 setLeads']);
+    assert.deepEqual(misses, ['1 setAccounts', '2 dbWrite', '3 dbWrite', '4 setUndoToast', '7 setLeads', '9 writeSettings', '12 putSettings', '13 addToSettingsList']);
 });
 
 // ── putSettings — run ────────────────────────────────────────────────────────

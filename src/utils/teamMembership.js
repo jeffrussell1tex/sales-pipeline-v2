@@ -204,12 +204,16 @@ export function rosterAfterTeamSave(users, answered, renamed) {
 // roster, and those lists as the server wrote them — without them the same tab's next teams save would send the
 // removed id again and be refused (§0.221). Since §0.222 the revoke's screens write no list of their own. The caller
 // applies it only while the org that asked is still the one on screen (requestOrg / stillOrg): another org's lists
-// never reach this one's copy. removedId: the row removed, or null when none was.
+// never reach this one's copy. removedId: the row removed, or null when none was. Since §0.225 each list it applies
+// brings the token the server answered for it (`revs`), merged key by key into the copy's: with the list and not its
+// token, the same tab's next save of that list would be refused as stale against its own removal. A token for a list
+// it does not apply is never taken, and with none answered the copy's tokens are left as they are.
 export function settingsAfterRemoval(prev, removedId, answer) {
     const lists = answer && answer.lists && typeof answer.lists === 'object' ? answer.lists : {};
     const written = {};
     for (const key of ['teams', 'territories']) if (Array.isArray(lists[key])) written[key] = lists[key];
-    return { ...prev, users: (prev?.users || []).filter((u) => !removedId || u?.id !== removedId), ...written };
+    const tokens = Object.fromEntries(Object.keys(written).filter((k) => typeof answer?.revs?.[k] === 'string').map((k) => [k, answer.revs[k]]));
+    return { ...prev, users: (prev?.users || []).filter((u) => !removedId || u?.id !== removedId), ...written, ...(Object.keys(tokens).length ? { revs: { ...(prev?.revs || {}), ...tokens } } : {}) };
 }
 // What a removal says when a settings save landed at the same moment every time it tried to write the lists.
 export const REMOVAL_LISTS_LEFT = 'Removed, but the team and territory lists still name them — another settings save landed at the same moment. Reload to see the lists.';

@@ -30,7 +30,8 @@ for (const [file, handler, noun] of [
 ]) {
     test(`${file}: a refused ${noun.toLowerCase()} delete is shown above the table, and a member row that did not update is named`, () => {
         const s = code(read(file));
-        assert.ok(s.includes("import { putSettings } from '../shared/saveSettings.js';"), 'uses the shared save, which throws on non-2xx');
+        // Since §0.225 the import names the screen's other senders too (writeSettings, takeLatestSettings).
+        assert.match(s, /import \{[^}]*\bputSettings\b[^}]*\} from '\.\.\/shared\/saveSettings\.js';/, 'uses the shared save, which throws on non-2xx');
         const del = blockOf(s, handler);
         assert.ok(del.includes('await putSettings({'), 'the settings PUT goes through putSettings');
         assert.ok(del.includes(`setDeleteErr(\`${noun} not deleted — \${e.message}\`)`), 'a refused PUT is reported');

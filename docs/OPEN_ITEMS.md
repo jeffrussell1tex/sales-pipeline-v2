@@ -254,8 +254,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      `a03b958`, NOT pushed:** the server — a settings save writes only its keys, each
      with a revision token compared in the write; a stale one refused,
      nothing written, no member renamed; every other writer merges only its
-     own. Next: B-2 (the shared sender and the people screens — closes §4.3's
-     two stale-tab items), then B-3 (every other screen).
+     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md
+     §4a), NOT committed, harness deferred:** the people screens send each
+     list's token through one sender; a stale refusal reads the latest and
+     says so — §4.3's two stale-tab items done on dev (a tab loaded before
+     it, and prod, still put a list back until they reload or it ships).
+     Next: B-3 (every other screen), then one scoped run over B-2 and B-3
+     before any push.
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -268,7 +273,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      name can be made (TeamModal checks only that a name is given) — the
      profile page numbers the second, "East (2)" (§0.211)~~ — these two
      DONE in §0.222 (step C: the name paired with the id, a rename renaming
-     every holder, no new duplicate name) (found unmarked 2 Nov); the put-back is step B.
+     every holder, no new duplicate name) (found unmarked 2 Nov); the
+     put-back DONE on dev in §0.225 (step B-2: the profile page and TeamModal
+     send the token of the list they read; NOT committed).
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -1969,7 +1976,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   now sends no member a write. Until step C SHIPS, do not save UKG's team
   on the Teams page (prod runs the old code). Repairing UKG's stored ids is
   still a write to real data — Jeff's call.
-- **A stale tab's whole teams list renames the holders back** (§0.222's
+- **A stale tab's whole teams list renames the holders back — DONE on dev
+  in §0.225 (step B-2; NOT committed)**: each of the screens named below,
+  and TeamModal, sends its list with the token it read; a stale one is
+  refused, nothing written, no one renamed, and the tab shows the latest
+  (browser check, 2 Nov: a rename in one tab, the other's save refused,
+  the holder keeping the new name). A tab loaded before B-2 sends no
+  token and is accepted unchecked (Q6) until it reloads, and prod runs
+  the old code until it ships (the J-B14 item below). Was (§0.222's
   review, 2 Nov): a teams save that names a team as the stored list does
   not renames every holder (§0.222's rule), so a tab loaded before a rename
   that saves the whole list — the Invite page and the CSV import
@@ -1984,7 +1998,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   id, so a member a list held only by Clerk id (UKG's) stays listed there
   and the Teams page draws them on the old team too (count, org chart);
   no write follows since §0.222's join guard. Fix with the moves taking
-  the member off by either id. Low.
+  the member off by either id. Since §0.225 Assign moves by app id too
+  (`teamsWithMemberOn`, JB2-8: on the team picked, off every other list
+  holding them by app id) — a Clerk entry still stays. Low.
 - **The Clerk sync still fills a blank territory from Clerk's user metadata**
   (J2's other half, filed 2 Nov): one value for every org a person is in.
   Low.
@@ -2004,6 +2020,32 @@ to add meetings. Nothing in the app adds a meeting to Google:
   decide "already listed" from the tab's own copy, so when the stored list
   no longer holds the member nothing is sent and no token can catch it.
   Low.
+- **An invite whose team was deleted elsewhere while it was out says
+  nothing** (§0.225's critics, JB2-13): the Invite page's and the
+  import's addition (`addToSettingsList` over `teamsWithMembers`) finds
+  no team of that id on the latest list, so it adds nothing and answers
+  "already"; no words. The member's row still names the team. Needs the
+  addition to report a missing team, and words. Low.
+- **A take-latest keeps the roster's team names as the tab loaded them**
+  (§0.225, JB2-6): `takeLatestSettings` reads settings only — the roster
+  is the /users endpoint's — so after a rename in another tab, this
+  tab's member rows keep the old team name until a reload. Low.
+- **The Territories CSV import merges by lower-cased name and rewrites
+  Parent and Rule** (§0.225, JB2-10; TerritoriesDetail.jsx handleImportCSV,
+  read 2 Nov): two territories whose names differ only by case become
+  one; legacy plain-string entries (no `name`) all key as "" and collapse
+  to one; a file with no Parent or Rule column sets both empty on every
+  territory it names. Low.
+- **Assign says "Team updated, but … was not" when no team write went
+  out** (§0.225, kept as planned): when the team picked already lists
+  the member and no other does, no settings save is sent, yet a failed
+  member save reads "Team updated". Low.
+- **TeamModal's "Sales Reps (N selected)" counts Sales Reps only**
+  (§0.225's browser check, 2 Nov): Assign offers every active member
+  with no team but an Admin (TeamsDetail.jsx `unassigned`), so it can put
+  a Manager on a team's `repIds`, which the window neither draws nor
+  counts; its save sends the stored list unchanged (`repIds` kept
+  whole), so nothing is dropped. Low.
 - **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
@@ -2030,7 +2072,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
   member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
   is a write to real data — Jeff's call.
 - **A stale tab's teams save is refused after a member is removed
-  elsewhere** (§0.221's review; since §0.222 a delete and the clear too —
+  elsewhere — DONE on dev in §0.225 (step B-2; NOT committed)**: since
+  §0.224 the stale token is refused (409) before the link check, and
+  since §0.225 the screens read the latest and say so, the profile's
+  Save changes making its move on it; the removing tab takes its lists'
+  tokens with them (settingsAfterRemoval). Proven by settings-revs.itest
+  (a removal then a stale save: 409, not 404), not in the pane (no member
+  is deleted there). A tab loaded before B-2, and prod, as above. Was
+  (§0.221's review; since §0.222 a delete and the clear too —
   the same tab applies the server's lists and is not refused): a revoke or
   a delete in
   one tab takes the member off the stored list; another tab's next teams
@@ -4350,7 +4399,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   static read misses; the suite its resize close added,
   tests/resize-targets.test.mjs, walks src (211 files the static read
   misses — a 49th), and §0.213's, tests/rounded-scrollers.test.mjs, walks
-  src and index.css (about 203 files it misses — a 50th); what each reaches
+  src and index.css (about 203 files it misses — a 50th); §0.225's,
+  tests/settings-saves.test.mjs, walks src (179 files the static read
+  misses — a 51st), and §0.225 edits three listed above (deal-modal-saves,
+  late-answers, save-buttons), so the one scoped run over B-2 and B-3
+  reads them short; what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
   part 4). Recommended: mutate-scope.mjs runs each edited test
   once with the tracer and adds what it traced to the scope (Jeff's call).

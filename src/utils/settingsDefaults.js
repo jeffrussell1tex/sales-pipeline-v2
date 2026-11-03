@@ -99,3 +99,23 @@ export function settingsSeeds() {
     for (const k of SEEDED_KEYS) out[k] = JSON.parse(JSON.stringify(DEFAULT_SETTINGS[k]));
     return out;
 }
+
+// The app's copy of an org's settings as the settings GET answers them (state
+// §0.225): the defaults under what the org stored, the task types and funnel
+// stages their defaults while the org's are empty, and the roster kept from the
+// copy it replaces — `users` is the /users endpoint's, never the GET's. No
+// stored settings: the defaults. The load (useSettings) and a screen's read of
+// the latest after a stale save (takeLatestSettings) build the copy this one
+// way: the tokens (`revs`) come inside the GET's settings and replace the
+// copy's whole, so the values and their tokens are always one matched set.
+export function settingsAsLoaded(prev, fromDb) {
+    if (!fromDb) return { ...DEFAULT_SETTINGS, users: prev?.users };
+    const { users: _stripUsers, ...settingsFromDb } = fromDb;
+    return {
+        ...DEFAULT_SETTINGS,
+        ...settingsFromDb,
+        users: prev?.users,
+        taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
+        funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
+    };
+}

@@ -2,9 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
+// A teams save names the token of the list it read (state §0.225): one sender, the latest taken on a refusal.
+import { writeSettings, takeLatestSettings, addToSettingsList } from '../shared/saveSettings.js';
+import { revsAfter, TEAMS_CHANGED_TWICE, TEAM_MOVE_CHANGED, TEAM_MOVE_CHANGED_UNREAD } from '../../../utils/settingsRevs.js';
 import { memberStatus, invitationEntries } from './memberStatus.js';
 import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
 import { teamIdNamed, teamsWithMembers, teamsWithMemberOn } from '../../../utils/teamMembership.js';
@@ -191,14 +194,12 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             // Each new member joins the list of the team chosen for them (state
             // §0.168): the Teams page reads the team's list, and the invite
             // stored the name alone, so an invited member joined on no team.
-            const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, sent);
+            // With the list's token as this page loaded it (state §0.225): a list another tab saved since is read
+            // again and the members added to it once more; a second refusal is said (J-B6).
             let teamNote = '';
-            if (teamsChanged) {
-                const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: joinedTeams }) });
-                if (!stillOrg(askedOrg)) return;
-                if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
-                else teamNote = ` The team list was not updated — ${rt.error}`;
-            }
+            const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, sent), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });
+            if (!stillOrg(askedOrg)) return;
+            if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : ` The team list was not updated — ${added.error}`;
             // Per-invite refusals come back in `errors` — with a 201 when some went
             // out. They were dropped, and the screen said "Sent!".
             const failed = Array.isArray(d.errors) ? d.errors : [];
@@ -1016,7 +1017,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let row = null;                  // the member as stored, once a request here has landed
         let move = listOwed;             // the teams' lists to move: one owed from an earlier save, or this save's team
-        let roleLanded = false, teamsNow = null, owedNext = listOwed;
+        let roleLanded = false, teamsNow = null, teamsRevs = null, owedNext = listOwed;
         const missed = [];               // what did not land, in the server's words
         try {
             if (Object.keys(changes).length) {
@@ -1030,15 +1031,18 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                 if ('teamId' in changes) move = { teamId: row.teamId || null };
             }
             // The teams' lists follow the member's team, by id, straight after the member's row (state §0.211): they
-            // depend on nothing else, and dbWrite never throws, so no later request can leave a saved team unlisted.
+            // depend on nothing else, and writeSettings never throws, so no later request can leave a saved team unlisted.
             // The Manager box changes no team's manager (Jeff, 26 Oct: "Only who they report to") — the Teams page does.
+            // A list another tab saved since this page loaded (state §0.225, J-B7): the latest is read and the move
+            // stays owed — the next Save makes it on that list, with its token.
             if (move) {
                 const { teams: moved, changed } = teamsWithMemberOn(settings.teams, user.id, move.teamId);
                 if (!changed) owedNext = null;
                 else {
-                    const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: moved }) });
+                    const rt = await writeSettings({ teams: moved }, { teams: settings.revs?.teams ?? null });
                     if (!stillOrg(askedOrg)) return;
-                    if (rt.ok) { teamsNow = moved; owedNext = null; }
+                    if (rt.ok) { teamsNow = moved; teamsRevs = rt.revs; owedNext = null; }
+                    else if (rt.stale) { owedNext = move; const latest = await takeLatestSettings(setSettings); missed.push(latest ? TEAM_MOVE_CHANGED : TEAM_MOVE_CHANGED_UNREAD); }
                     else { owedNext = move; missed.push(`Saved, but the team list was not updated \u2014 ${clause(rt.error)}. Save changes tries the list again.`); }
                 }
             }
@@ -1085,7 +1089,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
             setSettings(prev => ({
                 ...prev,
                 ...(row ? { users: (prev.users||[]).map(u => u.id === row.id ? { ...u, ...row } : u) } : {}),
-                ...(teamsNow ? { teams: teamsNow } : {}),
+                ...(teamsNow ? { teams: teamsNow, revs: revsAfter(prev.revs, teamsRevs) } : {}),
             }));
         }
         // An Admin's own row: the header's name follows at once, the profile panel when next opened (OPEN_ITEMS §4.3).

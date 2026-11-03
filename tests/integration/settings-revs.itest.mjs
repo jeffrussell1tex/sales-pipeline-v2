@@ -431,3 +431,65 @@ test('a fresh org\'s first save: its GET reads every other key as before it save
     assert.deepEqual(after.competitors, ['First']);
     await bUntouched();
 });
+
+// The screens' sender against the real handler (state §0.225 — batch 4b-3, step B-2; JB2-9): saveSettings.js run as a
+// screen runs it, each request it makes answered by this file's handler for org A. A save carrying a token another save
+// has moved throws `.stale`, nothing written; the member invite's addition, refused as stale, is made again on the
+// latest list with its token and lands beside the other save; the tokens the screen then holds are the next GET's. On
+// today's sender (B-1) the second argument is ignored, no `ifRevs` goes out and the save lands — the first proof fails.
+test('the screens\' sender, against the handler: a stale token throws .stale; an addition refused as stale is made again on the latest list, beside the other save; the tokens held are the next GET\'s', async () => {
+    await seedA();
+    const { putSettings, addToSettingsList } = await import('../../src/Tabs/settings/shared/saveSettings.js');
+    const { setRequestOrg } = await import('../../src/utils/storage.js');
+    const { teamsWithMembers } = await import('../../src/utils/teamMembership.js');
+    const { STALE_ERROR } = await import('../../src/utils/settingsRevs.js');
+    const WEST = 'team_itest_setrevs_west';
+    const savedWindow = globalThis.window, savedFetch = globalThis.fetch;
+    globalThis.window = {};               // first: dbFetch reads window.__getClerkToken — none here, the auth mock signs in
+    const asked = [];
+    // The database driver queries over fetch too: only the app's own paths are the screen's requests.
+    globalThis.fetch = async (url, opts = {}) => {
+        if (!(typeof url === 'string' && url.startsWith('/.netlify/functions/'))) return savedFetch(url, opts);
+        assert.equal(url, '/.netlify/functions/settings', 'the sender asks the settings function alone');
+        const method = opts.method || 'GET';
+        asked.push(method);
+        const r = await call(A, opts.body === undefined ? undefined : JSON.parse(opts.body), method);
+        return new Response(JSON.stringify(r.body), { status: r.status });
+    };
+    setRequestOrg(A);
+    try {
+        const loaded = await get(A);     // the screen's copy, as the app loaded it
+        let copy = { ...loaded, users: ['the roster'] };
+        const setSettings = (f) => { copy = f(copy); };
+        // Another tab saves the teams list first: a second team.
+        const other = await call(A, { teams: [team('East', [M1, M2]), { id: WEST, name: 'West', managerId: '', repIds: [] }], ifRevs: { teams: loaded.revs?.teams ?? null } });
+        assert.equal(other.status, 200, JSON.stringify(other.body));
+        const afterOther = await extraText(A);
+        // A save naming the token this screen loaded: refused, the keys that moved on the Error, nothing written.
+        await assert.rejects(putSettings({ teams: [team('East', [M1])] }, { teams: copy.revs?.teams ?? null }), (e) => {
+            assert.deepEqual(e.stale, ['teams'], 'REGRESSION: no token sent, or the refusal\'s keys lost');
+            assert.equal(e.message, STALE_ERROR);
+            return true;
+        });
+        assert.equal(await extraText(A), afterOther, 'nothing written');
+        // The invite's addition (Q5): M3 joins East — refused, made again on the latest list with its token, landed.
+        asked.length = 0;
+        const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, [{ id: M3, teamId: EAST }]),
+            { list: copy.teams, rev: copy.revs?.teams ?? null, setSettings });
+        assert.deepEqual(added, { ok: true });
+        assert.deepEqual(asked, ['PUT', 'GET', 'PUT'], 'refused, the latest read, made again');
+        const stored = (await rowOf(A)).extra.teams;
+        assert.deepEqual(stored.map((t) => [t.id, t.repIds]), [[EAST, [M1, M2, M3]], [WEST, []]], 'REGRESSION: the other tab\'s team taken off, or the addition lost');
+        assert.deepEqual(copy.teams, stored, 'the screen holds the list as stored');
+        assert.deepEqual(copy.users, ['the roster'], 'the roster kept');
+        assert.deepEqual(copy.revs, (await get(A)).revs, 'REGRESSION: the tokens the screen holds are not the next GET\'s — its next save refused');
+        // A save that lands answers its token: the next GET's.
+        const landed = await putSettings({ competitors: ['Saved'] }, { competitors: copy.revs?.competitors ?? null });
+        assert.equal(typeof landed.revs.competitors, 'string');
+        assert.equal(landed.revs.competitors, (await get(A)).revs.competitors);
+        await bUntouched();
+    } finally {
+        globalThis.window = savedWindow; globalThis.fetch = savedFetch;
+        setRequestOrg(null);
+    }
+});

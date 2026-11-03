@@ -148,8 +148,10 @@ One commit per verified batch; doc patch in the same commit.
   only its own keys, merged in SQL with a revision token each — never a
   whole `extra` from a read (`_settingsRevs.mjs`; guide §18b114); a save
   naming the tokens it loaded (`ifRevs`) whose token moved is a 409
-  `code: 'stale'`, nothing written, no member renamed; the screens send
-  tokens from B-2 and B-3.
+  `code: 'stale'`, nothing written, no member renamed. Since §0.225 the
+  people screens send each list's token through one sender
+  (`saveSettings.js`; a stale refusal reads the latest and says so —
+  guide §18b114 rule 9); every other screen from B-3.
 - Persistent data rule: anything that must survive a refresh is saved via
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.

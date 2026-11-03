@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
-import { DEFAULT_SETTINGS } from '../utils/settingsDefaults.js';
+import { DEFAULT_SETTINGS, settingsAsLoaded } from '../utils/settingsDefaults.js';
 
 // The app's copy of the active org's settings. This hook LOADS them and never
 // writes them (state §0.170): each settings screen saves the keys it owns by its
@@ -83,18 +83,9 @@ export function useSettings() {
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
                 if (gen !== loadGenRef.current) return;   // a newer load owns the state
-                if (data.settings) {
-                    const { users: _stripUsers, ...settingsFromDb } = data.settings;
-                    setSettings(prev => ({
-                        ...DEFAULT_SETTINGS,
-                        ...settingsFromDb,
-                        users: prev.users,
-                        taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
-                        funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
-                    }));
-                } else {
-                    setSettings(prev => ({ ...DEFAULT_SETTINGS, users: prev.users }));
-                }
+                // The defaults under what the org stored, the roster kept — one
+                // rule with a stale save's read of the latest (settingsDefaults.js).
+                setSettings(prev => settingsAsLoaded(prev, data.settings ?? null));
                 // This org's settings are in state: the Settings view may use
                 // them from here.
                 settingsOrgRef.current = orgId;

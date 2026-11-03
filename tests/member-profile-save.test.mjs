@@ -25,6 +25,10 @@
 // member themselves — is sent with the name, asked by the server where a write names it anew (users.mjs MANAGER_LINK),
 // cleared by a restore where it names no member here, picked by a type-ahead, and read by id by the band, the Users
 // list and the export (S13-S16; I5 in the integration suite, each case shown failing on step A's server).
+//
+// And §0.225 (batch 4b-3, step B-2 — Jeff, 2 Nov: every Recommended, J-B7): the teams' lists move with the token the page
+// loaded them with (saveSettings.js writeSettings); a list another tab saved since is refused, the latest read once and
+// shown, and the move stays owed — Save changes makes it on that list, with its token (S10 R19-R19c).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -34,6 +38,7 @@ import { NETWORK_ERROR } from '../src/utils/storage.js';
 import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from '../src/Tabs/settings/people/memberPickers.js';
 import { linksAsked, linksDecided, memberLinksCleared, NOT_AN_ID, namesItself, notInOrg } from '../src/utils/linkIds.js';
 import { teamIdNamed, teamsWithMemberOn } from '../src/utils/teamMembership.js';
+import { revsAfter, STALE_ERROR, TEAM_MOVE_CHANGED, TEAM_MOVE_CHANGED_UNREAD } from '../src/utils/settingsRevs.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -91,6 +96,10 @@ const LEGACY = member('usr_leg', 'Leg Acy', { role: 'member', userType: 'member'
 const USERS = Object.freeze([TESS, EVE, WES, NIA, LOU, BOB, JO, IVY, DEE, DAN, KAREN, TOM, LEGACY]);
 const withTeam = (m, id) => ({ ...m, ...teamPicked(teamOptions(TEAMS), id) });
 const repIdsOf = (teams) => teams.map((t) => (typeof t === 'string' ? t : t.repIds));
+// What a take-latest reads (state §0.225): another tab put Kim on West since the page loaded, and the list's token
+// moved. A move made on it keeps her there.
+const LATEST_TEAMS = Object.freeze([TEAMS[0], TEAMS[1], Object.freeze({ ...TEAMS[2], repIds: Object.freeze(['usr_kim']) }), 'Legacy']);
+const LATEST = Object.freeze({ teams: LATEST_TEAMS, revs: Object.freeze({ teams: 'T_LATEST' }) });
 
 // faed240's UsersDetail.jsx :937-938, verbatim: the body today's page sends.
 const OLD_BODY = (form, settings) => {
@@ -339,9 +348,9 @@ const freeNames = (fnSrc) => {
 };
 
 const SAVE = handlerOf(read(UD), 'UserProfilePage', 'handleSave');
-const SAVE_NAMES = ['clause', 'dbFetch', 'dbWrite', 'form', 'formAfterSave', 'listOwed', 'memberChanges', 'requestOrg', 'roleChanged', 'setError',
-    'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving', 'setSettings', 'setTimeout', 'setUser',
-    'settings', 'stillOrg', 'teamsWithMemberOn', 'user'];
+const SAVE_NAMES = ['TEAM_MOVE_CHANGED', 'TEAM_MOVE_CHANGED_UNREAD', 'clause', 'dbFetch', 'form', 'formAfterSave', 'listOwed', 'memberChanges',
+    'requestOrg', 'revsAfter', 'roleChanged', 'setError', 'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving',
+    'setSettings', 'setTimeout', 'setUser', 'settings', 'stillOrg', 'takeLatestSettings', 'teamsWithMemberOn', 'user', 'writeSettings'];
 
 // The server's answer to a member PUT, made up the way it builds one: the body laid over the stored row, the name
 // built from First and Last first (S2), the profile's userType the column's role.
@@ -352,15 +361,16 @@ const storedRow = (stored, body) => {
 // One run of a handleSave: scripted answers per endpoint (a queue, then the default), every request and every
 // setter call recorded in order, the setters' updaters applied to made-up state.
 // `typeDuring`: what the Admin types while the member's PUT is out — laid over the form when that request is asked.
-const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, users = USERS, me = null, answers = {}, org = () => true, typeDuring = null }) => {
+// `revs`: the tokens the page loaded with the lists (state §0.225); `latestFails`: a take-latest that could not read.
+const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, users = USERS, revs, me = null, answers = {}, org = () => true, typeDuring = null, latestFails = false }) => {
     const calls = [], sets = [], timers = [];
-    const settings = { teams, users };
+    const settings = { teams, users, revs };
     const state = { user, form, me, listOwed, settings, error: undefined, saving: undefined, saved: undefined, roleNote: undefined };
     const queue = Object.fromEntries(Object.entries(answers).map(([k, v]) => [k, [...v]]));
     const DEFAULT = {
         users: (body) => ({ status: 200, body: { user: storedRow(user, body) } }),
         'user-role': (body) => ({ status: 200, body: { ok: true, userId: body.targetUserId, role: body.role } }),
-        settings: (body) => ({ ok: true, status: 200, error: null, data: body }),
+        settings: (body) => ({ ok: true, status: 200, error: null, data: body, revs: { teams: 'T_NEW' } }),   // writeSettings' answer: the new token
     };
     const ask = (via, url, opts = {}) => {
         const to = url.split('/').pop().split('?')[0];
@@ -380,6 +390,18 @@ const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, 
             return { ok: a.status < 400, status: a.status, json: async () => a.body };
         },
         dbWrite: async (url, opts) => ask('dbWrite', url, opts),
+        // The settings sender (saveSettings.js writeSettings, state §0.225): never throws; dbWrite's shape, with the tokens a
+        // landed save answered (`revs`) or the keys a stale refusal names (`stale`). Recorded with the body it sends.
+        writeSettings: async (payload, revs) => ask('writeSettings', '/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ ...payload, ifRevs: revs }) }),
+        // One read of the latest (saveSettings.js takeLatestSettings): the copy takes its lists and tokens, the roster
+        // kept, and it answers them — or null, setting nothing, when it could not read.
+        takeLatestSettings: async (setter) => {
+            calls.push({ to: 'settings', via: 'takeLatestSettings', method: 'GET', body: undefined });
+            if (latestFails) return null;
+            setter((prev) => ({ ...LATEST, users: prev.users }));
+            return LATEST;
+        },
+        revsAfter, TEAM_MOVE_CHANGED, TEAM_MOVE_CHANGED_UNREAD,
         setError: set('setError', 'error'), setSaving: set('setSaving', 'saving'), setSaved: set('setSaved', 'saved'),
         setRoleNote: set('setRoleNote', 'roleNote'), setUser: set('setUser', 'user'), setForm: set('setForm', 'form'),
         setSettings: set('setSettings', 'settings'), setMyProfile: set('setMyProfile', 'me'), setListOwed: set('setListOwed', 'listOwed'),
@@ -557,12 +579,15 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.deepEqual(SAID(r14b), ['Could not change the role.']);
 
     // R15 the member, the list and the role all land: one roster update holding all three; nothing owed; saved.
-    const r15 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), phone: '2', role: 'Manager' } });
+    const r15 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), phone: '2', role: 'Manager' }, revs: { teams: 'T_OPEN', territories: 'R_HELD' } });
     assert.deepEqual(r15.to, ['users', 'settings', 'user-role']);
+    assert.deepEqual(r15.calls[1].body.ifRevs, { teams: 'T_OPEN' }, 'the list goes with the token the page loaded it with (state §0.225)');
     assert.equal(r15.named('setSettings').length, 1);
     const tess = r15.state.settings.users.find((u) => u.id === 'usr_tess');
     assert.deepEqual([tess.phone, tess.teamId, tess.role], ['2', 'team_west', 'Manager']);
     assert.deepEqual(repIdsOf(r15.state.settings.teams), [[], ['usr_eve'], ['usr_tess'], 'Legacy']);
+    assert.deepEqual(r15.state.settings.revs, { teams: 'T_NEW', territories: 'R_HELD' },
+        'REGRESSION: the token the list landed with is dropped, or the other tokens with it — the next save is refused as stale');
     assert.equal(r15.state.user.role, 'Manager');
     assert.deepEqual(r15.named('setListOwed'), [null]);
     assert.deepEqual(r15.named('setSaved'), [true]);
@@ -595,6 +620,38 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.equal(r18.state.form.title, 'Typing', 'REGRESSION: a field typed during the save is overwritten when it lands');
     assert.equal(r18.state.form.phone, '2');
     assert.deepEqual(memberChanges(r18.state.user, r18.state.form), { title: 'Typing' }, 'and it is what Save sends next');
+
+    // R19 (state §0.225, J-B7) the list refused as stale — another tab saved the teams since the page loaded: the member
+    // saved; the latest read once and shown; said, without Reload; the move owed.
+    const STALE = { ok: false, status: 409, error: STALE_ERROR, stale: ['teams'] };
+    const r19 = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), revs: { teams: 'T_OPEN' }, answers: { settings: [STALE] } });
+    assert.deepEqual(r19.calls.map((c) => [c.to, c.via, c.method]), [['users', 'dbFetch', 'PUT'], ['settings', 'writeSettings', 'PUT'], ['settings', 'takeLatestSettings', 'GET']],
+        'REGRESSION: a stale refusal leaves the refused copy on screen');
+    assert.deepEqual(r19.calls[1].body.ifRevs, { teams: 'T_OPEN' });
+    assert.deepEqual(SAID(r19), [TEAM_MOVE_CHANGED], 'REGRESSION: a stale refusal said in the server\'s words — "Reload the page", which loses the move');
+    assert.equal(TEAM_MOVE_CHANGED, 'Saved, but the team list changed since this page loaded — it now shows the latest. Save changes tries the list again.');
+    assert.deepEqual(r19.named('setListOwed'), [{ teamId: 'team_west' }], 'REGRESSION: the move is forgotten');
+    assert.equal(r19.state.settings.teams, LATEST_TEAMS, 'the latest on screen');
+    assert.deepEqual(r19.state.settings.revs, { teams: 'T_LATEST' }, 'with its token');
+    assert.equal(r19.state.user.teamId, 'team_west', 'the member was saved');
+    assert.equal(r19.state.settings.users.find((u) => u.id === 'usr_tess').teamId, 'team_west', 'and the roster holds the row');
+    assert.deepEqual(r19.named('setSaved'), []);
+    // R19b Save changes: the owed move made on the latest list, with its token — the other tab's Kim kept.
+    const r19b = await runSave({ user: r19.state.user, form: r19.state.form, listOwed: r19.state.listOwed, teams: r19.state.settings.teams, revs: r19.state.settings.revs });
+    assert.deepEqual(r19b.calls.map((c) => [c.to, c.method]), [['settings', 'PUT']], 'only the list');
+    assert.deepEqual(r19b.calls[0].body.ifRevs, { teams: 'T_LATEST' }, 'REGRESSION: Save again sends the refused token — refused again');
+    assert.deepEqual(repIdsOf(r19b.calls[0].body.teams), [[], ['usr_eve'], ['usr_kim', 'usr_tess'], 'Legacy'],
+        'REGRESSION: the move made on the refused list — the other tab\'s save undone');
+    assert.deepEqual(r19b.named('setListOwed'), [null]);
+    assert.deepEqual(r19b.state.settings.revs, { teams: 'T_NEW' });
+    assert.deepEqual(r19b.named('setSaved'), [true]);
+    // R19c the latest could not be read: said so, still without Reload (R16b); the copy as it was; the move owed.
+    const r19c = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [STALE] }, latestFails: true });
+    assert.deepEqual(r19c.to, ['users', 'settings', 'settings']);
+    assert.deepEqual(SAID(r19c), [TEAM_MOVE_CHANGED_UNREAD], 'REGRESSION: a list not read said as shown');
+    assert.ok(!/Reload/.test(SAID(r19c)[0]), 'never Reload — a reload loses the owed move');
+    assert.equal(r19c.state.settings.teams, TEAMS);
+    assert.deepEqual(r19c.named('setListOwed'), [{ teamId: 'team_west' }]);
 });
 
 // faed240's handleSave (UsersDetail.jsx :923-1015), verbatim — one string per line; run as the function it declares.

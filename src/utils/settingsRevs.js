@@ -34,6 +34,17 @@ const REV_KEY_SET = new Set(REV_KEYS);
 // or a hand-made call.
 export const STALE_ERROR = 'These settings changed since this page loaded. Reload the page to see the latest, then make your change again.';
 
+// The screens' words for a stale save (state §0.225 — batch 4b-3, step B-2). A screen refused as stale has read the
+// latest already (J-B4) and says so; the profile page's move is owed, and its next Save changes sends it (J-B7).
+/** A list's save refused: the screen now shows the latest list. `noun` names it: 'team', 'territory'. */
+export const listChanged = (noun) => `The ${noun} list changed since this page loaded — it now shows the latest. Make your change again.`;
+// The member invite and import: the invitations went out, and the team list refused their addition twice (J-B6).
+export const TEAMS_CHANGED_TWICE = 'The invitations went out, but the team list changed twice while saving and does not list them yet — reload; their team is set on their row.';
+// The member profile page: the member saved, the move on the team list refused — owed to the next Save changes.
+export const TEAM_MOVE_CHANGED = 'Saved, but the team list changed since this page loaded — it now shows the latest. Save changes tries the list again.';
+// …and when the latest could not be read: the same, without saying the page shows it. Neither says Reload (R16b).
+export const TEAM_MOVE_CHANGED_UNREAD = 'Saved, but the team list changed since this page loaded. Save changes tries the list again.';
+
 const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** The tokens a stored `extra` holds: { key: token } — only text tokens; anything else holds none. */
@@ -98,3 +109,24 @@ export const keysDropped = (stored, keep) => Object.keys(isPlain(stored) ? store
 
 /** Only the keys named. */
 export const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => k in (obj || {})).map((k) => [k, obj[k]]));
+
+// The screens' half (state §0.225 — batch 4b-3, step B-2): what a save sends, what a refusal names, and the tokens
+// the app's copy holds after a save landed.
+
+/**
+ * The body a save sends. With no tokens named (`revs` undefined) the payload as it is — accepted unchecked (Q6: a
+ * screen not converted yet). Else with `ifRevs`: for each key of the payload a token covers, the token the screen
+ * loaded, or null where it holds none (`revs` null or {}: checked, every token null).
+ */
+export function withIfRevs(payload, revs) {
+    if (revs === undefined) return payload;
+    return { ...payload, ifRevs: Object.fromEntries(revKeysOf(payload).map((k) => [k, typeof revs?.[k] === 'string' ? revs[k] : null])) };
+}
+
+/** The keys a stale refusal names (a 409 with `code: 'stale'`; [] when it names none) — null for any other answer. */
+export const staleOf = (status, body) => (status === 409 && body?.code === 'stale'
+    ? (Array.isArray(body.stale) ? body.stale.filter((k) => typeof k === 'string') : [])
+    : null);
+
+/** The tokens held, with those a save answered set over them key by key — the held set is never replaced whole. */
+export const revsAfter = (held, answered) => ({ ...revsOf({ revs: held }), ...revsOf({ revs: answered }) });

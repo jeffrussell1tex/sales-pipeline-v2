@@ -1,13 +1,17 @@
 // settings/people/TeamsDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { putSettings } from '../shared/saveSettings.js';
+import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+// A teams save names the token its list was read with, and a stale refusal takes the latest (state §0.225).
+import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 // A team is one record (state §0.222): a list's entries read as the members they name, a save sends only what it
 // changes, and no new team takes a name another has.
 import { holdsMember, namesMember, withoutMember, teamNameRefused, teamSaveMembers, rosterAfterTeamSave } from '../../../utils/teamMembership.js';
+// Assign lists a member once, by app id, on the team picked and on no other (state §0.225 — JB2-8).
+import { teamsWithMemberOn } from '../../../utils/teamMembership.js';
 
 const AttainBar = ({ pct }) => {
     const color = pct >= 100 ? T.ok : pct >= 60 ? T.warn : T.danger;
@@ -23,7 +27,7 @@ const AttainBar = ({ pct }) => {
 
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
-const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
+const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) => {
     const allUsers  = (settings.users || []).filter(u => u.name && u.active !== false);
     const managers  = allUsers.filter(u => {
         const r = (u.userType || u.role || '').toLowerCase();
@@ -35,7 +39,10 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     });
     const territories = (settings.territories || []).map(t => t.name || t).filter(Boolean);
     const verticals   = (settings.verticalMarkets || settings.verticals || []).map(v => v.name || v).filter(Boolean);
-    const teams       = settings.teams || [];
+    // The list and its token as the window opened (state §0.225 — J-B8): a save sends this list with this token, never a
+    // newer copy's; it is re-based on the list it landed, or on the latest when a new team was refused as stale.
+    const [base, setBase] = useState(() => ({ list: settings.teams || [], rev: settings.revs?.teams ?? null }));
+    const teams       = base.list;
 
     const isEdit = !!team;
     const [name,       setName]       = useState(team?.name       || '');
@@ -68,12 +75,24 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
             // every holder by id, an inactive one too.
             const sends = teamSaveMembers({ opened: isEdit ? team : null, saved, users: allUsers });
 
-            // Persist to settings (teams + users)
+            // Persist to settings (teams + users). The list goes with the token the window opened with (state §0.225): a
+            // save another landed first is refused — nothing written, no one renamed.
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
-            const data = await res.json();
+            const w = await writeSettings({ teams: updatedTeams }, { teams: base.rev });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Save failed');
+            if (w.stale) {
+                // The page takes the latest and says so (J-B8), and no member is sent anything: an edit closes, its words
+                // on the page; a new team stays open on the latest list, so Save again sends it with that list's token.
+                const latest = await takeLatestSettings(setSettings);
+                const words = latest ? listChanged('team') : w.error;
+                if (isEdit) { onStale(words); onClose(); return; }
+                if (latest) setBase({ list: latest.teams || [], rev: latest.revs?.teams ?? null });
+                setErr(words);
+                return;
+            }
+            if (!w.ok) throw new Error(w.error || 'Save failed');
+            // The list landed: the window holds it with its new token, so a Save after a member's failure sends both.
+            setBase({ list: updatedTeams, rev: w.revs.teams ?? null });
 
             // A member whose row did not update is reported by name; one that did is kept as the server answered it.
             const failed = [];
@@ -87,7 +106,7 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
             if (!stillOrg(askedOrg)) return;
 
             const renamed = isEdit && team.name !== saved.name ? { id, name: saved.name } : null;
-            setSettings(prev => ({ ...prev, teams: updatedTeams, users: rosterAfterTeamSave(prev.users, answered, renamed) }));
+            setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, w.revs), users: rosterAfterTeamSave(prev.users, answered, renamed) }));
             if (failed.length) {
                 setErr(`Team saved, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
                 return;                                  // stay open so the message is read
@@ -337,6 +356,11 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     // `if (res.ok)` and did nothing on failure, and the member cascade was only
     // console.error'd (state §0.109). Both are reported here, above the table.
     const [deleteErr,    setDeleteErr]    = useState('');
+    // A team window's save refused because another landed first, said on the page once the window has closed (state
+    // §0.225 — J-B8); opening a window or a Delete clears it.
+    const [listNote,     setListNote]     = useState('');
+    // An Assign in flight: the team buttons wait for its answer, so a second click never sends the same token again.
+    const [assigning,    setAssigning]    = useState(false);
 
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -357,20 +381,32 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     };
 
     const handleTeamSaved = (updatedTeams) => { /* setSettings already called inside TeamModal */ };
+    const openTeam = (t) => { setListNote(''); setEditingTeam(t); };
 
     const handleDelete = (team) => {
         setOpenKebab(null);
         showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, async () => {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const updatedTeams = teams.filter(t => t.id !== team.id);
+            const teamsRev = settings.revs?.teams ?? null;   // the token of the list this delete is built from (state §0.225)
             const members = allUsers.filter(u => u.teamId === team.id);
-            setDeleteErr('');
+            setDeleteErr(''); setListNote('');
+            let answer;
             try {
-                await putSettings({ teams: updatedTeams });   // throws on non-2xx
+                answer = await putSettings({ teams: updatedTeams }, { teams: teamsRev });   // throws on non-2xx
             } catch (e) {
+                // Another save landed first (state §0.225): nothing was deleted; the page takes the latest and says so.
+                // When the latest cannot be read, the refusal's own words.
+                if (e.stale) {
+                    const latest = await takeLatestSettings(setSettings);
+                    if (latest) { setDeleteErr(listChanged('team')); return; }
+                }
                 setDeleteErr(`Team not deleted — ${e.message}`);
                 return;
             }
+            // The list landed: the copy takes it and its token now, before the member rows — a save made while they go
+            // out sends the list as it stands, with its token.
+            setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, answer?.revs) }));
             // The team is gone; now the member rows. One that did not update is
             // reported by name, not logged — it still points at a team the
             // roster no longer has.
@@ -383,11 +419,44 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
             if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
-                teams: updatedTeams,
                 users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u),
             }));
             if (failed.length) setDeleteErr(`Team deleted, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
         });
+    };
+
+    // Assign a member to a team (state §0.225 — JB2-5, JB2-7, JB2-8). The member is listed once: on the team picked and
+    // off any other list that holds them by app id (teamsWithMemberOn — a list holding them by a Clerk id is N13, filed);
+    // a list that already has it so is not sent. The list goes with the token of the render that built it; a stale
+    // refusal takes the latest and says so, the window staying open on it, and the member is sent nothing. The landed
+    // list and its token reach the copy before the member's save, so a member save that fails leaves no old token
+    // behind; the roster keeps every member, the one assigned as the server answered it.
+    const assignTo = async (t) => {
+        if (assigning) return;
+        const teamsRev = settings.revs?.teams ?? null;
+        const { teams: updatedTeams, changed } = teamsWithMemberOn(teams, assigningUser.id, t.id);
+        setAssignErr('');
+        try {
+            setAssigning(true);
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+            if (changed) {
+                const rt = await writeSettings({ teams: updatedTeams }, { teams: teamsRev });
+                if (!stillOrg(askedOrg)) return;
+                if (rt.stale) {
+                    const latest = await takeLatestSettings(setSettings);
+                    if (latest) { setAssignErr(listChanged('team')); return; }
+                }
+                if (!rt.ok) { setAssignErr(`Not assigned — ${rt.error}`); return; }
+                setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, rt.revs) }));
+            }
+            const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
+            if (!stillOrg(askedOrg)) return;
+            if (!ru.ok) { setAssignErr(`Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`); return; }
+            setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === assigningUser.id ? { ...u, ...(ru.data?.user || { team: t.name, teamId: t.id, territory: t.territory || '', vertical: t.vertical || '' }) } : u) }));
+            setAssigningUser(null);
+        } finally {
+            setAssigning(false);
+        }
     };
 
     const teamCount  = teams.length;
@@ -402,6 +471,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                 settings={settings}
                 setSettings={setSettings}
                 onSave={handleTeamSaved}
+                onStale={setListNote}
                 onClose={() => setEditingTeam(null)}/>
         )}
 
@@ -430,24 +500,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                         ) : (
                             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                                 {teams.map(t => (
-                                    <button key={t.id} onClick={async () => {
-                                        const updatedTeams = teams.map(tm => tm.id === t.id
-                                            ? { ...tm, repIds: [...(tm.repIds||[]), assigningUser.id] }
-                                            : tm);
-                                        const updatedUsers = allUsers.map(u => u.id === assigningUser.id
-                                            ? { ...u, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }
-                                            : u);
-                                        setAssignErr('');
-                                        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-                                        const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
-                                        if (!stillOrg(askedOrg)) return;
-                                        if (!rt.ok) { setAssignErr(`Not assigned — ${rt.error}`); return; }
-                                        const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
-                                        if (!stillOrg(askedOrg)) return;
-                                        if (!ru.ok) { setAssignErr(`Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`); return; }
-                                        setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
-                                        setAssigningUser(null);
-                                    }} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, cursor:'pointer', fontFamily:T.sans, textAlign:'left' }}
+                                    <button key={t.id} onClick={() => assignTo(t)} disabled={assigning} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, cursor:'pointer', fontFamily:T.sans, textAlign:'left', opacity:assigning?0.7:1 }}
                                         onMouseEnter={e=>e.currentTarget.style.background='rgba(58,90,122,0.08)'}
                                         onMouseLeave={e=>e.currentTarget.style.background=T.surface2}>
                                         <span style={{ width:4, height:20, borderRadius:2, background:t.color||T.inkMuted, flexShrink:0 }}/>
@@ -499,7 +552,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
                     {viewMode === 'table' ? 'Switch to org chart' : 'Switch to table'}
                 </button>
-                <button onClick={() => setEditingTeam('new')}
+                <button onClick={() => openTeam('new')}
                     style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
                     New team
                 </button>
@@ -509,6 +562,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
         {deleteErr && (
             <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
                 {deleteErr}
+            </div>
+        )}
+
+        {listNote && (
+            <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                {listNote}
             </div>
         )}
 
@@ -544,7 +603,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     style={{ display:'grid', gridTemplateColumns:'24px 1fr 200px 80px 130px 90px 120px 80px 32px', gap:8, padding:'11px 16px', borderBottom: i<teams.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-                    onClick={() => setEditingTeam(team)}>
+                    onClick={() => openTeam(team)}>
                     <span style={{ color:T.border, fontSize:14, cursor:'grab' }} onClick={e=>e.stopPropagation()}>⠿</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <span style={{ width:4, height:16, borderRadius:2, background:team.color||T.inkMuted, flexShrink:0 }}/>
@@ -570,7 +629,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                             <div onClick={e=>e.stopPropagation()}
                                 style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160 }}>
                                 {[
-                                    { label:'Edit team',   action: () => { setOpenKebab(null); setEditingTeam(team); } },
+                                    { label:'Edit team',   action: () => { setOpenKebab(null); openTeam(team); } },
                                     { label:'Delete team', action: () => handleDelete(team), danger: true },
                                 ].map((item, mi) => (
                                     <button key={mi} onClick={item.action}
