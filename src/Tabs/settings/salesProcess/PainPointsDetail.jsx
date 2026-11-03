@@ -5,6 +5,7 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { painPointGroups } from '../../../utils/painPoints.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
@@ -50,7 +51,10 @@ const parsePainCSV = (text) => {
 };
 
 export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
-    const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
+    // Read through the one rule (state §0.227): the app's default, and an org that never saved here, hold a flat list
+    // of names, which this panel read as categories and threw on.
+    const stored   = painPointGroups(settings?.painPoints);
+    const saved    = stored.length ? stored : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
     const fileInputRef = useRef(null);

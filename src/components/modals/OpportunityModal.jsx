@@ -16,6 +16,7 @@ import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped,
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
 import { quarterOf, fiscalStartOf } from '../../utils/quarters.js';
+import { painPointGroups } from '../../utils/painPoints.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -1899,13 +1900,12 @@ export default function OpportunityModal({
                                         {(() => {
                                             const selectedPainPoints = formData.painPoints ? formData.painPoints.split(', ').filter(p => p) : [];
 
-                                            // settings.painPoints is grouped: [{ cat, items }]
-                                            // Fall back to a flat default list if not configured
-                                            const rawPainPoints = settings?.painPoints;
-                                            const isGrouped = Array.isArray(rawPainPoints) && rawPainPoints.length > 0 && typeof rawPainPoints[0] === 'object' && rawPainPoints[0].cat;
-                                            const groups = isGrouped
-                                                ? rawPainPoints
-                                                : [{ cat: 'Pain Points', items: rawPainPoints?.length ? rawPainPoints : ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility'] }];
+                                            // The library is categories ([{ cat, items }]) once saved in Settings, a flat list of names before:
+                                            // one rule reads both (state §0.227). Fall back to a flat default list if it holds none.
+                                            const configured = painPointGroups(settings?.painPoints);
+                                            const groups = configured.length
+                                                ? configured
+                                                : [{ cat: 'Pain Points', items: ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility'] }];
 
                                             return (
                                                 <>

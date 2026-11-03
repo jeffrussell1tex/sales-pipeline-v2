@@ -2048,7 +2048,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a Manager on a team's `repIds`, which the window neither draws nor
   counts; its save sends the stored list unchanged (`repIds` kept
   whole), so nothing is dropped. Low.
-- **Pain points library crashes on the seeded default** (§0.226's plan,
+- **Pain points library crashes on the seeded default — DONE on dev in
+  §0.227 (NOT committed; guide §18b115)**: every reader of the library
+  goes through `src/utils/painPoints.js`, the loose names one "Pain
+  Points" category; the browser check opened it on Accelerep QA's
+  seven names. Was (§0.226's plan,
   confirmed in the code 3 Nov; not yet seen in the browser): the
   default `painPoints` is seven strings (`settingsDefaults.js:36`); the
   GET answers it while the org has stored none, and every settings
@@ -2121,6 +2125,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is wrong — every `once` wrapper shares the hook's `flight` ref — but
   the other panels write a plain `once(…)`; dropping the `useCallback`
   would match them. Low.
+- **An empty pain points library falls back to three different lists**
+  (§0.227's review, 3 Nov): when the library holds no names (a stored
+  `[]`, or only entries the rule leaves out), the Settings panel shows
+  its own 21 names in 6 categories (`DEFAULT_PAIN_POINTS`), the deal
+  window offers 5 other names, the card shows nothing, and none is the
+  app default's 7. The panel cannot store `[]` itself; whether any org
+  holds one was not read. One fallback in `painPoints.js` would settle
+  it — which list is Jeff's call. Low.
+- **Pain points library's "Most-used pain points" card is made up**
+  (§0.227's browser check, 3 Nov): it says "Across all open
+  opportunities this quarter" over five fixed names and numbers (38,
+  31, 27, 24, 19 — `MOST_USED_PAIN_POINTS` in `PainPointsDetail.jsx`),
+  the same for every org, none of them from its deals. Count the deals'
+  pain points, or drop the card, as §0.86 did for the mocked-up panels (tests/honest-panels.test.mjs). Low.
 - **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
@@ -4490,6 +4508,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   misses — a 51st), and §0.225 edits three listed above (deal-modal-saves,
   late-answers, save-buttons), and §0.226 edits those three and
   quota-plan, so the one scoped run over B-2 and B-3 reads them short;
+  §0.227's tests/pain-points.test.mjs walks src too (a 52nd);
   what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
   part 4). Recommended: mutate-scope.mjs runs each edited test

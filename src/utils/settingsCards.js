@@ -22,6 +22,7 @@
 import { mfaCardOf } from './fetchStatus.js';
 import { jobsCheck } from './jobHealth.js';
 import { APP_ROLES } from './roles.js';
+import { painPointCount } from './painPoints.js';
 
 // ── counting helpers (state §0.88) ───────────────────────────────────────────
 // Every count below reads the key the card's OWN panel saves. The catalogue
@@ -119,7 +120,7 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     if (item.id === 'account-segments') statusDetail = len(settings?.accountSegmentTiers) ? plural(len(settings.accountSegmentTiers), 'tier') : 'App defaults';
     if (item.id === 'industries')      statusDetail = industriesDetail(settings?.industries) || 'App defaults';
     if (item.id === 'lead-conv-benchmarks') statusDetail = countOrNull(len(settings?.leadConvBenchmarks), 'source');
-    if (item.id === 'pain-points')     statusDetail = countOrNull(len(settings?.painPoints), 'pain point');
+    if (item.id === 'pain-points')     statusDetail = countOrNull(painPointCount(settings?.painPoints), 'pain point');   // names, never categories (state §0.227)
     if (item.id === 'email-templates') statusDetail = countOrNull(len(settings?.emailTemplates), 'template');
     if (item.id === 'buyer-personas')  statusDetail = plural(len(settings?.buyerPersonas), 'persona');
 

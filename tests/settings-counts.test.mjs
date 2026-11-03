@@ -61,7 +61,10 @@ test('sales process: pipelines, stages, KPIs, tiers, industries, sources, pain p
     assert.equal(industriesDetail([{ k: 'Tech' }]), '1 industry');
     assert.equal(detail('lead-conv-benchmarks', { leadConvBenchmarks: [1, 2, 3, 4] }), '4 sources');
     assert.equal(detail('lead-conv-benchmarks', {}), null);
-    assert.equal(detail('pain-points', { painPoints: [1] }), '1 pain point');
+    assert.equal(detail('pain-points', { painPoints: ['High Turnover'] }), '1 pain point');
+    // A saved library is categories (state §0.227): the card counts the pain points in them, never the categories.
+    assert.equal(detail('pain-points', { painPoints: [{ cat: 'Cost', items: ['A', 'B'] }, { cat: 'Team', items: ['C'] }] }), '3 pain points');
+    assert.equal(detail('pain-points', { painPoints: [{ cat: 'Empty', items: [] }] }), null);
     assert.equal(detail('buyer-personas', {}), '0 personas');
 });
 
