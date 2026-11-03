@@ -584,3 +584,84 @@ test('B-3a\'s keys through the sender: a three-key save names only the key that 
         setRequestOrg(null);
     }
 });
+
+// The Sales Manager's SPIFF board through the screens' sender (state §0.228 — batch 4b-3, step B-3b; STEP-B.md §4b §5,
+// Integration 5). Like B-3a's above, this passes on B-1's server and B-2's sender: it covers the key the page sends, it
+// is not proof of B-3b — the page's saves are proven run as written in tests/settings-saves.test.mjs. Each save is made
+// as the page makes it: `writeSettings({ spiffs }, opened)`, `opened` the tokens its drafts began with — each list's
+// taken from the copy as its draft began (draftTiers, draftSpiffs) — and a landed save's answered token merged into the
+// copy (revsAfter), the next draft beginning with it. Landed: only the SPIFFs' token named, a moved commission plan's
+// token held beside it never refusing it; the answered token the next GET's. Stale: another tab saved the board first —
+// refused, `.stale` naming `spiffs` alone, nothing written, no audit; the latest taken into the page's copy
+// (takeLatestSettings): the other tab's board and its token, the roster kept.
+test("B-3b's spiffs through the sender: writeSettings lands with the token its draft began with, the next GET's, a moved token for another list never refusing it; refused as stale when another tab saved the board first — nothing written, the latest taken", async () => {
+    await seedA();
+    const { writeSettings, takeLatestSettings } = await import('../../src/Tabs/settings/shared/saveSettings.js');
+    const { setRequestOrg } = await import('../../src/utils/storage.js');
+    const { STALE_ERROR, revsAfter } = await import('../../src/utils/settingsRevs.js');
+    const savedWindow = globalThis.window, savedFetch = globalThis.fetch;
+    globalThis.window = {};               // first: dbFetch reads window.__getClerkToken — none here, the auth mock signs in
+    const sent = [];                      // the bodies the sender PUT, as the handler read them
+    // The database driver queries over fetch too: only the app's own paths are the screen's requests.
+    globalThis.fetch = async (url, opts = {}) => {
+        if (!(typeof url === 'string' && url.startsWith('/.netlify/functions/'))) return savedFetch(url, opts);
+        assert.equal(url, '/.netlify/functions/settings', 'the sender asks the settings function alone');
+        const method = opts.method || 'GET';
+        const body = opts.body === undefined ? undefined : JSON.parse(opts.body);
+        if (method === 'PUT') sent.push(body);
+        const r = await call(A, body, method);
+        return new Response(JSON.stringify(r.body), { status: r.status });
+    };
+    setRequestOrg(A);
+    try {
+        // The page's copy, as the app loaded it. The commission plan's draft begins, then the SPIFF board's: each takes
+        // its own list's token from the copy as it begins — none stored yet, null.
+        let copy = { ...(await get(A)), users: ['the roster'] };
+        const setSettings = (f) => { copy = f(copy); };
+        let opened = { quotaData: copy.revs?.quotaData ?? null };
+        opened = { ...opened, spiffs: copy.revs?.spiffs ?? null };
+        // Another tab saves the commission plan meanwhile: the token the page holds for it has moved.
+        const PLAN = { commissionTiers: [{ min: 0, rate: 7 }] };
+        const plan = await call(A, { quotaData: PLAN, ifRevs: { quotaData: null } });
+        assert.equal(plan.status, 200, JSON.stringify(plan.body));
+
+        // The board's save lands, naming the SPIFFs' token alone; the token it answered is the next GET's.
+        const BOARD = [{ id: 'spiff_itest_setrevs_1', name: 'Q4 push', type: 'flat', amount: 500, active: true }];
+        const w = await writeSettings({ spiffs: BOARD }, opened);
+        assert.equal(w.ok, true, JSON.stringify(w));
+        assert.deepEqual(sent.at(-1).ifRevs, { spiffs: null }, "REGRESSION: the commission plan's token went with the SPIFF board — a moved token for a list it does not send refuses it");
+        assert.deepEqual(Object.keys(w.revs), ['spiffs'], 'only the key sent');
+        assert.equal(w.revs.spiffs, (await get(A)).revs.spiffs, "REGRESSION: the token answered is not the next GET's — the next SPIFF draft begins with it and is refused against its own");
+        const stored = (await rowOf(A)).extra;
+        assert.deepEqual(stored.spiffs, BOARD);
+        assert.deepEqual(stored.quotaData, PLAN, "the other tab's plan kept");
+        // As the page lands it: the token merged, the board put in; the next SPIFF draft begins with the copy's token.
+        setSettings((prev) => ({ ...prev, revs: revsAfter(prev.revs, w.revs) }));
+        setSettings((prev) => ({ ...prev, spiffs: BOARD }));
+        opened = { ...opened, spiffs: copy.revs?.spiffs ?? null };
+        assert.equal(opened.spiffs, w.revs.spiffs);
+
+        // Another tab saves the board first, with the same token.
+        const THEIRS = [{ id: 'spiff_itest_setrevs_2', name: 'Other tab push', type: 'flat', amount: 50, active: true }];
+        const other = await call(A, { spiffs: THEIRS, ifRevs: { spiffs: opened.spiffs } });
+        assert.equal(other.status, 200, JSON.stringify(other.body));
+        const afterOther = await extraText(A), n = await audits(A);
+        // The page's next save names the token its draft began with: refused, the key that moved alone, nothing written.
+        const mine = [...BOARD, { id: 'spiff_itest_setrevs_3', name: 'Stale tab push', type: 'flat', amount: 5, active: true }];
+        const refused = await writeSettings({ spiffs: mine }, opened);
+        assert.deepEqual([refused.ok, refused.status, refused.stale, refused.error], [false, 409, ['spiffs'], STALE_ERROR], 'REGRESSION: a SPIFF board saved over one another tab saved first');
+        assert.deepEqual(sent.at(-1).ifRevs, { spiffs: opened.spiffs }, 'the token its draft began with');
+        assert.equal(await extraText(A), afterOther, 'nothing written');
+        assert.equal(await audits(A), n, 'no audit');
+        // The page takes the latest: the other tab's board and its token, the roster kept.
+        const latest = await takeLatestSettings(setSettings);
+        assert.deepEqual(latest.spiffs, THEIRS);
+        assert.deepEqual(copy.spiffs, THEIRS, "the page's copy holds the other tab's board");
+        assert.deepEqual(copy.revs, (await get(A)).revs, "REGRESSION: the tokens the page holds are not the next GET's — its next SPIFF draft refused");
+        assert.deepEqual(copy.users, ['the roster'], 'the roster kept');
+        await bUntouched();
+    } finally {
+        globalThis.window = savedWindow; globalThis.fetch = savedFetch;
+        setRequestOrg(null);
+    }
+});

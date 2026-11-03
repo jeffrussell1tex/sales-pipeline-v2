@@ -1281,7 +1281,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
                 </div>
             </div>
         </CategoryDetailChrome>
-        {showEditBrand && <EditBrandModal initial={brand} onClose={() => setShowEditBrand(false)}/>}
+        {showEditBrand && <EditBrandModal initial={brand} initialRev={settings?.revs?.quoteBrand ?? null} onClose={() => setShowEditBrand(false)}/>}
         </>
     );
 };

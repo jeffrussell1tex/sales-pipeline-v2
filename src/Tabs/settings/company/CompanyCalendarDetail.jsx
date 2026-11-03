@@ -1,7 +1,9 @@
 // settings/company/CompanyCalendarDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { STILL_SAVING } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -65,19 +67,38 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     // 403 landed in the success path: the holiday appeared in the list, nothing
     // reached the database, and it vanished on reload.
     const [calError, setCalError] = useState('');
+    // The tokens as this panel opened (state §0.228): each save sends them, a landed save merges what it answered, and
+    // a save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale } = usePanelRevs(settings, setSettings);
+    // One save at a time (JB3-8, J-B10): Add, Delete and Sync share this gate. A change while a save is out is refused
+    // with STILL_SAVING, never sent behind it — it would name the token the save out is about to move, and be refused
+    // against its own. A refusal opens the gate once AdminView has not taken the latest for it (a panel drawn again
+    // on the latest has a gate of its own); a save that lands opens it only on the render that holds its tokens
+    // (`opened` moved), so the next save names them (state §0.228).
+    const inFlight = useRef(false);
+    useEffect(() => { inFlight.current = false; }, [opened]);
 
     // Optimistic write, reverted on failure so the list never shows a holiday the
-    // database does not have.
+    // database does not have. Only the keys it sent are put back, as the render
+    // that built them held them — never the tokens (state §0.228). A stale
+    // refusal puts nothing back: the panel is drawn again on the latest.
     const persistHolidays = async (patch, label) => {
-        let snapshot;
-        setSettings(prev => { snapshot = prev; return { ...prev, ...patch }; });
+        if (inFlight.current) { setCalError(`${label} not saved — ${STILL_SAVING}`); return false; }
+        inFlight.current = true;
+        const held = Object.fromEntries(Object.keys(patch).map(k => [k, settings?.[k]]));
+        setSettings(prev => ({ ...prev, ...patch }));
         setCalError('');
         try {
-            await putSettings(patch);
+            const answer = await putSettings(patch, opened);
+            landed(answer);
             return true;
         } catch (e) {
-            setSettings(snapshot);
+            if (e.stale && await panelStale(e)) return false;
+            setSettings(prev => ({ ...prev, ...held }));
             setCalError(`${label} not saved — ${e.message}`);
+            // The gate opens only now (state §0.228): opened before panelStale answered, a change made while
+            // AdminView read the latest went out with the old tokens.
+            inFlight.current = false;
             return false;
         }
     };
@@ -118,13 +139,17 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const [syncMsg, setSyncMsg]     = useState('');
 
     const handleSync = async () => {
+        // The gate is taken before the holidays GET (state §0.228): an Add or Delete meanwhile is refused, and the two
+        // keys this sends are not moved under it.
+        if (inFlight.current) { setSyncMsg(`Not synced — ${STILL_SAVING}`); setTimeout(() => setSyncMsg(''), 6000); return; }
+        inFlight.current = true;
         setSyncing(true);
         setSyncMsg('');
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
             const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
+            if (!stillOrg(askedOrg)) { inFlight.current = false; return; }
             if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
             if (!data || !data.holidays) throw new Error('No holidays in response');
             // Merge: keep custom holidays, replace all observed/federal entries with fresh API data
@@ -138,17 +163,24 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             // putSettings throws on non-2xx, so this reaches the catch below. The
             // old bare dbFetch did not, and a rejected save still reported
             // "✓ Synced N federal holidays".
-            const snapshot = settings;
+            // On a refusal only the two keys it sent are put back, as this render held them — never the tokens; a
+            // stale one puts nothing back, and the panel is drawn again on the latest (state §0.228).
+            const held = { customHolidays: settings?.customHolidays, federalHolidays: settings?.federalHolidays };
             setSettings(prev => ({ ...prev, customHolidays: preserved, federalHolidays: fresh }));
             try {
-                await putSettings({ customHolidays: preserved, federalHolidays: fresh });
+                const answer = await putSettings({ customHolidays: preserved, federalHolidays: fresh }, opened);
+                landed(answer);
             } catch (e) {
-                setSettings(snapshot);
+                // The gate stays shut while AdminView reads the latest (state §0.228); not taken, the refusal goes
+                // on to the catch below, which opens it.
+                if (e.stale && await panelStale(e)) return;
+                setSettings(prev => ({ ...prev, ...held }));
                 throw e;
             }
             setSyncMsg(`✓ Synced ${fresh.length} federal holidays for ${year}`);
             setTimeout(() => setSyncMsg(''), 4000);
         } catch (err) {
+            inFlight.current = false;   // the GET failed or the save was refused: the gate opens at once
             console.error('sync holidays error', err);
             setSyncMsg(`Failed to sync — ${err.message}`);
             setTimeout(() => setSyncMsg(''), 6000);

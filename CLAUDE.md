@@ -154,8 +154,9 @@ One commit per verified batch; doc patch in the same commit.
   guide §18b114 rule 9). Since §0.226 every draft panel of Settings sends
   the tokens it opened with (`usePanelRevs`); a stale refusal shows the
   panel again on the latest and says so (guide §18b114 rule 10);
-  Pipelines, Calendar, Edit brand, the Sales Manager and Connected apps
-  from B-3b and B-3c.
+  since §0.228 Pipelines, Calendar, Edit brand and the Sales Manager too
+  — one save at a time, a draft's token taken when it begins (rule 11);
+  Connected apps from B-3c.
 - Persistent data rule: anything that must survive a refresh is saved via
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.

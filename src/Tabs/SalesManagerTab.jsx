@@ -10,6 +10,8 @@ import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { forecastCallOf, withForecastCall, bestCaseOf } from '../utils/forecastCall';
 import { T } from '../tokens.js';
 import { useRegisterSave } from './settings/shared/useRegisterSave.js';
+import { writeSettings, takeLatestSettings } from './settings/shared/saveSettings.js';
+import { listChanged, revsAfter } from '../utils/settingsRevs.js';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 
@@ -425,7 +427,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
 // every deal ever (state §0.80), and never another year's plan (§0.203).
 function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, opportunities, saveState, setActiveTab, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, visibleReps,
                    planYear, setQuotaYear, thisYear, breakdown, fiscalStart, settingsLoaded,
-                   quotaDrafts, onQuotaChange, tiersDraft, setTiersDraft, spiffsDraft, setSpiffsDraft, saveQuotas, quotaSending, cancelQuotas, saveCommission, cancelCommission, saveSpiffBoard, cancelSpiffBoard }) {
+                   quotaDrafts, onQuotaChange, tiersDraft, setTiersDraft, spiffsDraft, setSpiffsDraft, saveQuotas, quotaSending, cancelQuotas, saveCommission, cancelCommission, commissionSending, saveSpiffBoard, cancelSpiffBoard, spiffsSending }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
@@ -530,6 +532,25 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
     const editSpiffs = next => setSpiffsDraft(next);
     const busy = saveState.status === 'saving' || quotaSending;
     const yearLocked = hasQuotaDrafts || busy || !settingsLoaded;
+    // The commission plan and the SPIFF board are locked while a save is out (state §0.228), as the quota board is:
+    // what was typed then was lost — the save out sends the draft it began with and, landed, drops the draft, and
+    // the leave guard's "Save changes and continue", sharing that save, said it was saved. `busy` holds every card
+    // while the banner says a save is out, the quotas' included; each card's own flag holds it through its own
+    // save, whatever another save (a claim's Approve) does to the banner. A disabled fieldset holds every control
+    // in the card — its fields, the status, ×, + Add Tier, + Add SPIFF, Remove, and its Cancel and Save.
+    const tiersLocked  = busy || commissionSending;
+    const spiffsLocked = busy || spiffsSending;
+    // A SPIFF's Remove asks first and is answered later (state §0.228): the answer reads the board as drawn then —
+    // never the list from when × was clicked — removes that SPIFF (by its id, else the entry itself), and changes
+    // nothing while the board is locked or when the SPIFF is no longer on it.
+    const spiffBoard = React.useRef(null);
+    spiffBoard.current = { locked: spiffsLocked, list: spiffList, edit: editSpiffs };
+    const removeSpiff = (spiff) => {
+        const now = spiffBoard.current;
+        if (now.locked) return;
+        const kept = now.list.filter(s => (spiff.id ? s.id !== spiff.id : s !== spiff));
+        if (kept.length !== now.list.length) now.edit(kept);
+    };
 
     return (
         <>
@@ -663,6 +684,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
         {/* Commission Plan + Preview (preserved from original) */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
             <div style={smCard2}>
+                <fieldset disabled={tiersLocked} style={{ border:'none', margin:0, padding:0, minWidth:0 }}>
                 <div style={cardHdr}>
                     <div>
                         <div style={eyebrow}>Commission Plan</div>
@@ -694,10 +716,12 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                         + Add Tier
                     </button>}
                 </div>
+                </fieldset>
             </div>
 
             {/* SPIFF Board */}
             <div style={smCard2}>
+                <fieldset disabled={spiffsLocked} style={{ border:'none', margin:0, padding:0, minWidth:0 }}>
                 <div style={{ ...cardHdr }}>
                     <div>
                         <div style={eyebrow}>SPIFF Board</div>
@@ -735,7 +759,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                                         onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                                     <SpiffStatus name={spiff.name} active={!!spiff.active} disabled={!canEditIncentives}
                                         onChange={v => editSpiffs(spiffList.map((s,i)=>i===si?{...s,active:v}:s))}/>
-                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>editSpiffs(spiffList.filter((_,i)=>i!==si)))}
+                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>removeSpiff(spiff))}
                                         style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
                                 {/* Description — stored on `condition`, which the claim modal already renders */}
@@ -752,6 +776,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                         ))
                     }
                 </div>
+                </fieldset>
             </div>
         </div>
 
@@ -936,6 +961,13 @@ export default function SalesManagerTab() {
     const [quotaDrafts, setQuotaDrafts] = useState({});      // { [userId]: { annual, periods: [text], typed } } — planYear's
     const [tiersDraft,  setTiersDraft]  = useState(null);    // null = nothing unsaved
     const [spiffsDraft, setSpiffsDraft] = useState(null);
+    // The token each draft began with (state §0.228 — JB3-5): its save names it, so a save of the same list that
+    // another tab or another Admin landed since is refused, nothing written. Taken when the draft begins, from the
+    // render its first edit is built from — never at save time; a draft dropped (saved, cancelled, refused, an org
+    // switch) takes the token again with its next first edit.
+    const [opened, setOpened] = useState({});
+    const draftTiers  = (next) => { if (tiersDraft === null) setOpened(o => ({ ...o, quotaData: settings.revs?.quotaData ?? null })); setTiersDraft(next); };
+    const draftSpiffs = (next) => { if (spiffsDraft === null) setOpened(o => ({ ...o, spiffs: settings.revs?.spiffs ?? null })); setSpiffsDraft(next); };
     // A draft is this org's: an org switch drops it (state §0.162's rule), or a
     // save would send one org's figures with the next org's token.
     useEffect(() => { setQuotaDrafts({}); setTiersDraft(null); setSpiffsDraft(null); }, [activeOrgId]);
@@ -967,23 +999,34 @@ export default function SalesManagerTab() {
             return false;
         }
         setSaveState({ status: 'saving', msg: '' });
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT', body: JSON.stringify(patch),
-            });
-            if (!res.ok) {
-                setSaveState({ status: 'error', msg: res.status === 403
-                    ? `Not saved — only Admins can change ${label}.`
-                    : `Not saved — the server returned ${res.status}. Your ${label} changes are not stored.` });
-                return false;
-            }
+        // With the token its draft began with (state §0.228 — JB3-5). writeSettings never throws, and never settles
+        // after an org switch.
+        const w = await writeSettings(patch, opened);
+        if (w.ok) {
+            // The tokens it answered go in before the caller puts the values in: the next draft begins with them.
+            setSettings(prev => ({ ...prev, revs: revsAfter(prev.revs, w.revs) }));
             setSaveState({ status: 'saved', msg: '' });
             return true;
-        } catch (err) {
-            console.error('[SalesManagerTab] save ' + label, err);
-            setSaveState({ status: 'error', msg: `Not saved — network error while saving ${label}.` });
-            return false;
         }
+        if (w.stale) {
+            // Another save of the list landed first: the page takes the latest, drops the refused draft and says so.
+            // The throw carries tookLatest, so the leave guard says J-B11's words; a card's own button swallows it.
+            // Unread, the server's words below, and the draft kept.
+            const latest = await takeLatestSettings(setSettings);
+            if (latest) {
+                if ('quotaData' in patch) setTiersDraft(null);
+                if ('spiffs' in patch) setSpiffsDraft(null);
+                const msg = listChanged('quotaData' in patch ? 'commission tier' : 'SPIFF');
+                setSaveState({ status: 'error', msg });
+                throw Object.assign(new Error(msg), { stale: w.stale, tookLatest: true });
+            }
+        }
+        setSaveState({ status: 'error', msg: w.status === 403
+            ? `Not saved — only Admins can change ${label}.`
+            : w.status === 0
+            ? `Not saved — network error while saving ${label}.`
+            : `Not saved — ${w.error}` });
+        return false;
     };
 
     // Each save throws when nothing was saved — the page's banner says why — so
@@ -1051,7 +1094,18 @@ export default function SalesManagerTab() {
         return quotaSaving.current;
     };
     const cancelQuotas = () => setQuotaDrafts({});
-    const saveCommission = async () => {
+    // The commission plan and the SPIFF board share one flight each, as the quotas do (state §0.228): the leave
+    // guard's "Save and continue" pressed while a card's own Save is out sent the same draft again with the same
+    // draft-start token, and whichever the server took second was refused as stale — the guard then said the
+    // change was not saved, or the card's banner said the list had changed, when it had landed. A second save
+    // while one is out returns the first one's promise and shares its outcome, a refusal included; cleared once
+    // it settles.
+    const commissionSaving = React.useRef(null);
+    const spiffsSaving = React.useRef(null);
+    // Each card locked while its own save is out (state §0.228), whatever another save does to the banner.
+    const [commissionSending, setCommissionSending] = useState(false);
+    const [spiffsSending, setSpiffsSending] = useState(false);
+    const sendCommission = async () => {
         if (tiersDraft === null) return;
         const quotaData = { ...(settings.quotaData || {}), commissionTiers: tiersDraft };
         const askedOrg = requestOrg();
@@ -1060,8 +1114,17 @@ export default function SalesManagerTab() {
         setSettings(prev => ({ ...prev, quotaData }));
         setTiersDraft(null);
     };
+    const saveCommission = () => {
+        if (!commissionSaving.current) {
+            setCommissionSending(true);
+            commissionSaving.current = sendCommission().finally(() => { commissionSaving.current = null; });
+            // Unlocked once it settles, unless another save of the card has started since (state §0.228).
+            commissionSaving.current.catch(() => {}).then(() => { if (!commissionSaving.current) setCommissionSending(false); });
+        }
+        return commissionSaving.current;
+    };
     const cancelCommission = () => setTiersDraft(null);
-    const saveSpiffBoard = async () => {
+    const sendSpiffBoard = async () => {
         if (spiffsDraft === null) return;
         // A SPIFF goes live only with a name: a nameless one reached reps' claim
         // screens as "Unnamed SPIFF".
@@ -1072,11 +1135,25 @@ export default function SalesManagerTab() {
         setSettings(prev => ({ ...prev, spiffs: spiffsDraft }));
         setSpiffsDraft(null);
     };
+    const saveSpiffBoard = () => {
+        if (!spiffsSaving.current) {
+            setSpiffsSending(true);
+            spiffsSaving.current = sendSpiffBoard().finally(() => { spiffsSaving.current = null; });
+            // Unlocked once it settles, unless another save of the card has started since (state §0.228).
+            spiffsSaving.current.catch(() => {}).then(() => { if (!spiffsSaving.current) setSpiffsSending(false); });
+        }
+        return spiffsSaving.current;
+    };
     const cancelSpiffBoard = () => setSpiffsDraft(null);
+    // A part refused as stale after an earlier part landed is `partial` (state §0.228 — JB3-5): App's guard says
+    // LEAVE_STALE_PART — that change was not saved, the ones saved before it stay saved.
     const saveAdminDrafts = async () => {
-        if (Object.keys(quotaDrafts).length) await saveQuotas();
-        if (tiersDraft !== null) await saveCommission();
-        if (spiffsDraft !== null) await saveSpiffBoard();
+        let landedOne = false;
+        try {
+            if (Object.keys(quotaDrafts).length) { await saveQuotas(); landedOne = true; }
+            if (tiersDraft !== null) { await saveCommission(); landedOne = true; }
+            if (spiffsDraft !== null) await saveSpiffBoard();
+        } catch (e) { if (e.tookLatest && landedOne) e.partial = true; throw e; }
     };
     // The page's unsaved state and its save, for the leave guard (App).
     const adminDirty = Object.keys(quotaDrafts).length > 0 || tiersDraft !== null || spiffsDraft !== null;
@@ -1574,9 +1651,9 @@ export default function SalesManagerTab() {
                 visibleReps={visibleReps} fyRange={fyRange}
                 planYear={planYear} setQuotaYear={setQuotaYear} thisYear={curQ.fiscalYear} breakdown={quotaBreakdown} fiscalStart={fiscalStart} settingsLoaded={settingsLoaded}
                 quotaDrafts={quotaDrafts} onQuotaChange={onQuotaChange}
-                tiersDraft={tiersDraft} setTiersDraft={setTiersDraft} spiffsDraft={spiffsDraft} setSpiffsDraft={setSpiffsDraft}
+                tiersDraft={tiersDraft} setTiersDraft={draftTiers} spiffsDraft={spiffsDraft} setSpiffsDraft={draftSpiffs}
                 saveQuotas={saveQuotas} quotaSending={quotaSending} cancelQuotas={cancelQuotas} saveCommission={saveCommission} cancelCommission={cancelCommission}
-                saveSpiffBoard={saveSpiffBoard} cancelSpiffBoard={cancelSpiffBoard}
+                saveSpiffBoard={saveSpiffBoard} cancelSpiffBoard={cancelSpiffBoard} commissionSending={commissionSending} spiffsSending={spiffsSending}
                 saveState={saveState} setSaveState={setSaveState}
                 setActiveTab={setActiveTab}
                 showConfirm={showConfirm} spiffClaims={spiffClaims} setSpiffClaims={setSpiffClaims} />}

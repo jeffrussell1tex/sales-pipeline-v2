@@ -35,6 +35,10 @@ JB3-1 to JB3-10.
 **B-3a built 2-3 Nov** as state §0.226 (guide §18b114 rule 10): nine edit
 scripts in a staged copy first, one review workflow, the browser check as
 Jeff and Karen; its departures from §4b are written in state §0.226.
+**B-3b built 3 Nov** as state §0.228 (guide §18b114 rule 11): one build
+workflow and two fix rounds in a staged copy, one revert, the browser
+check as Jeff and Karen; its departures from §4b are written in state
+§0.228.
 
 ## 0. What the code does today
 

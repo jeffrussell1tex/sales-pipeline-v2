@@ -261,9 +261,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`, harness deferred, NOT pushed:** every draft panel of
      Settings sends the tokens it opened with; a stale refusal shows the
      panel again on the latest and says so, and both leave guards say the
-     change was not saved. Next: B-3b (Pipelines, Calendar, Edit brand,
-     the Sales Manager), B-3c (Connected apps), then one scoped run over
-     B-2 and all of B-3 before any push.
+     change was not saved. **Step B-3b built 3 Nov (§0.228; guide §18b114
+     rule 11; STEP-B.md §4b), NOT committed, harness deferred:**
+     Pipelines, the holiday calendar, Edit brand and the Sales Manager
+     name their tokens — one save at a time, a stale refusal shown on the
+     latest and said. Next: B-3c (Connected apps), then one scoped run
+     over B-2, all of B-3 and §0.227 before any push.
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -2138,6 +2141,31 @@ to add meetings. Nothing in the app adds a meeting to Google:
   31, 27, 24, 19 — `MOST_USED_PAIN_POINTS` in `PainPointsDetail.jsx`),
   the same for every org, none of them from its deals. Count the deals'
   pain points, or drop the card, as §0.86 did for the mocked-up panels (tests/honest-panels.test.mjs). Low.
+- **Pipelines starts on a demo pipeline, so Add stage saves nothing**
+  (§0.228's browser check, 3 Nov; in the code since April — moved into
+  PipelinesDetail.jsx on 1 Jun): the panel
+  opens with `selectedId` `'new-biz'`, a demo pipeline's id. An org
+  whose pipeline has another id (Accelerep QA's is `'default'`) sees its
+  own pipeline drawn by the fallback, but Add stage, a stage's rename,
+  reorder and delete write to the pipeline whose id is `selectedId` —
+  none — so each saves the list unchanged (a 200) and closes as if it
+  worked, until a pipeline card is clicked. Select the drawn pipeline
+  (`selected.id`) or start on the org's default. Medium.
+- **A refused Rename stage loses the name typed** (§0.228's review, 3
+  Nov): `handleRenameStage` clears the field before it sends, so a
+  refusal — still saving, or by the server — loses what was typed.
+  §0.228's round 3 kept it open on a refusal, but the field is matched
+  by stage name alone and followed the user to another pipeline's stage
+  of that name, whose next blur renamed it; reverted. Fix with the field
+  tied to the pipeline it began in. Low.
+- **The Sales Manager's leave guard can say a landed save was not
+  saved** (§0.228's review, 3 Nov): the guard's `saveAdminDrafts` holds
+  the drafts of the render in which its Save was pressed; if a card's own save lands
+  while the guard is still saving an earlier card, the guard sends that
+  card's old draft again with its old token, is refused as stale, and
+  says "That change was not saved…" over a change that landed. Nothing is
+  lost or written twice. Read the drafts through a ref, or skip a card
+  whose flight settled. Low.
 - **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration

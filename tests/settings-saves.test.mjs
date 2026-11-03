@@ -1,19 +1,24 @@
 // The stale settings save, the screens' half (state §0.225 — batch 4b-3, step B-2; Jeff, 2 Nov: "Take all
-// Recommended", JB2-7 and JB2-8 fixed here; state §0.226 — step B-3a). One sender
+// Recommended", JB2-7 and JB2-8 fixed here; state §0.226 — step B-3a; state §0.228 — step B-3b). One sender
 // (src/Tabs/settings/shared/saveSettings.js) sends every converted screen's settings save with the token its draft was
 // read with; a stale refusal takes the latest (takeLatestSettings, J-B4); a save that lands merges the tokens it
 // answered (revsAfter) — before any member row goes out. B-3a converts every draft panel: its hook (usePanelRevs) holds
 // the tokens it opened with (`opened`), merges a landed save's (`landed`), and hands a stale refusal to AdminView's one
-// handler (`panelStale`, J-B5), which takes the latest and draws the panel again on it. The panels B-3b and B-3c
-// convert name no tokens until then and are accepted unchecked (Q6).
+// handler (`panelStale`, J-B5), which takes the latest and draws the panel again on it. B-3b converts the rest but one:
+// Pipelines and the calendar (one save in flight; a refusal puts back only the keys it sent, never the tokens), Edit
+// brand (its window takes the latest and stays open, JB3-4) and the Sales Manager (each draft's token taken when it
+// begins; a stale refusal takes the latest and drops the draft, JB3-5). Connected apps, B-3c's, names no tokens until
+// then and is accepted unchecked (Q6).
 //
-//   S1  the URL: only the sender, the app's load, Connected apps' two GETs and the direct sends B-3b moves hold it
+//   S1  the URL: only the sender, the app's load and Connected apps' two GETs hold it
 //   S2  every send names its tokens, read from its draft's binding (the render's settings.revs, a window's snapshot, the
-//       panel's own `opened`) — never `prev`, never a ref; the panels B-3b and B-3c convert name none, each still listed
+//       panel's own `opened`, the Sales Manager's drafts' own) — never `prev`, never a ref; Connected apps (B-3c) names
+//       none, still listed
 //   S3  the sender, run with fetch stubbed: putSettings (its network failure too), writeSettings, takeLatestSettings,
 //       addToSettingsList, the rules
 //   S4  every stale refusal takes the latest, through the one helper or the panel's own panelStale — a guarded panel's
-//       catch hands it there first; the invite and the import read `twice`
+//       catch hands it there first; the invite and the import read `twice`; Pipelines and the calendar put nothing back
+//       on a stale one, Edit brand and the Sales Manager take the latest themselves (no AdminView around them)
 //   S4b AdminView's panelStale, in order, and the one wrapper it remounts
 //   S5  every save that lands merges the tokens it answered, by revsAfter or the panel's landed — the Deletes and
 //       Assign before the members; every setSettings an updater; no snapshot put back
@@ -21,9 +26,16 @@
 //   S7  Teams' Assign (assignTo), run as written
 //   S8  the scanners' own reading on made-up sources; the suites list holds this file
 //   S9  usePanelRevs, run as written
-//   S10 a draft panel's save, run as written: Customer types, a flat list, Features (J-B12)
+//   S10 a save, run as written: Customer types, a flat list, Features (J-B12); Pipelines' persist and the calendar's
+//       (one save in flight, its gate shut while AdminView reads the latest, a keys-only rollback) and Pipelines' Add
+//       forms, kept when refused; Edit brand's Save, close and Escape; the Sales Manager's saveExtra,
+//       saveAdminDrafts (partial, over saveExtra's own refusal too), its cards' flights and the flags that lock them,
+//       a SPIFF's Remove answered late, its drafts' setters
 //   S11 AdminView's panelStale and guardSave, run as written; Back, another card and Discard
-//   S12 the pins: App's leave guard, the dialog's words (J-B11, JB3-2), reopen, one save at a time, JB3-6, JB3-7a
+//   S12 the pins: App's leave guard, the words (J-B11, JB3-2, JB3-8, JB3-4), reopen, one save at a time on every guarded
+//       file (B-3a's by once, the Sales Manager's by its flights), JB3-6, JB3-7a; the gate's release, Edit brand's window
+//       (its token, held while saving), the Sales Manager's drafts' setters; its commission plan and SPIFF board locked
+//       while a save is out (every control in a disabled fieldset, read by the AST; state §0.228)
 //
 // Every import of saveSettings.js, settingsRevs.js or settingsDefaults.js is an `await import()` inside its test: a
 // static import of a name the sender lacked would kill the file before the scans ran.
@@ -147,30 +159,36 @@ const B3A_FILES = [
     'src/Tabs/settings/salesProcess/LeadVisibilityDetail.jsx',
     'src/Tabs/settings/salesProcess/PainPointsDetail.jsx',
 ];
-// The sends, file by file, each converted: B-2's people screens (state §0.225), and B-3a's panels (state §0.226).
+// B-3b's (state §0.228): Pipelines and the calendar — optimistic, one save in flight, a refusal putting back only the
+// keys it sent; Edit brand's window and the Sales Manager's commission plan and SPIFF board — no AdminView around them,
+// each takes the latest itself.
+const PIPELINES = 'src/Tabs/settings/salesProcess/PipelinesDetail.jsx';
+const CALENDAR = 'src/Tabs/settings/company/CompanyCalendarDetail.jsx';
+const EDIT_BRAND = 'src/Tabs/settings/quoting/EditBrandModal.jsx';
+const SALES_MANAGER = 'src/Tabs/SalesManagerTab.jsx';
+// The sends, file by file, each converted: B-2's people screens (state §0.225), B-3a's panels (state §0.226) and B-3b's
+// (state §0.228).
 const SITES = {
     'src/Tabs/settings/people/TeamsDetail.jsx': { putSettings: 1, writeSettings: 2 },          // Delete; the window, Assign
     'src/Tabs/settings/people/TerritoriesDetail.jsx': { putSettings: 1, writeSettings: 2 },    // Delete; the window, the CSV
     'src/Tabs/settings/people/UsersDetail.jsx': { writeSettings: 1, addToSettingsList: 1 },    // the profile's move; Invite
     'src/components/layout/ModalLayer.jsx': { addToSettingsList: 1 },                          // the member import
     ...Object.fromEntries(B3A_FILES.map((f) => [f, { putSettings: 1 }])),
+    [PIPELINES]: { putSettings: 1 },                    // persist: every change
+    [CALENDAR]: { putSettings: 2 },                     // persistHolidays (Add, Delete); Sync
+    [EDIT_BRAND]: { writeSettings: 1 },                 // the window's Save
+    [SALES_MANAGER]: { writeSettings: 1 },              // saveExtra: the commission plan, the SPIFF board
 };
 const SITE_FILES = Object.keys(SITES);
-// The panels B-3b and B-3c convert, with their putSettings calls: each still names no tokens — one argument — and is
-// accepted unchecked (Q6). A panel converted comes off this list; B-3c empties it.
+// The panel B-3c converts, with its putSettings calls: it still names no tokens — one argument — and is accepted
+// unchecked (Q6). Converted, it comes off this list; B-3c empties it.
 const B3_PENDING = {
-    'src/Tabs/settings/company/CompanyCalendarDetail.jsx': 2,
     'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 3,
-    'src/Tabs/settings/salesProcess/PipelinesDetail.jsx': 1,
 };
-// The direct sends B-3b moves into the sender: the URL once each, until then.
-const B3_DIRECT = [
-    'src/Tabs/SalesManagerTab.jsx',
-    'src/Tabs/settings/quoting/EditBrandModal.jsx',
-];
-// The named GETs: the app's load, and the Connected apps panel's own load and re-read (B-3's).
+// The named GETs: the app's load, and the Connected apps panel's own load and re-read (B-3c's). B-3b moved the two
+// direct sends (the Sales Manager's, Edit brand's) into the sender (state §0.228): no file but these holds the URL.
 const NAMED_GETS = { 'src/hooks/useSettings.js': 1, 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 2 };
-const URL_HOLDERS = { [SENDER]: 1, ...NAMED_GETS, ...Object.fromEntries(B3_DIRECT.map((f) => [f, 1])) };
+const URL_HOLDERS = { [SENDER]: 1, ...NAMED_GETS };
 
 const SETTINGS_URL_ALL = /functions\/settings(?![\w/-])/g;
 const SETTINGS_URL_ONE = /functions\/settings(?![\w/-])/;
@@ -255,6 +273,52 @@ const hookFault = (name, anc) => {
     if (args !== 'settings, setSettings') return `comes from usePanelRevs(${args}) — the hook takes the copy the draft was seeded from`;
     return null;
 };
+// The Sales Manager's own tokens (state §0.228 — JB3-5): no AdminView and no hook around it, its drafts held above the
+// sub-tabs. Why its `opened` is not the tokens its drafts began with (null when it is): `const [opened, setOpened] =
+// useState(…)` in the component around the send, and every setOpened of it in draftTiers or draftSpiffs — consts of
+// that component — under `<its draft> === null`, putting in its own list's token alone over the others held, read
+// from the render's settings.revs: taken when the draft begins, never at save time, never again while it is open.
+const DRAFT_STARTS = { draftTiers: ['tiersDraft', 'quotaData'], draftSpiffs: ['spiffsDraft', 'spiffs'] };
+const draftOpenedFault = (anc) => {
+    const b = bindingOf('opened', anc);
+    const d = b && b.decl;
+    const pair = d && d.type === 'VariableDeclarator' && d.id.type === 'ArrayPattern' ? d.id.elements : [];
+    if (!d || b.kind !== 'const' || !isFn(b.scope) || !isCall(d.init) || calleeName(d.init) !== 'useState'
+        || pair[0]?.type !== 'Identifier' || pair[0].name !== 'opened' || pair[1]?.type !== 'Identifier') {
+        return 'is not the component\'s own `const [opened, setOpened] = useState(…)`';
+    }
+    const setter = pair[1].name, faults = [], begun = {};
+    walk(b.scope.body, (n, nanc) => {
+        if (!callsNamed(setter)(n) || bindingOf(setter, nanc)?.decl !== d) return;
+        const fnAt = nanc.findLastIndex(isFn), decl = nanc[fnAt - 1];
+        const draft = decl && decl.type === 'VariableDeclarator' && decl.init === nanc[fnAt] && decl.id.type === 'Identifier' ? decl.id.name : null;
+        const [held, key] = DRAFT_STARTS[draft] || [];
+        if (!key || bindingOf(draft, nanc.slice(0, fnAt))?.scope !== b.scope) {
+            faults.push(`${setter} called outside draftTiers / draftSpiffs — a token taken at save time, not with its draft`);
+            return;
+        }
+        const ifAt = nanc.findLastIndex((a) => a.type === 'IfStatement');
+        const iff = ifAt > fnAt ? nanc[ifAt] : null;
+        const t = iff && nanc[ifAt + 1] === iff.consequent ? iff.test : null;
+        if (!t || t.type !== 'BinaryExpression' || t.operator !== '===' || t.left.type !== 'Identifier' || t.left.name !== held || t.right.type !== 'NullLiteral') {
+            faults.push(`${draft}: ${setter} not under \`${held} === null\` — the token taken again on an open draft, newer than its edits`);
+            return;
+        }
+        const up = n.arguments[0];
+        const props = up && isFn(up) && up.body.type === 'ObjectExpression' ? up.body.properties : [];
+        const own = props.filter((p) => p.type === 'ObjectProperty');
+        const kept = props.some((p) => p.type === 'SpreadElement' && p.argument.type === 'Identifier' && p.argument.name === up.params[0]?.name);
+        if (!kept || props.length !== 2 || own.length !== 1 || keyName(own[0]) !== key) {
+            faults.push(`${draft}: ${setter} does not put in ${key}'s token alone, over the others held`);
+            return;
+        }
+        const why = tokenFault(own[0].value, key, nanc);
+        if (why) { faults.push(`${draft}: ${key}'s token ${why}`); return; }
+        begun[draft] = (begun[draft] || 0) + 1;
+    }, anc.slice(0, anc.indexOf(b.scope) + 1));
+    for (const draft of Object.keys(DRAFT_STARTS)) if (begun[draft] !== 1) faults.push(`${draft} takes its token ${begun[draft] || 0} times — once, when the draft begins`);
+    return faults.length ? faults.join('; ') : null;
+};
 // Why a token is not read from its draft's binding (null when it is): the render's settings.revs.<key>, a window's
 // snapshot's `.rev`, or a const set from one of those in a function around the send — with `?? null` or without. Never
 // a ref's `.current`, never an updater's `prev`, never an answer's tokens (the token goes with its draft, state §0.225).
@@ -304,7 +368,8 @@ const sendFaults = (file, src) => {
         // A panel's tokens as it opened (state §0.226): `opened`, its own usePanelRevs' — with any payload; withIfRevs
         // picks the keys it sends.
         if (n.arguments.length === 2 && revs.type === 'Identifier' && revs.name === 'opened') {
-            const why = hookFault('opened', anc);
+            // The Sales Manager's own form, in that file alone: its drafts' tokens (state §0.228, draftOpenedFault).
+            const why = file === SALES_MANAGER && hookFault('opened', anc) ? draftOpenedFault(anc) : hookFault('opened', anc);
             if (why) out.push(`${at}: opened ${why}`);
             return;
         }
@@ -403,8 +468,10 @@ const updaterFaults = (file, src) => {
         const fnAt = anc.findLastIndex(isFn);
         let lands = null;
         const landsHere = () => (lands ??= fnAt >= 0 && landsWith(anc[fnAt], anc.slice(0, fnAt)));
-        walk(fn.body, (o) => {
-            if (o.type !== 'ObjectExpression') return;
+        // An object built in a function inside the updater — a member's row in a .map — is that row, not the copy
+        // (state §0.228: the Sales Manager's forecast call writes one computed field of one member's row).
+        walk(fn.body, (o, oanc) => {
+            if (o.type !== 'ObjectExpression' || oanc.findLast(isFn) !== fn) return;
             const at = `${file}:${o.loc.start.line}`;
             const keys = o.properties.map((p) => (p.type === 'ObjectProperty' ? (p.computed ? '[computed]' : keyName(p)) : null));
             const revs = o.properties.find((p) => keyName(p) === 'revs');
@@ -414,7 +481,7 @@ const updaterFaults = (file, src) => {
                 const ok = isCall(v) && calleeName(v) === 'revsAfter' && v.arguments.length === 2 && (chainOf(v.arguments[0]) || []).join('.') === `${prev}.revs`;
                 if (!ok) out.push(`${at}: revs set other than revsAfter(${prev}.revs, …)`);
             }
-        });
+        }, [fn]);
     });
     return out;
 };
@@ -450,7 +517,7 @@ const landFaults = (file, src) => {
 
 // ── S1 ───────────────────────────────────────────────────────────────────────
 
-test('S1 — the URL: the sender, the app\'s load, Connected apps\' two GETs and the direct sends B-3b moves hold it — no other file, none of the converted screens', () => {
+test('S1 — the URL: the sender, the app\'s load and Connected apps\' two GETs hold it — no other file, none of the converted screens', () => {
     const got = {};
     for (const f of srcFiles()) {
         const n = urlCount(read(f));
@@ -473,7 +540,7 @@ test('S1 — the URL: the sender, the app\'s load, Connected apps\' two GETs and
 
 // ── S2 ───────────────────────────────────────────────────────────────────────
 
-test('S2 — every send names its tokens, read from its draft\'s binding — a panel\'s own opened, by the scope; the panels B-3b and B-3c convert name none, each still listed', () => {
+test('S2 — every send names its tokens, read from its draft\'s binding — a panel\'s own opened, by the scope; the Sales Manager\'s drafts\' own; Connected apps (B-3c) names none, still listed', () => {
     const faults = [], sites = {}, pending = {};
     for (const f of srcFiles()) {
         if (f === SENDER) continue;
@@ -492,13 +559,25 @@ test('S2 — every send names its tokens, read from its draft\'s binding — a p
         if (Object.keys(counts).length) sites[f] = counts;
     }
     assert.deepEqual(faults, []);
-    assert.deepEqual(sites, SITES, 'every send outside the pending list is one of B-2\'s or B-3a\'s, each named here');
-    assert.deepEqual(pending, B3_PENDING, 'every panel listed as B-3b\'s or B-3c\'s still sends, unchecked — a stale entry hides nothing');
+    assert.deepEqual(sites, SITES, 'every send outside the pending list is one of B-2\'s, B-3a\'s or B-3b\'s, each named here');
+    assert.deepEqual(pending, B3_PENDING, 'the panel listed as B-3c\'s still sends, unchecked — a stale entry hides nothing');
     // B-3a's sends name the tokens their panel opened with (state §0.226).
     for (const f of B3A_FILES) {
         walk(astOf(read(f)).program, (n) => {
             if (callsNamed('putSettings')(n)) assert.equal(n.arguments[1]?.name, 'opened', `${f}:${n.loc.start.line}: REGRESSION — a draft panel's save names tokens other than those it opened with`);
         });
+    }
+    // B-3b's (state §0.228): Pipelines' and the calendar's sends name the tokens their panel opened with, the Sales
+    // Manager's the tokens its drafts began with, Edit brand's the token its window opened with.
+    for (const [f, send, want, sends] of [[PIPELINES, 'putSettings', 'opened', 1], [CALENDAR, 'putSettings', 'opened', 2],
+        [SALES_MANAGER, 'writeSettings', 'opened', 1], [EDIT_BRAND, 'writeSettings', '{ quoteBrand: base.rev }', 1]]) {
+        const src = read(f), got = [];
+        walk(astOf(src).program, (n) => {
+            if (!callsNamed(send)(n)) return;
+            const a = n.arguments[1];
+            got.push(a ? src.slice(a.start, a.end) : '(none)');
+        });
+        assert.deepEqual(got, Array(sends).fill(want), `${f}: REGRESSION — a save names tokens other than its draft's (state §0.228)`);
     }
 });
 
@@ -785,7 +864,9 @@ test('S4 — every stale refusal takes the latest through the one helper, or the
     const faults = SITE_FILES.flatMap((f) => refusalFaults(f, read(f)));
     assert.deepEqual(faults, []);
     const guarded = SITE_FILES.filter((f) => has(astOf(read(f)).program, callsNamed('useRegisterSave')));
-    assert.deepEqual(guarded, B3A_FILES, 'every B-3a panel is registered with the leave guard — the first-line rule reads each');
+    // The Sales Manager registers with App's guard too (state §0.228); its send is writeSettings, which the first-line
+    // rule (a putSettings' catch) does not read — its stale branch is B-3b's S4 test's.
+    assert.deepEqual(guarded, [...B3A_FILES, SALES_MANAGER], 'every B-3a panel is registered with the leave guard — the first-line rule reads each');
     const sender = withoutComments(read(SENDER));
     const fnText = (name) => {
         let out = null;
@@ -801,6 +882,68 @@ test('S4 — every stale refusal takes the latest through the one helper, or the
     const add = fnText('addToSettingsList');
     assert.equal(count(add, 'takeLatestSettings('), 1, 'the addition takes the latest through the one helper');
     for (const name of ['putSettings', 'writeSettings']) assert.ok(fnText(name).includes('withIfRevs(payload, revs)'), `${name} sends what withIfRevs builds`);
+});
+
+// B-3b's refusals (state §0.228). Pipelines and the calendar: a stale refusal goes to panelStale, and nothing of the
+// catch's rollback runs before it — AdminView draws the panel again on the latest, and a rollback would put the old
+// mount's keys back over it. The gate opens only once panelStale has answered false — opened sooner, a change made
+// while AdminView reads the latest goes out with the old tokens; a panel drawn again on the latest has a gate of its
+// own: after the stale line, before the catch returns, or — where the catch rethrows (Sync) — in the catch around it.
+// Edit brand and the Sales Manager: no AdminView around them — the stale branch of `const <w> = await
+// writeSettings(…)` takes the latest itself, into the app's copy.
+test("S4 — B-3b's refusals: Pipelines' and the calendar's stale catch goes to panelStale before any rollback, the gate opened only after it answered; Edit brand's and the Sales Manager's writeSettings take the latest in their own stale branch", () => {
+    const isGateRelease = (st) => st.type === 'ExpressionStatement' && st.expression.type === 'AssignmentExpression'
+        && (chainOf(st.expression.left) || []).join('.') === 'inFlight.current' && st.expression.right.type === 'BooleanLiteral' && st.expression.right.value === false;
+    for (const [f, sends] of [[PIPELINES, 1], [CALENDAR, 2]]) {
+        let seen = 0;
+        walk(astOf(read(f)).program, (n, anc) => {
+            if (!callsNamed('putSettings')(n)) return;
+            let tryAt = -1;
+            for (let k = anc.length - 2; k >= 0 && !isFn(anc[k]); k--) if (anc[k].type === 'TryStatement' && anc[k + 1] === anc[k].block) { tryAt = k; break; }
+            const handler = tryAt >= 0 ? anc[tryAt].handler : null;
+            assert.ok(handler, `${f}:${n.loc.start.line}: no catch around the send`);
+            const e = handler.param?.name, body = handler.body.body;
+            const staleAt = body.findIndex((st) => st.type === 'IfStatement' && !st.alternate && st.test.type === 'LogicalExpression' && st.test.operator === '&&'
+                && isMember(st.test.left) && st.test.left.object.name === e && propName(st.test.left) === 'stale'
+                && st.test.right.type === 'AwaitExpression' && callsNamed('panelStale')(st.test.right.argument) && st.test.right.argument.arguments[0]?.name === e
+                && st.consequent.type === 'ReturnStatement');
+            assert.ok(staleAt >= 0, `${f}:${n.loc.start.line}: REGRESSION (J-B5) — a stale refusal not handed to panelStale, or the catch goes on after it`);
+            const firstSet = body.findIndex((st) => has(st, callsNamed('setSettings')));
+            assert.ok(firstSet > staleAt, `${f}:${n.loc.start.line}: REGRESSION (J-B10) — the keys put back before the stale refusal is handed on: the old mount's values over the latest`);
+            const releases = body.flatMap((st, i) => (isGateRelease(st) ? [i] : []));
+            assert.ok(releases.every((i) => i > staleAt), `${f}:${n.loc.start.line}: REGRESSION (state §0.228) — the gate opened before panelStale answered: a change made while AdminView reads the latest goes out with the old tokens`);
+            const exitAt = body.findIndex((st, i) => i > staleAt && (st.type === 'ReturnStatement' || st.type === 'ThrowStatement'));
+            let released = releases.some((i) => exitAt < 0 || i < exitAt);
+            if (!released && body.at(-1)?.type === 'ThrowStatement' && body.at(-1).argument?.name === e) {
+                // Sync: the refusal goes on to the catch around it, in the same function, which opens the gate.
+                let outer = null;
+                for (let k = tryAt - 1; k >= 0 && !isFn(anc[k]); k--) if (anc[k].type === 'TryStatement' && anc[k + 1] === anc[k].block) { outer = anc[k].handler; break; }
+                released = !!outer && outer.body.body.some(isGateRelease);
+            }
+            assert.ok(released, `${f}:${n.loc.start.line}: REGRESSION (JB3-8) — a refusal leaves the gate shut: every change after it said to be still saving`);
+            seen += 1;
+        });
+        assert.equal(seen, sends, `${f}: every send read`);
+    }
+    for (const f of [EDIT_BRAND, SALES_MANAGER]) {
+        let seen = 0;
+        walk(astOf(read(f)).program, (n, anc) => {
+            if (!callsNamed('writeSettings')(n)) return;
+            const decl = anc.at(-1)?.type === 'AwaitExpression' && anc.at(-2)?.type === 'VariableDeclarator' ? anc.at(-2) : null;
+            assert.ok(decl && decl.id.type === 'Identifier', `${f}:${n.loc.start.line}: the send's answer is bound`);
+            const w = decl.id.name, fn = anc.findLast(isFn), branches = [];
+            walk(fn.body, (o, oanc) => {
+                if (o.type === 'IfStatement' && oanc.findLast(isFn) === fn && isMember(o.test) && o.test.object.name === w && propName(o.test) === 'stale') branches.push(o);
+            }, [fn]);
+            assert.equal(branches.length, 1, `${f}: one stale branch — if (${w}.stale)`);
+            const takes = [];
+            walk(branches[0].consequent, (o) => { if (callsNamed('takeLatestSettings')(o)) takes.push(o); });
+            assert.ok(takes.length === 1 && takes[0].arguments.length === 1 && takes[0].arguments[0].name === 'setSettings',
+                `${f}: REGRESSION (JB3-4, JB3-5) — a stale refusal keeps what the server refused: the latest not taken into the app's copy`);
+            seen += 1;
+        });
+        assert.equal(seen, 1, `${f}: one send`);
+    }
 });
 
 // ── S4b ──────────────────────────────────────────────────────────────────────
@@ -830,6 +973,35 @@ test('S5 — every save that lands merges the tokens it answered — by revsAfte
         let lands = 0;
         walk(astOf(read(f)).program, (n) => { if (callsNamed('landed')(n)) lands += 1; });
         assert.equal(lands, 1, `${f}: REGRESSION — a landed save's tokens never merged; the panel's next save refused against its own`);
+    }
+    // B-3b's (state §0.228): Pipelines' one send and the calendar's two each land by the panel's landed; Edit brand's and
+    // the Sales Manager's merge the tokens their send answered as it lands — `revs: revsAfter(<prev>.revs, <w>.revs)` in
+    // an updater, in the branch for <w>.ok.
+    for (const [f, sends] of [[PIPELINES, 1], [CALENDAR, 2]]) {
+        let lands = 0;
+        walk(astOf(read(f)).program, (n) => { if (callsNamed('landed')(n)) lands += 1; });
+        assert.equal(lands, sends, `${f}: REGRESSION — a landed save's tokens never merged; the panel's next save refused against its own`);
+    }
+    for (const f of [EDIT_BRAND, SALES_MANAGER]) {
+        let merges = 0;
+        walk(astOf(read(f)).program, (n, anc) => {
+            if (!callsNamed('writeSettings')(n)) return;
+            const decl = anc.at(-2);
+            const w = decl?.type === 'VariableDeclarator' && decl.id.type === 'Identifier' ? decl.id.name : null;
+            walk(anc.findLast(isFn).body, (o) => {
+                if (o.type !== 'IfStatement' || !isMember(o.test) || o.test.object.name !== w || propName(o.test) !== 'ok') return;
+                walk(o.consequent, (c) => {
+                    if (!callsNamed('setSettings')(c) || !isFn(c.arguments[0])) return;
+                    const up = c.arguments[0], prev = up.params[0]?.name;
+                    walk(up.body, (p) => {
+                        if (p.type !== 'ObjectProperty' || keyName(p) !== 'revs' || !callsNamed('revsAfter')(p.value)) return;
+                        const [heldRevs, answered] = p.value.arguments;
+                        if ((chainOf(heldRevs) || []).join('.') === `${prev}.revs` && (chainOf(answered) || []).join('.') === `${w}.revs`) merges += 1;
+                    });
+                });
+            });
+        });
+        assert.equal(merges, 1, `${f}: REGRESSION — a landed save's token never reaches the copy: the next draft begins with the old one and is refused against its own`);
     }
     for (const [f, component, handler] of [
         ['src/Tabs/settings/people/TeamsDetail.jsx', 'TeamsDetail', 'handleDelete'],
@@ -1162,6 +1334,45 @@ test('S8 — the scanners read a panel\'s hook by the scope, on made-up sources:
     ]) assert.ok(lands(bad) > 0, `not seen: ${bad}`);
 });
 
+test('S8 — the scanners read the Sales Manager\'s own tokens, on made-up sources: its drafts\' setters, in that file alone (state §0.228); an updater\'s row built in a function inside it is that row, not the copy', () => {
+    const DRAFTS = {
+        tiers: 'const draftTiers = (next) => { if (tiersDraft === null) setOpened(o => ({ ...o, quotaData: settings.revs?.quotaData ?? null })); setTiersDraft(next); };',
+        spiffs: 'const draftSpiffs = (next) => { if (spiffsDraft === null) setOpened(o => ({ ...o, spiffs: settings.revs?.spiffs ?? null })); setSpiffsDraft(next); };',
+    };
+    const manager = ({ state = 'const [opened, setOpened] = useState({});', tiers = DRAFTS.tiers, spiffs = DRAFTS.spiffs, save = 'const w = await writeSettings(patch, opened);', before = '' } = {}) =>
+        `${before} export default function SalesManagerTab() { const { settings } = useApp(); const [tiersDraft, setTiersDraft] = useState(null); const [spiffsDraft, setSpiffsDraft] = useState(null); ${state} ${tiers} ${spiffs} const saveExtra = async (patch) => { ${save} }; }`;
+    const sends = (src, file = SALES_MANAGER) => sendFaults(file, src).out.length;
+    assert.equal(sends(manager()), 0, 'each draft\'s token, taken when it begins');
+    const withTiers = (body) => manager({ tiers: `const draftTiers = (next) => { ${body} setTiersDraft(next); };` });
+    for (const bad of [
+        manager({ state: '', before: 'function Other() { const [opened, setOpened] = useState({}); }' }),
+        manager({ save: 'setOpened(o => ({ ...o, spiffs: settings.revs?.spiffs ?? null })); const w = await writeSettings(patch, opened);' }),
+        manager({ save: 'const w = await writeSettings(patch, settings.revs);' }),
+        manager({ save: 'const w = await writeSettings({ teams: t }, { teams: opened.territories });' }),
+        withTiers('setOpened(o => ({ ...o, quotaData: settings.revs?.quotaData ?? null }));'),
+        withTiers('if (spiffsDraft === null) setOpened(o => ({ ...o, quotaData: settings.revs?.quotaData ?? null }));'),
+        withTiers('if (tiersDraft === null) setOpened(o => ({ ...o, spiffs: settings.revs?.spiffs ?? null }));'),
+        withTiers('if (tiersDraft === null) setOpened(o => ({ ...o, quotaData: o.quotaData ?? null }));'),
+        withTiers('if (tiersDraft === null) setOpened(o => ({ ...o, quotaData: ref.current }));'),
+        withTiers('if (tiersDraft === null) setOpened(settings.revs);'),
+        withTiers('if (tiersDraft === null) setOpened(o => ({ quotaData: settings.revs?.quotaData ?? null }));'),
+        withTiers(''),
+        manager({ state: 'let [opened, setOpened] = useState({});' }),
+        manager({ state: 'const [opened, setOpened] = useRef({});' }),
+        manager({ state: 'const { opened, setOpened } = useDrafts();' }),
+    ]) assert.ok(sends(bad) > 0, `not seen: ${bad}`);
+    assert.ok(sends(manager(), 'src/made.jsx') > 0, 'REGRESSION: a stray useState `opened` accepted outside the Sales Manager — every panel\'s tokens are its hook\'s');
+
+    const updaters = (body) => updaterFaults('src/made.jsx', body).length;
+    assert.equal(updaters('setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === id ? { ...u, [field]: value } : u) }));'), 0,
+        'a member\'s row in a .map: its own computed field, not a list of the copy');
+    for (const bad of [
+        'setSettings(prev => { const next = { ...prev, [key]: t }; return next; });',
+        'setSettings(prev => ({ ...prev, [key]: t, users: prev.users.map(u => ({ ...u })) }));',
+        'setSettings(prev => ({ ...prev, users: prev.users.map(u => u), teams: t }));',
+    ]) assert.ok(updaters(bad) > 0, `not seen: ${bad}`);
+});
+
 test('S8 — the suites list holds this file: the harness grades it', () => {
     const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
     assert.ok(suites.includes('tests/settings-saves.test.mjs'), 'SUITES runs this file');
@@ -1406,6 +1617,669 @@ test('S10 — Features\' save, run as written (J-B12): the tokens it opened with
     assert.deepEqual([forbidden.handed, forbidden.said], [[], ['Failed to save: You need the Admin role to change these settings.']]);
 });
 
+// ── S10 — B-3b's saves, run as written (state §0.228) ──────────────────────
+
+const deferred = () => { let resolve, reject; const p = new Promise((a, b) => { resolve = a; reject = b; }); return { p, resolve, reject }; };
+// An optimistic panel's save as written (Pipelines' persist, the calendar's persistHolidays and Sync): one gate across
+// calls; the app's copy as React holds it (a value set replaces it); the render's settings fixed; each send held until
+// the test answers it; panelStale answers `took` — or, with `hold`, when the test answers it (st.answerStale), so the
+// gate is read while AdminView reads the latest. The gate's release on a landed render is the [opened] effect's —
+// pinned in S12, never run here. `extra(st)` adds a handler's own scope.
+const optimisticRig = async (file, component, handler, sayer, extra = () => ({})) => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const settings = {
+        pipelines: [{ id: 'p1', name: 'Sales' }], assignmentRules: [{ id: 'r1' }], customHolidays: [{ date: 'Jan 2', name: 'Ours' }],
+        revs: { pipelines: 'R0', customHolidays: 'C0', other: 'O0' },
+    };
+    const st = { settings, copy: settings, opened: { ...settings.revs }, gate: { current: false }, sends: [], landed: [], handed: [], said: [], took: false,
+        syncing: [], gets: [], org: 'org_A' };
+    const fnSrc = handlerIn(read(file), component, handler);
+    const scope = {
+        STILL_SAVING, settings, opened: st.opened, inFlight: st.gate,
+        setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
+        putSettings: (...args) => { const d = deferred(); st.sends.push({ args, ...d }); return d.p; },
+        landed: (a) => st.landed.push(a),
+        panelStale: async (e, words) => { st.handed.push([e, words]); if (!st.hold) return st.took; const d = deferred(); st.answerStale = d.resolve; return d.p; },
+        [sayer]: (v) => { if (v) st.said.push(v); },
+        ...extra(st),
+    };
+    st.call = (...args) => runAs(fnSrc, scope, ...args);
+    return st;
+};
+
+test('S10 — Pipelines\' persist, run as written (JB3-8, J-B10): the tokens it opened with; one save in flight — a second change sends nothing and says so; the gate stays shut once it lands; a refusal puts back the keys it sent alone, never the tokens; a stale one goes to AdminView and puts nothing back', async () => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const run = () => optimisticRig(PIPELINES, 'PipelinesDetail', 'persist', 'setSaveError');
+    const P1 = [{ id: 'p1', name: 'Sales 2' }];
+
+    let st = await run();
+    const first = st.call({ pipelines: P1 }, 'Pipeline rename');
+    assert.equal(st.sends.length, 1);
+    assert.deepEqual(st.sends[0].args[0], { pipelines: P1 });
+    assert.equal(st.sends[0].args[1], st.opened, 'REGRESSION: the change sent with no tokens, or not the ones the panel opened with');
+    assert.deepEqual(st.copy.pipelines, P1, 'optimistic: on screen at once');
+    assert.deepEqual(await outcome(st.call({ assignmentRules: [] }, 'Assignment rule')), { v: false }, 'answered at once, nothing awaited');
+    assert.equal(st.sends.length, 1,'REGRESSION (JB3-8): a second change sent while the first is out — it names the token the first is about to move, and is refused by it');
+    assert.deepEqual(st.said, [`Assignment rule not saved — ${STILL_SAVING}`]);
+    assert.deepEqual(st.copy.assignmentRules, st.settings.assignmentRules, 'the refused change never reaches the screen');
+    const answer = { success: true, revs: { pipelines: 'R1' } };
+    st.sends[0].resolve(answer);
+    assert.equal(await first, true);
+    assert.deepEqual(st.landed, [answer], 'REGRESSION: the landed save\'s tokens never merged');
+    assert.equal(st.gate.current, true, 'REGRESSION (critic A8): the gate opened before the merged tokens are in a render — the next change built on the render before the landing');
+    assert.deepEqual(await outcome(st.call({ assignmentRules: [] }, 'Assignment rule')), { v: false }, 'shut until the [opened] effect opens it');
+    assert.equal(st.sends.length, 1);
+
+    st = await run();
+    const refused = st.call({ pipelines: P1 }, 'Pipeline rename');
+    const A1 = [{ id: 'r2' }];
+    st.copy = { ...st.copy, assignmentRules: A1, revs: { ...st.copy.revs, other: 'O1' } };   // meanwhile: another key set, another save's token merged
+    st.sends[0].reject(new Error('Server error 500'));
+    assert.equal(await refused, false);
+    assert.deepEqual(st.copy.pipelines, st.settings.pipelines, 'the change put back');
+    assert.equal(st.copy.assignmentRules, A1, 'REGRESSION (J-B10): a key it never sent put back — another change undone');
+    assert.deepEqual(st.copy.revs, { pipelines: 'R0', customHolidays: 'C0', other: 'O1' }, 'REGRESSION (J-B10): the tokens put back — another save\'s token lost, the next save of that key refused');
+    assert.deepEqual(st.said, ['Pipeline rename not saved — Server error 500']);
+    assert.deepEqual(st.handed, [], 'no stale refusal: never AdminView\'s');
+    assert.equal(st.gate.current, false, 'REGRESSION (JB3-8): a refusal leaves the gate shut');
+
+    const refusal = await staleRefusal('pipelines');
+    st = await run(); st.took = true;
+    const taken = st.call({ pipelines: P1 }, 'Pipeline rename');
+    st.sends[0].reject(refusal);
+    assert.equal(await taken, false);
+    assert.deepEqual(st.handed, [[refusal, undefined]], 'REGRESSION (J-B5): a stale refusal not handed to AdminView');
+    assert.deepEqual(st.copy.pipelines, P1, 'REGRESSION (J-B5): the old mount\'s values put back over the latest AdminView took');
+    assert.deepEqual([st.said, st.gate.current], [[], true], "no words from the old mount — AdminView says them; this mount's gate stays shut, the panel drawn again on the latest has its own (state §0.228)");
+
+    st = await run();
+    const unread = st.call({ pipelines: P1 }, 'Pipeline rename');
+    st.sends[0].reject(refusal);
+    assert.equal(await unread, false);
+    assert.equal(st.handed.length, 1);
+    assert.deepEqual([st.copy.pipelines, st.said], [st.settings.pipelines, [`Pipeline rename not saved — ${refusal.message}`]], 'the latest unread: put back, the server\'s words');
+    assert.equal(st.gate.current, false, 'REGRESSION (JB3-8): the latest unread leaves the gate shut — every change after said to be still saving');
+
+    // While AdminView reads the latest the gate stays shut (state §0.228): opened sooner, a change made then went out
+    // with the old tokens. Unread, it opens once the keys are put back.
+    st = await run(); st.hold = true;
+    const held = st.call({ pipelines: P1 }, 'Pipeline rename');
+    st.sends[0].reject(refusal);
+    await until(() => st.answerStale);
+    assert.equal(st.gate.current, true, 'REGRESSION (state §0.228): the gate opened before panelStale answered');
+    assert.deepEqual(await outcome(st.call({ assignmentRules: [] }, 'Assignment rule')), { v: false }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.sends.length, st.said], [1, [`Assignment rule not saved — ${STILL_SAVING}`]], 'REGRESSION (state §0.228): a change sent while AdminView reads the latest — it names the old tokens');
+    st.answerStale(false);
+    assert.equal(await held, false);
+    assert.deepEqual([st.copy.pipelines, st.copy.assignmentRules, st.gate.current], [st.settings.pipelines, st.settings.assignmentRules, false], 'unread: put back, the gate opened');
+});
+
+// Pipelines' Add pipeline and Add stage as written, persist answering `ok`: what each sets after the send, in order.
+test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.228): refused — still saving, or by the server — the form keeps what was typed and the selection stays; landed, the form cleared and closed", async () => {
+    const PIPES = [{ id: 'new-biz', name: 'New Business', isDefault: true, stages: ['Prospecting', 'Closed Won', 'Closed Lost'] }];
+    const run = async (handler, ok, scope) => {
+        const st = { sent: [], calls: [] };
+        const rec = (name) => (v) => st.calls.push([name, v]);
+        await runAs(handlerIn(read(PIPELINES), 'PipelinesDetail', handler), {
+            pipelines: PIPES, selected: PIPES[0], selectedId: 'new-biz', STAGE_TYPES: { 'Closed Won': 'Won', 'Closed Lost': 'Lost' },
+            persist: async (patch, label) => { st.sent.push([patch, label]); return ok; },
+            setSaving: rec('saving'), setSelectedId: rec('selected'), setNewName: rec('name'), setNewDefault: rec('default'), setNewErr: rec('err'),
+            setShowNewForm: rec('form'), setNewStageName: rec('stageName'), setNewStageType: rec('stageType'), setStageErr: rec('stageErr'),
+            setShowAddStage: rec('stageForm'),
+            ...scope,
+        });
+        return st;
+    };
+    for (const [handler, scope, label, kept, cleared] of [
+        ['handleAddPipeline', { newName: 'Renewals', newDefault: false }, 'Pipeline', [['saving', true], ['saving', false]],
+            [['saving', true], ['saving', false], ['selected', 'renewals'], ['name', ''], ['default', false], ['err', ''], ['form', false]]],
+        ['handleAddStage', { newStageName: 'Demo', newStageType: 'Open' }, 'Stage', [],
+            [['stageName', ''], ['stageType', 'Open'], ['stageErr', ''], ['stageForm', false]]],
+    ]) {
+        const refused = await run(handler, false, scope);
+        assert.deepEqual(refused.sent.map(([, l]) => l), [label], `${handler}: one send`);
+        assert.deepEqual(refused.calls, kept, `${handler}: REGRESSION (state §0.228) — refused, the form cleared and closed: what was typed lost to a change said to be still saving`);
+        const landed = await run(handler, true, scope);
+        assert.deepEqual(landed.calls, cleared, `${handler}: landed, the form cleared and closed`);
+    }
+});
+
+test('S10 — the calendar\'s persistHolidays, run as written: the tokens it opened with; refused while a Sync is out; the gate shut once it lands; a refusal puts back the holidays alone, never the tokens; a stale one, nothing', async () => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const run = () => optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'persistHolidays', 'setCalError');
+    const C1 = [{ date: 'Jan 2', name: 'Ours' }, { date: 'Mar 3', name: 'New' }];
+
+    let st = await run();
+    st.gate.current = true;   // a Sync out
+    assert.deepEqual(await outcome(st.call({ customHolidays: C1 }, 'Holiday')), { v: false }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.sends.length, st.said, st.copy.customHolidays], [0, [`Holiday not saved — ${STILL_SAVING}`], st.settings.customHolidays], 'REGRESSION (JB3-8): an Add sent while a Sync is out');
+
+    st = await run();
+    const added = st.call({ customHolidays: C1 }, 'Holiday');
+    assert.equal(st.sends[0].args[1], st.opened, 'REGRESSION: the holidays sent with no tokens, or not the ones the panel opened with');
+    st.sends[0].resolve({ success: true, revs: { customHolidays: 'C1' } });
+    assert.equal(await added, true);
+    assert.deepEqual([st.landed.length, st.gate.current], [1, true], 'landed; the gate shut until the merged tokens are in a render');
+
+    st = await run();
+    const refused = st.call({ customHolidays: C1 }, 'Holiday');
+    st.copy = { ...st.copy, pipelines: [], revs: { ...st.copy.revs, other: 'O1' } };
+    st.sends[0].reject(new Error('gone'));
+    assert.equal(await refused, false);
+    assert.deepEqual([st.copy.customHolidays, st.copy.pipelines, st.copy.revs], [st.settings.customHolidays, [], { pipelines: 'R0', customHolidays: 'C0', other: 'O1' }],
+        'REGRESSION (J-B10): a key it never sent, or the tokens, put back');
+    assert.deepEqual([st.said, st.gate.current], [['Holiday not saved — gone'], false]);
+
+    st = await run(); st.took = true;
+    const refusal = await staleRefusal('customHolidays');
+    const taken = st.call({ customHolidays: C1 }, 'Holiday');
+    st.sends[0].reject(refusal);
+    assert.equal(await taken, false);
+    assert.deepEqual([st.handed, st.copy.customHolidays, st.said], [[[refusal, undefined]], C1, []], 'REGRESSION (J-B5): put back over the latest, or not handed on');
+    assert.equal(st.gate.current, true, "this mount's gate stays shut — the panel drawn again on the latest has its own (state §0.228)");
+
+    // The latest unread (critic m1b): the holidays put back, the server's words — and the gate shut until then: opened
+    // while AdminView reads the latest, a holiday added meanwhile went out with the old tokens (state §0.228).
+    st = await run(); st.hold = true;
+    const unread = st.call({ customHolidays: C1 }, 'Holiday');
+    st.sends[0].reject(refusal);
+    await until(() => st.answerStale);
+    assert.equal(st.gate.current, true, 'REGRESSION (state §0.228): the gate opened before panelStale answered');
+    assert.deepEqual(await outcome(st.call({ customHolidays: [] }, 'Holiday')), { v: false }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.sends.length, st.said], [1, [`Holiday not saved — ${STILL_SAVING}`]], 'REGRESSION (state §0.228): a holiday sent while AdminView reads the latest — it names the old tokens');
+    st.answerStale(false);
+    assert.equal(await unread, false);
+    assert.deepEqual(st.copy.customHolidays, st.settings.customHolidays, 'REGRESSION (critic m1b): the latest unread — a holiday the server refused left on screen');
+    assert.deepEqual([st.copy.revs, st.said.at(-1), st.gate.current], [st.settings.revs, `Holiday not saved — ${refusal.message}`, false], 'the server\'s words; the gate opened');
+});
+
+test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with the tokens it opened with; a refusal puts back those two keys alone, never the tokens; stale, nothing; the gate taken before the GET, opened by a refusal, a failed GET or a switch', async () => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const FRESH = [{ date: 'Jan 1', name: 'New Year' }];
+    const run = () => optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'handleSync', 'setSyncMsg', (st) => ({
+        year: 2026, customHolidays: st.settings.customHolidays, console: { error: () => {} },
+        setTimeout: () => {}, setSyncing: (v) => st.syncing.push(v),
+        requestOrg: () => 'org_A', stillOrg: (o) => o === st.org,
+        dbFetch: async (url) => {
+            st.gets.push(url);
+            return st.getFails ? { ok: false, status: 502, json: async () => ({ error: 'Holidays service down' }) }
+                : { ok: true, status: 200, json: async () => ({ holidays: FRESH }) };
+        },
+    }));
+
+    let st = await run();
+    const synced = st.call();
+    await until(() => st.sends.length);
+    assert.deepEqual(st.sends[0].args[0], { customHolidays: st.settings.customHolidays, federalHolidays: FRESH });
+    assert.equal(st.sends[0].args[1], st.opened, 'REGRESSION: Sync sends no tokens, or not the ones the panel opened with');
+    st.sends[0].resolve({ success: true, revs: { customHolidays: 'C1', federalHolidays: 'F1' } });
+    await synced;
+    assert.equal(st.landed.length, 1, 'REGRESSION: Sync\'s tokens never merged — the next holiday save refused against its own');
+    assert.ok(st.said.length === 1 && st.said[0].includes('Synced 1 federal holidays for 2026'), st.said.join(' | '));
+    assert.deepEqual([st.syncing, st.gate.current], [[true, false], true]);
+
+    st = await run(); st.gate.current = true;
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.gets, st.sends.length, st.syncing, st.said], [[], 0, [], [`Not synced — ${STILL_SAVING}`]], 'REGRESSION (JB3-8): a Sync sent while a change is out');
+
+    st = await run();
+    const refused = st.call();
+    await until(() => st.sends.length);
+    assert.deepEqual(st.copy.federalHolidays, FRESH, 'optimistic');
+    st.copy = { ...st.copy, pipelines: [], revs: { ...st.copy.revs, other: 'O1' } };   // meanwhile: another key set, another token merged
+    st.sends[0].reject(new Error('gone'));
+    await refused;
+    assert.deepEqual(st.copy.customHolidays, st.settings.customHolidays);
+    assert.equal(st.copy.federalHolidays, undefined, 'both keys back as the render held them');
+    assert.deepEqual([st.copy.pipelines, st.copy.revs], [[], { pipelines: 'R0', customHolidays: 'C0', other: 'O1' }],
+        'REGRESSION (critic B7, J-B10): a key it never sent, or the tokens, put back — the whole render\'s copy over the latest');
+    assert.deepEqual([st.said, st.syncing, st.gate.current], [['Failed to sync — gone'], [true, false], false]);
+
+    const refusal = await staleRefusal('customHolidays');
+    st = await run(); st.took = true;
+    const taken = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].reject(refusal);
+    await taken;
+    assert.deepEqual(st.handed, [[refusal, undefined]], 'REGRESSION (J-B5): a stale Sync not handed to AdminView');
+    assert.deepEqual([st.copy.federalHolidays, st.said, st.gate.current], [FRESH, [], true], "REGRESSION: put back over the latest, or the old mount's words; this mount's gate stays shut, the panel drawn again on the latest has its own (state §0.228)");
+
+    st = await run();
+    const unread = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].reject(refusal);
+    await unread;
+    assert.deepEqual([st.copy.federalHolidays, st.said], [undefined, [`Failed to sync — ${refusal.message}`]], 'the latest unread: put back, the server\'s words');
+    assert.equal(st.gate.current, false, 'REGRESSION (JB3-8): the latest unread leaves the gate shut — every change after said to be still saving');
+
+    // While AdminView reads the latest the gate stays shut (state §0.228): a Sync run then would send the two keys with
+    // the old tokens. Unread, the catch around it opens the gate.
+    st = await run(); st.hold = true;
+    const held = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].reject(refusal);
+    await until(() => st.answerStale);
+    assert.equal(st.gate.current, true, 'REGRESSION (state §0.228): the gate opened before panelStale answered');
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.gets.length, st.sends.length, st.said], [1, 1, [`Not synced — ${STILL_SAVING}`]], 'REGRESSION (state §0.228): a Sync run while AdminView reads the latest');
+    st.answerStale(false);
+    await held;
+    assert.deepEqual([st.copy.federalHolidays, st.said.at(-1), st.gate.current], [undefined, `Failed to sync — ${refusal.message}`, false], 'unread: put back, the words, the gate opened');
+
+    st = await run(); st.getFails = true;   // the holidays GET refused: nothing to send, the gate opened by the outer catch
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'answered at once, nothing awaited');
+    assert.deepEqual([st.gets.length, st.sends.length, st.said, st.syncing, st.gate.current],
+        [1, 0, ['Failed to sync — Holidays service down'], [true, false], false],
+        'REGRESSION (JB3-8): a holidays GET that failed leaves the gate shut — every change after said to be still saving');
+
+    st = await run(); st.org = 'org_B';
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'REGRESSION: the last org\'s holidays sent after a switch');
+    assert.deepEqual([st.sends.length, st.gate.current], [0, false], 'REGRESSION: the gate held for a send that never goes — every change after said to be still saving');
+});
+
+// Edit brand's Save as written: the window's brand and its token (`base`); writeSettings answers `answer`; the latest,
+// when given, is taken into the copy.
+const BRAND_STUB = { preset: true };
+const runBrandSave = async ({ answer, latest = null, base = { rev: 'B0' }, brand = { accent: '#123' } }) => {
+    const { revsAfter, BRAND_CHANGED } = await import('../src/utils/settingsRevs.js');
+    const st = { copy: { quoteBrand: { accent: '#old' }, revs: { quoteBrand: 'B0', other: 'O0' } }, sends: [], saving: [], said: [], brands: [], bases: [], closed: 0, taken: 0, order: [] };
+    await runAs(handlerIn(read(EDIT_BRAND), 'EditBrandModal', 'handleSave'), {
+        brand, base, BRAND_PRESET: BRAND_STUB, BRAND_CHANGED, revsAfter,
+        writeSettings: async (...a) => { st.sends.push(a); st.order.push('send'); return answer; },
+        takeLatestSettings: async (set) => {
+            st.taken += 1;
+            if (!latest) return null;
+            set((prev) => ({ ...prev, quoteBrand: latest.quoteBrand, revs: latest.revs }));
+            return latest;
+        },
+        setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
+        // Every setSaveError in order, a clearing one too (critic m2): `said` holds the words alone.
+        setSaving: (v) => st.saving.push(v), setSaveError: (v) => { st.order.push(v === '' ? 'cleared' : 'said'); if (v) st.said.push(v); },
+        setBrand: (v) => st.brands.push(v), setBase: (v) => st.bases.push(v),
+        onClose: () => { st.closed += 1; },
+    });
+    return st;
+};
+
+test('S10 — Edit brand\'s Save, run as written (JB3-4): the token its window opened with; lands — the brand and its token into the copy, closed; stale — the latest re-seeds the brand and the token, the words, open; unread — the server\'s words, the edit kept, never optimistic', async () => {
+    const { BRAND_CHANGED, STALE_ERROR } = await import('../src/utils/settingsRevs.js');
+    const brand = { accent: '#123' };
+    const ok = await runBrandSave({ brand, answer: { ok: true, status: 200, error: null, revs: { quoteBrand: 'B1' } } });
+    assert.deepEqual(ok.sends, [[{ quoteBrand: brand }, { quoteBrand: 'B0' }]], 'REGRESSION (JB3-4): the brand sent with no token, or not the one its window opened with');
+    assert.deepEqual(ok.copy, { quoteBrand: brand, revs: { quoteBrand: 'B1', other: 'O0' } }, 'REGRESSION: the brand landed without its token, or the held tokens replaced whole');
+    assert.deepEqual([ok.closed, ok.saving[0], ok.said], [1, true, []]);
+    assert.deepEqual(ok.order, ['cleared', 'send'], "REGRESSION (critic m2): the window's last words not cleared as a save starts — a refusal's words shown over the save out");
+
+    const STALE = { ok: false, status: 409, error: STALE_ERROR, stale: ['quoteBrand'] };
+    const theirs = { accent: '#999' };
+    const taken = await runBrandSave({ brand, answer: STALE, latest: { quoteBrand: theirs, revs: { quoteBrand: 'BL' } } });
+    assert.equal(taken.taken, 1, 'REGRESSION (JB3-4): the latest not taken');
+    assert.deepEqual(taken.brands, [theirs], 'REGRESSION (JB3-4): the window keeps the refused edit over a brand that changed');
+    assert.deepEqual(taken.bases, [{ rev: 'BL' }], 'REGRESSION (JB3-4): the window keeps the old token — its next Save refused again');
+    assert.deepEqual(taken.said, [BRAND_CHANGED]);
+    assert.deepEqual(taken.order, ['cleared', 'send', 'said']);
+    assert.deepEqual([taken.closed, taken.saving.at(-1)], [0, false], 'stays open, Save offered again');
+    assert.deepEqual(taken.copy.quoteBrand, theirs, 'the copy is the latest');
+    const none = await runBrandSave({ brand, answer: STALE, latest: { quoteBrand: null, revs: {} } });
+    assert.deepEqual([none.brands, none.bases], [[BRAND_STUB], [{ rev: null }]], 'no brand saved there: the preset, no token');
+    const again = await runBrandSave({ brand, base: taken.bases[0], answer: { ok: true, status: 200, error: null, revs: { quoteBrand: 'B2' } } });
+    assert.deepEqual(again.sends[0][1], { quoteBrand: 'BL' }, 'the next Save names the latest\'s token');
+
+    const unread = await runBrandSave({ brand, answer: STALE });
+    assert.deepEqual([unread.taken, unread.brands, unread.bases, unread.closed, unread.saving.at(-1)], [1, [], [], 0, false]);
+    assert.deepEqual(unread.said, [`Brand not saved — ${STALE_ERROR}`], 'the latest unread: the server\'s words');
+    assert.deepEqual(unread.copy.quoteBrand, { accent: '#old' }, 'REGRESSION (JB3-4): optimistic — the copy took a brand the server refused');
+    const forbidden = await runBrandSave({ brand, answer: { ok: false, status: 403, error: 'You do not have permission to make this change.' } });
+    assert.deepEqual([forbidden.taken, forbidden.said, forbidden.closed], [0, ['Brand not saved — You do not have permission to make this change.'], 0]);
+});
+
+// A declaration anywhere inside a component, as written — Escape's handler is inside the component's effect.
+const declIn = (src, component, name) => {
+    let out = null;
+    walk(astOf(src).program, (n) => {
+        if (!componentBody(n, component)) return;
+        walk(n, (d) => { if (d.type === 'VariableDeclarator' && d.id.type === 'Identifier' && d.id.name === name && d.init) out = src.slice(d.init.start, d.init.end); });
+    });
+    assert.ok(out, `${component}'s ${name} not found`);
+    return out;
+};
+
+test('S10 — Edit brand\'s window while its save is out, run as written (critic A5): close and Escape do nothing; after it, close asks about an edit, Escape closes', () => {
+    const src = read(EDIT_BRAND);
+    const close = handlerIn(src, 'EditBrandModal', 'close');
+    const runClose = (saving, dirty) => {
+        const st = { asked: [], closed: 0 };
+        const onClose = () => { st.closed += 1; };
+        runAs(close, { saving, dirty, onClose, showConfirm: (words, then, danger) => st.asked.push([words, then === onClose, danger]) });
+        return st;
+    };
+    for (const dirty of [true, false]) {
+        assert.deepEqual(runClose(true, dirty), { asked: [], closed: 0 }, `dirty ${dirty}: REGRESSION (critic A5) — closed while its save is out: its answer lands on nothing, a refusal unsaid`);
+    }
+    assert.deepEqual(runClose(false, true), { asked: [['Discard unsaved brand changes?', true, false]], closed: 0 });
+    assert.deepEqual(runClose(false, false), { asked: [], closed: 1 });
+    const onKey = declIn(src, 'EditBrandModal', 'onKey');
+    const press = (saving, e) => { let closed = 0; runAs(onKey, { saving, close: () => { closed += 1; } }, e); return closed; };
+    const ESC = { key: 'Escape', defaultPrevented: false };
+    assert.equal(press(true, ESC), 0, 'REGRESSION (critic A5): Escape closes the window while its save is out');
+    assert.equal(press(false, ESC), 1);
+    assert.equal(press(false, { ...ESC, defaultPrevented: true }), 0, 'a layer above took it');
+    assert.equal(press(false, { key: 'Enter', defaultPrevented: false }), 0);
+});
+
+// The Sales Manager's saveExtra as written: the drafts' tokens (`opened`); writeSettings answers `answer`; the latest,
+// when given, is taken into the copy.
+const runSaveExtra = async ({ patch = { spiffs: [{ id: 's1', name: 'Q4 push' }] }, label = 'SPIFFs', answer, latest = null, loaded = true }) => {
+    const { revsAfter, listChanged } = await import('../src/utils/settingsRevs.js');
+    const st = { copy: { spiffs: [], quotaData: {}, revs: { quotaData: 'Q0', spiffs: 'S0' } }, opened: { quotaData: 'QD', spiffs: 'SD' },
+        sends: [], states: [], drafts: [], taken: 0, thrown: null, out: undefined };
+    try {
+        st.out = await runAs(handlerIn(read(SALES_MANAGER), 'SalesManagerTab', 'saveExtra'), {
+            settingsLoaded: loaded, opened: st.opened, revsAfter, listChanged,
+            writeSettings: async (...a) => { st.sends.push(a); return answer; },
+            takeLatestSettings: async (set) => { st.taken += 1; if (!latest) return null; set((prev) => ({ ...prev, ...latest })); return latest; },
+            setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
+            setSaveState: (v) => st.states.push(v),
+            setTiersDraft: (v) => st.drafts.push(['tiers', v]), setSpiffsDraft: (v) => st.drafts.push(['spiffs', v]),
+        }, patch, label);
+    } catch (e) { st.thrown = e; }
+    return st;
+};
+
+test('S10 — the Sales Manager\'s saveExtra, run as written (JB3-5): the tokens its draft began with; lands — the answered token merged; stale — the latest taken, that draft dropped, the list\'s words, thrown with tookLatest; unread, 403, the network, not loaded — the words, nothing dropped', async () => {
+    const { listChanged, STALE_ERROR } = await import('../src/utils/settingsRevs.js');
+    const ok = await runSaveExtra({ answer: { ok: true, status: 200, error: null, revs: { spiffs: 'S1' } } });
+    assert.equal(ok.sends.length, 1);
+    assert.equal(ok.sends[0][1], ok.opened, 'REGRESSION (JB3-5): the save names no tokens, or not those its draft began with');
+    assert.equal(ok.out, true);
+    assert.deepEqual(ok.copy.revs, { quotaData: 'Q0', spiffs: 'S1' }, 'REGRESSION: the answered token never merged, or the held ones replaced whole — the next SPIFF draft begins with the old one and is refused against its own');
+    assert.deepEqual(ok.states, [{ status: 'saving', msg: '' }, { status: 'saved', msg: '' }]);
+    assert.deepEqual([ok.drafts, ok.taken, ok.thrown], [[], 0, null]);
+
+    const STALE = (key) => ({ ok: false, status: 409, error: STALE_ERROR, stale: [key] });
+    const latest = { spiffs: [{ id: 's9', name: 'Theirs' }], revs: { spiffs: 'SL' } };
+    const spiffs = await runSaveExtra({ answer: STALE('spiffs'), latest });
+    assert.equal(spiffs.taken, 1, 'REGRESSION (JB3-5): the latest not taken');
+    assert.deepEqual(spiffs.drafts, [['spiffs', null]], 'REGRESSION (JB3-5): the refused draft kept over the latest — or the other draft dropped too');
+    assert.ok(spiffs.thrown, 'REGRESSION (JB3-5): stale returns false — the leave guard cannot say the latest was taken');
+    assert.deepEqual([spiffs.thrown.message, spiffs.thrown.tookLatest, spiffs.thrown.stale], [listChanged('SPIFF'), true, ['spiffs']]);
+    assert.equal('partial' in spiffs.thrown, false, 'REGRESSION (critic m6): one stale refusal thrown as partial — the guard says the ones saved before it stay saved, when none were');
+    assert.deepEqual(spiffs.states.at(-1), { status: 'error', msg: listChanged('SPIFF') });
+    assert.deepEqual(spiffs.copy.spiffs, latest.spiffs, 'the copy is the latest');
+    const tiers = await runSaveExtra({ patch: { quotaData: { commissionTiers: [] } }, label: 'commission tiers', answer: STALE('quotaData'), latest: { quotaData: {}, revs: { quotaData: 'QL' } } });
+    assert.deepEqual([tiers.drafts, tiers.thrown?.message, tiers.thrown?.tookLatest], [[['tiers', null]], listChanged('commission tier'), true]);
+
+    const unread = await runSaveExtra({ answer: STALE('spiffs') });
+    assert.deepEqual([unread.taken, unread.drafts, unread.thrown, unread.out], [1, [], null, false], 'the latest unread: the draft kept, nothing thrown');
+    assert.deepEqual(unread.states.at(-1), { status: 'error', msg: `Not saved — ${STALE_ERROR}` });
+    for (const [answer, msg] of [
+        [{ ok: false, status: 403, error: 'x' }, 'Not saved — only Admins can change SPIFFs.'],
+        [{ ok: false, status: 0, error: 'x' }, 'Not saved — network error while saving SPIFFs.'],
+        [{ ok: false, status: 500, error: 'The server returned 500.' }, 'Not saved — The server returned 500.'],
+    ]) {
+        const r = await runSaveExtra({ answer });
+        assert.deepEqual([r.out, r.taken, r.drafts, r.thrown, r.states.at(-1)], [false, 0, [], null, { status: 'error', msg }], `${answer.status}`);
+    }
+    const early = await runSaveExtra({ loaded: false, answer: null });
+    assert.deepEqual([early.out, early.sends, early.states], [false, [], [{ status: 'error', msg: 'Not saved — this organization\'s settings have not loaded. Reload the page and try again.' }]]);
+});
+
+test('S10 — the Sales Manager\'s saveAdminDrafts, run as written (JB3-5): a part refused as stale after an earlier part landed is partial — the guard says those stay saved; refused first, or refused otherwise, it is not', async () => {
+    const run = async ({ quotas = false, tiers = false, spiffs = false, fail = null }) => {
+        const order = [];
+        const part = (name) => async () => { order.push(name); if (fail && fail[0] === name) throw Object.assign(new Error(name), fail[1]); };
+        let thrown = null;
+        try {
+            await runAs(handlerIn(read(SALES_MANAGER), 'SalesManagerTab', 'saveAdminDrafts'), {
+                quotaDrafts: quotas ? { usr_a: {} } : {}, tiersDraft: tiers ? [] : null, spiffsDraft: spiffs ? [] : null,
+                saveQuotas: part('quotas'), saveCommission: part('tiers'), saveSpiffBoard: part('spiffs'),
+            });
+        } catch (e) { thrown = e; }
+        return { order, thrown };
+    };
+    const STALE = { tookLatest: true, stale: ['k'] };
+    const a = await run({ quotas: true, tiers: true, spiffs: true, fail: ['tiers', STALE] });
+    assert.deepEqual(a.order, ['quotas', 'tiers'], 'stops at the refusal');
+    assert.deepEqual([a.thrown?.partial, a.thrown?.tookLatest], [true, true], 'REGRESSION (JB3-5): quotas landed, then the commission plan refused — the guard says nothing was saved');
+    assert.equal((await run({ quotas: true, spiffs: true, fail: ['spiffs', STALE] })).thrown?.partial, true);
+    assert.equal((await run({ tiers: true, spiffs: true, fail: ['spiffs', STALE] })).thrown?.partial, true);
+    assert.equal((await run({ tiers: true, spiffs: true, fail: ['tiers', STALE] })).thrown?.partial, undefined, 'refused first: nothing landed before it');
+    assert.equal((await run({ quotas: true, tiers: true, fail: ['tiers', {}] })).thrown?.partial, undefined, 'a refusal that took no latest: the guard\'s own words');
+    const clean = await run({ quotas: true, tiers: true, spiffs: true });
+    assert.deepEqual([clean.order, clean.thrown], [['quotas', 'tiers', 'spiffs'], null]);
+});
+
+// A component's const, as written, or null when it has none — today's names kept, so old code fails on what it sends,
+// not on a missing name.
+const declOrNull = (src, component, name) => {
+    let out = null;
+    walk(astOf(src).program, (n) => {
+        const body = componentBody(n, component);
+        if (!body) return;
+        for (const st of body) {
+            if (st.type !== 'VariableDeclaration') continue;
+            for (const d of st.declarations) if (d.id.name === name && d.init) out = src.slice(d.init.start, d.init.end);
+        }
+    });
+    return out;
+};
+// A function as written, its names bound from `scope` as it is built.
+const fnAs = (fnSrc, scope) => {
+    const names = Object.keys(scope);
+    return new Function(...names, `return (${fnSrc});`)(...names.map((n) => scope[n]));
+};
+// The Sales Manager's saves as written, each over the ones it calls: saveExtra (writeSettings held until the test
+// answers it; the latest, when given, taken into the copy), the cards' sends, their flights and their flags (recorded in
+// st.flags; state §0.228), and
+// saveAdminDrafts — the quotas' save a stand-in that lands.
+const salesManagerRig = async ({ quotaDrafts = {}, tiersDraft = null, spiffsDraft = null, latest = null } = {}) => {
+    const { revsAfter, listChanged } = await import('../src/utils/settingsRevs.js');
+    const src = read(SALES_MANAGER);
+    const st = { flags: [], sends: [], states: [], quotas: 0, copy: { quotaData: {}, spiffs: [], revs: { quotaData: 'Q0', spiffs: 'S0' } } };
+    const scope = {
+        settingsLoaded: true, opened: { quotaData: 'QD', spiffs: 'SD' }, revsAfter, listChanged, quotaDrafts, tiersDraft, spiffsDraft,
+        settings: st.copy,
+        writeSettings: (...args) => { const d = deferred(); st.sends.push({ args, ...d }); return d.p; },
+        takeLatestSettings: async (set) => { if (!latest) return null; set((prev) => ({ ...prev, ...latest })); return latest; },
+        setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
+        setSaveState: (v) => st.states.push(v), setTiersDraft: () => {}, setSpiffsDraft: () => {},
+        requestOrg: () => 'org_A', stillOrg: () => true, refuse: (msg) => new Error(msg),
+        saveQuotas: async () => { st.quotas += 1; },
+        commissionSaving: { current: null }, spiffsSaving: { current: null },
+        setCommissionSending: (v) => st.flags.push(['commission', v]), setSpiffsSending: (v) => st.flags.push(['spiffs', v]),
+    };
+    scope.saveExtra = fnAs(handlerIn(src, 'SalesManagerTab', 'saveExtra'), scope);
+    for (const name of ['sendCommission', 'sendSpiffBoard']) {
+        const fnSrc = declOrNull(src, 'SalesManagerTab', name);
+        scope[name] = fnSrc ? fnAs(fnSrc, scope) : undefined;
+    }
+    for (const name of ['saveCommission', 'saveSpiffBoard']) scope[name] = st[name] = fnAs(handlerIn(src, 'SalesManagerTab', name), scope);
+    st.saveAdminDrafts = fnAs(handlerIn(src, 'SalesManagerTab', 'saveAdminDrafts'), scope);
+    return st;
+};
+const TIERS_DRAFT = [{ min: 0, rate: 5 }];
+const SPIFFS_DRAFT = [{ id: 's1', name: 'Q4 push' }];
+const LANDS = { ok: true, status: 200, error: null, revs: {} };
+
+test("S10 — the Sales Manager's commission plan and SPIFF board, run as written (state §0.228): one flight each — a second save while one is out sends nothing and shares its outcome, a refusal too; cleared once it settles; the leave guard's save while a card's is out shares it", async () => {
+    const { STALE_ERROR, listChanged } = await import('../src/utils/settingsRevs.js');
+    for (const [card, drafts, words] of [['saveCommission', { tiersDraft: TIERS_DRAFT }, 'Commission plan not saved.'], ['saveSpiffBoard', { spiffsDraft: SPIFFS_DRAFT }, 'SPIFFs not saved.']]) {
+        const st = await salesManagerRig(drafts);
+        const first = st[card]();
+        const second = st[card]();
+        assert.equal(st.sends.length, 1, `${card}: REGRESSION (state §0.228) — a second save while one is out sent again, with the same draft-start token: refused by the first`);
+        assert.equal(second, first, `${card}: the second save shares the first one's outcome`);
+        st.sends[0].resolve(LANDS);
+        assert.deepEqual([await first, await second], [undefined, undefined]);
+        const third = st[card]();
+        assert.notEqual(third, first, `${card}: REGRESSION — the flight never cleared: every later save answers the first one's outcome`);
+        assert.equal(st.sends.length, 2);
+        assert.equal(st[card](), third, `${card}: a refusal is shared too`);
+        st.sends[1].resolve({ ok: false, status: 500, error: 'The server returned 500.' });
+        await assert.rejects(third, (e) => e.message === words);
+        st[card]();
+        assert.equal(st.sends.length, 3, `${card}: cleared after a refusal`);
+        st.sends[2].resolve(LANDS);
+    }
+
+    // The leave guard's "Save and continue" while a card's own Save is out: it shares that save — no second send, its
+    // outcome the guard's (state §0.228). Sent again, the same draft and token was refused by the first, and the guard
+    // said the change was not saved when it had landed.
+    for (const [card, drafts, key, noun] of [['saveCommission', { tiersDraft: TIERS_DRAFT }, 'quotaData', 'commission tier'], ['saveSpiffBoard', { spiffsDraft: SPIFFS_DRAFT }, 'spiffs', 'SPIFF']]) {
+        const st = await salesManagerRig(drafts);
+        const own = st[card]();
+        const guard = st.saveAdminDrafts();
+        await tick();
+        assert.equal(st.sends.length, 1, `${card}: REGRESSION (state §0.228) — the guard sent the draft again while the card's own save was out: refused by it, the guard says the change was not saved when it landed`);
+        st.sends[0].resolve(LANDS);
+        assert.deepEqual([await own, await guard], [undefined, undefined]);
+        st[card]();
+        assert.equal(st.sends.length, 2, `${card}: cleared once it settled`);
+        st.sends[1].resolve(LANDS);
+
+        const stale = await salesManagerRig({ ...drafts, latest: { [key]: key === 'spiffs' ? [] : {}, revs: { [key]: 'L1' } } });
+        const own2 = stale[card]();
+        const guard2 = stale.saveAdminDrafts();
+        await tick();
+        assert.equal(stale.sends.length, 1);
+        stale.sends[0].resolve({ ok: false, status: 409, error: STALE_ERROR, stale: [key] });
+        const [a, b] = await Promise.allSettled([own2, guard2]);
+        assert.equal(b.reason, a.reason, `${card}: the guard reads the card's own refusal`);
+        assert.deepEqual([b.reason.message, b.reason.tookLatest, 'partial' in b.reason], [listChanged(noun), true, false], `${card}: the latest taken, nothing landed before it`);
+    }
+});
+
+test("S10 — the Sales Manager's saveAdminDrafts over saveExtra's own stale refusal, run as written (JB3-5, critic m6): quotas landed, then the commission plan refused — partial; nothing landed before it — not partial", async () => {
+    const { STALE_ERROR, listChanged } = await import('../src/utils/settingsRevs.js');
+    const latest = { quotaData: {}, revs: { quotaData: 'QL' } };
+    const refusedAfter = async (st) => {
+        const p = st.saveAdminDrafts();
+        await until(() => st.sends.length);
+        st.sends[0].resolve({ ok: false, status: 409, error: STALE_ERROR, stale: ['quotaData'] });
+        return p.then(() => null, (e) => e);
+    };
+    const landedFirst = await salesManagerRig({ quotaDrafts: { usr_a: {} }, tiersDraft: TIERS_DRAFT, latest });
+    const e1 = await refusedAfter(landedFirst);
+    assert.equal(landedFirst.quotas, 1, 'the quotas saved first');
+    assert.deepEqual([e1?.message, e1?.tookLatest, e1?.partial], [listChanged('commission tier'), true, true], 'REGRESSION (JB3-5): quotas landed, then the commission plan refused — the guard says nothing was saved');
+    const refusedFirst = await salesManagerRig({ tiersDraft: TIERS_DRAFT, latest });
+    const e2 = await refusedAfter(refusedFirst);
+    assert.deepEqual([refusedFirst.quotas, e2?.message, e2?.tookLatest], [0, listChanged('commission tier'), true]);
+    assert.equal('partial' in e2, false, 'REGRESSION (critic m6): refused with nothing landed before it, thrown as partial — the guard says the ones saved before it stay saved');
+});
+
+test('S10 — the Sales Manager\'s drafts\' setters, run as written (critic B9): each takes its list\'s token when its draft begins — from the render its first edit is built on — and never again while it is open', () => {
+    const src = read(SALES_MANAGER);
+    for (const [setter, draftName, setName, key, other] of [['draftTiers', 'tiersDraft', 'setTiersDraft', 'quotaData', 'spiffs'], ['draftSpiffs', 'spiffsDraft', 'setSpiffsDraft', 'spiffs', 'quotaData']]) {
+        const fn = handlerIn(src, 'SalesManagerTab', setter);
+        const run = (draft, revs, held) => {
+            const st = { opened: held, drafts: [] };
+            runAs(fn, { [draftName]: draft, settings: { revs }, setOpened: (f) => { st.opened = typeof f === 'function' ? f(st.opened) : f; }, [setName]: (v) => st.drafts.push(v) }, 'NEXT');
+            return st;
+        };
+        const begins = run(null, { quotaData: 'Q1', spiffs: 'S1' }, { [other]: 'KEPT' });
+        assert.deepEqual(begins.opened, { [other]: 'KEPT', [key]: key === 'spiffs' ? 'S1' : 'Q1' }, `${setter}: REGRESSION — the draft begins with no token, or the other draft's lost`);
+        assert.deepEqual(begins.drafts, ['NEXT']);
+        const open = run([], { quotaData: 'Q2', spiffs: 'S2' }, { [key]: 'BEGAN' });
+        assert.deepEqual(open.opened, { [key]: 'BEGAN' }, `${setter}: REGRESSION (critic B9) — an open draft's token taken again: a save another tab landed since passes under its edits`);
+        assert.deepEqual(open.drafts, ['NEXT']);
+        assert.deepEqual(run(null, undefined, {}).opened, { [key]: null }, `${setter}: a copy with no token — none (null), checked`);
+    }
+});
+
+// A component's top-level statement `<target> = …;` as written — run on every render — or null when it has none.
+const assignIn = (src, component, target) => {
+    let out = null;
+    walk(astOf(src).program, (n) => {
+        const body = componentBody(n, component);
+        if (!body) return;
+        for (const st of body) {
+            const e = st.type === 'ExpressionStatement' ? st.expression : null;
+            if (e && e.type === 'AssignmentExpression' && (chainOf(e.left) || []).join('.') === target) out = src.slice(st.start, st.end);
+        }
+    });
+    return out;
+};
+
+test("S10 — the Sales Manager's cards locked through their own save, run as written (state §0.228): each card's flag set once when its save goes out, cleared once it settles — landed or refused; a second save while one is out sets nothing", async () => {
+    for (const [card, drafts, key] of [['saveCommission', { tiersDraft: TIERS_DRAFT }, 'commission'], ['saveSpiffBoard', { spiffsDraft: SPIFFS_DRAFT }, 'spiffs']]) {
+        const st = await salesManagerRig(drafts);
+        const first = st[card]();
+        st[card]();
+        assert.deepEqual(st.flags, [[key, true]], `${card}: REGRESSION (state §0.228) — the card not locked by its own save: a claim's Approve flips the banner off saving mid-save, the card unlocks, and what is typed then is dropped when the save lands`);
+        st.sends[0].resolve(LANDS);
+        await first; await tick();
+        assert.deepEqual(st.flags, [[key, true], [key, false]], `${card}: REGRESSION (state §0.228) — never unlocked once its save landed`);
+        const second = st[card]();
+        st.sends[1].resolve({ ok: false, status: 500, error: 'The server returned 500.' });
+        await second.catch(() => {}); await tick();
+        assert.deepEqual(st.flags.slice(2), [[key, true], [key, false]], `${card}: REGRESSION (state §0.228) — never unlocked once its save was refused: the draft kept and nothing can change it`);
+    }
+});
+
+// A SPIFF's Remove as written (state §0.228): its × asks first — showConfirm keeps the answer for later — and the board
+// is drawn again before it is answered. One ref across renders (the board's useRef), each render's
+// `spiffBoard.current = …` run as written; the answer is the × of the render it was clicked on.
+test("S10 — a SPIFF's Remove answered late, run as written (state §0.228): it reads the board as drawn when answered — never the list from when × was clicked; nothing while the board's save is out, or once the SPIFF is gone", () => {
+    const src = read(SALES_MANAGER);
+    const lockSrc = declOrNull(src, 'AdminTab', 'spiffsLocked');
+    const drawSrc = assignIn(src, 'AdminTab', 'spiffBoard.current');
+    const removeSrc = declOrNull(src, 'AdminTab', 'removeSpiff');
+    const clicks = [];
+    walk(astOf(src).program, (n) => {
+        if (n.type !== 'JSXAttribute' || n.name.name !== 'onClick' || n.value?.type !== 'JSXExpressionContainer') return;
+        const asks = (c) => callsNamed('showConfirm')(c) && c.arguments[0]?.type === 'TemplateLiteral' && c.arguments[0].quasis[0].value.cooked.startsWith('Remove SPIFF');
+        if (has(n.value.expression, asks)) clicks.push(src.slice(n.value.expression.start, n.value.expression.end));
+    });
+    assert.equal(clicks.length, 1, "one SPIFF ×");
+    const board = { current: null };
+    const render = (list, { busy = false, sending = false } = {}) => {
+        const edits = [];
+        const editSpiffs = (next) => edits.push(next);
+        const spiffsLocked = lockSrc ? fnAs(lockSrc, { busy, spiffsSending: sending }) : busy;
+        if (drawSrc) fnAs(`() => { ${drawSrc} }`, { spiffBoard: board, spiffsLocked, spiffList: list, editSpiffs })();
+        const removeSpiff = removeSrc ? fnAs(removeSrc, { spiffBoard: board }) : undefined;
+        const click = (si) => {
+            let answer = null;
+            fnAs(clicks[0], { showConfirm: (words, then) => { answer = then; }, spiff: list[si], si, spiffList: list, editSpiffs, removeSpiff })();
+            assert.equal(typeof answer, 'function', 'asked first');
+            return answer;
+        };
+        return { edits, click };
+    };
+    const A = { id: 'a', name: 'A' }, B = { id: 'b', name: 'B' }, C = { id: 'c', name: 'C' };
+
+    let clicked = render([A, B]);
+    let answer = clicked.click(0);
+    let drawn = render([{ ...A, name: 'A2' }, B, C]);   // meanwhile: C added, A renamed
+    answer();
+    assert.deepEqual(clicked.edits, [], 'REGRESSION (state §0.228): the answer edited the list from when × was clicked — C, added since, gone again, through the setter of that render (its draft-start check on the old draft)');
+    assert.deepEqual(drawn.edits, [[B, C]], 'that SPIFF removed, by its id, from the board as drawn when answered, through its setter');
+
+    for (const [lock, why] of [[{ sending: true }, "the board's own save out, the banner flipped off saving by a claim's Approve"], [{ busy: true }, 'a save out (busy)']]) {
+        clicked = render([A, B]);
+        answer = clicked.click(1);
+        drawn = render([A, B], lock);
+        answer();
+        assert.deepEqual([clicked.edits, drawn.edits], [[], []], `REGRESSION (state §0.228): answered while ${why}, the draft edited under the save — it lands its own and drops the draft`);
+    }
+
+    clicked = render([A, B]);
+    answer = clicked.click(0);
+    drawn = render([B, C]);   // a save took the latest; A is not on it
+    answer();
+    assert.deepEqual([clicked.edits, drawn.edits], [[], []], 'gone from the board: nothing — no draft opened on the latest');
+
+    const N = { name: 'Same' }, N2 = { name: 'Same' };
+    clicked = render([N, N2, B]);
+    answer = clicked.click(0);
+    drawn = render([N, N2, B]);
+    answer();
+    assert.ok(drawn.edits.length === 1 && drawn.edits[0].length === 2 && drawn.edits[0][0] === N2 && drawn.edits[0][1] === B, 'no id: that entry removed, not its twin');
+
+    assert.equal(declOrNull(src, 'AdminTab', 'spiffBoard'), 'React.useRef(null)', 'the board as drawn is one ref across renders');
+});
+
 // ── S11 — AdminView's stale handler and leave guard, run as written ─────────
 
 const runPanelStale = async ({ latest = { revs: { k: 'L' } }, take = null, args = [] } = {}) => {
@@ -1530,10 +2404,43 @@ test('S12 — App\'s leave guard (navGuardSave), run as written: a refusal that 
     assert.deepEqual([landed.went, landed.shown, landed.failed], [['reports'], [false], [false]]);
 });
 
-test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), reopen where a draft re-seeds, one save at a time on every guarded panel (JB3-10), Property types\' deps, JB3-6, JB3-7a', async () => {
-    const { LEAVE_STALE, LEAVE_STALE_PART } = await import('../src/utils/settingsRevs.js');
+// Why a save is not one flight (null when it is): `const <name> = () => { if (!<ref>.current) { … <ref>.current =
+// <send>(…).finally(() => { <ref>.current = null; … }); } return <ref>.current; }`, <ref> the component's own
+// useRef(null) — a second save while one is out answers the first one's promise, and the flight clears once it settles
+// (the quotas' — state §0.203; the commission plan's and the SPIFF board's — state §0.228).
+const flightFault = (name, anc) => {
+    const b = bindingOf(name, anc);
+    const fn = b && b.kind === 'const' ? b.decl.init : null;
+    if (!isFn(fn) || fn.body.type !== 'BlockStatement' || fn.body.body.length !== 2) return 'is not `if (!<ref>.current) {…} return <ref>.current;`';
+    const [iff, ret] = fn.body.body;
+    const t = iff.type === 'IfStatement' && !iff.alternate ? iff.test : null;
+    const ref = t && t.type === 'UnaryExpression' && t.operator === '!' ? chainOf(t.argument) : null;
+    if (!ref || ref.length !== 2 || ref[1] !== 'current') return 'never asks whether a save is out (if (!<ref>.current))';
+    const r = ref[0];
+    if (ret.type !== 'ReturnStatement' || !ret.argument || (chainOf(ret.argument) || []).join('.') !== `${r}.current`) return `does not answer the flight out (return ${r}.current)`;
+    const rb = bindingOf(r, anc);
+    const init = rb && rb.kind === 'const' ? rb.decl.init : null;
+    const made = init && isCall(init) ? (init.callee.type === 'Identifier' ? init.callee.name : (chainOf(init.callee) || []).join('.')) : '';
+    if (!['useRef', 'React.useRef'].includes(made) || init.arguments[0]?.type !== 'NullLiteral' || rb.scope !== b.scope) return `${r} is not the component's own useRef(null)`;
+    let held = 0, clears = 0;
+    walk(iff.consequent, (o) => {
+        if (o.type !== 'AssignmentExpression' || (chainOf(o.left) || []).join('.') !== `${r}.current`) return;
+        const v = o.right;
+        if (!isCall(v) || !isMember(v.callee) || propName(v.callee) !== 'finally' || !isCall(v.callee.object) || !isFn(v.arguments[0])) return;
+        held += 1;
+        walk(v.arguments[0].body, (c) => { if (c.type === 'AssignmentExpression' && (chainOf(c.left) || []).join('.') === `${r}.current` && c.right.type === 'NullLiteral') clears += 1; });
+    });
+    if (held !== 1) return `does not hold its send as the flight (${r}.current = <send>(…).finally(…))`;
+    if (clears !== 1) return `never clears the flight once it settles (${r}.current = null in its finally) — every later save answers the first one's outcome`;
+    return null;
+};
+
+test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), still saving (JB3-8), the brand changed (JB3-4), reopen where a draft re-seeds, one save at a time on every guarded file — the Sales Manager by its flights (JB3-10, state §0.228), Property types\' deps, JB3-6, JB3-7a', async () => {
+    const { LEAVE_STALE, LEAVE_STALE_PART, STILL_SAVING, BRAND_CHANGED } = await import('../src/utils/settingsRevs.js');
     assert.equal(LEAVE_STALE, 'Another change landed first — the page now shows the latest. Your changes were not saved.', 'J-B11, verbatim');
     assert.equal(LEAVE_STALE_PART, 'Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved.', 'JB3-5');
+    assert.equal(STILL_SAVING, 'The last change is still saving — try again in a moment.', 'JB3-8, verbatim');
+    assert.equal(BRAND_CHANGED, 'The brand changed since this window opened — it now shows the latest. Make your change again.', 'JB3-4, verbatim');
     const modal = withoutComments(read('src/Tabs/settings/shared/LeaveGuardModal.jsx'));
     assert.ok(modal.includes("const stale = failed === 'stale' || failed === 'stale-partial';"));
     assert.match(modal, /\{failed === 'stale-partial' \? LEAVE_STALE_PART\s*: stale \? LEAVE_STALE\s*: 'The save did not go through — the page behind this dialog shows why\. Your changes are still here\.'\}/, 'the three states');
@@ -1555,13 +2462,30 @@ test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), reopen where a draft
         if (whenClean) assert.ok(anc.some((a) => a.type === 'IfStatement' && a.test.type === 'UnaryExpression' && a.test.operator === '!' && a.test.argument.name === 'dirty'), `${f}: only when the draft re-seeds (!dirty)`);
     }
 
-    // One save at a time: the guard's save is `const <handler> = once(async …)` — under useCallback for Property types.
+    // One save at a time, on every converted file that registers with the leave guard (JB3-10): a draft panel's guard
+    // save is `const <handler> = once(async …)` — under useCallback for Property types. The Sales Manager's guard runs
+    // saveAdminDrafts, and each save it awaits is one flight of its own (flightFault) — the quotas' (state §0.203), the
+    // commission plan's and the SPIFF board's (state §0.228): pressed while a card's own Save was out, the guard's sent
+    // the same draft with the same draft-start token and was refused by it.
     let guarded = 0;
     for (const f of SITE_FILES) {
         walk(astOf(read(f)).program, (n, anc) => {
             if (!callsNamed('useRegisterSave')(n)) return;
             guarded += 1;
             const h = n.arguments[2];
+            if (f === SALES_MANAGER) {
+                assert.equal(h?.name, 'saveAdminDrafts', `${f}: the guard runs the page's drafts' save`);
+                const b = bindingOf(h.name, anc);
+                assert.ok(b && b.kind === 'const' && isFn(b.decl.init), `${f}: saveAdminDrafts is the component's own`);
+                const awaited = [];
+                walk(b.decl.init.body, (o) => { if (o.type === 'AwaitExpression' && isCall(o.argument) && o.argument.callee.type === 'Identifier') awaited.push(o.argument.callee.name); });
+                assert.deepEqual(awaited, ['saveQuotas', 'saveCommission', 'saveSpiffBoard'], `${f}: the guard's save awaits the three cards' saves`);
+                for (const name of awaited) {
+                    const why = flightFault(name, [b.scope]);
+                    assert.equal(why, null, `${f}: ${name} ${why} — REGRESSION (JB3-10, state §0.228): pressed while the card's own Save is out, the guard's sends the same draft with the same token, refused by it`);
+                }
+                return;
+            }
             const b = h && h.type === 'Identifier' ? bindingOf(h.name, anc) : null;
             let init = b && b.kind === 'const' ? b.decl.init : null;
             if (isCall(init) && calleeName(init) === 'useCallback') init = init.arguments[0];
@@ -1571,7 +2495,7 @@ test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), reopen where a draft
             assert.equal(hookFault('once', anc), null, `${f}: once is the panel's own — its flight held across renders`);
         });
     }
-    assert.equal(guarded, B3A_FILES.length, 'every guarded panel read');
+    assert.equal(guarded, B3A_FILES.length + 1, "every guarded file read — B-3a's panels and the Sales Manager");
     let deps = null;
     walk(astOf(read(PROPERTY_TYPES)).program, (n) => {
         if (n.type === 'VariableDeclarator' && n.id.name === 'handleSave' && isCall(n.init) && calleeName(n.init) === 'useCallback') deps = n.init.arguments[1];
@@ -1608,4 +2532,170 @@ test('S11 — AdminView\'s note: drawn only above the card it was said for', () 
     const src = withoutComments(read(ADMIN));
     assert.equal(count(src, '{panelNote && panelNote.id === activeItem.id && ('), 1, 'REGRESSION: the J-B5 words drawn above whatever card is open');
     assert.equal(count(src, 'setPanelNote({ id: activeItem?.id, words });'), 1, 'the note names its card');
+});
+
+test('S12 — B-3b\'s pins (state §0.228): the gate opens on the render that holds a landed save\'s tokens; Edit brand\'s window — its token from the panel, Save and Cancel held while saving; the Sales Manager\'s drafts begin through their setters', () => {
+    // Pipelines and the calendar: `const inFlight = useRef(false)`, and `useEffect(() => { inFlight.current = false; },
+    // [opened])` — opened moves only when landed merged an answer, so the next change names the tokens it answered
+    // (critic A8).
+    const calleeText = (c) => (c.callee.type === 'Identifier' ? c.callee.name : (chainOf(c.callee) || []).join('.'));
+    for (const f of [PIPELINES, CALENDAR]) {
+        const refs = [], releases = [];
+        walk(astOf(read(f)).program, (n) => {
+            if (n.type === 'VariableDeclarator' && n.id.name === 'inFlight' && isCall(n.init) && ['useRef', 'React.useRef'].includes(calleeText(n.init))) refs.push(n.init.arguments[0]?.value);
+            if (!isCall(n) || !['useEffect', 'React.useEffect'].includes(calleeText(n))) return;
+            const [fn, deps] = n.arguments;
+            const body = fn?.body?.type === 'BlockStatement' ? fn.body.body : [];
+            const opens = body.length === 1 && body[0].type === 'ExpressionStatement' && body[0].expression.type === 'AssignmentExpression'
+                && (chainOf(body[0].expression.left) || []).join('.') === 'inFlight.current' && body[0].expression.right.value === false;
+            if (opens) releases.push((deps?.elements || []).map((e) => e.name).join(','));
+        });
+        assert.deepEqual(refs, [false], `${f}: one gate, open at mount`);
+        assert.deepEqual(releases, ['opened'], `${f}: REGRESSION (critic A8) — the gate opens before the merged tokens render, or never: the next change refused against its own save, or every change after the first said to be still saving`);
+    }
+
+    const tags = (f) => {
+        const src = read(f), out = [];
+        walk(astOf(src).program, (n) => {
+            if (n.type !== 'JSXOpeningElement') return;
+            out.push({ tag: n.name.name, ...Object.fromEntries(n.attributes.filter((a) => a.type === 'JSXAttribute' && a.value?.type === 'JSXExpressionContainer')
+                .map((a) => [a.name.name, src.slice(a.value.expression.start, a.value.expression.end)])) });
+        });
+        return out;
+    };
+    const brand = tags(EDIT_BRAND);
+    assert.ok(brand.some((e) => e.tag === 'button' && e.onClick === 'handleSave' && e.disabled === 'saving'), 'REGRESSION (critic A5): Save pressed again while its save is out');
+    assert.ok(brand.some((e) => e.tag === 'button' && e.onClick === 'close' && e.disabled === 'saving'), 'REGRESSION (critic A5): Cancel offered while the save is out');
+    const brandSrc = read(EDIT_BRAND);
+    let seeded = null;
+    walk(astOf(brandSrc).program, (n) => {
+        if (n.type === 'VariableDeclarator' && n.id.type === 'ArrayPattern' && n.id.elements[0]?.name === 'base') seeded = brandSrc.slice(n.init.start, n.init.end);
+    });
+    assert.equal(seeded, 'React.useState(() => ({ rev: initialRev }))', 'REGRESSION (JB3-4): the window\'s token not the one it opened with');
+    const opens = tags('src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx').filter((e) => e.tag === 'EditBrandModal');
+    assert.deepEqual(opens.map((e) => e.initialRev), ['settings?.revs?.quoteBrand ?? null'], 'REGRESSION (JB3-4): the window opens with no token — its Save checked against none, refused wherever a brand was saved');
+
+    const admin = tags(SALES_MANAGER).filter((e) => 'setTiersDraft' in e || 'setSpiffsDraft' in e);
+    assert.deepEqual(admin.map((e) => [e.tag, e.setTiersDraft, e.setSpiffsDraft]), [['AdminTab', 'draftTiers', 'draftSpiffs']],
+        'REGRESSION (critic B9): an edit goes past the drafts\' setters — the draft begins with no token');
+});
+
+// The Sales Manager's commission plan and SPIFF board while a save is out (state §0.228): `cardFaults(src, title, lock)`
+// reads the card — the `<div style={smCard2}>` around the eyebrow `title` — and each module-scope component of the file
+// it draws. Every control in it — a native input, select, textarea or button, or a component (it draws its own) — sits
+// in a `<fieldset disabled={<lock>}>` inside the card; anything else that answers an event (on…) is a fault — a disabled
+// fieldset disables native controls alone — and so is a legend (a fieldset's first legend's controls stay enabled), a
+// link, or a component not read. Returns { controls, faults }, the controls in source order.
+const NATIVE_CONTROLS = new Set(['input', 'select', 'textarea', 'button']);
+const jsxTag = (el) => (el.openingElement.name.type === 'JSXIdentifier' ? el.openingElement.name.name : null);
+const jsxAttr = (el, name) => el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === name) || null;
+const jsxExprName = (attr) => (attr?.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'Identifier' ? attr.value.expression.name : null);
+const onAttrs = (el) => el.openingElement.attributes.filter((a) => a.type === 'JSXAttribute' && /^on[A-Z]/.test(a.name.name)).map((a) => a.name.name);
+const controlName = (el) => {
+    const t = jsxTag(el);
+    if (t === 'input') return `input ${jsxAttr(el, 'type')?.value?.value ?? '?'}`;
+    if (t === 'button') return `button ${el.children.filter((c) => c.type === 'JSXText').map((c) => c.value).join('').trim()}`;
+    const label = jsxAttr(el, 'label')?.value;
+    return label?.type === 'StringLiteral' ? `${t} ${label.value}` : t;
+};
+const cardFaults = (src, title, lock) => {
+    const ast = astOf(src);
+    const cards = [];
+    walk(ast.program, (n, anc) => {
+        if (n.type !== 'JSXText' || n.value.trim() !== title) return;
+        const card = anc.findLast((a) => a.type === 'JSXElement' && jsxTag(a) === 'div' && jsxExprName(jsxAttr(a, 'style')) === 'smCard2');
+        if (card) cards.push(card);
+    });
+    if (cards.length !== 1) return { controls: [], faults: [`${cards.length} cards titled ${title}`] };
+    const controls = [], faults = [], drawn = [];
+    walk(cards[0], (n, anc) => {
+        if (n.type !== 'JSXElement') return;
+        const t = jsxTag(n);
+        const locked = anc.some((a) => a.type === 'JSXElement' && jsxTag(a) === 'fieldset' && jsxExprName(jsxAttr(a, 'disabled')) === lock);
+        if (t === null || t === 'legend' || t === 'a') { faults.push(`<${t ?? 'a member tag'}> in the card`); return; }
+        if (NATIVE_CONTROLS.has(t) || /^[A-Z]/.test(t)) {
+            controls.push(controlName(n));
+            if (!locked) faults.push(`${controlName(n)}:${n.loc.start.line} not in <fieldset disabled={${lock}}>`);
+            if (/^[A-Z]/.test(t) && !drawn.includes(t)) drawn.push(t);
+        } else if (onAttrs(n).length) faults.push(`<${t}>:${n.loc.start.line} answers ${onAttrs(n).join(', ')} — a disabled fieldset does not hold it`);
+    });
+    for (let i = 0; i < drawn.length; i++) {
+        const name = drawn[i];
+        let fn = null;
+        for (const st of ast.program.body) {
+            if (st.type === 'FunctionDeclaration' && st.id?.name === name) fn = st;
+            if (st.type === 'VariableDeclaration') for (const d of st.declarations) if (d.id.name === name && isFn(d.init)) fn = d.init;
+        }
+        if (!fn) { faults.push(`${name} is not this file's — not read`); continue; }
+        walk(fn.body, (n) => {
+            if (n.type !== 'JSXElement') return;
+            const t = jsxTag(n);
+            if (t === null || t === 'legend' || t === 'a') faults.push(`${name}: <${t ?? 'a member tag'}>`);
+            else if (/^[A-Z]/.test(t)) { if (!drawn.includes(t)) drawn.push(t); }
+            else if (!NATIVE_CONTROLS.has(t) && onAttrs(n).length) faults.push(`${name}: <${t}> answers ${onAttrs(n).join(', ')} — a disabled fieldset does not hold it`);
+        });
+    }
+    return { controls, faults };
+};
+
+test("S12 — the Sales Manager's commission plan and SPIFF board locked while a save is out (state §0.228): every control in a disabled fieldset, by the AST; the card's lock — busy, or its own save out — run as written; its flag handed down", () => {
+    // The scanner, on made-up sources.
+    const made = (inner) => [
+        'const C = () => (<div style={smCard2}><div style={eyebrow}>Board</div>' + inner + '</div>);',
+        'const Seg = ({ on }) => <div role="group"><button onClick={on}>x</button></div>;',
+        'function Bad({ on }) { return <span onClick={on}>x</span>; }',
+    ].join(String.fromCharCode(10));
+    assert.deepEqual(cardFaults(made('<fieldset disabled={lockA}><input type="number" onChange={f} onBlur={g}/><button onClick={g}>+ Add</button><select><option>o</option></select><Seg on={g}/></fieldset>'), 'Board', 'lockA'),
+        { controls: ['input number', 'button + Add', 'select', 'Seg'], faults: [] }, 'every control in the fieldset: no fault');
+    for (const [inner, why] of [
+        ['<fieldset disabled={lockA}><input/></fieldset><button onClick={g}>New</button>', 'a control after the fieldset'],
+        ['<Seg on={g}/><fieldset disabled={lockA}><input/></fieldset>', 'a component before it'],
+        ['<fieldset><input/></fieldset>', 'a fieldset with no lock'],
+        ['<fieldset disabled={lockB}><input/></fieldset>', "another card's lock"],
+        ['<fieldset disabled={!lockA}><input/></fieldset>', 'the lock turned round'],
+        ['<fieldset disabled={lockA}><div onClick={g}>Remove</div></fieldset>', 'a click on what a fieldset does not disable'],
+        ['<fieldset disabled={lockA}><Bad on={g}/></fieldset>', 'a component whose click is no control'],
+        ['<fieldset disabled={lockA}><legend><button onClick={g}>x</button></legend></fieldset>', 'a legend'],
+        ['<fieldset disabled={lockA}><a href="#">x</a></fieldset>', 'a link'],
+        ['<fieldset disabled={lockA}><Gone/></fieldset>', 'a component not read'],
+    ]) assert.ok(cardFaults(made(inner), 'Board', 'lockA').faults.length > 0, `the scanner misses ${why}`);
+
+    const src = read(SALES_MANAGER);
+    for (const [title, lock, want] of [
+        ['Commission Plan', 'tiersLocked', ['DraftActions Save plan', 'input number', 'button ×', 'button + Add Tier']],
+        ['SPIFF Board', 'spiffsLocked', ['DraftActions Save SPIFFs', 'button + Add SPIFF', 'input text', 'select', 'input number', 'SpiffStatus', 'button ×', 'input text']],
+    ]) {
+        const { controls, faults } = cardFaults(src, title, lock);
+        assert.deepEqual(faults, [], `${title}: REGRESSION (state §0.228) — a control not locked while a save is out: what is typed then is lost — the save out sends the draft it began with and drops the draft when it lands — and the leave guard says it was saved`);
+        assert.deepEqual(controls, want, `${title}: the card's controls, each read here — a new one is listed once it is locked`);
+    }
+
+    // The locks, run as written: busy (the banner says a save is out, the quotas' included), or the card's own save
+    // out — which holds it when another save (a claim's Approve) flips the banner off saving.
+    for (const [lock, flag] of [['tiersLocked', 'commissionSending'], ['spiffsLocked', 'spiffsSending']]) {
+        const init = declOrNull(src, 'AdminTab', lock);
+        assert.ok(init, `AdminTab has no ${lock}`);
+        const at = (busy, sending) => Boolean(fnAs(init, { busy, [flag]: sending }));
+        assert.deepEqual([at(false, false), at(true, false), at(false, true), at(true, true)], [false, true, true, true],
+            `${lock}: REGRESSION (state §0.228) — unlocked while a save is out, or locked with none`);
+    }
+    // Each flag: the page's own state, handed to AdminTab by name, read there.
+    const ast = astOf(src);
+    const params = [], handed = {}, states = {};
+    walk(ast.program, (n) => {
+        if (n.type === 'FunctionDeclaration' && n.id?.name === 'AdminTab') params.push(...n.params[0].properties.map(keyName));
+        if (n.type === 'JSXOpeningElement' && n.name.name === 'AdminTab') {
+            for (const a of n.attributes) if (a.type === 'JSXAttribute' && a.value?.type === 'JSXExpressionContainer') handed[a.name.name] = src.slice(a.value.expression.start, a.value.expression.end);
+        }
+        const body = componentBody(n, 'SalesManagerTab');
+        if (body) for (const st of body) {
+            if (st.type !== 'VariableDeclaration') continue;
+            for (const d of st.declarations) if (d.id.type === 'ArrayPattern' && d.init) states[d.id.elements[0]?.name] = [d.id.elements[1]?.name, src.slice(d.init.start, d.init.end)];
+        }
+    });
+    for (const [flag, setter] of [['commissionSending', 'setCommissionSending'], ['spiffsSending', 'setSpiffsSending']]) {
+        assert.deepEqual(states[flag], [setter, 'useState(false)'], `${flag}: the page's own state, unlocked at mount`);
+        assert.equal(handed[flag], flag, `${flag}: REGRESSION (state §0.228) — not handed to AdminTab: the card unlocks when the banner flips mid-save`);
+        assert.ok(params.includes(flag), `${flag}: AdminTab reads it`);
+    }
 });

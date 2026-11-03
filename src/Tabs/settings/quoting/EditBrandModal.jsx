@@ -4,7 +4,8 @@
 // applies to every quote template. Live quote-document preview re-renders as you edit.
 import React from 'react';
 import { T } from '../shared/tokens.js';
-import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+import { revsAfter, BRAND_CHANGED } from '../../../utils/settingsRevs.js';
 import { useApp } from '../../../AppContext';
 
 const SERIF = 'Georgia, "Tiempos", serif';
@@ -242,33 +243,50 @@ const FieldLabel = ({ children, hint }) => (
 // ────────────────────────────────────────────────────────────────
 // The modal
 // ────────────────────────────────────────────────────────────────
-export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
+export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onClose }) => {
   const [brand, setBrand] = React.useState(initial);
+  // The brand's revision token as this window opened (state §0.228 — JB3-4): its save names it, and a refusal
+  // re-seeds it with the brand from the latest.
+  const [base, setBase] = React.useState(() => ({ rev: initialRev }));
+  // While a save is out the window cannot close — its answer lands here (critic A5; LeaveGuardModal's rule).
+  const [saving, setSaving] = React.useState(false);
   const [previewSections, setPreviewSections] = React.useState(['cover', 'lines', 'terms', 'signature']);
   const set = (key, val) => setBrand((b) => ({ ...b, [key]: val }));
   const dirty = JSON.stringify(brand) !== JSON.stringify(initial);
   const { setSettings, showConfirm } = useApp();
-  const close = () => { if (dirty) { showConfirm('Discard unsaved brand changes?', onClose, false); return; } onClose(); };
+  const close = () => { if (saving) return; if (dirty) { showConfirm('Discard unsaved brand changes?', onClose, false); return; } onClose(); };
   const [saveError, setSaveError] = React.useState('');
   const handleSave = async () => {
     // The modal used to close unconditionally. PUT /settings is Admin-only since
     // SVR-2, so a non-admin's brand edit appeared to save, the modal closed, and
     // the change was gone on reload. Now it stays open and says why.
-    let snapshot;
-    if (setSettings) setSettings((s) => { snapshot = s; return { ...s, quoteBrand: brand }; });
+    // It is no longer optimistic (state §0.228 — JB3-4): the save names the brand's token as this window opened, and
+    // the app's copy takes the brand, with the token it answered, only once it lands. Refused because another save of
+    // the brand landed first, the window takes the latest, shows it, says so and stays open; the latest unread, the
+    // server's words and the edit kept. The sender never settles after an org switch.
+    setSaving(true);
     setSaveError('');
-    const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-    const r = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ quoteBrand: brand }) });
-    if (!stillOrg(askedOrg)) return;
-    if (!r.ok) {
-      if (setSettings && snapshot) setSettings(snapshot);
-      setSaveError(`Brand not saved — ${r.error}`);
+    const w = await writeSettings({ quoteBrand: brand }, { quoteBrand: base.rev });
+    if (w.ok) {
+      setSettings((prev) => ({ ...prev, quoteBrand: brand, revs: revsAfter(prev?.revs, w.revs) }));
+      onClose();
       return;
     }
-    onClose();
+    if (w.stale) {
+      const latest = await takeLatestSettings(setSettings);
+      if (latest) {
+        setBrand(latest.quoteBrand || BRAND_PRESET);
+        setBase({ rev: latest.revs?.quoteBrand ?? null });
+        setSaveError(BRAND_CHANGED);
+        setSaving(false);
+        return;
+      }
+    }
+    setSaveError(`Brand not saved — ${w.error}`);
+    setSaving(false);
   };
   React.useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) close(); };
+    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !saving) close(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   });
@@ -457,12 +475,12 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
               {saveError}
             </span>
           )}
-          <button onClick={close} style={{
+          <button onClick={close} disabled={saving} style={{
             padding: '8px 16px', background: T.surface, color: T.ink,
             border: `1px solid ${T.borderStrong}`, borderRadius: 3,
             fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>Cancel</button>
-          <button onClick={handleSave} style={{
+          <button onClick={handleSave} disabled={saving} style={{
             padding: '8px 18px', background: T.ink, color: '#fbf8f3',
             border: 'none', borderRadius: 3,
             fontSize: 13, fontWeight: 700, cursor: 'pointer',

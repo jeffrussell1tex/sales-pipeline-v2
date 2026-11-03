@@ -55,6 +55,11 @@ export const PANEL_CHANGED_KEY = PANEL_CHANGED + ' Enter the API key again.';
 export const LEAVE_STALE = 'Another change landed first — the page now shows the latest. Your changes were not saved.';
 // …and when an earlier part of the same save landed before the part refused (JB3-5 — the Sales Manager's drafts).
 export const LEAVE_STALE_PART = 'Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved.';
+// Pipelines and the holiday calendar save on each click, one save at a time: a second change while one is out is
+// refused with these words, never sent behind it (JB3-8, state §0.228).
+export const STILL_SAVING = 'The last change is still saving — try again in a moment.';
+// Edit brand handles its own stale refusal: the window stays open on the latest brand with these words (JB3-4).
+export const BRAND_CHANGED = 'The brand changed since this window opened — it now shows the latest. Make your change again.';
 
 const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 

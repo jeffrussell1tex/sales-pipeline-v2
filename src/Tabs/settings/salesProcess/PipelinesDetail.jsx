@@ -1,6 +1,8 @@
 // settings/salesProcess/PipelinesDetail.jsx
 import React, { useState } from 'react';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { STILL_SAVING } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -54,18 +56,45 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     // never passed one.
     const [saveError, setSaveError] = useState('');
 
+    // The tokens as this panel opened (state §0.228): each save sends them, a landed save merges what it answered,
+    // and a save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale } = usePanelRevs(settings, setSettings);
+    // One save at a time (JB3-8, state §0.228). Each click builds its change from this render's lists and saves at
+    // once, so a second change sent while the first is out would name the tokens the first is about to move, and be
+    // refused by it. It is refused here instead, nothing sent. The gate opens again when a refusal comes back and
+    // AdminView did not take the latest for it (a panel drawn again on the latest has a gate of its own), or once
+    // a landed save's merged tokens are in this render (the effect below) — never sooner, or the next click would
+    // still build on the render before the landing (critic A8).
+    const inFlight = React.useRef(false);
+    React.useEffect(() => { inFlight.current = false; }, [opened]);
+
     // Optimistic update, then revert on failure so what is on screen always
     // matches what is stored. putSettings throws a readable Error on non-2xx.
+    // The revert puts back only the keys this save sent, as this render held
+    // them (state §0.228) — never the tokens, and never the whole copy as it
+    // was before the send.
     const persist = async (patch, label) => {
-        let snapshot;
-        setSettings(prev => { snapshot = prev; return { ...prev, ...patch }; });
+        if (inFlight.current) { setSaveError(`${label} not saved — ${STILL_SAVING}`); return false; }
+        inFlight.current = true;
+        const held = Object.fromEntries(Object.keys(patch).map(k => [k, settings?.[k]]));
+        setSettings(prev => ({ ...prev, ...patch }));
         setSaveError('');
         try {
-            await putSettings(patch);
+            const answer = await putSettings(patch, opened);
+            landed(answer);
             return true;
         } catch (e) {
-            setSettings(snapshot);
+            // Another save landed first: AdminView takes the latest and draws this
+            // panel again on it, its words above — the optimistic change went with
+            // the old copy, nothing to put back. Unread, the revert and the
+            // server's words below.
+            if (e.stale && await panelStale(e)) return false;
+            setSettings(prev => ({ ...prev, ...held }));
             setSaveError(`${label} not saved — ${e.message}`);
+            // The gate opens only now (state §0.228): opened before panelStale answered, a change made while
+            // AdminView read the latest went out with the old tokens. A panel drawn again on the latest has a
+            // gate of its own; one that has closed needs none.
+            inFlight.current = false;
             return false;
         }
     };
@@ -116,8 +145,11 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             ? [...pipelines.map(p => ({ ...p, isDefault: false })), newPipeline]
             : [...pipelines, newPipeline];
         setSaving(true);
-        await persist({ pipelines: updated }, 'Pipeline');
+        const ok = await persist({ pipelines: updated }, 'Pipeline');
         setSaving(false);
+        // Refused — still saving, or by the server — the form keeps what was typed and the selection stays, as
+        // the calendar's Add does; the words above say why (state §0.228).
+        if (!ok) return;
         setSelectedId(newPipeline.id);
         setNewName(''); setNewDefault(false); setNewErr(''); setShowNewForm(false);
     };
@@ -149,7 +181,9 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updatedPipelines = pipelines.map(p =>
             p.id === selectedId ? { ...p, stages: updatedStages } : p
         );
-        await persist({ pipelines: updatedPipelines }, 'Stage');
+        // Refused — still saving, or by the server — the form keeps what was typed (state §0.228).
+        const ok = await persist({ pipelines: updatedPipelines }, 'Stage');
+        if (!ok) return;
         setNewStageName(''); setNewStageType('Open'); setStageErr(''); setShowAddStage(false);
     };
 
