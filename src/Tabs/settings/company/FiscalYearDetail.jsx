@@ -1,6 +1,7 @@
 // settings/company/FiscalYearDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -69,13 +70,16 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
     const periods = pickedPeriods ?? savedPeriods;
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
     // Unsaved is what differs from the saved settings — a pick back to them is no change.
     const startChanged = picked !== undefined && picked !== savedPick;
     const periodsChanged = pickedPeriods !== undefined && pickedPeriods !== savedPeriods;
     const dirty = startChanged || periodsChanged;
 
     const handleCancel = () => { setPicked(undefined); setPickedPeriods(undefined); };
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         // Only what changed (Jeff, 15 Oct: "Send only what changed"): a page opened before
         // another Admin's change must not put the old value back.
         const payload = {};
@@ -88,19 +92,23 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
             // OUTSIDE the try — so a 403 cleared the flag and reported success.
             // putSettings throws on non-2xx; the rethrow lets the navigation
             // guard know the save did not land.
-            await putSettings(payload);
+            const answer = await putSettings(payload, opened);
             // The app's copy follows the save (state §0.170): set before it, a
             // refused save moved every quarter in the app anyway, until a reload.
             setSettings(prev => ({ ...prev, ...payload }));
+            landed(answer);
             setPicked(undefined); setPickedPeriods(undefined);   // the page follows the saved settings again
             setSaveError('');
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

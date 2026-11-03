@@ -1,6 +1,7 @@
 // settings/dispatch/DispatchJobTemplatesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -169,10 +170,13 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAdd,  setShowAdd]  = useState(false);
     const [tmplMenu, setTmplMenu] = useState(null);
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     const selected = templates.find(t => t.id === selectedId);
 
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         setSaving(true);
         // A field still mid-edit ('' or '3.') must not reach the blob — the New
         // Job template picker and the preview panel both read these as numbers.
@@ -183,12 +187,16 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         }));
         setTemplates(clean);
         try {
-            await putSettings({ dispatchJobTemplates: clean });
+            const answer = await putSettings({ dispatchJobTemplates: clean }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
@@ -202,7 +210,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             throw e;
         }
         setSaving(false);
-    };
+    });
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

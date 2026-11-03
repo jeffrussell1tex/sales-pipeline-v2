@@ -1,7 +1,10 @@
 // settings/data/FeaturesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
-import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+// The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
+import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { PANEL_CHANGED, PANEL_CHANGED_KEY } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
@@ -103,6 +106,9 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     // and the Pipeline's "Score all deals". settings.mjs read and saved the switch, and no
     // screen showed it — so AI scoring was off in every workspace, for good.
     const [aiScoring, setAiScoring] = React.useState(false);
+    // The tokens as this panel opened (state §0.226): every save names them, a landed save merges what it answered,
+    // and the effect below re-takes them whenever it re-seeds the draft from the settings prop.
+    const { opened, landed, reopen, panelStale, once } = usePanelRevs(settings, setSettings);
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
@@ -136,6 +142,8 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             setAiSettings(settings.aiSettings || AI_DEFAULTS);
             setAiPrompts(settings.aiReportPromptsEnabled === true);
             setAiScoring(settings.aiScoringEnabled === true);
+            // The draft is the prop's again, so its tokens are too (state §0.226).
+            reopen();
         }
         setLoading(false);
     }, [settings]);
@@ -154,14 +162,18 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     };
 
     // ── Save all — AI settings + feature flags + tab visibility ─────────────────
-    const handleSaveAi = async () => {
+    // One save at a time: a second press, or the leave guard's Save while this one is out, shares its outcome
+    // (state §0.226 — JB3-10).
+    const handleSaveAi = once(async () => {
         setSaving(true);
         setError(null);
+        // Declared out here so the catch knows whether a typed key went with the save (J-B12).
+        let payload;
         try {
             // Only include anthropicApiKey when the admin set or cleared it.
             // Omitting the field entirely tells the server to preserve the
             // stored key; sending null clears it.
-            const payload = {
+            payload = {
                 aiSettings,
                 featureFlags: flags,
                 leadsEnabled:   tabViz.leadsEnabled,
@@ -174,19 +186,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
             if (keyAction === 'clear')                     payload.anthropicApiKey = null;
 
-            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('You need the Admin role to change organization settings.');
-                let msg = 'HTTP ' + res.status;
-                try { const d = await res.json(); if (d?.error) msg = d.error; } catch (_) {}
-                throw new Error(msg);
-            }
-            const result = await res.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
+            // Through the sender, with the tokens this panel opened with (state §0.226): after an org switch it never
+            // answers (state §0.175), its network failure included, and a save another landed first is refused,
+            // nothing written.
+            const result = await putSettings(payload, opened);
 
             setSettings(prev => ({
                 ...prev,
@@ -205,18 +208,25 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                     anthropicApiKeyLast4: keyAction === 'set' ? apiKeyInput.trim().slice(-4) : null,
                 } : {}),
             }));
+            landed(result);
             // Drop the plaintext from component state the moment it is persisted.
             setApiKeyInput('');
             setKeyAction(null);
             setDirty(false);
         } catch (e) {
+            // Refused because another save landed first (J-B5): AdminView reads the latest and remounts this panel on
+            // it — the typed key gone with the old mount — and says so, asking for the key again when one was sent
+            // (state §0.226 — J-B12; by the payload: 'set' with an empty box sends none).
+            if (e.stale && await panelStale(e, 'anthropicApiKey' in payload ? PANEL_CHANGED_KEY : PANEL_CHANGED)) throw e;
+            // The latest could not be read: the draft stays with the server's words — but never the typed key.
+            if (e.stale && 'anthropicApiKey' in payload) { setApiKeyInput(''); setKeyAction(null); setError('Failed to save: ' + e.message + ' Enter the API key again.'); throw e; }
             setError('Failed to save: ' + e.message);
             // Rethrow for the navigation guard. `finally` still clears the spinner.
             throw e;
         } finally {
             setSaving(false);
         }
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSaveAi);

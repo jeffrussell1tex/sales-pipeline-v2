@@ -78,7 +78,9 @@ test('the panel: Train now is disabled while the form is dirty, POSTs the functi
     const s = code(read('src/Tabs/settings/salesProcess/LeadScoringDetail.jsx'));
     assert.ok(s.includes("            const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });"));
     assert.ok(s.includes('            if (!res.ok) throw new Error(data.error || `Training refused (${res.status})`);'), 'a refusal is shown, never swallowed (18b1)');
-    assert.ok(s.includes('            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring }));'), 'the server\'s config becomes the prop');
+    assert.ok(s.includes("import { revsAfter } from '../../../utils/settingsRevs.js';"));
+    assert.ok(s.includes('            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring, revs: revsAfter(prev.revs, data.revs) }));'),
+        'the server\'s config becomes the prop, with the token it answered — else the next rules save is refused against itself (state §0.226)');
     assert.ok(s.includes('            setTrainMsg(trainNowMessage(data));'));
     assert.ok(s.includes('<button onClick={handleTrainNow} disabled={training || dirty}'), 'never trains against unsaved rules');
     assert.ok(s.includes("{training ? 'Training…' : 'Train now'}"));

@@ -114,6 +114,7 @@ const ALLOWED = [
     ['src/hooks/useCoachingNotes.js', 'setCoachingNotes(prev => (prev.length ? [] : prev))', 'empties the list when there is no org'],
     ['src/Tabs/SalesManagerTab.jsx', 'setSettings(prev => ({...prev, __qbTerrFilter:v}))', 'a screen filter kept on the settings object, never saved'],
     ['src/Tabs/SalesManagerTab.jsx', 'setSettings(prev=>({...prev,_spiffClaimFilter:s}))', 'a screen filter kept on the settings object, never saved'],
+    ['src/Tabs/settings/shared/usePanelRevs.js', 'setSettings((prev) => ({ ...prev, revs: revsAfter(prev?.revs, answer?.revs) }))', 'merges the tokens a send answered; called only straight after one'],
 ];
 
 const isFn = (n) => n && /^(ArrowFunctionExpression|FunctionExpression|FunctionDeclaration|ObjectMethod|ClassMethod)$/.test(n.type);

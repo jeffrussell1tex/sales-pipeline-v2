@@ -139,7 +139,8 @@ test('the Quotes tab decides by the same rule and names who decides; the gauge i
 
 test('the Approval tiers page: the choice, an approver and a backup per tier; nothing it offered that nothing did', () => {
     const s = code(read('src/Tabs/settings/quoting/ApprovalTiersDetail.jsx'));
-    assert.ok(s.includes('await putSettings({ approvalTiers: clean, approvalRouting: mode });') && s.includes('const clean = cleanApprovalTiers(tiers, mode);'));
+    assert.ok(s.includes('const answer = await putSettings({ approvalTiers: clean, approvalRouting: mode }, opened);') && s.includes('const clean = cleanApprovalTiers(tiers, mode);'),
+        'both keys in one save, naming the tokens the page opened with (state §0.226)');
     assert.ok(s.includes("onChange={() => chooseMode(o.id)}") && s.includes("{ id:'role',") && s.includes("{ id:'person',"));
     assert.ok(s.includes("if (mode === 'person' && tiers.some(t => needsChoice.has(t.id) && !t.approverUserId)) {"), 'a mode switch never quietly lets a discount through');
     assert.ok(s.includes("if (m === 'role') return { ...base, approverRole: 'Manager' };"), 'a tier that needed approval still does');

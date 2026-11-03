@@ -7,6 +7,7 @@
 // the server, so what this panel shows is exactly what the jobs function does.
 import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -39,25 +40,32 @@ export const DispatchCustomerNotificationsDetail = ({ settings, setSettings, onB
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     const set = (k, v) => { setCfg(prev => ({ ...prev, [k]: v })); setDirty(true); };
 
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         setSaving(true);
         const payload = { customerNotifications: cleanCustomerNotifications(cfg) };
         try {
-            await putSettings(payload);   // throws on non-2xx
+            const answer = await putSettings(payload, opened);   // throws on non-2xx
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, ...payload }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

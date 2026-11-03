@@ -1,6 +1,7 @@
 // settings/company/CompanyProfileDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -24,10 +25,13 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
     const [dirty, setDirty] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); };
     const handleCancel = () => { setForm({ ...saved }); setDirty(false); };
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         setSaving(true);
         const patch = {
             companyDisplayName:  form.displayName,
@@ -45,18 +49,22 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
             // the try — a 403 cleared the flag and looked like a successful save.
-            await putSettings(patch);
+            const answer = await putSettings(patch, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, ...patch }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

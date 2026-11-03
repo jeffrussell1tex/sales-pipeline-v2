@@ -13,6 +13,7 @@
 // 'government' or every existing row stops resolving. Labels are free to change.
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -96,6 +97,9 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
     const [error,  setError]  = useState('');
     const [newLabel, setNewLabel] = useState('');
     const [customers, setCustomers] = useState([]);
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     // Usage counts come from the customer records, so a type cannot be removed
     // out from under rows that still reference it.
@@ -136,7 +140,7 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
         setDirty(true);
     };
 
-    const handleSave = useCallback(async () => {
+    const handleSave = useCallback(once(async () => {
         const clean = types
             .map(t => ({ id: t.id, label: (t.label || '').trim() || t.id, icon: PROPERTY_ICONS.includes(t.icon) ? t.icon : 'building' }))
             .filter(t => t.id);
@@ -147,17 +151,21 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
         setSaving(true); setError('');
         setTypes(clean);
         try {
-            await putSettings({ dispatchPropertyTypes: clean });
+            const answer = await putSettings({ dispatchPropertyTypes: clean }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             if (setSettings) setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));
+            landed(answer);
             setDirty(false);
         } catch (err) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (err.stale && await panelStale(err)) throw err;
             setError(err.message || 'Save failed.');
             throw err;
         } finally {
             setSaving(false);
         }
-    }, [types, setSettings]);
+    }), [types, setSettings, opened, landed, panelStale]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     return (

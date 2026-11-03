@@ -20,7 +20,10 @@
 // the switch, and what it would do next — copy the saved keys into the app's
 // settings, roll back to its snapshot of the last org's settings, report an
 // error — would land on the new org's screen. Every caller is a Settings panel,
-// inside the tabs that remount on a switch, so nothing waits on it.
+// inside the tabs that remount on a switch, so nothing waits on it. A send that
+// never reached the server is the same (state §0.226 — JB3-7c): in the org that
+// asked it throws writeSettings' words for it (NETWORK_ERROR); after a switch it
+// never settles.
 //
 // Each save names the revision token it loaded for every key it sends (state
 // §0.225 — batch 4b-3, step B-2; src/utils/settingsRevs.js). The server refuses
@@ -48,11 +51,17 @@ const SETTINGS_URL = '/.netlify/functions/settings';
 
 export async function putSettings(payload, revs) {
     const askedOrg = requestOrg();
-    const res = await dbFetch(SETTINGS_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(withIfRevs(payload, revs)),
-    });
+    let res;
+    try {
+        res = await dbFetch(SETTINGS_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(withIfRevs(payload, revs)),
+        });
+    } catch {
+        if (!stillOrg(askedOrg)) return stopped();
+        throw new Error(NETWORK_ERROR);
+    }
     if (!stillOrg(askedOrg)) return stopped();
     if (!res.ok) {
         if (res.status === 403) throw new Error('You need the Admin role to change these settings.');

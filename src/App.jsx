@@ -1593,7 +1593,9 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // "Save changes and continue": the page's own save (settingsSaveRef — the
     // open panel's, or the Sales Manager's), which throws when it does not save;
-    // the page shows why, and the dialog stays.
+    // the page shows why, and the dialog stays. A save refused as stale has taken
+    // the latest (`tookLatest` — state §0.226): the dialog says so (J-B11), and
+    // 'stale-partial' when an earlier part of the same save landed (JB3-5).
     const navGuardSave = React.useCallback(async () => {
         const save = settingsSaveRef.current;
         if (!save) return;
@@ -1601,9 +1603,9 @@ dbFetch('/.netlify/functions/users?me=true')
         setNavGuardFailed(false);
         try {
             await save();
-        } catch {
+        } catch (e) {
             setNavGuardSaving(false);
-            setNavGuardFailed(true);
+            setNavGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);
             return;
         }
         setNavGuardSaving(false);

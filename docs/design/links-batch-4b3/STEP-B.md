@@ -24,6 +24,17 @@ tenancy; proof and scope) and a synthesis; Claude re-read saveSettings.js,
 useSettings.js's load and the profile move. Its build plan is §4a; its
 questions (JB2-1 to JB2-13) Jeff answered the same day: every
 Recommended, JB2-7 and JB2-8 fixed in B-2 (ANSWERS.md, B-2).
+**B-2 built 2 Nov** as state §0.225 (guide §18b114 rule 9), committed `438d974`.
+**B-3 mapped 2 Nov**, read only, by one workflow: five mappers (the shell and
+the leave guards; two of the sales-process panels; dispatch, Features and
+Connected apps; the proof), a designer, two critics (correctness and tenancy;
+proof and scope) and a synthesis; Claude re-read Features' key path, Train
+now's answer, AdminView's guard and Discard, LeaveGuardModal, Connected apps'
+load and the Sales Manager's saveExtra. Its build plan is §4b; its questions
+JB3-1 to JB3-10.
+**B-3a built 2-3 Nov** as state §0.226 (guide §18b114 rule 10): nine edit
+scripts in a staged copy first, one review workflow, the browser check as
+Jeff and Karen; its departures from §4b are written in state §0.226.
 
 ## 0. What the code does today
 
@@ -680,6 +691,725 @@ Setup: Accelerep QA; Jeff signs in and drives; local `netlify dev` after `rm -rf
 7. **§4's token "at open" for windows.** Kept, with the snapshot re-based from the take-latest answer and from the window's own landed save, so a new entry's retry carries a live token.
 8. **Not STEP-B, the task text:** it named `src/utils/saveSettings.js` and a move in `memberSave.js`. Both are wrong (§0, items 1-2).
 9. **Not STEP-B, CLAUDE.md:** the verification chain ran the harness before any commit; Jeff's "Commit each, harness last" (JB2-12) is now written into the chain and guide §18b23 part 4.
+
+## 4b. B-3 — the build plan (every other settings screen)
+
+I put this together on 2 Nov 2026 from the designer's plan, the five maps and two critiques: correctness/tenancy (cited as **A1–A10**) and proof/scope (**B1–B15**). Before taking or rejecting any critic point, I re-read the cited lines in the working tree. Points I took are marked **(critic)**. I edited nothing, served nothing, ran nothing against a database and ran no test. The only scripts were read-only `awk`/`grep`/`sed` reads. The line-ending table in §0.1 is the designer's count (`…/scratchpad/eol.mjs`); I did not re-run it.
+
+### The design in one paragraph
+
+**One new shared hook does most of the work: `src/Tabs/settings/shared/usePanelRevs.js`.**
+- It holds the panel's tokens from when it opened (`opened`).
+- `landed(answer)` merges a landed save's tokens into the app copy and into `opened`.
+- `reopen()` re-takes `opened` for the three panels that re-seed their draft from an effect.
+- `panelStale(e, words)` hands a stale refusal to AdminView through a context.
+- `once(fn)` makes a second save while one is out share the first one's outcome (JB3-10).
+
+**AdminView handles J-B5 in one place.** It reads the latest, clears App's dirty flag and save slot, remounts the open panel by bumping a key on one wrapper around `{panelEl}`, and draws the words above it. It does none of this if the panel that asked has since unmounted **(critic A2/B5)**. None of the ~40 pinned mount lines change.
+
+**Each guarded panel changes in six small places:**
+1. an import line;
+2. a hook line;
+3. `handleSave` wrapped in `once(...)`;
+4. the send gains `, opened`;
+5. `landed(answer)` after the mirror;
+6. one first line in the catch: `if (e.stale && await panelStale(e)) throw e;`.
+
+**Everything else:**
+- Pipelines and Calendar get one save in flight and roll back only the keys they sent.
+- Edit brand handles its stale refusal inside its window.
+- Sales Manager gets its own stale branch in `saveExtra`.
+- Both leave guards show J-B11's words when the thrown error carries `tookLatest`.
+
+**Recommended: three commits (JB3-9, critic B14).**
+- **B-3a:** the shell and every draft panel.
+- **B-3b:** the optimistic and odd-shaped screens.
+- **B-3c:** Connected apps.
+
+The harness stays deferred, with one scoped run over B-2 and all of B-3 before any push.
+
+### §0. Corrections the build must know
+
+**1. Line endings** (designer's node count; not re-run).
+- **LF:** `DispatchCustomerNotificationsDetail.jsx`, `ProductTypesDetail.jsx`, `EmailTemplatesDetail.jsx`, `LeaveGuardModal.jsx`, `src/utils/settingsRevs.js`, every test file. The new `usePanelRevs.js` is LF.
+- **CRLF:** every other B-3 panel, plus `SalesManagerTab.jsx`, `AdminView.jsx`, `App.jsx`, `saveSettings.js`, `CategoryDetailChrome.jsx` and `scripts/mutate-import.mjs`.
+- Edit the CRLF files by node script with asserted counts.
+
+**2. Backslash-u escape text.**
+- `SalesManagerTab.jsx` holds the escape written as six characters at :202-204, :901, :903-904 and :910.
+- The same file has a literal `—` in `saveExtra` at :975-977 **(critic B10)**.
+- So no harness anchor may quote a 403/status word from `saveExtra` alone. Quote it together with the new `const w = await writeSettings(patch, opened);` line.
+- Edit this file by node script only.
+
+**3. J-B12 lives in `data/FeaturesDetail.jsx`, not Connected apps.**
+- The typed key is state at :97-98 and is sent at :174-175.
+- The refusal path :182-187 and the network throw both run before the only `stillOrg` at :189.
+- :174 sends no key when `keyAction === 'set'` and the box is empty **(critic B2)**. So the J-B12 words key on `'anthropicApiKey' in payload`, not on `keyAction`.
+
+**4. `putSettings` does not check the org on a network failure.**
+- `await dbFetch` at `saveSettings.js:51-55` is outside any try.
+- `writeSettings` already handles this case (:78-79).
+- Fixed in §1 (JB3-7c).
+
+**5. The guards read `canSave` from a ref at render** (`AdminView.jsx:498`, `:800`; `App.jsx:2209`).
+- The slot is assigned and cleared in a passive effect, `useRegisterSave.js:19-20`. The plan cited ":83", but the file has 22 lines **(critic B13)**.
+- So AdminView's stale handler nulls the slot itself before the guard re-renders. App.jsx:1528 already does the same on an org switch.
+
+**6. Pre-existing: AdminView's Discard never resets `guardFailed`** (`:501`, `:803`). App resets it on open (`App.jsx:1566`). Fixed (JB3-7b).
+
+**7. The PUT answers tokens only for the keys sent** (`settings.mjs:564-566`).
+- A key the server derives (the AI scrub, the key migration) moves without telling the screen.
+- Features' next save of that key is refused once and shows the latest. That is B-1's rule; filed.
+
+**8. Train now drops the token.**
+- `LeadScoringDetail.jsx:134` takes `data.leadScoring` but not the `revs` that `train-lead-model.mjs:52` answers.
+- Without a fix, the first rules save after Train now is refused against itself. B-3 merges the token.
+
+**9. `handlerIn` (`settings-saves.test.mjs:84-95`) finds only `const X = (…) =>` components.**
+- `SalesManagerTab` (`export default function`, :818) and `FlatListDetail` (`function`, :10) need a FunctionDeclaration-aware pick.
+
+**10. `deal-modal-saves`' `screenOnly`** (`:132-145`) will flag the hook's `landed`. Its handler is `fns[1]` and has no `SERVER` call, so it needs an `ALLOWED` row.
+
+**11. `late-answers` will flag the optimistic rollbacks unless `panelStale` is learned (critic B1).**
+- Its `settles` list (:148-149) names only the four senders.
+- `setSettings` is a tracked shared setter (:26-28).
+- Pipelines' and Calendar's `setSettings(prev => …held)` after `await panelStale(e)` would be flagged.
+
+**12. S5 cannot see a spread, and its list rule will flag FlatList (critic B7).**
+- `updaterFaults` (`:272-291`) reads only named keys.
+- It flags any `[computed]` key written without `revs` (:282). FlatList's mirror `setSettings(prev => ({ ...prev, [settingsKey]: items }))` (:27) will fail it once the file joins `SITES`, even though `landed` merges right after.
+
+**13. Connected apps cannot simply drop its load (critic A1/B11).**
+- `loading` starts `true` (`ConnectedAppsDetail.jsx:371`) and only the settings load clears it (:399). The render returns early on it (:530).
+- `error` (:372, :545) is set only by that load.
+- An org with no row gets `{ settings: null }` (`settings.mjs:97`). The copy then has no `connectedApps` (`settingsDefaults.js` defines none; grep 0), and bare `connectedApps.slack` (:473) would throw.
+
+**14. Mount lines are pinned whole:**
+- tests: `email-templates.test.mjs:72`, `invoices.test.mjs:332`, `settings-leave-guard.test.mjs:112`, `honest-panels.test.mjs:157`;
+- harness: `mutate-import.mjs:4047`, `:4831`, `:4835`, `:4928`.
+
+Only `:433` (Connected apps, unpinned) changes, in B-3c.
+
+### §1. The sender and the new shared pieces (B-3a)
+
+**`src/utils/settingsRevs.js` (LF): new words after :46.**
+
+| Constant | Words | Decision |
+|---|---|---|
+| `PANEL_CHANGED` | "These settings changed since this page loaded — it now shows the latest. Make your change again." | JB3-1 |
+| `PANEL_CHANGED_KEY` | `PANEL_CHANGED` + " Enter the API key again." | J-B12 |
+| `PANEL_CHANGED_WEBHOOK` | `PANEL_CHANGED` + " Enter the webhook URL again." | JB3-3, B-3c |
+| `BRAND_CHANGED` | "The brand changed since this window opened — it now shows the latest. Make your change again." | JB3-4, B-3b |
+| `LEAVE_STALE` | "Another change landed first — the page now shows the latest. Your changes were not saved." | J-B11, verbatim |
+| `LEAVE_STALE_PART` | "Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved." | JB3-5, B-3b **(critic A4/B4)** |
+| `STILL_SAVING` | "The last change is still saving — try again in a moment." | JB3-8, B-3b |
+
+**`src/Tabs/settings/shared/saveSettings.js` (CRLF), `putSettings` :51-55.**
+- New shape: `let res; try { res = await dbFetch(…unchanged…); } catch { if (!stillOrg(askedOrg)) return stopped(); throw new Error(NETWORK_ERROR); }`.
+- `NETWORK_ERROR` is already imported (:43). The words now match `writeSettings` (:79) **(critic B13)**.
+- :56-67 stay byte for byte, so harness 5403 and 5407 survive.
+- The new try line must not repeat `writeSettings`' two-line anchor at `mutate-import.mjs:17364`. Its `catch` line differs, so that anchor stays unique; parse-check it.
+- Keep the one-argument (Q6) path. Old tabs use it, and S3 :421 and late-answers :237 pin it.
+
+**New: `src/Tabs/settings/shared/usePanelRevs.js` (LF), all module scope.**
+
+```
+import React from 'react';
+import { revsAfter } from '../../../utils/settingsRevs.js';
+// AdminView provides { took, landed } around the open panel (J-B5); null elsewhere.
+export const PanelStaleContext = React.createContext(null);
+export function usePanelRevs(settings, setSettings) {
+    // The tokens as this panel opened — its draft was seeded from the same render.
+    const [opened, setOpened] = React.useState(() => ({ ...(settings?.revs || {}) }));
+    const shell = React.useContext(PanelStaleContext);
+    // Mounted? A refusal or a landing answered after Back/Discard must touch no other panel (critic A2).
+    const alive = React.useRef(true);
+    React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+    const flight = React.useRef(null);
+    const landed = (answer) => {
+        setSettings((prev) => ({ ...prev, revs: revsAfter(prev?.revs, answer?.revs) }));
+        setOpened((held) => revsAfter(held, answer?.revs));
+        if (shell && alive.current) shell.landed();
+    };
+    const reopen = (revs = settings?.revs) => setOpened({ ...(revs || {}) });
+    const panelStale = async (e, words) => (shell ? shell.took(e, words, () => alive.current) : false);
+    // A second save while one is out shares its outcome (SalesManagerTab.jsx:1040-1052 precedent; JB3-10).
+    const once = (fn) => (...args) => {
+        if (flight.current) return flight.current;
+        const p = fn(...args); flight.current = p;
+        const clear = () => { if (flight.current === p) flight.current = null; };
+        p.then(clear, clear);
+        return p;
+    };
+    return { opened, landed, reopen, panelStale, once };
+}
+```
+
+**Why `opened` and not the render's `settings.revs`.**
+- The copy changes under an open panel only through a take-latest (which remounts) or through App's `loadData`, which re-runs on `[clerkUser, organization]` (`App.jsx:555`). Whether Clerk reissues those objects mid-session is an open question.
+- `opened` is never newer than the draft. So a moved copy can cause a false refusal, never a lost update.
+- Cancel does not re-take `opened`. The draft re-seeds from the render, so a refusal after Cancel means a change really did land.
+
+### §2. The token rule, and each site
+
+**The rule.** A send's second argument is one of:
+- the panel's `opened`, bound by `const { opened, … } = usePanelRevs(settings, setSettings)`. `withIfRevs` picks only the payload's keys (`settingsRevs.js:121-124`).
+- `{ quoteBrand: base.rev }` in Edit brand.
+- Sales Manager's draft-start `opened` (its `useState` form, Sales Manager only).
+
+A landed save calls `landed(answer)`, or merges with `revsAfter` in its own updater. A stale refusal goes to `panelStale`, or to `takeLatestSettings` where there is no AdminView (Edit brand, Sales Manager).
+
+Org checks come from the sender: `putSettings`, `writeSettings` and `takeLatestSettings` never settle after a switch (`saveSettings.js:56`, :61-62, :66, :79-81, :97), and AdminView is keyed by org (`SettingsTab.jsx:63`).
+
+**Shape A (B-3a): a standard draft panel, seeded at mount and registered with the guard.**
+1. A new line `import { usePanelRevs } from '../shared/usePanelRevs.js';` (never an edit of an import line a test quotes).
+2. `const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);` after the draft states.
+3. `const handleSave = once(async () => { … });`. The body is unchanged apart from items 4-6, and every caller (own buttons, both guards) shares it (JB3-10, critic A3/B3).
+4. `const answer = await putSettings(<payload as today>, opened);`.
+5. `landed(answer);` straight after the existing mirror, which stays byte for byte.
+6. The catch's first line: `if (e.stale && await panelStale(e)) throw e;`. Use `err` where the catch binds `err`.
+
+If the latest could not be read, the catch falls through to today's words (the server's `STALE_ERROR`) and keeps the draft.
+
+| Site (send line) | Keys | Notes beyond the six edits |
+|---|---|---|
+| FlatListDetail.jsx:25 | `[settingsKey]` | JB3-6: Save :73 `disabled={!dirty \|\| saving}`. |
+| CustomerTypesDetail.jsx:34 | customerTypeTiers | Harness 4815 re-pointed. Keep `setSaving(false);\n            throw e;\n        }` unique (4839). |
+| AccountSegmentsDetail.jsx:44 | accountSegmentTiers | none |
+| BuyerPersonasDetail.jsx:118 | buyerPersonas | none |
+| CustomFieldsDetail.jsx:60 | customFieldsByObject | JB3-6: `disablePrimary={!dirty \|\| saving}` (`CategoryDetailChrome.jsx:39`). |
+| EmailTemplatesDetail.jsx:84 (LF) | emailTemplates | New catch line above `setSaveError(e.message);`. email-templates :78 moves; :79 holds. |
+| FunnelStagesDetail.jsx:42 | funnelStages | JB3-6, as CustomFields. |
+| IndustriesDetail.jsx:55 | industries | connected-apps :131-139 Cancel substrings untouched. |
+| KPIThresholdsDetail.jsx:67 | kpiThresholds | The `hasErrors` throw has no `.stale` and falls through. |
+| LeadConversionDetail.jsx:62 (`LeadConvBenchmarks`) | leadConvBenchmarks | Hook in `LeadConvBenchmarks`. No new `setDirty(true)` (save-buttons :173 counts 4). |
+| PainPointsDetail.jsx:68 | painPoints | none |
+| CompanyProfileDetail.jsx:48 | the 11 company keys | `patch` stays a const. |
+| FiscalYearDetail.jsx:91 | fiscalYearStart and/or quotaPeriods (:81-84) | The conditional payload stays. quota-plan :480 (the `between` start line) and :484 re-pinned. Harness 4823 re-pointed; 11982 and 12097 survive. |
+| DispatchCrewsDetail.jsx:75 | dispatchCrews | Link 404s and 400s are not stale; unchanged. |
+| DispatchCustomerNotificationsDetail.jsx:49 (LF) | customerNotifications | customer-notifications :168 re-pinned. |
+| DispatchJobTemplatesDetail.jsx:186 | dispatchJobTemplates | none |
+| DispatchPropertyTypesDetail.jsx:150 | dispatchPropertyTypes | `useCallback(once(async () => {…}), [types, setSettings, opened, landed, panelStale])`. Signature :108, the catch regex :110 and harness 4042 are kept. |
+| DispatchSkillsDetail.jsx:36 | dispatchSkills, dispatchCerts, dispatchLicenses | Harness 4819 re-pointed. |
+| ApprovalTiersDetail.jsx:145 | approvalTiers, approvalRouting | approval-routing :142 re-pinned. Harness 4843 survives. |
+| ProductTypesDetail.jsx:53 (LF) | productTypes | invoices :336 re-pinned. JB3-7a: Cancel :77 also calls `setSettingsDirty && setSettingsDirty(false)`. |
+| QuoteTemplatesDetail.jsx:1066 | quoteTemplates, quoteDefaults, quoteBoilerplate | :1276 changes in B-3b (§4). |
+| DispatchBlockTypesDetail.jsx:42 (direct) | dispatchBlockTypes | Replace :41-51 with the A-shape send. The 403 words become the sender's (no pin). JB3-7a: Cancel :77-80 clears App's flag. Harness 4037 survives. |
+| DispatchJobTypesDetail.jsx:97 (direct) | dispatchTrades, dispatchJobTypes | As BlockTypes; Cancel :134-137. |
+
+**Shape A′ (B-3a): re-seeded by an effect.** The same six edits, plus `reopen()` where the draft re-seeds.
+
+- **FeaturesDetail.jsx `handleSaveAi` :157-219.**
+  - Replace :177-189 with `const result = await putSettings(payload, opened);`.
+  - The payload literal :164-175 and the mirror :191-207 stay, so harness 1421, ai-score :177-179, dispatch-gate :164 and report-prompt :357 hold. Then `landed(result);`.
+  - `reopen();` inside the effect's `if (!dirty)` (:128-139).
+  - The catch:
+    ```
+    const sentKey = 'anthropicApiKey' in payload;          // hoist `payload` above the try
+    if (e.stale && await panelStale(e, sentKey ? PANEL_CHANGED_KEY : PANEL_CHANGED)) throw e;
+    if (e.stale && sentKey) { setApiKeyInput(''); setKeyAction(null); setError('Failed to save: ' + e.message + ' Enter the API key again.'); throw e; }
+    ```
+    Then today's :213-215 **(critic B2)**.
+  - Drop `requestOrg`, `stillOrg` and `dbFetch` if they become unused.
+- **LeadScoringDetail.jsx:152.**
+  - `reopen();` in the :101 effect.
+  - Train now :134 becomes `setSettings(prev => ({ ...prev, leadScoring: data.leadScoring, revs: revsAfter(prev.revs, data.revs) }))` (train-now :81 re-pinned).
+- **LeadVisibilityDetail.jsx:67.** `reopen();` in the :54 effect.
+
+**Shape B (B-3b): optimistic, built on click** (J-B10, JB3-8). Same hook, no guard registration.
+
+- **`PipelinesDetail.jsx` `persist` :59-71.** All 9 callers stay as they are.
+  1. A new `const inFlight = useRef(false)`. If a save is out, `setSaveError(\`${label} not saved — ${STILL_SAVING}\`)` and return false.
+  2. Set `inFlight.current = true`.
+  3. `held = Object.fromEntries(Object.keys(patch).map(k => [k, settings?.[k]]))`.
+  4. Optimistic `setSettings(prev => ({ ...prev, ...patch }))`.
+  5. `const answer = await putSettings(patch, opened); landed(answer); return true;`.
+  6. Catch: `inFlight.current = false;`, then `if (e.stale && await panelStale(e)) return false;`, then `setSettings(prev => ({ ...prev, ...held }))` (never `revs`) and today's words.
+  7. The gate is released on success by `useEffect(() => { inFlight.current = false; }, [opened])`. It opens only once the merged token is in this render **(critic A8)**.
+  8. The `let snapshot` lines :60-61 and :67 go.
+- **`CompanyCalendarDetail.jsx` `persistHolidays` :71-83.** Same shape. One gate covers Add, the unguarded Delete :350, and Sync.
+- **`CompanyCalendarDetail.jsx` `handleSync` :120-157.**
+  - Take the gate before the holidays GET (if it is taken, say `STILL_SAVING` in `syncMsg`).
+  - Release it in the catch paths and in the `:127` org-switch return. On success it is released by the `[opened]` effect.
+  - :141-148 becomes `held` for both keys, the optimistic set, `const answer = await putSettings({ customHolidays: preserved, federalHolidays: fresh }, opened); landed(answer);`.
+  - Catch: stale goes to `panelStale` then `return`; otherwise the keys-only rollback and a rethrow to :151.
+
+**Shape C, Edit brand (B-3b)** and **shape D, Sales Manager (B-3b)** are in §4. **Shape E, Connected apps (B-3c)** is in §4.
+
+### §3. The shell (B-3a)
+
+**AdminView.jsx (CRLF).** New import lines for `takeLatestSettings`, `PanelStaleContext` and `PANEL_CHANGED`.
+
+- **New state** beside :112-114: `panelEpoch` (`useState(0)`) and `panelNote` (`useState(null)`, holding `{ id, words }`).
+- **The J-B5 handler**, at AdminView's top level after `guardSave` (:154), so S11 can pick it:
+
+  ```
+  const panelStale = async (e, words = PANEL_CHANGED, isAlive = () => true) => {
+      const latest = await takeLatestSettings(setSettings);   // never settles after a switch
+      if (!latest) return false;                               // keep the draft; the panel says the server's words
+      if (e) e.tookLatest = true;
+      if (!isAlive()) return true;                             // the asker left: the copy is the latest, nothing else touched (critic A2)
+      if (settingsSaveRef) settingsSaveRef.current = null;     // the guard reads canSave at render (§0.5)
+      if (typeof setSettingsDirty === 'function') setSettingsDirty(false);   // BlockTypes/JobTypes/ProductTypes never clear it
+      setPanelNote({ id: activeItem?.id, words });
+      setPanelEpoch((n) => n + 1);                             // remount on the latest (J-B5)
+      return true;
+  };
+  ```
+
+  The alive check (critic A2) beats B5's id/epoch check. Reopening the same card sets the same `SETTINGS_ITEMS` object, so the id and epoch would not move, and a late refusal would still wipe the new mount.
+- **Render (:494-504).**
+  - Before the panel: `{panelNote && panelNote.id === activeItem.id && <div …>{panelNote.words}</div>}`, in the chrome's error-box style (`CategoryDetailChrome.jsx:50-56`, the JB2-1 precedent).
+  - Then `<PanelStaleContext.Provider value={{ took: panelStale, landed: () => setPanelNote(null) }}><React.Fragment key={panelEpoch}>{panelEl}</React.Fragment></PanelStaleContext.Provider>`.
+- **`onBack` (:397-401).** `setPanelNote(null)` in both paths. Also in `openItem`'s two paths (:125-128).
+- **`guardSave`'s catch :140-144.** `setGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);` (unpinned).
+- **Both `onDiscard`s (:501, :803).** Add `setGuardFailed(false);` before `go && go()` (JB3-7b).
+
+**App.jsx (CRLF).** Only `navGuardSave`'s catch :1604-1608 changes: `} catch (e) {` … `setNavGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);`.
+- The dialog JSX :2206-2213 is unchanged, so harness 6294-6297 and save-buttons :191 survive.
+- save-buttons :212 and harness 4871 move.
+- App.jsx's 133 harness entries join the scoped run.
+
+**LeaveGuardModal.jsx (LF).**
+- Import `LEAVE_STALE` and `LEAVE_STALE_PART`.
+- `const stale = failed === 'stale' || failed === 'stale-partial';`.
+- The :29-33 line shows `failed === 'stale-partial' ? LEAVE_STALE_PART : stale ? LEAVE_STALE : today's words`.
+- :35 shows `{stale && !canSave ? null : message}`. "Save them, or discard" is false when nothing is left **(critic A6)**. It is changed inside the modal only, so App's JSX and harness 6294 are untouched.
+- Save stays offered on `canSave` alone, not hidden on `stale`. A4's formula `canSave && !(stale && !canSave)` reduces to `canSave` **(critic A4)**. In AdminView, `panelStale` nulls the slot first, so Save is hidden. On Sales Manager, a SPIFF draft left unsent keeps Save.
+- Discard :53-58 is labelled `stale && !canSave ? 'Continue' : 'Discard changes and continue'`, in the neutral style when it reads Continue (JB3-2).
+- The Escape line :21 is untouched (harness 6359, escape-order :489).
+
+### §4. Optimistic panels, Edit brand, Sales Manager, Connected apps, J-B12
+
+**J-B10 (B-3b).** As shape B. The `let snapshot` / `setSettings(snapshot)` lines go:
+- `PipelinesDetail.jsx:60-61`, `:67`;
+- `CompanyCalendarDetail.jsx:72-73`, `:79`, `:141`, `:146`.
+
+**Edit brand (B-3b, JB3-4; this replaces J-B10 for Edit brand on Jeff's word, critic B15).** In `EditBrandModal.jsx`:
+- Props become `({ initial = BRAND_PRESET, initialRev = null, onClose })`.
+- New state: `const [base, setBase] = React.useState(() => ({ rev: initialRev }))` and `const [saving, setSaving] = React.useState(false)`.
+- `handleSave` :253-269:
+  1. `setSaving(true); setSaveError('');`
+  2. `const w = await writeSettings({ quoteBrand: brand }, { quoteBrand: base.rev });`
+  3. If `w.ok`: `setSettings(prev => ({ ...prev, quoteBrand: brand, revs: revsAfter(prev.revs, w.revs) })); onClose(); return;`
+  4. If `w.stale`: `const latest = await takeLatestSettings(setSettings); if (latest) { setBrand(latest.quoteBrand || BRAND_PRESET); setBase({ rev: latest.revs?.quoteBrand ?? null }); setSaveError(BRAND_CHANGED); setSaving(false); return; }`
+  5. Otherwise: `` setSaveError(`Brand not saved — ${w.error}`); setSaving(false); ``.
+- While saving, the window cannot be closed **(critic A5)**:
+  - `close` (:251) returns at once while `saving`.
+  - The Escape handler (:271) also requires `!saving`.
+  - Cancel :460 and Save :465 get `disabled={saving}`.
+  - This is LeaveGuardModal's rule (`LeaveGuardModal.jsx:7`).
+- Imports: `dbWrite`, `requestOrg` and `stillOrg` go. Add `writeSettings`, `takeLatestSettings`, `revsAfter` and `BRAND_CHANGED`.
+- `QuoteTemplatesDetail.jsx:1276` passes `initialRev={settings.revs?.quoteBrand ?? null}`.
+- house-dialogs :48 is untouched.
+
+**Sales Manager (B-3b, JB3-5).** In `SalesManagerTab.jsx`:
+- **Draft-start tokens.**
+  - After :938: `const [opened, setOpened] = useState({});`.
+  - `const draftTiers = (next) => { if (tiersDraft === null) setOpened(o => ({ ...o, quotaData: settings.revs?.quotaData ?? null })); setTiersDraft(next); };`.
+  - `draftSpiffs` is the same for `spiffs`.
+  - :1577 passes `setTiersDraft={draftTiers} … setSpiffsDraft={draftSpiffs}`. Every SPIFF edit, the delayed Remove at :738 included, goes through `editSpiffs` (:530).
+  - The :941 org reset stays byte for byte; the next draft re-takes its token.
+- **`saveExtra` :964-987.** Its signature and the `if (!settingsLoaded) {` block stay (settings-org-load :358-363, harness 3858). After `setSaveState(saving)`:
+  1. `const w = await writeSettings(patch, opened);`
+  2. If `w.ok`: `setSettings(prev => ({ ...prev, revs: revsAfter(prev.revs, w.revs) })); setSaveState(saved); return true;`
+  3. If `w.stale`: `const latest = await takeLatestSettings(setSettings); if (latest) { if ('quotaData' in patch) setTiersDraft(null); if ('spiffs' in patch) setSpiffsDraft(null); const msg = listChanged('quotaData' in patch ? 'commission tier' : 'SPIFF'); setSaveState({ status: 'error', msg }); throw Object.assign(new Error(msg), { stale: w.stale, tookLatest: true }); }`
+  4. Otherwise today's words: 403 at :976, `w.status === 0` at :984, and `` `Not saved — ${w.error}` `` for anything else.
+- The callers :1058 and :1070 are unchanged (save-buttons :243, harness 4889). The throw passes through them.
+- **`saveAdminDrafts` :1076-1080 (critic A4/B4).**
+  ```
+  let landedOne = false;
+  try {
+      if (Object.keys(quotaDrafts).length) { await saveQuotas(); landedOne = true; }
+      if (tiersDraft !== null) { await saveCommission(); landedOne = true; }
+      if (spiffsDraft !== null) await saveSpiffBoard();
+  } catch (e) { if (e.tookLatest && landedOne) e.partial = true; throw e; }
+  ```
+  save-buttons :241-242 still finds the three awaits. "Landed" counts `saveQuotas` returning with nothing sent, so it is approximate (open question 5).
+
+**Connected apps (B-3c, JB3-3, Recommended: convert).**
+- `AdminView.jsx:433` becomes `<ConnectedAppsDetail settings={settings} setSettings={setSettings} onBack={onBack}/>`.
+- Read from the prop **(critic A1/B11)**:
+  - `const connectedApps = settings?.connectedApps || {}`;
+  - `slackConfig = settings?.slackConfig || {}`;
+  - `requests = settings?.integrationRequests || {}`;
+  - `webForm = cleanWebToLead(settings?.webToLead)`.
+- Delete the matching states (:364-366, :369) and the settings load (:386-400).
+- Delete `loading` (:371) and its early return (:530-535), or start it `false`. Delete `error` (:372) and its banner (:545). The calendar, BCC and jobs loads stay.
+- Add the hook line.
+- **Slack Save :446-459.** No longer optimistic:
+  - `const answer = await putSettings({ slackConfig: config, connectedApps: nextApps }, opened); setSettings(prev => ({ ...prev, slackConfig: config, connectedApps: nextApps })); landed(answer);` then the :453 line and its comment byte for byte.
+  - Catch: `if (e.stale) await panelStale(e, PANEL_CHANGED_WEBHOOK);`, then the :457 throw line byte for byte (harness 1523).
+- **Disconnect :460-472.** The same shape. Stale remounts; otherwise the :469 note (harness 1540).
+- **`saveWebForm` :507-520.**
+  - After `landed(answer)`: `const latest = await takeLatestSettings(setSettings); if (latest) reopen(latest.revs); else note('webform', 'Saved — the new link could not be read; reload the page to see it.');` **(critic A7)**. This replaces the :511 GET.
+  - Catch: stale goes to `panelStale` then `return`; otherwise the :516 note.
+- **`requestApp` :487-501.** `requestOrg`/`stillOrg` around the POST answer, then `setSettings(prev => ({ ...prev, integrationRequests: { ...(prev.integrationRequests || {}), [app.id]: data.request } }))`.
+- **Result:** both named GETs go, and the app copy stops being stale after a Slack save (`ReportsTab.jsx:4557` reads it).
+
+**J-B12 (B-3a).** Features clears the typed key by the remount, or by hand when the latest is unread, with the key words in both branches. Its failure path is org-checked by the sender, the network throw included (§1).
+
+### §5. Tests
+
+**`tests/settings-saves.test.mjs` (LF).**
+
+- **The lists.**
+  - Each commit moves its files from `B3_PENDING` / `B3_DIRECT` (:110-145) into `SITES` (:101-106), by literal path with counts:
+    - Calendar `putSettings: 2`;
+    - ConnectedApps `putSettings: 3`;
+    - EditBrandModal `writeSettings: 1`;
+    - SalesManagerTab `writeSettings: 1`;
+    - every other file `putSettings: 1`.
+  - After B-3c, S2's pending branch (:324-330, :338) goes, `NAMED_GETS` (:147) is `{ 'src/hooks/useSettings.js': 1 }`, and S1 (:301) asserts every `SITES` file holds 0.
+- **S2 (`sendFaults` :205-241) learns three accepted forms, resolved by a scope walk like `constNamed` (:160-180), not by name (critic B6):**
+  - a second argument that is the Identifier `opened`, with any payload, where the enclosing component destructures it from `usePanelRevs(settings, setSettings)`;
+  - in `src/Tabs/SalesManagerTab.jsx` only, `opened` from `const [opened, setOpened] = useState(`, with `setOpened` called only inside `draftTiers` / `draftSpiffs` under a `=== null` test **(critic A10)**;
+  - a token `<snapshot>.rev` (already accepted).
+  - S8 made-up cases. Accepted: each form above. Refused:
+    - `opened` bound only in another component of the file;
+    - a stray `const [opened] = useState({})` outside SalesManagerTab;
+    - `setOpened` inside `saveExtra`;
+    - `putSettings(p, settings.revs)`;
+    - `{ teams: opened.territories }`.
+- **S4 (`refusalFaults` :245-269) over every `SITES` file (today `B2_FILES`, :605).**
+  - A putSettings catch, or the function around a writeSettings, may call `panelStale(` in place of `takeLatestSettings(`. The `panelStale` must resolve to the hook's destructure, not a local function (critic B6).
+  - In any file that calls `useRegisterSave`, the putSettings catch's first statement must be `if (<x>.stale && await panelStale(<x>…)) throw <x>;` (critic B6).
+  - S8 cases for both.
+- **S4b, AdminView `panelStale` via a pick.** In order: `takeLatestSettings(setSettings)`, `if (!latest) return false;`, `tookLatest = true`, `if (!isAlive()) return true;`, `settingsSaveRef.current = null`, `setSettingsDirty(false)`, `setPanelEpoch(`. Also the Provider around `<React.Fragment key={panelEpoch}>{panelEl}</React.Fragment>`.
+- **S5 (`updaterFaults`) over `[SITES files, SENDER, usePanelRevs.js]` (critic B7).**
+  - The list rule (:282) passes where the enclosing function calls `landed(<the send's bound result>)` after the send.
+  - New: in every `SITES` file every `setSettings(` call takes a function.
+  - New: `landed`'s argument must be the identifier bound to the send's result.
+  - New: no `let snapshot`.
+- **S9, `usePanelRevs` run as written** (imports stripped; `useState`/`useRef`/`useContext`/`useEffect` stubbed with a call-indexed state array that persists across two renders, critic B8). Cases:
+  - `opened` is the first render's `revs` after a second render with newer `revs`;
+  - `landed` merges key by key into the copy and into `opened`;
+  - `reopen()` and `reopen(revs)` replace;
+  - `landed` clears the note only while alive;
+  - `panelStale` is false with no provider and passes an `isAlive` that turns false after the unmount cleanup;
+  - `once` hands a second caller the first promise (resolve and reject) and clears after it settles.
+- **S10, one handler of each shape run as written** (S6/S7's pattern, with a FunctionDeclaration-aware pick):
+  - **CustomerTypes** `handleSave`:
+    - sends `opened`;
+    - `landed` gets the answer;
+    - stale with `panelStale` true rethrows with no `setSaveError`;
+    - stale with false shows `e.message` and rethrows;
+    - a 404 shows its words.
+  - **Pipelines** `persist`:
+    - a second call while pending sends nothing and says `STILL_SAVING`;
+    - the gate stays shut after landing until `opened` changes;
+    - a refusal rolls back the sent key only, with `revs` untouched;
+    - stale goes to `panelStale` with no rollback.
+  - **Calendar Sync:** a refusal restores both keys only (critic B7 re-attributes mutant #32 here).
+  - **Features:** stale with the key sent passes `PANEL_CHANGED_KEY`. Unread: the key is cleared and the words end "Enter the API key again." (critic B2). Stale with `keyAction 'set'` and an empty box passes `PANEL_CHANGED`.
+  - **Sales Manager** `saveExtra`:
+    - sends `opened`;
+    - stale: take, draft dropped, `listChanged`, throws with `tookLatest` and `stale`;
+    - landed merges;
+    - 403, network and not-loaded words.
+  - **Sales Manager** `saveAdminDrafts`: quotas land then commission is stale gives `partial`.
+  - **`draftTiers` and `draftSpiffs`** each take the token only when their draft begins (critic B9).
+  - **EditBrand:**
+    - sends `base.rev`;
+    - stale re-seeds the brand and `base` and stays open;
+    - landed merges and closes;
+    - `close` and Escape do nothing while saving (critic A5).
+- **S11, AdminView `panelStale` and `guardSave` run as written.**
+  - Latest read and alive: dirty cleared, slot nulled, note set, epoch+1, `tookLatest`.
+  - Latest read, not alive: only `tookLatest`, returns true.
+  - Null: nothing set, false.
+  - After an org switch it never settles (critic B1).
+  - `guardSave` sets 'stale', 'stale-partial' or `true`.
+  - Static: `onBack`/`openItem` clear the note; both `onDiscard`s reset `guardFailed`.
+- **S12, static pins:**
+  - App's catch;
+  - LeaveGuardModal's three word states, `{stale && !canSave ? null : message}`, the Continue label;
+  - the `reopen()` calls;
+  - PropertyTypes' deps;
+  - the JB3-6 disables and JB3-7a Cancel lines;
+  - every guarded panel's `const handleSave = once(` / `handleSaveAi = once(`;
+  - EditBrand's `disabled={saving}` on Save and Cancel.
+- **S3 adds:** `putSettings` with a throwing fetch rejects with `NETWORK_ERROR` in the asking org and stays PENDING after a switch.
+- **ConnectedApps (B-3c):** a render-shape case with `settings = DEFAULT_SETTINGS` (the panel reads no bare `connectedApps.slack`), statically **(critic A1)**.
+
+**`tests/late-answers.test.mjs` (critic B1).**
+- Add `panelStale` to the `settles` list (:149).
+- Add the fixture `async function o() { await panelStale(e); setSettings(s => s); }` with no miss, beside :224-227.
+- B-3c: `requestApp`'s new `stillOrg`.
+
+**Pins that move**
+
+| File | Line(s) | Change |
+|---|---|---|
+| save-buttons | :106-127 | Column 2 of all 20 `AFTER_SAVE` rows gains `, opened`; the mirrors stay. |
+| save-buttons | :212 | `catch \(e\) \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(e\?\.tookLatest \? \(e\.partial \? 'stale-partial' : 'stale'\) : true\);\s*return;` |
+| save-buttons | :146-153, :167-170, :185-191, :241-243 | Unchanged. |
+| settings-leave-guard | :97 | Unchanged: the registration line is kept. |
+| quota-plan | :480, :484 | Moves (JB3-10 and the send). |
+| email-templates | :78 | Moves. |
+| invoices | :336 | Moves. |
+| customer-notifications | :168 | Moves. |
+| approval-routing | :142 | Moves. |
+| train-now | :81 | Moves. |
+| connected-apps (B-3c) | :62, :73, :87 (count 0), :88, :153 | Move. :63 and :72 are kept byte for byte. |
+| lead-intake (B-3c) | :158, :159, :160 | Move. :161, :163, :164 hold. |
+| deal-modal-saves | `ALLOWED` (:112-117) | Gains `['src/Tabs/settings/shared/usePanelRevs.js', 'setSettings((prev) => ({ ...prev, revs: revsAfter(prev?.revs, answer?.revs) }))', 'merges the tokens a send answered; called only straight after one']`. |
+
+**Integration** (`tests/integration/settings-revs.itest.mjs`, orgs `itest_setrevs_A/B`, org B byte for byte). These cases pass on today's server and sender. They are labelled **B-1/B-2 coverage of B-3's keys, not proof of B-3** **(critic B12)**:
+1. a three-key Skills save with one key moved (`.stale` names only it, nothing written);
+2. `putSettings(p, opened)` holding other keys' tokens;
+3. `anthropicApiKey` with a stale `aiSettings` token: refused, the stored key unchanged;
+4. `webToLead`'s answered token equals the next GET's;
+5. `spiffs` stale and landed through `writeSettings`.
+
+### §6. Harness (`scripts/mutate-import.mjs`, CRLF; anchors written with `\n`)
+
+**Re-point:**
+- 4815, 4819, 4823: re-quote with `const answer = await putSettings(…, opened);` and the same mirror-first mutant.
+- 4871: anchor on the new catch's `setNavGuardFailed(…);\n            return;\n        }`; the mutant drops `return;`.
+- B-3c: re-check 1523, 1527, 1540.
+
+**Survive if built as written** (parse each for exactly one match before the run):
+- 5403, 5407, 17344-17364, 3858, 4885, 4889, 4839, 4843, 4042, 4037, 4827, 4047, 4831, 4835, 4928, 1875, 6294-6297, 6359, 1421-1423, 11982, 12097, 14138-14174, 1388, 1392;
+- every other anchor on a changed file.
+
+**Anchor uniqueness (critic B10).**
+- Calendar's pairs (gate, `held`, optimistic set, `landed(answer);`, the stale line, the rollback) appear twice. Anchor Sync's with its two-key `held` line, and persistHolidays' with `setCalError`.
+- ConnectedApps' `landed(answer)` appears up to 3 times. Anchor each with its neighbouring unique line.
+- SalesManagerTab: anchor with `const w = await writeSettings(patch, opened);`.
+
+**New entries (mutant → the test that catches it), each proven caught by hand.**
+
+B-3a:
+
+| # | File | Mutant | Caught by |
+|---|---|---|---|
+| 1 | usePanelRevs.js | `opened` read from `settings.revs` at render | S9 |
+| 2 | usePanelRevs.js | `landed` replaces `revs` whole | S9 |
+| 3 | usePanelRevs.js | no rebase of `opened` | S9 |
+| 4 | usePanelRevs.js | no merge into the copy | S9 |
+| 5 | usePanelRevs.js | `panelStale` true with no provider | S9 |
+| 6 | usePanelRevs.js | `reopen` ignores its argument | S9 |
+| 7 | usePanelRevs.js | `landed` clears the note when not alive | S9 |
+| 8 | usePanelRevs.js | `isAlive` always true | S9 |
+| 9 | usePanelRevs.js | `once` sends twice | S9 |
+| 10 | usePanelRevs.js | `once` never clears | S9 |
+| 11 | AdminView | the take is skipped | S4b, S11 |
+| 12 | AdminView | remounts when the latest is unread | S11 |
+| 13 | AdminView | ignores `isAlive` | S11 |
+| 14 | AdminView | the dirty flag is left set | S11 |
+| 15 | AdminView | the slot is kept | S11 |
+| 16 | AdminView | `tookLatest` is not set | S11 |
+| 17 | AdminView | the key is dropped from the wrapper | S4b |
+| 18 | AdminView | `guardSave` says 'stale' for any failure | S11 |
+| 19 | AdminView | `onBack` keeps the note | S12 |
+| 20 | AdminView | `onDiscard` keeps `guardFailed` | S12 |
+| 21 | App | never 'stale' | S12, save-buttons :212 |
+| 22 | LeaveGuardModal | the old words when stale | S12 |
+| 23 | LeaveGuardModal | the message kept when nothing is left | S12 |
+| 24 | saveSettings.js | the network throw is unchecked | S3 |
+| 25 | late-answers | `panelStale` dropped from its `settles` list | the :224-style fixture |
+| 26 | CustomerTypes | the stale line removed | S4, S10 |
+| 27 | CustomerTypes | `landed` removed | S5, S10 |
+| 28 | CustomerTypes | `once` removed | S12 |
+| 29 | FlatList | `, opened` dropped | S2 |
+| 30 | BlockTypes | `, opened` dropped | S2 |
+| 31 | PropertyTypes | deps lose `opened` | S12 |
+| 32 | Features | the key words become `PANEL_CHANGED` | S10 |
+| 33 | Features | the key is kept when the latest is unread | S10 |
+| 34 | Features | the unread words lack "Enter the API key again." | S10 |
+| 35 | Train now | drops `revs` | train-now :81 |
+| 36 | LeadScoring | `reopen()` dropped | S12 |
+| 37 | — | a JB3-6 disable dropped | S12 |
+| 38 | — | a JB3-7a Cancel line dropped | S12 |
+
+B-3b:
+
+| # | File | Mutant | Caught by |
+|---|---|---|---|
+| 39 | Pipelines | the gate removed | S10 |
+| 40 | Pipelines | the gate released in `finally` | S10 |
+| 41 | Pipelines | rolls back `revs` too | S10 |
+| 42 | Pipelines | rolls back on stale | S10 |
+| 43 | Calendar | Sync rolls back with `setSettings(settings)` | S5 (function rule), S10 |
+| 44 | EditBrand | sends `{ quoteBrand: null }` | S10 |
+| 45 | EditBrand | stale does not re-seed | S10 |
+| 46 | EditBrand | `close` while saving | S10 |
+| 47 | EditBrand | Save not disabled | S12 |
+| 48 | Sales Manager | the token read at save (`settings.revs`) | S2 |
+| 49 | Sales Manager | `draftTiers` takes no token | S10 |
+| 50 | Sales Manager | `draftSpiffs` takes no token | S10 |
+| 51 | Sales Manager | the stale draft is kept | S10 |
+| 52 | Sales Manager | stale returns false | S10 |
+| 53 | Sales Manager | no success merge | S5 |
+| 54 | Sales Manager | `partial` never set | S10 |
+| 55 | LeaveGuardModal | 'stale-partial' shows `LEAVE_STALE` | S12 |
+
+B-3c:
+
+| # | File | Mutant | Caught by |
+|---|---|---|---|
+| 56 | ConnectedApps | the webForm take dropped | S10-style case, lead-intake |
+| 57 | ConnectedApps | `reopen(latest.revs)` dropped | S12 |
+| 58 | ConnectedApps | `requestApp`'s `stillOrg` dropped | late-answers |
+| 59 | ConnectedApps | `|| {}` on `connectedApps` dropped | the default-settings case |
+
+**Scope and order.**
+- Edited suites that build paths at run time (`OPEN_ITEMS` §6 list): save-buttons, settings-leave-guard, late-answers, deal-modal-saves, quota-plan, connected-apps, house-dialogs. Trace each before trusting the scope.
+- One scoped run over B-2 and all of B-3, `--base` the last green scope (B-1's `a03b958`), sized with `--list`, before any push.
+- `netlify dev` stopped; `rm -rf dist node_modules/.vite` after the gate build; the run must print `Baseline: green.` first.
+
+### §7. Browser check (one per commit, Accelerep QA `org_3K6LqEB6kPE9p4t96GBfsX9VNyb`)
+
+**Setup and rules.**
+- Jeff drives every save under the standing go.
+- Before each step: read the URL bar, count the orgs, read `Clerk.user`.
+- Never: a member delete, an email, a hand-made settings PUT, or a typed key or webhook.
+- Every Delete click needs Jeff's word.
+- Prove `ifRevs` from the 200's `revs` and from the 409.
+- An own-button stale save rethrows into `CategoryDetailChrome.jsx:39`'s bare `onClick`. Expect one unhandled-rejection console line per refused own-button save (filed) **(critic B12)**.
+
+**B-3a**
+1. **Competitors, two tabs.**
+   - A adds "QA-B3-a" and saves: 200.
+   - A then removes it and saves again: 200, the second in-tab save, proving `landed` rebases **(critic B12)**.
+   - B, opened before, adds "QA-B3-b" and saves: 409. B redraws with A's list and the note, and its addition is gone.
+   - B clicks Back: the note clears **(critic B12)**.
+   - B adds again: 200, and the note does not return.
+   - Remove the test items.
+2. **Company profile: two saves in a row in one tab**, both 200 (11 keys).
+3. **AdminView guard.** A saves Customer types. B edits Customer types, clicks Back, then "Save changes and continue". The dialog shows `LEAVE_STALE`, no Save, no "Save them…" line, Stay and Continue. The panel behind shows the latest and the note. Continue leaves.
+4. **App guard.** As step 3, on Funnel stages, leaving by the top nav.
+5. **Lead visibility, two tabs:** refused, remounted, words **(critic B12)**. Restore.
+6. **Save, then Back at once (JB3-10).** The guard's Save shares the save already out: 200 once, no 409.
+7. **Features.** A toggles a live flag; stale B toggles another: remount and `PANEL_CHANGED`. Restore. The key path is proven by S10 only.
+8. **Train now (optional, on Jeff's word: it writes the model):** then a rules save without reload: 200.
+
+**B-3b**
+1. **Pipelines.** A renames a stage; stale B reorders: refused and remounted. A fast second change says `STILL_SAVING`. Restore.
+2. **Calendar.** A adds a holiday; stale B adds one: refused. Deletes only on Jeff's word.
+3. **Edit brand.** A saves an accent colour; stale B saves another: the window stays open with `BRAND_CHANGED`. Escape during a save does nothing. Restore.
+4. **Sales Manager.**
+   - A edits a SPIFF name; stale B edits a SPIFF and saves: the `listChanged('SPIFF')` banner, the draft dropped.
+   - B with a tier draft and a SPIFF draft, tiers stale, by the nav: `LEAVE_STALE` with Save still offered for the SPIFFs.
+   - Restore.
+
+**B-3c**
+1. Open Connected apps: no settings GET in the network rows. Slack and the web form are drawn from the copy, with no "Loading…" stuck.
+2. A web-form toggle in a stale tab only on Jeff's word (it changes the public link).
+
+**Every commit: Karen.** Sign in and read `Clerk.user`. The app loads; Settings is not offered (Admin-only, `App.jsx:2084`, `:2175`); the settings GET returns 200 with `revs`; no PUT; no console error. This proves the rep path loads; it cannot reach any B-3 save **(critic B12)**.
+
+### §8. Docs (same commit as each part)
+
+- **State §0.226 (a/b/c).** Shapes A-E, the hook, J-B5's remount with its words and the alive check, J-B11, J-B10, J-B12, the Train now merge, `once`. Committed hash, "harness deferred", NOT pushed.
+- **Guide §18b114 rule 10.**
+  - Panel tokens come from `usePanelRevs` as the panel opened.
+  - A landed save calls `landed`.
+  - A stale refusal goes to AdminView's one handler, which touches only a mounted asker.
+  - The guards say J-B11's words on `tookLatest`.
+  - A guarded save is `once`.
+  - Optimistic panels: one save in flight, released on the merged render, a keys-only rollback, never `revs`.
+  - No settings URL outside the sender and the app's load.
+- **OPEN_ITEMS.**
+  - Mark CLAUDE.md's "the screens send tokens from B-2 and B-3" done on dev.
+  - File:
+    - the one-time false refusal after a key the server derived;
+    - Train now's `config-changed` not taking the latest;
+    - own-button rethrows as unhandled rejections (`CategoryDetailChrome.jsx:39`, Features' `DataBtn` :279);
+    - edits typed during a panel's own save (dirty cleared on landing; pre-existing);
+    - PainPoints' string default and :135 (unverified in the browser);
+    - FunnelStages' default shape;
+    - Pipelines' demo defaults (:16-38);
+    - the inert "Import preset" buttons (Crews :133, Skills :69);
+    - App's `loadData` identity question;
+    - `saveAdminDrafts`' approximate "landed".
+  - Add settings-saves to `OPEN_ITEMS.md`'s run-time-paths list.
+- **CLAUDE.md** "Endpoint and data invariants": B-3 done, and the panel token rule in one line.
+- **`SESSION_HANDOFF.md`** last.
+
+### Critic points not taken
+
+- **A9 (a take-latest resets Sales Manager's `__qbTerrFilter` and `_spiffClaimFilter`):** already decided. JB2-6, which Jeff took as Recommended, says the take "resets the Sales Manager's two screen filters … as a reload does". `settingsAsLoaded` (`settingsDefaults.js:111-121`) is unchanged. It stays filed.
+- **B5's fix as written (`activeItemRef` / `epochRef` compared after the GET):** replaced by A2's alive ref. Reopening the same card sets the same `SETTINGS_ITEMS` object (`AdminView.jsx:127`), so neither the id nor the epoch moves, and the id/epoch check would still wipe the new mount. The problem B5 found is fixed.
+- **A4's formula and B4's words, as written:** A4's `canSave && !(stale && !canSave)` reduces to `canSave` and is used in that form. B4's suggested words are replaced by `LEAVE_STALE_PART` (JB3-5), which says what landed without promising "nothing else was lost".
+- **A3's registration-site fix (`useRegisterSave(…, once(handleSave))`):** taken in a different place. Wrapping the declaration (`const handleSave = once(async () => …)`) covers the own buttons and both guards. It also keeps the registration lines that `settings-leave-guard.test.mjs:97`, save-buttons :162 and harness 4037/4827 pin. Its cost is quota-plan :480.
+
+All other points (A1-A8, A10, B1-B3, B6-B15) were verified against the lines cited above and taken.
+
+### Questions for Jeff
+
+- **JB3-1. J-B5's words above a remounted panel.**
+  - Recommended: "These settings changed since this page loaded — it now shows the latest. Make your change again." Features adds "Enter the API key again." and Slack adds "Enter the webhook URL again."
+  - The words are cleared by Back, by another card, or by that panel's next save that lands.
+  - Alternative: the server's `STALE_ERROR`, which says "Reload the page".
+- **JB3-2. The leave guard after a stale refusal.**
+  - Recommended: J-B11's words, the "Save them" line hidden, Save shown only while something is still unsaved, Stay, and a neutral "Continue".
+  - Alternative: keep the red "Discard changes and continue" label.
+- **JB3-3. Connected apps.**
+  - Recommended: read the settings prop like every other panel. Its two settings GETs go, and its own loading and error states go with the load.
+  - Alternative: keep the self-fetch, with tokens from its own load. That needs a third token shape in S2 and S4.
+- **JB3-4. Edit brand. This replaces J-B10's "optimistic" for Edit brand (STEP-B.md:192-195), which you already answered (critic B15).**
+  - Recommended: handle the refusal inside the window. It takes the latest, re-seeds, says "The brand changed…" and stays open. The save is no longer optimistic, and the window cannot be closed while saving.
+  - Alternative: keep J-B10 as answered (optimistic, keys-only rollback). Then a stale refusal remounts Quote templates, which also drops that panel's own unsaved templates.
+- **JB3-5. Sales Manager's stale refusal.**
+  - Recommended: take the latest, drop the refused draft, and show the banner `listChanged('commission tier' | 'SPIFF')`.
+  - Leaving by the nav says J-B11's words. When something earlier in the same save landed, it says "Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved.", and Save stays while a draft is left.
+  - Alternative: J-B11's words always.
+- **JB3-6. Save enabled while saving or clean** (CustomFields, FunnelStages chrome; FlatList :73).
+  - Recommended: disable it (three one-line props).
+  - Alternative: leave as is; JB3-10 already stops the double send.
+- **JB3-7. Older defects in the lines B-3 rewrites.**
+  - Recommended: fix all three:
+    - (a) BlockTypes', JobTypes' and ProductTypes' Cancel leaves App's unsaved flag set;
+    - (b) AdminView's Discard keeps the failure line into the next guard;
+    - (c) `putSettings`' network failure is unchecked after a switch.
+  - Alternative: file them.
+- **JB3-8. Pipelines and Calendar, one save in flight.**
+  - Recommended: a second change while one is out is refused with "The last change is still saving — try again in a moment."
+  - Alternative: disable every control (9 callers in Pipelines, 3 in Calendar).
+- **JB3-9. Split B-3 into three commits (critic B14). J-B1 (ANSWERS.md:77-79) set B-3 as one.**
+  - Recommended: B-3a, the shell and every draft panel (~33 source files); B-3b, Pipelines, Calendar, Edit brand and Sales Manager (6); B-3c, Connected apps (2). Each has its own gates and browser check; the harness stays deferred to one run before any push.
+  - Alternative: one commit (~37 source files, ~13 tests, 59 hand-proven entries).
+- **JB3-10. "Save and continue" pressed while the panel's own save is still out (critic A3/B3).**
+  - Today the second send would be refused by the first save, and J-B11 would falsely say "Your changes were not saved."
+  - Recommended: every guarded save is `once(...)`, so a second save shares the first one's outcome (`SalesManagerTab.jsx:1040-1052` precedent). Cost: 24 declaration lines, quota-plan :480 re-pinned.
+  - Alternative: file it, and accept that the words can be false in that case.
+
+### Disagreements with STEP-B.md
+
+1. **§4 "every catch calls the one named take-the-latest helper."** B-3's panels call `panelStale`, AdminView's one J-B5 handler, which calls `takeLatestSettings`. S4 learns that delegate by binding, and S4b proves the handler.
+2. **§4 "a click-built save from the same render that read the list."** Pipelines and Calendar send `opened`, rebased by each landed save, with the gate held until the rebase renders. It is never newer than the render.
+3. **§4 "Optimistic panels (Pipelines, Calendar, Edit brand)."** Edit brand stops being optimistic, which needs your word (JB3-4).
+4. **§4 "Every other panel: AdminView remounts."** Sales Manager is not an AdminView panel (JB3-5), and Edit brand is handled in its window (JB3-4).
+5. **§4 Features' org check "added".** It comes from moving onto the sender. The one gap left, the network throw, is the sender's own and is fixed there for every caller.
+6. **§4/§5 leave out Train now's token** (`LeadScoringDetail.jsx:134`). It is added.
+7. **§4 "nowhere outside saveSettings.js but the three named GETs."** One remains, `useSettings.js`, once B-3c lands.
+8. **§2/J-B1 "B-3 every other screen" as one commit.** Three are proposed (JB3-9).
+
+### Open questions (unverified; the design holds either way)
+
+1. Whether React batches `takeLatestSettings`' copy update with the key bump. The copy is set first in either order.
+2. Whether Clerk reissues `clerkUser` or `organization` mid-session (`App.jsx:555`). `opened` is safe either way.
+3. Whether an org switch can happen while a guard dialog is open (z-index 99999).
+4. Whether a click can land between a promise continuation's state updates and the next render. The `[opened]` release makes this moot for Pipelines and Calendar.
+5. `saveAdminDrafts`' "landed" counts a `saveQuotas` that returned with nothing sent (`SalesManagerTab.jsx:1011-1014`).
+6. PainPoints' crash on the seeded string default, not run in the browser.
+
+---
+
+**Summary for Jeff.** Right now, if you or another Admin change the same setting in two tabs, the last save quietly overwrites the first. B-2 fixed that for the Teams, Territories and Users screens. B-3 does it for every other settings screen, about 30 panels plus the Sales Manager's commission plan and SPIFF list.
+
+When your save loses to a change that landed first:
+- the screen reloads that panel with the latest values and says "These settings changed since this page loaded — it now shows the latest. Make your change again.";
+- the "Unsaved changes" dialog says "Another change landed first… Your changes were not saved." instead of claiming your changes are still there;
+- Pipelines and the Holidays calendar allow one change at a time while a save is out;
+- the Brand window stays open and shows the latest brand;
+- a typed API key is cleared, with a request to enter it again.
+
+It also fixes a few older problems in the same lines: Cancel leaving a false "unsaved" warning, the dialog keeping an old error, the Train now button's next save being refused, and Connected apps fetching settings on its own.
+
+About 37 source files and 13 test files change. I recommend three commits, each with its own browser check: the main panels first (~33 files), then Pipelines, Calendar, Brand and Sales Manager (6), then Connected apps (2). The long harness run stays deferred until all of them are in, as you decided.
 
 ## 5. Proof
 

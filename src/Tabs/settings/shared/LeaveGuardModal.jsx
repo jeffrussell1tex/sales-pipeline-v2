@@ -8,10 +8,17 @@
 // it is the guard's alone while it is open: it takes the Escape before anything under
 // it, and passes it on only to the app's dialogs above it (escapeBlocked).
 //
+// A save refused because another landed first has taken the latest (state §0.226 —
+// J-B11, JB3-2): `failed` is 'stale', or 'stale-partial' when an earlier part of the
+// same save landed (JB3-5). The dialog says so; with nothing left to save it drops
+// "Save them, or discard" — there is nothing to discard — and its last button only
+// continues. Save stays offered while something is still unsaved (canSave).
+//
 // Module scope — a component defined inside its parent would be a new type on
 // every render and remount mid-save.
 import React from 'react';
 import { T } from './tokens.js';
+import { LEAVE_STALE, LEAVE_STALE_PART } from '../../../utils/settingsRevs.js';
 import { useApp } from '../../../AppContext';
 import { useEscapeLayer } from '../../../hooks/useEscapeLayer';
 
@@ -19,6 +26,7 @@ export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDis
     message = 'This panel has changes that have not been saved. Save them, or discard and continue.' }) {
     const app = useApp();
     useEscapeLayer(true, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);
+    const stale = failed === 'stale' || failed === 'stale-partial';
     return (
     <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center',
         background:'rgba(42,38,34,0.55)' }} onClick={saving ? undefined : onStay}>
@@ -28,12 +36,16 @@ export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDis
             <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:8 }}>Unsaved changes</div>
             {failed && (
                 <div style={{ fontSize:12.5, fontWeight:600, color:T.danger, marginBottom:10, fontFamily:T.sans }}>
-                    The save did not go through — the page behind this dialog shows why. Your changes are still here.
+                    {failed === 'stale-partial' ? LEAVE_STALE_PART
+                        : stale ? LEAVE_STALE
+                        : 'The save did not go through — the page behind this dialog shows why. Your changes are still here.'}
                 </div>
             )}
-            <div style={{ fontSize:13.5, color:T.inkMid, lineHeight:1.55, marginBottom:22 }}>
-                {message}
-            </div>
+            {!(stale && !canSave) && (
+                <div style={{ fontSize:13.5, color:T.inkMid, lineHeight:1.55, marginBottom:22 }}>
+                    {message}
+                </div>
+            )}
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {canSave && (
                     <button onClick={onSave} disabled={saving}
@@ -51,10 +63,10 @@ export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDis
                     Stay here
                 </button>
                 <button onClick={onDiscard} disabled={saving}
-                    style={{ padding:'10px 16px', background:'transparent', color:T.danger,
-                        border:`1px solid ${T.border}`, borderRadius:4, fontSize:13.5, fontWeight:500,
+                    style={{ padding:'10px 16px', background:'transparent', color:stale && !canSave ? T.inkMid : T.danger,
+                        border:`1px solid ${stale && !canSave ? T.borderStrong : T.border}`, borderRadius:4, fontSize:13.5, fontWeight:500,
                         cursor:saving?'default':'pointer', textAlign:'left', fontFamily:T.sans }}>
-                    Discard changes and continue
+                    {stale && !canSave ? 'Continue' : 'Discard changes and continue'}
                 </button>
             </div>
         </div>

@@ -75,7 +75,7 @@ test('the catalogue lists the panel, the card counts it, AdminView routes it', (
     assert.ok(av.includes("        'email-templates':      'email-templates',"), 'the DETAIL_PANELS gate, not just the route');
     const panel = code(read('src/Tabs/settings/salesProcess/EmailTemplatesDetail.jsx'));
     assert.ok(panel.includes('const TemplateEditor = ({ tpl, onChange, onDelete }) => {'), 'the editor is module scope, data as props (focus)');
-    assert.ok(panel.includes('            await putSettings({ emailTemplates: clean });'), 'saved through the settings PUT');
+    assert.ok(panel.includes('            const answer = await putSettings({ emailTemplates: clean }, opened);'), 'saved through the settings PUT, naming the tokens the panel opened with (state §0.226)');
     assert.ok(panel.includes("            setSaveError(e.message);\n            setSaving(false);\n            throw e;"), 'a refused save is shown and rethrown (the nav guard)');
 });
 

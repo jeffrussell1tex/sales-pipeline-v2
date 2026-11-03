@@ -144,9 +144,11 @@ export const scanText = (file, src, shared = sharedSetters()) => {
             const here = [...path, node];
             // The settings senders answer only in the org that asked — after a switch none of them
             // settles (src/Tabs/settings/shared/saveSettings.js: putSettings, and since §0.225 writeSettings,
-            // addToSettingsList and takeLatestSettings) — so awaiting one opens no window.
+            // addToSettingsList and takeLatestSettings) — so awaiting one opens no window. Since §0.226 a
+            // panel's panelStale too (src/Tabs/settings/shared/usePanelRevs.js): it settles only through
+            // AdminView's takeLatestSettings, or at once, awaiting nothing, where no AdminView holds the panel.
             const settles = !(node.argument && (node.argument.type === 'CallExpression' || node.argument.type === 'OptionalCallExpression')
-                && /^(putSettings|writeSettings|addToSettingsList|takeLatestSettings)$/.test(node.argument.callee.name));
+                && /^(putSettings|writeSettings|addToSettingsList|takeLatestSettings|panelStale)$/.test(node.argument.callee.name));
             if (node.type === 'AwaitExpression' && fns.length && settles) fns[fns.length - 1].awaits.push({ end: node.end, path: here });
             // x?.() is an OptionalCallExpression (state §0.207): the merge hook's four late sets and audit rows were
             // invisible to a scan of CallExpression alone.
@@ -227,6 +229,7 @@ test('the scanner sees what it is for: a late set, a late write, a write in an a
         'async function l() { await takeLatestSettings(f); setSettings(s => s); }',                     // nor does takeLatestSettings
         'async function m() { await x(); await putSettings({}); }',                                     // a late putSettings (JB2-11)
         'async function n() { await x(); await addToSettingsList("teams", f, {}); }',                   // a late addition to a list
+        'async function o() { await panelStale(e); setSettings(s => s); }',                             // nor does a panel's panelStale (state §0.226)
     ].join('\n');
     const misses = scanText('src/fixture.js', fixture).map((v) => `${v.at} ${v.what}`);
     assert.deepEqual(misses, ['1 setAccounts', '2 dbWrite', '3 dbWrite', '4 setUndoToast', '7 setLeads', '9 writeSettings', '12 putSettings', '13 addToSettingsList']);

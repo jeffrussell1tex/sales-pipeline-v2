@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -16,24 +17,31 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
     const [newItem, setNewItem] = useState('');
     const inputRef = useRef(null);
 
-    const handleSave = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         try {
             // A failure was only console.error'd and the dirty flag cleared anyway.
             // This file is generic, so that one bug applied to every settings key
             // rendered through it.
-            await putSettings({ [settingsKey]: items });
+            const answer = await putSettings({ [settingsKey]: items }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, [settingsKey]: items }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);
@@ -70,7 +78,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
             rightActions={
                 <div style={{ display:'flex', gap:8 }}>
                     <button type="button" onClick={handleCancel} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
-                    <button type="button" onClick={handleSave} disabled={saving} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:saving?'default':'pointer', fontFamily:T.sans }}>{saving?'Saving…':'Save changes'}</button>
+                    <button type="button" onClick={handleSave} disabled={!dirty || saving} style={{ padding:'7px 14px', background:(!dirty || saving) ? T.borderStrong : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:(!dirty || saving) ? 'default' : 'pointer', fontFamily:T.sans }}>{saving?'Saving…':'Save changes'}</button>
                 </div>
             }
         >

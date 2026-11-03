@@ -104,3 +104,23 @@ AskUserQuestion:
   (Clerk ids) stays filed.
 - **The rest:** "Take all Recommended" — JB2-1 to JB2-6, JB2-9 to JB2-11 and
   JB2-13 as written in STEP-B.md §4a.
+
+### B-3 (2 November 2026)
+
+Asked after B-3's map (STEP-B.md §4b, "Questions for Jeff"), through
+AskUserQuestion (Jeff, "Start B-3"):
+
+- **JB3-9, the split:** "Three commits" — B-3a the shell (AdminView's remount,
+  both leave guards) and every draft panel; B-3b Pipelines, Calendar, Edit
+  brand and the Sales Manager; B-3c Connected apps; each with its own gates
+  and browser check, the harness deferred to one scoped run over B-2 and all
+  of B-3 before any push. J-B1's "B-3 every other screen" as one commit
+  yields to it.
+- **JB3-4, Edit brand:** "Stay open, show latest" — the window handles its
+  stale refusal itself: it takes the latest, re-seeds, says "The brand
+  changed since this window opened — it now shows the latest. Make your
+  change again." and stays open; its save is no longer optimistic, and the
+  window cannot be closed while saving. J-B10's "optimistic" yields to it for
+  Edit brand.
+- **The rest:** "Take all Recommended" — JB3-1 to JB3-3, JB3-5 to JB3-8 and
+  JB3-10 as written in STEP-B.md §4b.

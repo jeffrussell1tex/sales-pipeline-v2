@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -51,7 +52,10 @@ export const LeadConvBenchmarks = ({ settings, setSettings, setSettingsDirty, se
         setDirty(true);
     };
 
-    const handleSave = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         // Send ONLY the key this panel owns. It used to PUT the entire settings
         // object, so every unrelated key was rewritten from this component's
@@ -59,13 +63,17 @@ export const LeadConvBenchmarks = ({ settings, setSettings, setSettingsDirty, se
         // load. settings.mjs merges on 'key' in data, so a narrow patch is correct.
         setSaveError('');
         try {
-            await putSettings({ leadConvBenchmarks: rows });
+            const answer = await putSettings({ leadConvBenchmarks: rows }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, leadConvBenchmarks: rows }));
+            landed(answer);
             setDirty(false);
             setSaved2(true);
             setTimeout(() => setSaved2(false), 2000);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             // The banner above the table is where the user is looking (§18b32);
             // a console.error here was the only report of a refused save.
             setSaveError(e.message || 'Save failed.');
@@ -75,7 +83,7 @@ export const LeadConvBenchmarks = ({ settings, setSettings, setSettingsDirty, se
         } finally {
             setSaving(false);
         }
-    };
+    });
     // Hand the leave guard this panel's unsaved state and its save (state §0.170).
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

@@ -18,6 +18,7 @@
 // no decision, the backup is emailed (quote-reminders.mjs).
 import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -90,6 +91,9 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
     const [saving,      setSaving]      = useState(false);
     const [saveError,   setSaveError]   = useState('');
     const [trialDiscount, setTrialDiscount] = useState(18);
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     // Who may be named: the org's active Admins and Managers. A name a tier already
     // holds that is no longer one stays listed and marked — the server refuses it.
@@ -131,7 +135,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
         setTiers(JSON.parse(JSON.stringify(savedTiers))); setMode(savedMode); setNeedsChoice(new Set());
         setDirty(false); setSaveError('');
     };
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         if (mode === 'person' && tiers.some(t => needsChoice.has(t.id) && !t.approverUserId)) {
             // Thrown, not returned (state §0.170): the leave guard's "Save and
             // continue" runs this too, and a return let it move on, the edit lost.
@@ -142,11 +146,15 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
         const clean = cleanApprovalTiers(tiers, mode);
         setSaving(true);
         try {
-            await putSettings({ approvalTiers: clean, approvalRouting: mode });
+            const answer = await putSettings({ approvalTiers: clean, approvalRouting: mode }, opened);
             setSettings(prev => ({ ...prev, approvalTiers: clean, approvalRouting: mode }));
+            landed(answer);
             setTiers(JSON.parse(JSON.stringify(clean))); setNeedsChoice(new Set());
             setSaveError(''); setDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved (a 400 names why).
             setSaveError(e.message);
             // Clear the spinner, then rethrow: the leave guard's "Save and
@@ -155,7 +163,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Hand the leave guard this panel's unsaved state and its save (state §0.170).
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

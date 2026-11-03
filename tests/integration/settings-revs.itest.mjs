@@ -493,3 +493,94 @@ test('the screens\' sender, against the handler: a stale token throws .stale; an
         setRequestOrg(null);
     }
 });
+
+// B-3a's keys through the screens' sender (state §0.226 — batch 4b-3, step B-3a; STEP-B.md §4b §5, Integration 1-3).
+// These pass on B-1's server and B-2's sender: they cover the keys B-3's panels send, they are not proof of B-3 — a
+// panel's hook and handlers are proven run as written in tests/settings-saves.test.mjs. Each save is made as a panel
+// makes it: `putSettings(payload, opened)`, `opened` the tokens of the copy as the panel opened, merged after a landing
+// as the hook's `landed` merges them (revsAfter). 1. The Skills page's three keys, one moved by another tab: `.stale`
+// names that key alone, nothing written, no audit. 2. A save holding other keys' tokens, one of them moved: only the
+// payload's keys are named, and it lands. 3. Features' typed key beside a stale `aiSettings` token: refused before the
+// key is read, nothing written, the stored key as it was.
+test('B-3a\'s keys through the sender: a three-key save names only the key that moved; a token held for another key never refuses a save; a typed key beside a stale token is never stored', async () => {
+    await seedA();
+    const { putSettings } = await import('../../src/Tabs/settings/shared/saveSettings.js');
+    const { setRequestOrg } = await import('../../src/utils/storage.js');
+    const { STALE_ERROR, revsAfter } = await import('../../src/utils/settingsRevs.js');
+    const savedWindow = globalThis.window, savedFetch = globalThis.fetch;
+    globalThis.window = {};               // first: dbFetch reads window.__getClerkToken — none here, the auth mock signs in
+    const sent = [];                      // the bodies the sender PUT, as the handler read them
+    // The database driver queries over fetch too: only the app's own paths are the screen's requests.
+    globalThis.fetch = async (url, opts = {}) => {
+        if (!(typeof url === 'string' && url.startsWith('/.netlify/functions/'))) return savedFetch(url, opts);
+        assert.equal(url, '/.netlify/functions/settings', 'the sender asks the settings function alone');
+        const method = opts.method || 'GET';
+        const body = opts.body === undefined ? undefined : JSON.parse(opts.body);
+        if (method === 'PUT') sent.push(body);
+        const r = await call(A, body, method);
+        return new Response(JSON.stringify(r.body), { status: r.status });
+    };
+    setRequestOrg(A);
+    try {
+        // 1. Skills & certifications opens: its tokens are the copy's as loaded. Its first save lands and answers the
+        // three keys' tokens, merged into what it holds.
+        let opened = { ...((await get(A)).revs || {}) };
+        const SKILLS = ['dispatchSkills', 'dispatchCerts', 'dispatchLicenses'];
+        const first = await putSettings({
+            dispatchSkills: [{ id: 'sk_itest_setrevs', name: 'Brazing', category: 'Field', color: '#7a5a3c' }],
+            dispatchCerts: [{ id: 'ct_itest_setrevs', name: 'EPA 608', renewalDays: 365 }],
+            dispatchLicenses: ['Apprentice', 'Journeyman'],
+        }, opened);
+        assert.deepEqual(Object.keys(first.revs).sort(), [...SKILLS].sort(), 'the three keys\' tokens answered');
+        opened = revsAfter(opened, first.revs);
+        // Another tab saves the certifications alone.
+        const other = await call(A, { dispatchCerts: [{ id: 'ct_itest_setrevs_other', name: 'Other tab cert', renewalDays: 30 }], ifRevs: { dispatchCerts: opened.dispatchCerts } });
+        assert.equal(other.status, 200, JSON.stringify(other.body));
+        const afterOther = await extraText(A), n = await audits(A);
+        // The page saves all three again with the tokens it holds: refused, naming only the key that moved.
+        await assert.rejects(putSettings({
+            dispatchSkills: [{ id: 'sk_itest_setrevs', name: 'Brazing (stale tab)', category: 'Field', color: '#7a5a3c' }],
+            dispatchCerts: [{ id: 'ct_itest_setrevs', name: 'EPA 608 (stale tab)', renewalDays: 365 }],
+            dispatchLicenses: ['Apprentice', 'Journeyman', 'Master'],
+        }, opened), (e) => {
+            assert.deepEqual(e.stale, ['dispatchCerts'], 'REGRESSION: the two unmoved keys refused too — the tokens a landed save answered were not the ones stored');
+            assert.equal(e.message, STALE_ERROR);
+            return true;
+        });
+        assert.deepEqual(sent.at(-1).ifRevs, Object.fromEntries(SKILLS.map((k) => [k, opened[k]])), 'each key\'s token as the page holds it');
+        assert.equal(await extraText(A), afterOther, 'nothing written');
+        assert.equal(await audits(A), n, 'no audit');
+
+        // 2. A save holding other keys' tokens — the certifications' now stale — names only its own keys, and lands.
+        assert.notEqual(opened.dispatchCerts, (await get(A)).revs.dispatchCerts, 'the page holds a moved token for a key it does not send');
+        const skillsOnly = await putSettings({ dispatchSkills: [{ id: 'sk_itest_setrevs', name: 'Soldering', category: 'Field', color: '#7a5a3c' }] }, opened);
+        assert.deepEqual(sent.at(-1).ifRevs, { dispatchSkills: opened.dispatchSkills }, 'REGRESSION: a token for a key the save does not send went with it');
+        assert.deepEqual(Object.keys(skillsOnly.revs), ['dispatchSkills'], 'only the key sent');
+        const stored = (await rowOf(A)).extra;
+        assert.deepEqual(stored.dispatchSkills.map((s) => s.name), ['Soldering']);
+        assert.deepEqual(stored.dispatchCerts.map((c) => c.name), ['Other tab cert'], 'the other tab\'s save kept');
+        opened = revsAfter(opened, skillsOnly.revs);
+        assert.equal(opened.dispatchSkills, (await get(A)).revs.dispatchSkills, 'the token held is the next GET\'s');
+
+        // 3. Features opens on a row holding a key; another tab saves the AI settings; the page saves its flags and a
+        // typed key with the tokens it opened with: refused, the stored key as it was.
+        await db.update(settings).set({ extra: { ...(await rowOf(A)).extra, anthropicApiKey: 'aa:bb:cc' } }).where(eq(settings.orgId, A));
+        const featuresOpened = { ...((await get(A)).revs || {}) };
+        const aiOther = await call(A, { aiSettings: { tone: 'Other tab' }, ifRevs: { aiSettings: featuresOpened.aiSettings ?? null } });
+        assert.equal(aiOther.status, 200, JSON.stringify(aiOther.body));
+        const afterAi = await extraText(A), m = await audits(A);
+        await assert.rejects(putSettings({ aiSettings: { tone: 'Stale tab' }, featureFlags: { itestFlag: true }, anthropicApiKey: 'sk-ant-itest-setrevs-typed' }, featuresOpened), (e) => {
+            assert.deepEqual(e.stale, ['aiSettings'], 'the key that moved, alone');
+            assert.equal(e.message, STALE_ERROR);
+            return true;
+        });
+        assert.ok('anthropicApiKey' in sent.at(-1).ifRevs && 'aiSettings' in sent.at(-1).ifRevs, 'the typed key and the AI settings each named a token');
+        assert.equal(await extraText(A), afterAi, 'REGRESSION: a refused save wrote something');
+        assert.equal((await rowOf(A)).extra.anthropicApiKey, 'aa:bb:cc', 'REGRESSION: the typed key replaced the stored one');
+        assert.equal(await audits(A), m, 'no audit');
+        await bUntouched();
+    } finally {
+        globalThis.window = savedWindow; globalThis.fetch = savedFetch;
+        setRequestOrg(null);
+    }
+});

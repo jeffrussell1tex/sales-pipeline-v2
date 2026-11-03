@@ -333,7 +333,7 @@ test('product & service types: settings.mjs carries productTypes in BOTH halves 
     const panel = code(read('src/Tabs/settings/quoting/ProductTypesDetail.jsx'));
     assert.ok(panel.includes("import { cleanProductTypes, BUILTIN_PRODUCT_TYPES, JOB_LINE_TYPES } from '../../../utils/invoices.js';"), 'one vocabulary');
     assert.ok(panel.includes('const payload = { productTypes: cleanProductTypes(types) };'), 'saved cleaned');
-    assert.ok(panel.includes('await putSettings(payload);'), 'through the shared save (a refusal throws)');
+    assert.ok(panel.includes('const answer = await putSettings(payload, opened);'), 'through the shared save (a refusal throws), naming the tokens the panel opened with (state §0.226)');
     assert.ok(panel.includes("setError('Could not save: ' + e.message);"), 'and is shown');
     assert.ok(panel.includes('{builtin ? <span/> : ('), 'a built-in cannot be removed');
     assert.ok(!panel.includes('updatedAt="') && !panel.includes('updatedBy='), 'no typed edit history');

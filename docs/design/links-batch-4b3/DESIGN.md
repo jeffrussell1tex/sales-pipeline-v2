@@ -31,7 +31,9 @@ nothing in §2 Step A. Step C mapped and built 2 Nov as state §0.222 (guide
 Step B mapped 2 Nov (its plan, the critics' changes and Jeff's answers in
 STEP-B.md, ANSWERS.md); B-1, the server, built 2 Nov as state §0.224 (guide
 §18b114); B-2, the shared sender and the people screens, built 2 Nov as
-state §0.225 (guide §18b114 rule 9; STEP-B.md §4a); B-3 to come.
+state §0.225 (guide §18b114 rule 9; STEP-B.md §4a); B-3a, the shell and
+every draft panel, built 2-3 Nov as state §0.226 (guide §18b114 rule 10;
+STEP-B.md §4b); B-3b and B-3c to come.
 Step D mapped and built 2 Nov as state §0.223 (guide §18b113) — its plan
 and Jeff's four answers in STEP-D.md; the integration proof in its own
 suite (plan-links.itest.mjs), not settings-links as §5 named (that suite's

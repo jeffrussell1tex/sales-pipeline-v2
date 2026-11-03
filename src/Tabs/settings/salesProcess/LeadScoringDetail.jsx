@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { putSettings } from '../shared/saveSettings.js';
+// The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
+import { usePanelRevs } from '../shared/usePanelRevs.js';
+import { revsAfter } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -97,8 +100,11 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
     const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    // The tokens as this panel opened (state §0.226): every save names them, a landed save merges what it answered.
+    const { opened, landed, reopen, panelStale, once } = usePanelRevs(settings, setSettings);
 
-    useEffect(() => { const s = seed(); setCfg(s); setSaved(s); setDirty(false); /* eslint-disable-next-line */ }, [settings?.leadScoring]);
+    // Re-seeded from the prop, the draft takes the prop's tokens with it (state §0.226).
+    useEffect(() => { const s = seed(); setCfg(s); setSaved(s); setDirty(false); reopen(); /* eslint-disable-next-line */ }, [settings?.leadScoring]);
 
     const update = (patch) => { setCfg(prev => ({ ...prev, ...patch })); setDirty(true); };
     const updateFitRules = (rules) => { setCfg(prev => ({ ...prev, fit: { ...prev.fit, rules } })); setDirty(true); };
@@ -131,7 +137,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || `Training refused (${res.status})`);
-            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring }));
+            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring, revs: revsAfter(prev.revs, data.revs) }));
             setTrainMsg(trainNowMessage(data));
         } catch (e) {
             setTrainMsg({ ok: false, text: e.message });
@@ -140,7 +146,8 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
 
     const handleCancel = () => { const s = JSON.parse(JSON.stringify(saved)); setCfg(s); setDirty(false); };
     const handleReset  = () => { setCfg(JSON.parse(JSON.stringify(DEFAULT_LEAD_SCORING))); setDirty(true); };
-    const handleSave   = async () => {
+    // One save at a time: the leave guard's Save while this one is out shares its outcome (state §0.226 — JB3-10).
+    const handleSave   = once(async () => {
         setSaving(true);
         // Was fire-and-forget: dbFetch resolves for ANY status (guide 18b1), so a
         // 403 from the Admin-only PUT /settings cleared the dirty flag and left the
@@ -149,11 +156,14 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
         // else changed meanwhile.
         setSaveError('');
         try {
-            await putSettings({ leadScoring: cfg });
+            const answer = await putSettings({ leadScoring: cfg }, opened);
             setSettings(prev => ({ ...prev, leadScoring: cfg }));
+            landed(answer);
             setSaved(JSON.parse(JSON.stringify(cfg)));
             setDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView shows the latest and says so (state §0.226 — J-B5).
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(`Lead scoring not saved — ${e.message}`);
             // Clear the spinner, then rethrow: the leave guard's "Save and
             // continue" runs this too, and only a throw keeps it from moving on.
@@ -161,7 +171,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Hand the leave guard this panel's unsaved state and its save (state §0.170).
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

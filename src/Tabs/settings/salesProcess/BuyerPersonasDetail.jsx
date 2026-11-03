@@ -5,6 +5,7 @@ import { useApp } from '../../../AppContext';
 import { unarchived } from '../../../utils/pickLink.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -110,23 +111,30 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     const totalContacts = Object.values(contactCounts).reduce((a, b) => a + b, 0);
 
     // ── Handlers ──
-    const handleSave = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
             // the try — a failed save reported success.
-            await putSettings({ buyerPersonas: personas });
+            const answer = await putSettings({ buyerPersonas: personas }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, buyerPersonas: personas }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

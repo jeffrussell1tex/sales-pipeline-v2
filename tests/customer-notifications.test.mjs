@@ -165,7 +165,7 @@ test('the panel, the catalogue and the routing exist; the dispatch tab shows the
     const p = code(read('src/Tabs/settings/dispatch/DispatchCustomerNotificationsDetail.jsx'));
     assert.ok(p.includes("import { cleanCustomerNotifications } from '../../../utils/customerNotifications.js';"), 'one normaliser on both sides');
     assert.ok(p.includes('const payload = { customerNotifications: cleanCustomerNotifications(cfg) };'));
-    assert.ok(p.includes('await putSettings(payload);'), 'the shared save (§18b1)');
+    assert.ok(p.includes('const answer = await putSettings(payload, opened);'), 'the shared save (§18b1), naming the tokens the panel opened with (state §0.226)');
     assert.ok(code(read('src/Tabs/settings/catalogue.js')).includes("id:'dsp-customer-notify'"));
     const av = code(read('src/Tabs/AdminView.jsx'));
     assert.ok(av.includes("if (id === 'dsp-customer-notify') return <DispatchCustomerNotificationsDetail"));

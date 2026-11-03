@@ -45,6 +45,17 @@ export const TEAM_MOVE_CHANGED = 'Saved, but the team list changed since this pa
 // …and when the latest could not be read: the same, without saying the page shows it. Neither says Reload (R16b).
 export const TEAM_MOVE_CHANGED_UNREAD = 'Saved, but the team list changed since this page loaded. Save changes tries the list again.';
 
+// The settings panels' words (state §0.226 — batch 4b-3, step B-3). A panel whose save was refused as stale is drawn
+// again on the latest (J-B5), these words above it (JB3-1) until Back, another card, or its next save that lands.
+export const PANEL_CHANGED = 'These settings changed since this page loaded — it now shows the latest. Make your change again.';
+// Features: a typed API key is never kept across the latest — nor shown back (J-B12).
+export const PANEL_CHANGED_KEY = PANEL_CHANGED + ' Enter the API key again.';
+// The leave guards, when "Save changes and continue" was refused as stale and the page took the latest (J-B11,
+// verbatim)…
+export const LEAVE_STALE = 'Another change landed first — the page now shows the latest. Your changes were not saved.';
+// …and when an earlier part of the same save landed before the part refused (JB3-5 — the Sales Manager's drafts).
+export const LEAVE_STALE_PART = 'Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved.';
+
 const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** The tokens a stored `extra` holds: { key: token } — only text tokens; anything else holds none. */

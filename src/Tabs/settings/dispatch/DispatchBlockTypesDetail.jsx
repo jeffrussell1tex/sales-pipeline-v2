@@ -6,9 +6,10 @@
 // its own vocabulary rather than a hardcoded list.
 import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 
 const SWATCHES = ['#4d6b3d', '#9c3a2e', '#3a5a7a', '#b87333', '#7a6a48', '#5a544c', '#8a8378'];
 
@@ -23,6 +24,9 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
     const [dirty,  setDirty]  = useState(false);
     const [saving, setSaving] = useState(false);
     const [error,  setError]  = useState('');
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     const touch = () => { setDirty(true); setSettingsDirty && setSettingsDirty(true); };
 
@@ -34,26 +38,21 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
         setNewName(''); setError(''); touch();
     };
 
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         setSaving(true); setError('');
         try {
             const payload = { dispatchBlockTypes: types };
-            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!stillOrg(askedOrg)) return;
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('You need the Admin role to change these types.');
-                let msg = 'HTTP ' + res.status;
-                try { const d = await res.json(); if (d?.error) msg = d.error; } catch (_) {}
-                throw new Error(msg);
-            }
+            // Through the shared sender (state §0.226): it names the tokens this panel opened with, throws a refusal (a
+            // stale one carrying .stale), and after an org switch never answers (state §0.175).
+            const answer = await putSettings(payload, opened);
             setSettings(prev => ({ ...prev, ...payload }));
+            landed(answer);
             setDirty(false);
             setSettingsDirty && setSettingsDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             // Surfaced, never swallowed — a failed PUT must not look like a save.
             setError('Could not save: ' + e.message);
             // Rethrow for the navigation guard. `finally` still clears the
@@ -62,7 +61,7 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
         } finally {
             setSaving(false);
         }
-    };
+    });
 
     useRegisterSave(settingsSaveRef, dirty, handleSave);
 
@@ -77,6 +76,7 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
             onCancel={() => {
                 setTypes(JSON.parse(JSON.stringify(settings?.dispatchBlockTypes || [])));
                 setDirty(false); setError('');
+                setSettingsDirty && setSettingsDirty(false);   // App's unsaved flag too: touch() set it (state §0.226)
             }}
             primaryAction={handleSave}
             primaryLabel={saving ? 'Saving…' : 'Save changes'}

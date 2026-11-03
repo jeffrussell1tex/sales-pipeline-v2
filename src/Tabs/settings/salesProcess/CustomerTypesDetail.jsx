@@ -4,6 +4,7 @@ import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -28,15 +29,22 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const [addErr, setAddErr]   = useState('');
 
     const handleCancel = () => { setTiers(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
-    const handleSave   = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         try {
-            await putSettings({ customerTypeTiers: tiers });
+            const answer = await putSettings({ customerTypeTiers: tiers }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, customerTypeTiers: tiers }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
@@ -46,7 +54,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Hand the leave guard this panel's unsaved state and its save (state §0.170).
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);

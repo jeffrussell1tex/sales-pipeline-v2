@@ -103,27 +103,30 @@ test('the settings PUT: a seeded key it is not sent keeps what is stored, or the
 
 // ── the app's copy follows the save ────────────────────────────────────────
 
+// Each send names the tokens its panel opened with (`opened`, from usePanelRevs), and the tokens a landed save
+// answered are merged straight after the copy is set (`landed(answer)`) — else the panel's next save is refused
+// against itself (state §0.226).
 const AFTER_SAVE = [
-    ['salesProcess/CustomerTypesDetail.jsx',    'putSettings({ customerTypeTiers: tiers })',  'setSettings(prev => ({ ...prev, customerTypeTiers: tiers }));'],
-    ['salesProcess/AccountSegmentsDetail.jsx',  'putSettings({ accountSegmentTiers: tiers })', 'setSettings(prev => ({ ...prev, accountSegmentTiers: tiers }));'],
-    ['salesProcess/IndustriesDetail.jsx',       'putSettings({ industries })',                'setSettings(prev => ({ ...prev, industries }));'],
-    ['salesProcess/FunnelStagesDetail.jsx',     'putSettings({ funnelStages: stages })',      'setSettings(prev => ({ ...prev, funnelStages: stages }));'],
-    ['salesProcess/KPIThresholdsDetail.jsx',    'putSettings({ kpiThresholds: rows })',       'setSettings(prev => ({ ...prev, kpiThresholds: rows }));'],
-    ['salesProcess/CustomFieldsDetail.jsx',     'putSettings({ customFieldsByObject: fields })', 'setSettings(prev => ({ ...prev, customFieldsByObject: fields }));'],
-    ['salesProcess/PainPointsDetail.jsx',       'putSettings({ painPoints: groups })',        'setSettings(prev => ({ ...prev, painPoints: groups }));'],
-    ['salesProcess/FlatListDetail.jsx',         'putSettings({ [settingsKey]: items })',      'setSettings(prev => ({ ...prev, [settingsKey]: items }));'],
-    ['salesProcess/BuyerPersonasDetail.jsx',    'putSettings({ buyerPersonas: personas })',   'setSettings(prev => ({ ...prev, buyerPersonas: personas }));'],
-    ['salesProcess/LeadConversionDetail.jsx',   'putSettings({ leadConvBenchmarks: rows })',  'setSettings(prev => ({ ...prev, leadConvBenchmarks: rows }));'],
-    ['salesProcess/LeadScoringDetail.jsx',      'putSettings({ leadScoring: cfg })',          'setSettings(prev => ({ ...prev, leadScoring: cfg }));'],
-    ['salesProcess/LeadVisibilityDetail.jsx',   'putSettings(patch)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
-    ['company/CompanyProfileDetail.jsx',        'putSettings(patch)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
-    ['company/FiscalYearDetail.jsx',            'putSettings(payload)',                       'setSettings(prev => ({ ...prev, ...payload }));'],   // only what changed (state §0.203)
-    ['dispatch/DispatchSkillsDetail.jsx',       'putSettings(payload)',                       'setSettings(prev => ({ ...prev, ...payload }));'],
-    ['dispatch/DispatchCrewsDetail.jsx',        'putSettings({ dispatchCrews: crews })',      'setSettings(prev => ({ ...prev, dispatchCrews: crews }));'],
-    ['dispatch/DispatchJobTemplatesDetail.jsx', 'putSettings({ dispatchJobTemplates: clean })', 'setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));'],
-    ['dispatch/DispatchCustomerNotificationsDetail.jsx', 'putSettings(payload)',              'setSettings(prev => ({ ...prev, ...payload }));'],
-    ['dispatch/DispatchPropertyTypesDetail.jsx', 'putSettings({ dispatchPropertyTypes: clean })', 'setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));'],
-    ['quoting/QuoteTemplatesDetail.jsx',        'putSettings({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate })',
+    ['salesProcess/CustomerTypesDetail.jsx',    'putSettings({ customerTypeTiers: tiers }, opened)',  'setSettings(prev => ({ ...prev, customerTypeTiers: tiers }));'],
+    ['salesProcess/AccountSegmentsDetail.jsx',  'putSettings({ accountSegmentTiers: tiers }, opened)', 'setSettings(prev => ({ ...prev, accountSegmentTiers: tiers }));'],
+    ['salesProcess/IndustriesDetail.jsx',       'putSettings({ industries }, opened)',                'setSettings(prev => ({ ...prev, industries }));'],
+    ['salesProcess/FunnelStagesDetail.jsx',     'putSettings({ funnelStages: stages }, opened)',      'setSettings(prev => ({ ...prev, funnelStages: stages }));'],
+    ['salesProcess/KPIThresholdsDetail.jsx',    'putSettings({ kpiThresholds: rows }, opened)',       'setSettings(prev => ({ ...prev, kpiThresholds: rows }));'],
+    ['salesProcess/CustomFieldsDetail.jsx',     'putSettings({ customFieldsByObject: fields }, opened)', 'setSettings(prev => ({ ...prev, customFieldsByObject: fields }));'],
+    ['salesProcess/PainPointsDetail.jsx',       'putSettings({ painPoints: groups }, opened)',        'setSettings(prev => ({ ...prev, painPoints: groups }));'],
+    ['salesProcess/FlatListDetail.jsx',         'putSettings({ [settingsKey]: items }, opened)',      'setSettings(prev => ({ ...prev, [settingsKey]: items }));'],
+    ['salesProcess/BuyerPersonasDetail.jsx',    'putSettings({ buyerPersonas: personas }, opened)',   'setSettings(prev => ({ ...prev, buyerPersonas: personas }));'],
+    ['salesProcess/LeadConversionDetail.jsx',   'putSettings({ leadConvBenchmarks: rows }, opened)',  'setSettings(prev => ({ ...prev, leadConvBenchmarks: rows }));'],
+    ['salesProcess/LeadScoringDetail.jsx',      'putSettings({ leadScoring: cfg }, opened)',          'setSettings(prev => ({ ...prev, leadScoring: cfg }));'],
+    ['salesProcess/LeadVisibilityDetail.jsx',   'putSettings(patch, opened)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
+    ['company/CompanyProfileDetail.jsx',        'putSettings(patch, opened)',                         'setSettings(prev => ({ ...prev, ...patch }));'],
+    ['company/FiscalYearDetail.jsx',            'putSettings(payload, opened)',                       'setSettings(prev => ({ ...prev, ...payload }));'],   // only what changed (state §0.203)
+    ['dispatch/DispatchSkillsDetail.jsx',       'putSettings(payload, opened)',                       'setSettings(prev => ({ ...prev, ...payload }));'],
+    ['dispatch/DispatchCrewsDetail.jsx',        'putSettings({ dispatchCrews: crews }, opened)',      'setSettings(prev => ({ ...prev, dispatchCrews: crews }));'],
+    ['dispatch/DispatchJobTemplatesDetail.jsx', 'putSettings({ dispatchJobTemplates: clean }, opened)', 'setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));'],
+    ['dispatch/DispatchCustomerNotificationsDetail.jsx', 'putSettings(payload, opened)',              'setSettings(prev => ({ ...prev, ...payload }));'],
+    ['dispatch/DispatchPropertyTypesDetail.jsx', 'putSettings({ dispatchPropertyTypes: clean }, opened)', 'setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));'],
+    ['quoting/QuoteTemplatesDetail.jsx',        'putSettings({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }, opened)',
                                                 'setSettings(prev => ({ ...prev, quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }));'],
 ];
 
@@ -133,6 +136,8 @@ test('every settings screen changes the app\'s copy only once its save has lande
         assert.equal(count(s, mirror), 1, `${f}: the copy is set once`);
         before(s, 'await ' + save, mirror, `${f}: after the save, inside the try — a refused save showed in the app anyway`);
         assert.ok(!/let snapshot;|setSettings\(snapshot\)/.test(s), `${f}: no snapshot to put back`);
+        assert.equal(count(s, 'landed(answer);'), 1, `${f}: the tokens the save answered are merged once`);
+        before(s, mirror, 'landed(answer);', `${f}: the tokens the save answered follow the copy — its next save names them (state §0.226)`);
     }
 });
 
@@ -209,7 +214,8 @@ test('every way out of a tab asks first on a page with unsaved edits — the gua
     assert.ok(app.includes("if (navigateToRef.current('pipeline')) setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(null); setShowModal(true); }, 100);"),
         'the new deal opens only once the pipeline is open — not over the dialog — and only in the org it was asked in (§0.175)');
     const save = between(app, 'const navGuardSave = React.useCallback(async () => {', '}, [pendingNavTab, setActiveTab]);');
-    assert.ok(/try \{\s*await save\(\);\s*\} catch \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(true\);\s*return;/.test(save), 'a save that throws keeps the dialog');
+    assert.ok(/try \{\s*await save\(\);\s*\} catch \(e\) \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(e\?\.tookLatest \? \(e\.partial \? 'stale-partial' : 'stale'\) : true\);\s*return;/.test(save),
+        'a save that throws keeps the dialog — one refused as stale, the latest taken, says so (state §0.226 — J-B11)');
 });
 
 // ── the Sales Manager's Administration page ────────────────────────────────

@@ -10,6 +10,7 @@
 // on their ids); their kinds are the Admin's to change.
 import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { putSettings } from '../shared/saveSettings.js';
@@ -32,6 +33,9 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
     const [dirty,   setDirty]   = useState(false);
     const [saving,  setSaving]  = useState(false);
     const [error,   setError]   = useState('');
+    // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
+    // save while one is out shares the first one's outcome.
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     const touch = () => { setDirty(true); setSettingsDirty && setSettingsDirty(true); };
 
@@ -46,23 +50,27 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
     const setName = (id, name)     => { setTypes(p => p.map(t => t.id === id ? { ...t, name } : t)); touch(); };
     const remove  = (id)           => { setTypes(p => p.filter(t => t.id !== id)); touch(); };
 
-    const handleSave = async () => {
+    const handleSave = once(async () => {
         setSaving(true); setError('');
         try {
             const payload = { productTypes: cleanProductTypes(types) };
-            await putSettings(payload);
+            const answer = await putSettings(payload, opened);
             setSettings(prev => ({ ...prev, ...payload }));
+            landed(answer);
             setTypes(payload.productTypes);
             setDirty(false);
             setSettingsDirty && setSettingsDirty(false);
         } catch (e) {
+            // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
+            // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
+            if (e.stale && await panelStale(e)) throw e;
             // Surfaced, never swallowed — a failed PUT must not look like a save.
             setError('Could not save: ' + e.message);
             throw e;
         } finally {
             setSaving(false);
         }
-    };
+    });
 
     useRegisterSave(settingsSaveRef, dirty, handleSave);
 
@@ -74,7 +82,10 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
             subtitle="What a price-book item is, and the kind of line it becomes on a job made from an accepted quote."
             onBack={onBack}
             dirty={dirty}
-            onCancel={() => { setTypes(cleanProductTypes(settings?.productTypes)); setDirty(false); setError(''); }}
+            onCancel={() => {
+                setTypes(cleanProductTypes(settings?.productTypes)); setDirty(false); setError('');
+                setSettingsDirty && setSettingsDirty(false);   // App's unsaved flag too: touch() set it (state §0.226)
+            }}
             primaryAction={handleSave}
             primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

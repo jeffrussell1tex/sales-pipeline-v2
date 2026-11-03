@@ -4,6 +4,7 @@ import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -54,15 +55,22 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const [addErr, setAddErr]       = useState('');
 
     const handleCancel = () => { setFields(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
-    const handleSave   = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         try {
-            await putSettings({ customFieldsByObject: fields });
+            const answer = await putSettings({ customFieldsByObject: fields }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
             setSettings(prev => ({ ...prev, customFieldsByObject: fields }));
+            landed(answer);
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
@@ -76,7 +84,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
             throw e;
         }
         setSaving(false);
-    };
+    });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     useRegisterSave(settingsSaveRef, dirty, handleSave);
@@ -135,6 +143,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
             statusDetail={`${totalFields} custom fields`}
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            disablePrimary={!dirty || saving}
         >
             {/* Object tabs + search */}
             <div style={{ display:'flex', alignItems:'center', gap:4, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>

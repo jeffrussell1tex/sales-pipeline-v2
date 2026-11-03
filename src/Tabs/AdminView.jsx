@@ -6,6 +6,10 @@ import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
 import { T, eb } from './settings/shared/tokens.js';
 import { LeaveGuardModal } from './settings/shared/LeaveGuardModal.jsx';
+// A panel's save refused as stale: AdminView takes the latest and draws the panel again on it (state §0.226 — J-B5).
+import { takeLatestSettings } from './settings/shared/saveSettings.js';
+import { PanelStaleContext } from './settings/shared/usePanelRevs.js';
+import { PANEL_CHANGED } from '../utils/settingsRevs.js';
 import { StatusChip, SettingIcon, Avatar, Ring, CategoryChip } from './settings/shared/ui.jsx';
 import { CompanyProfileDetail } from './settings/company/CompanyProfileDetail.jsx';
 import { FiscalYearDetail } from './settings/company/FiscalYearDetail.jsx';
@@ -112,6 +116,11 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
     const [leaveGuard, setLeaveGuard] = useState(null);
     const [guardSaving, setGuardSaving] = useState(false);
     const [guardFailed, setGuardFailed] = useState(false);
+    // J-B5 (state §0.226): a panel whose save was refused as stale is drawn again on the latest — panelEpoch keys the
+    // one wrapper around it — and panelNote ({ id, words }) says so above that panel until Back, another card, or its
+    // next save that lands.
+    const [panelEpoch, setPanelEpoch] = useState(0);
+    const [panelNote,  setPanelNote]  = useState(null);
 
     // The Price book card opens the price book itself — Quotes → Price Book, the
     // catalog quotes draw from (state §0.149; Jeff: "the catalog … that feed the
@@ -123,13 +132,16 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         go();
     };
     const openItem = (it) => {
-        if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); setActiveItem(it); } }); return; }
+        if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); setPanelNote(null); setActiveItem(it); } }); return; }
+        setPanelNote(null);
         setActiveItem(it);
     };
 
     // `settingsSaveRef` is populated by every dirty panel and was never called by
     // anything — the existing nav guard only offers Stay or Discard. Wiring it here
     // means "Save and continue" is a real option rather than a manual round trip.
+    // A save refused as stale has taken the latest (`tookLatest` — state §0.226): the dialog says so (J-B11), and
+    // 'stale-partial' when an earlier part of the same save landed (JB3-5).
     const guardSave = async () => {
         const save = settingsSaveRef && settingsSaveRef.current;
         if (!save) { setLeaveGuard(null); return; }
@@ -139,7 +151,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
             await save();
         } catch (e) {
             setGuardSaving(false);
-            setGuardFailed(true);
+            setGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);
             return;                  // guard stays open — see below
         }
 
@@ -151,6 +163,24 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         setLeaveGuard(null);
         setGuardSaving(false);
         if (go) go();
+    };
+
+    // A panel's save refused as stale (J-B5 — state §0.226): the panel's catch hands it here (usePanelRevs'
+    // panelStale). One read puts the latest in the app's copy; then App's unsaved flag and the guard's save slot are
+    // cleared and the panel is drawn again on the latest, the words above it. It answers whether the latest was read —
+    // when not, the panel keeps its draft and says the server's words. A panel that has since unmounted (Back, another
+    // card, Discard) only learns the latest was taken: nothing here touches the panel open now (critic A2). After an
+    // org switch it never settles (takeLatestSettings).
+    const panelStale = async (e, words = PANEL_CHANGED, isAlive = () => true) => {
+        const latest = await takeLatestSettings(setSettings);   // never settles after a switch
+        if (!latest) return false;                               // keep the draft; the panel says the server's words
+        if (e) e.tookLatest = true;
+        if (!isAlive()) return true;                             // the asker left: the copy is the latest, nothing else touched (critic A2)
+        if (settingsSaveRef) settingsSaveRef.current = null;     // the guard reads canSave at render; useRegisterSave clears it only in an effect
+        if (typeof setSettingsDirty === 'function') setSettingsDirty(false);   // BlockTypes/JobTypes/ProductTypes never clear it
+        setPanelNote({ id: activeItem?.id, words });
+        setPanelEpoch((n) => n + 1);                             // remount on the latest (J-B5)
+        return true;
     };
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
@@ -395,8 +425,9 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         // clicks, so the most common exit from a panel was also the only unguarded
         // one. Same three options as that guard, for consistency.
         const onBack = () => {
-            if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); setActiveItem(null); } }); return; }
+            if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); setPanelNote(null); setActiveItem(null); } }); return; }
             if (typeof setSettingsDirty === 'function') setSettingsDirty(false);
+            setPanelNote(null);
             setActiveItem(null);
         };
 
@@ -493,12 +524,22 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
 
         return (
             <>
-                {panelEl}
+                {/* J-B5 (state §0.226): the panel drawn again on the latest says so, above it. */}
+                {panelNote && panelNote.id === activeItem.id && (
+                    <div style={{ padding:'9px 12px', marginBottom:12, borderRadius:T.r,
+                        background:`${T.danger}12`, border:`1px solid ${T.danger}55`,
+                        color:T.danger, fontSize:12.5, fontWeight:600, fontFamily:T.sans }}>
+                        {panelNote.words}
+                    </div>
+                )}
+                <PanelStaleContext.Provider value={{ took: panelStale, landed: () => setPanelNote(null) }}>
+                    <React.Fragment key={panelEpoch}>{panelEl}</React.Fragment>
+                </PanelStaleContext.Provider>
                 {leaveGuard && (
                     <LeaveGuardModal saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
                         onStay={() => { setLeaveGuard(null); setGuardFailed(false); }}
                         onSave={guardSave}
-                        onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); go && go(); }}/>
+                        onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); setGuardFailed(false); go && go(); }}/>
                 )}
             </>
         );
@@ -800,7 +841,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                 <LeaveGuardModal saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
                     onStay={() => { setLeaveGuard(null); setGuardFailed(false); }}
                     onSave={guardSave}
-                    onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); go && go(); }}/>
+                    onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); setGuardFailed(false); go && go(); }}/>
             )}
         </div>
     );

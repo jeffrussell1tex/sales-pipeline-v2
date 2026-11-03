@@ -1,18 +1,29 @@
 // The stale settings save, the screens' half (state §0.225 — batch 4b-3, step B-2; Jeff, 2 Nov: "Take all
-// Recommended", JB2-7 and JB2-8 fixed here). One sender (src/Tabs/settings/shared/saveSettings.js) sends every people
-// screen's settings save with the token its draft was read with; a stale refusal takes the latest (takeLatestSettings,
-// J-B4); a save that lands merges the tokens it answered (revsAfter) — before any member row goes out. B-3 converts the
-// other panels: until then they name no tokens and are accepted unchecked (Q6).
+// Recommended", JB2-7 and JB2-8 fixed here; state §0.226 — step B-3a). One sender
+// (src/Tabs/settings/shared/saveSettings.js) sends every converted screen's settings save with the token its draft was
+// read with; a stale refusal takes the latest (takeLatestSettings, J-B4); a save that lands merges the tokens it
+// answered (revsAfter) — before any member row goes out. B-3a converts every draft panel: its hook (usePanelRevs) holds
+// the tokens it opened with (`opened`), merges a landed save's (`landed`), and hands a stale refusal to AdminView's one
+// handler (`panelStale`, J-B5), which takes the latest and draws the panel again on it. The panels B-3b and B-3c
+// convert name no tokens until then and are accepted unchecked (Q6).
 //
-//   S1  the URL: only the sender, the app's load, Connected apps' two GETs and the direct sends B-3 moves hold it
-//   S2  every send names its tokens, read from its draft's binding (the render's settings.revs, a window's snapshot) —
-//       never `prev`, never a ref; the panels B-3 converts name none, each still listed
-//   S3  the sender, run with fetch stubbed: putSettings, writeSettings, takeLatestSettings, addToSettingsList, the rules
-//   S4  every stale refusal takes the latest, through the one helper; the invite and the import read `twice`
-//   S5  every save that lands merges the tokens it answered, by revsAfter — the Deletes and Assign before the members
+//   S1  the URL: only the sender, the app's load, Connected apps' two GETs and the direct sends B-3b moves hold it
+//   S2  every send names its tokens, read from its draft's binding (the render's settings.revs, a window's snapshot, the
+//       panel's own `opened`) — never `prev`, never a ref; the panels B-3b and B-3c convert name none, each still listed
+//   S3  the sender, run with fetch stubbed: putSettings (its network failure too), writeSettings, takeLatestSettings,
+//       addToSettingsList, the rules
+//   S4  every stale refusal takes the latest, through the one helper or the panel's own panelStale — a guarded panel's
+//       catch hands it there first; the invite and the import read `twice`
+//   S4b AdminView's panelStale, in order, and the one wrapper it remounts
+//   S5  every save that lands merges the tokens it answered, by revsAfter or the panel's landed — the Deletes and
+//       Assign before the members; every setSettings an updater; no snapshot put back
 //   S6  TerritoryModal's save, run as written
 //   S7  Teams' Assign (assignTo), run as written
 //   S8  the scanners' own reading on made-up sources; the suites list holds this file
+//   S9  usePanelRevs, run as written
+//   S10 a draft panel's save, run as written: Customer types, a flat list, Features (J-B12)
+//   S11 AdminView's panelStale and guardSave, run as written; Back, another card and Discard
+//   S12 the pins: App's leave guard, the dialog's words (J-B11, JB3-2), reopen, one save at a time, JB3-6, JB3-7a
 //
 // Every import of saveSettings.js, settingsRevs.js or settingsDefaults.js is an `await import()` inside its test: a
 // static import of a name the sender lacked would kill the file before the scans ran.
@@ -80,12 +91,19 @@ const withoutComments = (src) => {
     return out + src.slice(at);
 };
 
-// A component's handler, as written: the `const <handler> = …` among the statements of `const <component> = (…) => {`.
+// A component's handler, as written: the `const <handler> = …` among the statements of `const <component> = (…) => {`,
+// or of `function <component>(…) {` (FlatListDetail, App).
+const componentBody = (n, component) => {
+    if (n.type === 'VariableDeclarator' && n.id.name === component && isFn(n.init)) return n.init.body.body || [];
+    if (n.type === 'FunctionDeclaration' && n.id?.name === component) return n.body.body;
+    return null;
+};
 const handlerIn = (src, component, handler) => {
     let out = null;
     walk(astOf(src).program, (n) => {
-        if (n.type !== 'VariableDeclarator' || n.id.name !== component || !isFn(n.init)) return;
-        for (const st of n.init.body.body || []) {
+        const body = componentBody(n, component);
+        if (!body) return;
+        for (const st of body) {
             if (st.type !== 'VariableDeclaration') continue;
             for (const d of st.declarations) if (d.id.name === handler) out = src.slice(d.init.start, d.init.end);
         }
@@ -97,50 +115,57 @@ const handlerIn = (src, component, handler) => {
 // ── The files ────────────────────────────────────────────────────────────────
 
 const SENDER = 'src/Tabs/settings/shared/saveSettings.js';
-// B-2's sends, file by file: the people screens, converted (state §0.225).
+const HOOK = 'src/Tabs/settings/shared/usePanelRevs.js';
+const ADMIN = 'src/Tabs/AdminView.jsx';
+// B-3a's draft panels (state §0.226): each sends its one save through the sender with the tokens it opened with
+// (usePanelRevs), and each is registered with the leave guard (useRegisterSave).
+const B3A_FILES = [
+    'src/Tabs/settings/company/CompanyProfileDetail.jsx',
+    'src/Tabs/settings/company/FiscalYearDetail.jsx',
+    'src/Tabs/settings/data/FeaturesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchBlockTypesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchCrewsDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchCustomerNotificationsDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchJobTypesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx',
+    'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+    'src/Tabs/settings/quoting/ProductTypesDetail.jsx',
+    'src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx',
+    'src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx',
+    'src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx',
+    'src/Tabs/settings/salesProcess/CustomerTypesDetail.jsx',
+    'src/Tabs/settings/salesProcess/CustomFieldsDetail.jsx',
+    'src/Tabs/settings/salesProcess/EmailTemplatesDetail.jsx',
+    'src/Tabs/settings/salesProcess/FlatListDetail.jsx',
+    'src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx',
+    'src/Tabs/settings/salesProcess/IndustriesDetail.jsx',
+    'src/Tabs/settings/salesProcess/KPIThresholdsDetail.jsx',
+    'src/Tabs/settings/salesProcess/LeadConversionDetail.jsx',
+    'src/Tabs/settings/salesProcess/LeadScoringDetail.jsx',
+    'src/Tabs/settings/salesProcess/LeadVisibilityDetail.jsx',
+    'src/Tabs/settings/salesProcess/PainPointsDetail.jsx',
+];
+// The sends, file by file, each converted: B-2's people screens (state §0.225), and B-3a's panels (state §0.226).
 const SITES = {
     'src/Tabs/settings/people/TeamsDetail.jsx': { putSettings: 1, writeSettings: 2 },          // Delete; the window, Assign
     'src/Tabs/settings/people/TerritoriesDetail.jsx': { putSettings: 1, writeSettings: 2 },    // Delete; the window, the CSV
     'src/Tabs/settings/people/UsersDetail.jsx': { writeSettings: 1, addToSettingsList: 1 },    // the profile's move; Invite
     'src/components/layout/ModalLayer.jsx': { addToSettingsList: 1 },                          // the member import
+    ...Object.fromEntries(B3A_FILES.map((f) => [f, { putSettings: 1 }])),
 };
-const B2_FILES = Object.keys(SITES);
-// The panels B-3 converts, with their putSettings calls: each still names no tokens — one argument — and is accepted
-// unchecked (Q6). A panel converted comes off this list; B-3 empties it.
+const SITE_FILES = Object.keys(SITES);
+// The panels B-3b and B-3c convert, with their putSettings calls: each still names no tokens — one argument — and is
+// accepted unchecked (Q6). A panel converted comes off this list; B-3c empties it.
 const B3_PENDING = {
     'src/Tabs/settings/company/CompanyCalendarDetail.jsx': 2,
-    'src/Tabs/settings/company/CompanyProfileDetail.jsx': 1,
-    'src/Tabs/settings/company/FiscalYearDetail.jsx': 1,
-    'src/Tabs/settings/dispatch/DispatchCrewsDetail.jsx': 1,
-    'src/Tabs/settings/dispatch/DispatchCustomerNotificationsDetail.jsx': 1,
-    'src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx': 1,
-    'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx': 1,
-    'src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx': 1,
     'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 3,
-    'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx': 1,
-    'src/Tabs/settings/quoting/ProductTypesDetail.jsx': 1,
-    'src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/CustomerTypesDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/CustomFieldsDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/EmailTemplatesDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/FlatListDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/IndustriesDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/KPIThresholdsDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/LeadConversionDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/LeadScoringDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/LeadVisibilityDetail.jsx': 1,
-    'src/Tabs/settings/salesProcess/PainPointsDetail.jsx': 1,
     'src/Tabs/settings/salesProcess/PipelinesDetail.jsx': 1,
 };
-// The direct sends B-3 moves into the sender: the URL once each, until then.
+// The direct sends B-3b moves into the sender: the URL once each, until then.
 const B3_DIRECT = [
     'src/Tabs/SalesManagerTab.jsx',
-    'src/Tabs/settings/data/FeaturesDetail.jsx',
-    'src/Tabs/settings/dispatch/DispatchBlockTypesDetail.jsx',
-    'src/Tabs/settings/dispatch/DispatchJobTypesDetail.jsx',
     'src/Tabs/settings/quoting/EditBrandModal.jsx',
 ];
 // The named GETs: the app's load, and the Connected apps panel's own load and re-read (B-3's).
@@ -176,6 +201,58 @@ const constNamed = (name, anc) => {
         look(fn.body);
         if (found) return found;
     }
+    return null;
+};
+// The names a binding pattern binds: `x`, `{ a, b: c }`, `[d, e]`, defaults and rests.
+const patternNames = (p) => (!p ? []
+    : p.type === 'Identifier' ? [p.name]
+    : p.type === 'ObjectPattern' ? p.properties.flatMap((q) => patternNames(q.type === 'RestElement' ? q.argument : q.value))
+    : p.type === 'ArrayPattern' ? p.elements.flatMap(patternNames)
+    : p.type === 'AssignmentPattern' ? patternNames(p.left)
+    : p.type === 'RestElement' ? patternNames(p.argument) : []);
+// The binding a name reads at a node, by the scope (the node's ancestors): the innermost function — or the module —
+// that binds it, by a parameter or by a declaration in its own body outside any function inside it. Answers { kind,
+// decl, scope } (kind: 'param', 'const', 'let', 'var' or 'function'), or null when nothing around it binds the name.
+const bindingOf = (name, anc) => {
+    for (const scope of [...anc].reverse().filter((a) => isFn(a) || a.type === 'Program')) {
+        if (isFn(scope) && scope.params.some((p) => patternNames(p).includes(name))) return { kind: 'param', decl: null, scope };
+        let found = null;
+        const look = (node) => {
+            if (!node || typeof node.type !== 'string' || found) return;
+            if (node !== scope && isFn(node)) {
+                if (node.type === 'FunctionDeclaration' && node.id?.name === name) found = { kind: 'function', decl: node };
+                return;
+            }
+            if (node.type === 'VariableDeclaration') {
+                for (const d of node.declarations) if (!found && patternNames(d.id).includes(name)) found = { kind: node.kind, decl: d };
+            }
+            for (const k of Object.keys(node)) {
+                if (SKIP.has(k)) continue;
+                const v = node[k];
+                if (Array.isArray(v)) v.forEach(look);
+                else if (v && typeof v.type === 'string') look(v);
+            }
+        };
+        if (isFn(scope)) look(scope.body); else scope.body.forEach(look);
+        if (found) return { ...found, scope };
+    }
+    return null;
+};
+// Why a name is not the panel's own from its hook (null when it is): where it is read, it is bound by
+// `const { <name>, … } = usePanelRevs(settings, setSettings)` in the component around it — by the scope, not by the
+// name: never a prop, a state, a local, another component's hook, or a hook over another copy (state §0.226).
+const hookFault = (name, anc) => {
+    const b = bindingOf(name, anc);
+    if (!b) return 'is bound nowhere around it';
+    const d = b.decl;
+    if (!d || d.type !== 'VariableDeclarator' || !isCall(d.init) || calleeName(d.init) !== 'usePanelRevs') {
+        return `is ${b.kind === 'param' ? 'a parameter' : `a ${b.kind}`} of its own, not the panel's usePanelRevs'`;
+    }
+    if (b.kind !== 'const' || !isFn(b.scope)) return 'comes from usePanelRevs, but not as a component\'s const';
+    const prop = d.id.type === 'ObjectPattern' && d.id.properties.find((p) => p.type === 'ObjectProperty' && keyName(p) === name);
+    if (!prop || prop.value.type !== 'Identifier' || prop.value.name !== name) return `is not usePanelRevs' own ${name}`;
+    const args = d.init.arguments.map((a) => (a.type === 'Identifier' ? a.name : '?')).join(', ');
+    if (args !== 'settings, setSettings') return `comes from usePanelRevs(${args}) — the hook takes the copy the draft was seeded from`;
     return null;
 };
 // Why a token is not read from its draft's binding (null when it is): the render's settings.revs.<key>, a window's
@@ -224,6 +301,13 @@ const sendFaults = (file, src) => {
             return;
         }
         const [payload, revs] = n.arguments;
+        // A panel's tokens as it opened (state §0.226): `opened`, its own usePanelRevs' — with any payload; withIfRevs
+        // picks the keys it sends.
+        if (n.arguments.length === 2 && revs.type === 'Identifier' && revs.name === 'opened') {
+            const why = hookFault('opened', anc);
+            if (why) out.push(`${at}: opened ${why}`);
+            return;
+        }
         if (n.arguments.length !== 2 || !revs || revs.type !== 'ObjectExpression') { out.push(`${at}: no tokens — a second argument naming each key's`); return; }
         if (!payload || payload.type !== 'ObjectExpression') { out.push(`${at}: the payload is not an object literal`); return; }
         const sent = payload.properties.map(keyName), named = revs.properties.map(keyName);
@@ -239,12 +323,30 @@ const sendFaults = (file, src) => {
     });
     return { out, counts };
 };
+// Why a guarded panel's catch does not hand a stale refusal to AdminView first (null when it does): its first statement
+// is `if (<e>.stale && await panelStale(<e>…)) throw <e>;` — <e> the catch's own — so nothing of the old mount runs
+// once the latest is taken, and the leave guard reads the throw (state §0.226 — J-B5, J-B11).
+const firstLineFault = (handler) => {
+    const e = handler.param && handler.param.type === 'Identifier' ? handler.param.name : null;
+    const is = (x) => !!e && !!x && x.type === 'Identifier' && x.name === e;
+    const st = handler.body.body[0];
+    const t = st && st.type === 'IfStatement' && !st.alternate ? st.test : null;
+    const c = t ? (st.consequent.type === 'BlockStatement' && st.consequent.body.length === 1 ? st.consequent.body[0] : st.consequent) : null;
+    const ok = t && t.type === 'LogicalExpression' && t.operator === '&&'
+        && isMember(t.left) && is(t.left.object) && propName(t.left) === 'stale'
+        && t.right.type === 'AwaitExpression' && isCall(t.right.argument) && calleeName(t.right.argument) === 'panelStale' && is(t.right.argument.arguments[0])
+        && c.type === 'ThrowStatement' && is(c.argument);
+    return ok ? null : `does not open with \`if (${e || 'e'}.stale && await panelStale(${e || 'e'}…)) throw ${e || 'e'};\` — the old mount would go on over the latest`;
+};
 // One file's refusals: a putSettings' catch, and the function around a writeSettings, reads `.stale` and takes the
-// latest (takeLatestSettings); the function around an addToSettingsList reads `.twice` and takes no latest itself —
-// the helper has.
+// latest — by takeLatestSettings, or the panel's own panelStale (AdminView's, state §0.226); the function around an
+// addToSettingsList reads `.twice` and takes no latest itself — the helper has. In a panel registered with the leave
+// guard (useRegisterSave), a putSettings' catch hands a stale refusal to panelStale first (firstLineFault).
 const refusalFaults = (file, src) => {
     const out = [];
-    walk(astOf(src).program, (n, anc) => {
+    const program = astOf(src).program;
+    const guarded = has(program, callsNamed('useRegisterSave'));
+    walk(program, (n, anc) => {
         if (!isCall(n) || !SENDS.has(calleeName(n))) return;
         const name = calleeName(n), at = `${file}:${n.loc.start.line} ${name}`;
         const fnAt = anc.findLastIndex(isFn), fn = anc[fnAt];
@@ -254,32 +356,59 @@ const refusalFaults = (file, src) => {
             if (has(fn, callsNamed('takeLatestSettings'))) out.push(`${at}: takes the latest itself — the helper already has`);
             return;
         }
-        let where = fn;
+        let where = fn, whereAnc = anc.slice(0, fnAt);
         if (name === 'putSettings') {
             let tryAt = -1;
             for (let k = anc.length - 2; k > fnAt; k--) if (anc[k].type === 'TryStatement' && anc[k + 1] === anc[k].block) { tryAt = k; break; }
             where = tryAt >= 0 ? anc[tryAt].handler : null;
             if (!where) { out.push(`${at}: its refusal is thrown with no catch around it`); return; }
+            whereAnc = anc.slice(0, tryAt + 1);
         }
-        if (!has(where, readsMember('stale')) || !has(where, callsNamed('takeLatestSettings'))) {
-            out.push(`${at}: a stale refusal does not take the latest (.stale, takeLatestSettings) — the screen keeps a list the server refuses`);
+        if (!has(where, readsMember('stale')) || !(has(where, callsNamed('takeLatestSettings')) || has(where, callsNamed('panelStale')))) {
+            out.push(`${at}: a stale refusal does not take the latest (.stale; takeLatestSettings or panelStale) — the screen keeps what the server refuses`);
+        }
+        walk(where, (o, oanc) => {
+            if (!callsNamed('panelStale')(o)) return;
+            const why = hookFault('panelStale', oanc);
+            if (why) out.push(`${at}: panelStale ${why}`);
+        }, whereAnc);
+        if (guarded && name === 'putSettings') {
+            const why = firstLineFault(where);
+            if (why) out.push(`${at}: a guarded panel's catch ${why}`);
         }
     });
     return out;
 };
-// One file's setSettings updaters: an object writing a list (teams, territories, or a key computed) writes `revs` too,
-// and `revs` is only ever revsAfter(<prev>.revs, …) — the held tokens kept key by key, the answered ones set over them.
+// Whether a function lands a send's tokens through the panel's hook: `const <x> = await <send>(…)` in it (`id` names
+// the one wanted) and, after it, the panel's own landed(<x>) — not in a function inside it (state §0.226).
+const landsWith = (fn, fnAnc, id = null) => {
+    const sent = new Map();
+    let lands = false;
+    walk(fn.body, (o, oanc) => {
+        if (lands || oanc.findLast(isFn) !== fn) return;
+        if (o.type === 'VariableDeclarator' && o.id.type === 'Identifier' && o.init?.type === 'AwaitExpression' && isCall(o.init.argument) && SENDS.has(calleeName(o.init.argument))) sent.set(o.id.name, o.end);
+        const x = callsNamed('landed')(o) && o.arguments.length === 1 && o.arguments[0].type === 'Identifier' ? o.arguments[0].name : null;
+        if (x && sent.has(x) && (id === null || x === id) && o.start > sent.get(x) && !hookFault('landed', oanc)) lands = true;
+    }, [...fnAnc, fn]);
+    return lands;
+};
+// One file's setSettings updaters: an object writing a list (teams, territories, or a key computed) writes `revs` too —
+// or the function around it lands its send's tokens by the panel's landed (landsWith; FlatList's computed key) — and
+// `revs` is only ever revsAfter(<prev>.revs, …) — the held tokens kept key by key, the answered ones set over them.
 const updaterFaults = (file, src) => {
     const out = [];
-    walk(astOf(src).program, (n) => {
+    walk(astOf(src).program, (n, anc) => {
         if (!isCall(n) || !/^_?setSettings$/.test(calleeName(n) || '') || !isFn(n.arguments[0])) return;
         const fn = n.arguments[0], prev = fn.params[0]?.type === 'Identifier' ? fn.params[0].name : null;
+        const fnAt = anc.findLastIndex(isFn);
+        let lands = null;
+        const landsHere = () => (lands ??= fnAt >= 0 && landsWith(anc[fnAt], anc.slice(0, fnAt)));
         walk(fn.body, (o) => {
             if (o.type !== 'ObjectExpression') return;
             const at = `${file}:${o.loc.start.line}`;
             const keys = o.properties.map((p) => (p.type === 'ObjectProperty' ? (p.computed ? '[computed]' : keyName(p)) : null));
             const revs = o.properties.find((p) => keyName(p) === 'revs');
-            if (keys.some((k) => k === 'teams' || k === 'territories' || k === '[computed]') && !revs) out.push(`${at}: a list set without its token — the next save sends the old one and is refused`);
+            if (keys.some((k) => k === 'teams' || k === 'territories' || k === '[computed]') && !revs && !landsHere()) out.push(`${at}: a list set without its token — the next save sends the old one and is refused`);
             if (revs) {
                 const v = revs.value;
                 const ok = isCall(v) && calleeName(v) === 'revsAfter' && v.arguments.length === 2 && (chainOf(v.arguments[0]) || []).join('.') === `${prev}.revs`;
@@ -289,16 +418,45 @@ const updaterFaults = (file, src) => {
     });
     return out;
 };
+// One file's landings (state §0.226): every setSettings takes an updater — a value set puts back the tokens it was read
+// with, over any a save merged since; no snapshot is kept to put back (J-B10); landed takes the answer of a send before
+// it, and is the panel's own; in a panel with the hook every putSettings is answered into a const that landed takes.
+const landFaults = (file, src) => {
+    const out = [];
+    const program = astOf(src).program;
+    if (/\blet\s+snapshot\b/.test(withoutComments(src))) out.push(`${file}: a snapshot kept to put back — a rollback puts back every key it holds and their tokens`);
+    const hooked = has(program, callsNamed('usePanelRevs'));
+    walk(program, (n, anc) => {
+        if (!isCall(n)) return;
+        const name = calleeName(n), at = `${file}:${n.loc.start.line} ${name}`;
+        if (/^_?setSettings$/.test(name || '') && !isFn(n.arguments[0])) out.push(`${at}: set with a value, not an updater — the copy's tokens put back as they were read`);
+        if (name === 'landed') {
+            const [a] = n.arguments;
+            const b = a && a.type === 'Identifier' && n.arguments.length === 1 ? bindingOf(a.name, anc) : null;
+            const sentBy = b && b.kind === 'const' && b.decl.init?.type === 'AwaitExpression' && isCall(b.decl.init.argument) && SENDS.has(calleeName(b.decl.init.argument));
+            if (!sentBy || b.decl.end > n.start) out.push(`${at}: lands no send's answer — its argument is the const a send before it answered`);
+            const why = hookFault('landed', anc);
+            if (why) out.push(`${at}: landed ${why}`);
+        }
+        if (hooked && name === 'putSettings') {
+            const decl = anc.at(-1)?.type === 'AwaitExpression' ? anc.at(-2) : null;
+            const fnAt = anc.findLastIndex(isFn);
+            const bound = decl && decl.type === 'VariableDeclarator' && decl.id.type === 'Identifier' && anc.at(-3)?.kind === 'const';
+            if (!bound || !landsWith(anc[fnAt], anc.slice(0, fnAt), decl.id.name)) out.push(`${at}: its answer is never landed — the panel's next save names the old token and is refused against its own`);
+        }
+    });
+    return out;
+};
 
 // ── S1 ───────────────────────────────────────────────────────────────────────
 
-test('S1 — the URL: the sender, the app\'s load, Connected apps\' two GETs and the direct sends B-3 moves hold it — no other file, none of the people screens', () => {
+test('S1 — the URL: the sender, the app\'s load, Connected apps\' two GETs and the direct sends B-3b moves hold it — no other file, none of the converted screens', () => {
     const got = {};
     for (const f of srcFiles()) {
         const n = urlCount(read(f));
         if (n) got[f] = n;
     }
-    for (const f of B2_FILES) assert.equal(got[f], undefined, `${f}: a people screen sends through the sender (state §0.225)`);
+    for (const f of SITE_FILES) assert.equal(got[f], undefined, `${f}: a converted screen sends through the sender (state §0.225, §0.226)`);
     assert.deepEqual(got, URL_HOLDERS, 'a settings request outside the sender names no token and takes no latest — send it through saveSettings.js');
     assert.ok(read(SENDER).includes("const SETTINGS_URL = '/.netlify/functions/settings';"), 'the sender\'s one spelling');
     // The named GETs read: one argument, no method.
@@ -315,7 +473,7 @@ test('S1 — the URL: the sender, the app\'s load, Connected apps\' two GETs and
 
 // ── S2 ───────────────────────────────────────────────────────────────────────
 
-test('S2 — every send names its tokens, read from its draft\'s binding; the panels B-3 converts name none, each still listed', () => {
+test('S2 — every send names its tokens, read from its draft\'s binding — a panel\'s own opened, by the scope; the panels B-3b and B-3c convert name none, each still listed', () => {
     const faults = [], sites = {}, pending = {};
     for (const f of srcFiles()) {
         if (f === SENDER) continue;
@@ -334,8 +492,14 @@ test('S2 — every send names its tokens, read from its draft\'s binding; the pa
         if (Object.keys(counts).length) sites[f] = counts;
     }
     assert.deepEqual(faults, []);
-    assert.deepEqual(sites, SITES, 'every send outside the B-3 list is one of B-2\'s, each named here');
-    assert.deepEqual(pending, B3_PENDING, 'every panel listed as B-3\'s still sends, unchecked — a stale entry hides nothing');
+    assert.deepEqual(sites, SITES, 'every send outside the pending list is one of B-2\'s or B-3a\'s, each named here');
+    assert.deepEqual(pending, B3_PENDING, 'every panel listed as B-3b\'s or B-3c\'s still sends, unchecked — a stale entry hides nothing');
+    // B-3a's sends name the tokens their panel opened with (state §0.226).
+    for (const f of B3A_FILES) {
+        walk(astOf(read(f)).program, (n) => {
+            if (callsNamed('putSettings')(n)) assert.equal(n.arguments[1]?.name, 'opened', `${f}:${n.loc.start.line}: REGRESSION — a draft panel's save names tokens other than those it opened with`);
+        });
+    }
 });
 
 // ── S3 — the sender, run ─────────────────────────────────────────────────────
@@ -460,6 +624,22 @@ test('S3 — putSettings: no tokens named, no ifRevs (Q6); named, one per key; a
         await until(() => h.body);
         setRequestOrg('org_B'); h.body();
         assert.equal(await outcome(pr), PENDING, 'REGRESSION: a stale refusal read across a switch thrown on the new org\'s screen');
+    });
+});
+
+test('S3 — putSettings: a send that never reached the server throws writeSettings\' words in the org that asked; after a switch it never settles (JB3-7c)', async () => {
+    const { putSettings } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const { NETWORK_ERROR } = await import('../src/utils/storage.js');
+    await withServer(async ({ queue, setRequestOrg }) => {
+        queue.push(new Error('offline'));
+        const lost = await outcome(putSettings({ teams: [] }, { teams: 'T1' }));
+        assert.equal(lost.e?.message, NETWORK_ERROR, 'REGRESSION (JB3-7c): the network\'s own words, or none — writeSettings says NETWORK_ERROR');
+        assert.equal(lost.e?.stale, undefined, 'no stale refusal');
+        const h = held(); queue.push(h.answer);
+        const pr = putSettings({ teams: [] }, { teams: 'T1' });
+        await until(() => h.fail);
+        setRequestOrg('org_B'); h.fail();
+        assert.equal(await outcome(pr), PENDING, 'REGRESSION (JB3-7c): the last org\'s failed send said on the new org\'s screen');
     });
 });
 
@@ -601,9 +781,11 @@ test('S3 — addToSettingsList (Q5): lands; refused as stale, made again on the 
 
 // ── S4 ───────────────────────────────────────────────────────────────────────
 
-test('S4 — every stale refusal takes the latest through the one helper; the invite and the import read `twice`; the helper reads once and checks the org first', () => {
-    const faults = B2_FILES.flatMap((f) => refusalFaults(f, read(f)));
+test('S4 — every stale refusal takes the latest through the one helper, or the panel\'s own panelStale; a guarded panel\'s catch hands it there first; the invite and the import read `twice`; the helper reads once and checks the org first', () => {
+    const faults = SITE_FILES.flatMap((f) => refusalFaults(f, read(f)));
     assert.deepEqual(faults, []);
+    const guarded = SITE_FILES.filter((f) => has(astOf(read(f)).program, callsNamed('useRegisterSave')));
+    assert.deepEqual(guarded, B3A_FILES, 'every B-3a panel is registered with the leave guard — the first-line rule reads each');
     const sender = withoutComments(read(SENDER));
     const fnText = (name) => {
         let out = null;
@@ -621,11 +803,34 @@ test('S4 — every stale refusal takes the latest through the one helper; the in
     for (const name of ['putSettings', 'writeSettings']) assert.ok(fnText(name).includes('withIfRevs(payload, revs)'), `${name} sends what withIfRevs builds`);
 });
 
+// ── S4b ──────────────────────────────────────────────────────────────────────
+
+test('S4b — AdminView\'s panelStale, in order: the latest read; tookLatest; only while the asker is open, the guard\'s slot and App\'s flag cleared and the panel remounted; the Provider around the one wrapper', () => {
+    const src = withoutComments(read(ADMIN));
+    const h = handlerIn(src, 'AdminView', 'panelStale');
+    let at = -1;
+    for (const step of ['takeLatestSettings(setSettings)', 'if (!latest) return false;', 'tookLatest = true', 'if (!isAlive()) return true;',
+        'settingsSaveRef.current = null', 'setSettingsDirty(false)', 'setPanelEpoch(']) {
+        const i = h.indexOf(step);
+        assert.ok(i > at, `REGRESSION (J-B5): ${step} missing, or out of order`);
+        at = i;
+    }
+    assert.match(src, /<PanelStaleContext\.Provider value=\{\{ took: panelStale, landed: \(\) => setPanelNote\(null\) \}\}>\s*<React\.Fragment key=\{panelEpoch\}>\{panelEl\}<\/React\.Fragment>\s*<\/PanelStaleContext\.Provider>/,
+        'REGRESSION (J-B5): the open panel is not in the one wrapper the epoch keys, under the handler');
+    assert.equal(count(src, '{panelEl}'), 1, 'the panel drawn once, in the wrapper');
+});
+
 // ── S5 ───────────────────────────────────────────────────────────────────────
 
-test('S5 — every save that lands merges the tokens it answered, by revsAfter; the Deletes and Assign merge before any member row goes out', () => {
-    const faults = [...B2_FILES, SENDER].flatMap((f) => updaterFaults(f, read(f)));
+test('S5 — every save that lands merges the tokens it answered — by revsAfter, or the panel\'s landed(<its answer>) after the send; every setSettings an updater, no snapshot put back; the Deletes and Assign merge before any member row goes out', () => {
+    const faults = [...SITE_FILES, SENDER, HOOK].flatMap((f) => updaterFaults(f, read(f)));
+    faults.push(...SITE_FILES.flatMap((f) => landFaults(f, read(f))));
     assert.deepEqual(faults, []);
+    for (const f of B3A_FILES) {
+        let lands = 0;
+        walk(astOf(read(f)).program, (n) => { if (callsNamed('landed')(n)) lands += 1; });
+        assert.equal(lands, 1, `${f}: REGRESSION — a landed save's tokens never merged; the panel's next save refused against its own`);
+    }
     for (const [f, component, handler] of [
         ['src/Tabs/settings/people/TeamsDetail.jsx', 'TeamsDetail', 'handleDelete'],
         ['src/Tabs/settings/people/TerritoriesDetail.jsx', 'TerritoriesDetail', 'handleDelete'],
@@ -901,7 +1106,506 @@ test('S8 — the scanners see what they are for, on made-up sources', () => {
     ]) assert.ok(updaters(bad) > 0, `not seen: ${bad}`);
 });
 
+test('S8 — the scanners read a panel\'s hook by the scope, on made-up sources: its opened, its panelStale, its landed (state §0.226)', () => {
+    const HOOKED = 'const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);';
+    const inPanel = (body) => `const P = ({ settings, setSettings }) => { ${HOOKED} ${body} };`;
+    const sends = (src) => sendFaults('src/made.jsx', src).out.length;
+    assert.equal(sends(inPanel('const save = once(async () => { await putSettings({ teams: t }, opened); });')), 0, 'the hook\'s opened');
+    assert.equal(sends(inPanel('const save = async () => { const payload = {}; await putSettings(payload, opened); };')), 0, 'any payload: withIfRevs picks the keys it sends');
+    assert.equal(sends(inPanel('const save = useCallback(once(async () => { await putSettings({ [k]: v }, opened); }), [opened]);')), 0, 'under useCallback');
+    assert.equal(sends(`function F({ settings, setSettings }) { ${HOOKED} const save = async () => { await writeSettings(p, opened); }; }`), 0, 'a function component');
+    for (const bad of [
+        `const A = ({ settings, setSettings }) => { ${HOOKED} }; const B = () => { const save = async () => { await putSettings(p, opened); }; };`,
+        'const P = ({ settings, setSettings }) => { const [opened] = useState({}); const save = async () => { await putSettings(p, opened); }; };',
+        inPanel('const save = async () => { await putSettings(p, settings.revs); };'),
+        inPanel('const save = async () => { await putSettings({ teams: t }, { teams: opened.territories }); };'),
+        'const P = ({ settings, setSettings, opened }) => { const save = async () => { await putSettings(p, opened); }; };',
+        inPanel('const save = async (opened) => { await putSettings(p, opened); };'),
+        inPanel('const save = async () => { const opened = settings.revs; await putSettings(p, opened); };'),
+        'const P = ({ settings, setSettings }) => { const { opened } = usePanelState(settings, setSettings); const save = async () => { await putSettings(p, opened); }; };',
+        'const P = ({ settings, setSettings, latest }) => { const { opened } = usePanelRevs(latest, setSettings); const save = async () => { await putSettings(p, opened); }; };',
+        'const P = ({ settings, setSettings }) => { const { revs: opened } = usePanelRevs(settings, setSettings); const save = async () => { await putSettings(p, opened); }; };',
+        'const P = ({ settings, setSettings }) => { let { opened } = usePanelRevs(settings, setSettings); const save = async () => { await putSettings(p, opened); }; };',
+        `${HOOKED} const P = () => { const save = async () => { await putSettings(p, opened); }; };`,
+        inPanel('const save = async () => { await putSettings(p, opened, x); };'),
+    ]) assert.ok(sends(bad) > 0, `not seen: ${bad}`);
+
+    const refusals = (src) => refusalFaults('src/made.jsx', src).length;
+    const guardedPanel = (catchBody, e = 'e') => inPanel(`const save = once(async () => { try { await putSettings(p, opened); } catch (${e}) { ${catchBody} } }); useRegisterSave(ref, dirty, save);`);
+    assert.equal(refusals(guardedPanel('if (e.stale && await panelStale(e)) throw e; say(e.message); throw e;')), 0, 'a guarded panel hands it to AdminView first');
+    assert.equal(refusals(guardedPanel('if (err.stale && await panelStale(err, W)) { throw err; } throw err;', 'err')), 0, 'its own binding, its own words');
+    assert.equal(refusals(inPanel('const save = async () => { try { await putSettings(p, opened); } catch (e) { if (e.stale) await panelStale(e, W); throw e; } };')), 0, 'unguarded: panelStale in place of takeLatestSettings');
+    for (const bad of [
+        'const P = () => { const panelStale = async () => true; const save = async () => { try { await putSettings(p, {}); } catch (e) { if (e.stale && await panelStale(e)) throw e; } }; };',
+        'const P = ({ panelStale }) => { const save = async () => { try { await putSettings(p, {}); } catch (e) { if (e.stale && await panelStale(e)) throw e; } }; };',
+        guardedPanel('say(e.message); if (e.stale && await panelStale(e)) throw e; throw e;'),
+        guardedPanel('if (e.stale) await takeLatestSettings(setSettings); throw e;'),
+        guardedPanel('if (e.stale && await panelStale(e)) throw new Error(e.message);'),
+        guardedPanel('if (x.stale && await panelStale(x)) throw x; throw e;'),
+        guardedPanel('if (e.stale && panelStale(e)) throw e; throw e;'),
+        guardedPanel('if (e.stale || await panelStale(e)) throw e; throw e;'),
+        guardedPanel('if (e.stale && await panelStale(e)) throw e; else say(e.message);'),
+    ]) assert.ok(refusals(bad) > 0, `not seen: ${bad}`);
+
+    const lands = (src) => updaterFaults('src/made.jsx', src).length + landFaults('src/made.jsx', src).length;
+    assert.equal(lands(inPanel('const save = async () => { const answer = await putSettings({ [k]: v }, opened); setSettings(prev => ({ ...prev, [k]: v })); landed(answer); };')), 0, 'a computed key, its token landed after the send');
+    assert.equal(lands(inPanel('const save = async () => { try { const answer = await putSettings(p, opened); setSettings((s) => ({ ...s, ...p })); landed(answer); } catch (e) { throw e; } };')), 0);
+    for (const bad of [
+        inPanel('const save = async () => { const answer = await putSettings({ [k]: v }, opened); setSettings(prev => ({ ...prev, [k]: v })); };'),
+        inPanel('const save = async () => { landed(answer0); const answer = await putSettings({ [k]: v }, opened); setSettings(prev => ({ ...prev, [k]: v })); };'),
+        inPanel('const save = async () => { const answer = await putSettings(p, opened); setSettings(prev => ({ ...prev, ...p })); landed(settings); };'),
+        inPanel('const save = async () => { await putSettings(p, opened); setSettings(prev => ({ ...prev, ...p })); };'),
+        inPanel('const save = async () => { const answer = await putSettings(p, opened); const later = () => landed(answer); later(); };'),
+        'const P = ({ settings, setSettings }) => { const landed = () => {}; const save = async () => { const answer = await putSettings({ [k]: v }, {}); setSettings(prev => ({ ...prev, [k]: v })); landed(answer); }; };',
+        inPanel('const save = async () => { const answer = await putSettings(p, opened); setSettings({ ...settings, ...p }); landed(answer); };'),
+        inPanel('const save = async () => { let snapshot = settings; const answer = await putSettings(p, opened); landed(answer); };'),
+    ]) assert.ok(lands(bad) > 0, `not seen: ${bad}`);
+});
+
 test('S8 — the suites list holds this file: the harness grades it', () => {
     const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
     assert.ok(suites.includes('tests/settings-saves.test.mjs'), 'SUITES runs this file');
+});
+
+// ── S9 — usePanelRevs, run as written ───────────────────────────────────────
+
+// The hook as written, its imports stripped, React's hooks stubbed as React holds them: each call's slot by its place
+// in the render (a state, a ref, an effect), kept across renders; an effect runs after its render when its deps moved,
+// its cleanup on unmount. The context is what the test provides — AdminView's { took, landed }, or none.
+const hookRig = async (context = null) => {
+    const { revsAfter } = await import('../src/utils/settingsRevs.js');
+    const body = read(HOOK).replace(/^import .*\n/gm, '').replace(/^export /gm, '');
+    const slots = [], cleanups = [];
+    let at = 0, pending = [];
+    const React = {
+        createContext: (value) => ({ value }),
+        useContext: () => context,
+        useState: (init) => {
+            const i = at++;
+            if (!(i in slots)) slots[i] = { v: typeof init === 'function' ? init() : init };
+            const slot = slots[i];
+            return [slot.v, (next) => { slot.v = typeof next === 'function' ? next(slot.v) : next; }];
+        },
+        useRef: (init) => { const i = at++; if (!(i in slots)) slots[i] = { current: init }; return slots[i]; },
+        useEffect: (fn, deps) => {
+            const i = at++, was = slots[i];
+            if (was && deps && deps.length === was.deps.length && deps.every((d, k) => Object.is(d, was.deps[k]))) return;
+            slots[i] = { deps: deps || [] };
+            pending.push(fn);
+        },
+    };
+    const { usePanelRevs } = new Function('React', 'revsAfter', `${body}\nreturn { usePanelRevs };`)(React, revsAfter);
+    return {
+        render: (settings, setSettings) => {
+            at = 0;
+            const out = usePanelRevs(settings, setSettings);
+            for (const fn of pending.splice(0)) { const c = fn(); if (typeof c === 'function') cleanups.push(c); }
+            return out;
+        },
+        unmount: () => { for (const c of cleanups.splice(0)) c(); },
+    };
+};
+
+test('S9 — usePanelRevs, run as written: opened is the tokens of the render the draft was seeded from; landed merges an answer key by key into the copy and into opened; reopen takes them again', async () => {
+    let copy = { x: 1, revs: { a: 'A1', b: 'B1' } };
+    const setSettings = (f) => { copy = f(copy); };
+    const rig = await hookRig();
+    const first = rig.render(copy, setSettings);
+    assert.deepEqual(first.opened, { a: 'A1', b: 'B1' });
+    assert.notEqual(first.opened, copy.revs, 'a copy of the tokens, not the app\'s own object');
+    const later = rig.render({ x: 1, revs: { a: 'A2', b: 'B1', c: 'C2' } }, setSettings);
+    assert.deepEqual(later.opened, { a: 'A1', b: 'B1' }, 'REGRESSION: the tokens read at send time — a draft seeded from the first render sent with a newer copy\'s, a lost update');
+
+    later.landed({ success: true, revs: { a: 'A3', junk: 7 } });
+    assert.deepEqual(copy, { x: 1, revs: { a: 'A3', b: 'B1' } }, 'REGRESSION: the copy\'s tokens replaced whole, or the answered one not merged');
+    assert.deepEqual(rig.render(copy, setSettings).opened, { a: 'A3', b: 'B1' }, 'REGRESSION: opened not re-based on the save that landed — the panel\'s next save refused against its own');
+    rig.render(copy, setSettings).landed({ success: true });
+    assert.deepEqual(copy.revs, { a: 'A3', b: 'B1' }, 'an answer with no tokens keeps them');
+    assert.deepEqual(rig.render(copy, setSettings).opened, { a: 'A3', b: 'B1' });
+
+    rig.render({ revs: { a: 'A9' } }, setSettings).reopen();
+    assert.deepEqual(rig.render(copy, setSettings).opened, { a: 'A9' }, 'reopen(): the render\'s tokens, whole');
+    rig.render(copy, setSettings).reopen({ z: 'Z1' });
+    assert.deepEqual(rig.render(copy, setSettings).opened, { z: 'Z1' }, 'reopen(revs): those, whole');
+    rig.render({}, setSettings).reopen();
+    assert.deepEqual(rig.render(copy, setSettings).opened, {}, 'a copy with no tokens: none');
+});
+
+test('S9 — usePanelRevs, run as written: AdminView\'s handler takes a stale refusal, told whether the panel is still open; a landed save clears the note only while open; no AdminView, no handler', async () => {
+    const took = [], cleared = [];
+    const rig = await hookRig({ took: async (e, words, isAlive) => { took.push({ e, words, isAlive }); return 'TAKEN'; }, landed: () => cleared.push(true) });
+    let copy = { revs: { a: 'A1' } };
+    const setSettings = (f) => { copy = f(copy); };
+    const panel = rig.render(copy, setSettings);
+    const e = new Error('stale');
+    assert.equal(await panel.panelStale(e, 'W'), 'TAKEN', 'AdminView\'s answer, as it gave it');
+    assert.equal(took.length, 1);
+    assert.deepEqual([took[0].e, took[0].words, took[0].isAlive()], [e, 'W', true]);
+    panel.landed({ revs: { a: 'A2' } });
+    assert.deepEqual(cleared, [true], 'a save that lands clears the words above the panel');
+    rig.unmount();
+    assert.equal(took[0].isAlive(), false, 'REGRESSION (critic A2): a refusal answered after Back reads as the open panel\'s — that panel remounted, its draft lost');
+    panel.landed({ revs: { a: 'A3' } });
+    assert.deepEqual(cleared, [true], 'REGRESSION (critic A2): a save that landed after Back cleared the words of the panel open now');
+    assert.deepEqual(copy.revs, { a: 'A3' }, 'the copy still takes the tokens — they are the org\'s');
+
+    const bare = (await hookRig()).render({ revs: {} }, () => {});
+    assert.equal(await bare.panelStale(new Error('stale')), false, 'no AdminView around it: the panel keeps its draft and says the server\'s words');
+    assert.doesNotThrow(() => bare.landed({ revs: {} }));
+});
+
+test('S9 — usePanelRevs, run as written: once — a second save while one is out shares its outcome, across renders, a refusal too; cleared once it settles (JB3-10)', async () => {
+    const rig = await hookRig();
+    const gates = [], args = [];
+    const save = (...a) => { args.push(a); return new Promise((resolve, reject) => gates.push({ resolve, reject })); };
+    const first = rig.render({}, () => {}).once(save)('own Save');
+    const second = rig.render({}, () => {}).once(save)('the guard');
+    assert.equal(second, first, 'REGRESSION (JB3-10): the guard\'s Save sent while the panel\'s own is out — refused by it');
+    assert.deepEqual(args, [['own Save']]);
+    gates[0].resolve('landed');
+    assert.equal(await first, 'landed');
+    await tick();
+    const third = rig.render({}, () => {}).once(save)();
+    assert.notEqual(third, first, 'REGRESSION: the flight never cleared — every later save answers the first one\'s outcome');
+    assert.equal(args.length, 2);
+    assert.equal(rig.render({}, () => {}).once(save)(), third, 'a refusal is shared too');
+    gates[1].reject(new Error('refused'));
+    await assert.rejects(third, /refused/);
+    await tick();
+    rig.render({}, () => {}).once(save)();
+    assert.equal(args.length, 3, 'cleared after a refusal');
+    gates[2].resolve();
+});
+
+// ── S10 — a draft panel's save, run as written ──────────────────────────────
+
+const CUSTOMER_TYPES = 'src/Tabs/settings/salesProcess/CustomerTypesDetail.jsx';
+const FLAT_LIST = 'src/Tabs/settings/salesProcess/FlatListDetail.jsx';
+const FEATURES = 'src/Tabs/settings/data/FeaturesDetail.jsx';
+const PROPERTY_TYPES = 'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx';
+const staleRefusal = async (key) => {
+    const { STALE_ERROR } = await import('../src/utils/settingsRevs.js');
+    return Object.assign(new Error(STALE_ERROR), { stale: [key] });
+};
+// A panel's save as written, its hook and the sender stubbed: once hands the save itself back (the hook's own is S9's);
+// putSettings answers `answer` or throws `refusal`; panelStale answers `took`. Today's direct send is kept so old code
+// fails on what it sends, not on a missing name. Answers the steps in order, the words said, what went to AdminView,
+// and what it threw.
+const runPanelSave = async (file, component, handler, scope, { answer = { success: true, revs: {} }, refusal = null, took = false } = {}) => {
+    const steps = [], said = [], handed = [];
+    let copy = { revs: { k: 'NEWER' } };
+    const opened = { k: 'OPENED' };
+    let thrown = null;
+    try {
+        await runAs(handlerIn(read(file), component, handler), {
+            once: (fn) => fn, opened,
+            putSettings: async (...a) => { steps.push(['put', ...a]); if (refusal) throw refusal; return answer; },
+            setSettings: (f) => { steps.push(['set']); copy = f(copy); },
+            landed: (a) => steps.push(['landed', a]),
+            panelStale: async (e, words) => { handed.push([e, words]); return took; },
+            setSaving: (v) => steps.push(['saving', v]), setDirty: (v) => steps.push(['dirty', v]),
+            setSaveError: (v) => said.push(v), setError: (v) => said.push(v),
+            dbFetch: async (url, opts) => { steps.push(['dbFetch', url, JSON.parse(opts.body)]); return { ok: true, status: 200, json: async () => answer }; },
+            requestOrg: () => 'org_A', stillOrg: () => true,
+            ...scope,
+        });
+    } catch (e) { thrown = e; }
+    return { steps, said: said.filter(Boolean), handed, thrown, opened, copy };
+};
+const stepOf = (r, kind) => r.steps.find((s) => s[0] === kind);
+const kindsOf = (r) => r.steps.map((s) => s[0]);
+
+test('S10 — Customer types\' save, run as written: the tokens it opened with; lands, its answer to landed after the mirror; stale — to AdminView, rethrown, no words; unread — the server\'s words, the draft kept; a 404\'s words', async () => {
+    const tiers = [{ tier: 'SMB', hex: '#8a9a7a' }];
+    const answer = { success: true, revs: { customerTypeTiers: 'T2' } };
+    const run = (o) => runPanelSave(CUSTOMER_TYPES, 'CustomerTypesDetail', 'handleSave', { tiers }, o);
+    const ok = await run({ answer });
+    const put = stepOf(ok, 'put');
+    assert.ok(put, 'REGRESSION: the save never went through the sender');
+    assert.deepEqual(put[1], { customerTypeTiers: tiers });
+    assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
+    const k = kindsOf(ok);
+    assert.ok(k.indexOf('put') < k.indexOf('set') && k.indexOf('set') < k.indexOf('landed'), `the send, the mirror, then landed: ${k}`);
+    assert.equal(stepOf(ok, 'landed')[1], answer, 'REGRESSION: landed handed something other than the send\'s answer');
+    assert.deepEqual(ok.copy.customerTypeTiers, tiers);
+    assert.deepEqual([ok.thrown, ok.said, ok.handed], [null, [], []]);
+    assert.ok(ok.steps.some((s) => s[0] === 'dirty' && s[1] === false), 'saved: clean');
+
+    const refusal = await staleRefusal('customerTypeTiers');
+    const taken = await run({ refusal, took: true });
+    assert.equal(taken.thrown, refusal, 'rethrown — the leave guard stays, and reads tookLatest');
+    assert.deepEqual(taken.handed, [[refusal, undefined]], 'REGRESSION (J-B5): a stale refusal not handed to AdminView');
+    assert.deepEqual(taken.said, [], 'REGRESSION: the old mount says words over the latest');
+    assert.ok(!kindsOf(taken).includes('set') && !kindsOf(taken).includes('landed'), 'nothing of the refused draft reaches the copy');
+
+    const unread = await run({ refusal, took: false });
+    assert.equal(unread.thrown, refusal);
+    assert.deepEqual(unread.said, [refusal.message], 'the latest unread: the server\'s words, the draft kept');
+    assert.ok(!unread.steps.some((s) => s[0] === 'dirty' && s[1] === false), 'still dirty');
+
+    const gone = await run({ refusal: new Error('Not in your organization.') });
+    assert.deepEqual([gone.said, gone.handed, gone.thrown?.message], [['Not in your organization.'], [], 'Not in your organization.'], 'a refusal that is not stale: its words, never AdminView\'s');
+});
+
+test('S10 — a flat list\'s save (a function component, its key computed), run as written: the tokens it opened with; landed after the mirror; stale to AdminView', async () => {
+    const items = ['Acme'];
+    const run = (o) => runPanelSave(FLAT_LIST, 'FlatListDetail', 'handleSave', { items, settingsKey: 'competitors' }, o);
+    const ok = await run({});
+    const put = stepOf(ok, 'put');
+    assert.ok(put && put[2] === ok.opened, 'REGRESSION: the list sent with no tokens, or not the ones it opened with');
+    assert.deepEqual(put[1], { competitors: items });
+    assert.deepEqual(ok.copy.competitors, items);
+    assert.ok(kindsOf(ok).indexOf('landed') > kindsOf(ok).indexOf('set'), 'REGRESSION: the computed key\'s token never merged — the next save refused against its own');
+    const refusal = await staleRefusal('competitors');
+    const taken = await run({ refusal, took: true });
+    assert.deepEqual([taken.thrown, taken.handed.length, taken.said], [refusal, 1, []]);
+});
+
+test('S10 — Features\' save, run as written (J-B12): the tokens it opened with; stale — the key words when a key went, by the payload; unread — the typed key cleared, never kept across the latest', async () => {
+    const { PANEL_CHANGED, PANEL_CHANGED_KEY } = await import('../src/utils/settingsRevs.js');
+    const base = {
+        PANEL_CHANGED, PANEL_CHANGED_KEY,
+        aiSettings: { model: 'm' }, flags: { 'deal-scoring': true },
+        tabViz: { leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false, repsCanUseDispatch: false },
+        aiScoring: false, aiPrompts: true,
+    };
+    const run = async (keyAction, apiKeyInput, o) => {
+        const key = [];
+        const r = await runPanelSave(FEATURES, 'FeaturesDetail', 'handleSaveAi', { ...base, keyAction, apiKeyInput,
+            setApiKeyInput: (v) => key.push(['input', v]), setKeyAction: (v) => key.push(['action', v]) }, o);
+        return { ...r, key };
+    };
+    const answer = { success: true, anthropicApiKeySet: true, revs: { aiSettings: 'A2' } };
+    const ok = await run('set', ' sk-new ', { answer });
+    const put = stepOf(ok, 'put');
+    assert.ok(put, 'REGRESSION: the save never went through the sender');
+    assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
+    assert.equal(put[1].anthropicApiKey, 'sk-new');
+    assert.equal(stepOf(ok, 'landed')?.[1], answer, 'the answer to landed');
+    assert.deepEqual(ok.key, [['input', ''], ['action', null]], 'the plaintext dropped once saved');
+
+    const refusal = await staleRefusal('aiSettings');
+    const keyTaken = await run('set', 'sk-new', { refusal, took: true });
+    assert.deepEqual(keyTaken.handed, [[refusal, PANEL_CHANGED_KEY]], 'REGRESSION (J-B12): a typed key gone with the old mount, and nothing asks for it again');
+    assert.deepEqual([keyTaken.thrown, keyTaken.said], [refusal, []]);
+    const cleared = await run('clear', '', { refusal, took: true });
+    assert.equal(cleared.handed[0]?.[1], PANEL_CHANGED_KEY, 'a key cleared went with the save too');
+    const keyUnread = await run('set', 'sk-new', { refusal, took: false });
+    assert.deepEqual(keyUnread.key, [['input', ''], ['action', null]], 'REGRESSION (J-B12): the typed key kept across a refusal');
+    assert.equal(keyUnread.said.length, 1);
+    assert.ok(keyUnread.said[0].startsWith('Failed to save: ' + refusal.message) && keyUnread.said[0].endsWith('Enter the API key again.'), keyUnread.said[0]);
+    assert.equal(keyUnread.thrown, refusal);
+
+    const noKey = await run('set', '   ', { refusal, took: true });
+    assert.equal(noKey.handed[0]?.[1], PANEL_CHANGED, 'REGRESSION (critic B2): \'set\' with an empty box sends no key — yet the words ask for one');
+    assert.ok(!('anthropicApiKey' in stepOf(noKey, 'put')[1]));
+    const noKeyUnread = await run(null, '', { refusal, took: false });
+    assert.deepEqual([noKeyUnread.said, noKeyUnread.key], [['Failed to save: ' + refusal.message], []], 'no key sent: the server\'s words, nothing cleared');
+
+    const forbidden = await run(null, '', { refusal: new Error('You need the Admin role to change these settings.') });
+    assert.deepEqual([forbidden.handed, forbidden.said], [[], ['Failed to save: You need the Admin role to change these settings.']]);
+});
+
+// ── S11 — AdminView's stale handler and leave guard, run as written ─────────
+
+const runPanelStale = async ({ latest = { revs: { k: 'L' } }, take = null, args = [] } = {}) => {
+    const { PANEL_CHANGED } = await import('../src/utils/settingsRevs.js');
+    const st = { taken: 0, sets: 0, dirty: [], notes: [], epoch: 0, slot: { current: () => {} } };
+    const answer = runAs(handlerIn(read(ADMIN), 'AdminView', 'panelStale'), {
+        PANEL_CHANGED, activeItem: { id: 'customer-types' },
+        takeLatestSettings: take || (async () => { st.taken += 1; return latest; }),
+        setSettings: () => { st.sets += 1; },
+        settingsSaveRef: st.slot,
+        setSettingsDirty: (v) => st.dirty.push(v),
+        setPanelNote: (v) => st.notes.push(v),
+        setPanelEpoch: (f) => { st.epoch = typeof f === 'function' ? f(st.epoch) : f; },
+    }, ...args);
+    return { st, answer };
+};
+
+test('S11 — AdminView\'s panelStale, run as written: read — the slot and App\'s flag cleared, the words, the remount, tookLatest; the asker gone — only tookLatest; unread — nothing, false; never settles after a switch', async () => {
+    const { PANEL_CHANGED, PANEL_CHANGED_KEY } = await import('../src/utils/settingsRevs.js');
+    const e = new Error('stale');
+    const open = await runPanelStale({ args: [e, undefined, () => true] });
+    assert.equal(await open.answer, true);
+    assert.equal(e.tookLatest, true, 'REGRESSION (J-B11): the leave guard cannot tell the latest was taken');
+    assert.equal(open.st.taken, 1);
+    assert.equal(open.st.slot.current, null, 'REGRESSION: the guard still offers the old mount\'s save — its draft is gone');
+    assert.deepEqual(open.st.dirty, [false], 'REGRESSION: App still thinks the page is unsaved');
+    assert.deepEqual(open.st.notes, [{ id: 'customer-types', words: PANEL_CHANGED }], 'the words, above that panel (JB3-1)');
+    assert.equal(open.st.epoch, 1, 'REGRESSION (J-B5): the panel not drawn again on the latest');
+    const keyed = await runPanelStale({ args: [new Error('stale'), PANEL_CHANGED_KEY, () => true] });
+    await keyed.answer;
+    assert.equal(keyed.st.notes[0]?.words, PANEL_CHANGED_KEY, 'the panel\'s own words when it names them');
+
+    const e2 = new Error('stale');
+    const gone = await runPanelStale({ args: [e2, undefined, () => false] });
+    assert.equal(await gone.answer, true, 'the latest was taken');
+    assert.equal(e2.tookLatest, true);
+    assert.deepEqual([gone.st.slot.current !== null, gone.st.dirty, gone.st.notes, gone.st.epoch], [true, [], [], 0],
+        'REGRESSION (critic A2): the panel open now remounted, its draft lost, for a refusal answered after its asker left');
+
+    const e3 = new Error('stale');
+    const unread = await runPanelStale({ latest: null, args: [e3, undefined, () => true] });
+    assert.equal(await unread.answer, false, 'unread: the panel keeps its draft and says the server\'s words');
+    assert.deepEqual([e3.tookLatest, unread.st.slot.current !== null, unread.st.dirty, unread.st.notes, unread.st.epoch], [undefined, true, [], [], 0]);
+
+    // The real read, cut by a switch: it never settles, and touches nothing.
+    const { takeLatestSettings } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    await withServer(async ({ queue, setRequestOrg }) => {
+        const h = held(); queue.push(h.answer);
+        const e4 = new Error('stale');
+        const cut = await runPanelStale({ take: takeLatestSettings, args: [e4, undefined, () => true] });
+        await until(() => h.release);
+        setRequestOrg('org_B'); h.release(200, { settings: { revs: { k: 'X' } } });
+        assert.equal(await outcome(cut.answer), PENDING, 'REGRESSION (critic B1): the last org\'s refusal answered on the new org\'s screen');
+        assert.deepEqual([e4.tookLatest, cut.st.sets, cut.st.dirty, cut.st.notes, cut.st.epoch], [undefined, 0, [], [], 0]);
+    });
+});
+
+// A leave guard's save as written: the save it runs answers or throws `thrown`; answers what it set.
+const refusedWith = (fields) => async () => { throw Object.assign(new Error('x'), fields); };
+const GUARD_CASES = [[{ tookLatest: true }, 'stale'], [{ tookLatest: true, partial: true }, 'stale-partial'], [{ stale: ['k'] }, true], [{}, true]];
+
+test('S11 — AdminView\'s guardSave, run as written: a refusal that took the latest says so — \'stale\', \'stale-partial\'; any other, true; a save that lands moves on. Back, another card and Discard', async () => {
+    const runGuard = async (save) => {
+        const st = { failed: [], saving: [], guard: [], dirty: [], went: 0 };
+        await runAs(handlerIn(read(ADMIN), 'AdminView', 'guardSave'), {
+            settingsSaveRef: { current: save }, leaveGuard: { go: () => { st.went += 1; } },
+            setLeaveGuard: (v) => st.guard.push(v), setGuardSaving: (v) => st.saving.push(v),
+            setGuardFailed: (v) => st.failed.push(v), setSettingsDirty: (v) => st.dirty.push(v),
+        });
+        return st;
+    };
+    for (const [fields, want] of GUARD_CASES) {
+        const st = await runGuard(refusedWith(fields));
+        assert.deepEqual(st.failed, [false, want], `${JSON.stringify(fields)}: REGRESSION (J-B11) — the dialog cannot say the page took the latest`);
+        assert.deepEqual([st.went, st.guard, st.saving.at(-1)], [0, [], false], 'the dialog stays');
+    }
+    const landed = await runGuard(async () => {});
+    assert.deepEqual([landed.went, landed.dirty, landed.guard, landed.failed], [1, [false], [null], [false]]);
+
+    // Back and another card: the words go with the panel they were about, through the guard too. Discard forgets a
+    // failed save's words (JB3-7b).
+    const src = withoutComments(read(ADMIN));
+    const program = astOf(src).program;
+    for (const name of ['onBack', 'openItem']) {
+        const fns = [];
+        walk(program, (n) => { if (n.type === 'VariableDeclarator' && n.id.name === name && isFn(n.init)) fns.push(n.init); });
+        assert.equal(fns.length, 1, `one ${name}`);
+        let go = null;
+        walk(fns[0], (n) => { if (n.type === 'ObjectProperty' && keyName(n) === 'go' && isFn(n.value)) go = src.slice(n.value.start, n.value.end); });
+        assert.ok(go && go.includes('setPanelNote(null)'), `${name}: REGRESSION — leaving a dirty panel through the guard keeps its words for the next one`);
+        assert.equal(count(src.slice(fns[0].start, fns[0].end), 'setPanelNote(null)'), 2, `${name}: REGRESSION — the words outlive the panel they were about`);
+    }
+    const discards = [];
+    walk(program, (n) => { if (n.type === 'JSXAttribute' && n.name.name === 'onDiscard') discards.push(src.slice(n.value.start, n.value.end)); });
+    assert.equal(discards.length, 2, 'the panel\'s dialog and the card list\'s');
+    for (const d of discards) {
+        const reset = d.indexOf('setGuardFailed(false)'), go = d.indexOf('go && go()');
+        assert.ok(reset >= 0 && go > reset, `REGRESSION (JB3-7b): Discard keeps a failed save's words for the next dialog — ${d}`);
+    }
+});
+
+// ── S12 — the pins ───────────────────────────────────────────────────────────
+
+test('S12 — App\'s leave guard (navGuardSave), run as written: a refusal that took the latest says so — \'stale\', \'stale-partial\'; any other, true; a save that lands moves on', async () => {
+    const run = async (save) => {
+        const st = { failed: [], saving: [], shown: [], went: [] };
+        await runAs(handlerIn(read('src/App.jsx'), 'App', 'navGuardSave'), {
+            React: { useCallback: (fn) => fn },
+            settingsSaveRef: { current: save }, pendingNavTab: 'reports',
+            setNavGuardSaving: (v) => st.saving.push(v), setNavGuardFailed: (v) => st.failed.push(v),
+            setSettingsDirty: () => {}, setShowNavGuard: (v) => st.shown.push(v),
+            setActiveTab: (v) => st.went.push(v), setPendingNavTab: () => {},
+        });
+        return st;
+    };
+    for (const [fields, want] of GUARD_CASES) {
+        const st = await run(refusedWith(fields));
+        assert.deepEqual(st.failed, [false, want], `${JSON.stringify(fields)}: REGRESSION (J-B11) — the dialog cannot say the page took the latest`);
+        assert.deepEqual([st.went, st.shown, st.saving.at(-1)], [[], [], false], 'the dialog stays');
+    }
+    const landed = await run(async () => {});
+    assert.deepEqual([landed.went, landed.shown, landed.failed], [['reports'], [false], [false]]);
+});
+
+test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), reopen where a draft re-seeds, one save at a time on every guarded panel (JB3-10), Property types\' deps, JB3-6, JB3-7a', async () => {
+    const { LEAVE_STALE, LEAVE_STALE_PART } = await import('../src/utils/settingsRevs.js');
+    assert.equal(LEAVE_STALE, 'Another change landed first — the page now shows the latest. Your changes were not saved.', 'J-B11, verbatim');
+    assert.equal(LEAVE_STALE_PART, 'Another change landed first — the page now shows the latest. That change was not saved; the ones saved before it stay saved.', 'JB3-5');
+    const modal = withoutComments(read('src/Tabs/settings/shared/LeaveGuardModal.jsx'));
+    assert.ok(modal.includes("const stale = failed === 'stale' || failed === 'stale-partial';"));
+    assert.match(modal, /\{failed === 'stale-partial' \? LEAVE_STALE_PART\s*: stale \? LEAVE_STALE\s*: 'The save did not go through — the page behind this dialog shows why\. Your changes are still here\.'\}/, 'the three states');
+    assert.match(modal, /\{!\(stale && !canSave\) && \(\s*<div style=\{\{[^}]*\}\}>\s*\{message\}\s*<\/div>\s*\)\}/, 'REGRESSION (critic A6): "Save them, or discard" said — or its box drawn empty — with nothing left to save');
+    assert.ok(modal.includes("{stale && !canSave ? 'Continue' : 'Discard changes and continue'}"), 'JB3-2: nothing to discard — it continues');
+    assert.match(modal, /\{canSave && \(\s*<button onClick=\{onSave\}/, 'Save offered on canSave alone (critic A4)');
+
+    // reopen: in the effect that re-seeds the draft from the prop — Features' only while it is clean.
+    const calleeText = (c) => (c.callee.type === 'Identifier' ? c.callee.name : (chainOf(c.callee) || []).join('.'));
+    for (const [f, whenClean] of [[FEATURES, true], ['src/Tabs/settings/salesProcess/LeadScoringDetail.jsx', false], ['src/Tabs/settings/salesProcess/LeadVisibilityDetail.jsx', false]]) {
+        const calls = [];
+        walk(astOf(read(f)).program, (n, anc) => { if (callsNamed('reopen')(n)) calls.push({ n, anc }); });
+        assert.equal(calls.length, 1, `${f}: one reopen`);
+        const { n, anc } = calls[0];
+        assert.equal(hookFault('reopen', anc), null, `${f}: reopen is the panel's own`);
+        assert.equal(n.arguments.length, 0, `${f}: the render's tokens`);
+        const effect = anc.findLast((a, i) => isFn(a) && i > 0 && isCall(anc[i - 1]) && /^(React\.)?useEffect$/.test(calleeText(anc[i - 1])) && anc[i - 1].arguments[0] === a);
+        assert.ok(effect && anc.findLast(isFn) === effect, `${f}: REGRESSION — reopen outside the effect that re-seeds the draft: the draft the prop's, its tokens the old`);
+        if (whenClean) assert.ok(anc.some((a) => a.type === 'IfStatement' && a.test.type === 'UnaryExpression' && a.test.operator === '!' && a.test.argument.name === 'dirty'), `${f}: only when the draft re-seeds (!dirty)`);
+    }
+
+    // One save at a time: the guard's save is `const <handler> = once(async …)` — under useCallback for Property types.
+    let guarded = 0;
+    for (const f of SITE_FILES) {
+        walk(astOf(read(f)).program, (n, anc) => {
+            if (!callsNamed('useRegisterSave')(n)) return;
+            guarded += 1;
+            const h = n.arguments[2];
+            const b = h && h.type === 'Identifier' ? bindingOf(h.name, anc) : null;
+            let init = b && b.kind === 'const' ? b.decl.init : null;
+            if (isCall(init) && calleeName(init) === 'useCallback') init = init.arguments[0];
+            assert.ok(['handleSave', 'handleSaveAi'].includes(h?.name), `${f}: the guard runs the panel's save`);
+            assert.ok(isCall(init) && calleeName(init) === 'once' && isFn(init.arguments[0]) && init.arguments[0].async,
+                `${f}:${n.loc.start.line}: REGRESSION (JB3-10) — the guard's save is not once(async …): pressed while the panel's own is out, it is refused by it`);
+            assert.equal(hookFault('once', anc), null, `${f}: once is the panel's own — its flight held across renders`);
+        });
+    }
+    assert.equal(guarded, B3A_FILES.length, 'every guarded panel read');
+    let deps = null;
+    walk(astOf(read(PROPERTY_TYPES)).program, (n) => {
+        if (n.type === 'VariableDeclarator' && n.id.name === 'handleSave' && isCall(n.init) && calleeName(n.init) === 'useCallback') deps = n.init.arguments[1];
+    });
+    assert.deepEqual(deps?.elements?.map((e) => e.name), ['types', 'setSettings', 'opened', 'landed', 'panelStale'], 'REGRESSION: a memo over an old opened — the save names the tokens of a mount before its last landing');
+
+    // JB3-6: a Save waits for an edit, and for the save out. JB3-7a: Cancel clears App's unsaved flag too.
+    const elements = (f) => {
+        const src = read(f), out = [];
+        walk(astOf(src).program, (n) => {
+            if (n.type !== 'JSXOpeningElement') return;
+            out.push(Object.fromEntries(n.attributes.filter((a) => a.type === 'JSXAttribute' && a.value?.type === 'JSXExpressionContainer')
+                .map((a) => [a.name.name, src.slice(a.value.expression.start, a.value.expression.end)])));
+        });
+        return out;
+    };
+    assert.ok(elements(FLAT_LIST).some((e) => e.onClick === 'handleSave' && e.disabled === '!dirty || saving'), 'JB3-6: a flat list\'s own Save');
+    for (const f of ['src/Tabs/settings/salesProcess/CustomFieldsDetail.jsx', 'src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx']) {
+        assert.ok(elements(f).some((e) => e.primaryAction === 'handleSave' && e.disablePrimary === '!dirty || saving'), `${f}: JB3-6`);
+    }
+    for (const f of ['src/Tabs/settings/quoting/ProductTypesDetail.jsx', 'src/Tabs/settings/dispatch/DispatchBlockTypesDetail.jsx', 'src/Tabs/settings/dispatch/DispatchJobTypesDetail.jsx']) {
+        const cancels = [];
+        walk(astOf(read(f)).program, (n) => { if (n.type === 'JSXAttribute' && n.name.name === 'onCancel') cancels.push(n.value.expression); });
+        assert.equal(cancels.length, 1, `${f}: one Cancel`);
+        assert.ok(has(cancels[0], (n) => callsNamed('setSettingsDirty')(n) && n.arguments[0]?.type === 'BooleanLiteral' && n.arguments[0].value === false),
+            `${f}: REGRESSION (JB3-7a) — Cancel leaves App's unsaved flag set: the guard asks about edits that are gone`);
+    }
+});
+
+// The J-B5 words show on the card they were said for, and on no other (the checker's problem 3): Back, another card
+// and the guard's leave clear them, and the render checks the card too — a note kept past a path that forgets to
+// clear it would sit above another panel, naming a change that panel never saw.
+test('S11 — AdminView\'s note: drawn only above the card it was said for', () => {
+    const src = withoutComments(read(ADMIN));
+    assert.equal(count(src, '{panelNote && panelNote.id === activeItem.id && ('), 1, 'REGRESSION: the J-B5 words drawn above whatever card is open');
+    assert.equal(count(src, 'setPanelNote({ id: activeItem?.id, words });'), 1, 'the note names its card');
 });

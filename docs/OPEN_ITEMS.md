@@ -258,8 +258,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      list's token through one sender; a stale refusal reads the latest and
      says so — §4.3's two stale-tab items done on dev (a tab loaded before
      it, and prod, still put a list back until they reload or it ships).
-     Next: B-3 (every other screen), then one scoped run over B-2 and B-3
-     before any push.
+     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md
+     §4b), NOT committed, harness deferred:** every draft panel of
+     Settings sends the tokens it opened with; a stale refusal shows the
+     panel again on the latest and says so, and both leave guards say the
+     change was not saved. Next: B-3b (Pipelines, Calendar, Edit brand,
+     the Sales Manager), B-3c (Connected apps), then one scoped run over
+     B-2 and all of B-3 before any push.
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -2044,6 +2049,79 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a Manager on a team's `repIds`, which the window neither draws nor
   counts; its save sends the stored list unchanged (`repIds` kept
   whole), so nothing is dropped. Low.
+- **Pain points library crashes on the seeded default** (§0.226's plan,
+  confirmed in the code 3 Nov; not yet seen in the browser): the
+  default `painPoints` is seven strings (`settingsDefaults.js:36`); the
+  GET answers it while the org has stored none, and every settings
+  save stores it under the row (`_settingsRevs.mjs` `seedsUnder`). But
+  `PainPointsDetail.jsx` reads `{ cat, items }` groups: `g.items.length`
+  (:143) throws on the first render, and the Settings tab is replaced by
+  its error card. Accelerep QA's card reads "7 pain points", the seed's
+  count. The deal window copes (`OpportunityModal.jsx` :1905). Older
+  than §0.226. Medium.
+- **An edit made while a settings panel's own save is out is marked
+  saved** (§0.226's review, 3 Nov): each panel sends its draft as it
+  was at the click, then clears dirty when the answer lands (FlatList,
+  Customer types, Company profile, Lead visibility read). The later
+  edit stays on screen but the guard no longer asks, Cancel drops it,
+  and only another edit sends it; Lead visibility's re-seed effect
+  flips a box ticked meanwhile back. Since §0.226 the guard's "Save
+  changes and continue" pressed during that save shares it (`once`,
+  JB3-10) and leaves without sending the later edit, and a flat list's
+  Save is disabled once clean. The clean-marking is older than §0.226.
+  Low.
+- **The leave guard still says "not been saved" after a save that was
+  out when it opened** (§0.226's browser check, 3 Nov): Save, then
+  Back at once, opens the guard while the panel is dirty. When that
+  save lands, or is refused as stale, the panel turns clean and the
+  guard's Save goes, but the dialog keeps "Save them, or discard and
+  continue" and a red Discard — on a refusal it never says the change
+  was refused. Nothing closes or re-words the guard when the panel
+  turns clean (`AdminView.jsx`, `App.jsx`), and `panelStale` sets no
+  `guardFailed`. The landed case is older than §0.226. Low.
+- **A key the server derives on a save moves without the screen
+  knowing** (§0.226's plan, 2 Nov): the AI blob's scrub and the legacy
+  API-key migration (`settings.mjs` :504-505, `writtenKeys`) mint a
+  token for a key the save did not send, but the 200 answers only the
+  keys sent (:566). Since §0.226 Features names its tokens, so its next
+  save of `aiSettings`, or of a typed or cleared key, is refused once
+  as stale and shows the latest. Only an org whose stored AI blob still
+  holds a legacy key field, and once. Low.
+- **Train now's "rules changed" answer leaves the panel on the old
+  rules** (§0.226's plan, 2 Nov): when the rules are saved while the
+  model trains, `scoreOrg` answers `reason: 'config-changed'` with the
+  rules as they now stand and no token, and `LeadScoringDetail.jsx`
+  takes `leadScoring` only on `data.ok`. The panel keeps the rules and
+  token it opened with while the leads are re-scored on the new rules;
+  a rules save from it is refused once and drawn again on the latest,
+  the change lost. Its words already say "Train again." Low.
+- **A reload of the same org replaces a panel's copy under it**
+  (§0.226's plan, 2 Nov; unverified): `App.jsx`'s load re-runs on
+  `[clerkUser, organization]` by identity. If Clerk hands new objects
+  for the same user or org mid-session, the app's copy is replaced
+  whole; a panel's save still names the tokens it opened with, so no
+  update is lost, but Lead scoring re-seeds on `settings.leadScoring`
+  and silently drops an unsaved draft. Whether Clerk does this is not
+  known. Low.
+- **The "Import preset" buttons on Crews and Skills & certifications
+  do nothing** (§0.226's review, 3 Nov): the buttons in
+  `DispatchCrewsDetail.jsx` and `DispatchSkillsDetail.jsx` have no
+  `onClick` and no preset data exists, yet they look like the working
+  "+ New crew". Older than §0.226. Wire them to a preset list or remove
+  them. Low.
+- **Features asks for the API key again after a refused removal**
+  (§0.226's review, 3 Nov): J-B12's words key on the payload holding
+  `anthropicApiKey`, and a removal sends `anthropicApiKey: null`
+  (`FeaturesDetail.jsx`), so a stale refusal of a removal says "Enter
+  the API key again." though no key was typed (and, the latest unread,
+  resets the pending removal). Keying the words on a key that is not
+  null would fix it. Low.
+- **Property types wraps its save in a `useCallback` that never holds**
+  (§0.226's review, 3 Nov): its dependencies list `landed` and
+  `panelStale`, which `usePanelRevs` builds anew every render. Nothing
+  is wrong — every `once` wrapper shares the hook's `flight` ref — but
+  the other panels write a plain `once(…)`; dropping the `useCallback`
+  would match them. Low.
 - **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
@@ -2205,7 +2283,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Sixteen settings keys no screen sets by name** (an unverified scan; read
   each before saying anything of it). §0.188 (b), 7 Oct.
 - **Funnel stages keeps its own default stages,** in another shape.
-  §0.170 (b).
+  §0.170 (b). Read again 3 Nov (§0.226's plan): it is worse than a
+  default — the stored stages and the app default are `{ name, weight }`
+  and every reader reads `weight` (the deal window's stage default, Won
+  and Lost, Reopen, the hint; Reports' deal journey), but
+  `FunnelStagesDetail.jsx` edits `prob`, `type` and `color`. So its
+  "Default prob." saves a key nothing reads; a stage from "+ Add stage"
+  has no `weight`, giving a deal moved to it no default probability; and
+  with no stored `type` the curve draws nothing and every row reads "All
+  pipelines". Older than §0.226. Medium.
 - **A workspace created by integration requests keeps `[]` vertical
   markets,** which reads like a list an Admin cleared. §0.170 (c).
 - **Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
@@ -2213,7 +2299,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Pipelines, Company calendar and the quote brand editor** set the app's
   copy first and put back a whole snapshot on failure. §0.170 (e).
 - **A panel's own Save leaves a refused save's throw unhandled.**
-  §0.170 (f).
+  §0.170 (f). Since §0.226 not on the twenty-six panels it converted:
+  `once` hangs `p.then(clear, clear)` on the save it returns, which
+  handles the refusal (the browser check, 3 Nov: three refused
+  own-button saves, no "Uncaught" line — the pane records them). Still
+  open for the screens B-3b and B-3c convert, unverified.
 - **The SPIFF claims filter keeps its view state in the settings object.**
   §0.170 (g).
 - **The Settings cards before settings load** read "0 personas" / "No data"
@@ -4399,8 +4489,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   src and index.css (about 203 files it misses — a 50th); §0.225's,
   tests/settings-saves.test.mjs, walks src (179 files the static read
   misses — a 51st), and §0.225 edits three listed above (deal-modal-saves,
-  late-answers, save-buttons), so the one scoped run over B-2 and B-3
-  reads them short; what each reaches
+  late-answers, save-buttons), and §0.226 edits those three and
+  quota-plan, so the one scoped run over B-2 and B-3 reads them short;
+  what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
   part 4). Recommended: mutate-scope.mjs runs each edited test
   once with the tracer and adds what it traced to the scope (Jeff's call).

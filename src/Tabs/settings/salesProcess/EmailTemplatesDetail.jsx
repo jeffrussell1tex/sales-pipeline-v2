@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
+import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { MERGE_FIELDS, LIMITS, cleanEmailTemplates, mergeContext, renderForContact } from '../../../utils/emailTemplates.js';
@@ -77,22 +78,29 @@ export const EmailTemplatesDetail = ({ settings, setSettings, onBack, setSetting
     const [saving, setSaving]     = useState(false);
     const [saveError, setSaveError] = useState('');
 
-    const handleSave = async () => {
+    // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
+    // save refused because another landed first remounts the panel on the latest (J-B5).
+    const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
+    const handleSave = once(async () => {
         setSaving(true);
         const clean = cleanEmailTemplates(items);
         try {
-            await putSettings({ emailTemplates: clean });
+            const answer = await putSettings({ emailTemplates: clean }, opened);
             setSettings(prev => ({ ...prev, emailTemplates: clean }));
+            landed(answer);
             setItems(clean.map(t => ({ ...t })));
             setSaveError('');
             setDirty(false);
         } catch (e) {
+            // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
+            // it. Unread, the server's words below and the draft kept.
+            if (e.stale && await panelStale(e)) throw e;
             setSaveError(e.message);
             setSaving(false);
             throw e;
         }
         setSaving(false);
-    };
+    });
     useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
     useRegisterSave(settingsSaveRef, dirty, handleSave);
 

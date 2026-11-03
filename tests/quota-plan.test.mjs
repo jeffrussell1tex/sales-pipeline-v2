@@ -477,12 +477,15 @@ test('Home and Reports read the member\'s own plan for the year they show', () =
 
 test('the Fiscal year page: only what changed is saved; the quota periods; no made-up card; the current period from quarters.js', () => {
     const p = code(read('src/Tabs/settings/company/FiscalYearDetail.jsx'));
-    order(between(p, '    const handleSave = async () => {', '\n    };'),
+    // One save at a time (state §0.226 — JB3-10), naming the tokens the page opened with; the tokens it answered
+    // follow the copy.
+    order(between(p, '    const handleSave = once(async () => {', '\n    });'),
         '        if (startChanged) payload.fiscalYearStart = startMonth + 1;',
         '        if (periodsChanged) payload.quotaPeriods = periods;',
         '        if (!Object.keys(payload).length) return;',
-        '            await putSettings(payload);',
-        '            setSettings(prev => ({ ...prev, ...payload }));');
+        '            const answer = await putSettings(payload, opened);',
+        '            setSettings(prev => ({ ...prev, ...payload }));',
+        '            landed(answer);');
     assert.ok(p.includes('    const dirty = startChanged || periodsChanged;'), 'unsaved is what differs from the saved settings');
     order(p,
         '    const startNeverSet = fiscalYearDetail(settings?.fiscalYearStart) === null;',
