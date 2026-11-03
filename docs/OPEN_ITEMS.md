@@ -254,8 +254,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      `a03b958`, NOT pushed:** the server — a settings save writes only its keys, each
      with a revision token compared in the write; a stale one refused,
      nothing written, no member renamed; every other writer merges only its
-     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md
-     §4a), NOT committed, harness deferred:** the people screens send each
+     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md §4a), committed `438d974`, harness deferred, NOT pushed:** the people screens send each
      list's token through one sender; a stale refusal reads the latest and
      says so — §4.3's two stale-tab items done on dev (a tab loaded before
      it, and prod, still put a list back until they reload or it ships).
@@ -275,7 +274,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      DONE in §0.222 (step C: the name paired with the id, a rename renaming
      every holder, no new duplicate name) (found unmarked 2 Nov); the
      put-back DONE on dev in §0.225 (step B-2: the profile page and TeamModal
-     send the token of the list they read; NOT committed).
+     send the token of the list they read; committed `438d974`, NOT pushed).
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -1976,8 +1975,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   now sends no member a write. Until step C SHIPS, do not save UKG's team
   on the Teams page (prod runs the old code). Repairing UKG's stored ids is
   still a write to real data — Jeff's call.
-- **A stale tab's whole teams list renames the holders back — DONE on dev
-  in §0.225 (step B-2; NOT committed)**: each of the screens named below,
+- **A stale tab's whole teams list renames the holders back — DONE on dev in §0.225 (step B-2; committed `438d974`, NOT pushed)**: each of the screens named below,
   and TeamModal, sends its list with the token it read; a stale one is
   refused, nothing written, no one renamed, and the tab shows the latest
   (browser check, 2 Nov: a rename in one tab, the other's save refused,
@@ -2071,8 +2069,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   members' Clerk ids, 2 no one's); its territories' 4 `repIds` name no
   member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
   is a write to real data — Jeff's call.
-- **A stale tab's teams save is refused after a member is removed
-  elsewhere — DONE on dev in §0.225 (step B-2; NOT committed)**: since
+- **A stale tab's teams save is refused after a member is removed elsewhere — DONE on dev in §0.225 (step B-2; committed `438d974`, NOT pushed)**: since
   §0.224 the stale token is refused (409) before the link check, and
   since §0.225 the screens read the latest and say so, the profile's
   Save changes making its move on it; the removing tab takes its lists'
