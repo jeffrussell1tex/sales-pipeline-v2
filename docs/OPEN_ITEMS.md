@@ -128,24 +128,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      29 Oct, each the Recommended, and the census). Four steps: 3a the
      account import, screen and server together; 3b the contact and deal
      imports; 3c the merge's links; 3d the merge's placement. **3a built
-     (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, pushed to dev 30 Oct (`29e2f44..722ed8d`), NOT shipped**: the
+     (§0.215; guide §18b105), its browser check PASSED, committed `321643e`, pushed to dev 30 Oct (`29e2f44..722ed8d`), SHIPPED 4 Nov, the forty-fourth ship**: the
      account import's names each one record or the row refused at Preview,
      sent by depth; the accounts bulk create placed by the parent rule, the
      bulk overwrite moving and renaming nothing. **3b built (§0.216; guide
-     §18b106), its browser check PASSED as Jeff and as Karen, committed `ef075eb` (30 Oct, on Jeff's word, "Commit it"); pushed to dev 30 Oct on Jeff's word ("Push to dev"): `306be1f..94f266f` at 15:20:53 UTC, accelerep.netlify.app serving `index-D2hmxC5q.js` (the local build's hash) from 15:21:45 UTC, the Tests run GREEN (gates, unit, integration; completed 15:22:49 UTC); NOT shipped** (Jeff, 30 Oct:
+     §18b106), its browser check PASSED as Jeff and as Karen, committed `ef075eb` (30 Oct, on Jeff's word, "Commit it"); pushed to dev 30 Oct on Jeff's word ("Push to dev"): `306be1f..94f266f` at 15:20:53 UTC, accelerep.netlify.app serving `index-D2hmxC5q.js` (the local build's hash) from 15:21:45 UTC, the Tests run GREEN (gates, unit, integration; completed 15:22:49 UTC); SHIPPED 4 Nov, the forty-fourth ship** (Jeff, 30 Oct:
      "begin"; Q13 "Refuse both", Q14 "Keep what's stored"): the contact
      and deal imports' names each one record or the row refused at
      Preview; a contact linked by id, a new company made once; a deal on
      its account by id; the deals bulk paths linked by the single save's
      rule; a blank Sales Rep the importer's by id; an Overwrite's blank
      cell keeps what is stored. **3c built (§0.218; guide §18b108), its
-     browser check PASSED as Jeff, committed `98a26e3` (31 Oct, on Jeff's word, "Commit c"), pushed to dev 1 Nov, NOT shipped** (Jeff, 30 Oct: Q15 "Still
+     browser check PASSED as Jeff, committed `98a26e3` (31 Oct, on Jeff's word, "Commit c"), pushed to dev 1 Nov, SHIPPED 4 Nov, the forty-fourth ship** (Jeff, 30 Oct: Q15 "Still
      on survivor", Q16 "Skip if shared", Q17 "Show it to pick", Q18 all
      three): contacts moved by id and back with their own company; renames
      within the pair; a claim with its deal; a contact's Company with its
      account; two merges at once refused; each record counted once.
      **3d built (§0.219; guide §18b109), its browser check PASSED as Jeff,
-     committed `afb0578` (1 Nov, on Jeff's word, "Commit d"), pushed to dev 1 Nov, NOT shipped** (Jeff, 31 Oct: "Then d"; Q19 "Judge live rows only", Q20
+     committed `afb0578` (1 Nov, on Jeff's word, "Commit d"), pushed to dev 1 Nov, SHIPPED 4 Nov, the forty-fourth ship** (Jeff, 31 Oct: "Then d"; Q19 "Judge live rows only", Q20
      "Keep the lift allowed", Q21 "Only what the move changes", Q22 "Warn,
      keep Merge"): a merge refused, nothing written, saying what to move
      first, where it would close a loop, put an account under a site or
@@ -154,7 +154,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      marks a pair in one hierarchy; the window warns. Batch 3's four steps
      are built. **§0.220 built, its browser check PASSED as Jeff (a
      refused merge pressed on his word), committed `b8a9f24`, pushed to
-     dev 1 Nov (`ae439be..0d1f35b`, Tests GREEN), NOT shipped** (Jeff, 1 Nov: "do
+     dev 1 Nov (`ae439be..0d1f35b`, Tests GREEN), SHIPPED 4 Nov, the forty-fourth ship** (Jeff, 1 Nov: "do
      that"): the refusal's words read two records of one name apart, each
      merge card shows its level, the refusal box in the warm colours.
    - **Batch 4b-2a is DONE (§0.202; guide §18b95)** (Jeff, 15 Oct: "Small
@@ -238,54 +238,59 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      quote templates) and a service plan's visit template (§4.6) — designed
      1 Nov (docs/design/links-batch-4b3: the map, the census, Jeff's answers
      — every one the Recommended; four steps, A, C, D, then B). **Step A
-     built 1 Nov (§0.221; guide §18b111), committed `30d7adf`, pushed to
-     dev 2 Nov (`0d1f35b..c8f1440`, Tests GREEN), NOT shipped:** each list's
-     links and shape, the restore's clean-up, a team note's team,
-     integrationRequests the server's. **Step C built 2 Nov (§0.222; guide
-     §18b112; docs/design/links-batch-4b3/STEP-C.md), committed `9ce4dc6`, pushed to dev 2 Nov
-     (`c8f1440..f218421`, Tests GREEN), NOT shipped:** a
-     team's name paired with its id, a rename renaming every holder, no new
-     duplicate name, a removed member off the lists, TeamModal clearing no
-     one it does not hold. **Step D built 2 Nov (§0.223; guide §18b113;
-     docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`, pushed to dev 2 Nov (`f218421..ed394c5`, Tests GREEN), NOT shipped:** a plan's
-     visit template and covered job types this org's entries, the list
-     itself stored, the legacy seed skipping what exists. **Step B-1 built 2
-     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md),
-     committed `a03b958`, pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests
-     GREEN), NOT shipped:** the server — a settings save writes only its
-     keys, each with a revision token compared in the write; a stale one
-     refused, nothing written, no member renamed; every other writer merges
-     only its own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9;
-     STEP-B.md §4a), committed `438d974`, harness deferred, graded green in
-     the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
-     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** the people screens
-     send each list's token through one sender; a stale refusal reads the
-     latest and says so — §4.3's two stale-tab items done on dev (a tab
-     loaded before it, and prod, still put a list back until they reload or
-     it ships). **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10;
-     STEP-B.md §4b), committed `a463e99`, harness deferred, graded green in
-     the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
-     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** every draft panel of
-     Settings sends the tokens it opened with; a stale refusal shows the
-     panel again on the latest and says so, and both leave guards say the
-     change was not saved. **Step B-3b built 3 Nov (§0.228; guide §18b114
-     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred, graded
-     green in the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4
-     Nov (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** Pipelines, the
-     holiday calendar, Edit brand and the Sales Manager name their tokens —
-     one save at a time, a stale refusal shown on the latest and said. **Step
-     B-3c built 3 Nov (§0.229; guide §18b114 rule 12; STEP-B.md §4b),
-     committed `5af8c64`, harness deferred, graded green in the one scoped
+     built 1 Nov (§0.221; guide §18b111), committed `30d7adf`, pushed to dev
+     2 Nov (`0d1f35b..c8f1440`, Tests GREEN), SHIPPED 4 Nov, the forty-fourth
+     ship:** each list's links and shape, the restore's clean-up, a team
+     note's team, integrationRequests the server's. **Step C built 2 Nov
+     (§0.222; guide §18b112; docs/design/links-batch-4b3/STEP-C.md),
+     committed `9ce4dc6`, pushed to dev 2 Nov (`c8f1440..f218421`, Tests
+     GREEN), SHIPPED 4 Nov, the forty-fourth ship:** a team's name paired
+     with its id, a rename renaming every holder, no new duplicate name, a
+     removed member off the lists, TeamModal clearing no one it does not
+     hold. **Step D built 2 Nov (§0.223; guide §18b113;
+     docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`, pushed to
+     dev 2 Nov (`f218421..ed394c5`, Tests GREEN), SHIPPED 4 Nov, the
+     forty-fourth ship:** a plan's visit template and covered job types this
+     org's entries, the list itself stored, the legacy seed skipping what
+     exists. **Step B-1 built 2 Nov (§0.224; guide §18b114;
+     docs/design/links-batch-4b3/STEP-B.md), committed `a03b958`, pushed to
+     dev 4 Nov (`ed394c5..80b21fb`, Tests GREEN), SHIPPED 4 Nov, the
+     forty-fourth ship:** the server — a settings save writes only its keys,
+     each with a revision token compared in the write; a stale one refused,
+     nothing written, no member renamed; every other writer merges only its
+     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md
+     §4a), committed `438d974`, harness deferred, graded green in the one
+     scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
+     (`ed394c5..80b21fb`, Tests GREEN), SHIPPED 4 Nov, the forty-fourth
+     ship:** the people screens send each list's token through one sender; a
+     stale refusal reads the latest and says so — §4.3's two stale-tab items
+     done (a tab loaded before it still puts a list back until it reloads;
+     prod did until the forty-fourth ship). **Step B-3a built 2-3 Nov
+     (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`,
+     harness deferred, graded green in the one scoped run (3 Nov: 2,830/2,830
+     caught), pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests GREEN), SHIPPED
+     4 Nov, the forty-fourth ship:** every draft panel of Settings sends the
+     tokens it opened with; a stale refusal shows the panel again on the
+     latest and says so, and both leave guards say the change was not saved.
+     **Step B-3b built 3 Nov (§0.228; guide §18b114 rule 11; STEP-B.md §4b),
+     committed `724e98c`, harness deferred, graded green in the one scoped
      run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
-     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** Connected apps reads
-     the settings prop and names its tokens — every settings screen now does.
-     The one scoped run over B-2, all of B-3 and §0.227
-     (`node scripts/mutate-scope.mjs --base 3110feb`) came back green 3 Nov:
-     2,830/2,830 caught after a printed green baseline, exit 0 (state
-     §0.229). Pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests GREEN); the full
-     run before the ship came back green the same day: 4,183/4,183 caught
-     after a printed green baseline, exit 0 (state §0.229). Next: the ship,
-     on Jeff's word — `JOBS_ENABLED` read first (J-B14).
+     (`ed394c5..80b21fb`, Tests GREEN), SHIPPED 4 Nov, the forty-fourth
+     ship:** Pipelines, the holiday calendar, Edit brand and the Sales
+     Manager name their tokens — one save at a time, a stale refusal shown on
+     the latest and said. **Step B-3c built 3 Nov (§0.229; guide §18b114 rule
+     12; STEP-B.md §4b), committed `5af8c64`, harness deferred, graded green
+     in the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
+     (`ed394c5..80b21fb`, Tests GREEN), SHIPPED 4 Nov, the forty-fourth
+     ship:** Connected apps reads the settings prop and names its tokens —
+     every settings screen now does. The one scoped run over B-2, all of B-3
+     and §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) came back
+     green 3 Nov: 2,830/2,830 caught after a printed green baseline, exit 0
+     (state §0.229). Pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests GREEN);
+     the full run before the ship came back green the same day: 4,183/4,183
+     caught after a printed green baseline, exit 0 (state §0.229). SHIPPED 4
+     Nov, the forty-fourth ship (the state header), `JOBS_ENABLED` read first
+     (J-B14).
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -299,8 +304,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      profile page numbers the second, "East (2)" (§0.211)~~ — these two
      DONE in §0.222 (step C: the name paired with the id, a rename renaming
      every holder, no new duplicate name) (found unmarked 2 Nov); the
-     put-back DONE on dev in §0.225 (step B-2: the profile page and TeamModal
-     send the token of the list they read; committed `438d974`, pushed to dev 4 Nov, NOT shipped).
+     put-back DONE in §0.225 (step B-2: the profile page and TeamModal send
+     the token of the list they read; committed `438d974`, pushed to dev 4
+     Nov, SHIPPED 4 Nov, the forty-fourth ship).
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -434,8 +440,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        was tests and CI only). What the batch found and left is filed in
        §2.2, §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8, §5 and §6.
        Next in Jeff's order: the member profile page (above) — step A
-       done (§0.211), step B done (§0.212) — committed on dev 28 Oct, not
-       pushed.
+       done (§0.211), step B done (§0.212) — pushed to dev 27 and 28 Oct,
+       SHIPPED 4 Nov, the forty-fourth ship.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -594,18 +600,18 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **The full mutation-harness run on the tree that ships — run for this ship
-  4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229); a code commit before
-  the ship needs it again; it stands for each later ship** (guide §18b23 part
-  4; Jeff, 27 Oct: "the full run before each prod ship"): since §0.212 a
-  batch runs its scope (`node scripts/mutate-scope.mjs`), and every entry
-  (`node scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4
-  Nov) runs before each ship. §0.209-§0.211 were each graded by a full run
-  (§0.208 by its 3,139 older entries run on its step G's build in four slices
-  and its own seven pre-run on the final tree — no full run on its final
-  tree); §0.212 and §0.213 by their scopes alone until then; §0.208-§0.229
-  together by the full run of 4 Nov before their ship, on `80b21fb`
-  (4,183/4,183 caught, exit 0 — state §0.229).
+- **The full mutation-harness run on the tree that ships — run for the
+  forty-fourth ship 4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229);
+  each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
+  run before each prod ship"): since §0.212 a batch runs its scope (`node
+  scripts/mutate-scope.mjs`), and every entry (`node
+  scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4 Nov) runs
+  before each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
+  its 3,139 older entries run on its step G's build in four slices and its
+  own seven pre-run on the final tree — no full run on its final tree);
+  §0.212 and §0.213 by their scopes alone until then; §0.208-§0.229 together
+  by the full run of 4 Nov before their ship, on `80b21fb` (4,183/4,183
+  caught, exit 0 — state §0.229).
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
@@ -661,82 +667,83 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   none) and holds such a deal — at most the Undos in which the deal rule
   would leave a deal where it is rather than put it on a site (Jeff, 18
   Oct: "Leave such deals and count them"; UKG's 6 deals on sites, §2.4).
-- **Reload every app tab opened before the forty-third ship** (Deployed: dev
-  20:48 UTC, prod 20:51 UTC, 18 Oct — it covers the forty-second's, 17 Oct
-  18:36 UTC, the forty-first's, 17 Oct 13:06 UTC, the fortieth's, 16 Oct
-  15:03 UTC, the thirty-ninth's, 16 Oct 03:28 UTC, the thirty-eighth's, 15
-  Oct 17:59 UTC, the thirty-seventh's, 15 Oct 01:30 UTC, the thirty-sixth's,
-  14 Oct 12:59 UTC, and the thirty-fifth's, 13 Oct 20:25 UTC, too): an older
-  tab keeps the screens from before §0.199, §0.200, §0.201, §0.202, §0.203,
-  §0.204, §0.205, §0.206 and §0.207 — the task rail's completion, a New
-  Job's copied links, the task popups, the Technicians form's login picker,
-  the member profile page's save, the Sales Manager tab's quota board,
-  claims list, SPIFF board and forecast ledger, a saved report's Pin, the
-  backup page's import window, the Fiscal year page, and the Accounts and
-  Contacts tabs' lists among them. A tab opened before its site's §0.207
-  deploy and not reloaded keeps the old screens: no Undo after a merge and
-  no Past merges, the merge screens still saying merges are fully
-  reversible, its lists with no overtaken-answer guard, and its merge hook's
-  own `merge` audit row refused by the audit-log POST (403; read in code —
-  not shown on screen; the server's `account.merged` / `contact.merged` row
-  is written as before). A tab opened before its site's §0.206 deploy and
-  not reloaded keeps the old lists — merged-away accounts and contacts
-  listed — and there a Select all + Delete takes the listed merged-away
-  records with the rest. Contacts go by the one-request clear when it is an
-  Admin's, the list holds every contact of the org (All, no search) and none
-  is kept for an open deal; otherwise one request each. Accounts (an
-  Admin's) go one request each. Their merges' Undo is then refused (§0.207:
-  "… was deleted after this merge …"), and the delete's Undo brings them
-  back as live records — their merges' Undo refused again, "… is no longer
-  merged into …" (each re-post carries its merge mark, but neither POST
-  stores it — `sanitize` in accounts.mjs and contacts.mjs has no merge
-  field; §4.2 files the accounts' half). An older tab's Save quotas answers
-  200 and stores no quota (the server keeps the stored figures), and its
-  claim Approve still re-sends the whole claim as loaded (a stale copy can
-  put back what another save changed — what §0.204's Approve no longer
-  does). Its forecast call re-sends the rep's whole cached row — when the
-  cached team is no longer the rep's stored team and has been deleted since,
-  it now answers 404 "That team is not in your organization — pick one from
-  the list.", its call not stored (a deleted team the rep still holds is
-  taken, as before), and a team or a name changed since is put back as
-  before (never the pins: the server keeps them); its Pin from a window
+- **Reload every app tab opened before the forty-fourth ship** (Deployed:
+  prod 17:55 UTC 4 Nov — §0.208-§0.229, each on dev from the push its section
+  records; it covers the forty-third's, dev 20:48 UTC, prod 20:51 UTC, 18
+  Oct, the forty-second's, 17 Oct 18:36 UTC, the forty-first's, 17 Oct 13:06
+  UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16 Oct 03:28
+  UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the thirty-seventh's, 15 Oct
+  01:30 UTC, the thirty-sixth's, 14 Oct 12:59 UTC, and the thirty-fifth's, 13
+  Oct 20:25 UTC, too): an older tab keeps the screens from before §0.199,
+  §0.200, §0.201, §0.202, §0.203, §0.204, §0.205, §0.206 and §0.207 — the
+  task rail's completion, a New Job's copied links, the task popups, the
+  Technicians form's login picker, the member profile page's save, the Sales
+  Manager tab's quota board, claims list, SPIFF board and forecast ledger, a
+  saved report's Pin, the backup page's import window, the Fiscal year page,
+  and the Accounts and Contacts tabs' lists among them. A tab opened before
+  its site's §0.208-§0.229 deploy and not reloaded keeps the screens from
+  before them: among them, its settings saves send no revision token, which
+  the server takes unchecked (§0.224, Q6), so it can still put back a list
+  another save changed. A tab opened before its site's §0.207 deploy and not
+  reloaded keeps the old screens: no Undo after a merge and no Past merges,
+  the merge screens still saying merges are fully reversible, its lists with
+  no overtaken-answer guard, and its merge hook's own `merge` audit row
+  refused by the audit-log POST (403; read in code — not shown on screen; the
+  server's `account.merged` / `contact.merged` row is written as before). A
+  tab opened before its site's §0.206 deploy and not reloaded keeps the old
+  lists — merged-away accounts and contacts listed — and there a Select all +
+  Delete takes the listed merged-away records with the rest. Contacts go by
+  the one-request clear when it is an Admin's, the list holds every contact
+  of the org (All, no search) and none is kept for an open deal; otherwise
+  one request each. Accounts (an Admin's) go one request each. Their merges'
+  Undo is then refused (§0.207: "… was deleted after this merge …"), and the
+  delete's Undo brings them back as live records — their merges' Undo refused
+  again, "… is no longer merged into …" (each re-post carries its merge mark,
+  but neither POST stores it — `sanitize` in accounts.mjs and contacts.mjs
+  has no merge field; §4.2 files the accounts' half). An older tab's Save
+  quotas answers 200 and stores no quota (the server keeps the stored
+  figures), and its claim Approve still re-sends the whole claim as loaded (a
+  stale copy can put back what another save changed — what §0.204's Approve
+  no longer does). Its forecast call re-sends the rep's whole cached row —
+  when the cached team is no longer the rep's stored team and has been
+  deleted since, it now answers 404 "That team is not in your organization —
+  pick one from the list.", its call not stored (a deleted team the rep still
+  holds is taken, as before), and a team or a name changed since is put back
+  as before (never the pins: the server keeps them); its Pin from a window
   whose pin list still holds a report unpinned in another window and deleted
   since is refused, with no re-read, and so is every later Pin and Unpin
   there until a reload — but an Unpin of that report itself, which drops it
-  (a stale list that names only live reports is taken, and puts back the
-  ones unpinned elsewhere, as before); its import window closes on an
-  accepted restore's answer and reads only "Import failed" on a refused one,
-  so nothing the restore says is read. Reload, then strike this.
-- Nothing else open. The forty-third ship (18 Oct, 20:51 UTC: §0.207, a
-  merge's Undo on screen — the merge Undo batch; dev and prod in one
-  sitting), the forty-second (17 Oct, 18:36 UTC: §0.206, a
-  merged-away account or contact leaves the lists the screens draw — the
-  merged-away batch; dev and prod in one sitting; Jeff's read-only look
-  at UKG after it is recorded on state §0.206's Verified line — the
-  check written here before the ship, "Resinall" listed once, was wrong:
-  the survivor is a business unit under "Ergon", which the Accounts tab's
-  search, over the top-level list only, does not reach), the
-  forty-first (17 Oct, 13:06 UTC: §0.205, a member's team and pinned
-  reports name this org's, and the restore says what it did — batch
-  4b-2c; dev and prod in one sitting), the fortieth
-  (16 Oct, 15:03 UTC: §0.204, a sales record's links name live rows or
-  entries of this org — batch 4b-2b; dev and prod in one sitting), the
-  thirty-ninth (16 Oct, 03:28 UTC: §0.203, a
-  Sales Rep's quota is a plan per fiscal year — the quota batch; dev and
-  prod in one sitting), the thirty-eighth (15 Oct, 17:59 UTC: §0.202, a
-  member's save changes a member this org holds — batch 4b-2a), the
-  thirty-seventh (15 Oct, 01:30 UTC: §0.201,
-  Dispatch's links name live rows of this org — batch 4b-1), the
-  thirty-sixth (14 Oct, 12:59 UTC: §0.200, a
-  task alert interrupts only the member it is for), the thirty-fifth (13 Oct,
-  20:25 UTC: §0.199, a link names a live row of this org), the thirty-fourth
-  (13 Oct, 02:50 UTC:
-  §0.198, a pick saved as the record picked, and an edit leaving untouched
-  links out), the
-  thirty-third (11 Oct, 23:42 UTC: §0.196, one name
-  per member of an org, and §0.197, the "Accelerep" spelling), the
-  thirty-second (11 Oct, 13:36 UTC: §0.195, the AcceleRep sign-in page), the
-  thirty-first (10 Oct, 21:08 UTC: §0.194, the
+  (a stale list that names only live reports is taken, and puts back the ones
+  unpinned elsewhere, as before); its import window closes on an accepted
+  restore's answer and reads only "Import failed" on a refused one, so
+  nothing the restore says is read. Reload, then strike this.
+- Nothing else open. The forty-fourth ship (4 Nov, 17:55 UTC: §0.208-§0.229,
+  every batch since the forty-third, each pushed to dev before it as its
+  section records; prod in one push), the forty-third ship (18 Oct, 20:51
+  UTC: §0.207, a merge's Undo on screen — the merge Undo batch; dev and prod
+  in one sitting), the forty-second (17 Oct, 18:36 UTC: §0.206, a merged-away
+  account or contact leaves the lists the screens draw — the merged-away
+  batch; dev and prod in one sitting; Jeff's read-only look at UKG after it
+  is recorded on state §0.206's Verified line — the check written here before
+  the ship, "Resinall" listed once, was wrong: the survivor is a business
+  unit under "Ergon", which the Accounts tab's search, over the top-level
+  list only, does not reach), the forty-first (17 Oct, 13:06 UTC: §0.205, a
+  member's team and pinned reports name this org's, and the restore says what
+  it did — batch 4b-2c; dev and prod in one sitting), the fortieth (16 Oct,
+  15:03 UTC: §0.204, a sales record's links name live rows or entries of this
+  org — batch 4b-2b; dev and prod in one sitting), the thirty-ninth (16 Oct,
+  03:28 UTC: §0.203, a Sales Rep's quota is a plan per fiscal year — the
+  quota batch; dev and prod in one sitting), the thirty-eighth (15 Oct, 17:59
+  UTC: §0.202, a member's save changes a member this org holds — batch
+  4b-2a), the thirty-seventh (15 Oct, 01:30 UTC: §0.201, Dispatch's links
+  name live rows of this org — batch 4b-1), the thirty-sixth (14 Oct, 12:59
+  UTC: §0.200, a task alert interrupts only the member it is for), the
+  thirty-fifth (13 Oct, 20:25 UTC: §0.199, a link names a live row of this
+  org), the thirty-fourth (13 Oct, 02:50 UTC: §0.198, a pick saved as the
+  record picked, and an edit leaving untouched links out), the thirty-third
+  (11 Oct, 23:42 UTC: §0.196, one name per member of an org, and §0.197, the
+  "Accelerep" spelling), the thirty-second (11 Oct, 13:36 UTC: §0.195, the
+  AcceleRep sign-in page), the thirty-first (10 Oct, 21:08 UTC: §0.194, the
   account search fix) and the thirtieth (10 Oct, 15:06 UTC: §0.191, §0.192
   and §0.193, the PROD Closed Lost fix among them) are recorded in the state
   header, as are the twenty-ninth (9 Oct) and the Clerk cleanup after it.
@@ -1999,20 +2006,23 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ### 4.3 Settings
 
 - **TeamModal clears the team of every member its list does not hold by
-  app id — DONE in §0.222 (committed `9ce4dc6`, pushed to dev 2 Nov; NOT shipped)**: the
+  app id — DONE in §0.222 (committed `9ce4dc6`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship)**: the
   window reads a list's entries by app or Clerk id (Jeff's J1) and its save
   sends a member only a join, a leave or the team's new territory
   (`teamSaveMembers`); UKG's count (2 Nov, STEP-C.md §9): a save of its team
-  now sends no member a write. Until step C SHIPS, do not save UKG's team
-  on the Teams page (prod runs the old code). Repairing UKG's stored ids is
+  now sends no member a write. Until step C shipped (4 Nov, the
+  forty-fourth ship), UKG's team was not to be saved on the Teams page
+  (prod ran the old code); a tab opened before the ship runs it until
+  reloaded. Repairing UKG's stored ids is
   still a write to real data — Jeff's call.
-- **A stale tab's whole teams list renames the holders back — DONE on dev in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, NOT shipped)**: each of the screens named below,
+- **A stale tab's whole teams list renames the holders back — DONE in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship)**: each of the screens named below,
   and TeamModal, sends its list with the token it read; a stale one is
   refused, nothing written, no one renamed, and the tab shows the latest
   (browser check, 2 Nov: a rename in one tab, the other's save refused,
   the holder keeping the new name). A tab loaded before B-2 sends no
-  token and is accepted unchecked (Q6) until it reloads, and prod runs
-  the old code until it ships (the J-B14 item below). Was (§0.222's
+  token and is accepted unchecked (Q6) until it reloads; prod ran the
+  old code until the forty-fourth ship, 4 Nov (the J-B14 item below).
+  Was (§0.222's
   review, 2 Nov): a teams save that names a team as the stored list does
   not renames every holder (§0.222's rule), so a tab loaded before a rename
   that saves the whole list — the Invite page and the CSV import
@@ -2075,7 +2085,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a Manager on a team's `repIds`, which the window neither draws nor
   counts; its save sends the stored list unchanged (`repIds` kept
   whole), so nothing is dropped. Low.
-- **Pain points library crashes on the seeded default — DONE on dev in §0.227 (committed `0ed001e`, pushed to dev 4 Nov, NOT shipped; guide §18b115)**: every reader of the library
+- **Pain points library crashes on the seeded default — DONE in §0.227 (committed `0ed001e`, pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship; guide §18b115)**: every reader of the library
   goes through `src/utils/painPoints.js`, the loose names one "Pain
   Points" category; the browser check opened it on Accelerep QA's
   seven names. Was (§0.226's plan,
@@ -2222,13 +2232,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.170) mutate to `setError(…)`, which no longer exists; their text pins
   still catch them, but the mutants describe code that can no longer be.
   Re-point them to the card's own note (Jeff's call). Low.
-- **Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
+- ~~**Until §0.224 ships, prod's old writers put tokens back** (§0.224 —
   J-B14): dev and prod share one database; prod's settings PUT, its
   nightly lead scoring (where `JOBS_ENABLED` is on) and its integration
   requests still write a whole `extra` from a read, `revs` included, so a
   key's token can go back to an older value — a stale tab passes once, or
   a fresh one is refused once. Ship B soon after dev; read which site has
-  `JOBS_ENABLED` before the ship. Medium until shipped.
+  `JOBS_ENABLED` before the ship. Medium until shipped.~~ — DONE 4 Nov,
+  the forty-fourth ship. Read before the
+  ship (4 Nov, `site_job_heartbeats`, SELECT only): prod alone runs the
+  jobs, and its old nightly lead scoring last ran 06:00:57 UTC 4 Nov,
+  after the dev push — whether it put a token back was not checked.
 - **A stored revision token that is no text refuses every save of its key**
   (§0.224's review): `revsOf` reads only text tokens while the write's
   compare reads the stored value as text. No writer stores one. Low.
@@ -2247,7 +2261,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   members' Clerk ids, 2 no one's); its territories' 4 `repIds` name no
   member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
   is a write to real data — Jeff's call.
-- **A stale tab's teams save is refused after a member is removed elsewhere — DONE on dev in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, NOT shipped)**: since
+- **A stale tab's teams save is refused after a member is removed elsewhere — DONE in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship)**: since
   §0.224 the stale token is refused (409) before the link check, and
   since §0.225 the screens read the latest and say so, the profile's
   Save changes making its move on it; the removing tab takes its lists'
@@ -2395,12 +2409,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A workspace created by integration requests keeps `[]` vertical
   markets,** which reads like a list an Admin cleared. §0.170 (c).
 - ~~**Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
-  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229 (committed `5af8c64`, pushed to dev 4 Nov, NOT shipped): the panel reads the settings prop and sets the copy
+  as unconfigured until a reload. §0.170 (d).~~ — DONE in §0.229 (committed `5af8c64`, pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship): the panel reads the settings prop and sets the copy
   once a save lands; Reports sees a Slack save at once.
 - ~~**Pipelines, Company calendar and the quote brand editor** set the app's
   copy first and put back a whole snapshot on failure. §0.170 (e).~~ — the
-  snapshot and the brand DONE on dev in §0.228 (committed `724e98c`, NOT
-  pushed): Edit brand is no longer optimistic, and Pipelines and the
+  snapshot and the brand DONE in §0.228 (committed `724e98c`, pushed to dev
+  4 Nov, SHIPPED 4 Nov, the forty-fourth ship): Edit brand is no longer optimistic, and Pipelines and the
   calendar roll back only the keys they sent, never a token. Still open by
   design: Pipelines and the calendar set the copy before the save lands
   (one save at a time, JB3-8), which guide §18b63 rule 3 otherwise forbids.
@@ -2425,7 +2439,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   use it. As recorded.
 - ~~**The nightly lead-model batch's whole-blob settings write** could lose a
   concurrent Admin save. §0.123, as recorded.~~ — DONE in §0.224 (committed
-  `a03b958`; pushed to dev 4 Nov, NOT shipped): the model is written as the rules alone, guarded on them as
+  `a03b958`; pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship): the model is written as the rules alone, guarded on them as
   read; refused when they changed while it trained (J-B9).
 - **The Company calendar page's "Connected holiday sources" card does
   nothing.**
@@ -2737,7 +2751,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Smaller, from §0.201's map:** ~~Settings → Service plans' seed from legacy
   tiers derives `plan_legacy_<tier>` ids, so a second org's seed of a tier
   another org seeded is refused ("That plan id is already in use.")~~ —
-  DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; NOT shipped); a
+  DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship); a
   re-run of Settings → Vehicles & equipment's legacy import resets an
   imported row's technician, holder and status (a full-row upsert); the
   crew builder prints a technician's vehicle id, not its name; the
@@ -3165,7 +3179,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
 - ~~**Two jobs write the whole `settings.extra` back with no lock**~~ — DONE
-  in §0.224 (committed `a03b958`; pushed to dev 4 Nov, NOT shipped): each merges only its key, guarded on what it
+  in §0.224 (committed `a03b958`; pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship): each merges only its key, guarded on what it
   read (the nightly scoring and Train now; integration requests).
   Was:
   **Two jobs write the whole `settings.extra` back with no lock**

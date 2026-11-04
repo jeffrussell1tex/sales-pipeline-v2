@@ -45,7 +45,7 @@ Karen; its departures from §4b are written in state §0.229. Step B is built
 on dev; the one scoped harness run over B-2, all of B-3 and §0.227 came back
 green 3 Nov (2,830/2,830 caught, `--base 3110feb` — state §0.229); pushed
 to dev 4 Nov (`ed394c5..80b21fb`); the full run before the ship green 4 Nov
-(4,183/4,183 caught); NOT shipped.
+(4,183/4,183 caught); SHIPPED 4 Nov, the forty-fourth ship.
 
 ## 0. What the code does today
 
