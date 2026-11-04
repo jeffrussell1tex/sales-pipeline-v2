@@ -77,7 +77,7 @@ the stale check over every entry, then the batch's own entries, every older
 entry on a file it changed and every entry on a file a SUITES test it edited
 reads, imports or runs; it must print `Baseline: green.` first (a red baseline
 reports a false 100% caught). Before each prod ship: the full run,
-`node scripts/mutate-import.mjs`, every entry, about 4 h (guide §18b23
+`node scripts/mutate-import.mjs`, every entry, about 8 h (guide §18b23
 part 4; Jeff, 27 Oct 2026). Jeff may defer a batch's scoped run (2 Nov
 2026): it still runs the stale check (`--list`) and proves its own entries
 by hand, commits marked "harness deferred", and nothing is pushed until one
