@@ -250,33 +250,42 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      docs/design/links-batch-4b3/STEP-D.md), committed `a1de400`, pushed to dev 2 Nov (`f218421..ed394c5`, Tests GREEN), NOT shipped:** a plan's
      visit template and covered job types this org's entries, the list
      itself stored, the legacy seed skipping what exists. **Step B-1 built 2
-     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md), committed
-     `a03b958`, NOT pushed:** the server — a settings save writes only its keys, each
-     with a revision token compared in the write; a stale one refused,
-     nothing written, no member renamed; every other writer merges only its
-     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md §4a), committed `438d974`, harness deferred,
-     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** the people screens send each
-     list's token through one sender; a stale refusal reads the latest and
-     says so — §4.3's two stale-tab items done on dev (a tab loaded before
-     it, and prod, still put a list back until they reload or it ships).
-     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`, harness deferred,
-     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** every draft panel of
+     Nov (§0.224; guide §18b114; docs/design/links-batch-4b3/STEP-B.md),
+     committed `a03b958`, pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests
+     GREEN), NOT shipped:** the server — a settings save writes only its
+     keys, each with a revision token compared in the write; a stale one
+     refused, nothing written, no member renamed; every other writer merges
+     only its own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9;
+     STEP-B.md §4a), committed `438d974`, harness deferred, graded green in
+     the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
+     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** the people screens
+     send each list's token through one sender; a stale refusal reads the
+     latest and says so — §4.3's two stale-tab items done on dev (a tab
+     loaded before it, and prod, still put a list back until they reload or
+     it ships). **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10;
+     STEP-B.md §4b), committed `a463e99`, harness deferred, graded green in
+     the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
+     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** every draft panel of
      Settings sends the tokens it opened with; a stale refusal shows the
      panel again on the latest and says so, and both leave guards say the
      change was not saved. **Step B-3b built 3 Nov (§0.228; guide §18b114
-     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred,
-     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:**
-     Pipelines, the holiday calendar, Edit brand and the Sales Manager
-     name their tokens — one save at a time, a stale refusal shown on the
-     latest and said. **Step B-3c built 3 Nov (§0.229; guide §18b114
-     rule 12; STEP-B.md §4b), committed `5af8c64`, harness deferred,
-     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** Connected
-     apps reads the settings prop and names its tokens — every settings
-     screen now does. The one scoped run over B-2, all of B-3 and
-     §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) came back
-     green 3 Nov: 2,830/2,830 caught after a printed green baseline,
-     exit 0 (state §0.229). Next: the push, on Jeff's word; the full
-     run before the ship.
+     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred, graded
+     green in the one scoped run (3 Nov: 2,830/2,830 caught), pushed to dev 4
+     Nov (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** Pipelines, the
+     holiday calendar, Edit brand and the Sales Manager name their tokens —
+     one save at a time, a stale refusal shown on the latest and said. **Step
+     B-3c built 3 Nov (§0.229; guide §18b114 rule 12; STEP-B.md §4b),
+     committed `5af8c64`, harness deferred, graded green in the one scoped
+     run (3 Nov: 2,830/2,830 caught), pushed to dev 4 Nov
+     (`ed394c5..80b21fb`, Tests GREEN), NOT shipped:** Connected apps reads
+     the settings prop and names its tokens — every settings screen now does.
+     The one scoped run over B-2, all of B-3 and §0.227
+     (`node scripts/mutate-scope.mjs --base 3110feb`) came back green 3 Nov:
+     2,830/2,830 caught after a printed green baseline, exit 0 (state
+     §0.229). Pushed to dev 4 Nov (`ed394c5..80b21fb`, Tests GREEN); the full
+     run before the ship came back green the same day: 4,183/4,183 caught
+     after a printed green baseline, exit 0 (state §0.229). Next: the ship,
+     on Jeff's word — `JOBS_ENABLED` read first (J-B14).
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -291,7 +300,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      DONE in §0.222 (step C: the name paired with the id, a rename renaming
      every holder, no new duplicate name) (found unmarked 2 Nov); the
      put-back DONE on dev in §0.225 (step B-2: the profile page and TeamModal
-     send the token of the list they read; committed `438d974`, NOT pushed).
+     send the token of the list they read; committed `438d974`, pushed to dev 4 Nov, NOT shipped).
    - **A merged-away account or contact leaves the tabs' lists — DONE
      (§0.206; guide §18b99)** (Jeff, 16 Oct,
      after merging UKG's "Resinall, Inc." into "Resinall": "It said it did it
@@ -585,13 +594,18 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **The full mutation-harness run on the tree that ships** (guide §18b23
-  part 4; Jeff, 27 Oct: "the full run before each prod ship"): since
-  §0.212 a batch runs its scope (`node scripts/mutate-scope.mjs`), and
-  every entry (`node scripts/mutate-import.mjs`, about 4 h) runs before
-  each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
-  its 3,139 older entries run on its step G's build in four slices and its
-  own seven pre-run on the final tree — no full run on its final tree); §0.212 and §0.213 by their scopes alone.
+- **The full mutation-harness run on the tree that ships — run for this ship
+  4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229); a code commit before
+  the ship needs it again; it stands for each later ship** (guide §18b23 part
+  4; Jeff, 27 Oct: "the full run before each prod ship"): since §0.212 a
+  batch runs its scope (`node scripts/mutate-scope.mjs`), and every entry
+  (`node scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4
+  Nov) runs before each ship. §0.209-§0.211 were each graded by a full run
+  (§0.208 by its 3,139 older entries run on its step G's build in four slices
+  and its own seven pre-run on the final tree — no full run on its final
+  tree); §0.212 and §0.213 by their scopes alone until then; §0.208-§0.229
+  together by the full run of 4 Nov before their ship, on `80b21fb`
+  (4,183/4,183 caught, exit 0 — state §0.229).
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
@@ -1992,7 +2006,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   now sends no member a write. Until step C SHIPS, do not save UKG's team
   on the Teams page (prod runs the old code). Repairing UKG's stored ids is
   still a write to real data — Jeff's call.
-- **A stale tab's whole teams list renames the holders back — DONE on dev in §0.225 (step B-2; committed `438d974`, NOT pushed)**: each of the screens named below,
+- **A stale tab's whole teams list renames the holders back — DONE on dev in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, NOT shipped)**: each of the screens named below,
   and TeamModal, sends its list with the token it read; a stale one is
   refused, nothing written, no one renamed, and the tab shows the latest
   (browser check, 2 Nov: a rename in one tab, the other's save refused,
@@ -2061,7 +2075,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a Manager on a team's `repIds`, which the window neither draws nor
   counts; its save sends the stored list unchanged (`repIds` kept
   whole), so nothing is dropped. Low.
-- **Pain points library crashes on the seeded default — DONE on dev in §0.227 (committed `0ed001e`, NOT pushed; guide §18b115)**: every reader of the library
+- **Pain points library crashes on the seeded default — DONE on dev in §0.227 (committed `0ed001e`, pushed to dev 4 Nov, NOT shipped; guide §18b115)**: every reader of the library
   goes through `src/utils/painPoints.js`, the loose names one "Pain
   Points" category; the browser check opened it on Accelerep QA's
   seven names. Was (§0.226's plan,
@@ -2233,7 +2247,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   members' Clerk ids, 2 no one's); its territories' 4 `repIds` name no
   member. Dangling, not a leak. Kept under Q3 ("keep held strays"). A fix
   is a write to real data — Jeff's call.
-- **A stale tab's teams save is refused after a member is removed elsewhere — DONE on dev in §0.225 (step B-2; committed `438d974`, NOT pushed)**: since
+- **A stale tab's teams save is refused after a member is removed elsewhere — DONE on dev in §0.225 (step B-2; committed `438d974`, pushed to dev 4 Nov, NOT shipped)**: since
   §0.224 the stale token is refused (409) before the link check, and
   since §0.225 the screens read the latest and say so, the profile's
   Save changes making its move on it; the removing tab takes its lists'
@@ -2381,7 +2395,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A workspace created by integration requests keeps `[]` vertical
   markets,** which reads like a list an Admin cleared. §0.170 (c).
 - ~~**Connected Apps keeps its own copy.** Reports' delivery dialog reads Slack
-  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229 (committed `5af8c64`, NOT pushed): the panel reads the settings prop and sets the copy
+  as unconfigured until a reload. §0.170 (d).~~ — DONE on dev in §0.229 (committed `5af8c64`, pushed to dev 4 Nov, NOT shipped): the panel reads the settings prop and sets the copy
   once a save lands; Reports sees a Slack save at once.
 - ~~**Pipelines, Company calendar and the quote brand editor** set the app's
   copy first and put back a whole snapshot on failure. §0.170 (e).~~ — the
@@ -2411,7 +2425,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   use it. As recorded.
 - ~~**The nightly lead-model batch's whole-blob settings write** could lose a
   concurrent Admin save. §0.123, as recorded.~~ — DONE in §0.224 (committed
-  `a03b958`; NOT pushed): the model is written as the rules alone, guarded on them as
+  `a03b958`; pushed to dev 4 Nov, NOT shipped): the model is written as the rules alone, guarded on them as
   read; refused when they changed while it trained (J-B9).
 - **The Company calendar page's "Connected holiday sources" card does
   nothing.**
@@ -3151,7 +3165,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
 - ~~**Two jobs write the whole `settings.extra` back with no lock**~~ — DONE
-  in §0.224 (committed `a03b958`; NOT pushed): each merges only its key, guarded on what it
+  in §0.224 (committed `a03b958`; pushed to dev 4 Nov, NOT shipped): each merges only its key, guarded on what it
   read (the nightly scoring and Train now; integration requests).
   Was:
   **Two jobs write the whole `settings.extra` back with no lock**
@@ -4588,7 +4602,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   edits late-answers, connected-apps and settings-saves, all on it;
   what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
-  part 4). Recommended: mutate-scope.mjs runs each edited test
+  part 4); the full run of 4 Nov, every entry, graded what they all miss:
+  4,183/4,183 caught (state §0.229). Recommended: mutate-scope.mjs runs each edited test
   once with the tracer and adds what it traced to the scope (Jeff's call).
 - **The self-pin scan's floor stays seventeen with twenty pins** (§0.212
   added tests/mutate-scope.test.mjs's and tests/resize-targets.test.mjs's,
