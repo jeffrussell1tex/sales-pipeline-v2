@@ -254,23 +254,29 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      `a03b958`, NOT pushed:** the server — a settings save writes only its keys, each
      with a revision token compared in the write; a stale one refused,
      nothing written, no member renamed; every other writer merges only its
-     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md §4a), committed `438d974`, harness deferred, NOT pushed:** the people screens send each
+     own. **Step B-2 built 2 Nov (§0.225; guide §18b114 rule 9; STEP-B.md §4a), committed `438d974`, harness deferred,
+     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** the people screens send each
      list's token through one sender; a stale refusal reads the latest and
      says so — §4.3's two stale-tab items done on dev (a tab loaded before
      it, and prod, still put a list back until they reload or it ships).
-     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`, harness deferred, NOT pushed:** every draft panel of
+     **Step B-3a built 2-3 Nov (§0.226; guide §18b114 rule 10; STEP-B.md §4b), committed `a463e99`, harness deferred,
+     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** every draft panel of
      Settings sends the tokens it opened with; a stale refusal shows the
      panel again on the latest and says so, and both leave guards say the
      change was not saved. **Step B-3b built 3 Nov (§0.228; guide §18b114
-     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred, NOT pushed:**
+     rule 11; STEP-B.md §4b), committed `724e98c`, harness deferred,
+     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:**
      Pipelines, the holiday calendar, Edit brand and the Sales Manager
      name their tokens — one save at a time, a stale refusal shown on the
      latest and said. **Step B-3c built 3 Nov (§0.229; guide §18b114
-     rule 12; STEP-B.md §4b), committed `5af8c64`, harness deferred, NOT pushed:** Connected
+     rule 12; STEP-B.md §4b), committed `5af8c64`, harness deferred,
+     graded green in the one scoped run (3 Nov: 2,830/2,830 caught), NOT pushed:** Connected
      apps reads the settings prop and names its tokens — every settings
-     screen now does. Next: the one scoped run over B-2, all of B-3 and
-     §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) before any
-     push.
+     screen now does. The one scoped run over B-2, all of B-3 and
+     §0.227 (`node scripts/mutate-scope.mjs --base 3110feb`) came back
+     green 3 Nov: 2,830/2,830 caught after a printed green baseline,
+     exit 0 (state §0.229). Next: the push, on Jeff's word; the full
+     run before the ship.
      With it
      (Jeff, 26 Oct: "Fix the move, file the rest" — the profile batch's P6,
      P28, P29): the member profile page and TeamModal save the whole teams
@@ -4576,7 +4582,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   tests/settings-saves.test.mjs, walks src (179 files the static read
   misses — a 51st), and §0.225 edits three listed above (deal-modal-saves,
   late-answers, save-buttons), and §0.226 edits those three and
-  quota-plan, so the one scoped run over B-2 and B-3 reads them short;
+  quota-plan, so the one scoped run over B-2, all of B-3 and §0.227 read
+  them short (green 3 Nov, 2,830/2,830 caught — state §0.229);
   §0.227's tests/pain-points.test.mjs walks src too (a 52nd); §0.229
   edits late-answers, connected-apps and settings-saves, all on it;
   what each reaches

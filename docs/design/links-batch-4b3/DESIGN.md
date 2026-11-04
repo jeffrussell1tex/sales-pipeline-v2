@@ -36,7 +36,8 @@ every draft panel, built 2-3 Nov as state §0.226 (guide §18b114 rule 10;
 STEP-B.md §4b); B-3b, Pipelines, the holiday calendar, Edit brand and the
 Sales Manager, built 3 Nov as state §0.228 (guide §18b114 rule 11); B-3c,
 Connected apps, built 3 Nov as state §0.229 (guide §18b114 rule 12) — step
-B built on dev; the one scoped harness run over it waits before any push.
+B built on dev; the one scoped harness run over it came back green 3
+Nov (2,830/2,830 caught — state §0.229); NOT pushed.
 Step D mapped and built 2 Nov as state §0.223 (guide §18b113) — its plan
 and Jeff's four answers in STEP-D.md; the integration proof in its own
 suite (plan-links.itest.mjs), not settings-links as §5 named (that suite's

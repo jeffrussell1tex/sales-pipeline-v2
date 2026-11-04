@@ -42,8 +42,9 @@ check as Jeff and Karen; its departures from §4b are written in state
 **B-3c built 3 Nov** as state §0.229 (guide §18b114 rule 12): one build
 workflow and one fix round in a staged copy, the browser check as Jeff and
 Karen; its departures from §4b are written in state §0.229. Step B is built
-on dev; the one scoped harness run over B-2, all of B-3 and §0.227 waits
-before any push.
+on dev; the one scoped harness run over B-2, all of B-3 and §0.227 came back
+green 3 Nov (2,830/2,830 caught, `--base 3110feb` — state §0.229); NOT
+pushed.
 
 ## 0. What the code does today
 
