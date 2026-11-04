@@ -446,8 +446,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
-   app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
-   questions for Jeff first — §4.1).
+   app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
+   answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
+   the mechanism and the CRM tabs, Dispatch, Settings, the inline Escapes and
+   the document picker. Nothing built yet; next, batch 1.
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -1267,16 +1269,24 @@ to add meetings. Nothing in the app adds a meeting to Google:
   lists do, or its load is taken with `requestOrg` / `stillOrg` (guide
   §18b68).
 - **In-tab layers without Escape.**
-  - Fifteen files under src/Tabs draw fixed layers and handle no Escape:
-    DispatchTab (9), DispatchSkillsDetail (6), TasksTab (5) and twelve more.
-  - Eleven others handle an Escape somewhere; each layer is still to be
-    checked.
+  - Re-inventoried 4 Nov over f885df4 (docs/design/escape-tabs/DESIGN.md §2;
+    its counts replace the 9 Oct ones): 18 layers in the CRM tabs, 8 in
+    Dispatch, 45 in Settings, plus inline Escapes. Most have no Escape; the
+    few that have one leave it unmarked; App's letter and number shortcuts
+    fire over every one.
   - None is in `ESCAPE_ORDER` yet. The document picker (inside the deal window
     and the two record rails) joins it with them: it holds by its own list, the
     app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
-  - **Designed 9 Oct** (a read-only inventory of src/Tabs, about 74 layers;
-    nothing built): a registry of in-tab layers in App, a `useLocalLayer`
+  - **Designed 9 Oct, redesigned and answered 4 Nov** (the design after two
+    critiques, and Jeff's ten answers — all Recommended: ask "Discard?" on
+    typed work, for Escape, ×, Cancel and backdrop alike; the show-once
+    secrets close only by "I've stored it"; shortcuts off under any layer;
+    four batches; Settings' guard portaled above the rails; the shortcuts list
+    raised in batch 1; the layer bugs fixed in their batch; the other finds
+    filed; the notifications panel and the follow-up card close on an outside
+    click — docs/design/escape-tabs/). The 9 Oct summary, for the record (a
+    read-only inventory of src/Tabs, about 74 layers; nothing built): a registry of in-tab layers in App, a `useLocalLayer`
     hook, a guard that finds every fixed layer; three batches — the CRM tabs
     and the mechanism, Dispatch, Settings — and a fourth for inline-input
     Escapes and nested popovers. Questions for Jeff first: what Escape does to
@@ -1291,7 +1301,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The shortcuts list opens under an open rail or the deal window.** Its z
   is 9998, under every rail and the draggable windows; "?" opened it with a
   contact rail and with a new-task rail open. A z above them, with its place
-  in the order, is the fix. §0.189 (b), 8 Oct.
+  in the order, is the fix. §0.189 (b), 8 Oct. Answered 4 Nov (Q6): raised
+  to 11015 in Escape in the tabs' batch 1 (DESIGN.md §3.9).
 - **Layers drawn that nothing opens** (tests/open-states.test.mjs records each
   in KNOWN; giving one a way in, or retiring it, updates KNOWN):
   - the notes popover: ModalLayer draws it, App's Escape and the order name
