@@ -122,8 +122,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      still make one — §4.4). The header search's account
      rows name their parent, and count each open deal once. What it found
      and left is filed in §4.4.
-   - **Batch 3:** CSV import and merge (§4.7) — **designed and answered,
-     not built** (docs/design/links-batch-3: the map read 29 Oct over
+   - **Batch 3:** CSV import and merge (§4.7) — **designed and answered;
+     built and SHIPPED 4 Nov, the forty-fourth ship**
+     (docs/design/links-batch-3: the map read 29 Oct over
      `aeafb2d`, the design and its critics, Jeff's twelve answers of
      29 Oct, each the Recommended, and the census). Four steps: 3a the
      account import, screen and server together; 3b the contact and deal
