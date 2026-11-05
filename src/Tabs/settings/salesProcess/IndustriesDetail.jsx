@@ -1,5 +1,6 @@
 // settings/salesProcess/IndustriesDetail.jsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
@@ -104,6 +105,8 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
             window.removeEventListener('resize', handler);
         };
     }, [openIndKebab]);
+    // A popover in the one Escape order (state §0.232), portaled at its place's 12000 (it was 1000).
+    useLocalLayer(openIndKebab !== null && !!kebabPos, { onClose: () => setOpenIndKebab(null), place: 'tabPopover' });
 
     const addSub = (indKey) => {
         if (!newSub.trim()) return;
@@ -204,7 +207,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                         {showAddInd && (
                             <div style={{ display:'flex', gap:8, marginBottom:12 }}>
                                 <input value={newInd} onChange={e => setNewInd(e.target.value)} placeholder="Industry name…" autoFocus
-                                    onKeyDown={e => { if (e.key==='Enter') addIndustry(); if (e.key==='Escape') { setShowAddInd(false); setNewInd(''); } }}
+                                    onKeyDown={e => { if (e.key==='Enter') addIndustry(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setShowAddInd(false); setNewInd(''); } }}
                                     style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
                                 <button onClick={addIndustry} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
                                 <button onClick={() => { setShowAddInd(false); setNewInd(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
@@ -226,7 +229,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                             {renamingInd === ind.k ? (
                                                 <input autoFocus value={renameIndVal}
                                                     onChange={e => setRenameIndVal(e.target.value)}
-                                                    onKeyDown={e => { if (e.key==='Enter') handleRenameInd(ind.k); if (e.key==='Escape') { setRenamingInd(null); setRenameIndVal(''); } }}
+                                                    onKeyDown={e => { if (e.key==='Enter') handleRenameInd(ind.k); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setRenamingInd(null); setRenameIndVal(''); } }}
                                                     onBlur={() => handleRenameInd(ind.k)}
                                                     style={{ flex:1, padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
                                             ) : (
@@ -255,7 +258,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                                     }}
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
                                                 {openIndKebab === ind.k && kebabPos && createPortal(
-                                                    <div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
+                                                    <div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:12000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
 
                                                         {/* Edit */}
                                                         {[
@@ -338,7 +341,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                             {addingSubTo === ind.k ? (
                                                 <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
                                                     <input value={newSub} onChange={e => setNewSub(e.target.value)} placeholder="Sub-type…" autoFocus
-                                                        onKeyDown={e => { if (e.key==='Enter') addSub(ind.k); if (e.key==='Escape') { setAddingSubTo(null); setNewSub(''); } }}
+                                                        onKeyDown={e => { if (e.key==='Enter') addSub(ind.k); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setAddingSubTo(null); setNewSub(''); } }}
                                                         style={{ width:120, padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:10, fontSize:11.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
                                                     <button onClick={() => addSub(ind.k)} style={{ fontSize:11.5, fontWeight:600, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Add</button>
                                                     <button onClick={() => { setAddingSubTo(null); setNewSub(''); }} style={{ fontSize:11.5, color:T.inkMuted, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Cancel</button>

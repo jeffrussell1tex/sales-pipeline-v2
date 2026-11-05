@@ -270,9 +270,13 @@ test("T6 — the screens (state §0.205): a forecast call sends only its field �
     once(bd, ind(4, 'const close = loading ? () => {} : result?.imported > 0 || mayHaveWritten ? () => window.location.reload() : onClose;'));
     order(bd, ind(24, '{mayHaveWritten && ('), ind(32, 'The page reloads when this window closes, so every screen shows what the restore wrote.'));
     order(bd, ind(24, '{(result.imported > 0 || mayHaveWritten) && ('), ind(32, 'The page reloads on Close, so every screen shows what was restored.'));
-    once(bd, ind(8, '<DataModal width={520} onClose={close}>'));
-    once(bd, ind(12, '<DataModalHead onClose={close}'));
-    once(bd, ind(16, "<DataBtn label={result ? 'Close' : 'Cancel'} onClick={close} disabled={loading}/>"));
+    // Since §0.232 the window's controls and its Escape share one close through the one order, which takes `close` and
+    // holds while the restore runs (tests/tab-layers.test.mjs).
+    const imp = between(bd, 'const ImportBackupModal = ', 'const RestoreModal = ');   // the Restore window shares the shape
+    once(imp, ind(4, 'const requestClose = useLocalLayer(true, { onClose: close, busy: loading });'));
+    once(imp, ind(8, '<DataModal width={520} onClose={requestClose}>'));
+    once(imp, ind(12, '<DataModalHead onClose={requestClose}'));
+    once(imp, ind(16, "<DataBtn label={result ? 'Close' : 'Cancel'} onClick={requestClose} disabled={loading}/>"));
     assert.ok(!/=\{onClose\}/.test(between(bd, 'const ImportBackupModal = ', 'const RestoreModal = ')), 'REGRESSION: a close control of the import window calls onClose itself — live while the restore runs, and no reload after it');
     once(bd, ind(32, 'The page reloads on Close, so every screen shows what was restored.'));
     assert.ok(bd.includes('A record already here — the same id, or a detail only one record may have, such as a number, an email or a login — is left as it is.') && !bd.includes('will be updated'));

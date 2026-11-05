@@ -1,5 +1,6 @@
 // settings/people/UsersDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
@@ -935,6 +936,9 @@ const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeh
         window.addEventListener('resize', close);
         return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
     }, [open]);
+    // A popover in the one Escape order (state §0.232): portaled at its place's 12000 (it was 1000) and nested in the page,
+    // it takes the Escape first; the field's own Escape is gone.
+    useLocalLayer(open && !!pos, { onClose: () => setOpen(false), place: 'tabPopover' });
     if (chosenName || held) return (
         <div style={{ ...inputStyle, display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, cursor:'default' }}>
             <span style={{ color: held ? T.inkMuted : T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{held || chosenName}</span>
@@ -950,11 +954,10 @@ const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeh
                 onBlur={() => setTimeout(() => setOpen(false), 200)}
                 onKeyDown={e => {
                     if (e.key === 'Enter' && open && shown[0]) { e.preventDefault(); pick(shown[0].id); }
-                    else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }
                 }}/>
             {open && pos && createPortal(
                 <div ref={listRef} onMouseDown={e => e.preventDefault()}
-                    style={{ position:'fixed', left:pos.left, ...(pos.top != null ? { top:pos.top } : { bottom:pos.bottom }), width:pos.width, maxHeight:220, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, boxShadow:'0 4px 12px rgba(42,38,34,0.12)' }}>
+                    style={{ position:'fixed', left:pos.left, ...(pos.top != null ? { top:pos.top } : { bottom:pos.bottom }), width:pos.width, maxHeight:220, overflowY:'auto', zIndex:12000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, boxShadow:'0 4px 12px rgba(42,38,34,0.12)' }}>
                     {shown.length === 0 ? (
                         <div style={{ padding:'8px 10px', fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No Admin or Manager matches.</div>
                     ) : shown.map(p => (
@@ -1437,6 +1440,8 @@ export const UsersDetail = ({ settings, onBack }) => {
         };
     }, [openUserKebab]);
 
+    // A popover in the one Escape order (state §0.232), portaled at its place's 12000 (it was 1000).
+    useLocalLayer(openUserKebab !== null && !!kebabPos, { onClose: () => setOpenUserKebab(null), place: 'tabPopover' });
     const onUsers = () => { setPeopleView(null); setViewingUser(null); };
     // Import CSV opens the shared CSV importer for team members (state §0.167):
     // each row it imports is an invitation, sent once the Admin has reviewed them.
@@ -1778,7 +1783,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                         onClick through React, which would open the profile. */}
                                     {openUserKebab === u.id && kebabPos && createPortal(
                                         <div ref={kebabMenuRef} onClick={e => e.stopPropagation()}
-                                            style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), maxHeight:kebabPos.maxHeight, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', width:KEBAB_W }}>
+                                            style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), maxHeight:kebabPos.maxHeight, overflowY:'auto', zIndex:12000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', width:KEBAB_W }}>
                                             {[
                                                 { label:'View profile', action: () => { setViewingUser(u._raw || u); setPeopleView('profile'); setOpenUserKebab(null); } },
                                                 // 'Reset password', 'Enforce MFA' and 'Resend invite' were

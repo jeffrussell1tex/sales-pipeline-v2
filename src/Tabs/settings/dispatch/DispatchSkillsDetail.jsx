@@ -1,5 +1,6 @@
 // settings/dispatch/DispatchSkillsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
@@ -28,6 +29,10 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     const [skillMenu, setSkillMenu] = useState(null); // { id, idx, rect }
     const [certMenu,  setCertMenu]  = useState(null);
     const [licMenu,   setLicMenu]   = useState(null);
+    // Escape closes each ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(!!(skillMenu && skillMenu.rect), { onClose: () => setSkillMenu(null) });
+    useLocalLayer(!!(certMenu && certMenu.rect), { onClose: () => setCertMenu(null) });
+    useLocalLayer(!!(licMenu && licMenu.rect), { onClose: () => setLicMenu(null) });
     const [newCert,  setNewCert]  = useState({ name:'', renewalDays:365 });
     // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
     // save while one is out shares the first one's outcome.

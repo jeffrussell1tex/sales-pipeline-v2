@@ -1,5 +1,6 @@
 // settings/security/shared.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { T } from '../shared/tokens.js';
 
 export const SecCrumb = ({ page, onBack, section = 'Security' }) => (
@@ -110,11 +111,11 @@ export const PolicySelect = ({ label, value, children, width=260 }) => {
     React.useEffect(() => {
         if (!open) return;
         const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) setOpen(false); };
         document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+        return () => document.removeEventListener('mousedown', onDoc);
     }, [open]);
+    // Escape closes the dropdown, the one on top only, and marks it (state §0.232): its own listener left it unmarked.
+    useLocalLayer(open, { onClose: () => setOpen(false) });
 
     const openDropdown = () => {
         if (btnRef.current) {

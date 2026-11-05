@@ -1,5 +1,6 @@
 // settings/salesProcess/BuyerPersonasDetail.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { useApp } from '../../../AppContext';
 import { unarchived } from '../../../utils/pickLink.js';
@@ -94,6 +95,13 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     // ── Edit modal state ──
     const BLANK_PERSONA = { id: '', name: '', color: '#7a6a48', icon: '●', desc: '', titles: [], cares: [], objections: [], active: true };
     const [editModal, setEditModal] = React.useState(null); // null | { isNew, data }
+    // Escape closes a persona's ⋯ menu; and the persona window — one close for Escape, the backdrop, × and Cancel, a
+    // persona changed since it opened asking "Discard changes?" — measured against the persona as it opened (state §0.232).
+    useLocalLayer(openKebab !== null, { onClose: () => setOpenKebab(null) });
+    const personaBaseRef = React.useRef(null);
+    if (!editModal) personaBaseRef.current = null;
+    else if (personaBaseRef.current === null) personaBaseRef.current = JSON.stringify(editModal.data);
+    const requestPersonaClose = useLocalLayer(!!editModal, { onClose: () => setEditModal(null), dirty: !!editModal && JSON.stringify(editModal.data) !== personaBaseRef.current });
     const [editErr,   setEditErr]   = React.useState('');
 
     // ── Contact counts per persona value — the live contacts (state §0.210: one merged into another is counted nowhere) ──
@@ -342,12 +350,12 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
 
             {/* ── Edit / New Persona Modal ── */}
             {editModal && (
-                <div onClick={() => setEditModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div onClick={requestPersonaClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 8, width: 480, maxWidth: '95vw', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
                         {/* Header */}
                         <div style={{ background: '#1c1917', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: '#f5f1eb', fontFamily: T.sans }}>{editModal.isNew ? 'New persona' : 'Edit persona'}</div>
-                            <button onClick={() => setEditModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#f5f1eb', cursor: 'pointer', borderRadius: 4, width: 26, height: 26, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            <button onClick={requestPersonaClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#f5f1eb', cursor: 'pointer', borderRadius: 4, width: 26, height: 26, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                         </div>
                         {/* Body */}
                         <div style={{ padding: 20 }}>
@@ -397,7 +405,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
                         </div>
                         {/* Footer */}
                         <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8, background: T.surface2 }}>
-                            <button onClick={() => setEditModal(null)} style={{ padding: '7px 16px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                            <button onClick={requestPersonaClose} style={{ padding: '7px 16px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
                             <button onClick={saveEdit} style={{ padding: '7px 16px', background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>{editModal.isNew ? 'Add persona' : 'Save changes'}</button>
                         </div>
                     </div>

@@ -1,5 +1,6 @@
 // settings/salesProcess/KPIThresholdsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -28,6 +29,15 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
     // Kebab menu state
     const [openKPI, setOpenKPI]       = useState(null); // index
     const [editingUnit, setEditingUnit] = useState(null); // index — inline unit editor
+    // The ⋯ menu closes on a mousedown outside it — it closed only by its own button or an item (state §0.232) — and on
+    // Escape, the one on top only.
+    React.useEffect(() => {
+        if (openKPI === null) return undefined;
+        const onDown = (e) => { const root = e.target && e.target.closest ? e.target.closest('[data-menu-root]') : null; if (root && root.getAttribute('data-menu-root') === 'kpi-' + openKPI) return; setOpenKPI(null); };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [openKPI]);
+    useLocalLayer(openKPI !== null, { onClose: () => setOpenKPI(null) });
     // Add KPI form state
     const [showAdd, setShowAdd]   = useState(false);
     const [newKPI, setNewKPI]     = useState({ k:'', unit:'%', good:80, ok:60, poor:40, reverse:false, sample:[40,45,50,55,60,65,70,75,80], custom:true });
@@ -175,7 +185,7 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
                                         <input value={newKPI.k} onChange={e => { setNewKPI(p => ({ ...p, k:e.target.value })); setAddErr(''); }}
                                             placeholder="e.g. Emails per deal"
                                             style={{ ...inpSt, width:'100%' }}
-                                            onKeyDown={e => { if (e.key==='Enter') handleAddKPI(); if (e.key==='Escape') { setShowAdd(false); setAddErr(''); } }}/>
+                                            onKeyDown={e => { if (e.key==='Enter') handleAddKPI(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setShowAdd(false); setAddErr(''); } }}/>
                                     </div>
                                     <div>
                                         <label style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Unit</label>
@@ -246,7 +256,7 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
                                     <div style={{ textAlign:'right' }}>{numInp(i,'good',T.ok)}</div>
                                     <div><SPSparkline data={k.sample||[40,50,60,65,70,72,75,78,80]} color={T.ok}/></div>
                                     {/* Kebab */}
-                                    <div style={{ position:'relative' }}>
+                                    <div style={{ position:'relative' }} data-menu-root={'kpi-' + i}>
                                         <button onClick={e => { e.stopPropagation(); setOpenKPI(openKPI===i ? null : i); setEditingUnit(null); }}
                                             style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
                                         {openKPI === i && (

@@ -91,7 +91,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
                             ref={inputRef}
                             value={newItem}
                             onChange={e => setNewItem(e.target.value)}
-                            onKeyDown={e => { if (e.key==='Enter') addItem(); if (e.key==='Escape') setNewItem(''); }}
+                            onKeyDown={e => { if (e.key==='Enter') addItem(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) setNewItem(''); }}
                             placeholder={placeholder}
                             style={{ flex:1, padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none' }}
                         />

@@ -517,7 +517,9 @@ test('each new Escape does what the layer\'s own close does, and nothing mid-sav
     assert.ok(ql.includes("    useEscapeLayer(!!followUpPrompt, () => setFollowUpPrompt(null), escapeBlocked('followUp'));"));
     assert.ok(read('src/components/layout/MeetingPrepPanel.jsx').includes("    useEscapeLayer(!!(meetingPrepOpen && meetingPrepEvent), () => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }, escapeBlocked('meetingPrep'));"));
     const lg = read('src/Tabs/settings/shared/LeaveGuardModal.jsx');
-    assert.ok(lg.includes("    useEscapeLayer(true, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);"), 'Stay — never while a save is out');
+    assert.ok(lg.includes("    useEscapeLayer(!inTab, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);"), 'Stay — never while a save is out');
+    // Settings' own guard (AdminView's, `inTab`) stands at the same place through the tabs' stack, portaled above the rails (§0.232).
+    assert.ok(lg.includes("    useLocalLayer(inTab, { onClose: onStay, busy: saving, place: 'leaveGuard' });") && lg.includes('    return inTab ? createPortal(node, document.body) : node;'), 'Stay — never while a save is out, and drawn over the rails');
     for (const f of ['src/components/modals/CsvImportModal.jsx', 'src/components/modals/LeadImportModal.jsx']) {
         assert.ok(read(f).includes("    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));"), `${f}: never mid-import`);
     }

@@ -274,7 +274,7 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                         <div>
                             <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Name</label>
                             <input type="text" placeholder="e.g. Company offsite" value={formName} onChange={e => { setFormName(e.target.value); setFormError(''); }}
-                                style={inpStyle} onKeyDown={e => { if (e.key === 'Enter') handleAddHoliday(); if (e.key === 'Escape') resetForm(); }}/>
+                                style={inpStyle} onKeyDown={e => { if (e.key === 'Enter') handleAddHoliday(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) resetForm(); }}/>
                         </div>
                         <button onClick={handleAddHoliday} disabled={saving}
                             style={{ padding:'7px 16px', background: saving ? T.borderStrong : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: saving ? 'default' : 'pointer', fontFamily:T.sans, whiteSpace:'nowrap', alignSelf:'flex-end' }}>

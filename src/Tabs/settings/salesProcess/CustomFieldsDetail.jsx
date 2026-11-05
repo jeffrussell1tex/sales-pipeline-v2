@@ -1,5 +1,6 @@
 // settings/salesProcess/CustomFieldsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -110,6 +111,8 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const FIELD_TYPES = ['Text','Number','Date','Picklist','Toggle','URL','Month','Email','Phone'];
     const [openFieldKebab, setOpenFieldKebab] = useState(null); // api key of open kebab
     const [fieldKebabRect, setFieldKebabRect] = useState(null); // {top,left,right} for fixed positioning
+    // Escape closes a field's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(openFieldKebab !== null && !!fieldKebabRect, { onClose: () => { setOpenFieldKebab(null); setFieldKebabRect(null); } });
     const [editingFieldIdx, setEditingFieldIdx] = useState(null); // index in activeObj array
     const [editLabel, setEditLabel] = useState('');
     const [editType, setEditType]   = useState('Text');
@@ -174,7 +177,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 140px 120px auto auto', gap:10, alignItems:'flex-end' }}>
                         <div>
                             <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Label</label>
-                            <input value={newLabel} onChange={e => { setNewLabel(e.target.value); setAddErr(''); }} placeholder="e.g. Partner tier" onKeyDown={e => { if (e.key==='Enter') handleAddField(); if (e.key==='Escape') { setShowAdd(false); setAddErr(''); } }}
+                            <input value={newLabel} onChange={e => { setNewLabel(e.target.value); setAddErr(''); }} placeholder="e.g. Partner tier" onKeyDown={e => { if (e.key==='Enter') handleAddField(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setShowAdd(false); setAddErr(''); } }}
                                 style={{ padding:'7px 10px', background:T.surface, border:`1px solid ${addErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
                         </div>
                         <div>
@@ -228,7 +231,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
                                     <input
                                         value={editLabel}
                                         onChange={e => setEditLabel(e.target.value)}
-                                        onKeyDown={e => { if (e.key==='Enter') saveEdit(); if (e.key==='Escape') cancelEdit(); }}
+                                        onKeyDown={e => { if (e.key==='Enter') saveEdit(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) cancelEdit(); }}
                                         autoFocus
                                         style={{ padding:'4px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}
                                     />

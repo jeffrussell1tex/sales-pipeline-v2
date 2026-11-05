@@ -1,5 +1,6 @@
 // settings/data/FeaturesDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 // The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
 import { putSettings } from '../shared/saveSettings.js';
@@ -33,6 +34,8 @@ const ResetAiModal = ({ onClose }) => {
     const [confirm, setConfirm] = useState('');
     const [notify, setNotify]   = useState(true);
     const ready = confirm.trim().toUpperCase() === 'RESET';
+    // Escape closes it as Cancel does (state §0.232) — the confirmation word is not typed work.
+    useLocalLayer(true, { onClose });
     return (
         <DataModal width={540} onClose={onClose}>
             <DataModalHead onClose={onClose}

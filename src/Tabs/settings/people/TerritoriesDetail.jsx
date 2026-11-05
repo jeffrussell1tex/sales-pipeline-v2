@@ -1,5 +1,6 @@
 // settings/people/TerritoriesDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useApp } from '../../../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
@@ -23,6 +24,10 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
     const [repIds,  setRepIds]  = useState(territory?.repIds  || []);
     const [saving,  setSaving]  = useState(false);
     const [err,     setErr]     = useState('');
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a territory changed asks "Discard changes?";
+    // nothing while its save is out.
+    const [opened] = useState(() => JSON.stringify([territory?.name || '', territory?.parent || '', territory?.rule || '', territory?.ownerId || '', territory?.repIds || []]));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, parent, rule, ownerId, repIds]) !== opened, busy: saving });
 
     const owners = allUsers; // any user can own a territory
     const reps   = allUsers;
@@ -114,11 +119,11 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
     const parentOptions = [...new Set(territories.map(t => t.parent).filter(Boolean))];
 
     return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={requestClose}>
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:460, maxHeight:'88vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
                     <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{title}</div>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                    <button onClick={requestClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
                 </div>
                 {/* The box clips and only the body scrolls, so the scrollbar keeps the rounded corners (state §0.213). */}
                 <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14, flex:'1 1 auto', minHeight:0, overflowY:'auto' }}>
@@ -177,7 +182,7 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
                     {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
-                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={requestClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     <button onClick={save} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
@@ -200,6 +205,8 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
     const [deleteErr,     setDeleteErr]     = useState('');
     // An edit window refused because another change landed first closes; its words show here (state §0.225 — J-B8).
     const [listNote,      setListNote]      = useState('');
+    // Escape closes a territory's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(openTerrKebab !== null, { onClose: () => setOpenTerrKebab(null) });
 
     React.useEffect(() => {
         if (openTerrKebab === null) return;

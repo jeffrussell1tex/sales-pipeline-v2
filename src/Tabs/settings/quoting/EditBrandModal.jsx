@@ -3,6 +3,7 @@
 // Ported from the design handoff; brand is workspace-scoped (settings.quoteBrand) and
 // applies to every quote template. Live quote-document preview re-renders as you edit.
 import React from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { T } from '../shared/tokens.js';
 import { writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
 import { revsAfter, BRAND_CHANGED } from '../../../utils/settingsRevs.js';
@@ -254,7 +255,10 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
   const set = (key, val) => setBrand((b) => ({ ...b, [key]: val }));
   const dirty = JSON.stringify(brand) !== JSON.stringify(initial);
   const { setSettings, showConfirm } = useApp();
-  const close = () => { if (saving) return; if (dirty) { showConfirm('Discard unsaved brand changes?', onClose, false); return; } onClose(); };
+  // One close for Escape, the scrim, × and Cancel through the one order (state §0.232): a brand changed asks "Discard
+  // changes?" (Discard / Keep editing), nothing while its save is out. Its own Escape listener — unmarked, re-bound every
+  // render, asking through the confirm on the same keypress App's handler read — is gone.
+  const close = useLocalLayer(true, { onClose, dirty, busy: saving });
   const [saveError, setSaveError] = React.useState('');
   const handleSave = async () => {
     // The modal used to close unconditionally. PUT /settings is Admin-only since
@@ -285,11 +289,6 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
     setSaveError(`Brand not saved — ${w.error}`);
     setSaving(false);
   };
-  React.useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !saving) close(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  });
 
   const LOGO_MARKS = ['◐', '●', '◆', '▲', '❖', '◈'];
   const SECTION_OPTS = [

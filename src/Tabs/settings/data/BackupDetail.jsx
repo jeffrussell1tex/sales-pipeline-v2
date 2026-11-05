@@ -1,5 +1,6 @@
 // settings/data/BackupDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { LIcon } from '../shared/ui.jsx';
@@ -101,11 +102,13 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
     // with no answer to say so (none came, a crash's, or the restore's own counting rows not reached) — closing
     // reloads the page: the open app still shows what it loaded, and a settings save from it could replace what was
     // restored (a new org's teams). With nothing restored, Close just closes.
+    // Escape too (state §0.232): never while the restore runs.
     const close = loading ? () => {} : result?.imported > 0 || mayHaveWritten ? () => window.location.reload() : onClose;
 
+    const requestClose = useLocalLayer(true, { onClose: close, busy: loading });
     return (
-        <DataModal width={520} onClose={close}>
-            <DataModalHead onClose={close}
+        <DataModal width={520} onClose={requestClose}>
+            <DataModalHead onClose={requestClose}
                 title="Import from backup file"
                 sub="Upload a JSON backup to restore data into this workspace."/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
@@ -209,7 +212,7 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                 )}
             </div>
             <DataModalFoot>
-                <DataBtn label={result ? 'Close' : 'Cancel'} onClick={close} disabled={loading}/>
+                <DataBtn label={result ? 'Close' : 'Cancel'} onClick={requestClose} disabled={loading}/>
                 {!result && (
                     <DataBtn
                         label={loading ? 'Importing…' : 'Import records'}
@@ -256,9 +259,11 @@ const RestoreModal = ({ snap, onClose }) => {
         }
     };
 
+    // One close for Escape, the backdrop, × and Cancel, never while the snapshot downloads — they were live then (state §0.232).
+    const requestClose = useLocalLayer(true, { onClose, busy: loading });
     return (
-        <DataModal width={540} onClose={onClose}>
-            <DataModalHead onClose={onClose}
+        <DataModal width={540} onClose={requestClose}>
+            <DataModalHead onClose={requestClose}
                 title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
                     <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
                     Restore from snapshot?
@@ -297,7 +302,7 @@ const RestoreModal = ({ snap, onClose }) => {
                 {error && <div style={{ marginTop:10, fontSize:12, color:T.danger, fontWeight:600 }}>{error}</div>}
             </div>
             <DataModalFoot>
-                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Cancel" onClick={requestClose} disabled={loading}/>
                 <DataBtn label={loading ? 'Downloading…' : 'Download snapshot'} danger disabled={!ready || loading} onClick={handleDownload}/>
             </DataModalFoot>
         </DataModal>

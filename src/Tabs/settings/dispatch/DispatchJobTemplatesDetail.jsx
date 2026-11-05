@@ -1,5 +1,6 @@
 // settings/dispatch/DispatchJobTemplatesDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
@@ -170,6 +171,8 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAdd,  setShowAdd]  = useState(false);
     const [tmplMenu, setTmplMenu] = useState(null);
+    // Escape closes a template's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(!!(tmplMenu && tmplMenu.rect), { onClose: () => setTmplMenu(null) });
     // The tokens this panel opened with (state §0.226): its save names them, a landed save re-bases them, and a second
     // save while one is out shares the first one's outcome.
     const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);

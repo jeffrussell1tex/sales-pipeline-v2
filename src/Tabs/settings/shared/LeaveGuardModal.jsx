@@ -17,17 +17,23 @@
 // Module scope — a component defined inside its parent would be a new type on
 // every render and remount mid-save.
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { T } from './tokens.js';
 import { LEAVE_STALE, LEAVE_STALE_PART } from '../../../utils/settingsRevs.js';
 import { useApp } from '../../../AppContext';
 import { useEscapeLayer } from '../../../hooks/useEscapeLayer';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 
-export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDiscard,
+export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDiscard, inTab = false,
     message = 'This panel has changes that have not been saved. Save them, or discard and continue.' }) {
     const app = useApp();
-    useEscapeLayer(true, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);
+    useEscapeLayer(!inTab, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);
+    // Settings' own guard (AdminView, `inTab`) is portaled to the page and stands at the leave guard's place, 99999, over
+    // every rail and window (state §0.232; Jeff, 4 Nov: "Move it above") — drawn in the tab it sat under them, and a rail
+    // opened over it drew above it while the guard still took the next Escape. Escape is Stay, never while a save is out.
+    useLocalLayer(inTab, { onClose: onStay, busy: saving, place: 'leaveGuard' });
     const stale = failed === 'stale' || failed === 'stale-partial';
-    return (
+    const node = (
     <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center',
         background:'rgba(42,38,34,0.55)' }} onClick={saving ? undefined : onStay}>
         <div onClick={e => e.stopPropagation()}
@@ -72,4 +78,5 @@ export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDis
         </div>
     </div>
     );
+    return inTab ? createPortal(node, document.body) : node;
 }

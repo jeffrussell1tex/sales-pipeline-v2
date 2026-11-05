@@ -1,5 +1,6 @@
 // settings/people/TeamsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useApp } from '../../../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
@@ -53,6 +54,10 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
     const [color,      setColor]      = useState(team?.color      || TEAM_COLORS[0]);
     const [saving,     setSaving]     = useState(false);
     const [err,        setErr]        = useState('');
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a team changed since it opened asks "Discard
+    // changes?"; nothing while its save is out — the window closed mid-save and lost a member's refusal.
+    const [opened] = useState(() => JSON.stringify([team?.name || '', team?.territory || '', team?.vertical || '', team?.managerId || '', team?.repIds || [], team?.color || TEAM_COLORS[0]]));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, territory, vertical, managerId, repIds, color]) !== opened, busy: saving });
 
     // A tick adds the member's app id; an untick takes them off by either id (state §0.222 — a list may hold a member by
     // the Clerk id it held before members had app ids; it is never written so).
@@ -126,12 +131,12 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
 
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
-            onClick={onClose}>
+            onClick={requestClose}>
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:520, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
                 onClick={e=>e.stopPropagation()}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
                     <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{isEdit ? 'Edit team' : 'New team'}</div>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1 }}>×</button>
+                    <button onClick={requestClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1 }}>×</button>
                 </div>
                 {/* The box clips and only the body scrolls, so the scrollbar keeps the rounded corners (state §0.213). */}
                 <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14, flex:'1 1 auto', minHeight:0, overflowY:'auto' }}>
@@ -209,7 +214,7 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
                     {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, flexShrink:0, background:T.surface }}>
-                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={requestClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     <button onClick={handleSave} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
                         {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}
                     </button>
@@ -361,6 +366,11 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const [listNote,     setListNote]     = useState('');
     // An Assign in flight: the team buttons wait for its answer, so a second click never sends the same token again.
     const [assigning,    setAssigning]    = useState(false);
+    // Assign to team: one close for Escape, the backdrop, × and Cancel, never while an assignment is out — they were live
+    // then — and its error cleared, so a reopened window shows none of the last one's (state §0.232).
+    const requestAssignClose = useLocalLayer(!!assigningUser, { onClose: () => { setAssigningUser(null); setAssignErr(''); }, busy: assigning });
+    // Escape closes a team's ⋯ menu, the one on top only.
+    useLocalLayer(openKebab !== null, { onClose: () => setOpenKebab(null) });
 
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -478,12 +488,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
         {/* Assign user to existing team modal */}
         {assigningUser && (
             <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
-                onClick={() => setAssigningUser(null)}>
+                onClick={requestAssignClose}>
                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:400, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
                     onClick={e=>e.stopPropagation()}>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
                         <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Assign to team</div>
-                        <button onClick={() => setAssigningUser(null)} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                        <button onClick={requestAssignClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
                     </div>
                     <div style={{ padding:'16px 20px' }}>
                         <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:12 }}>
@@ -515,7 +525,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                         )}
                     </div>
                     <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'flex-end' }}>
-                        <button onClick={() => setAssigningUser(null)} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                        <button onClick={requestAssignClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     </div>
                 </div>
             </div>

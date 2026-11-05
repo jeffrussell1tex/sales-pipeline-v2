@@ -24,6 +24,7 @@
 //     each a request recorded on the org and mailed to the product owner, never
 //     a Connect.
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { startCalendarConnect } from '../../../utils/calendarConnect.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings, takeLatestSettings } from '../shared/saveSettings.js';
@@ -105,6 +106,10 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
     const [testing,    setTesting]    = useState(false);
     const [msg,        setMsg]        = useState(null);   // Send test message AND Save report here
     const [saving,     setSaving]     = useState(false);
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a URL, channel or alert changed asks "Discard
+    // changes?"; nothing while it saves or sends its test — they were live then.
+    const [opened] = useState(() => JSON.stringify([existing?.webhookUrl || '', existing?.channel || '#sales-alerts', cleanSlackAlerts(existing?.alerts)]));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([webhookUrl, channel, alerts]) !== opened, busy: saving || testing });
 
     // send-slack.mjs posts to an explicit webhookUrl when one is in the body —
     // the org's stored one is not touched until Save.
@@ -143,8 +148,8 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
     };
 
     return (
-        <IntModal width={560} onClose={onClose}>
-            <IntModalHeader onClose={onClose}
+        <IntModal width={560} onClose={requestClose}>
+            <IntModalHeader onClose={requestClose}
                 left={<AppTile name="Slack" color="#4a154b" emoji="💬" size={36}/>}
                 title="Configure Slack"
                 sub="Incoming Webhook · pipeline alerts and digests"/>
@@ -184,7 +189,7 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                 )}
             </div>
             <IntModalFooter left={<IntBtn label={testing ? 'Sending…' : 'Send test message'} onClick={handleTest} disabled={!webhookUrl.trim() || testing}/>}>
-                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label="Cancel" onClick={requestClose} disabled={saving || testing}/>
                 <IntBtn label={saving ? 'Saving…' : 'Save configuration'} primary onClick={handleSave} disabled={!webhookUrl.trim() || saving}/>
             </IntModalFooter>
         </IntModal>

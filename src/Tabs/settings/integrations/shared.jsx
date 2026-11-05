@@ -1,5 +1,6 @@
 // settings/integrations/shared.jsx
 import React from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { T } from '../shared/tokens.js';
 
 export const IntCrumb = ({ page, onBack }) => (
@@ -38,6 +39,8 @@ export const IntBtn = ({ label, primary, onClick, disabled }) => (
     </button>
 );
 
+// A frame, not a layer of its own (state §0.232): each window drawn in it registers (useLocalLayer) and hands it the
+// one close its backdrop, × and Cancel share — what is typed and what is saving are the window's, not the frame's.
 export const IntModal = ({ width=560, onClose, children }) => (
     <div onClick={onClose}
         style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
@@ -123,5 +126,7 @@ export function useRowMenu(btnPrefix, menuPrefix) {
         setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect()));
         setActiveMenu(id);
     };
+    // Escape closes the row's menu, the one on top only (state §0.232): every panel the hook serves takes it.
+    useLocalLayer(!!activeMenu, { onClose: () => setActiveMenu(null) });
     return { activeMenu, setActiveMenu, menuAt, toggleMenu };
 }

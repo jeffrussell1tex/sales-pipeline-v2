@@ -1,5 +1,6 @@
 // settings/data/ExportDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -16,6 +17,10 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
     const [cadence,setCadence]= React.useState(existing?.cadence     || 'Weekly · Mondays 06:00 UTC');
     const [dest,   setDest]   = React.useState(existing?.destination || 'download');
     const [saving, setSaving] = React.useState(false);
+    // The name is an uncontrolled field; what it holds now, for the close's question (state §0.232).
+    const [nameNow, setNameNow] = React.useState(existing?.name || '');
+    const [opened] = React.useState(() => JSON.stringify([existing?.name || '', existing?.scope || 'accounts', existing?.format || 'CSV', existing?.cadence || 'Weekly · Mondays 06:00 UTC', existing?.destination || 'download']));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([nameNow, scope, fmt, cadence, dest]) !== opened, busy: saving });
 
     const handleSave = async () => {
         const name = nameRef.current?.value?.trim();
@@ -26,11 +31,11 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
     };
 
     return (
-        <DataModal onClose={onClose}>
-            <DataModalHead title={existing ? 'Edit scheduled export' : 'New scheduled export'} sub="Define a recurring export. Manual trigger available immediately." onClose={onClose}/>
+        <DataModal onClose={requestClose}>
+            <DataModalHead title={existing ? 'Edit scheduled export' : 'New scheduled export'} sub="Define a recurring export. Manual trigger available immediately." onClose={requestClose}/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-                    <FL label="Name"><input ref={nameRef} defaultValue={existing?.name || ''} placeholder="e.g. Weekly accounts" style={inpStyle}/></FL>
+                    <FL label="Name"><input ref={nameRef} defaultValue={existing?.name || ''} onChange={e => setNameNow(e.target.value)} placeholder="e.g. Weekly accounts" style={inpStyle}/></FL>
                     <FL label="Entity (scope)">
                         <select value={scope} onChange={e => setScope(e.target.value)} style={selStyle}>
                             {['accounts','contacts','opportunities','tasks','activities','leads'].map(s => (
@@ -66,7 +71,7 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
                 </div>
             </div>
             <DataModalFoot>
-                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Cancel" onClick={requestClose}/>
                 <DataBtn label={saving ? 'Saving…' : (existing ? 'Save changes' : 'Create schedule')} primary disabled={saving} onClick={handleSave}/>
             </DataModalFoot>
         </DataModal>
@@ -427,6 +432,7 @@ const NewDsrModal = ({ onClose, onSave }) => {
     const [type,    setType]    = React.useState('access');
     const [notes,   setNotes]   = React.useState('');
     const [saving,  setSaving]  = React.useState(false);
+    const requestClose = useLocalLayer(true, { onClose, dirty: !!(subject.trim() || notes.trim()) || type !== 'access', busy: saving });
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
     const handleSave = async () => {
         if (!subject.trim()) return;
@@ -435,8 +441,8 @@ const NewDsrModal = ({ onClose, onSave }) => {
         setSaving(false);
     };
     return (
-        <DataModal onClose={onClose}>
-            <DataModalHead title="New DSR request" sub="Log a GDPR Data Subject Request. 30-day SLA starts today." onClose={onClose}/>
+        <DataModal onClose={requestClose}>
+            <DataModalHead title="New DSR request" sub="Log a GDPR Data Subject Request. 30-day SLA starts today." onClose={requestClose}/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
                 <FLm label="Subject (email or identifier)"><input value={subject} onChange={e => setSubject(e.target.value)} placeholder="user@example.com" style={inpStyle}/></FLm>
                 <FLm label="Request type">
@@ -448,7 +454,7 @@ const NewDsrModal = ({ onClose, onSave }) => {
                 <FLm label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any context…" style={{ ...inpStyle, resize:'vertical' }}/></FLm>
             </div>
             <DataModalFoot>
-                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Cancel" onClick={requestClose}/>
                 <DataBtn label={saving ? 'Saving…' : 'Create request'} primary disabled={!subject.trim() || saving} onClick={handleSave}/>
             </DataModalFoot>
         </DataModal>

@@ -21,6 +21,7 @@
 // column the schema has no value for, and a "Related · same actor" list built
 // from a hardcoded array instead of the loaded rows.
 import React from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch } from '../../../utils/storage';
 import { useApp } from '../../../AppContext';
 import { T } from '../shared/tokens.js';
@@ -187,11 +188,11 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
     });
     React.useEffect(() => {
         const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef?.current && !btnRef.current.contains(e.target)) onClose(); };
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+        return () => document.removeEventListener('mousedown', onDoc);
     }, []);
+    // Escape closes it, the one on top only, and marks it (state §0.232).
+    useLocalLayer(true, { onClose });
     return <div ref={ref} style={style}>{children}</div>;
 };
 
@@ -217,6 +218,9 @@ const AddDestinationModal = ({ onClose, onSave }) => {
     const [fmt, setFmt] = React.useState('JSON');
     const [saving, setSaving] = React.useState(false);
     const [err, setErr] = React.useState('');
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a destination typed or a preset picked asks
+    // "Discard changes?"; nothing while it is being added — its × was live then.
+    const requestClose = useLocalLayer(true, { onClose, dirty: !!(dest.trim() || url.trim()) || fmt !== 'JSON', busy: saving });
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
     const handleSave = async () => {
         setSaving(true); setErr('');
@@ -225,14 +229,14 @@ const AddDestinationModal = ({ onClose, onSave }) => {
         if (!r.ok) setErr(r.error || 'Not saved.');
     };
     return (
-        <div onClick={saving ? undefined : onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div onClick={requestClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:540, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
                 <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div>
                         <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Add streaming destination</div>
                         <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>Every audit event is POSTed here as it is written, signed with a secret you will see once.</div>
                     </div>
-                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                    <button onClick={requestClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
                 </div>
                 <div style={{ padding:'18px 20px' }}>
                     <div style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:8, fontFamily:T.sans }}>Quick presets</div>
@@ -266,7 +270,7 @@ const AddDestinationModal = ({ onClose, onSave }) => {
                     </div>
                 </div>
                 <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'flex-end' }}>
-                    <SecBtn label="Cancel" onClick={onClose} disabled={saving}/>
+                    <SecBtn label="Cancel" onClick={requestClose} disabled={saving}/>
                     <SecBtn label={saving?'Adding…':'Add destination'} primary onClick={handleSave} disabled={saving}/>
                 </div>
             </div>
@@ -277,6 +281,9 @@ const AddDestinationModal = ({ onClose, onSave }) => {
 // The secret, once. Shown after create and after rotate; never retrievable again.
 const SecretRevealModal = ({ dest, secret, rotated, onClose }) => {
     const [copied, setCopied] = React.useState(false);
+    // A secret shown once closes only by "I have stored it" (state §0.232; Jeff, 4 Nov: "Only "I've stored it""): Escape
+    // is taken and does nothing — held as a save is.
+    useLocalLayer(true, { onClose, busy: true });
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:950, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:560, overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)', fontFamily:T.sans }}>

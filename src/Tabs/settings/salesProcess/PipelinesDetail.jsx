@@ -1,5 +1,6 @@
 // settings/salesProcess/PipelinesDetail.jsx
 import React, { useState } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { putSettings } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { STILL_SAVING } from '../../../utils/settingsRevs.js';
@@ -118,6 +119,19 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const [openPipelineKebab, setOpenPipelineKebab]     = useState(null); // pipeline id
     const [confirmDeletePipeline, setConfirmDeletePipeline] = useState(null); // pipeline id
     const [blockedDeletePipeline, setBlockedDeletePipeline] = useState(null); // { name, reason }
+    // The two ⋯ menus close on a mousedown outside them — they closed only by their own button or an item, so two stayed
+    // open (state §0.232; Jeff, 4 Nov: "Fix in its batch") — and on Escape, the one on top only; so do the two windows.
+    React.useEffect(() => {
+        const key = openPipelineKebab !== null ? 'pl-' + openPipelineKebab : openKebab !== null ? 'st-' + openKebab : null;
+        if (!key) return undefined;
+        const onDown = (e) => { const root = e.target && e.target.closest ? e.target.closest('[data-menu-root]') : null; if (root && root.getAttribute('data-menu-root') === key) return; setOpenPipelineKebab(null); setOpenKebab(null); setConfirmDelete(null); };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [openPipelineKebab, openKebab]);
+    useLocalLayer(openPipelineKebab !== null, { onClose: () => setOpenPipelineKebab(null) });
+    useLocalLayer(openKebab !== null, { onClose: () => { setOpenKebab(null); setConfirmDelete(null); } });
+    useLocalLayer(!!blockedDeletePipeline, { onClose: () => setBlockedDeletePipeline(null) });
+    useLocalLayer(!!confirmDeletePipeline, { onClose: () => setConfirmDeletePipeline(null) });
 
     const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
     const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
@@ -311,7 +325,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                             <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Pipeline name</label>
                             <input value={newName} onChange={e => { setNewName(e.target.value); setNewErr(''); }}
                                 placeholder="e.g. Partner deals"
-                                onKeyDown={e => { if (e.key==='Enter') handleAddPipeline(); if (e.key==='Escape') { setShowNewForm(false); setNewErr(''); } }}
+                                onKeyDown={e => { if (e.key==='Enter') handleAddPipeline(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setShowNewForm(false); setNewErr(''); } }}
                                 autoFocus
                                 style={{ padding:'7px 10px', background:T.surface, border:`1px solid ${newErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
                         </div>
@@ -396,7 +410,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     <div style={{ flex:1 }}/>
                                     <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{p.active} open · {p.value}</span>
                                     {/* Pipeline kebab */}
-                                    <div style={{ position:'relative' }} onClick={e => e.stopPropagation()}>
+                                    <div style={{ position:'relative' }} data-menu-root={'pl-' + p.id} onClick={e => e.stopPropagation()}>
                                         <button onClick={() => setOpenPipelineKebab(openPipelineKebab===p.id ? null : p.id)}
                                             style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
                                         {openPipelineKebab === p.id && (
@@ -465,7 +479,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     <input value={newStageName} onChange={e => { setNewStageName(e.target.value); setStageErr(''); }}
                                         placeholder="e.g. Due diligence"
                                         autoFocus
-                                        onKeyDown={e => { if (e.key==='Enter') handleAddStage(); if (e.key==='Escape') { setShowAddStage(false); setStageErr(''); } }}
+                                        onKeyDown={e => { if (e.key==='Enter') handleAddStage(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setShowAddStage(false); setStageErr(''); } }}
                                         style={{ padding:'6px 10px', background:T.surface, border:`1px solid ${stageErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
                                     {stageErr && <div style={{ fontSize:10.5, color:T.danger, marginTop:3, fontFamily:T.sans }}>{stageErr}</div>}
                                 </div>
@@ -507,7 +521,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     <div>
                                         {renamingStage === s ? (
                                             <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
-                                                onKeyDown={e => { if (e.key==='Enter') handleRenameStage(); if (e.key==='Escape') { setRenamingStage(null); setRenameVal(''); } }}
+                                                onKeyDown={e => { if (e.key==='Enter') handleRenameStage(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setRenamingStage(null); setRenameVal(''); } }}
                                                 onBlur={handleRenameStage}
                                                 style={{ padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, outline:'none', width:'90%' }}/>
                                         ) : (
@@ -522,7 +536,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${5+i*2}d`}</span></div>
                                     <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${Math.max(5, 42-i*5)}`}</span></div>
                                     {/* Kebab */}
-                                    <div style={{ position:'relative' }}>
+                                    <div style={{ position:'relative' }} data-menu-root={'st-' + s}>
                                         <button onClick={e => { e.stopPropagation(); setOpenKebab(openKebab===s ? null : s); setConfirmDelete(null); setRenamingStage(null); }}
                                             style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1, fontFamily:T.sans }}>⋯</button>
                                         {openKebab === s && (

@@ -946,7 +946,9 @@ test('S16 (P14, D15) the Manager box is a type-ahead of one pick at module scope
     // A pick swaps the field for the chip: the focus goes to its ×, and × back to the field (the review).
     once(box, ind(4, "const pick = (id) => { onPick(id); setQuery(''); setOpen(false); setRefocusChip(true); };"), 'REGRESSION: a pick drops the focus to the page');
     once(box, ind(8, 'if (refocusChip && chipRef.current) { chipRef.current.focus(); setRefocusChip(false); }'));
-    once(box, ind(20, "else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }"), "REGRESSION: the box's Escape left unmarked — App's own Escape acts on it too");
+    // Since §0.232 the list takes its Escape in the one order — a popover at 12000, marked (tests/tab-layers.test.mjs).
+    once(box, ind(4, "useLocalLayer(open && !!pos, { onClose: () => setOpen(false), place: 'tabPopover' });"), "REGRESSION: the box's Escape left unmarked — App's own Escape acts on it too");
+    assert.ok(!box.includes("e.key === 'Escape'"), 'the field\'s own Escape gone — it ran after the order\'s, on the same keypress');
     once(box, ind(20, "if (e.key === 'Enter' && open && shown[0]) { e.preventDefault(); pick(shown[0].id); }"));
     once(box, ind(12, '{open && pos && createPortal('), 'the list portaled — no ancestor clips or traps it');
     assert.ok(box.includes("position:'fixed'"), 'and fixed, from the field');

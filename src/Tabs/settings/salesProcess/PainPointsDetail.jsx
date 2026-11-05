@@ -188,7 +188,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
                     {/* New category form */}
                     {addingCat && (
                         <div style={{ display:'flex', gap:8, marginBottom:14, padding:12, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2 }}>
-                            <input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="Category name…" onKeyDown={e => { if (e.key==='Enter') addCategory(); if (e.key==='Escape') { setAddingCat(false); setNewCat(''); } }}
+                            <input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="Category name…" onKeyDown={e => { if (e.key==='Enter') addCategory(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setAddingCat(false); setNewCat(''); } }}
                                 autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
                             <button onClick={addCategory} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
                             <button onClick={() => { setAddingCat(false); setNewCat(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
@@ -209,7 +209,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
                         >
                             {addingItem === g.cat && (
                                 <div style={{ display:'flex', gap:8, marginBottom:10 }}>
-                                    <input value={newItem} onChange={e => setNewItem(e.target.value)} placeholder="Pain point description…" onKeyDown={e => { if (e.key==='Enter') addItem(g.cat); if (e.key==='Escape') { setAddingItem(null); setNewItem(''); } }}
+                                    <input value={newItem} onChange={e => setNewItem(e.target.value)} placeholder="Pain point description…" onKeyDown={e => { if (e.key==='Enter') addItem(g.cat); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setAddingItem(null); setNewItem(''); } }}
                                         autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
                                     <button onClick={() => addItem(g.cat)} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
                                     <button onClick={() => { setAddingItem(null); setNewItem(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>

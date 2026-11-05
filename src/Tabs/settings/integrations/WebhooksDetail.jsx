@@ -1,5 +1,6 @@
 // settings/integrations/WebhooksDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
@@ -26,6 +27,9 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
     const [secret,  setSecret]  = React.useState('');
     const [copiedSec, setCopiedSec] = React.useState(false);
 
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a name, a URL or an event changed asks "Discard
+    // changes?"; nothing while it is created, nor once the signing secret shows — it closes only by "I've saved it".
+    const requestClose = useLocalLayer(true, { onClose, dirty: step === 'form' && (!!(name.trim() || url.trim()) || [...checked].sort().join() !== 'opportunity.stage_changed,opportunity.won'), busy: saving || step !== 'form' });
     // Event types must match WEBHOOK_EVENTS from webhooks.mjs exactly
     const eventGroups = [
         { group:'Pipeline',  events:['opportunity.created','opportunity.stage_changed','opportunity.won','opportunity.lost'] },
@@ -61,8 +65,8 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
     };
 
     return (
-        <IntModal width={620} onClose={onClose}>
-            <IntModalHeader onClose={onClose}
+        <IntModal width={620} onClose={requestClose}>
+            <IntModalHeader onClose={requestClose}
                 title={step==='form' ? 'New webhook endpoint' : 'Endpoint created — save your secret'}
                 sub={step==='form' ? "Accelerep will POST a signed JSON payload to your URL on each event." : undefined}/>
             <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
@@ -132,7 +136,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
             <IntModalFooter>
                 {step === 'form' ? (
                     <>
-                        <IntBtn label="Cancel" onClick={onClose}/>
+                        <IntBtn label="Cancel" onClick={requestClose}/>
                         <IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||!name.trim()||!url.trim()}/>
                     </>
                 ) : (

@@ -1,5 +1,6 @@
 // settings/integrations/ApiKeysDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
@@ -13,6 +14,10 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
     const [result,  setResult]  = React.useState(null); // { key, plaintextKey }
     const [copied,  setCopied]  = React.useState(false);
 
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a name typed or a scope ticked asks "Discard
+    // changes?"; nothing while the key is created — the key would be made and its plaintext lost — and nothing at the
+    // reveal: the key shown once closes only by "I've stored it" (Jeff, 4 Nov: "Only "I've stored it"").
+    const requestClose = useLocalLayer(true, { onClose, dirty: step === 'form' && (!!name.trim() || scopes.size > 1), busy: step !== 'form' });
     const ALL_SCOPES = ['read','leads:write','contacts:write','opportunities:write','quotes:write','webhooks:write'];
 
     const toggleScope = (s) => setScopes(prev => {
@@ -55,8 +60,8 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
         color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     return (
-        <IntModal width={580} onClose={onClose}>
-            <IntModalHeader onClose={onClose}
+        <IntModal width={580} onClose={requestClose}>
+            <IntModalHeader onClose={requestClose}
                 title={step === 'reveal' ? 'Key created — copy it now' : 'Create API key'}
                 sub={step !== 'reveal' ? 'Keys give programmatic access to Accelerep data. Stored as SHA-256 hash.' : undefined}/>
             <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
@@ -166,7 +171,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
             <IntModalFooter>
                 {step === 'form' && (
                     <>
-                        <IntBtn label="Cancel" onClick={onClose}/>
+                        <IntBtn label="Cancel" onClick={requestClose}/>
                         <IntBtn label="Create key" primary onClick={handleCreate} disabled={!name.trim()}/>
                     </>
                 )}
@@ -222,11 +227,9 @@ const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
         setPos({ top, right });
     }, []);
 
-    React.useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, []);
+    // Escape closes it, the one on top only, and marks it (state §0.232); its key picker, opened inside it, first.
+    useLocalLayer(true, { onClose });
+    useLocalLayer(showKeyPicker, { onClose: () => setShowKeyPicker(false) });
 
     const keyPrefix = activeKey?.keyPrefix || 'spt_live_••••••••';
     const snippets = {
@@ -412,6 +415,8 @@ data = res.json()`,
 const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
     const [confirming, setConfirming] = React.useState(false);
     const [error,      setError]      = React.useState('');
+    // One close, never while the revoke is out — its × and backdrop were live then (state §0.232).
+    const requestClose = useLocalLayer(true, { onClose, busy: confirming });
 
     const handleRevoke = async () => {
         setConfirming(true); setError('');
@@ -426,8 +431,8 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
     };
 
     return (
-        <IntModal width={460} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title="Revoke API key?" sub="This cannot be undone. Any services using this key will stop working immediately."/>
+        <IntModal width={460} onClose={requestClose}>
+            <IntModalHeader onClose={requestClose} title="Revoke API key?" sub="This cannot be undone. Any services using this key will stop working immediately."/>
             <div style={{ padding:'18px 22px' }}>
                 <div style={{ padding:'12px 14px', background:T.surface2, borderRadius:6, marginBottom:14 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:2 }}>{keyRecord.name}</div>
@@ -436,7 +441,7 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
                 {error && <div style={{ fontSize:12, color:T.danger, marginBottom:10 }}>{error}</div>}
             </div>
             <IntModalFooter>
-                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label="Cancel" onClick={requestClose} disabled={confirming}/>
                 <button onClick={handleRevoke} disabled={confirming}
                     style={{ padding:'7px 16px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                     {confirming ? 'Revoking…' : 'Revoke key'}

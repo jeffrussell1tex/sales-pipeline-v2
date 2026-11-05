@@ -45,7 +45,10 @@ test('every replaced site goes through showConfirm / showPrompt', () => {
     assert.ok(read('src/Tabs/ReportsTab.jsx').includes('showConfirm(`Delete the saved report "${r.name}"?`, async () => {'));
     assert.ok(read('src/components/documents/DocumentRail.jsx').includes('showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {'));
     assert.ok(read('src/Tabs/DocumentsTab.jsx').includes('showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {'));
-    assert.ok(read('src/Tabs/settings/quoting/EditBrandModal.jsx').includes("showConfirm('Discard unsaved brand changes?', onClose, false)"));
+    // Since §0.232 Edit brand asks through the one close every window shares — useLocalLayer's, which asks through
+    // showConfirm ("Discard changes?", tests/tab-layers.test.mjs).
+    assert.ok(read('src/Tabs/settings/quoting/EditBrandModal.jsx').includes('  const close = useLocalLayer(true, { onClose, dirty, busy: saving });'));
+    assert.ok(read('src/hooks/useLocalLayer.js').includes('a.showConfirm(DISCARD_MESSAGE, () => {'));
     // PriceBookDetail.jsx (two showConfirm sites) was deleted in §0.149 — the
     // Settings card now opens Quotes → Price Book, the catalog quotes draw from.
     // RolesDetail's "Rename role" prompt went with the invented roles it renamed

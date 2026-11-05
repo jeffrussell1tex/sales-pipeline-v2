@@ -1,5 +1,6 @@
 // settings/quoting/QuoteTemplatesDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
@@ -117,6 +118,8 @@ const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditin
         { label:'Delete',                 action: null,       danger:true,  disabled:true  },
     ];
 
+    // Escape closes the card's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(menuOpen, { onClose: () => setMenuOpen(false) });
     const menuItems = canEdit ? editableMenuItems : readOnlyMenuItems;
 
     return (
@@ -205,7 +208,7 @@ const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditin
                             value={editingName}
                             onChange={e => onEditingNameChange(e.target.value)}
                             onBlur={onEditingCommit}
-                            onKeyDown={e => { if (e.key==='Enter') onEditingCommit(); if (e.key==='Escape') onEditingCommit(); }}
+                            onKeyDown={e => { if (e.key==='Enter') onEditingCommit(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) onEditingCommit(); }}
                             onClick={e => e.stopPropagation()}
                             style={{
                                 flex:1, fontSize:13, fontWeight:700, color:T.ink,
@@ -632,6 +635,10 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
     const [visibleTo,    setVisibleTo]    = useState('Everyone in Sales');
     const [setAsDefault, setSetAsDefault] = useState(false);
 
+    // One close for Escape, the backdrop, × and Cancel (state §0.232): a choice made since it opened asks "Discard
+    // changes?" — nothing is saved until Create.
+    const [opened] = useState(() => JSON.stringify(['blank', 'blocks', OPTIONAL_BLOCKS_DEFAULT, { size:'letter', orientation:'Portrait', density:'Standard' }, 'pitch', null, 'Untitled template', 'Everyone in Sales', false]));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([mode, blankVariant, optionalBlocks, pageSetup, useCase, selectedTpl ? selectedTpl.id || selectedTpl : null, newName, visibleTo, setAsDefault]) !== opened });
     // Footer always shown for blank; shown conditionally for others
     const showFooter = mode === 'blank' || (mode === 'duplicate' && selectedTpl) || mode === 'import';
 
@@ -720,7 +727,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
 
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
-            onClick={onClose}>
+            onClick={requestClose}>
             <div onClick={e => e.stopPropagation()}
                 style={{ background:T.surface, borderRadius:12, width: showPreview ? 1140 : 820, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 64px rgba(20,16,12,0.28)', fontFamily:T.sans, transition:'width 220ms ease' }}>
 
@@ -731,7 +738,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                             <div style={{ fontSize:18, fontWeight:700, color:T.ink, marginBottom:3, letterSpacing:-0.2, fontFamily:T.serif, fontStyle:'italic' }}>New quote template</div>
                             <div style={{ fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Choose how to start, then name the template.</div>
                         </div>
-                        <button onClick={onClose}
+                        <button onClick={requestClose}
                             style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:20, lineHeight:1, padding:'2px 6px', borderRadius:4, fontFamily:T.sans }}
                             onMouseEnter={e => e.currentTarget.style.color=T.ink}
                             onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>×</button>
@@ -1011,7 +1018,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                             <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>{footerHelper}</span>
                             <div style={{ display:'flex', gap:8 }}>
-                                <button onClick={onClose}
+                                <button onClick={requestClose}
                                     style={{ padding:'8px 20px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                                     onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                                     onMouseLeave={e => e.currentTarget.style.background=T.surface}>

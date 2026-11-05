@@ -1,5 +1,6 @@
 // settings/integrations/AutomationsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
@@ -136,6 +137,10 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     const [actions,    setActs]  = React.useState(Array.isArray(rule?.actions) && rule.actions.length ? rule.actions : [{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
+    // One close for Escape, the backdrop and × (state §0.232): a rule changed since it opened asks "Discard changes?";
+    // nothing while it saves.
+    const [opened] = React.useState(() => JSON.stringify([name, trigger, conditions, actions]));
+    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, trigger, conditions, actions]) !== opened, busy: saving });
 
     const addCond = () => setConds(p => [...p, { field: conditionFields(trigger)[0]?.key || '', operator:'eq', value:'' }]);
     const delCond = (i) => setConds(p => p.filter((_,j) => j!==i));
@@ -183,8 +188,8 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     };
 
     return (
-        <IntModal width={680} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title={editing ? 'Edit automation' : 'New automation'} sub={editing ? `Changes apply to the next event; ${rule.runCount || 0} past run${(rule.runCount || 0) === 1 ? '' : 's'} stay as logged.` : 'Define a trigger, optional conditions, and what actions to run.'}/>
+        <IntModal width={680} onClose={requestClose}>
+            <IntModalHeader onClose={requestClose} title={editing ? 'Edit automation' : 'New automation'} sub={editing ? `Changes apply to the next event; ${rule.runCount || 0} past run${(rule.runCount || 0) === 1 ? '' : 's'} stay as logged.` : 'Define a trigger, optional conditions, and what actions to run.'}/>
             {/* Stepper */}
             <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, padding:'0 22px', flexShrink:0 }}>
                 {steps.map((s,i) => { const n=i+1, active=step===n, done=step>n; return (
@@ -341,6 +346,8 @@ export const AutomationsDetail = ({ onBack }) => {
     const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('auto-btn-', 'auto-menu-');
     const lists = useApp(); // opportunities / leads / tasks — to name a run's record
     const [runsFor,        setRunsFor]        = React.useState(null); // { rule, runs }
+    // Escape closes the run history, as its × and backdrop do (state §0.232).
+    useLocalLayer(!!runsFor, { onClose: () => setRunsFor(null) });
     const [runsLoading,    setRunsLoading]    = React.useState(false);
     const [filter,         setFilter]         = React.useState('All');
 

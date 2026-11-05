@@ -338,6 +338,93 @@ test('weekKey: a week by its days, in any key order', () => {
     assert.equal(weekKey(undefined), weekKey({}), 'no pattern');
 });
 
+// ── batch 3: Settings (state §0.232), read ──────────────────────────────────
+
+test('Settings\' layers each take their Escape, and do what their own close does (batch 3, §0.232)', () => {
+    const S = 'src/Tabs/settings/';
+    const has = (file, decl0, line, why) => assert.ok(decl(read(file), decl0).includes(line), `${file} [${decl0}]: ${why || line.trim()}`);
+    has('src/Tabs/AdminView.jsx', 'AdminView', '    useLocalLayer(!!naMenuOpen && !activeItem, { onClose: () => setNaMenuOpen(null) });', 'the needs-attention menu, while the card list draws it');
+    assert.equal(count(read('src/Tabs/AdminView.jsx'), '<LeaveGuardModal inTab '), 2, 'Settings\' own guard, both its places, portaled above the rails (Q5)');
+    has(S + 'integrations/shared.jsx', 'useRowMenu', '    useLocalLayer(!!activeMenu, { onClose: () => setActiveMenu(null) });', 'every panel\'s row menu — API keys, Webhooks, Automations');
+    has(S + 'security/shared.jsx', 'PolicySelect', '    useLocalLayer(open, { onClose: () => setOpen(false) });');
+    has(S + 'audit/AuditDetail.jsx', 'AuditAnchoredMenu', '    useLocalLayer(true, { onClose });');
+    has(S + 'audit/AuditDetail.jsx', 'AddDestinationModal', "    const requestClose = useLocalLayer(true, { onClose, dirty: !!(dest.trim() || url.trim()) || fmt !== 'JSON', busy: saving });", 'typed work asks; its × held mid-save, as its backdrop and Cancel were');
+    has(S + 'data/BackupDetail.jsx', 'RestoreModal', "                <DataBtn label=\"Cancel\" onClick={requestClose} disabled={loading}/>", 'the restore\'s Cancel held while the snapshot downloads');
+    has(S + 'data/ExportDetail.jsx', 'NewExportModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([nameNow, scope, fmt, cadence, dest]) !== opened, busy: saving });');
+    has(S + 'data/ExportDetail.jsx', 'NewDsrModal', "    const requestClose = useLocalLayer(true, { onClose, dirty: !!(subject.trim() || notes.trim()) || type !== 'access', busy: saving });");
+    has(S + 'data/FeaturesDetail.jsx', 'ResetAiModal', '    useLocalLayer(true, { onClose });');
+    has(S + 'integrations/ApiKeysDetail.jsx', 'RevokeKeyModal', '    const requestClose = useLocalLayer(true, { onClose, busy: confirming });');
+    has(S + 'integrations/ApiKeysDetail.jsx', 'DocsPopoverB', '    useLocalLayer(showKeyPicker, { onClose: () => setShowKeyPicker(false) });', 'its key picker, nested');
+    has(S + 'integrations/AutomationsDetail.jsx', 'AutomationModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, trigger, conditions, actions]) !== opened, busy: saving });');
+    has(S + 'integrations/AutomationsDetail.jsx', 'AutomationsDetail', '    useLocalLayer(!!runsFor, { onClose: () => setRunsFor(null) });', 'the run history');
+    has(S + 'integrations/ConnectedAppsDetail.jsx', 'SlackConfigModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([webhookUrl, channel, alerts]) !== opened, busy: saving || testing });');
+    has(S + 'people/TeamsDetail.jsx', 'TeamModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, territory, vertical, managerId, repIds, color]) !== opened, busy: saving });');
+    const teams = decl(read(S + 'people/TeamsDetail.jsx'), 'TeamsDetail');
+    assert.ok(teams.includes("    const requestAssignClose = useLocalLayer(!!assigningUser, { onClose: () => { setAssigningUser(null); setAssignErr(''); }, busy: assigning });"), 'Assign to team: held while an assignment is out, and its error cleared on close — a reopened window showed the last one\'s');
+    assert.equal(count(teams, 'onClick={requestAssignClose}'), 3, 'its backdrop, × and Cancel');
+    has(S + 'people/TerritoriesDetail.jsx', 'TerritoryModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, parent, rule, ownerId, repIds]) !== opened, busy: saving });');
+    has(S + 'people/TerritoriesDetail.jsx', 'TerritoriesDetail', '    useLocalLayer(openTerrKebab !== null, { onClose: () => setOpenTerrKebab(null) });');
+    has(S + 'people/UsersDetail.jsx', 'UsersDetail', "    useLocalLayer(openUserKebab !== null && !!kebabPos, { onClose: () => setOpenUserKebab(null), place: 'tabPopover' });");
+    has(S + 'quoting/EditBrandModal.jsx', 'EditBrandModal', '  const close = useLocalLayer(true, { onClose, dirty, busy: saving });');
+    assert.equal(count(decl(read(S + 'quoting/EditBrandModal.jsx'), 'EditBrandModal'), 'onClick={close}'), 3, 'Edit brand\'s scrim, × and Cancel through the one close — none closes mid-save');
+    has(S + 'data/ExportDetail.jsx', 'NewExportModal', ' onChange={e => setNameNow(e.target.value)} ', 'the uncontrolled name field feeds the close\'s question');
+    has(S + 'quoting/QuoteTemplatesDetail.jsx', 'NewTemplateModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([mode, blankVariant, optionalBlocks, pageSetup, useCase, selectedTpl ? selectedTpl.id || selectedTpl : null, newName, visibleTo, setAsDefault]) !== opened });');
+    assert.equal(count(decl(read(S + 'quoting/QuoteTemplatesDetail.jsx'), 'NewTemplateModal'), 'onClick={requestClose}'), 3);
+    has(S + 'salesProcess/BuyerPersonasDetail.jsx', 'BuyerPersonasDetail', '    const requestPersonaClose = useLocalLayer(!!editModal, { onClose: () => setEditModal(null), dirty: !!editModal && JSON.stringify(editModal.data) !== personaBaseRef.current });');
+    has(S + 'salesProcess/IndustriesDetail.jsx', 'IndustriesDetail', "    useLocalLayer(openIndKebab !== null && !!kebabPos, { onClose: () => setOpenIndKebab(null), place: 'tabPopover' });");
+    has(S + 'dispatch/DispatchSkillsDetail.jsx', 'DispatchSkillsDetail', '    useLocalLayer(!!(licMenu && licMenu.rect), { onClose: () => setLicMenu(null) });');
+    has(S + 'dispatch/DispatchJobTemplatesDetail.jsx', 'DispatchJobTemplatesDetail', '    useLocalLayer(!!(tmplMenu && tmplMenu.rect), { onClose: () => setTmplMenu(null) });');
+});
+
+test('the secrets shown once close only by "I\'ve stored it" (Q2, §0.232): Escape, the backdrop and × do nothing at the reveal, nor while the secret is made', () => {
+    const S = 'src/Tabs/settings/';
+    const key = decl(read(S + 'integrations/ApiKeysDetail.jsx'), 'NewApiKeyModal');
+    assert.ok(key.includes("    const requestClose = useLocalLayer(true, { onClose, dirty: step === 'form' && (!!name.trim() || scopes.size > 1), busy: step !== 'form' });"), 'the API key: held while it is created and once it shows');
+    assert.ok(key.includes('        <IntModal width={580} onClose={requestClose}>\n            <IntModalHeader onClose={requestClose}'), 'its backdrop and × through the held close');
+    assert.ok(key.includes('<IntBtn label="I\'ve stored it — close" primary onClick={onClose}/>'), 'and only its "I\'ve stored it" closes');
+    const hook = decl(read(S + 'integrations/WebhooksDetail.jsx'), 'NewWebhookModal');
+    assert.ok(hook.includes("busy: saving || step !== 'form' });"), 'the webhook\'s signing secret: held while it is made and once it shows');
+    assert.equal(count(hook, ' onClose={requestClose}'), 2, 'its backdrop and ×');
+    assert.ok(hook.includes('<IntBtn label="I\'ve saved it — close" primary onClick={onClose}/>'));
+    const audit = decl(read(S + 'audit/AuditDetail.jsx'), 'SecretRevealModal');
+    assert.ok(audit.includes('    useLocalLayer(true, { onClose, busy: true });') && audit.includes('<SecBtn label="I have stored it" primary onClick={onClose}/>'), 'the audit stream\'s: Escape taken, nothing closes it but "I have stored it"');
+});
+
+test('Pipelines\' and KPI thresholds\' ⋯ menus close on a click outside them (Q7, §0.232) — they closed only by their own button or an item', () => {
+    const S = 'src/Tabs/settings/salesProcess/';
+    const p = decl(read(S + 'PipelinesDetail.jsx'), 'PipelinesDetail');
+    assert.ok(p.includes("        const key = openPipelineKebab !== null ? 'pl-' + openPipelineKebab : openKebab !== null ? 'st-' + openKebab : null;"));
+    assert.ok(p.includes("const root = e.target && e.target.closest ? e.target.closest('[data-menu-root]') : null; if (root && root.getAttribute('data-menu-root') === key) return; setOpenPipelineKebab(null); setOpenKebab(null); setConfirmDelete(null);"), 'a mousedown outside the open menu closes both');
+    assert.ok(p.includes("data-menu-root={'pl-' + p.id}") && p.includes("data-menu-root={'st-' + s}"), 'each menu\'s own root');
+    for (const line of ['    useLocalLayer(openPipelineKebab !== null, { onClose: () => setOpenPipelineKebab(null) });', '    useLocalLayer(!!blockedDeletePipeline, { onClose: () => setBlockedDeletePipeline(null) });', '    useLocalLayer(!!confirmDeletePipeline, { onClose: () => setConfirmDeletePipeline(null) });']) assert.ok(p.includes(line), line.trim());
+    const k = decl(read(S + 'KPIThresholdsDetail.jsx'), 'KPIThresholdsDetail');
+    assert.ok(k.includes("if (root && root.getAttribute('data-menu-root') === 'kpi-' + openKPI) return; setOpenKPI(null);") && k.includes("data-menu-root={'kpi-' + i}"));
+    assert.ok(k.includes('    useLocalLayer(openKPI !== null, { onClose: () => setOpenKPI(null) });'));
+    // The close is attached, and taken off (each component holds one such listener).
+    for (const [name, src] of [['Pipelines', p], ['KPI thresholds', k]]) {
+        assert.equal(count(src, "        document.addEventListener('mousedown', onDown);\n"), 1, `${name}: the outside close is listened for`);
+        assert.equal(count(src, "        return () => document.removeEventListener('mousedown', onDown);\n"), 1, `${name}: and taken off`);
+    }
+});
+
+test('every inline Escape in Settings leaves a marked one alone and marks the one it takes (§0.232)', () => {
+    const files = walkDir('src/Tabs/settings').filter((f) => f.endsWith('.jsx'));
+    let n = 0;
+    for (const f of files) {
+        const src = read(f);
+        assert.ok(!/if\s*\(\s*e\.key\s*===\s*'Escape'\s*\)/.test(src), `${f}: an inline Escape that does not check the mark`);
+        n += count(src, "if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) ");
+    }
+    assert.ok(n >= 19, `the inline Escapes (${n}; 19 when §0.232 was written)`);
+    // Run: the transform's condition — a marked Escape skipped, an unmarked one marked and taken.
+    const run = (e) => { let took = false; if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) took = true; return took; };
+    const fresh = esc();
+    assert.equal(run(fresh), true); assert.equal(fresh.defaultPrevented, true);
+    const marked = { ...esc(), defaultPrevented: true };
+    assert.equal(run(marked), false);
+    assert.equal(run({ key: 'Enter', defaultPrevented: false, preventDefault() {} }), false);
+});
+
 // ── THE GUARD ───────────────────────────────────────────────────────────────
 
 const walk = (node, visit, anc = []) => {
@@ -447,18 +534,37 @@ const outsideHooks = (files) => {
     }
     return out;
 };
-// Whether a top-level declaration takes its Escape in the order: useLocalLayer, or an app layer's
-// useEscapeLayer held by the order (the leave guard — tests/escape-order.test.mjs owns it).
-const registers = (src) => {
+// Whether a top-level declaration takes its Escape in the order: useLocalLayer, a hook that calls it (useRowMenu —
+// §0.232), or an app layer's useEscapeLayer held by the order (tests/escape-order.test.mjs owns those).
+const registers = (src, layerHooks = new Set()) => {
     const out = new Map();
+    const viaHook = layerHooks.size ? new RegExp(`\\b(${[...layerHooks].join('|')})\\(`) : null;
     for (const top of ast(src).program.body) {
         const name = topName(top);
         if (!name) continue;
         const body = src.slice(top.start, top.end);
-        out.set(name, /useLocalLayer\(/.test(body) || (/useEscapeLayer\(/.test(body) && /escapeBlocked\('/.test(body)));
+        out.set(name, /useLocalLayer\(/.test(body) || (!!viaHook && viaHook.test(body)) || (/useEscapeLayer\(/.test(body) && /escapeBlocked\('/.test(body)));
     }
     return out;
 };
+// The top-level hooks that register a layer themselves — a call to one registers (useRowMenu).
+const layerHooksIn = (files) => {
+    const out = new Set();
+    for (const f of files) {
+        const src = read(f);
+        for (const top of ast(src).program.body) {
+            const name = topName(top);
+            if (name && /^use[A-Z]/.test(name) && name !== 'useLocalLayer' && /useLocalLayer\(/.test(src.slice(top.start, top.end))) out.add(name);
+        }
+    }
+    return out;
+};
+// Frames, not layers (§0.232): each window drawn in one registers and hands it its close — so the frame's own fixed
+// box passes, and every component that renders the frame must register.
+const FRAMES = [
+    { file: 'src/Tabs/settings/integrations/shared.jsx', decl: 'IntModal' },
+    { file: 'src/Tabs/settings/data/shared.jsx', decl: 'DataModal' },
+];
 
 // A listener whose layer registers in another component of the file.
 const SERVES = [
@@ -476,75 +582,23 @@ const NOT_A_LAYER = [
 // Later batches of this work (docs/design/escape-tabs/DESIGN.md §4): each hit by its file, its
 // component and its line's text, and the batch that registers it. Each batch strikes its own.
 const KNOWN = [
-    { batch: 3, file: "src/Tabs/AdminView.jsx", decl: "AdminView", text: "document.addEventListener('mousedown', onDoc);" },
-    { batch: 3, file: "src/Tabs/AdminView.jsx", decl: "AdminView", text: "style={{ position:'absolute', right:0, zIndex:50, ...(i >= 1 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 })," },
-    { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });" },
-    { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "setStyle({ position:'fixed', zIndex:9999, top, ...computed, visibility:'visible' });" },
-    { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "document.addEventListener('mousedown', onDoc);" },
-    { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AddDestinationModal", text: "<div onClick={saving ? undefined : onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>" },
-    { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "SecretRevealModal", text: "<div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:950, display:'flex', alignItems:'center', justifyContent:'center' }}>" },
-    { batch: 3, file: "src/Tabs/settings/data/shared.jsx", decl: "DataModal", text: "<div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx", decl: "DispatchJobTemplatesDetail", text: "<div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setTmplMenu(null)}/>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx", decl: "DispatchJobTemplatesDetail", text: "<div style={{position:'fixed',top:tmplMenu.rect.top,right:tmplMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:180,overflow:'hidden'}}>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setSkillMenu(null)}/>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',top:skillMenu.rect.top,right:skillMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setCertMenu(null)}/>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',top:certMenu.rect.top,right:certMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setLicMenu(null)}/>" },
-    { batch: 3, file: "src/Tabs/settings/dispatch/DispatchSkillsDetail.jsx", decl: "DispatchSkillsDetail", text: "<div style={{position:'fixed',top:licMenu.rect.top,right:licMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "DocsPopoverB", text: "<div ref={ref} style={{ position:'fixed', top:-9999, left:-9999, visibility:'hidden', pointerEvents:'none', width:440 }}>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "DocsPopoverB", text: "<div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:399, background:'transparent' }}/>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "DocsPopoverB", text: "<div ref={ref} style={{ position:'fixed', zIndex:400, top:pos.top, right:pos.right," },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "DocsPopoverB", text: "style={{ position:'absolute', bottom:'100%', right:0, marginBottom:4, zIndex:10," },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "ApiKeysDetail", text: "const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('key-btn-', 'key-menu-');" },
-    { batch: 3, file: "src/Tabs/settings/integrations/ApiKeysDetail.jsx", decl: "ApiKeysDetail", text: "<div id={'key-menu-' + k.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100 }}>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/AutomationsDetail.jsx", decl: "AutomationsDetail", text: "const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('auto-btn-', 'auto-menu-');" },
-    { batch: 3, file: "src/Tabs/settings/integrations/AutomationsDetail.jsx", decl: "AutomationsDetail", text: "<div onClick={() => setRunsFor(null)} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.4)', zIndex:600, display:'flex', alignItems:'flex-start', justifyContent:'flex-end' }}>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/AutomationsDetail.jsx", decl: "AutomationsDetail", text: "<div id={'auto-menu-' + rule.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100," },
-    { batch: 3, file: "src/Tabs/settings/integrations/shared.jsx", decl: "IntModal", text: "style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>" },
-    { batch: 3, file: "src/Tabs/settings/integrations/shared.jsx", decl: "useRowMenu", text: "document.addEventListener('mousedown', close);" },
-    { batch: 3, file: "src/Tabs/settings/integrations/WebhooksDetail.jsx", decl: "WebhooksDetail", text: "const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('wh-btn-', 'wh-menu-');" },
-    { batch: 3, file: "src/Tabs/settings/integrations/WebhooksDetail.jsx", decl: "WebhooksDetail", text: "<div id={'wh-menu-' + wh.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100 }}>" },
-    { batch: 3, file: "src/Tabs/settings/people/TeamsDetail.jsx", decl: "TeamModal", text: "<div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}" },
-    { batch: 3, file: "src/Tabs/settings/people/TeamsDetail.jsx", decl: "TeamsDetail", text: "document.addEventListener('click', h);" },
-    { batch: 3, file: "src/Tabs/settings/people/TeamsDetail.jsx", decl: "TeamsDetail", text: "<div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}" },
-    { batch: 3, file: "src/Tabs/settings/people/TeamsDetail.jsx", decl: "TeamsDetail", text: "style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160 }}>" },
-    { batch: 3, file: "src/Tabs/settings/people/TerritoriesDetail.jsx", decl: "TerritoryModal", text: "<div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>" },
-    { batch: 3, file: "src/Tabs/settings/people/TerritoriesDetail.jsx", decl: "TerritoriesDetail", text: "document.addEventListener('click', h);" },
-    { batch: 3, file: "src/Tabs/settings/people/TerritoriesDetail.jsx", decl: "TerritoriesDetail", text: "style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180 }}>" },
-    { batch: 3, file: "src/Tabs/settings/people/UsersDetail.jsx", decl: "MemberTypeahead", text: "{open && pos && createPortal( <div ref={listRef} onMouseDown={e => e.preventDefault()}" },
-    { batch: 3, file: "src/Tabs/settings/people/UsersDetail.jsx", decl: "MemberTypeahead", text: "style={{ position:'fixed', left:pos.left, ...(pos.top != null ? { top:pos.top } : { bottom:pos.bottom }), width:pos.width, maxHeight:220, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, boxShadow:'0 4px 12px rgba(42,38,34,0.12)' }}>" },
-    { batch: 3, file: "src/Tabs/settings/people/UsersDetail.jsx", decl: "UsersDetail", text: "document.addEventListener('click', handler);" },
-    { batch: 3, file: "src/Tabs/settings/people/UsersDetail.jsx", decl: "UsersDetail", text: "{openUserKebab === u.id && kebabPos && createPortal( <div ref={kebabMenuRef} onClick={e => e.stopPropagation()}" },
-    { batch: 3, file: "src/Tabs/settings/people/UsersDetail.jsx", decl: "UsersDetail", text: "style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), maxHeight:kebabPos.maxHeight, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', width:KEBAB_W }}>" },
-    { batch: 3, file: "src/Tabs/settings/quoting/ApprovalTiersDetail.jsx", decl: "ApprovalTiersDetail", text: "document.addEventListener('click', h);" },
-    { batch: 3, file: "src/Tabs/settings/quoting/ApprovalTiersDetail.jsx", decl: "ApprovalTiersDetail", text: "<div style={{ position:'absolute', right:0, zIndex:500, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:230, overflow:'hidden'," },
-    { batch: 3, file: "src/Tabs/settings/quoting/EditBrandModal.jsx", decl: "EditBrandModal", text: "<div style={{ position: 'fixed', inset: 0, zIndex: 100," },
-    { batch: 3, file: "src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx", decl: "TplLibCard", text: "document.addEventListener('mousedown', handler);" },
-    { batch: 3, file: "src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx", decl: "TplLibCard", text: "<div style={{ position:'absolute', right:0, marginTop:4, ...(isLastRow ? { bottom:'100%', marginBottom:4, top:'auto' } : { top:'100%' })," },
-    { batch: 3, file: "src/Tabs/settings/quoting/QuoteTemplatesDetail.jsx", decl: "NewTemplateModal", text: "<div style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx", decl: "AccountSegmentsDetail", text: "document.addEventListener('click', handler);" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/AccountSegmentsDetail.jsx", decl: "AccountSegmentsDetail", text: "style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx", decl: "BuyerPersonasDetail", text: "document.addEventListener('mousedown', handler);" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx", decl: "BuyerPersonasDetail", text: "<div id={'persona-menu-' + p.id} onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, zIndex: 200, ...(personaIdx >= personas.length - 3 ? { bottom: '100%', marginBottom: 4, top: 'auto' } : { top: '100%', marginTop: 4 }), width: 210, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: 5, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.13)', fontFamily: T.sans }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/BuyerPersonasDetail.jsx", decl: "BuyerPersonasDetail", text: "<div onClick={() => setEditModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/CustomerTypesDetail.jsx", decl: "CustomerTypesDetail", text: "document.addEventListener('click', handler);" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/CustomerTypesDetail.jsx", decl: "CustomerTypesDetail", text: "style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/CustomFieldsDetail.jsx", decl: "CustomFieldsDetail", text: "style={{ position:'fixed', inset:0, zIndex:9998 }}" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/CustomFieldsDetail.jsx", decl: "CustomFieldsDetail", text: "<div style={{ position:'fixed'," },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/IndustriesDetail.jsx", decl: "IndustriesDetail", text: "document.addEventListener('click', handler);" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/IndustriesDetail.jsx", decl: "IndustriesDetail", text: "{openIndKebab === ind.k && kebabPos && createPortal( <div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/IndustriesDetail.jsx", decl: "IndustriesDetail", text: "<div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/KPIThresholdsDetail.jsx", decl: "KPIThresholdsDetail", text: "style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/PipelinesDetail.jsx", decl: "PipelinesDetail", text: "<div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center' }}", n: 2 },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/PipelinesDetail.jsx", decl: "PipelinesDetail", text: "<div style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160, overflow:'hidden' }}>" },
-    { batch: 3, file: "src/Tabs/settings/salesProcess/PipelinesDetail.jsx", decl: "PipelinesDetail", text: "style={{ position:'absolute', right:0, top:'100%', zIndex:200, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>" },
-    { batch: 3, file: "src/Tabs/settings/security/shared.jsx", decl: "PolicySelect", text: "document.addEventListener('mousedown', onDoc);" },
-    { batch: 3, file: "src/Tabs/settings/security/shared.jsx", decl: "PolicySelect", text: "<div ref={ref} style={{ position:'fixed', top:pos.top, left:pos.left, zIndex:9999 }}>" },
     { batch: 4, file: "src/components/documents/atoms.jsx", decl: "PeopleChooser", text: "<div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 3, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, maxHeight: 200, overflowY: 'auto', zIndex: 5, boxShadow: '0 4px 12px rgba(42,38,34,0.12)' }}>" },
 ];
 
 const matches = (h, e) => h.file === e.file && h.decl === e.decl && h.text === e.text;
+// The components that draw a window in a frame and take no Escape (§0.232).
+const unframed = (files, reg, readFile = read) => {
+    const out = [];
+    for (const f of files) {
+        const src = readFile(f);
+        for (const top of ast(src).program.body) {
+            const name = topName(top);
+            const body = src.slice(top.start, top.end);
+            for (const fr of FRAMES) if (new RegExp(`<${fr.decl}[\\s>]`).test(body) && !reg.get(f).get(name)) out.push(`${f} [${name}] draws <${fr.decl}> and takes no Escape`);
+        }
+    }
+    return out;
+};
 // Each name, checked against the hits: it matches exactly its count (n, else one). A layer added
 // beside a named one — the same text in the same component — is a second hit, and fails it.
 // The KNOWN entries whose component now registers — struck in the batch that registers it (§0.231).
@@ -563,12 +617,18 @@ test('THE GUARD: every layer under the tabs takes its Escape in the order, or is
     const hooks = outsideHooks(files);
     assert.ok(hooks.has('useRowMenu'), 'a hook that installs an outside-click listener');
     const hits = files.flatMap((f) => layerHits(f, read(f), classes, hooks));
-    const reg = new Map(files.map((f) => [f, registers(read(f))]));
+    const layerHooks = layerHooksIn(files);
+    assert.ok(layerHooks.has('useRowMenu'), 'a hook that registers its menu (§0.232)');
+    const reg = new Map(files.map((f) => [f, registers(read(f), layerHooks)]));
     const named = [...SERVES, ...NOT_A_LAYER, ...KNOWN];
-    const loose = hits.filter((h) => !named.some((e) => matches(h, e)) && !reg.get(h.file).get(h.decl));
+    const frame = (h) => FRAMES.some((fr) => fr.file === h.file && fr.decl === h.decl);
+    const loose = hits.filter((h) => !named.some((e) => matches(h, e)) && !frame(h) && !reg.get(h.file).get(h.decl));
     assert.deepEqual(loose.map((h) => `${h.file} [${h.decl}] ${h.kind}: ${h.text}`), [], 'a layer with no Escape in the order: give it useLocalLayer, or name it with its reason');
     assert.deepEqual(namedMismatches(hits, named), [], 'a name that no longer matches its layers, or one that now matches more');
-    for (const e of KNOWN) assert.ok([3, 4].includes(e.batch), `${e.file}: its batch (batch 2, Dispatch, landed in §0.231)`);
+    for (const e of KNOWN) assert.ok([4].includes(e.batch), `${e.file}: its batch (batch 2, Dispatch, landed in §0.231; batch 3, Settings, in §0.232)`);
+    // Every component that draws a window in a frame registers it (§0.232).
+    for (const fr of FRAMES) assert.ok(hits.some((h) => frame(h) && h.decl === fr.decl), `${fr.decl}: still a frame with a fixed box`);
+    assert.deepEqual(unframed(files, reg), [], 'a window in a frame registers itself');
     // A later batch's layer that now registers is struck from KNOWN in that batch (§0.231): left, it would hide the next
     // layer added beside it under its name.
     assert.deepEqual(toStrike(KNOWN, reg), [], 'a KNOWN layer whose component registers: strike it');
@@ -585,7 +645,11 @@ test('THE GUARD: a popover draws at its place\'s z and outside the tabs; a tab\'
             const name = topName(top);
             if (!/useLocalLayer\(/.test(body)) continue;
             const popover = /useLocalLayer\([^;]*place: 'tabPopover'/.test(body);
-            if (popover) {
+            // A layer standing at an app place (Settings' own leave guard, §0.232) is portaled to where that place draws.
+            const appPlace = /useLocalLayer\([^;]*place: '(?!tabPopover|tabLayer)\w+'/.test(body);
+            if (appPlace) {
+                assert.ok(/createPortal\(/.test(body), `${f} [${name}]: a layer at an app place is portaled out of the tab`);
+            } else if (popover) {
                 assert.ok(/createPortal\(/.test(body), `${f} [${name}]: a popover is portaled out of the tab`);
                 assert.ok(/zIndex: ?12000\b/.test(body), `${f} [${name}]: at its place's 12000`);
             } else {
@@ -645,6 +709,11 @@ test('the guard finds the shapes as they were: a fixed layer, a ternary, a compu
     assert.equal(namedMismatches([hit, hit], [one]).length, 1, 'a layer added beside a named one fails');
     assert.equal(namedMismatches([], [one]).length, 1, 'a named layer gone fails');
     assert.deepEqual(namedMismatches([hit, hit], [{ ...one, n: 2 }]), [], 'n: 2 names both');
+    // A window in a frame registers, or is named (§0.232); a hook that registers counts as registering.
+    const framed = 'function Good() { const c = useLocalLayer(true, { onClose }); return <IntModal onClose={c} />; }\nfunction Bad() { return <DataModal onClose={onClose} />; }';
+    assert.deepEqual(unframed(['y.jsx'], new Map([['y.jsx', registers(framed)]]), () => framed), ['y.jsx [Bad] draws <DataModal> and takes no Escape']);
+    assert.equal(registers('function P() { useRowMenu(); return null; }', new Set(['useRowMenu'])).get('P'), true);
+    assert.equal(registers('function P() { useRowMenu(); return null; }').get('P'), false);
     // A KNOWN entry whose component registers is struck; one whose component does not stays.
     const reg2 = new Map([['x.jsx', new Map([['A', true], ['B', false]])]]);
     assert.deepEqual(toStrike([{ ...one, batch: 3 }, { file: 'x.jsx', decl: 'B', text: 'u', batch: 3 }], reg2), ['x.jsx [A] t']);

@@ -2001,27 +2001,20 @@ const declIn = (src, component, name) => {
     return out;
 };
 
-test('S10 — Edit brand\'s window while its save is out, run as written (critic A5): close and Escape do nothing; after it, close asks about an edit, Escape closes', () => {
+test('S10 — Edit brand\'s window while its save is out, run as written (critic A5): close and Escape do nothing; after it, close asks about an edit, Escape closes', async () => {
+    // Since §0.232 its close and its Escape are the one close every window shares (useLocalLayer): busy while its save is
+    // out, dirty while the brand differs from what it opened with — the decision run here, the hook read in
+    // tests/tab-layers.test.mjs (the confirm's words, the latest close, Escape at key time and marked).
     const src = read(EDIT_BRAND);
-    const close = handlerIn(src, 'EditBrandModal', 'close');
-    const runClose = (saving, dirty) => {
-        const st = { asked: [], closed: 0 };
-        const onClose = () => { st.closed += 1; };
-        runAs(close, { saving, dirty, onClose, showConfirm: (words, then, danger) => st.asked.push([words, then === onClose, danger]) });
-        return st;
-    };
+    assert.ok(src.includes('  const close = useLocalLayer(true, { onClose, dirty, busy: saving });'), 'REGRESSION (critic A5): the close is not held by the save');
+    assert.ok(src.includes('  const dirty = JSON.stringify(brand) !== JSON.stringify(initial);'));
+    assert.ok(!src.includes("addEventListener('keydown'"), 'its own Escape listener — unmarked, re-bound every render — gone');
+    const { closeDecision } = await import('../src/utils/tabLayers.js');
     for (const dirty of [true, false]) {
-        assert.deepEqual(runClose(true, dirty), { asked: [], closed: 0 }, `dirty ${dirty}: REGRESSION (critic A5) — closed while its save is out: its answer lands on nothing, a refusal unsaid`);
+        assert.equal(closeDecision({ busy: true, dirty }), 'none', `dirty ${dirty}: REGRESSION (critic A5) — closed while its save is out: its answer lands on nothing, a refusal unsaid`);
     }
-    assert.deepEqual(runClose(false, true), { asked: [['Discard unsaved brand changes?', true, false]], closed: 0 });
-    assert.deepEqual(runClose(false, false), { asked: [], closed: 1 });
-    const onKey = declIn(src, 'EditBrandModal', 'onKey');
-    const press = (saving, e) => { let closed = 0; runAs(onKey, { saving, close: () => { closed += 1; } }, e); return closed; };
-    const ESC = { key: 'Escape', defaultPrevented: false };
-    assert.equal(press(true, ESC), 0, 'REGRESSION (critic A5): Escape closes the window while its save is out');
-    assert.equal(press(false, ESC), 1);
-    assert.equal(press(false, { ...ESC, defaultPrevented: true }), 0, 'a layer above took it');
-    assert.equal(press(false, { key: 'Enter', defaultPrevented: false }), 0);
+    assert.equal(closeDecision({ busy: false, dirty: true }), 'ask', 'an edit asks');
+    assert.equal(closeDecision({ busy: false, dirty: false }), 'close');
 });
 
 // The Sales Manager's saveExtra as written: the drafts' tokens (`opened`); writeSettings answers `answer`; the latest,

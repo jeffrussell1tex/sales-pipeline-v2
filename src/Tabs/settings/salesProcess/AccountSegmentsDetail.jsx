@@ -1,5 +1,6 @@
 // settings/salesProcess/AccountSegmentsDetail.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -86,6 +87,8 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
     }, [openTierKebab]);
+    // Escape closes a tier's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(openTierKebab !== null, { onClose: () => setOpenTierKebab(null) });
     const [editingTierIdx, setEditingTierIdx] = useState(null); // inline edit
     const [editingTierVal, setEditingTierVal] = useState({}); // { tier, range, sla, owner, hex }
 
@@ -189,7 +192,7 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
                                                 <input type="color" value={editingTierVal.hex||t.hex} onChange={e => setEditingTierVal(p => ({ ...p, hex:e.target.value }))}
                                                     style={{ width:24, height:24, border:`1px solid ${T.border}`, borderRadius:T.r, padding:1, cursor:'pointer', flexShrink:0 }}/>
                                                 <input value={editingTierVal.tier??t.tier} onChange={e => setEditingTierVal(p => ({ ...p, tier:e.target.value }))}
-                                                    autoFocus style={{ ...inpSm }} onKeyDown={e => { if (e.key==='Enter') handleEditTierSave(i); if (e.key==='Escape') { setEditingTierIdx(null); setEditingTierVal({}); } }}/>
+                                                    autoFocus style={{ ...inpSm }} onKeyDown={e => { if (e.key==='Enter') handleEditTierSave(i); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setEditingTierIdx(null); setEditingTierVal({}); } }}/>
                                             </div>
                                         ) : (
                                             <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>

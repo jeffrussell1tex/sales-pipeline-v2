@@ -17,6 +17,7 @@
 // nothing opened it. The SLA column is the reminder's time since §0.158: after it, with
 // no decision, the backup is emailed (quote-reminders.mjs).
 import React, { useState } from 'react';
+import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
@@ -178,6 +179,8 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
         document.addEventListener('click', h);
         return () => document.removeEventListener('click', h);
     }, [openTierMenu]);
+    // Escape closes a tier's ⋯ menu, the one on top only (state §0.232).
+    useLocalLayer(openTierMenu !== null, { onClose: () => setOpenTierMenu(null) });
     const startEdit = (i, field, val) => { setEditingField({ idx: i, field }); setEditingVal(val); setOpenTierMenu(null); };
     const commitFieldEdit = (i, field, val) => {
         setTiers(prev => {
@@ -296,7 +299,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
                                             {ef === 'label' ? (
                                                 <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
                                                     onBlur={() => commitFieldEdit(i,'label',editingVal)}
-                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'label',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'label',editingVal); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) setEditingField(null); }}
                                                     style={{ ...inpSt, fontFamily:T.sans, fontWeight:700, width:'90%' }}/>
                                             ) : (
                                                 <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
@@ -314,7 +317,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
                                                     <input autoFocus type="number" min={Math.round(lo*100)+1} max={100} value={editingVal}
                                                         onChange={e => setEditingVal(e.target.value)}
                                                         onBlur={() => commitFieldEdit(i,'maxDiscount',editingVal)}
-                                                        onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'maxDiscount',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                        onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'maxDiscount',editingVal); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) setEditingField(null); }}
                                                         style={{ ...inpSt, width:52 }}/>
                                                     <span>%</span>
                                                 </div>
@@ -356,7 +359,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
                                             {ef === 'sla' ? (
                                                 <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
                                                     onBlur={() => commitFieldEdit(i,'sla',editingVal)}
-                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'sla',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'sla',editingVal); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) setEditingField(null); }}
                                                     style={{ ...inpSt, width:52, textAlign:'right' }} placeholder="8h"/>
                                             ) : t.sla || '—'}
                                         </div>

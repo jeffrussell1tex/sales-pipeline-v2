@@ -71,6 +71,8 @@ export const DataBtn = ({ label, primary, danger:isDanger, onClick, disabled }) 
     </button>
 );
 
+// A frame, not a layer of its own (state §0.232): each window drawn in it registers (useLocalLayer) and hands it the
+// one close its backdrop, × and Cancel share.
 export const DataModal = ({ width=640, onClose, children }) => (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
         <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>

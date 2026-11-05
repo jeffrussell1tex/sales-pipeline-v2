@@ -1,5 +1,6 @@
 // AdminView.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { dbFetch } from '../utils/storage';
 import { jobHealth } from '../utils/jobHealth.js';
 import DuplicateScanView from './DuplicateScanView';
@@ -234,11 +235,11 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
             const btn  = document.getElementById('na-btn-'  + naMenuOpen);
             if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) setNaMenuOpen(null);
         };
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) setNaMenuOpen(null); };
         document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown',   onKey);
-        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+        return () => document.removeEventListener('mousedown', onDoc);
     }, [naMenuOpen]);
+    // Escape closes the needs-attention menu, the one on top only (state §0.232) — while it is drawn: the card list holds it.
+    useLocalLayer(!!naMenuOpen && !activeItem, { onClose: () => setNaMenuOpen(null) });
 
     // Detail panels that have real content — others just open the card (no-op for now)
     const DETAIL_PANELS = {
@@ -536,7 +537,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                     <React.Fragment key={panelEpoch}>{panelEl}</React.Fragment>
                 </PanelStaleContext.Provider>
                 {leaveGuard && (
-                    <LeaveGuardModal saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
+                    <LeaveGuardModal inTab saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
                         onStay={() => { setLeaveGuard(null); setGuardFailed(false); }}
                         onSave={guardSave}
                         onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); setGuardFailed(false); go && go(); }}/>
@@ -838,7 +839,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
             {/* Also needed on the card list: `openItem` can intercept a click on a
                 DIFFERENT panel while the current one is dirty. */}
             {leaveGuard && (
-                <LeaveGuardModal saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
+                <LeaveGuardModal inTab saving={guardSaving} failed={guardFailed} canSave={!!(settingsSaveRef && settingsSaveRef.current)}
                     onStay={() => { setLeaveGuard(null); setGuardFailed(false); }}
                     onSave={guardSave}
                     onDiscard={() => { const go = leaveGuard.go; setLeaveGuard(null); setGuardFailed(false); go && go(); }}/>
