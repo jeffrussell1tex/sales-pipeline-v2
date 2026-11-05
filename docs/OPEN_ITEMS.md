@@ -455,8 +455,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    45, and every inline Escape in Settings. **Batch 4 built 5 Nov** (state
    §0.233), the last: the document picker at a place of its own, the people
    chooser's list a popover, every inline Escape in src checking the mark.
-   **All four built — NOT pushed**; the push to dev takes one scoped harness
-   run first (§6).
+   **All four built and pushed to dev 5 Nov** (`2942d6c..e1eb8bf`; the one
+   scoped run first, 3,428/3,428 caught; Tests GREEN); not yet shipped — the
+   next prod ship takes the full run first (§2.2).
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -1287,7 +1288,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   lists do, or its load is taken with `requestOrg` / `stillOrg` (guide
   §18b68).
 - **In-tab layers without Escape.** **Built in four batches, 4–5 Nov (state
-  §0.230–§0.233) — NOT pushed.**
+  §0.230–§0.233) — pushed to dev 5 Nov (`2942d6c..e1eb8bf`), not yet
+  shipped.**
   - Re-inventoried 4 Nov over f885df4 (docs/design/escape-tabs/DESIGN.md §2;
     its counts replace the 9 Oct ones): 18 layers in the CRM tabs, 8 in
     Dispatch, 45 in Settings, plus inline Escapes. Most have no Escape; the

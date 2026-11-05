@@ -4125,7 +4125,7 @@ through `dbFetch`.
 3. **Escape does what the layer's own close does** — its ×, Cancel, Skip or backdrop, one function for all of them: a reminder is dismissed and the next shows, the quick log closes with its draft kept, the leave guard is Stay.
 4. **Nothing mid-save closes on Escape** — an import running, a merge saving, a claim being submitted, a guard's save out: the Escape is refused.
 5. **The draggable windows share one place** — each rises when clicked (useDraggable), so among themselves the order is the order clicked.
-6. **In-tab layers are in the order since §0.230** (§18b116): the CRM tabs' in Escape in the tabs' batch 1; Dispatch's, Settings' and the inline Escapes in batches 2-4 (docs/OPEN_ITEMS.md §4.1; tests/tab-layers.test.mjs names each layer still to come, by its batch). Before, fifteen files drew fixed layers with no Escape at all, and eleven more handled one somewhere (§0.186's found (a), the audit).
+6. **In-tab layers are in the order since §0.230** (§18b116): the CRM tabs' in Escape in the tabs' batch 1; Dispatch's, Settings' and the inline Escapes in batches 2-4 (§0.231-§0.233; docs/OPEN_ITEMS.md §4.1); since §0.233 every in-tab layer is in the order and tests/tab-layers.test.mjs's KNOWN is empty — it fails on any layer under the tabs it does not name, and on any inline Escape in src that reads no mark (§18b116 rule 4). Before, fifteen files drew fixed layers with no Escape at all, and eleven more handled one somewhere (§0.186's found (a), the audit).
 
 ## 18b81. A Layer Drawn Over The Page Is Drawn Outside .app-container; A Screen Replaced Keeps Its Ways In (hard rule)
 
