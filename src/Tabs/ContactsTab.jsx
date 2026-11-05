@@ -848,7 +848,7 @@ export default function ContactsTab() {
                         <input
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Escape') setSearch(''); }}
+                            onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) setSearch(''); }}
                             placeholder="Search contacts…"
                             style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
                         />

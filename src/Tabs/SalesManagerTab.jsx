@@ -186,7 +186,7 @@ function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color }
         <input type="number" min="0" defaultValue={estimated ? '' : value} placeholder={estimated ? String(Math.round(value)) : '0'}
             autoFocus
             onBlur={e => { if (skip.current) { skip.current = false; onCancel(); return; } onSave(e.target.value); }}
-            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { skip.current = true; e.target.blur(); } }}
+            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { skip.current = true; e.target.blur(); } }}
             style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
     );
     return (

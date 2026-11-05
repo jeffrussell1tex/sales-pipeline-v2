@@ -41,6 +41,7 @@ export const ESCAPE_ORDER = [
     ['leaveGuard', 99999],
     ['tabPopover', 12000],       // a popover portaled out of a tab or a rail (state §0.230)
     ['linkPicker', 11105],
+    ['docPicker', 11104],        // "Link an existing document", from a record's Documents (state §0.233; it held by a list of its own)
     ['uploadRail', 11103],
     ['documentRail', 11101],
     ['meetingPrep', 11021],      // over the rail or the deal window its Prep was pressed in (§0.187)

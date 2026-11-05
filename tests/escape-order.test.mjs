@@ -77,6 +77,10 @@ test('layersAbove: a layer passes the Escape on while one above it is open, and 
     assert.equal(layersAbove('draggable', { reminderPopup: true }), true, 'a reminder is drawn over the import windows');
     assert.equal(layersAbove('leaveGuard', { confirm: true }), true, 'the app\'s dialogs sit above every layer (§18b70.4)');
     assert.equal(layersAbove('leaveGuard', { documentRail: true, taskRail: true }), false, 'the leave guard sits above the rails');
+    assert.equal(layersAbove('documentRail', { docPicker: true }), true, 'the document picker draws over the rail it opens from (§0.233)');
+    assert.equal(layersAbove('draggable', { docPicker: true }), true, 'and over the deal window');
+    assert.equal(layersAbove('docPicker', { leaveGuard: true }), true, 'under the leave guard and the app\'s dialogs');
+    assert.equal(layersAbove('docPicker', { accountRail: true, uploadRail: true, documentRail: true }), false, 'nothing under it holds it');
     assert.equal(layersAbove('coachingNote', { confirm: true, blockedDelete: true }), false, 'nothing sits above the top');
     assert.equal(layersAbove('search', { notes: true }), true, 'the notes popover draws over the header\'s panels, whatever their z (§0.187)');
     assert.throws(() => layersAbove('nope', {}), /no layer named nope/);
@@ -114,7 +118,7 @@ test('one Escape, one layer: the meeting prep panel over the rail its Prep was p
 // from App's render). They sit in its stacking context, under every layer outside it (§0.187).
 const IN_APP_CONTAINER = ['tabLayer', 'search', 'profile', 'notifications'];
 // Portaled to the page from wherever they are hosted — a tab or a rail (§0.230): outside it.
-const PORTALED = ['tabPopover'];
+const PORTALED = ['tabPopover', 'docPicker'];   // the document picker, from a record's Documents (§0.233)
 
 test('the order is z order, highest first, each name once — the layers inside .app-container last, under every layer outside it', () => {
     assert.equal(new Set(NAMES).size, NAMES.length);
@@ -202,6 +206,7 @@ const zOf = {
     // A marker, not a z: each tab's layer draws at its own z inside .app-container, where the
     // header (sticky, 150) holds its panels — tests/tab-layers.test.mjs pins the header's 150.
     tabLayer: () => '1200',
+    docPicker: () => /return createPortal\(\s*<>\s*<div[\s\S]*?zIndex: (\d+)/.exec(read('src/components/documents/DocumentPicker.jsx'))[1],
 };
 function maxZ(file) { return String(Math.max(...[...read(file).matchAll(/zIndex: ?(\d+)/g)].map((m) => Number(m[1])))); }
 
@@ -224,7 +229,7 @@ const OPEN_AS = {
     shortcuts: 'showShortcuts', quickLog: 'quickLogOpen', meetingPrep: '!!(meetingPrepOpen && meetingPrepEvent)',
     leadModal: 'showLeadModal', merge: '!!(mergeModal || contactMergeModal)',
     search: 'showSearchResults', profile: 'showProfilePanel', notifications: 'showNotifications', notes: '!!notesPopover',
-    tabPopover: '!!tabPlaces.tabPopover', tabLayer: '!!tabPlaces.tabLayer',
+    tabPopover: '!!tabPlaces.tabPopover', tabLayer: '!!tabPlaces.tabLayer', docPicker: '!!tabPlaces.docPicker',
 };
 
 test('App says which layers are open, by every name in the order and no other, each by the flag it is drawn on', () => {
@@ -288,6 +293,8 @@ const LAYERS = {
     // by the top of its place; tests/tab-layers.test.mjs finds each one
     tabLayers: { name: 'tabLayer', local: true },
     tabPopovers: { name: 'tabPopover', local: true },
+    // the document picker (§0.233) — drawn by a record's Documents (RecordDocuments), in a rail or the deal window
+    docPickers: { name: 'docPicker', local: true },
 };
 
 // What holds each useEscapeLayer in a file — its third argument, as written.
@@ -327,6 +334,7 @@ test('THE GUARD: every layer the app renders has a place in the order and an Esc
         'showSearchResults', 'showProfilePanel', 'showNotifications',   // the header's panels (AppHeader; App's Escape)
         'MeetingPrepPanel', 'LeaveGuardModal',
         'tabLayers', 'tabPopovers',   // drawn by the tabs and the popovers (tests/tab-layers.test.mjs)
+        'docPickers',   // drawn by a record's Documents (§0.233)
     ];
     const unknown = rendered.filter((k) => !(k in LAYERS));
     assert.deepEqual(unknown, [], 'a new layer: give it an Escape and a place in ESCAPE_ORDER, then a row here');

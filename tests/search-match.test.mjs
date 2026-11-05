@@ -515,8 +515,10 @@ test("the document share picker is the class's: the matcher, fifty, a word to op
     const atoms = read('src/components/documents/atoms.jsx');
     const chooser = between(atoms, 'export function PeopleChooser(', '\n}\n');
     assert.ok(atoms.includes("import { searchKey } from '../../utils/searchMatch.js';"));
-    assert.ok(chooser.includes('onChange={(e) => { setQuery(e.target.value); setOpen(!!searchKey(e.target.value)); }}'), 'it opens for a word, not for punctuation alone');
-    assert.ok(chooser.includes('onFocus={() => setOpen(!!searchKey(query))}'));
+    // Through show (§0.233): it places the list from the field, and opens it only for a word.
+    assert.ok(chooser.includes('onChange={(e) => { setQuery(e.target.value); show(!!searchKey(e.target.value)); }}'), 'it opens for a word, not for punctuation alone');
+    assert.ok(chooser.includes('onFocus={() => show(!!searchKey(query))}'));
+    assert.ok(chooser.includes('const r = yes && fieldRef.current ? fieldRef.current.getBoundingClientRect() : null;') && chooser.includes('setOpen(!!r);'), 'show opens it only when asked to');
     assert.ok(chooser.includes(STICK('more', 'T.surface')), 'a press on the count keeps the focus, so the list stays open');
     assert.ok(read('src/utils/documentPeople.js').includes('    return matchSearch(offered, query, { text: (p) => p.name, limit });'));
 });

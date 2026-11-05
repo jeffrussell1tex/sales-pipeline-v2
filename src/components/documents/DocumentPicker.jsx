@@ -4,12 +4,13 @@
 // library from useApp(). Centered modal above the host rail.
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../AppContext';
-import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { useLocalLayer } from '../../hooks/useLocalLayer';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill } from './atoms';
 
 export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClose }) {
-    const { documents = [], confirmModal, promptModal } = useApp();
+    const { documents = [] } = useApp();
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState({}); // id -> doc
 
@@ -21,9 +22,11 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
         return documents.filter((d) => !exclude.has(d.id) && (!q || (d.name || '').toLowerCase().includes(q)));
     }, [documents, exclude, search]);
 
-    // Escape closes the picker as its backdrop does (state §0.180) — once the app's confirm
-    // or prompt above it is closed.
-    useEscapeLayer(open, () => onClose && onClose(), !!(confirmModal || promptModal));
+    // Escape closes the picker as its backdrop does (state §0.180), in the one order (state §0.233): its place,
+    // `docPicker` at 11104, above the rails and windows — it held by a list of its own (the app's confirm and prompt),
+    // missing the coaching note, the blocked-delete notice and the leave guard above it. Portaled to the page, so the
+    // rail or window it is opened from draws under it.
+    useLocalLayer(open, { onClose: () => onClose && onClose(), place: 'docPicker' });
 
     if (!open) return null;
 
@@ -34,7 +37,7 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
         return next;
     });
 
-    return (
+    return createPortal(
         <>
             <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 11104, background: 'rgba(42,38,34,0.35)' }} />
             <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(520px, calc(100vw - 32px))', maxHeight: '82vh', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, boxShadow: '0 24px 64px rgba(42,38,34,0.28)', zIndex: 11105, display: 'flex', flexDirection: 'column', fontFamily: T.sans, overflow: 'hidden' }}>
@@ -77,6 +80,7 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
                     </button>
                 </div>
             </div>
-        </>
+        </>,
+        document.body,
     );
 }

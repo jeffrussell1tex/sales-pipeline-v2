@@ -8,6 +8,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useLocalLayer } from '../../hooks/useLocalLayer';
 import { T } from '../../tokens.js';
 import { parseLocalDate } from '../../utils/dateLocal.js';
 import { peopleMatching } from '../../utils/documentPeople.js';
@@ -182,6 +184,25 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
     // foot; the list opens for a word typed, not for punctuation alone.
     const { shown, more } = peopleMatching(people, query, chosen);
     const add = (id) => { if (onToggle) onToggle(id); setQuery(''); setOpen(false); };
+    // The list is a popover in the one Escape order (state §0.233): portaled at 12000 from the field's rect, above the
+    // document rail it is picked in — Escape closes the list alone; it closed the whole rail. A scroll or a resize, which
+    // move the field from under it, close it — not one inside the list; a resize's target is the window (state §0.212).
+    const fieldRef = React.useRef(null);
+    const listRef = React.useRef(null);
+    const [pos, setPos] = useState(null);
+    const show = (yes) => {
+        const r = yes && fieldRef.current ? fieldRef.current.getBoundingClientRect() : null;
+        setPos(r ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 3 } : null);
+        setOpen(!!r);
+    };
+    React.useEffect(() => {
+        if (!open) return undefined;
+        const close = (e) => { if (e && e.target instanceof Node && listRef.current && listRef.current.contains(e.target)) return; setOpen(false); };
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close);
+        return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+    }, [open]);
+    useLocalLayer(open && !!pos, { onClose: () => setOpen(false), place: 'tabPopover' });
     return (
         <div style={{ marginTop: 8 }}>
             {chosen.length > 0 && (
@@ -196,14 +217,14 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
                 </div>
             )}
             <div style={{ position: 'relative' }}>
-                <input type="text" value={query} placeholder="Search people to share with…" autoComplete="off"
-                    onChange={(e) => { setQuery(e.target.value); setOpen(!!searchKey(e.target.value)); }}
-                    onFocus={() => setOpen(!!searchKey(query))}
+                <input ref={fieldRef} type="text" value={query} placeholder="Search people to share with…" autoComplete="off"
+                    onChange={(e) => { setQuery(e.target.value); show(!!searchKey(e.target.value)); }}
+                    onFocus={() => show(!!searchKey(query))}
                     onBlur={() => setTimeout(() => setOpen(false), 200)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) { e.preventDefault(); add(shown[0].id); } }}
                     style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, background: T.surface, color: T.ink, boxSizing: 'border-box', outline: 'none' }} />
-                {open && (
-                    <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 3, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, maxHeight: 200, overflowY: 'auto', zIndex: 5, boxShadow: '0 4px 12px rgba(42,38,34,0.12)' }}>
+                {open && pos && createPortal(
+                    <div ref={listRef} style={{ position: 'fixed', left: pos.left, width: pos.width, bottom: pos.bottom, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, maxHeight: 200, overflowY: 'auto', zIndex: 12000, boxShadow: '0 4px 12px rgba(42,38,34,0.12)' }}>
                         {shown.length === 0 ? (
                             <div style={{ padding: '8px 10px', fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No one in this organization matches.</div>
                         ) : shown.map((p) => (
@@ -215,7 +236,8 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
                             </div>
                         ))}
                         {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: T.surface, padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
-                    </div>
+                    </div>,
+                    document.body,
                 )}
             </div>
         </div>

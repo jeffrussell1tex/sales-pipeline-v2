@@ -2089,7 +2089,7 @@ export default function OpportunityModal({
                                                     <textarea ref={commentTextareaRef} value={commentDraft} onChange={handleCommentDraftChange}
                                                         onKeyDown={e => {
                                                             if (mentionQuery !== null && filteredMentions.length > 0) {
-                                                                if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return; }
+                                                                if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); setMentionQuery(null); return; }
                                                                 if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); insertMention(filteredMentions[0]); return; }
                                                             }
                                                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && commentDraft.trim()) {

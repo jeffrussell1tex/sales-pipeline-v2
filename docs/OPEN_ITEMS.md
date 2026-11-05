@@ -452,8 +452,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    the document picker. **Batch 1 built 4 Nov** (state §0.230): the
    mechanism and the CRM tabs' 18 layers. **Batch 2 built 5 Nov** (state
    §0.231): Dispatch's 8. **Batch 3 built 5 Nov** (state §0.232): Settings'
-   45, and every inline Escape in Settings. Next, batch 4: the CRM search
-   boxes' and the Sales Manager's inline Escapes, the document picker.
+   45, and every inline Escape in Settings. **Batch 4 built 5 Nov** (state
+   §0.233), the last: the document picker at a place of its own, the people
+   chooser's list a popover, every inline Escape in src checking the mark.
+   **All four built — NOT pushed**; the push to dev takes one scoped harness
+   run first (§6).
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -1283,7 +1286,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   is not read. Recommended: the rail closes on an org switch, as the
   lists do, or its load is taken with `requestOrg` / `stillOrg` (guide
   §18b68).
-- **In-tab layers without Escape.**
+- **In-tab layers without Escape.** **Built in four batches, 4–5 Nov (state
+  §0.230–§0.233) — NOT pushed.**
   - Re-inventoried 4 Nov over f885df4 (docs/design/escape-tabs/DESIGN.md §2;
     its counts replace the 9 Oct ones): 18 layers in the CRM tabs, 8 in
     Dispatch, 45 in Settings, plus inline Escapes. Most have no Escape; the
@@ -1294,13 +1298,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
     the shortcuts off under any layer, and the CRM tabs' 18, each in the
     order. **Batch 2 built 5 Nov** (state §0.231): Dispatch's 8. **Batch 3
     built 5 Nov** (state §0.232): Settings' 45 and every inline Escape in
-    Settings. **Left (batch 4):** the Accounts and Contacts search boxes' and
-    the Sales Manager call cell's inline Escapes, the document picker, and
-    the document rails' people chooser — tests/tab-layers.test.mjs KNOWN names
-    what it scans, and fails on any layer it does not name, or names once its
-    component registers. The document picker (inside the deal window
-    and the two record rails) joins it with them: it holds by its own list, the
-    app's confirm and prompt (§0.189 (c)).
+    Settings. **Batch 4 built 5 Nov** (state §0.233): the Accounts and
+    Contacts search boxes', the Sales Manager call cell's and the deal
+    window's mention list's inline Escapes; the document picker (inside the
+    deal window and the two record rails) at a place of its own, `docPicker`,
+    portaled — it held by its own list, the app's confirm and prompt (§0.189
+    (c)); the document rails' people chooser a popover. KNOWN is empty:
+    tests/tab-layers.test.mjs fails on any layer under the tabs it does not
+    name, and on any inline Escape in src that reads no mark.
   - Source: §0.186 (a), 7 Oct.
   - **Designed 9 Oct, redesigned and answered 4 Nov** (the design after two
     critiques, and Jeff's ten answers — all Recommended: ask "Discard?" on

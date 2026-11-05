@@ -79,7 +79,8 @@ test('the four document layers each take their Escape, before their early return
     before(link, "useEscapeLayer(showDocLinkPicker, close, escapeBlocked('linkPicker'));", 'if (!showDocLinkPicker) return null;');
     assert.equal(link.split('const close = () =>').length - 1, 1, 'one close');
     const picker = read('src/components/documents/DocumentPicker.jsx');
-    before(picker, 'useEscapeLayer(open, () => onClose && onClose(), !!(confirmModal || promptModal));', 'if (!open) return null;');
+    // In the one order since §0.233 — its place, docPicker; it held by a list of its own (the app's confirm and prompt).
+    before(picker, "useLocalLayer(open, { onClose: () => onClose && onClose(), place: 'docPicker' });", 'if (!open) return null;');
 });
 
 // ── the guard ───────────────────────────────────────────────────────────────

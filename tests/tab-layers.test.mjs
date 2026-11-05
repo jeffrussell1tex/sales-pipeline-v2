@@ -425,6 +425,54 @@ test('every inline Escape in Settings leaves a marked one alone and marks the on
     assert.equal(run({ key: 'Enter', defaultPrevented: false, preventDefault() {} }), false);
 });
 
+test('batch 4 (§0.233): the document picker at its place, portaled; the people chooser\'s list a popover', () => {
+    const picker = read('src/components/documents/DocumentPicker.jsx');
+    assert.ok(picker.includes("    useLocalLayer(open, { onClose: () => onClose && onClose(), place: 'docPicker' });"), 'the picker: its place, in the one order');
+    assert.ok(picker.indexOf("place: 'docPicker'") < picker.indexOf('if (!open) return null;'), 'called before its early return');
+    assert.ok(!/useEscapeLayer\(/.test(picker) && !picker.includes('confirmModal') && !picker.includes('promptModal'), 'not a list of its own of what is above it');
+    assert.ok(picker.includes('    return createPortal(\n        <>\n') && picker.includes('        </>,\n        document.body,\n    );'), 'portaled to the page: the rail or window it opens from draws under it');
+    const names = ESCAPE_ORDER.map(([n]) => n);
+    for (const under of ['uploadRail', 'documentRail', 'accountRail', 'contactRail', 'draggable']) assert.ok(names.indexOf('docPicker') < names.indexOf(under), `docPicker above ${under}`);
+    for (const over of ['tabPopover', 'leaveGuard', 'confirm']) assert.ok(names.indexOf('docPicker') > names.indexOf(over), `docPicker under ${over}`);
+    const pc = decl(read('src/components/documents/atoms.jsx'), 'PeopleChooser');
+    assert.ok(pc.includes("    useLocalLayer(open && !!pos, { onClose: () => setOpen(false), place: 'tabPopover' });"), 'Escape closes the list alone — it closed the whole rail');
+    assert.ok(pc.includes('{open && pos && createPortal(') && pc.includes("<div ref={listRef} style={{ position: 'fixed', left: pos.left, width: pos.width, bottom: pos.bottom,") && pc.includes('zIndex: 12000,'), 'portaled at 12000, above the rail, from the field\'s rect');
+    assert.ok(pc.includes('onChange={(e) => { setQuery(e.target.value); show(!!searchKey(e.target.value)); }}') && pc.includes('onFocus={() => show(!!searchKey(query))}') && pc.includes('<input ref={fieldRef} '), 'placed from the field each time it opens');
+    assert.ok(pc.includes("setPos(r ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 3 } : null);") && pc.includes('setOpen(!!r);'), 'above the field, as it drew');
+    assert.ok(pc.includes('const close = (e) => { if (e && e.target instanceof Node && listRef.current && listRef.current.contains(e.target)) return; setOpen(false); };'), 'a scroll or a resize closes it, not a scroll inside it; a resize\'s target is the window (§0.212)');
+    assert.ok(pc.includes("window.addEventListener('scroll', close, true);") && pc.includes("window.addEventListener('resize', close);") && pc.includes("return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };"), 'attached while open, removed on close');
+});
+
+test('every inline Escape in src leaves a marked one alone (§0.233) — the search boxes, the call cell, the deal window\'s mentions', () => {
+    const mark = "if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) ";
+    assert.ok(read('src/Tabs/AccountsTab.jsx').includes(`onKeyDown={e => { ${mark}{ setSearch('');`), 'the Accounts search box');
+    assert.ok(read('src/Tabs/ContactsTab.jsx').includes(`onKeyDown={e => { ${mark}setSearch(''); }}`), 'the Contacts search box');
+    assert.ok(read('src/Tabs/SalesManagerTab.jsx').includes(`${mark}{ skip.current = true; e.target.blur(); }`), 'the Sales Manager call cell');
+    assert.ok(read('src/components/modals/OpportunityModal.jsx').includes("if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); setMentionQuery(null); return; }"), 'the deal window\'s mention list');
+    const { n, unmarked } = inlineEscapes(walkDir('src').filter((p) => /\.jsx?$/.test(p)));
+    assert.deepEqual(unmarked, [], 'an inline Escape that does not check the mark — a layer above took it, and this acts on the same keypress');
+    assert.ok(n >= 24, `the inline Escapes in src (${n}; 24 when §0.233 was written)`);
+    // The scan finds the shape as it was: the Contacts search box before §0.233, beside one marked.
+    const was = "function C() { return <><input onKeyDown={e => { if (e.key === 'Escape') setSearch(''); }} /><input onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented) close(); }} /></>; }";
+    assert.deepEqual(inlineEscapes(['x.jsx'], () => was), { n: 2, unmarked: ['x.jsx:1'] });
+});
+// Every onKeyDown in these files that reads an Escape, and those that read no mark (§0.233).
+function inlineEscapes(files, readFile = read) {
+    let n = 0;
+    const unmarked = [];
+    for (const f of files) {
+        const src = readFile(f);
+        walk(ast(src), (node) => {
+            if (node.type !== 'JSXAttribute' || node.name.name !== 'onKeyDown' || !node.value) return;
+            const code = src.slice(node.value.start, node.value.end);
+            if (!code.includes("'Escape'")) return;
+            n += 1;
+            if (!code.includes('defaultPrevented')) unmarked.push(`${f}:${src.slice(0, node.start).split('\n').length}`);
+        });
+    }
+    return { n, unmarked };
+}
+
 // ── THE GUARD ───────────────────────────────────────────────────────────────
 
 const walk = (node, visit, anc = []) => {
@@ -581,9 +629,8 @@ const NOT_A_LAYER = [
 ];
 // Later batches of this work (docs/design/escape-tabs/DESIGN.md §4): each hit by its file, its
 // component and its line's text, and the batch that registers it. Each batch strikes its own.
-const KNOWN = [
-    { batch: 4, file: "src/components/documents/atoms.jsx", decl: "PeopleChooser", text: "<div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 3, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, maxHeight: 200, overflowY: 'auto', zIndex: 5, boxShadow: '0 4px 12px rgba(42,38,34,0.12)' }}>" },
-];
+// Batch 4, the last, struck its own in §0.233: none is left — a new layer registers, never named for a later batch.
+const KNOWN = [];
 
 const matches = (h, e) => h.file === e.file && h.decl === e.decl && h.text === e.text;
 // The components that draw a window in a frame and take no Escape (§0.232).
@@ -625,7 +672,7 @@ test('THE GUARD: every layer under the tabs takes its Escape in the order, or is
     const loose = hits.filter((h) => !named.some((e) => matches(h, e)) && !frame(h) && !reg.get(h.file).get(h.decl));
     assert.deepEqual(loose.map((h) => `${h.file} [${h.decl}] ${h.kind}: ${h.text}`), [], 'a layer with no Escape in the order: give it useLocalLayer, or name it with its reason');
     assert.deepEqual(namedMismatches(hits, named), [], 'a name that no longer matches its layers, or one that now matches more');
-    for (const e of KNOWN) assert.ok([4].includes(e.batch), `${e.file}: its batch (batch 2, Dispatch, landed in §0.231; batch 3, Settings, in §0.232)`);
+    assert.deepEqual(KNOWN, [], 'every batch landed (batch 2, Dispatch, in §0.231; batch 3, Settings, in §0.232; batch 4, the last, in §0.233)');
     // Every component that draws a window in a frame registers it (§0.232).
     for (const fr of FRAMES) assert.ok(hits.some((h) => frame(h) && h.decl === fr.decl), `${fr.decl}: still a frame with a fixed box`);
     assert.deepEqual(unframed(files, reg), [], 'a window in a frame registers itself');

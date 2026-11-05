@@ -1615,7 +1615,7 @@ dbFetch('/.netlify/functions/users?me=true')
         shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
         leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
         search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
-        tabPopover: !!tabPlaces.tabPopover, tabLayer: !!tabPlaces.tabLayer,
+        tabPopover: !!tabPlaces.tabPopover, tabLayer: !!tabPlaces.tabLayer, docPicker: !!tabPlaces.docPicker,
     };
     openLayersRef.current = openLayers;
     const escapeBlocked = (name) => layersAbove(name, openLayers);

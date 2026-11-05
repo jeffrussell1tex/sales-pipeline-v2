@@ -944,7 +944,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                         ref={searchRef}
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
+                        onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented && (e.preventDefault(), true)) { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
                         placeholder="Search accounts…"
                         style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
                     />
