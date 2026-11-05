@@ -578,7 +578,9 @@ test('the readers: quote -> job, the placeholder, New Job\'s field and Save, the
     assert.ok(d.includes('                accountId:       createdCust ? (createdCust.accountId || null) : (custAccountId || null),'), "the job on the made customer's account as the server kept it");
     // New Job stays open while its Save runs; no Create under the placeholder's refusal.
     assert.ok(d.includes('    const closeNewJob = () => { if (!newJobSaving) setShowNewJobForm(false); };'));
-    assert.equal(d.split('onClick={closeNewJob}').length - 1, 3, 'the backdrop, the × and Cancel');
+    // The backdrop, the × and Cancel through New Job's one close since §0.231, closeNewJob its close (tests/tab-layers.test.mjs).
+    assert.equal(d.split('onClick={requestCloseNewJob}').length - 1, 3, 'the backdrop, the × and Cancel');
+    assert.ok(d.includes('useLocalLayer(showNewJobForm, { onClose: closeNewJob,'), 'and what they close by');
     assert.ok(!d.includes('onClick={() => setShowNewJobForm(false)}'));
     assert.ok(d.includes("    const showCreate = !refusal && typed?.how === 'create';"));
     // What each row and option says.

@@ -297,6 +297,47 @@ test('the layer bugs in these files (Jeff, 4 Nov: "Fix in its batch")', () => {
     assert.ok(kb.includes("        window.addEventListener('scroll', close, true);"), 'a scroll closes it — drawn fixed, it was left behind');
 });
 
+// ── batch 2: Dispatch (state §0.231), read ──────────────────────────────────
+
+test('Dispatch\'s layers each take their Escape, and do what their own close does (batch 2, §0.231)', () => {
+    const d = read('src/Tabs/DispatchTab.jsx');
+    const ct = decl(d, 'CustomerTypeahead');
+    assert.ok(ct.includes('    const listShown = open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate);')
+        && ct.includes('    useLocalLayer(listShown, { onClose: () => setOpen(false) });') && ct.includes('            {listShown && ('), 'New Job\'s customer results — nested in New Job, the list alone, the query kept');
+    const cb = decl(d, 'CrewBuilderView');
+    assert.ok(cb.includes('    useLocalLayer(!!overridePrompt, { onClose: () => setOverridePrompt(null) });'), '"Assign anyway?"');
+    assert.equal(count(cb, '} disabled={saving}\n'), 3, 'Added, Add and Override held while a schedule saves — its success wiped them');
+    assert.ok(decl(d, 'MassSchedulePanel').includes('    useLocalLayer(true, { onClose: onCancel, busy: saving });'), 'the Proposed schedule — never while the schedules go out');
+    const sv = decl(d, 'ScheduleView');
+    assert.ok(sv.includes('    const requestEditClose = useLocalLayer(!!editing, { onClose: () => setEditing(null), dirty: !!editing && JSON.stringify(editing) !== editBaseRef.current, busy });'), 'the time-off dialog — typed work asks, nothing mid-save');
+    assert.ok(sv.includes('    else if (editBaseRef.current === null) editBaseRef.current = JSON.stringify(editing);') && sv.includes('    if (!editing) editBaseRef.current = null;'), 'measured against the block as it opened');
+    assert.ok(sv.includes('    const requestConflictClose = useLocalLayer(!!conflict, { onClose: () => setConflict(null), busy });'), '"Already scheduled", over it');
+    assert.ok(sv.indexOf('const requestEditClose') < sv.indexOf('const requestConflictClose'), 'declared in the order they open');
+    assert.equal(count(sv, 'onClick={requestEditClose}'), 2, 'the time-off dialog\'s backdrop and Cancel ask as Escape does');
+    assert.equal(count(sv, 'onClick={requestConflictClose}'), 2, 'the conflict\'s backdrop and Reject');
+    const sp = decl(d, 'ShiftPatternDialog');
+    assert.ok(sp.includes('    const requestClose = useLocalLayer(true, { onClose: onCancel, dirty: weekKey(wh) !== base, busy });'), 'the shift pattern — a changed week asks');
+    assert.equal(count(sp, 'onClick={requestClose}'), 2, 'its backdrop and Cancel');
+    assert.ok(sp.includes("catch (e) { setErr(`Not saved — ${e?.message || 'the server did not answer'}`); }") && sp.includes('<div role="alert"'), 'a refused save is said — a try with no catch left it silent');
+    const tab = decl(d, 'DispatchTab');
+    assert.ok(tab.includes("    useLocalLayer(!!openFilter && !!filterRect && view === 'board', { onClose: closeFilter });"), 'the board\'s filter menu, while it is drawn');
+    assert.ok(tab.includes('    const requestCloseNewJob = useLocalLayer(showNewJobForm, { onClose: closeNewJob, dirty: showNewJobForm && JSON.stringify(newJobForm) !== newJobBaseRef.current, busy: newJobSaving });'), 'New Job — typed work asks, nothing while its Save runs');
+    assert.ok(tab.includes('    else if (newJobBaseRef.current === null) newJobBaseRef.current = JSON.stringify(newJobForm);') && tab.includes('    if (!showNewJobForm) newJobBaseRef.current = null;'), 'measured against the form it opened with — a won deal\'s, a plan\'s visit, or blank');
+    assert.equal(count(tab, 'onClick={requestCloseNewJob}'), 3, 'New Job\'s backdrop, × and Cancel ask as Escape does');
+    assert.ok(tab.includes('        if (showConfirm) showConfirm(msg, action, true, DISCARD_LABELS);'), 'the discard prompt says Discard / Keep editing — it read "Delete"');
+});
+
+test('weekKey: a week by its days, in any key order', () => {
+    const line = read('src/Tabs/DispatchTab.jsx').split('\n').find((l) => l.startsWith('const weekKey = (o) => '));
+    const weekKey = new Function(`${line}; return weekKey;`)();
+    const a = { mon: { start: '08:00', end: '17:00' }, tue: { start: '08:00', end: '17:00' } };
+    assert.equal(weekKey(a), weekKey({ tue: { start: '08:00', end: '17:00' }, mon: { start: '08:00', end: '17:00' } }), 'a day off and on again: the same week');
+    assert.notEqual(weekKey(a), weekKey({ ...a, tue: { start: '09:00', end: '17:00' } }), 'a start changed');
+    assert.notEqual(weekKey(a), weekKey({ ...a, tue: { start: '08:00', end: '16:00' } }), 'an end changed');
+    assert.notEqual(weekKey(a), weekKey({ mon: a.mon }), 'a day off');
+    assert.equal(weekKey(undefined), weekKey({}), 'no pattern');
+});
+
 // ── THE GUARD ───────────────────────────────────────────────────────────────
 
 const walk = (node, visit, anc = []) => {
@@ -437,16 +478,6 @@ const NOT_A_LAYER = [
 const KNOWN = [
     { batch: 3, file: "src/Tabs/AdminView.jsx", decl: "AdminView", text: "document.addEventListener('mousedown', onDoc);" },
     { batch: 3, file: "src/Tabs/AdminView.jsx", decl: "AdminView", text: "style={{ position:'absolute', right:0, zIndex:50, ...(i >= 1 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 })," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "CustomerTypeahead", text: "<div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "CrewBuilderView", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "MassSchedulePanel", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "ScheduleView", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "ScheduleView", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "ShiftPatternDialog", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "DispatchTab", text: "<div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={closeFilter}/>" },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "DispatchTab", text: "<div style={{ position:'fixed', top:filterRect.top, left:filterRect.left, zIndex:9999," },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "DispatchTab", text: "style={{ position: 'fixed', inset: 0, background: 'rgba(42,38,34,0.45)', zIndex: 1000 }} />" },
-    { batch: 2, file: "src/Tabs/DispatchTab.jsx", decl: "DispatchTab", text: "<div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)'," },
     { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });" },
     { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "setStyle({ position:'fixed', zIndex:9999, top, ...computed, visibility:'visible' });" },
     { batch: 3, file: "src/Tabs/settings/audit/AuditDetail.jsx", decl: "AuditAnchoredMenu", text: "document.addEventListener('mousedown', onDoc);" },
@@ -516,6 +547,8 @@ const KNOWN = [
 const matches = (h, e) => h.file === e.file && h.decl === e.decl && h.text === e.text;
 // Each name, checked against the hits: it matches exactly its count (n, else one). A layer added
 // beside a named one — the same text in the same component — is a second hit, and fails it.
+// The KNOWN entries whose component now registers — struck in the batch that registers it (§0.231).
+const toStrike = (known, reg) => known.filter((e) => reg.get(e.file) && reg.get(e.file).get(e.decl)).map((e) => `${e.file} [${e.decl}] ${e.text}`);
 const namedMismatches = (hits, named) => named
     .map((e) => ({ e, got: hits.filter((h) => matches(h, e)).length }))
     .filter(({ e, got }) => got !== (e.n || 1))
@@ -535,7 +568,10 @@ test('THE GUARD: every layer under the tabs takes its Escape in the order, or is
     const loose = hits.filter((h) => !named.some((e) => matches(h, e)) && !reg.get(h.file).get(h.decl));
     assert.deepEqual(loose.map((h) => `${h.file} [${h.decl}] ${h.kind}: ${h.text}`), [], 'a layer with no Escape in the order: give it useLocalLayer, or name it with its reason');
     assert.deepEqual(namedMismatches(hits, named), [], 'a name that no longer matches its layers, or one that now matches more');
-    for (const e of KNOWN) assert.ok([2, 3, 4].includes(e.batch), `${e.file}: its batch`);
+    for (const e of KNOWN) assert.ok([3, 4].includes(e.batch), `${e.file}: its batch (batch 2, Dispatch, landed in §0.231)`);
+    // A later batch's layer that now registers is struck from KNOWN in that batch (§0.231): left, it would hide the next
+    // layer added beside it under its name.
+    assert.deepEqual(toStrike(KNOWN, reg), [], 'a KNOWN layer whose component registers: strike it');
     for (const e of SERVES) assert.ok(reg.get(e.file).get(e.layer.split(' ')[0]) || /registers/.test(e.layer), `${e.file}: the layer it serves registers`);
 });
 
@@ -609,4 +645,7 @@ test('the guard finds the shapes as they were: a fixed layer, a ternary, a compu
     assert.equal(namedMismatches([hit, hit], [one]).length, 1, 'a layer added beside a named one fails');
     assert.equal(namedMismatches([], [one]).length, 1, 'a named layer gone fails');
     assert.deepEqual(namedMismatches([hit, hit], [{ ...one, n: 2 }]), [], 'n: 2 names both');
+    // A KNOWN entry whose component registers is struck; one whose component does not stays.
+    const reg2 = new Map([['x.jsx', new Map([['A', true], ['B', false]])]]);
+    assert.deepEqual(toStrike([{ ...one, batch: 3 }, { file: 'x.jsx', decl: 'B', text: 'u', batch: 3 }], reg2), ['x.jsx [A] t']);
 });

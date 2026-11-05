@@ -900,10 +900,13 @@ test("C21 — the quote email's fallback recipient is the live contact of the de
 
 test("C22 — Dispatch's New Job Customer field opens only with a row to show: a near spelling of a merged-away name — no exact name, so no Create — opens no empty box (§0.209's defect; Jeff, 23 Oct: \"File it, fix in §0.210\") (the condition and the field's pieces, from the file, run)", () => {
     const d = code(read(DISPATCH));
-    const OPEN = S(12) + '{open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (';
+    // The condition is the list's, once, since §0.231 (its Escape registers by it — tests/tab-layers.test.mjs), and the
+    // box is drawn on it.
+    const OPEN = S(4) + 'const listShown = open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate);';
     once(d, OPEN);
+    once(d, S(12) + '{listShown && (');
     // The condition the pinned line holds — run, never a copy.
-    const cond = OPEN.trim().replace(/^\{open && /, '').replace(/ && \($/, '');
+    const cond = OPEN.trim().replace(/^const listShown = open && /, '').replace(/;$/, '');
     const opens = (state, c = cond) => runSlice(c, state);
     // The field's own pieces, sliced from CustomerTypeahead: `typed` and `showCreate` over its customers and accounts —
     // the one rule its Save reads (customerForText, state §0.214), so a refused name offers no Create.

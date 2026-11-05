@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
+import { useLocalLayer } from '../hooks/useLocalLayer';
+import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
@@ -409,6 +411,11 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
         .filter(a => !holdAccounts && !acctLeadSet.has(a.id) && !isMergeArchived(a) && !linkedAccountIds.has(a.id)), query, byName);
     const acctMatches = [...acctLead, ...acctFound];
 
+    // The results list, nested in New Job (state §0.231): opened after it, the top of their place — Escape closes the list
+    // alone, the query kept.
+    const listShown = open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate);
+    useLocalLayer(listShown, { onClose: () => setOpen(false) });
+
     const inputSt = { width: '100%', padding: '8px 10px', border: `1px solid ${selectedId ? T.ok : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' };
     const rowSt   = { padding: '7px 10px', fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer', borderBottom: `1px solid ${T.border}` };
     const hdrSt   = { padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: T.inkMuted, background: T.bg, fontFamily: T.sans };
@@ -444,7 +451,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
             )}
             {/* Open only with a row to show (state §0.210): a near spelling of a merged-away name offers no Create, so
                 it alone opened an empty box (§0.209's defect; Jeff, 23 Oct: "File it, fix in §0.210"). */}
-            {open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (
+            {listShown && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3,
                     background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
                     boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>
@@ -1036,6 +1043,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     };
     useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
     const [saving, setSaving] = useState(false);
+    // "Assign anyway?" closes on Escape as its Cancel does (state §0.231).
+    useLocalLayer(!!overridePrompt, { onClose: () => setOverridePrompt(null) });
 
     useEffect(() => {
         const sel = selectedJob;
@@ -1543,19 +1552,21 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                                             <span style={{ fontSize: 10, fontFamily: T.mono, color: T.inkMid }}>{c.tech.hoursThisWeek || 0}/{c.tech.hoursCap || 40} hrs</span>
                                             {isAdded ? (
-                                                <button onClick={() => setAddedTechs(prev => ({ ...prev, [c.tech.id]: false }))}
+                                                <button onClick={() => setAddedTechs(prev => ({ ...prev, [c.tech.id]: false }))} disabled={saving}
                                                     style={{ padding: '5px 12px', background: T.ok, color: '#fbf8f3', border: 'none',
                                                         borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                                     ✓ Added
                                                 </button>
                                             ) : canAdd ? (
-                                                <button onClick={() => setAddedTechs(prev => ({ ...prev, [c.tech.id]: true }))}
+                                                <button onClick={() => setAddedTechs(prev => ({ ...prev, [c.tech.id]: true }))} disabled={saving}
                                                     style={{ padding: '5px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
                                                         borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                                     + Add
                                                 </button>
                                             ) : (
-                                                <button onClick={() => setOverridePrompt({ tech: c.tech, blockers: c.blockers })}
+                                                // Held while a schedule saves (state §0.231): a crew changed then was wiped by the save's
+                                                // success, an override with it.
+                                                <button onClick={() => setOverridePrompt({ tech: c.tech, blockers: c.blockers })} disabled={saving}
                                                     style={{ padding: '5px 12px', background: 'transparent', color: T.warn,
                                                         border: `1px solid ${T.warn}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                                     Override
@@ -4749,7 +4760,10 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
 
 const hhmm = (hr) => `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.round((hr % 1) * 60)).padStart(2, '0')}`;
 
-const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, onConfirm }) => (
+const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, onConfirm }) => {
+    // Escape closes it as Cancel does, never while the schedules go out (state §0.231).
+    useLocalLayer(true, { onClose: onCancel, busy: saving });
+    return (
     <div onClick={onCancel}
         style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
             display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -4839,7 +4853,8 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
             </div>
         </div>
     </div>
-);
+    );
+};
 
 
 // ── Availability model ────────────────────────────────────────────────────────
@@ -4877,6 +4892,15 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
     const [busy, setBusy] = React.useState(false);
     const [err, setErr] = React.useState('');
     const [conflict, setConflict] = React.useState(null);   // { block, jobs }
+    // Mark unavailable / Edit time off, and "Already scheduled" over it (state §0.231): one close each for Escape, the
+    // backdrop and Cancel (Reject); the time off typed and not saved asks "Discard changes?"; nothing while a save is out.
+    // What it is measured against: the block as it opened (set the render it opens). The conflict opens after the
+    // dialog, so it is the top of their place and takes the first Escape.
+    const editBaseRef = React.useRef(null);
+    if (!editing) editBaseRef.current = null;
+    else if (editBaseRef.current === null) editBaseRef.current = JSON.stringify(editing);
+    const requestEditClose = useLocalLayer(!!editing, { onClose: () => setEditing(null), dirty: !!editing && JSON.stringify(editing) !== editBaseRef.current, busy });
+    const requestConflictClose = useLocalLayer(!!conflict, { onClose: () => setConflict(null), busy });
 
     const typeOf = (id) => (blockTypes || []).find(t => t.id === id) || null;
 
@@ -5020,7 +5044,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
             )}
 
             {conflict && (
-                <div onClick={() => !busy && setConflict(null)}
+                <div onClick={requestConflictClose}
                     style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999,
                         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div onClick={e => e.stopPropagation()}
@@ -5054,7 +5078,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
                             <div style={{ fontSize: 12, color: T.danger, fontWeight: 600, fontFamily: T.sans, marginBottom: 10 }}>{err}</div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                            <button onClick={() => setConflict(null)} disabled={busy}
+                            <button onClick={requestConflictClose} disabled={busy}
                                 style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
                                     border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
                                     cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
@@ -5072,7 +5096,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
             )}
 
             {editing && (
-                <div onClick={() => !busy && setEditing(null)}
+                <div onClick={requestEditClose}
                     style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
                         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div onClick={e => e.stopPropagation()}
@@ -5141,7 +5165,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
                                     Delete
                                 </button>
                             )}
-                            <button onClick={() => setEditing(null)} disabled={busy}
+                            <button onClick={requestEditClose} disabled={busy}
                                 style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
                                     border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
                                     cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
@@ -5163,9 +5187,17 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
 
 // Recurring weekly pattern. Unchecked day = not working, which is what makes a
 // grey "Off" cell on the schedule grid.
+// A week's pattern by its days, in any key order (a day turned off and on again is the same week).
+const weekKey = (o) => JSON.stringify(Object.keys(o || {}).sort().map(k => [k, o[k]?.start, o[k]?.end]));
+
 const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
     const [wh, setWh] = React.useState(() => ({ ...(tech?.workingHours || {}) }));
     const [busy, setBusy] = React.useState(false);
+    // A refused save is said (state §0.231): a try with no catch left the dialog open and silent.
+    const [err, setErr] = React.useState('');
+    const [base] = React.useState(() => weekKey(tech?.workingHours));
+    // One close for Escape, the backdrop and Cancel; a changed week asks "Discard changes?"; nothing mid-save.
+    const requestClose = useLocalLayer(true, { onClose: onCancel, dirty: weekKey(wh) !== base, busy });
 
     const toggle = (k) => setWh(p => {
         const next = { ...p };
@@ -5174,7 +5206,7 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
     });
 
     return (
-        <div onClick={() => !busy && onCancel()}
+        <div onClick={requestClose}
             style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
                 display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div onClick={e => e.stopPropagation()}
@@ -5213,14 +5245,17 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
                     );
                 })}
 
+                {err && (
+                    <div role="alert" style={{ fontSize: 12, color: T.danger, fontWeight: 600, fontFamily: T.sans, marginTop: 12 }}>{err}</div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                    <button onClick={onCancel} disabled={busy}
+                    <button onClick={requestClose} disabled={busy}
                         style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
                             border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
                             cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
                         Cancel
                     </button>
-                    <button onClick={async () => { setBusy(true); try { await onSave(wh); } finally { setBusy(false); } }}
+                    <button onClick={async () => { setBusy(true); setErr(''); try { await onSave(wh); } catch (e) { setErr(`Not saved — ${e?.message || 'the server did not answer'}`); } finally { setBusy(false); } }}
                         disabled={busy}
                         style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.ink, color: '#fbf8f3',
                             border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
@@ -5422,7 +5457,8 @@ export default function DispatchTab() {
     // style. Falls through to the action if the modal is unavailable — a missing
     // confirm must not silently swallow the click.
     const confirmDiscard = useCallback((msg, action) => {
-        if (showConfirm) showConfirm(msg, action, true);
+        // Its words (state §0.231): "Delete" read for "You have unsaved changes. Discard them?".
+        if (showConfirm) showConfirm(msg, action, true, DISCARD_LABELS);
         else action();
     }, [showConfirm]);
     const isTech = userRole === 'Technician';
@@ -5708,6 +5744,8 @@ export default function DispatchTab() {
     }, [openFilter]);
 
     const closeFilter = useCallback(() => { setOpenFilter(null); setFilterRect(null); }, []);
+    // Escape closes it, the one on top only (state §0.231) — while it is drawn: the board's bar holds it.
+    useLocalLayer(!!openFilter && !!filterRect && view === 'board', { onClose: closeFilter });
 
     // ── Load all dispatch data from DB on mount ───────────────────────────────
     useEffect(() => {
@@ -5876,6 +5914,13 @@ export default function DispatchTab() {
     // New Job does not close while its Save runs (state §0.214): the Save goes on, and wrote the customer and location
     // it made into whichever New Job was opened next.
     const closeNewJob = () => { if (!newJobSaving) setShowNewJobForm(false); };
+    // One close for Escape, the backdrop, × and Cancel (state §0.231): a job typed or changed since it opened asks
+    // "Discard changes?"; nothing while its Save runs. What it is measured against: the form as it opened — a won deal's,
+    // a plan's visit or a blank one — set the render it opens.
+    const newJobBaseRef = useRef(null);
+    if (!showNewJobForm) newJobBaseRef.current = null;
+    else if (newJobBaseRef.current === null) newJobBaseRef.current = JSON.stringify(newJobForm);
+    const requestCloseNewJob = useLocalLayer(showNewJobForm, { onClose: closeNewJob, dirty: showNewJobForm && JSON.stringify(newJobForm) !== newJobBaseRef.current, busy: newJobSaving });
     const handleSaveNewJob = async () => {
         const custName = newJobForm.customer.trim();
         const title    = newJobForm.title.trim();
@@ -6788,7 +6833,7 @@ export default function DispatchTab() {
             {/* ── New Job modal ──────────────────────────────────────────────── */}
             {showNewJobForm && (
                 <>
-                    <div onClick={closeNewJob}
+                    <div onClick={requestCloseNewJob}
                         style={{ position: 'fixed', inset: 0, background: 'rgba(42,38,34,0.45)', zIndex: 1000 }} />
                     <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                         zIndex: 1001, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r + 2,
@@ -6796,7 +6841,7 @@ export default function DispatchTab() {
                         {/* Header */}
                         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>New Job</div>
-                            <button onClick={closeNewJob}
+                            <button onClick={requestCloseNewJob}
                                 style={{ background: 'none', border: 'none', fontSize: 18, color: T.inkMuted, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
                         </div>
                         {/* Body */}
@@ -7068,7 +7113,7 @@ export default function DispatchTab() {
                         </div>
                         {/* Footer */}
                         <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                            <button onClick={closeNewJob}
+                            <button onClick={requestCloseNewJob}
                                 style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                                 Cancel
                             </button>

@@ -450,7 +450,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
    the mechanism and the CRM tabs, Dispatch, Settings, the inline Escapes and
    the document picker. **Batch 1 built 4 Nov** (state §0.230): the
-   mechanism and the CRM tabs' 18 layers. Next, batch 2: Dispatch.
+   mechanism and the CRM tabs' 18 layers. **Batch 2 built 5 Nov** (state
+   §0.231): Dispatch's 8. Next, batch 3: Settings.
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -1289,9 +1290,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - **Batch 1 built 4 Nov** (state §0.230; guide §18b116): the mechanism —
     `useLocalLayer`, App's stack, the places `tabLayer` and `tabPopover` —
     the shortcuts off under any layer, and the CRM tabs' 18, each in the
-    order. **Left:** Dispatch's 8 (batch 2), Settings' 45 (batch 3), the
-    inline Escapes and the document picker (batch 4) — tests/tab-layers.test.mjs
-    KNOWN names each by its batch, and fails on any layer it does not name. The document picker (inside the deal window
+    order. **Batch 2 built 5 Nov** (state §0.231): Dispatch's 8. **Left:**
+    Settings' 45 (batch 3), the inline Escapes and the document picker
+    (batch 4) — tests/tab-layers.test.mjs KNOWN names each by its batch, and
+    fails on any layer it does not name, or names once its component registers. The document picker (inside the deal window
     and the two record rails) joins it with them: it holds by its own list, the
     app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
@@ -2820,10 +2822,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   prompt, and a save's answer is lost if the user leaves mid-save; a
   working-hours save from the week view, landing after a technician was
   opened in Technicians, leaves that draft stale — its next save sends the
-  old week; the discard prompt's confirm button reads "Delete"
-  (confirmDiscard passes danger). Since §0.230 App's confirm takes its
-  words (`showConfirm`'s fourth argument): batch 2 of Escape in the tabs
-  gives this prompt Discard / Keep editing. Any other danger confirm still
+  old week. (The discard prompt's confirm button read "Delete" —
+  confirmDiscard passed danger; since §0.231 it says Discard / Keep
+  editing, through `showConfirm`'s fourth argument.) Any other danger confirm still
   reads "Delete" whatever it does (ModalLayer.jsx:847 — re-read 4 Nov). Also
   (the Dispatch reader, 4 Nov; not re-read): Jobs has no unsaved-changes
   guard at all — a list pick or a sub-tab switch drops an unsaved job edit.
