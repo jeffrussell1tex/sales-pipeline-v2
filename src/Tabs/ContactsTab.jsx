@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
@@ -163,6 +164,9 @@ function RowActionMenu({ rect, onClose, items, idBase }) {
         window.addEventListener('resize', onMove);
         return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', onMove); };
     }, [rect, onClose]);
+    // A popover in the one Escape order (state §0.230): portaled at 12000, it takes the Escape
+    // first and marks it.
+    useLocalLayer(!!rect, { onClose, place: 'tabPopover' });
     if (!rect) return null;
     const MENU_W = 180;
     const up = (window.innerHeight - rect.bottom) < 180;

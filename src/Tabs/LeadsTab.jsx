@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { createPortal } from 'react-dom';
 import { useApp } from '../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
@@ -133,6 +134,9 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
     }, [open]);
     const bd = lead?.breakdown;
     const canExplain = hasAxes && bd && (((bd.fit || []).length) || ((bd.engagement || []).length));
+    // A popover in the one Escape order (state §0.230), at its place's 12000 — it was 60, under
+    // every rail and window.
+    useLocalLayer(!!(open && canExplain), { onClose: () => setOpen(false), place: 'tabPopover' });
     return (
         <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
             <div
@@ -150,7 +154,7 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
                 block for a fixed box — rendered here, the popover sat inside the
                 hovered card, clipped by the strip, and grew its scrollbar. */}
             {open && canExplain && createPortal(
-                <div ref={cardRef} onClick={e => e.stopPropagation()} style={{ position: 'fixed', ...at, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
+                <div ref={cardRef} onClick={e => e.stopPropagation()} style={{ position: 'fixed', ...at, zIndex: 12000, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: T.ink, fontFamily: T.sans }}>Why this score</span>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color, textTransform: 'uppercase', fontFamily: T.sans }}>{band}</span>
@@ -220,11 +224,12 @@ const StatusPickerPopover = ({ anchor, onPick, onClose }) => {
     const ref = useRef(null);
     useEffect(() => {
         const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-        const onKey  = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDown);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+        return () => document.removeEventListener('mousedown', onDown);
     }, [onClose]);
+    // Escape closes it, the one on top only, and marks it (state §0.230): its own listener left
+    // the Escape unmarked, and App acted on the same keypress.
+    useLocalLayer(!!anchor, { onClose });
     if (!anchor) return null;
     const q = query.trim().toLowerCase();
     const shown = q ? LEAD_STATUSES.filter(s => s.toLowerCase().includes(q)) : LEAD_STATUSES;
@@ -271,11 +276,12 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose, onClear }) => {
     const ref = useRef(null);
     useEffect(() => {
         const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-        const onKey  = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDown);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+        return () => document.removeEventListener('mousedown', onDown);
     }, [onClose]);
+    // Escape closes it, the one on top only, and marks it (state §0.230): its own listener left
+    // the Escape unmarked, and App acted on the same keypress.
+    useLocalLayer(!!anchor, { onClose });
     if (!anchor) return null;
     const q = query.trim().toLowerCase();
     const shown = q ? reps.filter(r => (r.name || '').toLowerCase().includes(q)) : reps;

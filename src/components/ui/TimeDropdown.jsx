@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocalLayer } from '../../hooks/useLocalLayer';
 import { T } from '../../tokens.js';
 
 // ── Design tokens (Option D handoff — warm stone/ink) ─────────────────────────
@@ -172,6 +173,12 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
         typeBufRef.current = '';
     }, []);
 
+    // The open list is a popover in the one Escape order (state §0.230): portaled at 12000, over
+    // the rail, window or tab dialog it is picked in, it takes the Escape first — on document,
+    // whether its trigger has focus or not (a mouse open never focused it, and Escape then
+    // closed the dialog under the list) — and marks it, so the host stays.
+    useLocalLayer(open, { onClose: closeMenu, place: 'tabPopover' });
+
     const select = useCallback((t) => {
         onChange(t);
         closeMenu();
@@ -228,7 +235,6 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
             }
             return;
         }
-        if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
         if (e.key === 'Tab') { closeMenu(); return; }
         if (e.key === 'ArrowDown') { e.preventDefault(); moveHighlight(highlight + 1); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); moveHighlight(highlight - 1); return; }

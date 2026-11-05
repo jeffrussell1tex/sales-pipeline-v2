@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
@@ -128,14 +129,17 @@ function getTypeMeta(type) {
 }
 
 // ── Snooze picker ────────────────────────────────────────────────
-function SnoozePicker({ onSnooze, onClose, anchorRect }) {
+function SnoozePicker({ onSnooze, onClose, anchorRect, anchorRef }) {
     const ref = useRef(null);
 
+    // Not on its own button (state §0.230): the mousedown closed it and the click opened it again.
     useEffect(() => {
-        const handler = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        const handler = e => { if (ref.current && !ref.current.contains(e.target) && !(anchorRef && anchorRef.current && anchorRef.current.contains(e.target))) onClose(); };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [onClose]);
+    }, [onClose, anchorRef]);
+    // Escape closes it, the one on top only (state §0.230).
+    useLocalLayer(true, { onClose });
 
     const POPOVER_H = 168;
     const POPOVER_W = 200;
@@ -155,7 +159,8 @@ function SnoozePicker({ onSnooze, onClose, anchorRect }) {
     ];
 
     return (
-        <div ref={ref} style={{ position: 'fixed', top, left, zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: POPOVER_W, overflow: 'hidden', fontFamily: T.sans }}>
+        // A pick is the picker's alone (state §0.230): it bubbled to the row and opened the task too.
+        <div ref={ref} onClick={e => e.stopPropagation()} style={{ position: 'fixed', top, left, zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: POPOVER_W, overflow: 'hidden', fontFamily: T.sans }}>
             <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>Snooze until</div>
             </div>
@@ -275,7 +280,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.inkMid} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h6l-4 5h4"/></svg>
                             </button>
                             {snoozeOpen && snoozeRect && (
-                                <SnoozePicker onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} anchorRect={snoozeRect}/>
+                                <SnoozePicker onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} anchorRect={snoozeRect} anchorRef={snoozeRef}/>
                             )}
                         </div>
                         {/* Done */}

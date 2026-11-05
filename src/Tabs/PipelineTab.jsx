@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
@@ -59,6 +60,9 @@ function FilterPanel({
             setDraftTerritory(pipelineTerritoryFilter[0] || '__all__');
         }
     }, [open]);
+
+    // Escape closes it as its backdrop does (state §0.230) — a filter draft, nothing sent.
+    useLocalLayer(open, { onClose });
 
     if (!open) return null;
 
@@ -181,10 +185,14 @@ function FilterPanel({
 function SaveViewDialog({ open, onSave, onClose }) {
     const [name, setName] = useState('');
     useEffect(() => { if (open) setName(''); }, [open]);
+    // One close for Escape, the backdrop and Cancel (state §0.230; Jeff, 4 Nov: "All four ask"):
+    // a name typed asks "Discard changes?" first. The input's own Escape closed the dialog after
+    // the order's, on the same keypress — gone; the dialog's layer takes it.
+    const requestClose = useLocalLayer(open, { onClose, dirty: !!name.trim() });
     if (!open) return null;
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(42,38,34,0.3)' }} />
+            <div onClick={requestClose} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(42,38,34,0.3)' }} />
             <div style={{
                 position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                 zIndex: 301, background: T.surface, border: `1px solid ${T.border}`,
@@ -196,7 +204,7 @@ function SaveViewDialog({ open, onSave, onClose }) {
                     autoFocus
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim()); if (e.key === 'Escape') onClose(); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim()); }}
                     placeholder="View name…"
                     style={{
                         width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`,
@@ -206,7 +214,7 @@ function SaveViewDialog({ open, onSave, onClose }) {
                     }}
                 />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button onClick={onClose} style={{ padding: '6px 14px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.rSm, color: T.inkMid, fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                    <button onClick={requestClose} style={{ padding: '6px 14px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.rSm, color: T.inkMid, fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
                     <button onClick={() => name.trim() && onSave(name.trim())} disabled={!name.trim()} style={{ padding: '6px 14px', background: T.ink, border: 'none', borderRadius: T.rSm, color: T.surface, fontSize: 12, fontWeight: 600, cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: T.sans, opacity: name.trim() ? 1 : 0.5 }}>Save</button>
                 </div>
             </div>

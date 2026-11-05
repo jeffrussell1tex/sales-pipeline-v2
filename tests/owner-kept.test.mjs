@@ -246,7 +246,9 @@ test('BULK AND MERGE: a writer that changes the owner name moves the owner id wi
 
 test('DIALOG: the number and letter shortcuts wait while the dialog is open', () => {
     const a = read('src/App.jsx');
-    assert.ok(a.includes('const anyModalOpen = showModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity || lostReasonModal;'));
+    // Since §0.230 every layer holds them — the dialog is the deal window's ('draggable' in the order),
+    // read at key time (tests/tab-layers.test.mjs runs the rule).
+    assert.ok(a.includes('            const anyModalOpen = anyLayerOpen();'));
     assert.ok(a.includes('}, [showModal, showUserModal, showActivityModal, viewingActivity, lostReasonModal,'), 'and the handler sees it change');
 });
 

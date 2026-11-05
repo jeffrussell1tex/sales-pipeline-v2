@@ -3,6 +3,7 @@
 // like the other tabs; opens the detail rail / upload rail via context setters.
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
@@ -16,7 +17,8 @@ const COLS = '1fr 120px 1.2fr 150px 92px 86px 34px';
 function RowMenu({ anchor, onClose, onPreview, onDownload, onOpen, onDelete }) {
     const ref = useRef(null);
     useEffect(() => {
-        const close = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        // Not on its own ⋯ (state §0.230): the mousedown closed it and the click opened it again.
+        const close = (e) => { if (ref.current && !ref.current.contains(e.target) && !(e.target.closest && e.target.closest('[data-doc-menu-trigger]'))) onClose(); };
         window.addEventListener('mousedown', close);
         window.addEventListener('scroll', close, true);
         window.addEventListener('resize', onClose);
@@ -26,12 +28,14 @@ function RowMenu({ anchor, onClose, onPreview, onDownload, onOpen, onDelete }) {
             window.removeEventListener('resize', onClose);
         };
     }, [onClose]);
+    // A popover in the one Escape order (state §0.230), at its place's 12000 (it was 11050).
+    useLocalLayer(!!anchor, { onClose, place: 'tabPopover' });
     if (!anchor) return null;
     const top = Math.min(anchor.bottom + 4, window.innerHeight - 180);
     const left = Math.min(anchor.right - 150, window.innerWidth - 160);
     const item = { display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 12px', fontSize: 12, color: T.ink, cursor: 'pointer', fontFamily: T.sans };
     return ReactDOM.createPortal(
-        <div ref={ref} style={{ position: 'fixed', top, left, width: 150, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', zIndex: 11050, overflow: 'hidden', padding: '4px 0' }}>
+        <div ref={ref} style={{ position: 'fixed', top, left, width: 150, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', zIndex: 12000, overflow: 'hidden', padding: '4px 0' }}>
             <button style={item} onClick={onPreview}>Preview</button>
             <button style={item} onClick={onDownload}>Download</button>
             <button style={item} onClick={onOpen}>Open details</button>
@@ -74,7 +78,7 @@ function DocRow({ doc, onOpen, onMenu }) {
             <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.ownerName || '—'}</div>
             <div style={{ fontSize: 12, color: T.inkMid }}>{fmtDate(doc.modifiedAt)}</div>
             <div style={{ fontSize: 12, color: T.inkMid }}>{fmtSize(doc.sizeKb)}</div>
-            <button
+            <button data-doc-menu-trigger
                 onClick={(e) => { e.stopPropagation(); onMenu(doc, e.currentTarget.getBoundingClientRect()); }}
                 style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px 6px', borderRadius: T.r, opacity: hover ? 1 : 0.5 }}
                 title="More">⋯</button>
@@ -189,7 +193,7 @@ export default function DocumentsTab() {
                     filtered.map((doc) => (
                         <DocRow key={doc.id} doc={doc}
                             onOpen={(d) => setDocumentRailId && setDocumentRailId(d.id)}
-                            onMenu={(d, anchor) => setMenu({ doc: d, anchor })} />
+                            onMenu={(d, anchor) => setMenu(m => (m && m.doc.id === d.id ? null : { doc: d, anchor }))} />
                     ))
                 )}
             </div>

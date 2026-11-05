@@ -46,6 +46,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import LayerBoundary from './components/LayerBoundary';
 import MeetingPrepPanel from './components/layout/MeetingPrepPanel';
 import { layersAbove, topLayer } from './utils/escapeOrder.js';
+import { pushLayer, removeLayer, onTopOfPlace, placesOpen, samePlaces } from './utils/tabLayers.js';
 import { T } from './tokens.js';
 
 
@@ -401,8 +402,10 @@ function App() {
     };
 
     // ── Core utility functions ──
-    const showConfirm = (message, onConfirm, danger = true) => {
-        setConfirmModal({ message, onConfirm, danger });
+    // `labels` (state §0.230): the buttons' words, { confirm, cancel } — a tab's layer asks
+    // "Discard changes?" with Discard / Keep editing; without them, Delete or Confirm, and Cancel.
+    const showConfirm = (message, onConfirm, danger = true, labels = null) => {
+        setConfirmModal({ message, onConfirm, danger, labels });
     };
 
     // The app's own prompt dialog: a titled text field with Cancel / submit. onSubmit
@@ -562,6 +565,27 @@ dbFetch('/.netlify/functions/users?me=true')
     // The layers open at this render (openLayers, below — state §0.189), for the Escape:
     // read at key time, as navigateToRef is.
     const openLayersRef = useRef(null);
+    // The layers drawn inside the tabs, and the popovers portaled out of them (state §0.230;
+    // useLocalLayer): a stack in a ref, in the order they opened, each under its place in the
+    // order. Registering and unregistering are stable, and App re-renders only when a place
+    // goes empty or not empty (tabPlaces) — a menu's open costs no render of the whole app,
+    // and a layer that remounts where it was ends where it started.
+    const tabStackRef = useRef([]);
+    const [tabPlaces, setTabPlaces] = useState({});
+    const syncTabPlaces = React.useCallback(() => {
+        const next = placesOpen(tabStackRef.current);
+        setTabPlaces(prev => (samePlaces(prev, next) ? prev : next));
+    }, []);
+    const registerLayer = React.useCallback((id, place) => { tabStackRef.current = pushLayer(tabStackRef.current, { id, place }); syncTabPlaces(); }, [syncTabPlaces]);
+    const unregisterLayer = React.useCallback((id) => { tabStackRef.current = removeLayer(tabStackRef.current, id); syncTabPlaces(); }, [syncTabPlaces]);
+    // Every layer open now, App's and the tabs', read at key time — never a render's copy: within
+    // one keypress React has re-rendered before a later listener runs.
+    const layersNow = React.useCallback(() => ({ ...(openLayersRef.current || {}), ...placesOpen(tabStackRef.current) }), []);
+    // Whether a tab's layer passes an Escape on: a layer above its place is open, or it is not
+    // the top of its place.
+    const localLayerBlocked = React.useCallback((id, place) => layersAbove(place, layersNow()) || !onTopOfPlace(tabStackRef.current, id), [layersNow]);
+    // Whether any layer is drawn over the page, App's or a tab's — the shortcuts hold (state §0.230).
+    const anyLayerOpen = React.useCallback(() => topLayer(layersNow()) !== null, [layersNow]);
 
     // ── Global keyboard shortcuts ─────────────────────────────
     useEffect(() => {
@@ -609,12 +633,16 @@ dbFetch('/.netlify/functions/users?me=true')
                 return;
             }
 
+            // A control took this key (state §0.230): the time picker's type-ahead marks the "3" of
+            // "837", and App sent it to Tasks — the dialog the picker sat in, and its draft, gone.
+            if (e.defaultPrevented) return;
             // Don't fire shortcuts while typing
             if (isTyping) return;
-            // Don't fire if any modal is open (except ? for help)
-            // The lost-reason dialog too (state §0.193): N opened a deal window over it, and a
-            // second Closed Lost from there replaced the first deal's pending save.
-            const anyModalOpen = showModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity || lostReasonModal;
+            // Don't fire while any layer is drawn over the page (except ? for help): App's, a tab's,
+            // a popover (state §0.230; Jeff, 4 Nov: "Off while open"). Before, only App's windows
+            // and dialogs held them — the lost reason too (state §0.193: N opened a deal window over
+            // it) — and a "1" over a tab's dialog switched the tab under it, mid-save.
+            const anyModalOpen = anyLayerOpen();
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -1587,6 +1615,7 @@ dbFetch('/.netlify/functions/users?me=true')
         shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
         leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
         search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
+        tabPopover: !!tabPlaces.tabPopover, tabLayer: !!tabPlaces.tabLayer,
     };
     openLayersRef.current = openLayers;
     const escapeBlocked = (name) => layersAbove(name, openLayers);
@@ -1734,6 +1763,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const appContextValue = {
         // ── Escape: the layer on top takes it (state §0.186) ──
         escapeBlocked,
+        registerLayer, unregisterLayer, localLayerBlocked, anyLayerOpen,   // a tab's layers (state §0.230)
         openMeetingPrep,
         // ── Documents ──
         ...documentsHook,

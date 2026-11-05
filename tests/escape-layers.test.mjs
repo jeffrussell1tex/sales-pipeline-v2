@@ -135,11 +135,13 @@ const keydownListeners = (file, src) => {
 
 test('THE GUARD — every keydown listener under src that reacts to Escape leaves one a layer above took alone', () => {
     const all = srcFiles().flatMap((f) => keydownListeners(f, read(f)));
-    assert.ok(all.length >= 16, `the walk finds the listeners (${all.length})`);
+    // 14 since §0.230: the Sub-accounts drawer's and the two Leads pickers' own listeners are gone —
+    // each takes its Escape through useLocalLayer — and the hook's one listener is counted.
+    assert.ok(all.length >= 14, `the walk finds the listeners (${all.length})`);
     const unread = all.filter((l) => l.body === null);
     assert.deepEqual(unread.map((l) => `${l.file}:${l.line}`), [], 'every handler found');
     const escapes = all.filter((l) => l.body.includes("'Escape'"));
-    assert.ok(escapes.length >= 14, `the Escape listeners (${escapes.length}; 14 since §0.189 — the lost-reason window takes its Escape through useEscapeLayer)`);
+    assert.ok(escapes.length >= 12, `the Escape listeners (${escapes.length}; 14 since §0.189 — the lost-reason window takes its Escape through useEscapeLayer; 12 since §0.230 — the drawer's and the Leads pickers' three gone, useLocalLayer's one in)`);
     const blind = escapes.filter((l) => !l.body.includes('defaultPrevented'));
     assert.deepEqual(blind.map((l) => `${l.file}:${l.line}`), []);
 });

@@ -165,7 +165,8 @@ test('T1 — the Accounts tab: a merged-away account is not listed, in All or in
         '    const toggleSelectAll = () => setSelectedIds(prev => prev.length === filtered.length ? [] : filtered.map(a => a.id));',
         '        const rows = filtered.map(a => {',
     ]) once(tab, line);
-    assert.equal(count(tab, '\n                    accounts={visibleAccounts}\n'), 2, "the filter panel's options, in both its places");
+    // One place since §0.230 — the panel was drawn twice, the header's copy and the toolbar's.
+    assert.equal(count(tab, '\n                    accounts={visibleAccounts}\n'), 1, "the filter panel's options, in its one place");
 });
 
 // ── the Contacts tab ────────────────────────────────────────────────────────

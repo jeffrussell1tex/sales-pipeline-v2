@@ -449,7 +449,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
    the mechanism and the CRM tabs, Dispatch, Settings, the inline Escapes and
-   the document picker. Nothing built yet; next, batch 1.
+   the document picker. **Batch 1 built 4 Nov** (state §0.230): the
+   mechanism and the CRM tabs' 18 layers. Next, batch 2: Dispatch.
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -754,6 +755,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   New Deal → Account (the pane check used made-up rows, not UKG's).
 
 ### 2.3 Before selling
+
+- **A quote shows Accelerep's name to every org** (Escape in the tabs'
+  critique, 4 Nov; re-read — the multi-tenant rule: nothing tenant-visible
+  global unless a per-org setting overrides it): the Quotes tab's preview
+  prints "ACCELEREP", "500 Market Street, Suite 800, San Francisco, CA
+  94103" and "Accelerep signature" for every org (QuotesTab.jsx:279-280,
+  :344), and the quote PDF heads every org's quote "ACCELEREP CRM"
+  (quote-pdf.mjs:122) though it prints the org's own address and phone
+  (`cp`, :112). No other org's data shows. Recommended: both read the
+  org's company profile and brand (Settings → Edit brand), the app's name
+  nowhere on a customer's document.
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
   documentation, not tried). Calendar access is a "sensitive" scope.
@@ -1274,7 +1286,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
     Dispatch, 45 in Settings, plus inline Escapes. Most have no Escape; the
     few that have one leave it unmarked; App's letter and number shortcuts
     fire over every one.
-  - None is in `ESCAPE_ORDER` yet. The document picker (inside the deal window
+  - **Batch 1 built 4 Nov** (state §0.230; guide §18b116): the mechanism —
+    `useLocalLayer`, App's stack, the places `tabLayer` and `tabPopover` —
+    the shortcuts off under any layer, and the CRM tabs' 18, each in the
+    order. **Left:** Dispatch's 8 (batch 2), Settings' 45 (batch 3), the
+    inline Escapes and the document picker (batch 4) — tests/tab-layers.test.mjs
+    KNOWN names each by its batch, and fails on any layer it does not name. The document picker (inside the deal window
     and the two record rails) joins it with them: it holds by its own list, the
     app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
@@ -1298,11 +1315,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
     under a menu; Accounts' Filters panel drawn twice; Pipelines' ⋯ menus
     never closing on an outside click; the shortcuts list above the rails
     now or later.
-- **The shortcuts list opens under an open rail or the deal window.** Its z
-  is 9998, under every rail and the draggable windows; "?" opened it with a
-  contact rail and with a new-task rail open. A z above them, with its place
-  in the order, is the fix. §0.189 (b), 8 Oct. Answered 4 Nov (Q6): raised
-  to 11015 in Escape in the tabs' batch 1 (DESIGN.md §3.9).
 - **Layers drawn that nothing opens** (tests/open-states.test.mjs records each
   in KNOWN; giving one a way in, or retiring it, updates KNOWN):
   - the notes popover: ModalLayer draws it, App's Escape and the order name
@@ -2160,6 +2172,36 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `onClick` and no preset data exists, yet they look like the working
   "+ New crew". Older than §0.226. Wire them to a preset list or remove
   them. Low.
+- **More controls that do nothing** (Escape in the tabs' inventory and its
+  critique, 4 Nov; each re-read): Features' "Reset AI training data?" —
+  "Request reset" only closes the window (FeaturesDetail.jsx:78), its
+  facts hard-coded (:47-50); Webhooks' row menu "Send test event"
+  (`onClick={() => {}}`, WebhooksDetail.jsx:12); Dispatch skills' license
+  "Rename" only closes its menu (DispatchSkillsDetail.jsx:221); and
+  outside Settings, Leads' "See all" (a pointer, no handler,
+  LeadsTab.jsx:516), Quotes' "☰ View bundles" (no onClick,
+  QuotesTab.jsx:1129) and the Sub-accounts drawer's "Show all"
+  (AccountsTab.jsx:291). Wire or remove each. Low.
+- **Two deletes with no confirm** (the Settings reader, 4 Nov; re-read):
+  a webhook endpoint's "Delete endpoint" (WebhooksDetail.jsx:14 →
+  :297 → `handleDelete` :181) sends the DELETE at once; an automation's
+  "Delete" (AutomationsDetail.jsx:542 → :373) takes the row off the list
+  and then sends it. Every other delete in Settings asks first (App's
+  confirm). Recommended: App's confirm, as the rest do.
+- **`window.alert` for a refused save, as a class** (4 Nov; re-read):
+  Export's two dialogs (ExportDetail.jsx:258, :268), Territories' CSV
+  import (TerritoriesDetail.jsx:228, :233, :252, :254, :255), Reports'
+  PDF export and owner email (ReportsTab.jsx:452, :6073), a blocked policy
+  (security/shared.jsx:85). The house shows words on the screen.
+- **Teams' Assign window shows an old error when reopened** (4 Nov;
+  re-read): `assignErr` is cleared only when an assignment starts
+  (TeamsDetail.jsx:438); opening and closing the window leave it.
+- **Half-typed add and rename forms are invisible to both leave guards**
+  (4 Nov): AdminView hands no `setSettingsDirty` to the panels that save
+  each action as it happens (AdminView.jsx:437-473) — Company calendar
+  (CompanyCalendarDetail.jsx:136), Pipelines (PipelinesDetail.jsx:45,
+  :103, :115), Connected apps among them — so a name typed and not yet
+  added is dropped on leaving without a word. Low.
 - **Features asks for the API key again after a refused removal**
   (§0.226's review, 3 Nov): J-B12's words key on the payload holding
   `anthropicApiKey`, and a removal sends `anthropicApiKey: null`
@@ -2779,7 +2821,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   working-hours save from the week view, landing after a technician was
   opened in Technicians, leaves that draft stale — its next save sends the
   old week; the discard prompt's confirm button reads "Delete"
-  (confirmDiscard passes danger).
+  (confirmDiscard passes danger). Since §0.230 App's confirm takes its
+  words (`showConfirm`'s fourth argument): batch 2 of Escape in the tabs
+  gives this prompt Discard / Keep editing. Any other danger confirm still
+  reads "Delete" whatever it does (ModalLayer.jsx:847 — re-read 4 Nov). Also
+  (the Dispatch reader, 4 Nov; not re-read): Jobs has no unsaved-changes
+  guard at all — a list pick or a sub-tab switch drops an unsaved job edit.
+- **Work Schedules' time-off Delete has no confirm** (the Dispatch reader,
+  4 Nov; re-read): "Delete" in Mark unavailable / Edit time off
+  (DispatchTab.jsx:5136) sends it at once (`deleteBlock` :6242).
+- **The technician's field view defines a component inside a component**
+  (4 Nov; re-read): `Section` (DispatchTab.jsx:5367) inside
+  `TechnicianView` (:5351) draws each `TechJobCard`; any re-render — a
+  job's busy flag set mid-save (:6261) — remounts every card, so typed
+  notes, an open card and the card's own error are lost (read from code,
+  not seen). Module scope, as the house rule says.
 
 ### 4.5 Notifications, email and digests
 
@@ -4306,7 +4362,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   9 Oct (§0.194's review).
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
-  sites.
+  sites. Re-read 4 Nov: the four are Work Schedules' time-off dialog's
+  Start and End (DispatchTab.jsx:5114, :5118) and the shift pattern's two
+  (:5201, :5205).
 - **Twins are still easy to make** (the map, 11 Oct; not re-read):
   - The account picker's Create checks only the caller's list, so a rep
     can create a second account under the name of one another rep owns.
@@ -4331,8 +4389,23 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The reminder modal takes the first click on the Reports tab.** §0.140,
   as recorded.
 - **AccountsTab layout polish.** As recorded.
-- **68 churn-only inline components** (`npm run check:inline -- --churn`;
-  28 Oct; 70 on 7 Oct, §9 said 76). SalesManagerTab's SubTabs, TeamTab and
+- **The draggable windows' z climbs for the whole visit** (the mechanism
+  critique, 4 Nov; re-read): `_globalZ` (useDraggable.js:24-25) rises by
+  one on every `bringToFront` (:126) and is never reset, so after a few
+  hundred clicks on windows' headers a window draws above the rails and
+  the shortcuts list (11015), against its place in the Escape order
+  (`draggable`, 10000); on a phone every window is `MOBILE_Z` 600 (:213),
+  under the quick log, the lead form, the merge reviews and the shortcuts
+  list. Recommended: a small band (10000-10099), reset when no window is
+  open.
+- **67 churn-only inline components** (`npm run check:inline -- --churn`;
+  4 Nov — AccountsTab's `Toolbar` made inline JSX in §0.230, as its header
+  is; 68 on 28 Oct, 70 on 7 Oct, §9 said 76). AccountsTab's six others
+  (`TableColumnHeader`, `SignalView`, `BusinessBookView`, `Lane`,
+  `ListView`, `EmptyState`), Quotes' `BarCell` and Reports'
+  `PinnedCardS`, `TemplateCardS`, `GhostBtnD`, `FieldChip`, `TabStrip`,
+  `UpdateBtn` and `BuilderHeader` are among them (re-read 4 Nov). Quotes'
+  `MiniBar` (QuotesTab.jsx:1050, inside CatalogTab) is drawn nowhere — dead. SalesManagerTab's SubTabs, TeamTab and
   AuditTab are among them, per §0.84, and AppHeader's `ST` (AppHeader.jsx:705;
   its search results' `GH` and `RR` went with §0.209); and the New User window's
   `Toggle` (UserModal.jsx:207), Reports' `PanelB` (ReportsTab.jsx:1293) and
@@ -4469,6 +4542,19 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ---
 
 ## 6. Tooling, tests and housekeeping
+
+- **The harness: the likely tests first, the full suites only for a survivor**
+  (recommended 4 Nov, Jeff: "apply your recommendation to the project rules"
+  — planned tooling, its own small batch, not started): each mutant now runs
+  all 164 SUITES, about 7 s; nearly every one is caught by a test that reads
+  the file it changes. Run first the tests that name or read the mutated file
+  and the whole-tree guards; caught, it is done (about 1 s); not caught, the
+  full SUITES as today — so every verdict is the one the full suites give,
+  a wrong guess costing time, never a grade. Estimated (not measured): a
+  batch's scope from about 5 h to about 1 h, the full run from about 8 h to
+  1.5-2 h. Before it is used, a sample graded both ways must match. With it,
+  a stale check that lists the entries a weakened test grades (a lowered
+  floor, a loosened pin), to prove them by hand with the batch's own.
 
 - **The harness runs each mutant with no time limit** (§0.215's fourth
   review, run in a scratch copy): scripts/mutate-import.mjs and

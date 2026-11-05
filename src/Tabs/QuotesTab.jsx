@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
@@ -361,6 +362,8 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
 // are fake place holders … remove the fake ones and just add a place holder".
 const TemplatePickerModal = ({ opp, templates, onPick, onClose }) => {
     const [selected, setSelected] = useState(null);
+    // Escape closes it as × and Cancel do (state §0.230) — a choice, not typed work.
+    useLocalLayer(true, { onClose });
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(26,22,18,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }} onClick={onClose}>

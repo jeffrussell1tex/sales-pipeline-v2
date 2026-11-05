@@ -31,6 +31,12 @@
 // from a list of its own, and the rails, the lead and lost-reason windows and the document
 // layers each kept a list of what sat above them: one Escape could close the lower of two
 // layers, or both. THE GUARD runs every pair.
+//
+// And the tabs' layers are in it (state §0.230): two places — 'tabPopover' (12000, a popover
+// portaled out of a tab or a rail) and 'tabLayer' (a layer drawn in a tab, inside
+// .app-container) — each taking its Escape through useLocalLayer, as a capture-phase layer does.
+// The shortcuts list moved to 11015, over the rails and the windows. tests/tab-layers.test.mjs
+// finds every tab layer and holds it to its place.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -63,7 +69,11 @@ test('layersAbove: a layer passes the Escape on while one above it is open, and 
     assert.equal(layersAbove('meetingPrep', { documentRail: true }), true, 'a document opened over it');
     assert.equal(layersAbove('contactRail', { meetingPrep: true }), true, 'the rail under it waits');
     assert.equal(layersAbove('duePopup', { contactRail: true }), true, 'a rail sits above the reminders');
-    assert.equal(layersAbove('duePopup', { draggable: true, shortcuts: true }), false, 'the deal modal and the shortcuts sit below them');
+    assert.equal(layersAbove('duePopup', { draggable: true, quickLog: true }), false, 'the deal modal and the quick log sit below them');
+    assert.equal(layersAbove('duePopup', { shortcuts: true }), true, 'the shortcuts list sits above them since §0.230 (it was under them, at 9998)');
+    assert.equal(layersAbove('contactRail', { tabPopover: true }), true, 'a popover portaled out of a tab or a rail draws over the rails (§0.230)');
+    assert.equal(layersAbove('tabLayer', { draggable: true }), true, 'a tab\'s layer sits under every layer drawn outside .app-container (§0.230)');
+    assert.equal(layersAbove('search', { tabLayer: true }), true, 'and over the header\'s panels');
     assert.equal(layersAbove('draggable', { reminderPopup: true }), true, 'a reminder is drawn over the import windows');
     assert.equal(layersAbove('leaveGuard', { confirm: true }), true, 'the app\'s dialogs sit above every layer (§18b70.4)');
     assert.equal(layersAbove('leaveGuard', { documentRail: true, taskRail: true }), false, 'the leave guard sits above the rails');
@@ -77,7 +87,8 @@ test('topLayer: the first open layer, top first — null when nothing is drawn o
     for (const name of NAMES) assert.equal(topLayer({ [name]: true }), name);
     assert.equal(topLayer({ notifications: true, search: true }), 'search', 'the search results draw over the notifications');
     assert.equal(topLayer({ profile: true, notes: true, coachingNote: true }), 'coachingNote', 'the coaching note over the notes popover, over the profile');
-    assert.equal(topLayer({ shortcuts: true, taskRail: true, draggable: true }), 'taskRail', 'a rail over the deal window, over the shortcuts');
+    assert.equal(topLayer({ shortcuts: true, taskRail: true, draggable: true }), 'shortcuts', 'the shortcuts list over a rail, over the deal window (§0.230 — "?" opened it under them)');
+    assert.equal(topLayer({ taskRail: true, draggable: true, tabLayer: true }), 'taskRail', 'a rail over the deal window, over a tab\'s layer');
     assert.equal(topLayer({ notes: false, search: 0, profile: true }), 'profile', 'a closed layer is not on top');
 });
 
@@ -99,9 +110,11 @@ test('one Escape, one layer: the meeting prep panel over the rail its Prep was p
 
 // ── the order ───────────────────────────────────────────────────────────────
 
-// The layers drawn inside .app-container: the header's (THE GUARD below reads it from App's
-// render). They sit in its stacking context, under every layer outside it (§0.187).
-const IN_APP_CONTAINER = ['search', 'profile', 'notifications'];
+// The layers drawn inside .app-container: a tab's and the header's (THE GUARD below reads it
+// from App's render). They sit in its stacking context, under every layer outside it (§0.187).
+const IN_APP_CONTAINER = ['tabLayer', 'search', 'profile', 'notifications'];
+// Portaled to the page from wherever they are hosted — a tab or a rail (§0.230): outside it.
+const PORTALED = ['tabPopover'];
 
 test('the order is z order, highest first, each name once — the layers inside .app-container last, under every layer outside it', () => {
     assert.equal(new Set(NAMES).size, NAMES.length);
@@ -116,11 +129,12 @@ test('the order is z order, highest first, each name once — the layers inside 
 const DRAWN_BY = {
     search: 'AppHeader', profile: 'AppHeader', notifications: 'AppHeader',
     quickLog: 'QuickLogFab', followUp: 'QuickLogFab', meetingPrep: 'MeetingPrepPanel', leaveGuard: 'LeaveGuardModal',
+    tabLayer: 'PipelineTab',   // the tabs, each inside .app-container — the Pipeline tab stands for them (§0.230)
 };
 const drawnBy = (name) => DRAWN_BY[name] || 'ModalLayer';
 
 // Each component App's render draws a layer with, and whether it is drawn inside .app-container.
-const DRAWERS = new Set(NAMES.map(drawnBy));
+const DRAWERS = new Set(NAMES.filter((n) => !PORTALED.includes(n)).map(drawnBy));
 const appComponents = (src) => {
     const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
     const app = ast.program.body.find((n) => n.type === 'FunctionDeclaration' && n.id && n.id.name === 'App');
@@ -139,19 +153,19 @@ const appComponents = (src) => {
 const insideNames = (src) => {
     const where = appComponents(src);
     for (const c of DRAWERS) assert.ok(where.has(c), `App draws ${c}`);
-    return NAMES.filter((n) => where.get(drawnBy(n)));
+    return NAMES.filter((n) => !PORTALED.includes(n) && where.get(drawnBy(n)));
 };
 
-test('THE GUARD: the layers drawn inside .app-container — a stacking context at z-index 1 — are the header\'s panels, and the order puts them under every other (§0.187)', () => {
+test('THE GUARD: the layers drawn inside .app-container — a stacking context at z-index 1 — are a tab\'s and the header\'s panels, and the order puts them under every other (§0.187, §0.230)', () => {
     assert.ok(/\n\s*\.app-container \{[^}]*position: relative;[^}]*z-index: 1;/.test(read('src/index.css')), 'the container is a stacking context at 1');
     assert.deepEqual(insideNames(read('src/App.jsx')), IN_APP_CONTAINER, 'a layer that must sit over a rail is drawn outside .app-container');
     assert.deepEqual(NAMES.slice(-IN_APP_CONTAINER.length), IN_APP_CONTAINER, 'last in the order');
 });
 
 test('the guard finds the shape as it was: the meeting prep panel drawn inside .app-container', () => {
-    const src = 'function App() { return (<AppProvider><div className="app-container"><AppHeader /><MeetingPrepPanel /></div>'
+    const src = 'function App() { return (<AppProvider><div className="app-container"><AppHeader /><PipelineTab /><MeetingPrepPanel /></div>'
         + '<ModalLayer /><QuickLogFab /><LeaveGuardModal /></AppProvider>); }';
-    assert.deepEqual(insideNames(src), ['meetingPrep', 'search', 'profile', 'notifications']);
+    assert.deepEqual(insideNames(src), ['meetingPrep', 'tabLayer', 'search', 'profile', 'notifications']);
 });
 
 // Where each layer draws its z — the order's number must be the file's.
@@ -160,7 +174,7 @@ const zOf = {
     blockedDelete: () => /blockedDeleteModal && \(\s*<div style=\{\{[^}]*?zIndex: (\d+)/.exec(read('src/components/layout/ModalLayer.jsx'))[1],
     prompt: () => /\.modal-overlay \{[^}]*z-index: (\d+);/.exec(read('src/index.css'))[1],
     confirm: () => /\.modal-overlay \{[^}]*z-index: (\d+);/.exec(read('src/index.css'))[1],
-    followUp: () => /followUpPrompt && \(\s*<div style=\{\{[^}]*?zIndex: (\d+)/.exec(read('src/components/layout/QuickLogFab.jsx'))[1],
+    followUp: () => /followUpPrompt && \(\s*<div ref=\{followUpRef\} style=\{\{[^}]*?zIndex: (\d+)/.exec(read('src/components/layout/QuickLogFab.jsx'))[1],
     leaveGuard: () => /zIndex:(\d+)/.exec(read('src/Tabs/settings/shared/LeaveGuardModal.jsx'))[1],
     linkPicker: () => maxZ('src/components/documents/DocumentLinkPicker.jsx'),
     uploadRail: () => maxZ('src/components/documents/DocumentUploadRail.jsx'),
@@ -183,6 +197,11 @@ const zOf = {
     profile: () => /showProfilePanel && \([\s\S]*?zIndex: (\d+)/.exec(read('src/components/layout/AppHeader.jsx'))[1],
     notifications: () => /showNotifications && \([\s\S]*?zIndex: (\d+)/.exec(read('src/components/layout/AppHeader.jsx'))[1],
     notes: () => /notesPopover && \(\(\) => \{[\s\S]*?zIndex: (\d+)/.exec(read('src/components/layout/ModalLayer.jsx'))[1],
+    // The time picker's list — tests/tab-layers.test.mjs holds every other popover of the place to it.
+    tabPopover: () => /createPortal\(\s*<div[\s\S]*?zIndex: (\d+)/.exec(read('src/components/ui/TimeDropdown.jsx'))[1],
+    // A marker, not a z: each tab's layer draws at its own z inside .app-container, where the
+    // header (sticky, 150) holds its panels — tests/tab-layers.test.mjs pins the header's 150.
+    tabLayer: () => '1200',
 };
 function maxZ(file) { return String(Math.max(...[...read(file).matchAll(/zIndex: ?(\d+)/g)].map((m) => Number(m[1])))); }
 
@@ -205,6 +224,7 @@ const OPEN_AS = {
     shortcuts: 'showShortcuts', quickLog: 'quickLogOpen', meetingPrep: '!!(meetingPrepOpen && meetingPrepEvent)',
     leadModal: 'showLeadModal', merge: '!!(mergeModal || contactMergeModal)',
     search: 'showSearchResults', profile: 'showProfilePanel', notifications: 'showNotifications', notes: '!!notesPopover',
+    tabPopover: '!!tabPlaces.tabPopover', tabLayer: '!!tabPlaces.tabLayer',
 };
 
 test('App says which layers are open, by every name in the order and no other, each by the flag it is drawn on', () => {
@@ -264,6 +284,10 @@ const LAYERS = {
     showNotifications: { name: 'notifications', app: 'showNotifications' },
     MeetingPrepPanel: { name: 'meetingPrep', layer: 'src/components/layout/MeetingPrepPanel.jsx' },
     LeaveGuardModal: { name: 'leaveGuard', layer: 'src/Tabs/settings/shared/LeaveGuardModal.jsx' },
+    // the tabs' layers (state §0.230) — useLocalLayer, a capture-phase listener held by the order and
+    // by the top of its place; tests/tab-layers.test.mjs finds each one
+    tabLayers: { name: 'tabLayer', local: true },
+    tabPopovers: { name: 'tabPopover', local: true },
 };
 
 // What holds each useEscapeLayer in a file — its third argument, as written.
@@ -302,6 +326,7 @@ test('THE GUARD: every layer the app renders has a place in the order and an Esc
         ...layersIn('src/components/layout/QuickLogFab.jsx', 'QuickLogFab'),
         'showSearchResults', 'showProfilePanel', 'showNotifications',   // the header's panels (AppHeader; App's Escape)
         'MeetingPrepPanel', 'LeaveGuardModal',
+        'tabLayers', 'tabPopovers',   // drawn by the tabs and the popovers (tests/tab-layers.test.mjs)
     ];
     const unknown = rendered.filter((k) => !(k in LAYERS));
     assert.deepEqual(unknown, [], 'a new layer: give it an Escape and a place in ESCAPE_ORDER, then a row here');
@@ -327,6 +352,11 @@ test('THE GUARD: every layer the app renders has a place in the order and an Esc
             assert.ok(appEscape.includes(closes), `${key}: App's Escape closes it — ${closes}`);
         }
         if (how.own) assert.ok(/'Escape'|useEscapeLayer\(/.test(read(how.own)), `${key}: its own listener takes the Escape`);
+        if (how.local) {
+            const hook = read('src/hooks/useLocalLayer.js');
+            assert.ok(hook.includes("document.addEventListener('keydown', onKey, true);"), `${key}: on document, in the capture phase`);
+            assert.ok(hook.includes("if (e.key !== 'Escape' || e.defaultPrevented) return;") && hook.includes('now.localLayerBlocked(id, place)') && hook.includes('e.preventDefault();'), `${key}: leaves a marked or held Escape, marks the one it takes`);
+        }
         if (how.layer) {
             assert.ok(read(how.layer).includes(`escapeBlocked('${how.name}')`), `${key}: it takes the Escape, passing it on while a layer above ${how.name} is open`);
             for (const held of escapeLayerHolds(read(how.layer))) assert.ok(held.includes('escapeBlocked('), `${key}: every useEscapeLayer in ${how.layer} is held by the order, not a list — ${held}`);
@@ -390,7 +420,8 @@ test('THE GUARD: a layer\'s own listener decides by the order — escapeBlocked(
         assert.ok(read(`src/components/rails/${f}.jsx`).includes('            e.preventDefault();\n            if (!isEditing) closeRail();'), `${f}: marked, editing or not`);
     }
     // The header's search box closes the results itself — while nothing is open above them.
-    assert.ok(read('src/components/layout/AppHeader.jsx').includes("onKeyDown={e => { if (e.key === 'Escape' && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}"));
+    // and leaves a marked one alone (§0.230: a tab's layer took it, and React ran the box's after)
+    assert.ok(read('src/components/layout/AppHeader.jsx').includes("onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}"));
 });
 
 // A keypress, as the page meets it: each open layer's listener by how it takes its Escape —
@@ -442,7 +473,7 @@ test('THE GUARD: of any two layers open, one Escape closes the upper and only it
 
 test('a rail that keeps its draft keeps the Escape: nothing under it closes', () => {
     const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
-    const open = { taskRail: true, shortcuts: true };
+    const open = { taskRail: true, profile: true };
     // The rail's listener, editing: the Escape is its own — marked — and the rail stays.
     if (!(e.defaultPrevented || layersAbove('taskRail', open))) e.preventDefault();
     assert.equal(e.defaultPrevented, true);
@@ -460,11 +491,11 @@ test('the guard finds the shape as it was (HEAD before §0.189): App\'s own list
         if (first) closed.push(first);
         return closed;
     };
-    assert.deepEqual(pressAsItWas({ contactRail: true, shortcuts: true }), ['contactRail', 'shortcuts'], 'two layers, one Escape');
+    assert.deepEqual(pressAsItWas({ contactRail: true, profile: true }), ['contactRail', 'profile'], 'two layers, one Escape');
     assert.deepEqual(pressAsItWas({ search: true, notifications: true }), ['notifications'], 'the lower of two');
     assert.deepEqual(pressAsItWas({ coachingNote: true, profile: true }), ['profile'], 'the profile under the coaching note');
     assert.deepEqual(pressAsItWas({ coachingNote: true, contactRail: true }), ['contactRail', 'coachingNote'], 'a rail under the coaching note');
-    assert.deepEqual(press({ contactRail: true, shortcuts: true }, { contactRail: 'own', shortcuts: 'app' }), ['contactRail']);
+    assert.deepEqual(press({ contactRail: true, profile: true }, { contactRail: 'own', profile: 'app' }), ['contactRail']);
     assert.deepEqual(press({ search: true, notifications: true }, { search: 'app', notifications: 'app' }), ['search']);
     assert.deepEqual(press({ coachingNote: true, profile: true }, { coachingNote: 'app', profile: 'app' }), ['coachingNote']);
     assert.deepEqual(press({ coachingNote: true, contactRail: true }, { coachingNote: 'app', contactRail: 'own' }), ['coachingNote']);

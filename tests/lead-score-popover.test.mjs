@@ -42,7 +42,8 @@ test('LeadScore: the popover is position: fixed, placed from the badge, closed b
     const block = s.slice(start, s.indexOf('const LeadStatusPill', start));
     assert.ok(block.includes("const [at, setAt] = useState(null);"), 'viewport px, not a CSS offset');
     assert.ok(block.includes("setAt(popoverPlacement(badgeRef.current.getBoundingClientRect(), { width: 232, height: 300 }));"), 'placed from the badge rect at open');
-    assert.ok(block.includes("style={{ position: 'fixed', ...at, zIndex: 60, width: 232,"), 'REGRESSION: absolute under the badge is clipped by the Triage rows and grows their scrollbar');
+    // At 12000 since §0.230 — the tab popovers' place in the Escape order (it was 60).
+    assert.ok(block.includes("style={{ position: 'fixed', ...at, zIndex: 12000, width: 232,"), 'REGRESSION: absolute under the badge is clipped by the Triage rows and grows their scrollbar');
     assert.equal(count(block, "position: 'absolute', top: '100%'"), 0, 'the absolute popover is gone');
     assert.ok(block.includes("window.addEventListener('scroll', close, true);"), 'a scroll closes it — a fixed box does not follow the page');
     assert.ok(block.includes("window.addEventListener('resize', close);"));

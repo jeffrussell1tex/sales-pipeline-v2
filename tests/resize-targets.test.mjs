@@ -146,6 +146,7 @@ const unfound = (ls) => ls.filter((l) => !l.fn).map((l) => `${l.file} ${l.event}
 // Handlers the parse cannot find, each safe for its reason (pinned in the test below).
 const NAMED = new Map([
     ['src/Tabs/DocumentsTab.jsx resize onClose', "the row menu's close is the tab's `() => setMenu(null)`, which reads no event"],
+    ['src/Tabs/ReportsTab.jsx resize close', "the contact row's ⋮ menu's close (state §0.230) is a useCallback that takes no event"],
 ]);
 
 test('THE GUARD — every handler a window event reaches under src asks for a node before it reads its event\'s target', () => {
@@ -161,6 +162,9 @@ test('the named handlers are as their reasons say', () => {
     const d = read('src/Tabs/DocumentsTab.jsx');
     assert.equal(d.split('<RowMenu ').length - 1, 1, 'one row menu');
     assert.ok(d.includes('<RowMenu anchor={menu.anchor} onClose={() => setMenu(null)}'), NAMED.get('src/Tabs/DocumentsTab.jsx resize onClose'));
+    const r = read('src/Tabs/ReportsTab.jsx');
+    assert.equal(r.split("window.addEventListener('resize', close);").length - 1, 1, 'one resize named close in the Reports tab');
+    assert.ok(r.includes('    const close = React.useCallback(() => { setOpen(false); setRect(null); setShowPersona(false); }, []);'), NAMED.get('src/Tabs/ReportsTab.jsx resize close'));
 });
 
 test('the guard finds the shapes as they were and the ones the review named, and passes a checked one and a handler that reads no event', () => {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 // Every read of a lost deal's reason or exit stage goes through here (0.66):
@@ -16,7 +17,6 @@ import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openP
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
-import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
@@ -2273,11 +2273,22 @@ const WhereEditor = ({ source, where, onChange }) => {
 // prints what went where. Slack is offered only when the workspace has it
 // connected. The time is a time input, any minute (§0.140 — the job runs every
 // five minutes); it was a select of 24 hours.
+// What a schedule says, to tell typed work from what is stored (state §0.230).
+const deliveryKey = (d) => JSON.stringify(d ? [d.enabled, d.cadence, d.hour, d.minute, d.weekday, d.dayOfMonth, d.timezone, [...(d.emailTo || [])].sort(), !!d.slack] : null);
+
 const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {
     const browserTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
     const [draft, setDraft] = React.useState(() => cleanDelivery(report?.config?.delivery)
         || { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastSentAt: null, lastError: null });
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    // One close for Escape, the backdrop and Close (state §0.230; Jeff, 4 Nov: "All four ask"): a
+    // schedule changed and not saved asks "Discard changes?" first; nothing while a save is out.
+    // What it is measured against: the stored schedule once the report holds one — a save
+    // answers with it — else the draft it opened with.
+    const baseRef = React.useRef(null);
+    if (baseRef.current === null) baseRef.current = deliveryKey(draft);
+    React.useEffect(() => { const stored = cleanDelivery(report?.config?.delivery); if (stored) baseRef.current = deliveryKey(stored); }, [report]);
+    const requestClose = useLocalLayer(true, { onClose, dirty: deliveryKey(draft) !== baseRef.current, busy });
     // "HH:MM" from the input → hour and minute together (one state move, never a half-set time)
     const setTime = (hhmm) => { const [h, m] = String(hhmm || '').split(':').map(Number); if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m })); };
     const members = (users || []).filter(u => u.active !== false && u.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -2288,7 +2299,7 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
     const label = { fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans, marginBottom: 4 };
     const btn = (primary, off = false) => ({ padding: '7px 14px', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans, cursor: busy || off ? 'default' : 'pointer', border: primary ? 'none' : `1px solid ${T.border}`, background: primary ? T.ink : 'transparent', color: primary ? T.surface : T.inkMid, opacity: busy || off ? 0.55 : 1 });
     return (
-        <div onClick={() => !busy && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div onClick={requestClose} style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div onClick={e => e.stopPropagation()} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 20, width: 540, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Schedule delivery</div>
@@ -2347,7 +2358,7 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
                     <div role={note.ok ? 'status' : 'alert'} style={{ fontSize: 12.5, fontWeight: 600, color: note.ok ? T.ok : T.danger, fontFamily: T.sans, padding: '6px 10px', background: note.ok ? `${T.ok}12` : `${T.danger}12`, borderLeft: `3px solid ${note.ok ? T.ok : T.danger}`, borderRadius: T.r, lineHeight: 1.5 }}>{note.text}</div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={onClose} disabled={busy} style={btn(false)}>Close</button>
+                    <button onClick={requestClose} disabled={busy} style={btn(false)}>Close</button>
                     <button onClick={() => onSendNow(draft)} disabled={busy || !canSend} title={canSend ? 'Save this schedule and send the report now' : 'Pick a recipient, or turn Slack on, first'} style={btn(false, !canSend)}>{busy ? 'Working…' : 'Save & send now'}</button>
                     <button onClick={() => onSave(draft)} disabled={busy || !tzOk} style={btn(true, !tzOk)}>{busy ? 'Working…' : 'Save schedule'}</button>
                 </div>
@@ -4775,12 +4786,20 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
         setShowPersona(false);
     };
 
+    // Closes on a mousedown outside it and its ⋮, and on a scroll (state §0.230): a click listener
+    // never heard a click on another row's ⋮ — its toggle stops the click — so two stayed open;
+    // drawn fixed where it opened, a scroll left it behind. Escape closes it, the one on top only.
+    const menuRef = React.useRef(null);
+    const close = React.useCallback(() => { setOpen(false); setRect(null); setShowPersona(false); }, []);
     React.useEffect(() => {
-        if (!open) return;
-        const close = () => { setOpen(false); setRect(null); setShowPersona(false); };
-        document.addEventListener('click', close);
-        return () => document.removeEventListener('click', close);
-    }, [open]);
+        if (!open) return undefined;
+        const onDown = (e) => { if ((btnRef.current && btnRef.current.contains(e.target)) || (menuRef.current && menuRef.current.contains(e.target))) return; close(); };
+        document.addEventListener('mousedown', onDown);
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close);
+        return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+    }, [open, close]);
+    useLocalLayer(open, { onClose: close });
 
     const menuStyle = rect ? {
         position: 'fixed',
@@ -4812,7 +4831,7 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
                 ⋮
             </button>
             {open && rect && menuStyle && (
-                <div style={menuStyle} onClick={e => e.stopPropagation()}>
+                <div ref={menuRef} style={menuStyle} onClick={e => e.stopPropagation()}>
                     {!showPersona ? (
                         <>
                             <div style={itemStyle(false)}
@@ -5061,6 +5080,10 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+    // Escape closes each picker, the one on top only (state §0.230).
+    useLocalLayer(accOpen, { onClose: () => setAccOpen(false) });
+    useLocalLayer(conOpen, { onClose: () => setConOpen(false) });
+    useLocalLayer(oppOpen, { onClose: () => setOppOpen(false) });
 
     // ── Period cutoff ──────────────────────────────────────────
     const periodCutoff = React.useMemo(() => {

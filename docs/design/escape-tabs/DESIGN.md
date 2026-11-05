@@ -1,4 +1,4 @@
-<!-- Escape in the tabs (OPEN_ITEMS §1 item 3; §4.1 "In-tab layers without Escape", "The shortcuts list opens under an open rail"): the design, revised after two critiques (§9), with Jeff's ten answers (ANSWERS.md). Written 4 Nov 2026 in the twenty-fifth session, read only, over f885df4 — file:line references are as of f885df4 and may move; verify each one before building. Nothing built yet. -->
+<!-- Escape in the tabs (OPEN_ITEMS §1 item 3; §4.1 "In-tab layers without Escape", "The shortcuts list opens under an open rail"): the design, revised after two critiques (§9), with Jeff's ten answers (ANSWERS.md). Written 4 Nov 2026 in the twenty-fifth session, read only, over f885df4 — file:line references are as of f885df4 and may move; verify each one before building. Batch 1 (the mechanism and the CRM tabs) built 4 Nov — state §0.230, harness deferred. -->
 
 # Design: every in-tab layer closes on Escape, the one on top only, and no shortcut fires under one
 
@@ -183,8 +183,9 @@ layer a batch converts goes with that batch — §3.6.)
    the hook's.
 4. **Inline Escapes outside layers and the document picker** (§2.4).
 
-Each batch: its tests, the gates, unit, integration, the scoped harness (`mutate-scope.mjs`; the full run before the
-next prod ship only — Jeff, 4 Nov: "Do not run the full harness after each change"), a pane check as Karen
+Each batch: its tests, the gates, unit, integration, the stale check and its own harness entries proven by hand —
+harness deferred (Jeff, 4 Nov: "Do not run the full harness after each change", "Before each push to dev", "Prove them by
+hand": one scoped run before each push to dev, the full run before a prod ship), a pane check as Karen
 (`accelerep@outlook.com`, role User; Settings as an Admin, since Karen cannot open it), one commit with its doc patch.
 
 ## 5. Tests

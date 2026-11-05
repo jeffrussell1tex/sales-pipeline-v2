@@ -251,9 +251,10 @@ export default function ModalLayer() {
 
             {/* Notes Popover */}
             {/* ── Keyboard Shortcuts Overlay ───────────────────────── */}
+            {/* Over the rails and the windows (state §0.230): at 9998 it opened under them. */}
             {showShortcuts && (
                 <div onClick={() => setShowShortcuts(false)} style={{
-                    position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 9998,
+                    position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 11015,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     backdropFilter: 'blur(2px)', animation: 'fadeIn 0.15s ease'
                 }}>
@@ -837,13 +838,13 @@ export default function ModalLayer() {
                                 style={{ padding: '0.625rem 1.5rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface, color: T.inkMid, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                 onMouseEnter={e => e.target.style.background = T.surface2}
                                 onMouseLeave={e => e.target.style.background = T.surface}
-                            >Cancel</button>
+                            >{confirmModal.labels?.cancel || 'Cancel'}</button>
                             <button
                                 onClick={() => { const fn = confirmModal.onConfirm; setConfirmModal(null); fn(); }}
                                 style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: confirmModal.danger !== false ? T.danger : T.ink, color: T.surface, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                 onMouseEnter={e => e.target.style.opacity = '0.9'}
                                 onMouseLeave={e => e.target.style.opacity = '1'}
-                            >{confirmModal.danger !== false ? 'Delete' : 'Confirm'}</button>
+                            >{confirmModal.labels?.confirm || (confirmModal.danger !== false ? 'Delete' : 'Confirm')}</button>
                         </div>
                         </div>
                     </div>

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 3, 2026 · rules current through **§18b115** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b116** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -2890,7 +2890,7 @@ every mutant after it. The rules:
   lock. Any other error, and a lock that outlasts the tries, stops the run as
   before.
 
-### 4. A batch runs its scope; a ship runs every entry (§0.212, 27 Oct 2026)
+### 4. A batch is deferred; a push to dev runs the scope; a ship runs every entry (§0.212, 27 Oct 2026; §0.230, 4 Nov 2026)
 
 Jeff, 27 Oct: "each batch gets the stale check, its own entries, every older entry on the files it changed and every entry caught by a test file it edited; the full run before each prod ship". The full run had grown to about four hours (3,273
 entries on 27 Oct, one full run per commit). A batch changes how a mutant is
@@ -2899,7 +2899,9 @@ tests it edited — and, through a test it did not edit, a file that test reache
 a fixture it reads, or the SUITES list. The scope runs the first three; the rest
 wait for the full run.
 
-- **Every batch, before its commit:** `node scripts/mutate-scope.mjs` — from a copy of
+**Since 4 Nov 2026, standing** (Jeff: "Do not run the full harness after each change", "I said do not run the full harness until we are committing to dev", "Before each push to dev", "Prove them by hand"; then, on the recommendation, "apply your recommendation to the project rules", "keep in mind this product is still in dev", "then we run the full harness before committing to production"): no harness run is started while a batch is built or committed — every batch is a deferred one (below), the scoped run waits for the next push to dev, and the full run for the next ship. Why: a batch's scoped run had grown to hours (2,706 entries projected at about 5 h, 4 Nov) and stalled the work; the product is in dev, with dev between every batch and prod. What it costs, named: an older mutant made to survive by a batch's edit to a test (a lowered floor, a loosened pin) is found at the push, not at the commit — so a batch names each test it weakened in its state section, and the push's survivors trace to it.
+
+- **The scoped run — before each push to dev**, over every batch since the last green scope (`--base` that commit): `node scripts/mutate-scope.mjs` — from a copy of
   the repo when `netlify dev` is up in the repo (its HMR chases the rewrites), with
   `--git <repo>` for git's answers. It parses every entry's anchor first (none may be
   missing; the batch's own must each be their file's only match, or NOT UNIQUE stops
@@ -2928,13 +2930,12 @@ wait for the full run.
   Its summary line and its own exit code are the result, as the full run's are.
 - **Before each prod ship:** the full run, `node scripts/mutate-import.mjs`, every
   entry, on the tree that ships.
-- **A deferred scope** (Jeff, 2 Nov 2026: "not run the 3+ hour harness check until
-  we are done with our work"; "Commit each, harness last"): while a run of batches is
-  built, Jeff may defer each batch's scoped run. A deferred batch still runs the stale
+- **A deferred scope** — every batch since 4 Nov 2026 (Jeff, 2 Nov 2026: "not run the 3+ hour harness check until
+  we are done with our work"; "Commit each, harness last"; standing since 4 Nov, above). A deferred batch still runs the stale
   check over every entry (`node scripts/mutate-scope.mjs --list` — an anchor its
   edits moved would stop the final run some 80 minutes in) and proves each of its own
-  new entries caught by hand; it is committed with "harness deferred" in its commit
-  message and its state section. Nothing is pushed until one scoped run, `--base` the
+  new and repointed entries caught by hand (only those mutants, in the harness copy, after a green baseline — never a scoped run), names each test it weakened; it is committed with "harness deferred" in its commit
+  message and its state section. The scoped run may go in the background in the harness copy while the next batch is built — it holds no commit. Nothing is pushed until one scoped run, `--base` the
   last commit whose scope printed green (so every deferred batch is in its scope),
   prints `Baseline: green.` and exits 0; the deferred marks then name that run. A
   survivor it finds is fixed in a commit of its own, before the push.
@@ -4124,7 +4125,7 @@ through `dbFetch`.
 3. **Escape does what the layer's own close does** — its ×, Cancel, Skip or backdrop, one function for all of them: a reminder is dismissed and the next shows, the quick log closes with its draft kept, the leave guard is Stay.
 4. **Nothing mid-save closes on Escape** — an import running, a merge saving, a claim being submitted, a guard's save out: the Escape is refused.
 5. **The draggable windows share one place** — each rises when clicked (useDraggable), so among themselves the order is the order clicked.
-6. **In-tab layers are not yet in the order** — docs/OPEN_ITEMS.md (§0.186's found (a), the audit): fifteen files draw fixed layers with no Escape at all, and eleven more are to be checked layer by layer.
+6. **In-tab layers are in the order since §0.230** (§18b116): the CRM tabs' in Escape in the tabs' batch 1; Dispatch's, Settings' and the inline Escapes in batches 2-4 (docs/OPEN_ITEMS.md §4.1; tests/tab-layers.test.mjs names each layer still to come, by its batch). Before, fifteen files drew fixed layers with no Escape at all, and eleven more handled one somewhere (§0.186's found (a), the audit).
 
 ## 18b81. A Layer Drawn Over The Page Is Drawn Outside .app-container; A Screen Replaced Keeps Its Ways In (hard rule)
 
@@ -4594,3 +4595,15 @@ through `dbFetch`.
 2. **Every reader goes through it** — the screen that edits the value, any count of it, any picker that offers it. A reader's own fallback (the value holds nothing) stays the reader's; the shape is the rule's.
 3. **Reading writes nothing.** A stored shape changes only when an Admin saves; opening a screen never converts the value.
 4. **The guard.** tests/pain-points.test.mjs THE GUARD (every read of the value in src through the rule — dotted, bracket and destructured; the readers listed), the rule run on each shape, the readers' lines pinned; the harness's §0.227 block, each entry proven caught by hand.
+
+## 18b116. Every Layer In A Tab Takes Its Escape In The One Order — useLocalLayer, A Stack In App, One Close For All Four, And No Shortcut Under A Layer (hard rule)
+
+**Origin (§0.230, 4 Nov 2026 — Jeff: "Escape in tabs (§4.1)", ten answers, every one the Recommended; docs/design/escape-tabs/).** Of about 73 layers drawn inside the tabs, most had no Escape; the few that had one left it unmarked, so App closed a layer of its own or the undo toast on the same keypress; and App's letter and number shortcuts fired over every one — typing "837" in the Reports delivery dialog's time picker sent "3" to Tasks, and the dialog and its draft were gone. The shortcuts list ("?") opened under the rails. Two layers — the notifications list and the follow-up card — never closed by themselves.
+
+1. **A layer drawn in a tab, or portaled out of one, calls `useLocalLayer(open, { onClose, dirty, busy, place })`** (src/hooks/useLocalLayer.js) at the top level of a module-scope component. Its place is where it draws: `'tabLayer'` drawn in the tab (inside `.app-container`, under every layer outside it, over the header's panels — the header is sticky at 150, its own stacking context); `'tabPopover'` portaled to the page at **12000**, over every rail and window. A shared control's popover takes `'tabPopover'` wherever it is hosted (the time picker, in a tab or a rail). A layer standing for an app place names it (`place: 'leaveGuard'`).
+2. **App holds them in a stack, in a ref** (`tabStackRef`; src/utils/tabLayers.js): in the order opened, out by id; register and unregister stable; App re-renders only when a place goes empty or not empty. A layer registers in a layout effect, and only when `open` changes. It takes an Escape — document, capture phase — while it is the top of its place and nothing above the place is open, **decided at key time** (`localLayerBlocked`): within one keypress React has re-rendered before a later listener runs, so only the mark (`e.defaultPrevented`) guards anything after the hook. It marks what it takes.
+3. **One close for Escape, ×, Cancel and the backdrop** (Jeff: "All four ask") — the `requestClose` the hook returns: nothing while `busy` (a save is out); while `dirty` (typed work) App's confirm asks "Discard changes?" — **Discard** / **Keep editing** (`showConfirm`'s fourth argument, its words) — and the layer stays; else the layer's own close. Discard runs the layer's close as it stands then and never while a save is out; the focused field lets go first, so Enter cannot submit under the confirm. A search box or a filter draft is not typed work.
+4. **A control inside a registered layer that owns an Escape is a layer of its own**, nested, registered with its host (the time picker's list; a picker inside a dialog): the hook marks first, so a control's own `onKeyDown` after it would act on the same keypress. No `onKeyDown` Escape inside a registered layer unless it leaves a marked one.
+5. **No shortcut fires while any layer is open** — App's, a tab's, a popover (`anyLayerOpen`: the order's `topLayer` over App's layers and the stack) — **nor on a key a control already took** (`e.defaultPrevented`); "?" still toggles the list; Ctrl-K holds too (Jeff: "Off while open").
+6. **A layer that never closes by itself closes on a click outside it** (Jeff: "Close on outside click") — the notifications list (not on the bell, which toggles it), the follow-up card (as its Skip) — or shortcuts would stay held.
+7. **The guard.** tests/tab-layers.test.mjs: the stack and the close run; a nested pair and a popover over a rail run press by press; the hook and App read; each converted layer pinned; THE GUARD — every fixed position (a literal, a ternary, a computed style), portal, class index.css draws fixed, floating absolute box (a position, a z and a shadow) and outside-click listener or hook under src/Tabs and the components they import belongs to a component that registers, or is named: KNOWN (a later batch, by file, component and line text, each with its count), SERVES (a listener whose layer registers elsewhere) or NOT_A_LAYER (its reason); a name that no longer matches fails; a popover portaled at 12000, a tab's layer not portaled; `useLocalLayer` only at a component's top level; the shapes as they were. tests/escape-order.test.mjs holds the two places in the order. The harness's §0.230 block.

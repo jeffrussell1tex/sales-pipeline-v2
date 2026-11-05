@@ -19,6 +19,13 @@
 // tests/escape-order.test.mjs keeps every app layer in this list, the list in z order,
 // and each z true to the file that draws it.
 //
+// The layers drawn inside the tabs join it (state §0.230 — Jeff, 4 Nov, "Escape in the tabs"),
+// in two places by where they draw: 'tabPopover' (12000) — a popover portaled out of a tab or a
+// rail (a row's ⋯ menu, the time picker), drawn over every rail and window — and 'tabLayer' —
+// a layer drawn in a tab, inside .app-container, so under every layer outside it. Each takes
+// its Escape through useLocalLayer (src/hooks/useLocalLayer.js; App's stack, src/utils/
+// tabLayers.js): on top of its place, while nothing above the place is open.
+//
 // Every app layer's Escape decides by this order (state §0.189): a layer's own listener
 // asks escapeBlocked('<its name>') and marks the Escape it takes; App's handler closes
 // the layer on top (topLayer) when it is one of App's, and leaves the Escape to it when
@@ -32,10 +39,12 @@ export const ESCAPE_ORDER = [
     ['confirm', 100100],
     ['followUp', 100050],        // the quick log's "add a follow-up?"
     ['leaveGuard', 99999],
+    ['tabPopover', 12000],       // a popover portaled out of a tab or a rail (state §0.230)
     ['linkPicker', 11105],
     ['uploadRail', 11103],
     ['documentRail', 11101],
     ['meetingPrep', 11021],      // over the rail or the deal window its Prep was pressed in (§0.187)
+    ['shortcuts', 11015],        // over the rails and the windows "?" opens it over (state §0.230; it was 9998, under them)
     ['activityDetail', 11010],
     ['taskRail', 11003],
     ['activityRail', 11001],
@@ -45,12 +54,17 @@ export const ESCAPE_ORDER = [
     ['duePopup', 10001],
     ['reminderPopup', 10000],    // later in ModalLayer than every draggable window
     ['draggable', 10000],
-    ['shortcuts', 9998],
     ['quickLog', 9990],
     ['leadModal', 9000],
     ['merge', 4000],
     ['notes', 998],
-    // inside .app-container, its z-index 1 — under every layer above (§0.187)
+    // inside .app-container, its z-index 1 — under every layer above (§0.187). A tab's layer
+    // is drawn there at its own z; the header is sticky at 150, its own stacking context, so
+    // its panels draw at 150 there whatever their own z (1199-1000, as each file draws them).
+    // A tab's layer with a backdrop covers the header; one without closes on the mousedown a
+    // header click is — the order puts it over the panels (state §0.230). Its number marks the
+    // place: no one z is a tab's.
+    ['tabLayer', 1200],
     ['search', 1199],
     ['profile', 1099],
     ['notifications', 1000],

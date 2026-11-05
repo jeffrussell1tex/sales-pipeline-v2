@@ -23,6 +23,15 @@ export default function QuickLogFab() {
     // its × does (state §0.186) — each while no layer above it is open.
     useEscapeLayer(quickLogOpen, () => setQuickLogOpen(false), escapeBlocked('quickLog'));
     useEscapeLayer(!!followUpPrompt, () => setFollowUpPrompt(null), escapeBlocked('followUp'));
+    // A click outside the follow-up is its Skip (state §0.230; Jeff, 4 Nov: "Close on outside
+    // click"): it never closed by itself, and while it shows no shortcut fires.
+    const followUpRef = React.useRef(null);
+    React.useEffect(() => {
+        if (!followUpPrompt) return undefined;
+        const onDown = (e) => { if (followUpRef.current && !followUpRef.current.contains(e.target)) setFollowUpPrompt(null); };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [followUpPrompt, setFollowUpPrompt]);
 
     const inputStyle = {
         width: '100%', fontSize: '0.875rem', border: '1px solid #e5e2db',
@@ -199,7 +208,7 @@ export default function QuickLogFab() {
 
             {/* ════ FOLLOW-UP TASK PROMPT ════ */}
             {followUpPrompt && (
-                <div style={{ position: 'fixed', bottom: '2rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 100050,   /* above the rails (state §0.177) */ background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1.25rem', width: isMobile ? 'auto' : '280px' }}
+                <div ref={followUpRef} style={{ position: 'fixed', bottom: '2rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 100050,   /* above the rails (state §0.177) */ background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1.25rem', width: isMobile ? 'auto' : '280px' }}
                     onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
                     <div style={{ fontSize: '0.8125rem', color: T.inkMid, marginBottom: '0.875rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
@@ -78,6 +78,7 @@ export default function AppHeader({
         calConnectResult, setCalConnectResult,
         activeOrgId,
         escapeBlocked,
+        anyLayerOpen,
     } = useApp();
 
     const isAdmin    = userRole === 'Admin';
@@ -90,17 +91,29 @@ export default function AppHeader({
     const openDealsOf = React.useMemo(() => openDealsByAccount(opportunities, accounts), [opportunities, accounts]);
     const accountsById = React.useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
 
-    // ⌘K / Ctrl-K opens search palette from anywhere
+    // ⌘K / Ctrl-K opens search palette from anywhere — not over a layer (state §0.230), as no
+    // shortcut does: the palette, drawn in the header, opened under a tab's dialog, and the next
+    // Escape closed the dialog and then the palette.
     useEffect(() => {
         const onKey = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
+                if (anyLayerOpen && anyLayerOpen()) return;
                 setShowSearchResults(true);
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, []);
+
+    // The notifications list closes on a mousedown outside the bell and its list (state §0.230).
+    const bellRef = useRef(null);
+    useEffect(() => {
+        if (!showNotifications) return undefined;
+        const onDown = (e) => { if (bellRef.current && !bellRef.current.contains(e.target)) setShowNotifications(false); };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [showNotifications, setShowNotifications]);
 
     const { userMemberships } = useOrganizationList({ userMemberships: { infinite: true } });
     // Clerk's own profile screen, opened in the app (state §0.168): the password
@@ -443,7 +456,7 @@ export default function AppHeader({
                                 placeholder="Search accounts, contacts, deals…"
                                 value={globalSearch}
                                 onChange={e => setGlobalSearch(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Escape' && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}
+                                onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}
                                 style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 15, color: T.ink, padding: 0, fontFamily: T.sans }}
                             />
                             {globalSearch && (
@@ -493,8 +506,9 @@ export default function AppHeader({
                     </>
                 )}
 
-                {/* Bell */}
-                <div style={{ position: 'relative' }}>
+                {/* Bell — its list closes on a click outside it (state §0.230; Jeff, 4 Nov: "Close on
+                    outside click"): it never closed by itself, and with it open no shortcut fires. */}
+                <div ref={bellRef} style={{ position: 'relative' }}>
                     <button onClick={() => setShowNotifications(!showNotifications)}
                         style={{ background: notifications.length > 0 ? T.danger : 'transparent', color: T.surfaceInkFg, border: 'none', borderRadius: T.r, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', transition: 'background 150ms' }}
                         onMouseEnter={e => { if (!notifications.length) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}

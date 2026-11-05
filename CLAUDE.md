@@ -72,16 +72,20 @@ npm test                 # load-bearing for deploy: function-import graph
 ```
 
 Then: `npm run test:int` (targets `DATABASE_URL_TEST`, not the app DB).
-Then: the harness, scoped to the batch: `node scripts/mutate-scope.mjs` —
-the stale check over every entry, then the batch's own entries, every older
-entry on a file it changed and every entry on a file a SUITES test it edited
-reads, imports or runs; it must print `Baseline: green.` first (a red baseline
-reports a false 100% caught). Before each prod ship: the full run,
-`node scripts/mutate-import.mjs`, every entry, about 8 h (guide §18b23
-part 4; Jeff, 27 Oct 2026). Jeff may defer a batch's scoped run (2 Nov
-2026): it still runs the stale check (`--list`) and proves its own entries
-by hand, commits marked "harness deferred", and nothing is pushed until one
-scoped run over every deferred batch prints green (guide §18b23 part 4).
+Then: the harness, deferred (Jeff, 4 Nov 2026: "do not run the full harness
+until we are committing to dev" — "Before each push to dev"; guide §18b23
+part 4). Never start a harness run while building or committing a batch:
+the batch runs the stale check, `node scripts/mutate-scope.mjs --list`
+(it runs nothing), proves its own new and repointed entries caught by hand
+in the harness copy, names in its state section every test it weakened (a
+lowered floor, a loosened pin), and commits marked "harness deferred".
+Before each push to dev: one scoped run, `node scripts/mutate-scope.mjs
+--base <last green-scoped commit>`, over every batch since — from the
+harness copy, so it may run in the background while the next batch is
+built; it never holds a commit, and it must print `Baseline: green.` first
+(a red baseline reports a false 100% caught) and exit 0 before the push; a
+survivor is fixed in its own commit first. Before each prod ship: the full
+run, `node scripts/mutate-import.mjs`, every entry, about 8 h.
 Then: rep-path browser check signed in as Karen (`accelerep@outlook.com`,
 role `User`) — Admin skips every ownership and role branch, so an Admin-only
 pass proves nothing. Read the URL bar and count the orgs before any browser

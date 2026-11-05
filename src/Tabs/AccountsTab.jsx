@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
@@ -183,12 +184,10 @@ function SubAccountDrawer({ parentAccount, subAccounts, contacts, onClose, onVie
         return () => clearTimeout(t);
     }, []);
 
-    // Close on Escape
-    React.useEffect(() => {
-        const handler = e => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [onClose]);
+    // Escape closes it, the one on top only (state §0.230): its place in the one order. Its own
+    // listener, on window, left the Escape unmarked, and App closed a layer of its own — or the
+    // undo toast — on the same keypress.
+    useLocalLayer(true, { onClose });
 
     const filtered = subAccounts.filter(s =>
         !q.trim() || (s.name||'').toLowerCase().includes(q.toLowerCase())
@@ -451,6 +450,10 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
             setAccountSegment(currentFilters.accountSegment || '__all__');
         }
     }, [open]);
+
+    // Escape closes it as its backdrop does (state §0.230) — the draft dropped: a filter draft is
+    // not typed work, and nothing is sent until Apply.
+    useLocalLayer(open, { onClose });
 
     if (!open) return null;
 
@@ -967,14 +970,8 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                     Filter{activePanelFilterCount > 0 ? ` · ${activePanelFilterCount}` : ''}
                 </button>
 
-                <FilterPanel
-                    open={filterOpen}
-                    onClose={() => setFilterOpen(false)}
-                    accounts={visibleAccounts}
-                    settings={settings}
-                    currentFilters={panelFilters}
-                    onApply={setPanelFilters}
-                />
+                {/* The Filter panel is drawn once, in the toolbar (state §0.230): it was drawn here too,
+                    on the same flag at the same spot, two drafts of one panel. */}
 
                 {canEdit && (
                     <button
@@ -1016,7 +1013,9 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     );
 
     // ── Combined toolbar: tabs + warmth chips + sort + filter (one row) ─────
-    const Toolbar = () => (
+    // Inline JSX, as the header is — NOT a component defined here (state §0.230): one was a new
+    // type every render, so the Filter panel in it remounted and lost its draft mid-edit.
+    const toolbarJSX = (
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 12, borderBottom: `1px solid ${T.border}`, paddingBottom: 0 }}>
             {/* View sub-tabs */}
             {views.map(v => {
@@ -1134,7 +1133,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
             {headerJSX}
 
             {/* Combined toolbar: tabs + warmth + sort + filter */}
-            <Toolbar />
+            {toolbarJSX}
 
             {/* Sub-account side drawer */}
             {drawerAccount && (
