@@ -609,6 +609,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
     `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other
     site's reads fail with no message and show an empty calendar (§4.4).
+- **Read `MAIL_FROM` and `APP_URL` on both Netlify sites** (the quote
+  branding design, 9 Nov; docs/design/quote-branding/DESIGN.md D4, D6):
+  every email goes out from `MAIL_FROM` (send-email.mjs:38, fallback
+  `Sales Pipeline <noreply@salespipeline.app>`); the quote email's link
+  falls back to the dev site when `APP_URL` is unset (quote-email.mjs:33).
+  Neither value was read. The quote branding batch makes the From name the
+  org's and drops the quote email's link; the address must stay on
+  Resend's verified domain.
 
 ### 2.2 Around the next ship to prod
 
@@ -780,10 +788,18 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   prints "ACCELEREP", "500 Market Street, Suite 800, San Francisco, CA
   94103" and "Accelerep signature" for every org (QuotesTab.jsx:279-280,
   :344), and the quote PDF heads every org's quote "ACCELEREP CRM"
-  (quote-pdf.mjs:122) though it prints the org's own address and phone
-  (`cp`, :112). No other org's data shows. Recommended: both read the
-  org's company profile and brand (Settings → Edit brand), the app's name
-  nowhere on a customer's document.
+  (quote-pdf.mjs:122). Its address and phone branch (`cp`, :112) never
+  runs: it reads a `companyProfile` from the request body, and its one
+  caller (QuotesTab.jsx:1756) sends none (corrected 9 Nov — the line
+  said it printed them). No other org's data shows. **Designed and
+  answered 9 Nov — Jeff's five answers, each the Recommended; next, his
+  pick of 9 Nov** (docs/design/quote-branding/DESIGN.md and ANSWERS.md:
+  the map of every customer-facing output — the preview, the PDF, the
+  quote email, the dispatch customer emails' shared layout, where a
+  customer's reply goes — and the census). Recommended: one source for
+  who the org is (the Company profile, else the org's Clerk name), read
+  by the server from the caller's org, the app's name nowhere on a
+  customer's document.
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
   documentation, not tried). Calendar access is a "sensitive" scope.
@@ -1192,6 +1208,18 @@ model's pattern to deals.
 
 ### 3.5 Larger features, each a session of its own (as recorded)
 
+- **A quote in the org's brand** (Jeff, 9 Nov, the quote branding
+  design's Q5: "File as one feature"; docs/design/quote-branding/DESIGN.md
+  §2.2): Settings promises a look no output applies — Company profile's
+  logo ("Your logo appears on quote PDFs…", CompanyProfileDetail.jsx:86;
+  the page has no logo field), its brand colour (:88; nothing reads
+  `companyBrandColor`) and its default quote header with placeholders
+  (:120; nothing reads `quoteHeader`); Edit brand's colours, fonts and
+  logo mark (`quoteBrand`, read only by the Settings screens) and its
+  "Upload SVG…" button, which has no handler (EditBrandModal.jsx:365). The
+  quote branding batch rewords those sentences to what is true; this
+  feature makes them so — the logo uploaded and stored per org, the
+  colours and fonts on the PDF and the preview, the header printed.
 - **The tech mobile experience:** one dedicated mobile pass (Jeff deferred
   it). The SPIFF panel, desktop-only today, belongs in it.
 - **E2E tests (Playwright):** a thin happy path. The hurdle is automating
@@ -2972,6 +3000,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
+- **The quote PDF is built from the request body, not the stored quote**
+  (the quote branding design, 9 Nov, Q4; read in code, not run): quote-pdf.mjs
+  takes `{ quote, opportunity, lines }` from the body (:356) and checks only
+  that the caller is signed in (:349) — no org check on the quote, no
+  deal read rule, no write role — so any signed-in member can post any
+  quote content and get a PDF that reads as their org's quote. No other
+  org's data is read (it reads none). Jeff, 9 Nov: "File it, own batch".
+  Recommended: the PDF loads the stored quote by id in the caller's org,
+  under the deal's read rule (`dealAccess`, as quote-email.mjs:82); the
+  open question is what a PDF of an unsaved edit should show (today it
+  prints the edit).
 - **A Manager's `managedReps` narrows no list but deals in the header
   search, Home's pinned reports and Reports** (the cleanup batch's design,
   18 Oct, P40b; re-read 23 Oct, read in code, not run): the client narrows
@@ -4841,3 +4880,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Object.freeze(['Manager', 'Admin'])` outside roles.js. A class item:
   widen the scan, and move APPROVER_ROLES to roles.js or name it there.
   (The profile page's Manager box reads `canSeeAll`, no list — §0.211.)
+- **The `companyProfile` settings key has no writer** (the quote branding
+  design, 9 Nov; read in code): `{ address, phone, notes }`
+  (settingsDefaults.js:74, settings.mjs:162 and :409, `REV_KEYS`) — no
+  screen writes it, and its one reader, the quote PDF's body-borne
+  `companyProfile`, is never sent (QuotesTab.jsx:1756). Three orgs hold it
+  empty (census, 9 Nov). Once the quote branding batch reads the Company
+  profile's own keys, remove the key from the defaults, both halves of
+  settings.mjs and `REV_KEYS` together (stored rows can keep it — keys are
+  additive).
