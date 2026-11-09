@@ -80,7 +80,7 @@ test('QuotesTab: the builder’s notes reach the customer on every surface — t
     assert.ok(s.includes("import { esc } from '../utils/customerNotifications';"), 'the print fallback escapes what it interpolates');
     assert.ok(s.includes("${activeQuote.notes?.trim() ? `<h3") && s.includes("${esc(activeQuote.notes.trim())}</p>` : ''}"), 'the print fallback carries the notes, escaped');
     assert.ok(s.includes("${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}"), 'and the payment terms');
-    const pdf = read('netlify/functions/quote-pdf.mjs');
+    const pdf = read('netlify/functions/_quotePdf.mjs');   // the PDF's layout since §0.235
     assert.ok(pdf.includes("const notesText = (quote.notes && quote.notes.trim()) ? quote.notes"), 'the PDF function renders the quote’s notes');
     assert.ok(s.includes("<button onClick={onEdit} style={{ marginTop: 10, width: '100%', background: T.gold, border: `1px solid ${T.goldInk}`"), 'Edit in builder is the sand bar, not a hairline');
 });

@@ -119,6 +119,7 @@ const RENDERERS = [
     // [file, what of it prints to a customer (null = the whole file), the patterns]
     ['src/Tabs/QuotesTab.jsx',                            null,                                   [...APP, ...APP_LINK]],   // the preview and the print fallback
     ['netlify/functions/quote-pdf.mjs',                   null,                                   [...APP, ...APP_LINK]],
+    ['netlify/functions/_quotePdf.mjs',                   null,                                   [...APP, ...APP_LINK]],   // the PDF's layout (§0.235)
     ['netlify/functions/quote-email.mjs',                 null,                                   [...APP, ...APP_LINK]],
     ['netlify/functions/send-email.mjs',                  ['customerLayout'],                     [...APP, ...APP_LINK]],
     ['netlify/functions/send-email.mjs',                  ['emailTemplates.customerAppointmentConfirmed', 'emailTemplates.customerTechOnTheWay'], [...APP, ...APP_LINK]],
@@ -220,7 +221,9 @@ test('the PDF renders where it is deployed: pdfkit stays outside the quote-pdf b
     assert.ok(toml.includes('[functions."quote-pdf"]'), 'REGRESSION (§0.234): the quote PDF\'s function block is gone');
     assert.ok(block.includes('  node_bundler = "esbuild"') && block.includes('  external_node_modules = ["pdfkit"]'),
         'REGRESSION (§0.234): pdfkit bundled into the quote PDF again — no standard font, every PDF a 500');
-    assert.ok(read('netlify/functions/quote-pdf.mjs').includes("import PDFDocument from 'pdfkit';"), 'the module the block keeps whole');
+    // Since §0.235 pdfkit is imported by the layout the handler imports; the block's external applies to the whole bundle.
+    assert.ok(read('netlify/functions/quote-pdf.mjs').includes("import { buildPDF } from './_quotePdf.mjs';")
+        && read('netlify/functions/_quotePdf.mjs').includes("import PDFDocument from 'pdfkit';"), 'the module the block keeps whole, through the layout');
 });
 
 test('the suites: this file is graded by the harness', () => {

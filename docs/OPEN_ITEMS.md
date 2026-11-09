@@ -636,14 +636,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   caught, exit 0 — state §0.229); §0.230-§0.233 by their one scoped run
   (5 Nov, 3,428/3,428) and the full run of 5–6 Nov before their ship, on
   `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233).
-- **The quote PDF on the deployed sites — §0.234's netlify.toml block,
-  proven on localhost only** (state §0.234): dev and prod run the bundle
-  that answered 500 (dev, 9 Nov: an authorized probe of the deployed
-  quote-pdf, 500; prod: no call in seven days). After the push to dev:
-  render a quote through accelerep.netlify.app's quote-pdf (signed in,
-  writes nothing) and read the PDF back; after the ship, the same on
-  salespipelinetracker.com. Until then the Quotes tab's Download falls
-  back to its print copy.
+- **The quote PDF on prod — after the next ship** (state §0.234, §0.235):
+  dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
+  Q-2026-001 rendered there as Karen and read back — 200, QA's name,
+  address and contact, nothing of the app's — and two pages, the second
+  holding only its number: §0.235, built 9 Nov, not yet pushed). After
+  §0.235's push: the same render on dev, counting its pages; after the
+  ship, on salespipelinetracker.com. Until then prod's Download falls
+  back to its print copy (no call to prod's quote-pdf in seven days).
 - **§0.234's TEST values in Accelerep QA, Jeff's to clear if he wishes**
   (its browser check, 9 Nov): Settings → Company profile — display name
   "TEST Branding Co", "1 TEST Way", Austin, TX 78701, 512-555-0134,
@@ -812,14 +812,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   customer-facing output — the preview, the PDF, the quote email, the
   dispatch customer emails' shared layout, where a customer's reply goes
   — and the census). **Built 9 Nov (state §0.234; guide §18b117), its
-  browser check PASSED as Jeff and as Karen — NOT committed; harness
-  deferred**: one rule names the org (the Company profile, else its Clerk
+  browser check PASSED as Jeff and as Karen; committed `f21f3ff`; pushed
+  to dev 9 Nov after its scoped run (`ec4204e..b494e03`), its PDF
+  rendered there as Karen**: one rule names the org (the Company profile, else its Clerk
   name), read by the server from the caller's org; the preview, PDF,
   print copy and emails carry no app name and no link into the app; sent
   as the org, the reply to the rep or the support email; Edit brand a
   look; and the quote PDF, which answered 500 everywhere (pdfkit bundled
-  without its fonts — Jeff: "Fold it in"), renders again. Strike this
-  once it ships.
+  without its fonts — Jeff: "Fold it in"), renders again. Its pages (a
+  page for the quote number alone, a long quote in fragments, the address
+  under a wrapped quote name): state §0.235, built 9 Nov, not yet pushed.
+  Strike this once both ship.
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
   documentation, not tried). Calendar access is a "sensitive" scope.
@@ -4295,6 +4298,25 @@ to add meetings. Nothing in the app adds a meeting to Google:
   after the list read again answers (`await load()` first).
 
 ### 4.8 Other UI
+
+- **The quote PDF's date is the server's day, not the org's** (§0.235's
+  review, 9 Nov; the function host's timezone not read): the footer's date
+  is `new Date().toLocaleDateString('en-US', …)` on the host
+  (`netlify/functions/_quotePdf.mjs`). If Netlify runs functions in UTC, a
+  quote downloaded in a Chicago evening is dated the next day. Whether an
+  org's timezone is stored anywhere was not read; the browser's date sent
+  with the request is the other way.
+- **The quote PDF prints text outside WinAnsi as other glyphs** (§0.235's
+  review, 9 Nov, rendered): an emoji prints as Latin letters ("Thanks 😀"
+  → "Thanks Ø=Þ"); CJK notes print as Latin glyphs and never wrap (pdfkit
+  measures each as zero wide), running off the page's right edge. An em
+  dash and "é" print right. pdfkit's standard fonts hold no more; the fix
+  is an embedded Unicode font — with the brand look (§3.5).
+- **The quote PDF draws the org's name, the status, the figures and the
+  footer without `printable`** (§0.235, 9 Nov): a tab or control
+  character in the org's display name would garble its run, as one did in
+  the notes. The notes, product names, quote name, address lines and meta
+  values are covered (`_quotePdf.mjs` `printable`).
 
 - **Reports' Activity History declares eleven sub-components inside
   itself** (the cleanup batch's design, 18 Oct, §1 row P40's eighth item;

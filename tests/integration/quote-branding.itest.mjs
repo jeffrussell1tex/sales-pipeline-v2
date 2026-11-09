@@ -188,6 +188,8 @@ test('PDF: the caller\'s org\'s name, address and contact — a body naming anot
     assert.equal(pdf.author, 'Alpha Quotes & Co', 'the PDF\'s Author is the org');
     for (const w of B_WORDS) assert.ok(!pdf.all.includes(w), `REGRESSION (R2): the body's profile reached the PDF — "${w}"`);
     assert.ok(!APP_WORDS.test(pdf.all) && !APP_WORDS.test(pdf.raw), 'REGRESSION (§0.234): the app\'s name or address on a customer\'s PDF');
+    // Through the handler, one page: until §0.235 the quote number made a second page on every quote (dev, 9 Nov).
+    assert.equal(pdf.raw.match(/\/Type \/Pages\s*\/Count (\d+)/)?.[1], '1', 'REGRESSION (§0.235): a short quote is more than one page');
 });
 
 test('PDF: no display name — the org\'s Clerk name; Clerk down — no name line and still a PDF; never the app\'s', async () => {
