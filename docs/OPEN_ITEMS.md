@@ -456,8 +456,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    §0.233), the last: the document picker at a place of its own, the people
    chooser's list a popover, every inline Escape in src checking the mark.
    **All four built and pushed to dev 5 Nov** (`2942d6c..e1eb8bf`; the one
-   scoped run first, 3,428/3,428 caught; Tests GREEN); not yet shipped — the
-   next prod ship takes the full run first (§2.2).
+   scoped run first, 3,428/3,428 caught; Tests GREEN); **SHIPPED 9 Nov, the
+   forty-fifth ship** (`d43c16f..6d8fecb`; the full run first, 4,301/4,301
+   caught — state §0.233).
 4. **Deal data** (§4.2):
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
@@ -682,9 +683,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   none) and holds such a deal — at most the Undos in which the deal rule
   would leave a deal where it is rather than put it on a site (Jeff, 18
   Oct: "Leave such deals and count them"; UKG's 6 deals on sites, §2.4).
-- **Reload every app tab opened before the forty-fourth ship** (Deployed:
-  prod 17:55 UTC 4 Nov — §0.208-§0.229, each on dev from the push its section
-  records; it covers the forty-third's, dev 20:48 UTC, prod 20:51 UTC, 18
+- **Reload every app tab opened before the forty-fifth ship** (Deployed:
+  prod 15:19 UTC 9 Nov — §0.230-§0.233, on dev from 09:30 UTC 5 Nov; it
+  covers the forty-fourth's, prod 17:55 UTC 4 Nov — §0.208-§0.229, each on
+  dev from the push its section records — the forty-third's, dev 20:48 UTC, prod 20:51 UTC, 18
   Oct, the forty-second's, 17 Oct 18:36 UTC, the forty-first's, 17 Oct 13:06
   UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16 Oct 03:28
   UTC, the thirty-eighth's, 15 Oct 17:59 UTC, the thirty-seventh's, 15 Oct
@@ -696,6 +698,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   Manager tab's quota board, claims list, SPIFF board and forecast ledger, a
   saved report's Pin, the backup page's import window, the Fiscal year page,
   and the Accounts and Contacts tabs' lists among them. A tab opened before
+  its site's §0.230-§0.233 deploy and not reloaded keeps the in-tab layers
+  from before them: an Escape closes the rail or window under a layer, and
+  App's letter and number shortcuts fire under one. A tab opened before
   its site's §0.208-§0.229 deploy and not reloaded keeps the screens from
   before them: among them, its settings saves send no revision token, which
   the server takes unchecked (§0.224, Q6), so it can still put back a list
@@ -732,7 +737,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   unpinned elsewhere, as before); its import window closes on an accepted
   restore's answer and reads only "Import failed" on a refused one, so
   nothing the restore says is read. Reload, then strike this.
-- Nothing else open. The forty-fourth ship (4 Nov, 17:55 UTC: §0.208-§0.229,
+- Nothing else open. The forty-fifth ship (9 Nov, 15:19 UTC: §0.230-§0.233,
+  Escape in the tabs, its four batches pushed to dev together 5 Nov; prod in
+  one push), the forty-fourth ship (4 Nov, 17:55 UTC: §0.208-§0.229,
   every batch since the forty-third, each pushed to dev before it as its
   section records; prod in one push), the forty-third ship (18 Oct, 20:51
   UTC: §0.207, a merge's Undo on screen — the merge Undo batch; dev and prod
@@ -1292,8 +1299,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   lists do, or its load is taken with `requestOrg` / `stillOrg` (guide
   §18b68).
 - **In-tab layers without Escape.** **Built in four batches, 4–5 Nov (state
-  §0.230–§0.233) — pushed to dev 5 Nov (`2942d6c..e1eb8bf`), not yet
-  shipped.**
+  §0.230–§0.233) — pushed to dev 5 Nov (`2942d6c..e1eb8bf`), SHIPPED 9
+  Nov, the forty-fifth ship.**
   - Re-inventoried 4 Nov over f885df4 (docs/design/escape-tabs/DESIGN.md §2;
     its counts replace the 9 Oct ones): 18 layers in the CRM tabs, 8 in
     Dispatch, 45 in Settings, plus inline Escapes. Most have no Escape; the
