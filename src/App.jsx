@@ -338,7 +338,7 @@ function App() {
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
         loadOpportunities,
-        handleDeleteDeals, handleSave, completeLostSave, saveDealComments,
+        handleDeleteDeals, handleSave, completeLostSave, saveDealNote,
     } = useOpportunities(_deps);
 
     const {
@@ -1841,7 +1841,7 @@ dbFetch('/.netlify/functions/users?me=true')
         handleDeleteActivity,
         handleLogActivity,
         handleSaveActivity,
-        saveDealComments,
+        saveDealNote,
         loadOpportunities,
         loadAccounts,
         loadContacts,

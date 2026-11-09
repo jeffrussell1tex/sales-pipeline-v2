@@ -149,7 +149,9 @@ test('REGRESSION — a partial PUT updates its fields and preserves the rest', a
     assert.equal(Number(row.arr),     250000,           'ARR must survive a stage-only PUT');
     assert.equal(row.notes,           'precious notes', 'notes must survive a stage-only PUT');
     assert.equal(row.pipelineId,      'pipe_custom',    "pipelineId must not reset to 'default'");
-    assert.equal(row.stageHistory.length, 1,            'stage history must survive (the field no payload carried)');
+    assert.equal(row.stageHistory.length, 2,            'stage history must survive (the field no payload carried) — and, since §0.236, the move appended by the server');
+    assert.deepEqual(row.stageHistory[0], { stage: 'Discovery', date: '2026-08-01', author: 'seed' }, 'the stored history kept as stored');
+    assert.deepEqual([row.stageHistory[1].prevStage, row.stageHistory[1].stage], ['Discovery', 'Proposal'], 'the move, from the stored stage');
     assert.equal(row.comments.length, 1,                'Team Notes must survive a partial PUT');
     assert.deepEqual(row.contactIds,  ['itest_opps_ct_1'],         'linked contacts must survive a partial PUT');
     assert.equal(row.ownerId, REP_A,  'ownership must survive a PUT that never mentioned salesRep (18b13)');

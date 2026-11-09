@@ -65,13 +65,15 @@ test('THE GUARD: each hook sends an edit through sentBody — never the data who
     for (const [file, fn, name, list] of HOOKS) {
         const src = code(read(file));
         assert.ok(src.includes("import { sentBody, shownRow } from '../utils/leaveOut.js';"), file);
-        assert.ok(src.includes(`dbFetch('/.netlify/functions/${fn}', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(${name})) })`), `${file}: the edit's PUT`);
+        // A deal's edit also leaves out its notes and stage history (dealBody, state §0.236).
+        const sent = fn === 'opportunities' ? `dealBody(sentBody(${name}))` : `sentBody(${name})`;
+        assert.ok(src.includes(`dbFetch('/.netlify/functions/${fn}', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(${sent}) })`), `${file}: the edit's PUT`);
         assert.equal(count(src, `body: JSON.stringify(${name}) })`), 0, `${file}: REGRESSION — a PUT of the data whole sends the untouched links`);
         assert.ok(src.includes(list), `${file}: the list takes the server's row, else the data without the names`);
     }
     const opps = code(read('src/hooks/useOpportunities.js'));
-    assert.ok(opps.includes("setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));\n            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(updatedOpp)) });"),
-        'the Closed Lost dialog sends the deal as the window left it');
+    assert.ok(opps.includes("setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));\n            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });"),
+        'the Closed Lost dialog sends the deal as the window left it — without its notes or stage history (§0.236)');
 });
 
 test('THE GUARD: each of the four save screens builds its Save through leaveOut, once; the key is leaveOut.js\'s alone', () => {

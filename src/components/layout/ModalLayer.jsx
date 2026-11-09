@@ -130,7 +130,7 @@ export default function ModalLayer() {
         leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
-        handleDeleteActivity, handleDeleteTask, handleCompleteTask, handleLogActivity, saveDealComments,
+        handleDeleteActivity, handleDeleteTask, handleCompleteTask, handleLogActivity, saveDealNote,
         addAudit, softDelete, showConfirm, loadOpportunities, loadAccounts,
         loadContacts, loadTasks, loadActivities,
         setActiveTab, activeTab,
@@ -139,15 +139,14 @@ export default function ModalLayer() {
         escapeBlocked,
     } = useApp();
 
-    // A deal's team notes, saved as they change (state §0.177): the list on screen
-    // and the open deal take the notes once the server has them.
-    const saveNotes = async (oppId, change) => {
+    // A deal's team notes, saved as they change (state §0.177), one operation at a time (state §0.236): the
+    // server applies it to the notes as stored. The list on screen and the open deal take the notes the server
+    // answers — on a refusal too, so a note deleted since, or written since, shows as stored.
+    const saveNotes = async (oppId, note) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-        const deal = (opportunities || []).find(o => o.id === oppId);
-        const next = change(deal?.comments || []);
-        const r = await saveDealComments(oppId, next);
+        const r = await saveDealNote(oppId, note);
         if (!stillOrg(askedOrg)) return stopped();
-        if (r.ok) setEditingOpp(prev => (prev && prev.id === oppId ? { ...prev, comments: next } : prev));
+        if (Array.isArray(r.comments)) setEditingOpp(prev => (prev && prev.id === oppId ? { ...prev, comments: r.comments } : prev));
         return r;
     };
 
@@ -205,12 +204,12 @@ export default function ModalLayer() {
                     // or back, on reload. Each answers { ok, error } for the modal to show.
                     onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: 'id_' + crypto.randomUUID(), createdAt: new Date().toISOString(), author: currentUser || '' })}
                     onDeleteActivity={(activityId) => handleDeleteActivity(activityId)}
-                    onSaveComment={(oppId, comment) => saveNotes(oppId, (list) => [...list, comment])}
-                    onEditComment={(oppId, commentId, newText) => saveNotes(oppId, (list) => list.map(c =>
-                        c.id === commentId ? { ...c, text: newText, edited: true, editedAt: new Date().toISOString() } : c))}
+                    currentUserId={currentUserId}
+                    onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}
+                    onEditComment={(oppId, commentId, newText) => saveNotes(oppId, { op: 'edit', id: commentId, text: newText })}
                     onDeleteComment={(oppId, commentId) => new Promise((answer) => {
                         // Asked first — a cancel never answers, and the modal shows nothing.
-                        showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, (list) => list.filter(c => c.id !== commentId)).then(answer); });
+                        showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });
                     })}
                     onClose={() => { document.activeElement?.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}

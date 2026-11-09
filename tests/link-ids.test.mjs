@@ -261,7 +261,9 @@ test('THE GUARD: every single write asks checkLinks — a create with nothing he
     const at = (s, a, b) => s.indexOf(a) >= 0 && s.indexOf(b, s.indexOf(a)) > s.indexOf(a);   // b after a — the next of it
     const c = fn('contacts');
     assert.ok(c.includes('const linked = await checkLinks(CONTACT_LINKS, data, null, orgId);'));
-    assert.ok(c.includes("const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });"), 'E2: the survivor is what is stored');
+    // Since §0.236 a delete's Undo keeps its owner by id (restoredOwner); both owners' branches store the survivor.
+    assert.ok(c.includes("? restoredOwner(sanitize({ ...data, ...linked.set }), data.ownerId, await rosterUserById(data.ownerId, orgId), ownerNameKeyFor('contact'))")
+        && c.includes(": await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });"), 'E2: the survivor is what is stored');
     assert.ok(at(c, 'if (forbiddenPut) return forbiddenPut;', 'const linked = await checkLinks(CONTACT_LINKS, data, target, orgId);'));
     assert.ok(at(c, 'const linked = await checkLinks(CONTACT_LINKS, data, target, orgId);', 'const [upserted] = await db.insert(contacts)'));
     assert.ok(c.includes('Object.assign(clean, linked.set);\n            Object.assign(updateData, linked.set);'));

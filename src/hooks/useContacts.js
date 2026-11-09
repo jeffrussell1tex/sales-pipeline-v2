@@ -96,14 +96,16 @@ export function useContacts(deps) {
                         const have = new Set(prev.map(c => c.id));
                         return [...prev, ...deleted.filter(c => !have.has(c.id))];
                     });
-                    // Undo re-POSTs each; a refused restore takes it off the screen again and says so.
+                    // Undo re-POSTs each, marked a restore (state §0.236; Jeff's Q4): the server keeps the owner it
+                    // was stored with, by id — never the member pressing Undo. A refused restore takes it off the
+                    // screen again and says so.
                     const notRestored = [];
                     for (const c of deleted) {
                         if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
                         const rr = await dbWrite('/.netlify/functions/contacts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(c),
+                            body: JSON.stringify({ ...c, restore: true }),
                         });
                         if (!rr.ok) notRestored.push({ c, error: rr.error });
                     }

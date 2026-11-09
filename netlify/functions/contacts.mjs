@@ -6,8 +6,10 @@ import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
+    rosterUserById,
 } from './_lib.mjs';
-import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
+import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor } from './_ownership.mjs';
+import { restoredOwner } from '../../src/utils/restoreOwner.js';
 import { deletionAudit } from './_audit.mjs';
 import { openDealNamingContact, openDealNamingAnyContact, openDealRefusal } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
@@ -139,7 +141,13 @@ export const handler = async (event) => {
             // Each link it names is one of this org's (state §0.199).
             const linked = await checkLinks(CONTACT_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
-            const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });
+            // A delete's Undo marks its POST a restore (state §0.236; Jeff's Q4 "Any role, by id"): the owner it was
+            // stored with, by id — a member of THIS org, else none and the name with it — never the caller, never a
+            // name looked up again. For any role that may delete a contact (reps delete their own and unassigned
+            // ones); a forged mark gains nothing a create naming any member's name does not already give.
+            const newRow = data.restore === true
+                ? restoredOwner(sanitize({ ...data, ...linked.set }), data.ownerId, await rosterUserById(data.ownerId, orgId), ownerNameKeyFor('contact'))
+                : await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(contacts).values({ ...newRow, orgId }).onConflictDoNothing({ target: contacts.id }).returning();
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That contact id is already in use.' }) };

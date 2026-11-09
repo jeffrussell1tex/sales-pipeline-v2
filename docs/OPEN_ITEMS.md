@@ -472,7 +472,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    note one operation the server applies; Q2 the server stamps the author
    and time, only the author edits or deletes; Q3 stage history the
    server's, as the CSV path's; Q4 a contact's Undo a restore keeping the
-   stored owner by id, for any role that may delete it. Not built.
+   stored owner by id, for any role that may delete it. **Built 9 Nov
+   (state §0.236; guide §18b119), its browser check PASSED as Karen — NOT
+   committed; harness deferred**: a note one operation the server applies
+   (compare-and-set), stamped by the server, only its author changing it; a
+   whole list refused; a stage move appended to the stored history in the
+   write; a contact's Undo a restore keeping its stored owner by id. Strike
+   this once it ships.
 5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
@@ -654,6 +660,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   §0.235's push: the same render on dev, counting its pages; after the
   ship, on salespipelinetracker.com. Until then prod's Download falls
   back to its print copy (no call to prod's quote-pdf in seven days).
+- **§0.236's TEST data in Accelerep QA, Jeff's to clear if he wishes** (its
+  browser check, 9 Nov — state §0.236): on the deal "TEST §0.209 deal", a
+  team note "TEST 0.236 note from tab A", Next Steps "TEST 0.236 saved from
+  the stale tab", its stage Qualification (was Discovery) with one history
+  entry; the contact "TEST Undo 0236", unassigned.
 - **§0.234's TEST values in Accelerep QA, Jeff's to clear if he wishes**
   (its browser check, 9 Nov): Settings → Company profile — display name
   "TEST Branding Co", "1 TEST Way", Austin, TX 78701, 512-555-0134,
@@ -1831,14 +1842,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Recommended: keep (each is rare, or data from before the rule), but the
   merge's Undo's shapes by name, which have no age limit, are batch 3's
   to close (Jeff, 18 Oct: "Ship as is, file the edge" — §4.7).
-- **A deal's notes are saved as the whole list.** Two people saving at once
-  keep the last list, so a note is dropped. Recommended: a server-side
-  append, or a version check. §0.177 (a).
-- **A contact's Undo can change its owner.** A re-POST with no owner is
-  stamped with whoever pressed Undo. §0.178 (b). Since §0.198 an account's
-  Undo (an Admin's restore) keeps the stored owner — an unassigned account
-  stays unassigned, and one whose owner has left the org since comes back
-  unassigned with no owner name — and meets no territory rule.
 - **The deal PUT's "opportunity updated" email compares the rep's name to
   the caller's Clerk id**, so a rep with that email on is emailed about their
   own edits. §0.176 (c).
@@ -4664,6 +4667,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **The late-answer guard counts an org check on another branch** (§0.236's
+  harness run, 9 Nov — read in tests/late-answers.test.mjs scanText): a late
+  set or write is cleared when an org check appears anywhere in the text
+  between the last await and it — inside a `catch` that only runs on a
+  network failure too. `saveDealNote`'s list set, its check deleted, passed
+  the guard (the hook's own test now pins the check). Recommended: clear a
+  point only by a check that runs on its path (not on another branch of an
+  if, a ?:, a try's catch).
 - **The harness: the likely tests first, the full suites only for a survivor**
   (recommended 4 Nov, Jeff: "apply your recommendation to the project rules"
   — planned tooling, its own small batch, not started): each mutant now runs

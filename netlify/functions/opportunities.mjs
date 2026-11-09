@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { opportunities, users, accounts } from '../../db/schema.js';
-import { eq, asc, and, inArray } from 'drizzle-orm';
+import { eq, asc, and, inArray, isNull, sql } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 // The read rule, imported directly so a suite that mocks auth.mjs still runs it.
 import { dealVisibleTo } from '../../src/utils/roles.js';
@@ -13,11 +13,14 @@ import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
+    resolveCaller, memberNamesOf,
 } from './_lib.mjs';
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
-import { applyStageChanges } from './_stage.mjs';
+import { applyStageChanges, moveDayOf, stageMoveOf } from './_stage.mjs';
+// A deal's team notes, one operation at a time (state §0.236): the rules, shared with the deal window.
+import { noteOpOf, applyNoteOp, notesOf, NOTE_WORDS } from '../../src/utils/dealNotes.js';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
@@ -26,6 +29,15 @@ import { checkLinks, checkBulkLinks } from './_links.mjs';
 // The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
 // its account is accountLink's, below).
 const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }];
+
+// The stored notes still as read — the compare of a note's compare-and-set (state §0.236). jsonb equality ignores
+// key order; a row that stored no list compares as SQL NULL.
+const notesStill = (stored) => (stored == null
+    ? isNull(opportunities.comments)
+    : sql`${opportunities.comments} = ${JSON.stringify(stored)}::jsonb`);
+// A stage move's entry appended to the history AS STORED, in the write itself (state §0.236) — never a list a
+// body sent, never one read before the write.
+const historyWith = (entry) => sql`(CASE WHEN jsonb_typeof(${opportunities.stageHistory}) = 'array' THEN ${opportunities.stageHistory} ELSE '[]'::jsonb END) || ${JSON.stringify([entry])}::jsonb`;
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -398,6 +410,9 @@ export const handler = async (event) => {
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // No row writes a deal's notes or its stage history (state §0.236): the notes go one at a time
+                // (below), the history is the server's (applyStageChanges). An import's overwrite sends neither.
+                if (data.some(d => d && ('comments' in d || 'stageHistory' in d))) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };
                 // Reps may only overwrite their own or unassigned deals — the same
                 // check the single-record path applies below, resolved once for
                 // the batch.
@@ -502,6 +517,61 @@ export const handler = async (event) => {
                 table: opportunities, entity: 'opportunity', id: data.id, orgId, userId, userRole, headers, row: existing,
             });
             if (forbiddenPut) return forbiddenPut;
+
+            // ── A team note: one operation on the notes as stored (state §0.236; Jeff's Q1, Q2) ──
+            // { id, note: { op: 'add', text } | { op: 'edit', id, text } | { op: 'delete', id } }, alone. The server
+            // stamps the author (the caller's member name and id), the time and the note's id; only its author edits
+            // or deletes it. Applied by compare-and-set against the list as read — a write that meets a list moved
+            // since reads it again and applies the operation to that — so two posts at once both land, and nothing
+            // is ever written back whole. A refusal answers the notes as stored, for the screen to show.
+            if ('note' in data) {
+                if (Object.keys(data).some(k => k !== 'id' && k !== 'note')) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.alone }) };
+                const op = noteOpOf(data.note);
+                if (op.error) return { statusCode: 400, headers, body: JSON.stringify({ error: op.error }) };
+                const me = await resolveCaller(userId, orgId);
+                const names = (await memberNamesOf(orgId)).map(u => u.name).filter(Boolean);
+                let stored = existing;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });
+                    if (applied.error) return { statusCode: applied.status, headers, body: JSON.stringify({ error: applied.error, comments: notesOf(stored.comments) }) };
+                    const [written] = await db.update(opportunities)
+                        .set({ comments: applied.list, updatedAt: new Date() })
+                        .where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments)))
+                        .returning();
+                    if (written) {
+                        // The deal's rep hears of a note by someone else (the "new note" email, as before §0.236).
+                        const rep = written.salesRep;
+                        if (op.op === 'add' && rep && applied.note.author !== rep) {
+                            await maybeEmail(rep, 'commentAdded', {
+                                repName:       rep,
+                                dealName:      written.opportunityName || 'Deal',
+                                account:       written.account,
+                                comment:       applied.note.text || '',
+                                commentBy:     applied.note.author || userId,
+                                opportunityId: written.id,
+                            }, orgId);
+                        }
+                        return { statusCode: 200, headers, body: JSON.stringify({ opportunity: written, note: applied.note }) };
+                    }
+                    [stored] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));
+                    if (!stored) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
+                }
+                return { statusCode: 409, headers, body: JSON.stringify({ error: NOTE_WORDS.busy, comments: notesOf(stored.comments) }) };
+            }
+            // A whole notes list is never written (state §0.236): a screen's list is its copy, and a copy older than
+            // the stored list erased the notes posted since.
+            if ('comments' in data) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };
+            // The stage history and its date are the server's (state §0.236; Jeff's Q3): a body's are never written.
+            // A move — a stage sent that is not the stored one — appends its entry to the history as stored, in the
+            // write below, dated the member's day where it is within a day of the server's.
+            const sentDay = data.stageChangedDate;
+            delete data.stageHistory;
+            delete data.stageChangedDate;
+            const move = stageMoveOf(existing, data, {
+                day: moveDayOf(sentDay, new Date().toISOString().slice(0, 10)),
+                author: (await resolveCaller(userId, orgId)).name || '',
+                now: new Date().toISOString(),
+            });
             const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             // Each contact it names anew is one of this org's; one the deal already holds is not asked
@@ -510,7 +580,6 @@ export const handler = async (event) => {
             if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
             Object.assign(data, people.set);
             const previousStage    = existing?.stage    || null;
-            const previousComments = existing?.comments || [];
 
             // The payload is sanitized OVERLAID ON THE STORED ROW (the
             // leads/users merge pattern): a key sent is applied — including an
@@ -541,12 +610,15 @@ export const handler = async (event) => {
             // mentioned salesRep leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
-            const { id, ...updateData } = clean;
+            if (move) { clean.stageChangedDate = move.date; clean.stageHistory = [...notesOf(existing.stageHistory), move]; }
+            // The notes and the history are never in the update (state §0.236): a note posted, or a move appended,
+            // between this request's read and its write would be written over. A move appends in SQL, to what is stored.
+            const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
             const [upserted] = await db.insert(opportunities)
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({
                     target: opportunities.id, setWhere: eq(opportunities.orgId, orgId),
-                    set: { ...updateData, updatedAt: new Date() }
+                    set: { ...updateData, ...(move ? { stageHistory: historyWith(move) } : {}), updatedAt: new Date() }
                 })
                 .returning();
 
@@ -582,25 +654,9 @@ export const handler = async (event) => {
                 }
             }
 
-            // Email: new comment added
-            const newComments = (upserted.comments || []).filter(
-                c => !previousComments.some(p => p.id === c.id)
-            );
-            for (const comment of newComments) {
-                if (rep && comment.author !== rep) {
-                    await maybeEmail(rep, 'commentAdded', {
-                        repName:       rep,
-                        dealName:      upserted.opportunityName || 'Deal',
-                        account:       upserted.account,
-                        comment:       comment.text || '',
-                        commentBy:     comment.author || userId,
-                        opportunityId: upserted.id,
-                    }, orgId);
-                }
-            }
-
-            // Email: general update — only if no stage change and no new comment to avoid double-emailing
-            if (rep && !stageChanged && newComments.length === 0 && rep !== userId) {
+            // Email: general update — only if no stage change, to avoid double-emailing. A note is never part of
+            // this save (state §0.236): the "new note" email is the note branch's, above.
+            if (rep && !stageChanged && rep !== userId) {
                 await maybeEmail(rep, 'opportunityUpdated', {
                     repName:       rep,
                     dealName:      upserted.opportunityName || 'Deal',

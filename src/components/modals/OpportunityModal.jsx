@@ -15,6 +15,7 @@ import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, 
 import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, isHiddenAccount, HIDDEN_ACCOUNT_WORDS } from '../../utils/dealAccount.js';
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
+import { mayChangeNote } from '../../utils/dealNotes.js';
 import { quarterOf, fiscalStartOf } from '../../utils/quarters.js';
 import { painPointGroups } from '../../utils/painPoints.js';
 
@@ -992,7 +993,7 @@ function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settin
 // ─────────────────────────────────────────────────────────────
 export default function OpportunityModal({
     opportunity, accounts, contacts, settings, pipelines, activePipelineId,
-    currentUser, activities, tasks, onSaveActivity, onDeleteActivity,
+    currentUser, currentUserId, activities, tasks, onSaveActivity, onDeleteActivity,
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave,
     onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
@@ -1208,18 +1209,8 @@ export default function OpportunityModal({
     };
     const handleSubmit = (e) => { e.preventDefault(); saveDeal(); };
 
-    // ── @mention helpers (fully preserved) ───────────────────
-    const extractMentions = (text) => {
-        if (!text) return [];
-        const found = [];
-        const parts = text.split('@');
-        for (let i = 1; i < parts.length; i++) {
-            for (const name of [...teamMembers].sort((a, b) => b.length - a.length)) {
-                if (parts[i].startsWith(name)) { found.push(name); break; }
-            }
-        }
-        return [...new Set(found)];
-    };
+    // ── @mention helpers ─────────────────────────────────────
+    // A note's mentions are the server's since §0.236 (src/utils/dealNotes.js mentionsIn, the same rule).
     const renderCommentText = (text) => {
         if (!text) return null;
         return text.split(/(@[\w][\w\s]*)/g).map((part, i) => {
@@ -1303,12 +1294,12 @@ export default function OpportunityModal({
     // Team notes are saved as they are posted, edited or deleted (state §0.177) —
     // they set the deal on screen only. A failure keeps the draft, or the edit, and
     // says why; the delete asks first (ModalLayer), and a cancel answers nothing.
+    // The text alone goes (state §0.236): the server writes the author, the time, the id and the mentions.
     const postNote = async () => {
         const text = commentDraft.trim();
         if (!text || noteState.saving || !onSaveComment) return;
-        const comment = { id: 'c_' + Date.now(), text, author: currentUser || 'Anonymous', timestamp: new Date().toISOString(), mentions: extractMentions(text) };
         setNoteState({ saving: true, error: null });
-        const r = await onSaveComment(opportunity.id, comment);
+        const r = await onSaveComment(opportunity.id, text);
         if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }
         setNoteState({ saving: false, error: null });
         setCommentDraft(''); setMentionQuery(null);
@@ -2139,7 +2130,7 @@ export default function OpportunityModal({
                                             {comments.length > 0 && (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
                                                     {comments.map(c => {
-                                                        const isOwn = c.author === currentUser;
+                                                        const isOwn = mayChangeNote(c, { id: currentUserId, name: currentUser });   // the server's rule (state §0.236)
                                                         const ts = new Date(c.timestamp), now = new Date();
                                                         const diffMs = now - ts, diffMins = Math.floor(diffMs / 60000), diffHours = Math.floor(diffMs / 3600000), diffDays = Math.floor(diffMs / 86400000);
                                                         const timeAgo = diffMins < 1 ? 'just now' : diffMins < 60 ? `${diffMins}m ago` : diffHours < 24 ? `${diffHours}h ago` : diffDays < 7 ? `${diffDays}d ago` : ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: ts.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });

@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg, stopped, NETWORK_ERROR } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
+import { dealBody } from '../utils/dealNotes.js';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -125,7 +126,7 @@ export function useOpportunities(deps) {
             stageHistory: stageChanged
                 ? [...(prevOpp?.stageHistory || []), stageHistoryEntry]
                 : (prevOpp?.stageHistory || []),
-            comments: prevOpp?.comments || [],
+            comments: prevOpp?.comments || [],   // shown until the server answers; never sent on an edit (dealBody, state §0.236)
             lostReason:   formData.lostReason   || prevOpp?.lostReason   || '',
             lostCategory: formData.lostCategory || prevOpp?.lostCategory || '',
             lostDate:     formData.lostDate     || prevOpp?.lostDate     || '',
@@ -151,7 +152,7 @@ export function useOpportunities(deps) {
         if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
             setOppModalSaving(true); setOppModalError(null);
-            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(updatedOpp)) })   // the links nobody touched left out (§0.198)
+            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) })   // the links nobody touched left out (§0.198); never the notes or the stage history — the server keeps the one and writes the other (§0.236)
                 .then(async res => {
                     const data = await res.json();
                     if (!stillOrg(askedOrg)) return;
@@ -216,7 +217,7 @@ export function useOpportunities(deps) {
         const enriched = {
             ...formData,
             lostReason, lostCategory, lostDate: today,
-            comments: prevOppRef?.comments || formData.comments || [],
+            comments: prevOppRef?.comments || formData.comments || [],   // shown until the server answers; never sent (dealBody, §0.236)
             stageHistory: formData.stageHistory || prevOppRef?.stageHistory || [],
         };
         // The write is awaited and checked before anything else happens. Previously
@@ -232,7 +233,7 @@ export function useOpportunities(deps) {
             const updatedOpp = { ...enriched, id: editingOppRef.id };
             const before = opportunities.find(o => o.id === editingOppRef.id);
             setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));
-            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(updatedOpp)) });   // as the deal window left it (§0.198)
+            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });   // as the deal window left it (§0.198); never the notes or the stage history (§0.236)
             if (!stillOrg(askedOrg)) return stopped();
             if (!r.ok) {
                 setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));   // never show what was not stored; nothing else is undone
@@ -261,25 +262,38 @@ export function useOpportunities(deps) {
 
     // A deal's team notes are saved the moment one is posted, edited or deleted
     // (state §0.177). They lived on the deal on screen until the deal was saved —
-    // closing the modal instead lost them on reload. The PUT merges over the stored
-    // row (§0.169), so it sends the notes alone.
-    const saveDealComments = async (oppId, comments) => {
+    // closing the modal instead lost them on reload.
+    //
+    // One operation at a time (state §0.236; Jeff's Q1, Q2): { op: 'add', text } | { op: 'edit', id, text } |
+    // { op: 'delete', id }. The server applies it to the notes as stored and stamps who and when; the list takes
+    // the notes the server answers — on a refusal too (a note deleted since, another's note), so the screen shows
+    // what is stored. It sent the deal's whole list, built from this screen's copy: a copy older than the stored
+    // list erased every note posted since.
+    const saveDealNote = async (oppId, note) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-        const r = await dbWrite('/.netlify/functions/opportunities', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: oppId, comments }),
-        });
+        let res, body = null;
+        try {
+            res = await dbFetch('/.netlify/functions/opportunities', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: oppId, note }),
+            });
+            try { body = await res.json(); } catch { body = null; }
+        } catch {
+            if (!stillOrg(askedOrg)) return stopped();
+            return { ok: false, error: NETWORK_ERROR };
+        }
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
-        if (!r.ok) return { ok: false, error: r.error };
-        setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments } : o)));
-        return { ok: true };
+        const notes = res.ok ? body?.opportunity?.comments : body?.comments;
+        if (Array.isArray(notes)) setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments: notes } : o)));
+        if (!res.ok) return { ok: false, error: body?.error || (res.status === 403 ? 'You do not have permission to make this change.' : `The server returned ${res.status}.`), comments: notes };
+        return { ok: true, comments: notes };
     };
 
     return {
         opportunities,
         setOpportunities,
-        saveDealComments,
+        saveDealNote,
         oppModalError,
         setOppModalError,
         oppModalSaving,

@@ -29,14 +29,15 @@ test('ModalLayer: the deal modal logs, deletes and notes through the hooks — n
     const props = between(src, '<OpportunityModal', 'onClose={() => {');
     assert.ok(props.includes("onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: 'id_' + crypto.randomUUID(), createdAt: new Date().toISOString(), author: currentUser || '' })}"));
     assert.ok(props.includes('onDeleteActivity={(activityId) => handleDeleteActivity(activityId)}'));
-    assert.ok(props.includes('onSaveComment={(oppId, comment) => saveNotes(oppId, (list) => [...list, comment])}'));
-    assert.ok(props.includes('onEditComment={(oppId, commentId, newText) => saveNotes(oppId, (list) => list.map(c =>'));
-    assert.ok(props.includes("showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, (list) => list.filter(c => c.id !== commentId)).then(answer); });"));
+    // Since §0.236 each is one operation the server applies (tests/deal-data.test.mjs holds the rule).
+    assert.ok(props.includes("onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}"));
+    assert.ok(props.includes("onEditComment={(oppId, commentId, newText) => saveNotes(oppId, { op: 'edit', id: commentId, text: newText })}"));
+    assert.ok(props.includes("showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });"));
     for (const setter of ['setActivities(', 'setOpportunities(']) assert.ok(!props.includes(setter), `${setter} in the deal modal's props`);
-    const notes = between(src, 'const saveNotes = async (oppId, change) => {', 'return (');
-    assert.ok(notes.includes('const r = await saveDealComments(oppId, next);'));
+    const notes = between(src, 'const saveNotes = async (oppId, note) => {', 'return (');
+    assert.ok(notes.includes('const r = await saveDealNote(oppId, note);'));
     assert.ok(notes.indexOf('if (!stillOrg(askedOrg)) return stopped();') < notes.indexOf('setEditingOpp('), 'the open deal takes the notes after the org check');
-    assert.ok(notes.includes('if (r.ok) setEditingOpp('), 'and only once the server has them');
+    assert.ok(notes.includes('if (Array.isArray(r.comments)) setEditingOpp('), 'and only the notes the server answered');
 });
 
 test('useActivities: a logged activity is POSTed and shown only once the server has it', () => {
@@ -66,16 +67,18 @@ test('App: useActivities gets the shared deps — softDelete and setUndoToast ar
     const app = read('src/App.jsx');
     assert.ok(app.includes('} = useActivities(_deps);'));
     assert.ok(!app.includes('useActivities({ showConfirm'), 'handed showConfirm alone');
-    for (const name of ['handleLogActivity,', 'saveDealComments,']) assert.ok(app.split(name).length - 1 >= 1, name);
+    for (const name of ['handleLogActivity,', 'saveDealNote,']) assert.ok(app.split(name).length - 1 >= 1, name);
 });
 
-test('useOpportunities: notes are PUT alone, and the list takes them only once the server has them', () => {
+test('useOpportunities: a note is PUT alone, one operation, and the list takes the notes the server answers — after the org check', () => {
     const src = read('src/hooks/useOpportunities.js');
-    const save = between(src, 'const saveDealComments = async (oppId, comments) => {', 'return { ok: true };');
+    const save = between(src, 'const saveDealNote = async (oppId, note) => {', 'return { ok: true, comments: notes };');
     assert.ok(save.includes("method: 'PUT',"));
-    assert.ok(save.includes('body: JSON.stringify({ id: oppId, comments }),'));
-    assert.ok(save.includes('if (!r.ok) return { ok: false, error: r.error };'), 'a refused PUT answers its error');
-    assert.ok(save.indexOf('if (!r.ok) return { ok: false, error: r.error };') < save.indexOf('setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments } : o)));'));
+    assert.ok(save.includes('body: JSON.stringify({ id: oppId, note }),'), 'the operation alone (state §0.236)');
+    assert.ok(/if \(!stillOrg\(askedOrg\)\) return stopped\(\);   \/\/ the deal modal was remounted by the switch\r?\n        const notes = res\.ok/.test(save), 'the org checked after the answer, before its notes are read');
+    assert.ok(save.indexOf('// the deal modal was remounted by the switch') < save.indexOf('setOpportunities('), 'and before the list is set');
+    assert.ok(save.includes('const notes = res.ok ? body?.opportunity?.comments : body?.comments;'), 'the notes as stored — on a refusal too');
+    assert.ok(save.includes("if (!res.ok) return { ok: false, error: body?.error"), 'a refused PUT answers its error');
 });
 
 test('OpportunityModal: the History tab and the notes wait for the save — a failure keeps what was typed and says why', () => {

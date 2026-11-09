@@ -91,6 +91,39 @@ export function resolveStageChange(row, prior, importDate) {
     return { changed, patch };
 }
 
+// ── A single save's stage move (state §0.236; docs/design/deal-data, Jeff's Q3 "Fold it in") ──
+//
+// Until §0.236 the deal window, the Closed Lost dialog and the Pipeline board's drag each sent the deal's WHOLE
+// stage history, built in the browser from its copy of the deal — loaded when the page opened. A tab left open
+// wrote its old history back on any save and dropped a stage move made elsewhere since. Now a single PUT's body
+// history and stage date are ignored; the server appends the move's entry to the history AS STORED (opportunities.mjs,
+// in the write itself), as resolveStageChange does for an import.
+
+// The day a move is dated: the day the screen sent (the member's own calendar day, as every screen has dated a
+// move) when it is a real yyyy-mm-dd within a day of the server's — else the server's. A body cannot date a move
+// to any other day.
+export function moveDayOf(sent, serverDay) {
+    const s = String(sent ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return serverDay;
+    const a = Date.parse(s + 'T00:00:00Z'), b = Date.parse(serverDay + 'T00:00:00Z');
+    if (!Number.isFinite(a) || !Number.isFinite(b) || new Date(a).toISOString().slice(0, 10) !== s) return serverDay;
+    return Math.abs(a - b) <= 86400000 ? s : serverDay;
+}
+
+/**
+ * The entry a single save's stage move appends — or null when the body moves no stage: no stage sent, a blank
+ * one, the stage it has, or a deal with no stage stored (as an import reads it).
+ * @param {Object} stored  the stored row: { stage }
+ * @param {Object} body    the PUT's body
+ * @param {Object} at      { day: yyyy-mm-dd, author: the caller's member name, now: ISO string }
+ */
+export function stageMoveOf(stored, body, { day, author, now }) {
+    const to = body?.stage;
+    const from = stored?.stage ?? null;
+    if (to === undefined || to === null || String(to).trim() === '' || from === null || to === from) return null;
+    return { stage: to, date: day, prevStage: from, author: author || '', timestamp: now };
+}
+
 // The two columns this module DERIVES per row rather than reading from the CSV.
 // They are the reason applyStageChanges cannot simply hand its output to
 // partialRows -- see the batch-uniformity note on applyStageChanges below.

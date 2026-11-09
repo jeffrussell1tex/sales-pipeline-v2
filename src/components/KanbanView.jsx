@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 
 // ── Tokens — exact match to TOKENS in mockup ─────────────────
@@ -222,13 +222,21 @@ export default function KanbanView({
         // the whole row this list holds, and a list loaded before another session's save wrote
         // that save back: a deal D22 moved up from a site went back onto the site's name with no
         // id (state §0.198; the critics, 12 Oct).
+        // Not its history (state §0.236): the server appends the move to the history as stored — a list this board
+        // built from its own copy dropped a move made elsewhere since. The board shows the move at once and takes the
+        // deal as stored from the answer — once the org is still the one it asked in (state §0.175).
+        const askedOrg = requestOrg();
         dbFetch('/.netlify/functions/opportunities', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate, stageHistory: newOpp.stageHistory }),
-        }).then(res => {
+            body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate }),
+        }).then(async res => {
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) { console.error('Stage change not saved:', res.status); return; }
-            if (toStage === 'Closed Won') promptSpiffClaim?.(newOpp);
+            const stored = (await res.json().catch(() => null))?.opportunity;
+            if (!stillOrg(askedOrg)) return;
+            if (stored) setOpportunities(prev => prev.map(o => (o.id === stored.id ? stored : o)));
+            if (toStage === 'Closed Won') promptSpiffClaim?.(stored || newOpp);
         }).catch(console.error);
         setKanbanDragging(null);
         setKanbanDragOver(null);

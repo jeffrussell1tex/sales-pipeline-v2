@@ -56,6 +56,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 const { handler: opps }  = await import('../../netlify/functions/opportunities.mjs');
 const { handler: tasksFn } = await import('../../netlify/functions/tasks.mjs');
 const { handler: mergeFn } = await import('../../netlify/functions/merge.mjs');
+const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
 const { opportunities, tasks, users, auditLog, settings, accounts, mergeLog } = await import('../../db/schema.js');
 const { eq, inArray } = await import('drizzle-orm');
@@ -93,7 +94,7 @@ const task = async (id) => (await db.select().from(tasks).where(eq(tasks.id, id)
 // The deal window's save: the whole stored row back, one field changed.
 const resave = async (id, change) => {
     const { createdAt: _c, updatedAt: _u, orgId: _o, ...row } = await deal(id);
-    return parse(await opps(ev(ADMIN, 'PUT', { ...row, ...change })));
+    return parse(await opps(ev(ADMIN, 'PUT', dealBody({ ...row, ...change }))));   // its notes and history never sent (§0.236)
 };
 
 const cleanup = async () => {

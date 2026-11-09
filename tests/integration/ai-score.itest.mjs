@@ -76,6 +76,7 @@ const FN = {
     score: (await import('../../netlify/functions/ai-score.mjs')).handler,
     opps:  (await import('../../netlify/functions/opportunities.mjs')).handler,
 };
+const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
 const { settings, users, opportunities, auditLog, activities, contacts } = await import('../../db/schema.js');
 const { eq, and, inArray } = await import('drizzle-orm');
@@ -215,7 +216,7 @@ test('a deal save never writes the score — the window sends the deal it opened
     const [row] = await db.select().from(opportunities).where(eq(opportunities.id, DEAL));
     const opened = { ...row, createdAt: undefined, updatedAt: undefined, orgId: undefined };
     for (const old of [null, { score: 99, verdict: 'Strong', signals: [], recommendation: '', scoredAt: '2026-01-01T00:00:00.000Z', history: [] }]) {
-        const r = await call(FN.opps, WHO.rep, 'PUT', { ...opened, nextSteps: 'Send the proposal', aiScore: old });
+        const r = await call(FN.opps, WHO.rep, 'PUT', dealBody({ ...opened, nextSteps: 'Send the proposal', aiScore: old }));   // its notes and history never sent (§0.236)
         assert.equal(r.status, 200, JSON.stringify(r.body));
         assert.equal(r.body.opportunity.nextSteps, 'Send the proposal', 'the edit is saved');
         assert.deepEqual(await kept(DEAL), score, `the score stays ai-score's (sent: ${JSON.stringify(old)?.slice(0, 30)})`);

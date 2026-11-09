@@ -167,6 +167,14 @@ One commit per verified batch; doc patch in the same commit.
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.
 - `dbFetch` returns the raw `Response` — caller must `.json()`.
+- A list a row holds is added to on the server, never written back whole from a
+  screen's copy (guide §18b119): a deal's team note is one operation
+  (`{ id, note: { op } }`, `src/utils/dealNotes.js`) applied by compare-and-set,
+  the author and time the server's, only the author editing or deleting; a
+  body naming `comments` is refused; a stage move is appended to the stored
+  history in the write (`_stage.mjs` stageMoveOf); a deal's save sends
+  `dealBody(...)` (THE GUARD, tests/deal-data.test.mjs). A delete's Undo
+  keeps the stored owner by id (`restoredOwner`), never the caller.
 - A Sales Rep's quota is a plan per fiscal year (`profile.quotaPlans`):
   `PUT /users?quotas=true` is its one writer; every other save keeps it
   (`storedQuota`, and `keepQuotaPlans` on any write of a member's whole

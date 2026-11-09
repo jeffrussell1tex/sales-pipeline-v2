@@ -470,7 +470,7 @@ test("THE ENDPOINT: a deal keeps the account id; a new one must be this org's ac
     assert.ok(post.includes('const link = await accountLink(data, null, orgId);'));
     assert.ok(post.includes('if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };'));
     assert.ok(post.includes("stampOwnerId(sanitize(link.id ? { ...named, account: link.name, accountId: link.id } : named), 'opportunity',"), 'a new deal is linked to the account found, and named after it — its contacts checked too (§0.199)');
-    const put = between(raw, '            if (forbiddenPut) return forbiddenPut;', '            const { id, ...updateData } = clean;');
+    const put = between(raw, '            if (forbiddenPut) return forbiddenPut;', '            const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;');   // the notes and history out of the update since §0.236
     const at = put.indexOf('const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);');
     assert.ok(at > 0 && at < put.indexOf('const clean = sanitize({ ...existing, ...data });'), 'after the ownership check, before the write');
     assert.ok(put.includes('if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };'));
@@ -632,13 +632,15 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(read('src/App.jsx').includes('useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });'));
 });
 
-test("H4: the Kanban's stage drag sends the stage, its date and its history — never the whole row its list holds, which wrote a list loaded before another session's save back (a D22 lift undone)", () => {
+test("H4: the Kanban's stage drag sends the stage and its date — never the whole row its list holds, which wrote a list loaded before another session's save back (a D22 lift undone); since §0.236 not its history either, which the server appends", () => {
     const k = read('src/components/KanbanView.jsx');
     const drop = between(k, 'const handleKanbanDrop = (toStage) => {', '\n    };\n');
-    assert.ok(drop.includes('body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate, stageHistory: newOpp.stageHistory }),'), 'the stage alone, merged over the stored row');
+    assert.ok(drop.includes('body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate }),'), 'the stage alone, merged over the stored row');
     assert.ok(!drop.includes('body: JSON.stringify(newOpp)'), 'REGRESSION: the whole row');
+    assert.ok(!drop.includes('stageHistory: newOpp.stageHistory'), 'REGRESSION (§0.236): the board sends its own copy of the history');
     const changed = between(drop, 'const newOpp = {\n            ...updatedOpp,\n', '        };');
-    assert.deepEqual([...changed.matchAll(/^            (\w+):/gm)].map((x) => x[1]), ['stage', 'stageChangedDate', 'stageHistory'], 'what the drag changes is what it sends');
+    assert.deepEqual([...changed.matchAll(/^            (\w+):/gm)].map((x) => x[1]), ['stage', 'stageChangedDate', 'stageHistory'], 'what the drag shows at once: the stage, its date, the move — sent: the first two');
+    assert.ok(drop.includes('if (stored) setOpportunities(prev => prev.map(o => (o.id === stored.id ? stored : o)));'), 'the deal as stored, from the answer');
 });
 
 test("J4: Reports' add and remove on \"Contacts on this deal\" send the deal's id and its contacts alone — never the whole row the report loaded, which re-linked a deal another session had moved and reset its Site Name", () => {

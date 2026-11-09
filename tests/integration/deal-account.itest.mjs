@@ -80,6 +80,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 
 const { handler } = await import('../../netlify/functions/opportunities.mjs');
 const { handler: mergeFn } = await import('../../netlify/functions/merge.mjs');
+const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
 const { opportunities, accounts, mergeLog, auditLog } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
@@ -139,9 +140,11 @@ test("a create keeps the account picked, by id — under the account's own name"
 test('a partial PUT keeps the id — a stage move, and the notes alone', async () => {
     assert.equal((await call(A, 'PUT', { id: ID('d1'), stage: 'Proposal' })).status, 200);
     assert.equal((await rowOf(ID('d1'))).accountId, UNIT);
-    assert.equal((await call(A, 'PUT', { id: ID('d1'), comments: [{ id: 'c1', text: 'note', timestamp: '2026-10-11T00:00:00Z' }] })).status, 200);
+    // A note is one operation since §0.236 (saveDealNote): it writes the notes alone. This suite's caller is no member
+    // of its org, so the post is refused — and either way the deal's account link is untouched.
+    assert.equal((await call(A, 'PUT', { id: ID('d1'), note: { op: 'add', text: 'note' } })).status, 403);
     const row = await rowOf(ID('d1'));
-    assert.equal(row.accountId, UNIT, "saveDealComments' PUT names no account");
+    assert.equal(row.accountId, UNIT, "a note's PUT names no account");
     assert.equal(row.account, 'Shell - Port Allen');
 });
 
@@ -396,12 +399,12 @@ test("H4: a list loaded before a D22 lift by name — the Kanban's drag (the sta
     assert.equal(m.statusCode, 200, m.body);
     const now = async () => { const x = await rowOf(H('d')); return [x.accountId, x.account, x.site, x.stage]; };
     assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Discovery'], 'D22: moved up by its name');
-    // the Kanban's drag: the stage, its date and its history alone
-    let r = await call(A, 'PUT', { id: H('d'), stage: 'Proposal', stageChangedDate: '2026-10-12', stageHistory: [{ stage: 'Proposal', date: '2026-10-12', prevStage: 'Discovery' }] });
+    // the Kanban's drag: the stage and its date alone (since §0.236 the server appends the history)
+    let r = await call(A, 'PUT', { id: H('d'), stage: 'Proposal', stageChangedDate: '2026-10-12' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Proposal'], 'the lift kept');
     // the whole row a stale list sends: no id, the old name, no Site Name
-    r = await call(A, 'PUT', { ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Negotiation', contactIds: [] });
+    r = await call(A, 'PUT', dealBody({ ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Negotiation', contactIds: [] }));   // as a window sends it since §0.236
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Negotiation'], 'no id sent while the deal holds one: the link, its name and its Site Name kept; the stage saved');
     for (const empty of ['', null]) {
@@ -430,7 +433,7 @@ test("J5: a save that sends no account id while the deal holds one keeps the id 
     const m = await mergeFn(ev(A, 'POST', { entityType: 'account', survivorId: W('site'), archivedId: W('unit') }));
     assert.equal(m.statusCode, 200, m.body);
     assert.deepEqual(await now(W('old')), [SHELL, 'Shell', 'J5 Port Allen Site', 'Discovery'], 'D22: moved up by its name');
-    r = await call(A, 'PUT', { ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Proposal' });
+    r = await call(A, 'PUT', dealBody({ ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Proposal' }));   // as a window sends it since §0.236
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(await now(W('old')), [SHELL, 'Shell', 'J5 Port Allen Site', 'Proposal'], 'the stale whole row: its Account text not the stored one — the lift and its Site Name kept, the stage saved');
 });
