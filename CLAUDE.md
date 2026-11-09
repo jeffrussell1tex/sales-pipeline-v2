@@ -85,7 +85,7 @@ harness copy, so it may run in the background while the next batch is
 built; it never holds a commit, and it must print `Baseline: green.` first
 (a red baseline reports a false 100% caught) and exit 0 before the push; a
 survivor is fixed in its own commit first. Before each prod ship: the full
-run, `node scripts/mutate-import.mjs`, every entry, about 8 h.
+run, `node scripts/mutate-import.mjs`, every entry, about 9 h.
 Then: rep-path browser check signed in as Karen (`accelerep@outlook.com`,
 role `User`) — Admin skips every ownership and role branch, so an Admin-only
 pass proves nothing. Read the URL bar and count the orgs before any browser

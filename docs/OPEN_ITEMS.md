@@ -612,17 +612,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 ### 2.2 Around the next ship to prod
 
 - **The full mutation-harness run on the tree that ships — run for the
-  forty-fourth ship 4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229);
-  each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
+  forty-fourth ship 4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229),
+  and for the forty-fifth 5–6 Nov on `b5880ec`, 4,301/4,301 caught (state
+  §0.233); each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
   run before each prod ship"): since §0.212 a batch runs its scope (`node
   scripts/mutate-scope.mjs`), and every entry (`node
-  scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4 Nov) runs
+  scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4 Nov, 8 h
+  50 min on 5–6 Nov) runs
   before each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
   its 3,139 older entries run on its step G's build in four slices and its
   own seven pre-run on the final tree — no full run on its final tree);
   §0.212 and §0.213 by their scopes alone until then; §0.208-§0.229 together
   by the full run of 4 Nov before their ship, on `80b21fb` (4,183/4,183
-  caught, exit 0 — state §0.229).
+  caught, exit 0 — state §0.229); §0.230-§0.233 by their one scoped run
+  (5 Nov, 3,428/3,428) and the full run of 5–6 Nov before their ship, on
+  `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233).
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
