@@ -463,6 +463,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    - notes appended on the server;
    - a contact's Undo keeping the row's owner (an account's keeps it since
      §0.198).
+   **Designed and answered 9 Nov** (docs/design/deal-data/DESIGN.md and
+   ANSWERS.md — Jeff's four answers, each the Recommended): the map found
+   the class wider — the deal window's Save and the Closed Lost dialog
+   write a tab's old notes back too, and stage history is written whole
+   from the browser by three writers (UKG: 11 deals with history); the
+   census (SELECT only) — four notes in all, nothing to migrate. Q1 each
+   note one operation the server applies; Q2 the server stamps the author
+   and time, only the author edits or deletes; Q3 stage history the
+   server's, as the CSV path's; Q4 a contact's Undo a restore keeping the
+   stored owner by id, for any role that may delete it. Not built.
 5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
