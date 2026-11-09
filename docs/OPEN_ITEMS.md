@@ -636,6 +636,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   caught, exit 0 — state §0.229); §0.230-§0.233 by their one scoped run
   (5 Nov, 3,428/3,428) and the full run of 5–6 Nov before their ship, on
   `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233).
+- **The quote PDF on the deployed sites — §0.234's netlify.toml block,
+  proven on localhost only** (state §0.234): dev and prod run the bundle
+  that answered 500 (dev, 9 Nov: an authorized probe of the deployed
+  quote-pdf, 500; prod: no call in seven days). After the push to dev:
+  render a quote through accelerep.netlify.app's quote-pdf (signed in,
+  writes nothing) and read the PDF back; after the ship, the same on
+  salespipelinetracker.com. Until then the Quotes tab's Download falls
+  back to its print copy.
+- **§0.234's TEST values in Accelerep QA, Jeff's to clear if he wishes**
+  (its browser check, 9 Nov): Settings → Company profile — display name
+  "TEST Branding Co", "1 TEST Way", Austin, TX 78701, 512-555-0134,
+  support@test-branding.example. Cleared, QA's quotes print its Clerk
+  name, "Accelerep QA". QA's stored Edit brand still holds the old
+  preset's "Accelerep" name and contact line, read by nothing; its next
+  brand save drops them.
 - **§0.211's TEST records in Accelerep QA, Jeff's to delete if he
   wishes** (its browser check, 27 Oct — state §0.211): the member
   "TEST Profile Rep" (a Sales Rep with no email and no login; title
@@ -792,14 +807,19 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   runs: it reads a `companyProfile` from the request body, and its one
   caller (QuotesTab.jsx:1756) sends none (corrected 9 Nov — the line
   said it printed them). No other org's data shows. **Designed and
-  answered 9 Nov — Jeff's five answers, each the Recommended; next, his
-  pick of 9 Nov** (docs/design/quote-branding/DESIGN.md and ANSWERS.md:
-  the map of every customer-facing output — the preview, the PDF, the
-  quote email, the dispatch customer emails' shared layout, where a
-  customer's reply goes — and the census). Recommended: one source for
-  who the org is (the Company profile, else the org's Clerk name), read
-  by the server from the caller's org, the app's name nowhere on a
-  customer's document.
+  answered 9 Nov — Jeff's five answers, each the Recommended**
+  (docs/design/quote-branding/DESIGN.md and ANSWERS.md: the map of every
+  customer-facing output — the preview, the PDF, the quote email, the
+  dispatch customer emails' shared layout, where a customer's reply goes
+  — and the census). **Built 9 Nov (state §0.234; guide §18b117), its
+  browser check PASSED as Jeff and as Karen — NOT committed; harness
+  deferred**: one rule names the org (the Company profile, else its Clerk
+  name), read by the server from the caller's org; the preview, PDF,
+  print copy and emails carry no app name and no link into the app; sent
+  as the org, the reply to the rep or the support email; Edit brand a
+  look; and the quote PDF, which answered 500 everywhere (pdfkit bundled
+  without its fonts — Jeff: "Fold it in"), renders again. Strike this
+  once it ships.
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
   documentation, not tried). Calendar access is a "sensitive" scope.
@@ -2082,6 +2102,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.3 Settings
 
+- **Company profile's own live preview names the org differently from
+  its quotes** (§0.234's browser check, 9 Nov; read in code,
+  CompanyProfileDetail.jsx:136-147): with no display name it shows "Your
+  Company" where a quote prints the org's Clerk name, and it writes the
+  city line "Austin, TX, 78701" where a quote writes "Austin, TX 78701"
+  (`orgIdentityOf`). Its sample still shows the quote header, which no
+  quote prints yet (§3.5). Recommended: draw the preview through
+  `orgIdentityOf` with the org's Clerk name, the header marked "not yet
+  printed" — a small batch, or with §3.5.
 - **TeamModal clears the team of every member its list does not hold by
   app id — DONE in §0.222 (committed `9ce4dc6`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship)**: the
   window reads a list's entries by app or Clerk id (Jeff's J1) and its save

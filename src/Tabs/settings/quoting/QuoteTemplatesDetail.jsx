@@ -11,6 +11,8 @@ import { LIcon } from '../shared/ui.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { QPill, ATToggle } from './shared.jsx';
 import { EditBrandModal, BRAND_PRESET } from './EditBrandModal.jsx';
+import { useOrganization } from '@clerk/clerk-react';
+import { orgIdentityOf, profileOfSettings, brandLook } from '../../../utils/orgIdentity.js';
 
 // TODO: read currentUser from session/AppContext — hard-coded for dev
 const CURRENT_USER = { id:'u_42', name:'Bea Chen', role:'admin' };
@@ -37,12 +39,12 @@ const DEFAULT_QUOTE_TEMPLATES = [
 const QT_BRANDING = {
     primary: '#6b2a22', ink: '#1a1612', paper: '#fbf8f3', accent: '#b87333',
     serifFamily: 'Georgia, serif', sansFamily: 'system-ui, sans-serif',
-    logoMark: '◐', companyName: 'Accelerep',
-    contactLine: 'sales@accelerep.com · accelerep.com',
+    logoMark: '◐',
 };
 
-// Mini quote doc preview — scaled-down representation
-const MiniQuoteDoc = ({ scale = 0.32 }) => {
+// Mini quote doc preview — scaled-down representation. `orgName` is the org's own (src/utils/orgIdentity.js) — the
+// thumbnail printed the app's name for every org until §0.234.
+const MiniQuoteDoc = ({ scale = 0.32, orgName = '' }) => {
     const w = Math.round(360 * scale);
     const h = Math.round(480 * scale);
     const s = scale;
@@ -51,7 +53,7 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
             {/* Cover */}
             <div style={{ display:'flex', alignItems:'center', gap:Math.round(6*s) }}>
                 <span style={{ fontSize:Math.round(18*s), color:QT_BRANDING.primary }}>{QT_BRANDING.logoMark}</span>
-                <b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:Math.round(11*s) }}>{QT_BRANDING.companyName}</b>
+                <b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:Math.round(11*s) }}>{orgName || 'Your company'}</b>
             </div>
             <div style={{ height:1, background:QT_BRANDING.primary, opacity:0.6 }}/>
             <div style={{ fontSize:Math.round(7*s), fontWeight:700, color:QT_BRANDING.accent, letterSpacing:0.5, textTransform:'uppercase' }}>QUOTE · Q-2026</div>
@@ -62,7 +64,7 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
                 <div style={{ display:'flex', justifyContent:'space-between', padding:`${Math.round(3*s)}px 0`, borderBottom:`1px solid ${QT_BRANDING.primary}`, fontWeight:700, fontSize:Math.round(7*s), letterSpacing:0.4 }}>
                     <span>ITEM</span><span>QTY</span><span>TOTAL</span>
                 </div>
-                {[['Accelerep Core','50','$36,000'],['Pipeline','50','$12,000'],['Support','1','$4,800']].map((r,i) => (
+                {[['Core subscription','50','$36,000'],['Pipeline','50','$12,000'],['Support','1','$4,800']].map((r,i) => (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:`${Math.round(3*s)}px 0`, fontSize:Math.round(7*s), borderBottom:`1px solid rgba(0,0,0,0.06)` }}>
                         <span>{r[0]}</span><span style={{ color:T.inkMuted }}>{r[1]}</span><span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{r[2]}</span>
                     </div>
@@ -82,7 +84,7 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
 };
 
 // Template card — with hover edit affordance, lock icon, overflow menu, ownership stamp
-const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete, isLastRow = false }) => {
+const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete, isLastRow = false, orgName = '' }) => {
     const [hover,    setHover]    = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [tooltip,  setTooltip]  = useState(false);
@@ -140,7 +142,7 @@ const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditin
             {/* Preview tile */}
             <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
                 <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
-                    <MiniQuoteDoc/>
+                    <MiniQuoteDoc orgName={orgName}/>
                 </div>
 
                 {/* DEFAULT pill — top-left */}
@@ -601,7 +603,7 @@ const NTMFooter = ({ newName, setNewName, visibleTo, setVisibleTo, setAsDefault,
 
 // NEW TEMPLATE MODAL — main component
 // ─────────────────────────────────────────────────────────────────────────────
-const NewTemplateModal = ({ templates, onClose, onCreate }) => {
+const NewTemplateModal = ({ templates, onClose, onCreate, orgName = '' }) => {
     // Top-level mode (left rail)
     const [mode, setMode]               = useState('blank'); // blank | duplicate | import | library
 
@@ -866,7 +868,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                                                     {/* Thumbnail */}
                                                     <div style={{ width:72, flexShrink:0, background:'linear-gradient(180deg,#f4ede0 0%,#ede4d2 100%)', borderRight:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', padding:'8px 0', overflow:'hidden' }}>
                                                         <div style={{ transform:'scale(0.16)', transformOrigin:'center', width:360, height:240, marginTop:-100, marginLeft:-130 }}>
-                                                            <MiniQuoteDoc scale={1}/>
+                                                            <MiniQuoteDoc scale={1} orgName={orgName}/>
                                                         </div>
                                                     </div>
                                                     {/* Text */}
@@ -1038,7 +1040,9 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
     );
 };
 
-export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+// `onOpenPanel(id)` opens another Settings panel through AdminView's own leave guard — Edit brand's way to Company
+// profile (state §0.234).
+export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef, onOpenPanel = null }) => {
     const savedTemplates  = settings?.quoteTemplates?.length ? settings.quoteTemplates : DEFAULT_QUOTE_TEMPLATES;
     const savedDefaults   = settings?.quoteDefaults || { validity:'30 days', paymentTerms:'Net-30', autoRenew:'60-day notice', currency:'USD', signOff:'DocuSign', issueDate:'Date sent' };
     const savedBoilerplate = settings?.quoteBoilerplate || '"Pricing reflects current list less applicable discounts. Quote valid for 30 days from issue. Auto-renews for like terms unless 60-day written notice…"';
@@ -1136,9 +1140,12 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
 
     // Brand — read from saved quote brand (settings.quoteBrand)
     const [showEditBrand, setShowEditBrand] = useState(false);
-    const brand        = settings?.quoteBrand || BRAND_PRESET;
+    const brand        = brandLook(settings?.quoteBrand || BRAND_PRESET);
     const brandColor   = brand.primary;
-    const brandName    = brand.companyName;
+    // Who the org is on its quotes — the Company profile, else its name in Clerk (§0.234), never the brand's old name.
+    const { organization } = useOrganization();
+    const orgIdentity  = orgIdentityOf(profileOfSettings(settings), organization?.name);
+    const brandName    = orgIdentity.name;
 
     return (
         <>
@@ -1150,7 +1157,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >
             {/* New template modal */}
-            {showNewModal && <NewTemplateModal templates={templates} onClose={() => setShowNewModal(false)} onCreate={handleCreateTemplate}/>}
+            {showNewModal && <NewTemplateModal templates={templates} onClose={() => setShowNewModal(false)} onCreate={handleCreateTemplate} orgName={brandName}/>}
 
             <div style={{ padding:'0 0 40px' }}>
                 {/* Brand strip */}
@@ -1160,7 +1167,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
                     </div>
                     <div>
                         <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Company name</div>
-                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:16 }}>{brandName}</div>
+                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:16 }}>{brandName || <span style={{ fontFamily:T.sans, fontStyle:'normal', fontWeight:400, fontSize:12, color:T.inkMuted }}>Not set — Company profile</span>}</div>
                     </div>
                     <div>
                         <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Primary color</div>
@@ -1208,7 +1215,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
                     >
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
                             {templates.map((t,i) => (
-                                <TplLibCard key={t.id} t={t} isLastRow={i >= templates.length - 3}
+                                <TplLibCard key={t.id} t={t} isLastRow={i >= templates.length - 3} orgName={brandName}
                                     isDefault={i===0}
                                     isSelected={selectedId===t.id}
                                     isEditing={editingTplId===t.id}
@@ -1288,7 +1295,8 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
                 </div>
             </div>
         </CategoryDetailChrome>
-        {showEditBrand && <EditBrandModal initial={brand} initialRev={settings?.revs?.quoteBrand ?? null} onClose={() => setShowEditBrand(false)}/>}
+        {showEditBrand && <EditBrandModal initial={brand} initialRev={settings?.revs?.quoteBrand ?? null} onClose={() => setShowEditBrand(false)}
+            org={orgIdentity} onOpenProfile={onOpenPanel ? () => { setShowEditBrand(false); onOpenPanel('company-profile'); } : null}/>}
         </>
     );
 };

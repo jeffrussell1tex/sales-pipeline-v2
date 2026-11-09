@@ -8,20 +8,22 @@ import { T } from '../shared/tokens.js';
 import { writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
 import { revsAfter, BRAND_CHANGED } from '../../../utils/settingsRevs.js';
 import { useApp } from '../../../AppContext';
+import { contactLineOf, brandLook } from '../../../utils/orgIdentity.js';
 
 const SERIF = 'Georgia, "Tiempos", serif';
 const eyebrow = (color) => ({ fontSize: 11, fontWeight: 600, color: color || T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' });
 
+// The brand is a LOOK only (state §0.234; Jeff, 9 Nov, Q2: "Remove, link out"): who the org is — its name and contact
+// details — comes from Settings → Company profile, the one place a customer document reads. The preset held the
+// app's own name and contact line, shown to every org and stored as the org's by an untouched Save.
 export const BRAND_PRESET = {
   logoMark:    '◐',
-  companyName: 'Accelerep',
   primary:     '#6b2a22',
   accent:      '#b87333',
   ink:         '#1a1612',
   paper:       '#fbf8f3',
   displayFont: 'Editorial',
   bodyFont:    'Söhne',
-  contactLine: 'sales@accelerep.com · accelerep.com · +1 (415) 555-0140',
 };
 
 // Curated palettes — brand edits should stay on-brand, so we offer tasteful
@@ -50,7 +52,10 @@ const fontOf = (name) => FONT_RENDER[name] || FONT_RENDER['Söhne'];
 // Live quote-document preview (brand-driven). Mirrors MockQuoteDoc but
 // honours the editable font choices so typography changes are visible.
 // ────────────────────────────────────────────────────────────────
-export const BrandPreviewDoc = ({ brand, scale = 1, sections = ['cover', 'lines', 'terms', 'signature'] }) => {
+// `org` is the org's identity (src/utils/orgIdentity.js) — its name and contact line, from the Company profile.
+export const BrandPreviewDoc = ({ brand, org, scale = 1, sections = ['cover', 'lines', 'terms', 'signature'] }) => {
+  const orgName = org?.name || 'Your company';
+  const orgContact = contactLineOf(org);
   const disp = fontOf(brand.displayFont);
   const body = fontOf(brand.bodyFont);
   const w = 380 * scale, h = 506 * scale;
@@ -69,7 +74,7 @@ export const BrandPreviewDoc = ({ brand, scale = 1, sections = ['cover', 'lines'
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 * scale }}>
             <span style={{ fontSize: 20 * scale, color: brand.primary, lineHeight: 1 }}>{brand.logoMark}</span>
-            <b style={{ ...dispStyle, fontSize: 14 * scale }}>{brand.companyName}</b>
+            <b style={{ ...dispStyle, fontSize: 14 * scale }}>{orgName}</b>
           </div>
           <div style={{ height: 1.5, background: brand.primary, opacity: 0.7 }}/>
           <div style={{
@@ -96,7 +101,7 @@ export const BrandPreviewDoc = ({ brand, scale = 1, sections = ['cover', 'lines'
             <span>ITEM</span><span>QTY</span><span>TOTAL</span>
           </div>
           {[
-            ['Accelerep Core', '50', '$36,000'],
+            ['Core subscription', '50', '$36,000'],
             ['Pipeline & Forecasting', '50', '$12,000'],
             ['Premium support', '1', '$4,800'],
             ['Onboarding — White-glove', '1', '$8,500'],
@@ -117,7 +122,7 @@ export const BrandPreviewDoc = ({ brand, scale = 1, sections = ['cover', 'lines'
         <div style={{ marginTop: 'auto', fontSize: 7 * scale, opacity: 0.65, lineHeight: 1.5 }}>
           <div style={{ fontSize: 6.5 * scale, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: brand.accent, marginBottom: 3 }}>Terms</div>
           Net-30 invoicing. Auto-renew with 60-day notice. Pricing locked for the term.
-          <div style={{ marginTop: 7, color: brand.ink, opacity: 0.85 }}>{brand.contactLine}</div>
+          {orgContact && <div style={{ marginTop: 7, color: brand.ink, opacity: 0.85 }}>{orgContact}</div>}
         </div>
       )}
       {sections.includes('signature') && (
@@ -218,22 +223,6 @@ const FontPicker = ({ options, value, onChange, italicFirst }) => (
   </div>
 );
 
-const TextField = ({ value, onChange, placeholder, mono }) => (
-  <div style={{
-    padding: '8px 10px', background: T.surface,
-    border: `1px solid ${T.border}`, borderRadius: 3,
-  }}>
-    <input
-      value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      style={{
-        width: '100%', border: 'none', outline: 'none', background: 'transparent',
-        fontSize: 13, color: T.ink, padding: 0,
-        fontFamily: mono ? 'ui-monospace, Menlo, monospace' : 'inherit',
-      }}
-    />
-  </div>
-);
-
 const FieldLabel = ({ children, hint }) => (
   <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: T.inkMid, marginBottom: 6 }}>
     {children}
@@ -244,7 +233,9 @@ const FieldLabel = ({ children, hint }) => (
 // ────────────────────────────────────────────────────────────────
 // The modal
 // ────────────────────────────────────────────────────────────────
-export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onClose }) => {
+// `org` names the org in the preview; `onOpenProfile` opens Settings → Company profile, where its name and contact
+// details are kept (Q2) — offered only while nothing here is unsaved, so leaving loses no brand edit.
+export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onClose, org = null, onOpenProfile = null }) => {
   const [brand, setBrand] = React.useState(initial);
   // The brand's revision token as this window opened (state §0.228 — JB3-4): its save names it, and a refusal
   // re-seeds it with the brand from the latest.
@@ -270,16 +261,18 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
     // server's words and the edit kept. The sender never settles after an org switch.
     setSaving(true);
     setSaveError('');
-    const w = await writeSettings({ quoteBrand: brand }, { quoteBrand: base.rev });
+    // The look alone (§0.234): a brand saved before keeps no app name or contact line once saved again.
+    const look = brandLook(brand);
+    const w = await writeSettings({ quoteBrand: look }, { quoteBrand: base.rev });
     if (w.ok) {
-      setSettings((prev) => ({ ...prev, quoteBrand: brand, revs: revsAfter(prev?.revs, w.revs) }));
+      setSettings((prev) => ({ ...prev, quoteBrand: look, revs: revsAfter(prev?.revs, w.revs) }));
       onClose();
       return;
     }
     if (w.stale) {
       const latest = await takeLatestSettings(setSettings);
       if (latest) {
-        setBrand(latest.quoteBrand || BRAND_PRESET);
+        setBrand(brandLook(latest.quoteBrand || BRAND_PRESET));
         setBase({ rev: latest.revs?.quoteBrand ?? null });
         setSaveError(BRAND_CHANGED);
         setSaving(false);
@@ -325,7 +318,7 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
               Edit brand
             </div>
             <div style={{ fontSize: 12.5, color: T.inkMid, marginTop: 4 }}>
-              Logo, colors and type apply to <b>all 4 quote templates</b>. The preview updates as you edit.
+              Logo, colors and type for your quotes, saved for your workspace. Not yet printed on the quote or its PDF — your company's name and contact details are.
             </div>
           </div>
           <button onClick={close} style={{
@@ -400,14 +393,23 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
             {/* Company details */}
             <div style={{ paddingTop: 18, borderTop: `1px solid ${T.border}` }}>
               <ControlGroup label="Company details">
-                <div style={{ marginBottom: 14 }}>
-                  <FieldLabel>Company name</FieldLabel>
-                  <TextField value={brand.companyName} onChange={(v) => set('companyName', v)} placeholder="Company name"/>
+                <div style={{ fontSize: 12.5, color: T.inkMid, lineHeight: 1.55, marginBottom: 10 }}>
+                  Your company's name, address, phone and support email print on every quote, its PDF and your customers' emails.
+                  They are kept in <b>Settings → Company profile</b>.
                 </div>
-                <div>
-                  <FieldLabel hint="prints in the quote footer">Contact line</FieldLabel>
-                  <TextField value={brand.contactLine} onChange={(v) => set('contactLine', v)} placeholder="email · website · phone"/>
+                <div style={{ fontSize: 12.5, color: T.ink, marginBottom: 10 }}>
+                  {org?.name ? <>Printed as <b>{org.name}</b>{contactLineOf(org) ? <> · {contactLineOf(org)}</> : null}</> : <span style={{ color: T.inkMuted }}>No company name yet.</span>}
                 </div>
+                {onOpenProfile && (
+                  <button onClick={onOpenProfile} disabled={dirty || saving}
+                    title={dirty ? 'Save or reset the brand first' : undefined}
+                    style={{
+                      padding: '6px 12px', background: T.surface, color: dirty || saving ? T.inkMuted : T.ink,
+                      border: `1px solid ${T.borderStrong}`, borderRadius: 3,
+                      fontSize: 12, fontWeight: 600, cursor: dirty || saving ? 'default' : 'pointer',
+                    }}>Open Company profile →</button>
+                )}
+                {onOpenProfile && dirty && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 6 }}>Save or reset the brand first.</div>}
               </ControlGroup>
             </div>
           </div>
@@ -440,7 +442,7 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
             </div>
 
             <div style={{ marginTop: 0 }}>
-              <BrandPreviewDoc brand={brand} scale={0.95} sections={previewSections}/>
+              <BrandPreviewDoc brand={brand} org={org} scale={0.95} sections={previewSections}/>
             </div>
 
             <div style={{ position: 'absolute', bottom: 14, fontSize: 10.5, color: T.inkMid, opacity: 0.8 }}>

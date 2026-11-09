@@ -150,6 +150,10 @@ test('scheduling confirms by email and text, issues the token, and records both 
     assert.equal(p.status, 200, JSON.stringify(p.body));
     assert.equal(mails.length, 1);
     assert.equal(mails[0].to, 'pat@itest-notify.local');
+    // Sent as the org (state §0.234): its name on the sender, raw (the mailer cleans it); no support email on file, so
+    // no reply address — and the template is told no reply reaches the org.
+    assert.equal(mails[0].fromName, 'Acme <HVAC> & Sons', 'REGRESSION (§0.234): the visit email not sent as the org');
+    assert.equal(mails[0].replyTo, null, 'REGRESSION (§0.234): a reply address with no support email on file');
     assert.ok(mails[0].subject.startsWith('CONFIRM Furnace <tune-up> Tuesday, September 15, 2026 between 8:00 AM and 10:00 AM'), mails[0].subject);
     assert.equal(texts.length, 1);
     assert.equal(texts[0].to, '+15551234567');

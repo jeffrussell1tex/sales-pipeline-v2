@@ -15,6 +15,8 @@ import { eq, and } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms } from './send-sms.mjs';
+import { identityOfRow } from './_orgIdentity.mjs';
+import { emailOrNull, contactLineOf } from '../../src/utils/orgIdentity.js';
 import {
     cleanCustomerNotifications, notificationPlan, channelsFor, whenText, smsText, publicStatusPath,
 } from '../../src/utils/customerNotifications.js';
@@ -24,7 +26,8 @@ export const smsConfigured = () => !!(process.env.TWILIO_ACCOUNT_SID && process.
 // 24 random bytes, URL-safe: the status link's whole authority. Never an id.
 export const newPublicToken = () => randomBytes(24).toString('base64url');
 
-const companyNameOf = (srow) => srow?.extra?.companyDisplayName || srow?.companyName || 'Your service provider';
+// Who the org is to its customer (state §0.234): the Company profile, else its name in Clerk — the one rule
+// (_orgIdentity.mjs), read from this job's org's row. The words' last resort stays "Your service provider".
 
 /**
  * @param {{ orgId: string, before: object|null, after: object, actorName?: string|null }} p
@@ -56,8 +59,13 @@ export async function notifyCustomer({ orgId, before, after, actorName = null })
         }
         const statusUrl = cfg.statusLink && token ? `${siteUrl()}${publicStatusPath(token)}` : null;
 
+        const identity = await identityOfRow(orgId, srow);
+        // A customer's reply reaches the org's support email (Jeff, 9 Nov, Q3); none on file, no reply is asked for.
+        const replyTo = emailOrNull(identity.email);
         const detail = {
-            companyName:   companyNameOf(srow),
+            companyName:   identity.name || 'Your service provider',
+            contactLine:   contactLineOf(identity),
+            canReply:      !!replyTo,
             customerName:  cust.contactName || cust.name,
             jobTitle:      after.title,
             when:          whenText(after),
@@ -80,7 +88,7 @@ export async function notifyCustomer({ orgId, before, after, actorName = null })
                         const tpl = type === 'on_the_way'
                             ? emailTemplates.customerTechOnTheWay(detail)
                             : emailTemplates.customerAppointmentConfirmed(detail);
-                        await sendEmail({ to, ...tpl });
+                        await sendEmail({ to, ...tpl, fromName: identity.name, replyTo });
                         entry(type, 'email', to, true);
                     } catch (e) { entry(type, 'email', to, false, { error: String(e.message || e).slice(0, 200) }); }
                 }

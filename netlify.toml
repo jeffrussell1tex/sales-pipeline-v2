@@ -31,6 +31,17 @@ schedule = "0 6 * * *"
 [functions."report-deliveries"]
 schedule = "*/5 * * * *"
 
+# The quote PDF (state §0.234): pdfkit reads its standard fonts' metrics from its
+# own folder at run time (fs.readFileSync(__dirname + '/data/Helvetica.afm')).
+# Bundled into the function, __dirname is the function's folder, the file is not
+# there, and every PDF answered 500 before drawing a line (seen 9 Nov 2026 on
+# localhost — ENOENT …/functions-serve/quote-pdf/netlify/functions/data/Helvetica.afm
+# — and on dev). Kept external, pdfkit ships whole with its data and reads its own
+# folder. tests/customer-docs.test.mjs holds this block.
+[functions."quote-pdf"]
+  node_bundler = "esbuild"
+  external_node_modules = ["pdfkit"]
+
 # Approval reminders (state §0.158): hourly; a quote waiting past its tier's SLA
 # reminds the tier's backup — or its approver again — once per submission.
 [functions."quote-reminders"]

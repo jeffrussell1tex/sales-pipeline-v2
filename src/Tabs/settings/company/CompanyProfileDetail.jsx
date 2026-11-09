@@ -75,7 +75,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
         <DetailPageChrome
             error={saveError}
             crumb="Company profile" title="Company profile"
-            subtitle="Logo, address, phone, and default quote header"
+            subtitle="Your name, address, phone and support email — printed on your quotes and your customers' emails"
             statusDetail="Complete"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
@@ -83,16 +83,18 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
             <div style={{ display:'grid', gridTemplateColumns:'1fr 420px', gap:20 }}>
                 {/* LEFT */}
                 <div>
-                    <CSectionCard title="Brand" description="Your logo appears on quote PDFs, shared report exports, and in the workspace header for every user.">
+                    {/* What this page says is what prints (state §0.234): the name, address, phone and support email reach
+                        a customer's quote, PDF and emails; the colour and the quote header are saved, not yet printed. */}
+                    <CSectionCard title="Brand" description="Your display name prints on every quote, its PDF and the emails your customers receive.">
                         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                            <CField label="Brand color" hint="Used as the accent on quote PDFs and report headers.">
+                            <CField label="Brand color" hint="Saved for your quote brand — not yet printed on quotes.">
                                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                     <input type="color" value={form.brandColor} onChange={e => set('brandColor', e.target.value)}
                                         style={{ width:34, height:34, padding:2, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', background:'none' }}/>
                                     <CInput value={form.brandColor} onChange={v => set('brandColor', v)} mono/>
                                 </div>
                             </CField>
-                            <CField label="Display name" hint="Appears in the top nav and on all exported documents.">
+                            <CField label="Display name" hint="Prints on your quotes and your customers' emails. Left empty, your organization's name is used.">
                                 <CInput value={form.displayName} onChange={v => set('displayName', v)} placeholder="Your company name"/>
                             </CField>
                             <CField label="Legal name" hint="Full legal entity name for contracts and invoices.">
@@ -101,7 +103,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
                         </div>
                     </CSectionCard>
 
-                    <CSectionCard title="Address & contact" description="The registered office address shown on quotes. For multi-location, set up locations under Sales process → Territories.">
+                    <CSectionCard title="Address & contact" description="Printed under your name on quotes and their PDFs. The phone and support email also close your customers' emails, and a customer's reply to a visit email goes to the support email.">
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
                             <div style={{ gridColumn:'1 / 3' }}>
                                 <CField label="Street address"><CInput value={form.address} onChange={v => set('address', v)} placeholder="123 Main St, Suite 100"/></CField>
@@ -117,7 +119,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
 
                     <CSectionCard
                         title="Default quote header"
-                        description="This block prints at the top of every new quote PDF. Reps can override per-quote if Quote templates allow it."
+                        description="Saved for your quote brand — not yet printed on quotes or their PDFs."
                         headAction={<span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Supports {'{{rep.name}}'}, {'{{account.name}}'}, {'{{quote.number}}'}</span>}
                     >
                         <CTextarea value={form.quoteHeader} onChange={v => set('quoteHeader', v)} rows={5}/>

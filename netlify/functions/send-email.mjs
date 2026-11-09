@@ -3,6 +3,7 @@ import { serverErrorBody } from './_lib.mjs';
 // from the database, so they are escaped; the internal templates above render
 // our own users' data and always have not.
 import { esc as escHtml } from '../../src/utils/customerNotifications.js';
+import { mailFromAs, emailOrNull } from '../../src/utils/orgIdentity.js';
 /**
  * send-email.mjs
  * Shared mailer utility — all email sending flows through this function.
@@ -31,11 +32,17 @@ import { esc as escHtml } from '../../src/utils/customerNotifications.js';
  * Core send function. Call this from any Netlify function.
  * Returns { success: true } or throws with a descriptive message.
  *
- * @param {{ to: string|string[], subject: string, html: string, text?: string }} opts
+ * An email to an org's customer is sent AS THE ORG (state §0.234; Jeff, 9 Nov, Q3): `fromName` shows the org's
+ * name on the one verified sender address, and `replyTo` sends the customer's reply to the org — the rep who sent
+ * a quote, the org's support email for a visit. Each is used only when it is well formed (src/utils/orgIdentity.js);
+ * otherwise the email goes out as before rather than not at all.
+ *
+ * @param {{ to: string|string[], subject: string, html: string, text?: string, fromName?: string, replyTo?: string|null }} opts
  */
-export async function sendEmail({ to, subject, html, text }) {
+export async function sendEmail({ to, subject, html, text, fromName = '', replyTo = null }) {
     const apiKey = process.env.RESEND_API_KEY;
-    const from   = process.env.MAIL_FROM || 'Sales Pipeline <noreply@salespipeline.app>';
+    const from   = mailFromAs(process.env.MAIL_FROM || 'Sales Pipeline <noreply@salespipeline.app>', fromName);
+    const reply  = emailOrNull(replyTo);
 
     if (!apiKey) {
         console.error('send-email: RESEND_API_KEY is not set');
@@ -48,6 +55,7 @@ export async function sendEmail({ to, subject, html, text }) {
         subject,
         html,
         ...(text ? { text } : {}),
+        ...(reply ? { reply_to: reply } : {}),
     };
 
     const res = await fetch('https://api.resend.com/emails', {
@@ -126,6 +134,44 @@ function layout(title, bodyHtml) {
       <p>You're receiving this because you have an account on <a href="${appUrl}">Accelerep</a>.</p>
       <p><a href="${appUrl}/settings">Manage notification preferences</a></p>
     </div>
+  </div>
+</body>
+</html>`;
+}
+
+// The layout of an email to an org's CUSTOMER (state §0.234): headed by the org's name, closed by its name and
+// contact line — never the app's name, never "an account on" the app or a link into it (the customer has neither).
+// `name` and `contactLine` arrive raw and are escaped here; `title` and `bodyHtml` arrive escaped.
+function customerLayout(title, bodyHtml, { name = '', contactLine = '' } = {}) {
+    const foot = [name, contactLine].filter(Boolean).map(escHtml).join(' · ');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title}</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a2e; }
+    .wrapper { max-width: 600px; margin: 32px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .header { background: #1a1a2e; padding: 24px 32px; }
+    .header-title { color: #ffffff; font-size: 16px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+    .body { padding: 32px; }
+    .body h2 { font-size: 20px; font-weight: 700; margin: 0 0 8px; color: #1a1a2e; }
+    .body p { font-size: 14px; line-height: 1.6; color: #4a4a6a; margin: 0 0 16px; }
+    .detail-box { background: #f4f6f8; border-radius: 6px; padding: 16px 20px; margin: 20px 0; }
+    .detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: #4a4a6a; }
+    .detail-label { font-weight: 600; color: #1a1a2e; min-width: 140px; }
+    .btn { display: inline-block; background: #3b82f6; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; margin-top: 8px; }
+    .footer { background: #f4f6f8; padding: 16px 32px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #8b92a9; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    ${name ? `<div class="header"><p class="header-title">${escHtml(name)}</p></div>` : ''}
+    <div class="body">
+      ${bodyHtml}
+    </div>
+    ${foot ? `<div class="footer"><p>${foot}</p></div>` : ''}
   </div>
 </body>
 </html>`;
@@ -218,13 +264,14 @@ export const emailTemplates = {
     },
 
     /**
-     * To the CUSTOMER: their visit is booked, or its date/time changed (state §0.111).
-     * @param {{ companyName, customerName, jobTitle, when, techFirstName, statusUrl }} d
+     * To the CUSTOMER: their visit is booked, or its date/time changed (state §0.111). In the org's own layout, and
+     * asking for a reply only when one reaches the org (`canReply` — its support email is the reply-to; §0.234).
+     * @param {{ companyName, contactLine, canReply, customerName, jobTitle, when, techFirstName, statusUrl }} d
      */
-    customerAppointmentConfirmed({ companyName, customerName, jobTitle, when, techFirstName, statusUrl }) {
+    customerAppointmentConfirmed({ companyName, contactLine = '', canReply = false, customerName, jobTitle, when, techFirstName, statusUrl }) {
         const co = escHtml(companyName || 'Your service provider');
         const subject = `Your ${jobTitle || 'service'} visit is scheduled — ${companyName || 'confirmation'}`;
-        const html = layout(subject, `
+        const html = customerLayout(escHtml(subject), `
             <h2>Your visit is scheduled</h2>
             <p>Hi ${escHtml(customerName || 'there')}, ${co} has scheduled your <strong>${escHtml(jobTitle || 'service')}</strong> visit.</p>
             <div class="detail-box">
@@ -233,24 +280,24 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">From</span><span>${co}</span></div>
             </div>
             ${statusUrl ? `<a class="btn" href="${escHtml(statusUrl)}">View visit status →</a>` : ''}
-            <p style="margin-top:16px">Need to change it? Reply to this email or call ${co}.</p>
-        `);
+            <p style="margin-top:16px">Need to change it? ${canReply ? 'Reply to this email or call' : 'Call'} ${co}.</p>
+        `, { name: companyName, contactLine });
         return { subject, html };
     },
 
     /**
-     * To the CUSTOMER: the technician is on the way (state §0.111).
-     * @param {{ companyName, customerName, jobTitle, when, techFirstName, statusUrl }} d
+     * To the CUSTOMER: the technician is on the way (state §0.111), in the org's own layout (§0.234).
+     * @param {{ companyName, contactLine, customerName, jobTitle, when, techFirstName, statusUrl }} d
      */
-    customerTechOnTheWay({ companyName, customerName, jobTitle, techFirstName, statusUrl }) {
+    customerTechOnTheWay({ companyName, contactLine = '', customerName, jobTitle, techFirstName, statusUrl }) {
         const co = escHtml(companyName || 'Your service provider');
         const who = techFirstName ? `${techFirstName} is` : 'Your technician is';
         const subject = `${who} on the way — ${companyName || 'your service visit'}`;
-        const html = layout(subject, `
+        const html = customerLayout(escHtml(subject), `
             <h2>${escHtml(who)} on the way</h2>
             <p>Hi ${escHtml(customerName || 'there')}, ${escHtml(who)} heading to you now for your <strong>${escHtml(jobTitle || 'service')}</strong> visit from ${co}.</p>
             ${statusUrl ? `<a class="btn" href="${escHtml(statusUrl)}">Track visit status →</a>` : ''}
-        `);
+        `, { name: companyName, contactLine });
         return { subject, html };
     },
 

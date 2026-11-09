@@ -15,6 +15,10 @@
 import PDFDocument from 'pdfkit';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+// Who sends the quote (state §0.234): read from the CALLER'S org — never from the body, which until §0.234 could
+// carry a `companyProfile` (its one caller never sent one, so no org's address ever printed).
+import { orgIdentityFor } from './_orgIdentity.mjs';
+import { contactLineOf } from '../../src/utils/orgIdentity.js';
 
 const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -22,7 +26,7 @@ const headers = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// ── Colour palette (matches Accelerep warm stone) ────────────────────────────
+// ── Colour palette (the house warm stone) ────────────────────────────────────
 const COLOR = {
     nearBlack:  '#1c1917',
     cream:      '#f5f1eb',
@@ -78,14 +82,17 @@ function calcTotals(lineItems = [], dealDiscountPct = 0) {
 }
 
 // ── PDF builder ───────────────────────────────────────────────────────────────
-function buildPDF(quote, opportunity, inputLines, companyProfile) {
+// `identity` is the sending org's (src/utils/orgIdentity.js): its name, address lines, phone and email. Exported for
+// tests/customer-docs.test.mjs, which renders it and reads the text back.
+export function buildPDF(quote, opportunity, inputLines, identity) {
     return new Promise((resolve, reject) => {
+        const org = identity || { name: '', addressLines: [], phone: '', email: '' };
         const doc = new PDFDocument({
             size: 'LETTER',
             margins: { top: 0, bottom: 40, left: 0, right: 0 },
             info: {
                 Title:   quote.name || quote.quoteNumber || 'Quote',
-                Author:  'Accelerep CRM',
+                ...(org.name ? { Author: org.name } : {}),
                 Subject: 'Sales Quote',
             },
         });
@@ -106,38 +113,32 @@ function buildPDF(quote, opportunity, inputLines, companyProfile) {
 
         const oppName  = opportunity ? (opportunity.opportunityName || opportunity.account || '') : '';
         const repName  = quote.createdBy || '';
-        const cp       = companyProfile || {};
 
         // ── HEADER BAND ────────────────────────────────────────────────────
-        // Taller header when company address/phone is present
-        const hasContactInfo = !!(cp.address || cp.phone);
+        // The sending org's address lines, then its phone · email, under the quote name; taller when there are any.
+        const contactLines = [...(org.addressLines || []), contactLineOf(org)].filter(Boolean).slice(0, 3);
+        const hasContactInfo = contactLines.length > 0;
         const headerH = hasContactInfo ? 110 : 88;
         doc.rect(0, 0, PW, headerH).fill(hex(COLOR.nearBlack));
 
         // Gold accent bar
         doc.rect(ML, 20, 4, hasContactInfo ? 68 : 48).fill(hex(COLOR.gold));
 
-        // Company / app name
-        doc.fillColor(hex(COLOR.gold)).fontSize(9).font('Helvetica-Bold')
-            .text('ACCELEREP CRM', ML + 14, 22, { characterSpacing: 1.5 });
+        // The sending org's name — never the app's (state §0.234); none, no line.
+        if (org.name) {
+            doc.fillColor(hex(COLOR.gold)).fontSize(9).font('Helvetica-Bold')
+                .text(org.name.toUpperCase(), ML + 14, 22, { characterSpacing: 1.5, width: CW - 160, height: 11, ellipsis: true });
+        }
 
         // Quote name
         doc.fillColor(hex(COLOR.cream)).fontSize(18).font('Helvetica-Bold')
             .text(quote.name || quote.quoteNumber || 'Sales Quote', ML + 14, 36, { width: CW - 160 });
 
-        // Company address & phone below quote name
-        if (hasContactInfo) {
-            let cpY = 60;
-            if (cp.address) {
-                doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
-                    .text(cp.address, ML + 14, cpY, { width: CW - 160 });
-                cpY += 11;
-            }
-            if (cp.phone) {
-                doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
-                    .text(cp.phone, ML + 14, cpY, { width: CW - 160 });
-            }
-        }
+        // The org's address and contact below the quote name
+        contactLines.forEach((line, i) => {
+            doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
+                .text(line, ML + 14, 60 + i * 11, { width: CW - 160, height: 10, ellipsis: true });
+        });
 
         // Quote number + version top-right
         doc.fillColor(hex(COLOR.dimmed)).fontSize(8).font('Helvetica')
@@ -305,8 +306,7 @@ function buildPDF(quote, opportunity, inputLines, companyProfile) {
         y += 52;
 
         // ── NOTES / TERMS ──────────────────────────────────────────────────
-        const notesText = (quote.notes && quote.notes.trim()) ? quote.notes
-            : (cp.notes && cp.notes.trim()) ? cp.notes : null;
+        const notesText = (quote.notes && quote.notes.trim()) ? quote.notes : null;
         if (notesText) {
             y += 8;
             doc.fillColor(hex(COLOR.muted)).fontSize(7.5).font('Helvetica-Bold')
@@ -323,8 +323,8 @@ function buildPDF(quote, opportunity, inputLines, companyProfile) {
         doc.moveTo(0, footerY).lineTo(PW, footerY).lineWidth(0.5).strokeColor(hex(COLOR.border)).stroke();
 
         doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
-            .text('Generated by Accelerep CRM · ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-                ML, footerY + 12, { width: CW / 2 });
+            .text((org.name ? org.name + ' · ' : '') + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+                ML, footerY + 12, { width: CW / 2, height: 10, ellipsis: true });
 
         const qNum = quote.quoteNumber || '';
         const ver  = 'v' + (quote.version || 1);
@@ -353,13 +353,13 @@ export const handler = async (event) => {
 
     try {
         const body = JSON.parse(event.body || '{}');
-        const { quote, opportunity, lines, companyProfile } = body;
+        const { quote, opportunity, lines } = body;
 
         if (!quote) {
             return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'quote is required' }) };
         }
 
-        const pdfBuffer = await buildPDF(quote, opportunity, lines, companyProfile);
+        const pdfBuffer = await buildPDF(quote, opportunity, lines, await orgIdentityFor(auth.orgId));
 
         const filename = (quote.quoteNumber || 'quote') + '-v' + (quote.version || 1) + '.pdf';
 

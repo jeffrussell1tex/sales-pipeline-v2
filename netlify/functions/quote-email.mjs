@@ -29,8 +29,11 @@ import { quoteTransitionRefusal, quoteNeedsApproval } from '../../src/utils/quot
 // Every value placed in the customer's email is escaped: notes, product names,
 // terms and names are typed by people, and markup in them would reach the inbox.
 import { esc } from '../../src/utils/customerNotifications.js';
-
-const APP_URL = process.env.APP_URL || 'https://accelerep.netlify.app';
+// The email is the org's to its customer (state §0.234): its name, contact line and reply address, read from the
+// caller's org and the sender's own row — never the app's name, never a link into the app (the customer has no
+// account in it). Until §0.234 it was headed "Accelerep" and ended with a link to the CRM.
+import { orgIdentityFor } from './_orgIdentity.mjs';
+import { contactLineOf, emailOrNull } from '../../src/utils/orgIdentity.js';
 
 const responseHeaders = {
     'Content-Type': 'application/json',
@@ -172,10 +175,14 @@ export const handler = async (event) => {
         // somebody else, or inject markup. Looked up by the CLERK id — `userId` is
         // the Clerk id, and comparing it to users.id (usr_…) never matched, so no
         // signature ever went out (§0.155).
+        // The same row gives the customer's reply its address: the rep who sends the quote (Jeff, 9 Nov, Q3); none
+        // well formed, no reply-to and no reply asked for.
         let signatureHtml = '';
+        let replyTo = null;
         try {
-            const [senderRow] = await db.select({ profile: users.profile })
+            const [senderRow] = await db.select({ profile: users.profile, email: users.email })
                 .from(users).where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId))).limit(1);
+            replyTo = emailOrNull(senderRow?.email);
             const raw = (senderRow?.profile || {}).emailSignature;
             if (raw && String(raw).trim()) {
                 signatureHtml = `
@@ -185,6 +192,10 @@ export const handler = async (event) => {
             // A missing signature must never block the quote going out.
             console.error('quote-email: signature lookup failed', e.message);
         }
+
+        // Who sends it: the caller's org (_orgIdentity.mjs — the Company profile, else its name in Clerk).
+        const org = await orgIdentityFor(orgId);
+        const orgFoot = [org.name, contactLineOf(org)].filter(Boolean).map(esc).join(' · ');
 
         const emailHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -196,8 +207,8 @@ export const handler = async (event) => {
 <body style="margin:0;padding:0;background:#f4f4f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1917;">
   <div style="max-width:600px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="background:#1c1917;padding:28px 36px;">
-      <p style="color:#f5f1eb;font-size:18px;font-weight:700;margin:0;">Accelerep</p>
-      <p style="color:#a8a29e;font-size:12px;margin:4px 0 0;">Quote for your review</p>
+      ${org.name ? `<p style="color:#f5f1eb;font-size:18px;font-weight:700;margin:0;">${esc(org.name)}</p>` : ''}
+      <p style="color:#a8a29e;font-size:12px;margin:${org.name ? '4px' : '0'} 0 0;">Quote for your review</p>
     </div>
     <div style="padding:36px;">
       <h2 style="font-size:22px;font-weight:700;margin:0 0 8px;color:#1c1917;">Hi ${esc(customerName)},</h2>
@@ -234,12 +245,12 @@ export const handler = async (event) => {
 
       ${signatureHtml || `
       <p style="margin-top:28px;font-size:13px;color:#a8a29e;">
-        This quote was prepared for you by your account representative. Please reply to this email with any questions.
+        This quote was prepared for you by your account representative.${replyTo ? ' Please reply to this email with any questions.' : ''}
       </p>`}
     </div>
-    <div style="background:#f8f6f3;padding:18px 36px;border-top:1px solid #e8e3da;font-size:11px;color:#a8a29e;text-align:center;">
-      <p style="margin:0;">Accelerep · <a href="${esc(APP_URL)}" style="color:#78716c;text-decoration:none;">${esc(APP_URL)}</a></p>
-    </div>
+    ${orgFoot ? `<div style="background:#f8f6f3;padding:18px 36px;border-top:1px solid #e8e3da;font-size:11px;color:#a8a29e;text-align:center;">
+      <p style="margin:0;">${orgFoot}</p>
+    </div>` : ''}
   </div>
 </body>
 </html>`;
@@ -249,6 +260,8 @@ export const handler = async (event) => {
             to: customerEmail,
             subject: `Your Quote ${quoteNum}${accountName ? ` — ${accountName}` : ''}`,
             html: emailHtml,
+            fromName: org.name,
+            replyTo,
         });
 
         // ── 6. Update quote status to "Sent to Customer" ──────────────────────

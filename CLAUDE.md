@@ -218,6 +218,15 @@ One commit per verified batch; doc patch in the same commit.
   is the importer's by id — one rule, `_lib.mjs importerOwners` over
   `importerOwner.js` — and an Overwrite's blank keeps the stored owner
   (guide §18b106, §18b107).
+- A customer's document — a quote's preview, PDF, print copy and email,
+  the dispatch customer emails and SMS, the status page, the web form —
+  names the org that sent it by one rule (`src/utils/orgIdentity.js`:
+  the Company profile, else the org's name in Clerk), read by the
+  caller's org and never from a body; never the app's name or a link
+  into the app (THE GUARD, tests/customer-docs.test.mjs). It is sent as
+  the org and replies to the org — a quote to the rep, a visit email to
+  the support email; the members' emails keep the app's (guide §18b117).
+  pdfkit stays outside the quote PDF's bundle (netlify.toml).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

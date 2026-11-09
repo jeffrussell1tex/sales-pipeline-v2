@@ -1939,9 +1939,10 @@ test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with t
 const BRAND_STUB = { preset: true };
 const runBrandSave = async ({ answer, latest = null, base = { rev: 'B0' }, brand = { accent: '#123' } }) => {
     const { revsAfter, BRAND_CHANGED } = await import('../src/utils/settingsRevs.js');
+    const { brandLook } = await import('../src/utils/orgIdentity.js');
     const st = { copy: { quoteBrand: { accent: '#old' }, revs: { quoteBrand: 'B0', other: 'O0' } }, sends: [], saving: [], said: [], brands: [], bases: [], closed: 0, taken: 0, order: [] };
     await runAs(handlerIn(read(EDIT_BRAND), 'EditBrandModal', 'handleSave'), {
-        brand, base, BRAND_PRESET: BRAND_STUB, BRAND_CHANGED, revsAfter,
+        brand, base, BRAND_PRESET: BRAND_STUB, BRAND_CHANGED, revsAfter, brandLook,
         writeSettings: async (...a) => { st.sends.push(a); st.order.push('send'); return answer; },
         takeLatestSettings: async (set) => {
             st.taken += 1;
@@ -1981,6 +1982,15 @@ test('S10 — Edit brand\'s Save, run as written (JB3-4): the token its window o
     assert.deepEqual([none.brands, none.bases], [[BRAND_STUB], [{ rev: null }]], 'no brand saved there: the preset, no token');
     const again = await runBrandSave({ brand, base: taken.bases[0], answer: { ok: true, status: 200, error: null, revs: { quoteBrand: 'B2' } } });
     assert.deepEqual(again.sends[0][1], { quoteBrand: 'BL' }, 'the next Save names the latest\'s token');
+
+    // A brand saved before §0.234 held a name and a contact line — the app's own where its preset was saved untouched
+    // (one org, census 9 Nov). The window no longer edits them; its Save and its re-seed carry the look alone.
+    const old = { accent: '#123', companyName: 'Old Co', contactLine: 'old@x.test' };
+    const cleaned = await runBrandSave({ brand: old, answer: { ok: true, status: 200, error: null, revs: { quoteBrand: 'B3' } } });
+    assert.deepEqual(cleaned.sends[0][0], { quoteBrand: { accent: '#123' } }, 'REGRESSION (§0.234): a saved brand carries a company name or contact line again');
+    assert.deepEqual(cleaned.copy.quoteBrand, { accent: '#123' }, 'REGRESSION (§0.234): the copy keeps the name the save dropped');
+    const reseed = await runBrandSave({ brand, answer: STALE, latest: { quoteBrand: old, revs: { quoteBrand: 'BL' } } });
+    assert.deepEqual(reseed.brands, [{ accent: '#123' }], 'REGRESSION (§0.234): a refused save re-seeds the window with the old name and contact line');
 
     const unread = await runBrandSave({ brand, answer: STALE });
     assert.deepEqual([unread.taken, unread.brands, unread.bases, unread.closed, unread.saving.at(-1)], [1, [], [], 0, false]);

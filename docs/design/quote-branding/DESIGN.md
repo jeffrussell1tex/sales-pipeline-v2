@@ -1,4 +1,4 @@
-<!-- Quote branding (OPEN_ITEMS §2.3 "A quote shows Accelerep's name to every org"): the design, 9 Nov 2026, over ec4204e. Answered 9 Nov — each of Q1-Q5 the Recommended (ANSWERS.md beside this file); not yet built. -->
+<!-- Quote branding (OPEN_ITEMS §2.3 "A quote shows Accelerep's name to every org"): the design, 9 Nov 2026, over ec4204e. Answered 9 Nov — each of Q1-Q5 the Recommended (ANSWERS.md beside this file). Built 9 Nov (state §0.234; guide §18b117), with the quote PDF's pdfkit bundling fixed (Jeff: "Fold it in"); its browser check PASSED as Jeff and as Karen; NOT committed; harness deferred. -->
 
 # Design: a customer's document names the org that sent it, never the app
 

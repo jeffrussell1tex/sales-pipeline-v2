@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useOrganization } from '@clerk/clerk-react';
 import { useLocalLayer } from '../hooks/useLocalLayer';
+// Who the quote is from (state §0.234): the org's Company profile, else its name in Clerk — never the app's.
+import { orgIdentityOf, profileOfSettings, contactLineOf } from '../utils/orgIdentity.js';
 import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
@@ -270,15 +273,21 @@ const QuoteActivityLog = ({ quote, events, error }) => {
 };
 
 // ─── PDF preview ──────────────────────────────────────────────
-const QuotePDFPreview = ({ quote, opp, products }) => {
+// `org` is the sending org's identity (src/utils/orgIdentity.js) — what the PDF and the email print too.
+const QuotePDFPreview = ({ quote, opp, products, org }) => {
     const { lines, listTotal, totalValue, avgDisc } = calcLineTotals(quote.lineItems || [], products || []);
+    const orgContact = contactLineOf(org);
     return (
         <div style={{ background: '#fafaf7', padding: '20px 24px 24px', border: `1px solid ${T.border}`, borderRadius: T.r }}>
             <div style={{ background: '#fff', border: `1px solid ${T.border}`, boxShadow: '0 2px 8px rgba(26,22,18,0.06)', padding: '40px 44px', fontFamily: 'Georgia,"Times New Roman",serif', color: '#2a2622', minHeight: 600 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, borderBottom: '2px solid #2a2622', marginBottom: 24 }}>
                     <div>
-                        <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: T.goldInk, marginBottom: 4 }}>ACCELEREP</div>
-                        <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.inkMid, lineHeight: 1.55 }}>500 Market Street, Suite 800<br />San Francisco, CA 94103</div>
+                        {org?.name && <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: T.goldInk, marginBottom: 4, textTransform: 'uppercase' }}>{org.name}</div>}
+                        {(org?.addressLines?.length > 0 || orgContact) && (
+                            <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.inkMid, lineHeight: 1.55 }}>
+                                {[...(org.addressLines || []), orgContact].filter(Boolean).map((l, i) => <div key={i}>{l}</div>)}
+                            </div>
+                        )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: T.inkMuted }}>QUOTE</div>
@@ -342,7 +351,7 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
                     </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 30, fontFamily: T.sans }}>
-                    {['Customer signature', 'Accelerep signature'].map(s => (
+                    {['Customer signature', `${org?.name || 'Company'} signature`].map(s => (
                         <div key={s}>
                             <div style={{ borderBottom: `1px solid #2a2622`, height: 40, marginBottom: 6 }} />
                             <div style={{ fontSize: 10, color: T.inkMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{s}</div>
@@ -1442,6 +1451,10 @@ export default function QuotesTab() {
         loadQuotes, showConfirm, quoteModalError,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
+    // The sending org as the preview draws it — the same rule the PDF and the email read on the server (§0.234).
+    const { organization } = useOrganization();
+    const orgIdentity = useMemo(() => orgIdentityOf(profileOfSettings(settings), organization?.name),
+        [settings, organization?.name]);
 
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
     // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
@@ -1761,7 +1774,7 @@ export default function QuotesTab() {
         } catch {
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body>${orgIdentity.name ? `<p style="font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8a8378;margin:0">${esc(orgIdentity.name)}</p>` : ''}<h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
             w.document.close(); setTimeout(() => w.print(), 400);
         }
     };
@@ -2104,7 +2117,7 @@ export default function QuotesTab() {
                             {/* Preview mode */}
                             {configuratorQuotes.length > 0 && viewMode === 'preview' && activeQuote && (
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 10, alignItems: 'flex-start' }}>
-                                    <QuotePDFPreview quote={activeQuote} opp={configuratorOpp} products={products || []} />
+                                    <QuotePDFPreview quote={activeQuote} opp={configuratorOpp} products={products || []} org={orgIdentity} />
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
                                             <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 10 }}>Customer preview</div>
