@@ -443,8 +443,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        Next in Jeff's order: the member profile page (above) — step A
        done (§0.211), step B done (§0.212) — pushed to dev 27 and 28 Oct,
        SHIPPED 4 Nov, the forty-fourth ship.
-2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
-   four decisions.
+2. **AI scoring batch 1, the model choice** (§3.1). **The four decisions
+   made 9 Nov**, each the Recommended (Jeff: "1 recommended" through "4
+   recommended"; docs/design/ai-scoring/ANSWERS.md). Next: batch 1's design,
+   read in code.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -994,7 +996,6 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   expected to drop (read in code; the re-check's render read the same
   pipeline as before). The design's other flag is decided: each tab's
   Export follows its list (Jeff, 17 Oct: "Export follows the list").
-- **AI scoring's four decisions:** see §3.1.
 - **QuickLog's "📅 Add to Google Calendar"** promises an event and makes
   none. Wire it to `fireActivityCalendarEvent`, or remove the box.
   §0.169 (f).
@@ -1011,7 +1012,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **Schema changes, each additive and nullable, both databases, Jeff's go:**
   - an owner id on `spiff_claims` (§0.169 (d));
   - `org_id` in `document_links_unique_idx` (§0.166 (2));
-  - a close-date history column on deals (§3.1).
+  - a close-date history column on deals (§3.1). Decided 9 Nov (Jeff: "3
+    recommended"); needed before batch 2; its apply is put to Jeff when
+    built.
   - A unique index on `users`, on the org plus the name with whitespace
     collapsed, trimmed and lowercased. It closes the race §0.196 leaves: every
     check reads, then writes, so two writes at one moment can still make a
@@ -1207,7 +1210,9 @@ model's pattern to deals.
 - Rank by what preceded progress, saying it is correlation, not cause.
 - Shown in the deal window's AI read, on Home and in meeting prep.
 
-**Decisions for Jeff, with the recommendations:**
+**Decisions, with the recommendations — each answered the Recommended
+(Jeff, 9 Nov: "1 recommended" through "4 recommended";
+docs/design/ai-scoring/ANSWERS.md):**
 
 1. **Where the number comes from.** Recommended: the learned model, with
    Claude explaining it. The alternative keeps Claude's score and adds the
