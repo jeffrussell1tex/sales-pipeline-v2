@@ -445,8 +445,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
        SHIPPED 4 Nov, the forty-fourth ship.
 2. **AI scoring batch 1, the model choice** (§3.1). **The four decisions
    made 9 Nov**, each the Recommended (Jeff: "1 recommended" through "4
-   recommended"; docs/design/ai-scoring/ANSWERS.md). Next: batch 1's design,
-   read in code.
+   recommended"; docs/design/ai-scoring/ANSWERS.md). **Batch 1 designed and
+   answered 9 Nov** (docs/design/ai-scoring/DESIGN.md; Q1-Q4 each the
+   Recommended, Q4 all three): the chosen model with one fallback, the model
+   kept and audited, "Available to" on scoring and the report builder's Ask
+   AI, the budget and the mock AI controls out, the cause named. Not built.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —

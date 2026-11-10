@@ -10,3 +10,12 @@ The plan: OPEN_ITEMS §3.1 ("AI deal scoring — the plan and its recommended im
 | 4 | Which models to offer | **The Recommended** — the current Haiku, Sonnet and Opus, each checked against what the workspace's key can call before it is listed. Batch 1. |
 
 Next, per the plan: batch 1, the Admin's model choice (decisions 2 and 4) — designed from the code first.
+
+## Batch 1's own questions (DESIGN.md §4, asked 9 Nov in the dialog, each standing on its own)
+
+| Q | Asked | Answer |
+|---|---|---|
+| Q1 | Should "Available to" and the model choice also govern the report builder's "Ask AI"? | **"Roles both, model scoring (Recommended)"** — "Available to" covers deal scoring and Ask AI; the model choice covers deal scoring only, and the card says so; a member left out gets the built-in report reader |
+| Q2 | What a stored model off the new list runs as | **"Default, Haiku 5.5 (Recommended)"** — the panel shows Haiku 5.5 selected until an Admin picks |
+| Q3 | What "Available to" governs for a role it leaves out | **"Asking Claude only (Recommended)"** — no Score, Refresh or "Score all deals", the server refusing them, the cached score included; a score a deal already has still shows wherever the deal shows |
+| Q4 | Which nearby fixes ride along (multi-select) | **All three:** "Name the cause (Recommended)", "Cut text at a word (Recommended)", "Remove mock AI controls (Recommended)" |
