@@ -1237,6 +1237,18 @@ docs/design/ai-scoring/ANSWERS.md):**
   of an invoice"; `quote-pdf.mjs` is the pattern), and an invoice email.
 - **A deep link** from the quote card to its job.
 - **Per-org defaults** for tax rate and terms.
+- **Sales tax on quotes** (Jeff, 9 Nov: "add sales tax calculation to quotes
+  to our to do list"). Read 9 Nov: a quote carries no tax anywhere — no
+  rate, no taxable flag on a line, no tax in its totals, preview, PDF or
+  email (QuotesTab.jsx, quotes.mjs, _quotePdf.mjs, quote-email.mjs). Dispatch
+  invoices already do: `invoices.tax_rate` (db/schema.ts:684), a taxable
+  flag per line, and `invoiceTotals` (src/utils/invoices.js:188 — tax on
+  the taxable lines only, to the cent) — the pattern to reuse. For the
+  design: where the rate comes from (the org's default above, per quote, or
+  by the customer's location); which lines are taxable (per product?);
+  tax-exempt customers; whether the quote's rate carries to its job's
+  invoice; and the schema change it needs (additive and nullable, both
+  databases, Jeff's go). Not designed.
 - **The dead `priceBookProducts` key.** Drop it from both settings.mjs halves.
 - **The quote Activity list** is derived from the current status, so earlier
   steps vanish. The audit log is the real history. §0.150, as recorded.
