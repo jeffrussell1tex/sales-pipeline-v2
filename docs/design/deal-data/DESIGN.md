@@ -1,4 +1,4 @@
-<!-- Deal data (OPEN_ITEMS §1 item 4, §4.2): the design, 9 Nov 2026, over b1e328c. Answered 9 Nov — each of Q1-Q4 the Recommended (ANSWERS.md beside this file). Built 9 Nov (state §0.236; guide §18b119); its browser check PASSED as Karen; NOT committed; harness deferred. -->
+<!-- Deal data (OPEN_ITEMS §1 item 4, §4.2): the design, 9 Nov 2026, over b1e328c. Answered 9 Nov — each of Q1-Q4 the Recommended (ANSWERS.md beside this file). Built 9 Nov (state §0.236; guide §18b119); its browser check PASSED as Karen; committed `1905c5d`; pushed to dev 10 Nov after the one scoped run (3,262/3,262). -->
 
 # Design: a deal's notes and stage history are added to, never written back whole; a contact's Undo keeps its owner
 

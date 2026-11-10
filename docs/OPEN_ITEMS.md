@@ -450,8 +450,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    Recommended, Q4 all three): the chosen model with one fallback, the model
    kept and audited, "Available to" on scoring and the report builder's Ask
    AI, the budget and the mock AI controls out, the cause named. **Built 9 Nov
-   (state §0.238; guide §18b121) — NOT committed; harness deferred**, its browser check PASSED as Karen
-   and as an Admin.
+   (state §0.238; guide §18b121) — committed `3395b01`; pushed to dev 10 Nov** after the one
+   scoped run (3,262/3,262; `b494e03..9dc9944`, Tests GREEN); its browser check PASSED as Karen
+   and as an Admin, its dev checks on 10 Nov (a real score, the key check).
    Strike this once it ships. Next in §3.1: the close-date history column
    (decision 3, its apply Jeff's), then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -482,8 +483,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    and time, only the author edits or deletes; Q3 stage history the
    server's, as the CSV path's; Q4 a contact's Undo a restore keeping the
    stored owner by id, for any role that may delete it. **Built 9 Nov
-   (state §0.236; guide §18b119), its browser check PASSED as Karen — NOT
-   committed; harness deferred**: a note one operation the server applies
+   (state §0.236; guide §18b119), its browser check PASSED as Karen —
+   committed `1905c5d`; pushed to dev 10 Nov** (the one scoped run first,
+   3,262/3,262; a note posted on dev): a note one operation the server applies
    (compare-and-set), stamped by the server, only its author changing it; a
    whole list refused; a stage move appended to the stored history in the
    write; a contact's Undo a restore keeping its stored owner by id. Strike
@@ -498,8 +500,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    read. Q1 the whole class, one link shape and one reader; Q2 a link to
    another of the member's orgs switches, then opens; Q3 a record they can't
    open says so; Q4 the weekly summary opens the Pipeline tab. **Built 9 Nov
-   (state §0.237; guide §18b120), its browser check PASSED as Karen — NOT
-   committed; harness deferred**: one link shape (`appLink`) and one reader;
+   (state §0.237; guide §18b120), its browser check PASSED as Karen —
+   committed `15b8197`; pushed to dev 10 Nov** (the one scoped run first,
+   3,262/3,262; the reader checked on dev, a switch of org included): one link shape (`appLink`) and one reader;
    every deal, task and quote link names its org; a preferences link opens
    the Notifications tab. Strike this once it ships.
 
@@ -653,7 +656,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   falls back to the dev site when `APP_URL` is unset (quote-email.mjs:33).
   Neither value was read. The quote branding batch makes the From name the
   org's and drops the quote email's link; the address must stay on
-  Resend's verified domain.
+  Resend's verified domain. Every member email's link is
+  `appLink(APP_URL || 'https://salespipelinetracker.com', …)` (send-email.mjs:85,
+  §0.237): on a site with it unset, a member email links to prod. **Read
+  for dev, 10 Nov** (Jeff): `APP_URL` = `https://accelerep.netlify.app`, so a
+  dev email links to dev (state §0.238, the dev checks). Still unread:
+  `APP_URL` on prod, and `MAIL_FROM` on both (a member email from dev came
+  from noreply@salespipelinetracker.com, 10 Nov).
 
 ### 2.2 Around the next ship to prod
 
@@ -677,9 +686,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
   Q-2026-001 rendered there as Karen and read back — 200, QA's name,
   address and contact, nothing of the app's — and two pages, the second
-  holding only its number: §0.235, built 9 Nov, not yet pushed). After
-  §0.235's push: the same render on dev, counting its pages; after the
-  ship, on salespipelinetracker.com. Until then prod's Download falls
+  holding only its number: §0.235, built 9 Nov, pushed to dev 10 Nov). On
+  dev since: a 60-line quote in three pages, "Page i of 3" in every
+  footer, nothing cut (state §0.238, the dev checks); after the ship, on
+  salespipelinetracker.com. Until then prod's Download falls
   back to its print copy (no call to prod's quote-pdf in seven days).
 - **§0.236's TEST data in Accelerep QA, Jeff's to clear if he wishes** (its
   browser check, 9 Nov — state §0.236): on the deal "TEST §0.209 deal", a
@@ -863,7 +873,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   look; and the quote PDF, which answered 500 everywhere (pdfkit bundled
   without its fonts — Jeff: "Fold it in"), renders again. Its pages (a
   page for the quote number alone, a long quote in fragments, the address
-  under a wrapped quote name): state §0.235, built 9 Nov, not yet pushed.
+  under a wrapped quote name): state §0.235, built 9 Nov, pushed to dev 10 Nov.
   Strike this once both ship.
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
@@ -1157,7 +1167,7 @@ way.
   converted and dead leads. Its threshold is 150 by default and never fewer
   than 20.
 
-**Batch 1: the Admin's model choice (small; recommended first).** **Built 9 Nov (state §0.238).**
+**Batch 1: the Admin's model choice (small; recommended first).** **Built 9 Nov (state §0.238); pushed to dev 10 Nov.**
 
 - The AI score uses the model the Admin chose, from a list the server
   accepts.
@@ -2014,6 +2024,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `Authorization: Bearer` is the current header — both calls.)
 - **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
+- **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
+- **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
+- **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
 
 - **The Recommendation report's outcomes never move.** Nothing calls
   `recommendation-log.mjs`'s PUT, the sweep that marks a pending alert
@@ -3050,7 +3063,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A message link's notice is the five-second toast** (§0.237's browser
   check): "That deal isn't available to you" shows at load and goes after
   five seconds, often under the overdue-task reminder — a member who looks
-  away misses it.
+  away misses it. And it carries the undo toast's ✓, so a refusal reads as
+  done (§0.238's dev check, 10 Nov: "✓ That link is for an organization
+  you're not a member of.").
+- **A member's deal email names who acted by their Clerk id** (§0.238's dev
+  check, 10 Nov): "Hi Jeff RussellAdmin, user_3ASC6O… updated the stage on
+  one of your deals." The deal PUT hands the stage email `changedBy:
+  userId`, the close email `closedBy: userId` and the update email
+  `updatedBy: userId` — Clerk's id (opportunities.mjs:640, 651, 666); the
+  Slack post beside them names the mover (`getCallerName`, :692).
+  Recommended: the caller's name, as Slack's — with §4.2's "compares the
+  rep's name to the caller's Clerk id" (the same `userId`, :659).
 - **The Notifications tab files "Maintenance agreement expiring (Dispatch)"
   under "Quote alerts".** §0.158.
 - **The Monday team digest's Attainment reads "—" for every rep.**
