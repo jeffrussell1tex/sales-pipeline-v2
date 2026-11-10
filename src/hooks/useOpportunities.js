@@ -137,8 +137,11 @@ export function useOpportunities(deps) {
             // through, but nothing ever wrote it, so every "days to close" read the
             // forecast date instead (0.68 batch 5b). Kept across edits of a won deal;
             // cleared if the deal is reopened.
+            // A deal already won keeps its won date as stored, none included — never the day of a later edit; a deal won
+            // in this save is won today, never on the date its copy held from an earlier win (state §0.240; the review);
+            // a new deal as given.
             wonDate:      formData.stage === 'Closed Won'
-                ? ((prevOpp?.stage === 'Closed Won' && prevOpp?.wonDate) ? prevOpp.wonDate : (formData.wonDate || today))
+                ? (!prevOpp ? (formData.wonDate || today) : prevOpp.stage === 'Closed Won' ? (prevOpp.wonDate || '') : today)
                 : '',
         };
 

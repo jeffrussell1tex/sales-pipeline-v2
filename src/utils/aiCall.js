@@ -86,6 +86,10 @@ export function attemptOutcome({ thrown, status, text, json }) {
     try {
         const parsed = JSON.parse(block.text.replace(/```json|```/g, '').trim());
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+        // A score with no next action (state §0.240, finding 1 — a real score on dev answered recommendation ""): read
+        // once more on the fallback; the answer is carried, and kept when no answer brings one (Jeff, 10 Nov: "Keep score,
+        // no action").
+        if (typeof parsed.recommendation !== 'string' || parsed.recommendation.trim() === '') return { ok: false, cause: 'unreadable', retry: true, detail: 'a blank recommendation', parsed };
         return { ok: true, parsed };
     } catch {
         return { ok: false, cause: 'unreadable', retry: true, detail: 'the answer is not JSON' };

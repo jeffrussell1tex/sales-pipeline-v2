@@ -153,9 +153,12 @@ test('WIRING: App.jsx reads every link once, waits for the profile in an org, sw
     assert.ok(!a.includes('takeQuoteLink') && !a.includes('quoteLinkRef'), 'one reader — the quote link\'s folded in');
     assert.ok(a.includes('if (!link || !clerkUser || !organization?.id || !roleKnown) return;'), 'it waits for the profile in an org');
     assert.ok(a.includes("const member = (userMemberships?.data || []).some(m => m.organization?.id === link.org);"), 'a member of the link\'s org, by Clerk\'s own list');
-    assert.ok(a.includes('if (!member) { doneWithAppLink(); offerUndo({ notice: APP_LINK_WORDS.org }); return; }'), 'REGRESSION (Q2): an org the member is not in, entered or said nothing');
+    assert.ok(a.includes('if (!member) { doneWithAppLink(); setUndoToast({ error: APP_LINK_WORDS.org }); return; }'), 'REGRESSION (Q2): an org the member is not in, entered or said nothing — said as an error, ⚠, kept until closed (§0.240)');
+    assert.ok(!a.includes('offerUndo({ notice: APP_LINK_WORDS'), 'REGRESSION (§0.240): a refusal under the undo toast\'s ✓, gone in five seconds');
+    assert.ok(a.includes("if (!res.ok) throw new Error('the list did not answer');"), 'a list that did not answer is no refusal');
+    assert.ok(a.includes('})().catch(() => { if (stillOrg(askedOrg)) { keepAppLink(link); setUndoToast({ error: APP_LINK_WORDS.unread }); } });'), 'a failed read said apart, the link kept for a reload');
     assert.ok(a.includes('            appLinkSwitchRef.current = link.org;\n            setActive({ organization: link.org });'), 'switched to, once');
-    assert.ok(a.includes("if (!deal) { offerUndo({ notice: APP_LINK_WORDS.deal }); return; }"), 'REGRESSION (Q3): a deal they cannot open, a blank Home');
+    assert.ok(a.includes("if (!deal) { setUndoToast({ error: APP_LINK_WORDS.deal }); return; }"), 'REGRESSION (Q3): a deal they cannot open, a blank Home');
     assert.ok(a.includes("const deal = await linkedRecord('opportunities', 'opportunities', link.id);\n                if (!stillOrg(askedOrg)) return;"), 'the server\'s own list decides; a switch drops the answer');
     assert.ok(a.includes("if (link.kind === 'pipeline') { setActiveTab('pipeline'); return; }"), 'the weekly summary (Q4)');
     assert.ok(a.includes("if (link.kind === 'notifications') { setProfileTabAsk('notifications'); setShowProfilePanel(true); return; }"));

@@ -74,6 +74,7 @@ export function useContacts(deps) {
                 }
                 if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             }
+            let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
                 // What did not delete is put back, and the first refusal is shown — the server's
                 // open-deal refusal names the deal.
@@ -81,9 +82,10 @@ export function useContacts(deps) {
                     const have = new Set(prev.map(c => c.id));
                     return [...prev, ...failed.map(f => f.c).filter(c => !have.has(c.id))];
                 });
-                setUndoToast({ error: going.length === 1
+                failNote = going.length === 1
                     ? `Contact not deleted — ${failed[0].error}`
-                    : `${failed.length} of ${going.length} contacts not deleted — ${failed[0].error}` });
+                    : `${failed.length} of ${going.length} contacts not deleted — ${failed[0].error}`;
+                setUndoToast({ error: failNote });
                 if (failed.length === going.length) return;   // nothing deleted, nothing to undo
             }
             const deleted = going.filter(c => !failed.some(f => f.c.id === c.id));
@@ -119,6 +121,7 @@ export function useContacts(deps) {
                     }
                 }
             );
+            if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
         });
     };
 

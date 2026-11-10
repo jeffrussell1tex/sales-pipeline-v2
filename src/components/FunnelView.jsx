@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../AppContext';
 import { T } from '../tokens.js';
+import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 
 // ── Tokens — exact match to TOKENS in Funnel Redesign mockup ─
 
@@ -15,7 +16,9 @@ const fmtARR = (n) => {
 
 const relativeDay = (dateStr) => {
     if (!dateStr) return '—';
-    const diff = Math.round((new Date(dateStr + 'T12:00:00') - new Date()) / 86400000);
+    // Signed calendar days (state §0.240); an unreadable day reads as no day, not "Invalid Date".
+    const diff = calendarDays(todayLocal(), dateStr);
+    if (diff === null) return '—';
     if (diff === 0) return 'today';
     if (diff < 0) return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     if (diff <= 14) return `${diff}d`;
@@ -163,12 +166,13 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
                                 // permanently false, so such a deal could never flag as
                                 // stalled. The stage summary further down already
                                 // guarded this; the row did not.
+                                // Calendar days (state §0.240), as the board's daysSince.
                                 const days = opp.stageChangedDate
-                                    ? Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)
+                                    ? daysSince(opp.stageChangedDate, today)
                                     : null;
                                 const stale = days !== null && days > 14;
                                 const closeDays = opp.forecastedCloseDate
-                                    ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - today) / 86400000)
+                                    ? calendarDays(today, opp.forecastedCloseDate)
                                     : null;
                                 const overdue = closeDays !== null && closeDays < 0;
                                 return (
@@ -273,7 +277,7 @@ export default function FunnelView({
         const avgDays = deals.length === 0 ? 0 : Math.round(
             deals.reduce((sum, d) => {
                 const days = d.stageChangedDate
-                    ? Math.round((today - new Date(d.stageChangedDate + 'T12:00:00')) / 86400000)
+                    ? (daysSince(d.stageChangedDate, today) ?? 0)   // calendar days (§0.240)
                     : 0;
                 return sum + days;
             }, 0) / deals.length
@@ -293,8 +297,8 @@ export default function FunnelView({
     const allStuck = pipelineFilteredOpps.filter(o => {
         if (['Closed Won', 'Closed Lost'].includes(o.stage)) return false;
         if (!o.stageChangedDate) return false;
-        const days = Math.round((today - new Date(o.stageChangedDate + 'T12:00:00')) / 86400000);
-        return days > 14;
+        const days = daysSince(o.stageChangedDate, today);   // calendar days (§0.240); unreadable is null, never > 14
+        return days !== null && days > 14;
     }).sort((a, b) => new Date(a.stageChangedDate) - new Date(b.stageChangedDate));
 
     const totalPipeline = stageData.reduce((s, d) => s + d.value, 0);
@@ -427,7 +431,7 @@ export default function FunnelView({
                     ) : (
                         allStuck.slice(0, 10).map(opp => {
                             const days = opp.stageChangedDate
-                                ? Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)
+                                ? daysSince(opp.stageChangedDate, today)   // calendar days (§0.240)
                                 : null;
                             return (
                                 <div key={opp.id}

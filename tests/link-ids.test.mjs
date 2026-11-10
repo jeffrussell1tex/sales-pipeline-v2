@@ -333,7 +333,7 @@ test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anyt
     assert.ok(c.includes("const keyed = await rekeyBulkOwners(partialRows(linked.rows, sanitize, storedById), 'contact', { table: contacts, orgId });"), 'a key one row leaves out is its stored value (Q14)');
     const o = fn('opportunities');
     assert.ok(o.includes('const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);'), "a create's contacts asked of the rows as linked (state §0.216)");
-    assert.ok(o.includes("const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });"));
+    assert.ok(o.includes("const owned = await stampOwnerIds(people.rows.map(d => sanitize({ ...d, createdDate: createdDayOf(d) })), 'opportunity', { clerkUserId: userId, orgId });"));   // dated by the server's rule (§0.240)
     assert.ok(o.includes('const people = await checkBulkLinks(DEAL_LINKS, data, orgId, { held: priors });'));
     assert.ok(o.includes('const priorRows = await db\n                    .select()\n                    .from(opportunities)'), 'the stored contacts are read with the priors — the stored rows whole (state §0.216)');
     assert.ok(o.includes('data.splice(0, data.length, ...people.rows);'));

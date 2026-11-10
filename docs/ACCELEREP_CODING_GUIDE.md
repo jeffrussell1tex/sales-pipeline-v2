@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b122** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b123** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4687,3 +4687,15 @@ through `dbFetch`.
 6. **A restore keeps a deal's histories entry by entry** (`restoredHistories`): the shape the server writes, else dropped. It checks the shape, not who made an entry — say so wherever it is described.
 7. **A list a row holds reads anything not a list as none** (`listOf`), and a stored date as the column holds it — an entry the server wrote is never hidden by its own reader nor dropped by a restore.
 8. **The column is additive** (§18c): `db/apply-close-date-history.mjs` — checks only without `--apply`, read back, its `--test` path refusing the shared app database's host; applied before any code that names it runs, local `netlify dev` included.
+
+## 18b123. A Day Count Is Calendar Days, Through One Helper; A Refusal Is Said Until It Is Read; A Message Names Who Acted By Name (hard rule)
+
+**Origin (§0.240, 10 Nov 2026 — the five findings of §0.238's dev checks; docs/design/five-findings, Jeff's five answers).** A deal moved this morning read "-1d"; the deal health called a deal closing today "1 days overdue"; a link refusal wore the undo toast's ✓ and left in five seconds; a deal email printed the mover's Clerk id; a rep was emailed about their own edits; any save could move a deal's created date.
+
+1. **A day count a member sees is whole calendar days** — `calendarDays(from, to)` (signed) or `daysSince(day)` (never below 0), `src/utils/dateLocal.js`. Never a stored day read at noon or as UTC midnight and divided against now — floored, ceiled, truncated or rounded: each is one off around noon, an evening, or a clock change. A count a scan cannot see as such (a bare division against a threshold) is written with the helper too. THE GUARD: tests/date-local.test.mjs's count scan, with named exceptions for instant ages (hours, minutes).
+2. **A close date of today reads "today"**, overdue from the next morning. A countdown is signed; an elapsed count never below 0.
+3. **The server's own day counts are the member's day**, not UTC's — filed (OPEN_ITEMS §4.2); until then, a new server count says which day it counts from.
+4. **A refusal is said as an error** — ⚠, kept until closed — never under the undo toast's ✓ or its timer. A read that failed is said apart from a refusal ("couldn't be opened… reload") and keeps what the member asked for, so a reload tries it again.
+5. **A message names who acted by their member name** — "Someone" when the caller has no member row — never a Clerk id; and a member is not told of their own act, by owner id (`!!` both sides — the null === null collision). A name is never compared to an id.
+6. **A value the record keeps from its making is the server's once it exists** — a deal's created date: no save names it; a create keeps a real day it names, else the server's day. **A date that marks a stage follows the stage** — a deal's won date: dated by the move into Closed Won unless the save names a real day that is not the stored one, cleared by a move out.
+7. **An AI answer that reads but leaves out what the screen shows first is asked once more** (§18b121 rule 2) — a blank recommendation — and kept when no answer brings it, said so in the audit row; what is blank is not drawn (a heading over nothing, an empty chip).

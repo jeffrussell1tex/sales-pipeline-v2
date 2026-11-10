@@ -6,7 +6,7 @@ import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 // "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
 import { mayUseAi } from '../utils/aiModels.js';
 import { storedScore } from '../utils/aiScore.js';
-import { isoLocal } from '../utils/dateLocal';
+import { isoLocal, todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
 import ListView from '../components/ListView';
@@ -283,13 +283,15 @@ function Chip({ label, active, count, onClick, onDelete }) {
 // ── Forecast card / lane (module scope — stable identity) ──
 function ForecastCard({ opp, deps }) {
     const { dealScoringOn, calculateDealHealth, setEditingOpp, setShowModal } = deps;
-    const closedays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000) : null;
+    // Signed calendar days (state §0.240): overdue from the next morning.
+    const closedays = opp.forecastedCloseDate ? calendarDays(todayLocal(), opp.forecastedCloseDate) : null;
     const overdue   = closedays !== null && closedays < 0;
     const health    = dealScoringOn ? calculateDealHealth(opp) : null;
     const hColor    = health ? (health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger) : T.border;
     const relDay    = d => {
         if (!d) return '—';
-        const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000);
+        const diff = calendarDays(todayLocal(), d);   // an unreadable day reads as no day, not "Invalid Date"
+        if (diff === null) return '—';
         if (diff === 0) return 'today';
         if (diff < 0)  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
         if (diff <= 14) return diff+'d';
@@ -470,19 +472,21 @@ export default function PipelineTab() {
 
     const stalledOpps = visibleOpportunities.filter(o =>
         !['Closed Won','Closed Lost'].includes(o.stage) && o.stageChangedDate &&
-        (Date.now() - new Date(o.stageChangedDate + 'T12:00:00').getTime()) / 86400000 > 14
+        daysSince(o.stageChangedDate) > 14   // more than 14 calendar days, as the board's stale flag (§0.240)
     );
     const closingThisWeek = visibleOpportunities.filter(o => {
         if (['Closed Won','Closed Lost'].includes(o.stage) || !o.forecastedCloseDate) return false;
-        const d = Math.round((new Date(o.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000);
-        return d >= -14 && d <= 7;
+        // Signed calendar days (§0.240). Unreadable is null, which `>= -14` would take: it read NaN, matching neither.
+        const d = calendarDays(todayLocal(), o.forecastedCloseDate);
+        return d !== null && d >= -14 && d <= 7;
     });
     const commitOpps = visibleOpportunities.filter(o =>
         ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)
     );
     const recentlyTouched = visibleOpportunities.filter(o => {
         if (!o.stageChangedDate) return false;
-        return Math.round((Date.now() - new Date(o.stageChangedDate + 'T12:00:00').getTime()) / 86400000) <= 7;
+        const n = daysSince(o.stageChangedDate);   // calendar days (§0.240); null would pass `<= 7`, as NaN never did
+        return n !== null && n <= 7;
     });
 
     // ── Filter options ────────────────────────────────────────
@@ -606,7 +610,7 @@ export default function PipelineTab() {
         const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
         const rows = smartFilteredOpps.map(o => {
             const health     = isFeatureEnabled('deal-scoring') ? calculateDealHealth(o) : { score: '', status: '' };
-            const daysInStage = o.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(o.stageChangedDate + 'T12:00:00')) / 86400000)) : '';
+            const daysInStage = o.stageChangedDate ? (daysSince(o.stageChangedDate) ?? '') : '';
             const weightedVal = ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100).toFixed(0);
             return [
                 o.opportunityName || o.account,

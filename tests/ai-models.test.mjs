@@ -258,14 +258,18 @@ test('ai-score.mjs: the Admin\'s model, then once more on the fallback — the s
 
 test('ai-score.mjs: no score — 502 with the cause in words, after the audit row; a score keeps its model, each text cut at a word', () => {
     const s = read('netlify/functions/ai-score.mjs');
-    const fail = between(s, 'if (!last.outcome.ok) {', 'const parsed = last.outcome.parsed;');
+    const fail = between(s, 'if (!kept) {', 'const parsed = kept.outcome.parsed;');   // none read, none kept (§0.240)
     before(fail, "action: 'ai.deal_score_failed'", 'return { statusCode: 502', 'the log first, then the answer');
     assert.ok(fail.includes("body: JSON.stringify({ error: causeWords(last.outcome.cause, modelLabel(last.model)), cause: last.outcome.cause })"));
     assert.ok(!s.includes('AI scoring service unavailable'), 'REGRESSION (OPEN_ITEMS §4.2): every failure said the same');
     assert.ok(s.includes('headline:       cutAtWord(parsed.headline, 120),'));
     assert.ok(s.includes('text:      cutAtWord(s?.text, 100),'));
     assert.ok(s.includes('recommendation: cutAtWord(parsed.recommendation, 150),'));
-    assert.ok(s.includes('model:          last.model,'), 'the model that answered');
+    assert.ok(s.includes('model:          kept.model,'), 'the model whose answer is kept');
+    // §0.240 (finding 1): an answer with no next action is carried and kept when no answer brings one.
+    assert.ok(s.includes('const kept = [...attempts].reverse().find((a) => a.outcome.ok) || [...attempts].reverse().find((a) => a.outcome.parsed) || null;'));
+    assert.ok(s.includes("const noAction = kept.outcome.ok ? '' : ' · kept with no next action';"), 'the audit row says so');
+    assert.ok(s.includes('})).filter(s => s.text).slice(0, 5),'), 'a signal with no words dropped');
     assert.ok(!/\.slice\(0, (100|120|150)\)/.test(s), 'no cut mid-word left');
 });
 

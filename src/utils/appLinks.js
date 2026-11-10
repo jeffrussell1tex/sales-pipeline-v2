@@ -73,6 +73,12 @@ export function dropAppLink(store = tabStore()) {
     try { store?.removeItem(APP_LINK_KEY); } catch { /* storage unavailable */ }
 }
 
+// A link whose record could not be read (the list did not answer — never a refusal) is kept in the tab, so a reload
+// tries it again (state §0.240, finding 2). A refusal drops it: the newest link the member followed decides.
+export function keepAppLink(link, store = tabStore()) {
+    try { if (link && APP_LINK_KINDS.includes(link.kind)) store?.setItem(APP_LINK_KEY, JSON.stringify(link)); } catch { /* storage unavailable */ }
+}
+
 export function takeAppLink(search, store = tabStore()) {
     const here = readAppLink(search);
     if (here) {
@@ -104,4 +110,6 @@ export const APP_LINK_WORDS = Object.freeze({
     task:    'That task isn\'t available to you — it may have been deleted or reassigned.',
     quote:   'That quote isn\'t available to you — it may have been deleted or reassigned.',
     org:     'That link is for an organization you\'re not a member of.',
+    // Not a refusal (state §0.240): the list did not answer; the link is kept, and a reload tries it again.
+    unread:  'That link couldn\'t be opened just now — reload the page to try again.',
 });

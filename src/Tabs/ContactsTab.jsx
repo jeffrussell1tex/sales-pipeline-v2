@@ -6,6 +6,7 @@ import { canEditCrm } from '../utils/roles.js';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { unarchived } from '../utils/pickLink.js';
+import { daysSince } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -25,7 +26,8 @@ const avatarBg = name => {
 
 const relDate = d => {
     if (!d) return '—';
-    const days = Math.floor((Date.now() - new Date(d+'T12:00:00').getTime()) / 86400000);
+    const days = daysSince(d);   // calendar days (state §0.240): it read -1 before noon
+    if (days == null) return '—';
     if (days === 0)  return 'Today';
     if (days === 1)  return '1d ago';
     if (days < 7)   return days + 'd ago';

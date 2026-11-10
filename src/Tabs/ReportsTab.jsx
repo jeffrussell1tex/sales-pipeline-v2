@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
-import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
+import { parseLocalDate, isoLocal, todayLocal, daysSince, calendarDays, timelineBucket } from '../utils/dateLocal';
 // Every read of a lost deal's reason or exit stage goes through here (0.66):
 // the reports used to read the free-text notes instead of the picked category,
 // and the closing history entry's own stage instead of the stage it came from.
@@ -571,10 +571,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             const dealsRisk = openOpps.map(o=>{
                               const flags=[];
                               const lastAct=reportsActivities.filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-                              const daysStale=lastAct?.date ? Math.floor((Date.now()-new Date(lastAct.date+'T12:00:00'))/86400000) : null;
+                              const daysStale=lastAct?.date ? daysSince(lastAct.date, today2iso) : null;
                               const cd=o.forecastedCloseDate||o.closeDate;
                               if(daysStale!==null&&daysStale>=14) flags.push({l:`No activity in ${daysStale}d`,s:'high'});
-                              if(cd&&cd<today2iso) flags.push({l:`Close date passed ${Math.floor((Date.now()-new Date(cd+'T12:00:00'))/86400000)}d ago`,s:'high'});
+                              if(cd&&cd<today2iso) flags.push({l:`Close date passed ${daysSince(cd, today2iso)}d ago`,s:'high'});
                               if(!o.nextSteps) flags.push({l:'No next step',s:'low'});
                               return {...o,flags};
                             }).filter(o=>o.flags.length>0).sort((a,b)=>(b.flags.filter(f=>f.s==='high').length-a.flags.filter(f=>f.s==='high').length)||((parseFloat(b.arr)||0)-(parseFloat(a.arr)||0))).slice(0,5);
@@ -1758,8 +1758,9 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 // bare day, but nothing validates a client value, so read them
                                 // through parseLocalDate and drop what does not parse (0.60).
                                 const daysFromCreated = (later, l) => {
+                                    // Calendar days (state §0.240): an instant to a day's noon ran one low.
                                     const a = parseLocalDate(later), b = parseLocalDate(l.createdAt);
-                                    return (a && b) ? Math.max(0, Math.floor((a - b) / 86400000)) : null;
+                                    return (a && b) ? daysSince(b, a) : null;
                                 };
                                 const speedSamples = allLeads
                                     .filter(l => l.firstTouchDate && l.createdAt)
@@ -2701,7 +2702,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const addedRecent = allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
     const stuckDeals = allOpen.filter(o=>{
         const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-        const ds = lastAct?.date ? Math.floor((new Date()-new Date(lastAct.date+'T12:00:00'))/86400000) : 999;
+        const ds = lastAct?.date ? daysSince(lastAct.date) : 999;
         return ds >= 14;
     });
     const stuckARR = stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
@@ -2826,7 +2827,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         );
         const atRiskOpps = allOpen.filter(o => {
             const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-            const days = lastAct?.date ? Math.floor((Date.now()-new Date(lastAct.date+'T12:00:00').getTime())/86400000) : 999;
+            const days = lastAct?.date ? daysSince(lastAct.date) : 999;
             return days >= 14;
         });
         const newSinceOpps = allOpen.filter(o => o.createdDate && o.createdDate >= iso7);
@@ -2839,13 +2840,18 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const lastActLabel = opp => {
             const a = (activities||[]).filter(a=>a.opportunityId===opp.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
             if (!a?.date) return 'No activity';
-            return Math.floor((Date.now()-new Date(a.date+'T12:00:00').getTime())/86400000)+'d ago';
+            // Calendar days (state §0.240): from the day's noon it read -1d before noon.
+            const n = daysSince(a.date);
+            return n == null ? '—' : n+'d ago';
         };
         const closeLabelFn = opp => {
             const cd = opp.forecastedCloseDate||opp.closeDate;
             if (!cd) return null;
-            const diff = Math.ceil((new Date(cd+'T12:00:00')-Date.now())/86400000);
-            if (diff<=0) return 'OVERDUE';
+            // Signed calendar days: today is 0 and closes today; OVERDUE from the next morning.
+            // Math.ceil against now read today OVERDUE from noon, and one high before it.
+            const diff = calendarDays(todayLocal(), cd);
+            if (diff == null) return null;
+            if (diff<0) return 'OVERDUE';
             if (diff<=7) return 'CLOSE '+new Date(cd+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'}).toUpperCase();
             return Math.ceil(diff/7)+'wk';
         };
@@ -3024,7 +3030,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         const enter = parseLocalDate(h.date);
                         const exit  = parseLocalDate(o.stageHistory[i+1].date);
                         if (!enter || !exit) return;
-                        const d = Math.floor((exit-enter)/86400000);
+                        const d = calendarDays(enter, exit);   // a DST change made a 23-hour week read 6 (§0.240)
                         if (d >= 0 && d < 365) samples.push(d);
                     }
                 });
@@ -5926,23 +5932,12 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 ].sort((a,b) => new Date(b.rawDate) - new Date(a.rawDate));
 
                 // Bucket events
+                // By calendar day (timelineBucket, dateLocal.js; state §0.240): "this week" began at
+                // the current time of day on Sunday, so a Sunday event left it every afternoon.
                 const now = new Date();
-                const today = now.toDateString();
-                const yest = new Date(now - 86400000).toDateString();
-                const thisWeekStart = new Date(now - (now.getDay() * 86400000));
-                const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
-                const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-
-                const bucketName = (dateStr) => {
-                    if (!dateStr || dateStr === '1900-01-01') return 'Earlier';
-                    const d = new Date(dateStr+'T12:00:00');
-                    if (d >= tomorrowStart) return 'Upcoming';
-                    if (d.toDateString() === today) return 'Today';
-                    if (d.toDateString() === yest) return 'Yesterday';
-                    if (d >= thisWeekStart) return 'This week';
-                    if (d >= lastMonthStart) return 'Last month';
-                    return 'Earlier';
-                };
+                const bucketName = (dateStr) => (
+                    !dateStr || dateStr === '1900-01-01' ? 'Earlier' : timelineBucket(dateStr, now)
+                );
                 const buckets = {};
                 const BUCKET_ORDER = ['Upcoming','Today','Yesterday','This week','Last month','Earlier'];
                 allEvents.forEach(e => {
@@ -6177,8 +6172,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         : '—';
                                     // FIX 2: use createdDate (the actual field) not createdAt/openedDate
                                     const openedRaw = selectedOpp.createdDate || selectedOpp.createdAt || selectedOpp.openedDate || '';
+                                    // daysSince reads a createdAt instant too; noon appended to one was NaN (§0.240).
                                     const age = openedRaw
-                                        ? Math.round((Date.now() - new Date(openedRaw+'T12:00:00'))/86400000)
+                                        ? daysSince(openedRaw)
                                         : null;
                                     const openedLabel = openedRaw
                                         ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
@@ -6190,8 +6186,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         if (match) return match.date || match.changedAt || '';
                                         return selectedOpp.stageChangedDate || selectedOpp.stageChangedAt || '';
                                     })();
+                                    // Calendar days (§0.240); a changedAt instant reads as its local day, not NaN.
                                     const daysInStage = stageEnteredRaw
-                                        ? Math.round((Date.now() - new Date(stageEnteredRaw+'T12:00:00'))/86400000)
+                                        ? daysSince(stageEnteredRaw)
                                         : null;
 
                                     const stageStatusColor = stage.includes('Won') ? T.ok : stage.includes('Lost') ? T.danger : T.warn;

@@ -116,7 +116,7 @@ test('the two AI calls and the job say what left the app and as whom', () => {
     // One row each way, naming every model asked and why one failed (state §0.238).
     assert.ok(a.includes("const entityName = opp.opportunityName || opp.account || 'Unnamed';"));
     assert.ok(a.includes("action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName,"), 'a deal handed to the model is logged on the deal');
-    assert.ok(a.includes('detail: `${last.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}`,'), 'the model that answered, and the one that failed first');
+    assert.ok(a.includes('detail: `${kept.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}${noAction}`,'), 'the model whose answer is kept, every attempt not kept, and a missing next action said (§0.240)');
     assert.ok(a.includes("action: 'ai.deal_score_failed', entityType: 'opportunity', entityId: opportunityId, entityName,"), 'no score came back, and the deal still left the app');
     assert.ok(a.includes('detail: `${keyWords} · ${tried}`,'));
     const j = code(src('report-deliveries.mjs'));

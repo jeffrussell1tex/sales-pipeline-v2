@@ -3,7 +3,7 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
-import { isoLocal } from '../utils/dateLocal';
+import { isoLocal, todayLocal, calendarDays } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -52,8 +52,9 @@ const fmtAgo = iso => {
 // Compact day label for "Coming up" strip
 const dayLabelShort = isoDay => {
     const d   = new Date(isoDay + 'T12:00:00');
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const diff = Math.round((new Date(isoDay + 'T12:00:00') - now) / 86400000);
+    // Calendar days (state §0.240): the day's noon less today's midnight is 0.5, which
+    // Math.round takes to 1 -- today read "Tomorrow" and tomorrow its weekday.
+    const diff = calendarDays(todayLocal(), isoDay);
     if (diff === 0)  return 'Today';
     if (diff === 1)  return 'Tomorrow';
     return d.toLocaleDateString('en-US', { weekday: 'short' });

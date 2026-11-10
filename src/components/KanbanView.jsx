@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
+import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 
 // ── Tokens — exact match to TOKENS in mockup ─────────────────
 
@@ -10,7 +11,9 @@ const sc = (stage) => T.stages[stage] || T.inkMuted;
 // Relative day helper matching mockup's relativeDay()
 const relDay = (dateStr) => {
     if (!dateStr) return '—';
-    const diff = Math.round((new Date(dateStr + 'T12:00:00') - new Date()) / 86400000);
+    // Signed calendar days (state §0.240), the count the card's daysSince keeps beside it.
+    const diff = calendarDays(todayLocal(), dateStr);
+    if (diff === null) return '—';
     if (diff === 0) return 'today';
     if (diff < 0) return `${Math.abs(diff)}d ago`;
     if (diff === 1) return 'tmrw';
@@ -48,12 +51,12 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
     const hColor = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
 
     const daysInStage = opp.stageChangedDate
-        ? Math.max(0, Math.floor((Date.now() - new Date(opp.stageChangedDate + 'T12:00:00').getTime()) / 86400000))
+        ? daysSince(opp.stageChangedDate)   // calendar days (state §0.240): from the day's noon it ran one low
         : null;
     const stale = daysInStage !== null && daysInStage > 14;
 
     const closedays = opp.forecastedCloseDate
-        ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000)
+        ? calendarDays(todayLocal(), opp.forecastedCloseDate)   // signed calendar days: overdue from the next morning (§0.240)
         : null;
 
     const atRisk = opp.aiScore && opp.aiScore.score < 50;

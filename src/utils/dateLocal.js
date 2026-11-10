@@ -96,6 +96,70 @@ export function toLocalDay(v) {
     return Number.isNaN(d.getTime()) ? null : isoLocal(d);
 }
 
+// ── COUNTING DAYS (0.240) ────────────────────────────────────
+// Every "N days ago", "in stage N days" and "closes in N days" a member sees
+// counts CALENDAR days, not 24-hour spans. The old shape,
+// `Math.floor((now - new Date(day + 'T12:00:00')) / 86400000)`, measured from
+// local noon: before noon a deal moved today read -1 ("-1d ago"), yesterday's
+// call read 0, and every count ran one low all morning. Reading a day as
+// `new Date(day)` (UTC midnight) put it on the previous evening west of
+// Greenwich instead -- one high each evening (from 6pm Central in winter, 7pm
+// in summer). Both sides are reduced to
+// their wall-calendar day and counted by Date.UTC, so a clock change (a 23- or
+// 25-hour day) never moves the count.
+//
+// A bare yyyy-mm-dd is that calendar day, read by hand -- never through the
+// engine's parser, which takes it as UTC midnight. Anything else -- a Date, an
+// epoch number, a timestamp string -- is an instant and counts as the LOCAL day
+// it falls on. Unreadable on either side is null, never NaN.
+function dayNumber(v) {
+    if (typeof v === 'number') v = new Date(v);
+    if (typeof v === 'string') {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+        if (m) {
+            const y = +m[1], mo = +m[2], d = +m[3];
+            const t = Date.UTC(y, mo - 1, d);
+            const back = new Date(t);
+            return (back.getUTCFullYear() === y && back.getUTCMonth() === mo - 1 && back.getUTCDate() === d) ? t / 86400000 : null;
+        }
+    }
+    const d = parseLocalDate(v);
+    return d ? Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 : null;
+}
+
+// Signed whole calendar days from day `from` to day `to`: tomorrow is 1,
+// yesterday -1, the same day 0. null when either side is unreadable.
+export function calendarDays(from, to) {
+    const a = dayNumber(from), b = dayNumber(to);
+    return a == null || b == null ? null : Math.round(b - a);
+}
+
+// Whole calendar days since `day`: today 0, yesterday 1 -- never below 0, so a
+// day in the future reads as today. null when unreadable.
+export function daysSince(day, today = todayLocal()) {
+    const n = calendarDays(day, today);
+    return n == null ? null : Math.max(0, n);
+}
+
+// The deal timeline's bucket for a day (ReportsTab), placed by calendar day against
+// `now` (a Date): a later day 'Upcoming', today 'Today', the day before 'Yesterday',
+// back to this week's Sunday 'This week', back to the first of last month 'Last
+// month', anything older or unreadable 'Earlier'. The old placement compared the
+// day's noon with instants: "this week" began at the current time of day on Sunday,
+// so a Sunday event fell out of it every afternoon, and "yesterday" was now minus
+// 24 hours, the wrong day for an hour after a clock change (state §0.240).
+export function timelineBucket(day, now = new Date()) {
+    if (!day) return 'Earlier';
+    const n = calendarDays(day, now);
+    if (n == null) return 'Earlier';
+    if (n < 0) return 'Upcoming';
+    if (n === 0) return 'Today';
+    if (n === 1) return 'Yesterday';
+    if (n <= now.getDay()) return 'This week';
+    const lastMonthStart = isoLocal(new Date(now.getFullYear(), now.getMonth() - 1, 1, 12));
+    return calendarDays(lastMonthStart, day) >= 0 ? 'Last month' : 'Earlier';
+}
+
 // The parts must survive a round trip through a real Date unchanged; 2026-02-30
 // comes back as March 2nd, and that difference is the rejection.
 function validDay(y, mo, d) {

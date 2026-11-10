@@ -225,10 +225,13 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
         // Once, where the cause allows and the function's time still holds an attempt (else the row names the one).
         if (!attempts[0].outcome.ok && attempts[0].outcome.retry && attemptTime(Date.now() - startedAt) >= MIN_ATTEMPT_MS) attempts.push({ model: fallback, outcome: await ask(fallback) });
         const last = attempts[attempts.length - 1];
+        // The answer kept (state §0.240): the last that read, else the last that read but brought no next action — never
+        // worse than one blank answer (Jeff, 10 Nov: "Keep score, no action"); none read, none kept.
+        const kept = [...attempts].reverse().find((a) => a.outcome.ok) || [...attempts].reverse().find((a) => a.outcome.parsed) || null;
         const keyWords = usingOrgKey ? 'the workspace’s key' : 'the site key';
         const entityName = opp.opportunityName || opp.account || 'Unnamed';
 
-        if (!last.outcome.ok) {
+        if (!kept) {
             // The deal still left the app, so the log says so — every attempt, its model and why it failed
             // (guide §18b42; OPEN_ITEMS §4.2: the cause reached only the console). Never the key.
             const tried = attempts.map((a) => `${a.model}: ${a.outcome.detail}`).join(' · ');
@@ -239,7 +242,7 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
             });
             return { statusCode: 502, headers, body: JSON.stringify({ error: causeWords(last.outcome.cause, modelLabel(last.model)), cause: last.outcome.cause }) };
         }
-        const parsed = last.outcome.parsed;
+        const parsed = kept.outcome.parsed;
 
         // Validate and sanitize — each text ended at a whole word (state §0.238; OPEN_ITEMS §4.2).
         const scoreData = {
@@ -247,13 +250,14 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
             score:          Number.isFinite(parseInt(parsed.score, 10)) ? Math.max(0, Math.min(100, parseInt(parsed.score, 10))) : 50,
             verdict:        ['Strong','On Track','At Risk','Critical'].includes(parsed.verdict) ? parsed.verdict : 'At Risk',
             headline:       cutAtWord(parsed.headline, 120),
-            signals:        (Array.isArray(parsed.signals) ? parsed.signals : []).slice(0, 5).map(s => ({
+            // A signal with no words is dropped (state §0.240): it drew an empty chip.
+            signals:        (Array.isArray(parsed.signals) ? parsed.signals : []).map(s => ({
                 text:      cutAtWord(s?.text, 100),
                 sentiment: ['positive','warning','negative'].includes(s?.sentiment) ? s.sentiment : 'warning',
-            })),
+            })).filter(s => s.text).slice(0, 5),
             recommendation: cutAtWord(parsed.recommendation, 150),
-            // The model that answered — the chosen one, or the fallback after it failed.
-            model:          last.model,
+            // The model whose answer is kept — the chosen one, or the fallback after it failed.
+            model:          kept.model,
             scoredAt:       new Date().toISOString(),
         };
 
@@ -272,10 +276,13 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
 
         // The deal's data left the app for the model — the log says so, on the deal (§0.143).
         // The model that answered, and the one that failed first when it fell back (state §0.238).
-        const fellBack = attempts.length > 1 ? ` · after ${attempts[0].model}: ${attempts[0].outcome.detail}` : '';
+        // Every attempt not kept, in order: the one before the kept answer 'after', the one after it 'then' (state §0.240 —
+        // a blank first answer kept when the fallback failed).
+        const fellBack = attempts.filter((a) => a !== kept).map((a) => ` · ${a === attempts[0] ? 'after' : 'then'} ${a.model}: ${a.outcome.detail}`).join('');
+        const noAction = kept.outcome.ok ? '' : ' · kept with no next action';
         await auditAs(orgId, auth.userId, {
             action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName,
-            detail: `${last.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}`,
+            detail: `${kept.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}${noAction}`,
         });
         return { statusCode: 200, headers, body: JSON.stringify({ ...stored, usingOrgKey }) };
 

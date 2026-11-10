@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, Organ
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
-import { todayLocal } from './utils/dateLocal';
+import { todayLocal, daysSince, calendarDays } from './utils/dateLocal';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
@@ -38,7 +38,7 @@ import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { readCalendarReturn } from './utils/calendarReturn.js';
 // A message's link into the app — a deal, a task, a quote, a tab, the Notifications tab (state §0.237).
-import { takeAppLink, dropAppLink, withoutAppLink, APP_LINK_WORDS } from './utils/appLinks.js';
+import { takeAppLink, dropAppLink, keepAppLink, withoutAppLink, APP_LINK_WORDS } from './utils/appLinks.js';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
@@ -992,11 +992,12 @@ dbFetch('/.netlify/functions/users?me=true')
         dropAppLink();
         window.history.replaceState(null, '', withoutAppLink(window.location.href));
     };
-    // A record a link names, from the server's own list for this member — or null when the list does not hold it.
+    // A record a link names, from the server's own list for this member — or null when the list does not hold it. A
+    // list that did not answer is no refusal (state §0.240): it throws, and the reader says the link couldn't be opened.
     const linkedRecord = async (fn, key, id) => {
         const res = await dbFetch(`/.netlify/functions/${fn}`);
-        if (!res.ok) return null;
-        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error('the list did not answer');
+        const body = await res.json().catch(() => { throw new Error('the list did not read'); });
         const list = Array.isArray(body) ? body : (body?.[key] || []);
         return list.find(r => r && r.id === id) || null;
     };
@@ -1007,7 +1008,8 @@ dbFetch('/.netlify/functions/users?me=true')
             if (appLinkSwitchRef.current === link.org) return;   // switching: this runs again in that org
             const member = (userMemberships?.data || []).some(m => m.organization?.id === link.org);
             if (!orgListLoaded) return;
-            if (!member) { doneWithAppLink(); offerUndo({ notice: APP_LINK_WORDS.org }); return; }
+            // A refusal is said as an error — ⚠, kept until closed — never a ✓ gone in five seconds (state §0.240, finding 2).
+            if (!member) { doneWithAppLink(); setUndoToast({ error: APP_LINK_WORDS.org }); return; }
             appLinkSwitchRef.current = link.org;
             setActive({ organization: link.org });
             return;
@@ -1021,25 +1023,25 @@ dbFetch('/.netlify/functions/users?me=true')
             if (link.kind === 'deal') {
                 const deal = await linkedRecord('opportunities', 'opportunities', link.id);
                 if (!stillOrg(askedOrg)) return;
-                if (!deal) { offerUndo({ notice: APP_LINK_WORDS.deal }); return; }
+                if (!deal) { setUndoToast({ error: APP_LINK_WORDS.deal }); return; }
                 setActiveTab('pipeline');
                 setEditingOpp(_opportunitiesRef.current.find(o => o.id === deal.id) || deal);
                 setShowModal(true);
             } else if (link.kind === 'task') {
                 const task = await linkedRecord('tasks', 'tasks', link.id);
                 if (!stillOrg(askedOrg)) return;
-                if (!task) { offerUndo({ notice: APP_LINK_WORDS.task }); return; }
+                if (!task) { setUndoToast({ error: APP_LINK_WORDS.task }); return; }
                 setTasks(prev => (prev.some(t => t.id === task.id) ? prev : [...prev, task]));   // the rail finds it before the list's own load lands
                 setTaskRailId(task.id);
                 setTaskRailMode('view');
             } else if (link.kind === 'quote') {
                 const q = await linkedRecord('quotes', 'quotes', link.id);
                 if (!stillOrg(askedOrg)) return;
-                if (!q) { offerUndo({ notice: APP_LINK_WORDS.quote }); return; }
+                if (!q) { setUndoToast({ error: APP_LINK_WORDS.quote }); return; }
                 setQuotesDeepLinkOppId(q.opportunityId);
                 setActiveTab('quotes');
             }
-        })().catch(() => { if (stillOrg(askedOrg)) offerUndo({ notice: APP_LINK_WORDS[link.kind] || APP_LINK_WORDS.deal }); });
+        })().catch(() => { if (stillOrg(askedOrg)) { keepAppLink(link); setUndoToast({ error: APP_LINK_WORDS.unread }); } });
     }, [clerkUser, organization?.id, roleKnown, orgListLoaded]);   // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -1301,9 +1303,10 @@ dbFetch('/.netlify/functions/users?me=true')
         const oppActivities = activities.filter(a => a.opportunityId === opportunity.id);
         if (oppActivities.length > 0) {
             const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
-            const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
-            
-            if (daysSinceActivity > 30) { score -= 40; reasons.push('No activity in over 30 days (' + daysSinceActivity + ' days)'); }
+            const daysSinceActivity = daysSince(lastActivity, now);
+
+            if (daysSinceActivity == null) { /* an activity date that does not read says nothing of the days (state §0.240) */ }
+            else if (daysSinceActivity > 30) { score -= 40; reasons.push('No activity in over 30 days (' + daysSinceActivity + ' days)'); }
             else if (daysSinceActivity > 14) { score -= 25; reasons.push('No activity in over 14 days (' + daysSinceActivity + ' days)'); }
             else if (daysSinceActivity > 7) { score -= 10; reasons.push('No activity in over 7 days (' + daysSinceActivity + ' days)'); }
             else { reasons.push('Recent activity ' + daysSinceActivity + ' day' + (daysSinceActivity !== 1 ? 's' : '') + ' ago'); }
@@ -1313,23 +1316,23 @@ dbFetch('/.netlify/functions/users?me=true')
         }
         
         // Check time in current stage
-        if (opportunity.stageChangedDate) {
-            const stageDate = new Date(opportunity.stageChangedDate);
-            const daysInStage = Math.floor((now - stageDate) / (1000 * 60 * 60 * 24));
-            
+        // Calendar days (state §0.240): the stage day was read as UTC midnight -- the evening
+        // before, west of Greenwich -- and the close date the same way, so both ran a day out.
+        const daysInStage = opportunity.stageChangedDate ? daysSince(opportunity.stageChangedDate, now) : null;
+        if (daysInStage != null) {
             if (daysInStage > 60) { score -= 30; reasons.push('Stuck in current stage for ' + daysInStage + ' days'); }
             else if (daysInStage > 30) { score -= 15; reasons.push('In current stage for ' + daysInStage + ' days'); }
             else { reasons.push('In current stage for ' + daysInStage + ' days'); }
         }
         
         // Check close date proximity
-        if (opportunity.forecastedCloseDate) {
-            const closeDate = new Date(opportunity.forecastedCloseDate);
-            const daysToClose = Math.floor((closeDate - now) / (1000 * 60 * 60 * 24));
-            
+        // Signed: today is 0, overdue only from the next morning.
+        const daysToClose = opportunity.forecastedCloseDate ? calendarDays(now, opportunity.forecastedCloseDate) : null;
+        if (daysToClose != null) {
             if (daysToClose < 0) { score -= 35; reasons.push('Close date is ' + Math.abs(daysToClose) + ' days overdue'); }
-            else if (daysToClose < 7 && oppActivities.length === 0) { score -= 20; reasons.push('Closing in ' + daysToClose + ' days with no activities'); }
-            else if (daysToClose < 14) { reasons.push('Close date approaching in ' + daysToClose + ' days'); }
+            // The close day itself reads "today", never "in 0 days" (state §0.240).
+            else if (daysToClose < 7 && oppActivities.length === 0) { score -= 20; reasons.push((daysToClose === 0 ? 'Closing today' : 'Closing in ' + daysToClose + (daysToClose === 1 ? ' day' : ' days')) + ' with no activities'); }
+            else if (daysToClose < 14) { reasons.push(daysToClose === 0 ? 'Close date is today' : 'Close date approaching in ' + daysToClose + (daysToClose === 1 ? ' day' : ' days')); }
         }
         
         // Determine status and color
@@ -1372,8 +1375,8 @@ dbFetch('/.netlify/functions/users?me=true')
                 const oppActivities = activities.filter(a => a.opportunityId === opp.id);
                 if (oppActivities.length > 0) {
                     const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
-                    const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
-                    
+                    const daysSinceActivity = daysSince(lastActivity, now);
+
                     if (daysSinceActivity > 14 && opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost') {
                         newNotifications.push({
                             id: `stale-${opp.id}`,
@@ -1387,14 +1390,15 @@ dbFetch('/.netlify/functions/users?me=true')
                 
                 // Close date reminders
                 if (opp.forecastedCloseDate && opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost') {
-                    const closeDate = new Date(opp.forecastedCloseDate + 'T12:00:00');
-                    const daysToClose = Math.floor((closeDate - now) / (1000 * 60 * 60 * 24));
-                    
-                    if (daysToClose >= 0 && daysToClose <= 7) {
+                    const daysToClose = calendarDays(now, opp.forecastedCloseDate);
+
+                    // Unreadable is null, which `>= 0` would take: it read NaN, matching neither.
+                    if (daysToClose != null && daysToClose >= 0 && daysToClose <= 7) {
                         newNotifications.push({
                             id: `closing-${opp.id}`,
                             type: 'info',
-                            message: `${opp.account} closing in ${daysToClose} days`,
+                            // The close day itself reads "today", never "in 0 days" (state §0.240).
+                            message: daysToClose === 0 ? `${opp.account} closing today` : `${opp.account} closing in ${daysToClose} ${daysToClose === 1 ? 'day' : 'days'}`,
                             opportunityId: opp.id,
                             date: now.toISOString()
                         });

@@ -5,6 +5,8 @@ import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 import { unarchived } from '../utils/pickLink.js';
+// Imported under another name: getWarmth's own `daysSince` (its result's key) would shadow it.
+import { daysSince as daysSinceDay } from '../utils/dateLocal';
 
 // ── Design tokens ─────────────────────────────────────────────
 
@@ -57,7 +59,7 @@ function getWarmth(account, opportunities, activities, tasks) {
 
     const lastAct   = accActs[0];
     const daysSince = lastAct?.date
-        ? Math.floor((Date.now() - new Date(lastAct.date+'T12:00:00').getTime()) / 86400000)
+        ? daysSinceDay(lastAct.date)   // calendar days (state §0.240): it read -1 before noon
         : null;
 
     let warmth = 'cold';
@@ -80,7 +82,8 @@ const warmthColor = w => w === 'hot' ? T.danger : w === 'warm' ? T.warn : w === 
 // Correct relative date — takes date string directly
 const relDate = d => {
     if (!d) return '—';
-    const days = Math.floor((Date.now() - new Date(d+'T12:00:00').getTime()) / 86400000);
+    const days = daysSinceDay(d);   // calendar days (state §0.240): it read -1 before noon
+    if (days == null) return '—';
     if (days === 0)   return 'Today';
     if (days === 1)   return '1d ago';
     if (days < 7)    return days+'d ago';

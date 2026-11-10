@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
-import { parseLocalDate } from '../../utils/dateLocal';
+import { parseLocalDate, daysSince } from '../../utils/dateLocal';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { useApp } from '../../AppContext';
 import AccountPicker from '../rails/AccountPicker';
@@ -309,8 +309,8 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
     if (opportunity.createdDate) stageEvents.unshift({ date: opportunity.createdDate, label: 'Deal opened', prev: null, next: allStages[0] });
 
     const today = new Date();
-    const dealAge = opportunity.createdDate ? Math.floor((today - new Date(opportunity.createdDate + 'T12:00:00')) / 86400000) : null;
-    const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate + 'T12:00:00')) / 86400000) : null;
+    const dealAge = opportunity.createdDate ? daysSince(opportunity.createdDate, today) : null;
+    const timeInStage = opportunity.stageChangedDate ? daysSince(opportunity.stageChangedDate, today) : null;
     const actCounts = oppActivities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {});
 
     // Contacts engaged: the people this deal's activities were logged with, by the contact
@@ -749,14 +749,17 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
                                 <div style={{ fontSize: '2rem', fontWeight: '800', color: vc.color, lineHeight: 1, fontFamily: T.sans }}>{score.score}</div>
                                 <div style={{ fontSize: '0.625rem', fontWeight: '700', color: vc.color, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: T.sans }}>{score.verdict}</div>
                             </div>
+                            {/* The heading only over a next action (state §0.240): a score kept with none showed it over nothing. */}
                             <div style={{ flex: 1 }}>
+                                {score.recommendation && (<>
                                 <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px', fontFamily: T.sans }}>Recommended next action</div>
                                 <div style={{ fontSize: '0.875rem', color: T.ink, fontWeight: '500', lineHeight: 1.5, fontFamily: T.sans }}>{score.recommendation}</div>
+                                </>)}
                             </div>
                         </div>
-                        {score.signals && score.signals.length > 0 && (
+                        {(score.signals || []).some((s) => s?.text) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                                {score.signals.map((s, i) => (
+                                {score.signals.filter((s) => s?.text).map((s, i) => (
                                     <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
                                 ))}
                             </div>
@@ -885,7 +888,8 @@ function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts,
     // Last touch recency → engagement level
     const engLevel = (lastActivityDate) => {
         if (!lastActivityDate) return 'stale';
-        const days = Math.floor((Date.now() - new Date(lastActivityDate + 'T12:00:00').getTime()) / 86400000);
+        const days = daysSince(lastActivityDate);
+        if (days == null) return 'stale';
         if (days <= 3) return 'hot';
         if (days <= 10) return 'warm';
         if (days <= 21) return 'cool';
@@ -930,7 +934,7 @@ function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts,
                 </div>
                 {aiScore ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {aiSignals.slice(0, 4).map((s, i) => (
+                        {aiSignals.filter((s) => s?.text).slice(0, 4).map((s, i) => (
                             <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
                         ))}
                         {aiOn && (
@@ -1306,8 +1310,8 @@ export default function OpportunityModal({
     // ── Deal age metadata ─────────────────────────────────────
     const dealAgeInfo = opportunity ? (() => {
         const today = new Date();
-        const dealAge = opportunity.createdDate ? Math.floor((today - new Date(opportunity.createdDate + 'T12:00:00')) / 86400000) : null;
-        const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate + 'T12:00:00')) / 86400000) : null;
+        const dealAge = opportunity.createdDate ? daysSince(opportunity.createdDate, today) : null;
+        const timeInStage = opportunity.stageChangedDate ? daysSince(opportunity.stageChangedDate, today) : null;
         return { dealAge, timeInStage };
     })() : null;
 
@@ -1626,7 +1630,7 @@ export default function OpportunityModal({
                                                 );
                                             }
                                             const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
-                                            const timeInStage = opportunity?.stageChangedDate ? Math.floor((Date.now() - new Date(opportunity.stageChangedDate + 'T12:00:00').getTime()) / 86400000) : null;
+                                            const timeInStage = opportunity?.stageChangedDate ? daysSince(opportunity.stageChangedDate) : null;
                                             if (!stageDefault && timeInStage === null) return null;
                                             return (
                                                 <div style={{ fontSize: 11.5, color: T.inkMuted, marginTop: 6, fontFamily: T.serif, fontStyle: 'italic' }}>

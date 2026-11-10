@@ -22,7 +22,11 @@ import { applyStageChanges, moveDayOf, stageMoveOf } from './_stage.mjs';
 // A deal's team notes, one operation at a time (state §0.236): the rules, shared with the deal window.
 import { noteOpOf, applyNoteOp, notesOf, NOTE_WORDS } from '../../src/utils/dealNotes.js';
 // A deal's close-date history (state §0.239): the words a refusal says, and a move's from → to.
-import { HISTORY_WORDS, moveWords } from '../../src/utils/dealHistory.js';
+import { HISTORY_WORDS, moveWords, isDay } from '../../src/utils/dealHistory.js';
+
+// A deal's created date is the server's once the deal exists (state §0.240, finding 5; Jeff, 10 Nov: "Server-owned"):
+// a create keeps a real day it names — the member's, or an import's own Created Date — else the server's day; no
+// save changes it (a screen's copy filled an empty one with the day of its first edit).
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
@@ -42,6 +46,8 @@ const notesStill = (stored) => (stored == null
 const historyWith = (entry) => sql`(CASE WHEN jsonb_typeof(${opportunities.stageHistory}) = 'array' THEN ${opportunities.stageHistory} ELSE '[]'::jsonb END) || ${JSON.stringify([entry])}::jsonb`;
 // A list column as stored — anything not a list (a deal from before the column, none yet) read as an empty one.
 const listOf = (col) => sql`(CASE WHEN jsonb_typeof(${col}) = 'array' THEN ${col} ELSE '[]'::jsonb END)`;
+// The day a new deal was created: the day it names when that is a real day, else the server's (state §0.240).
+const createdDayOf = (d) => (isDay(d?.createdDate) ? d.createdDate : new Date().toISOString().slice(0, 10));
 // A close-date move, decided IN the write (state §0.239; docs/design/close-date-history R3, Jeff's Q1): where the date as
 // stored at that moment is not the one written — a date set where there was none and a date cleared included — its
 // entry is appended to the history as stored; else the history stays. In ON CONFLICT DO UPDATE a column names the row
@@ -353,7 +359,7 @@ export const handler = async (event) => {
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
-                const owned = await stampOwnerIds(people.rows.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
+                const owned = await stampOwnerIds(people.rows.map(d => sanitize({ ...d, createdDate: createdDayOf(d) })), 'opportunity', { clerkUserId: userId, orgId });
                 owned.rows = importer.stamp(owned.rows);
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
@@ -369,7 +375,8 @@ export const handler = async (event) => {
             const people = await checkLinks(DEAL_LINKS, data, null, orgId);
             if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
             const named = { ...data, ...people.set };
-            const newRow = await stampOwnerId(sanitize(link.id ? { ...named, account: link.name, accountId: link.id } : named), 'opportunity', { clerkUserId: userId, orgId });
+            const dated = { ...named, createdDate: createdDayOf(named) };
+            const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That deal id is already in use.' }) };
@@ -391,7 +398,7 @@ export const handler = async (event) => {
                     account:       inserted.account,
                     arr:           inserted.arr,
                     stage:         inserted.stage,
-                    createdBy:     userId,
+                    createdBy:     creatorName || 'Someone',   // a member's name, never the Clerk id (state §0.240, finding 3)
                     opportunityId: inserted.id,
                 }, orgId);
             }
@@ -429,6 +436,8 @@ export const handler = async (event) => {
                 if (data.some(d => d && ('comments' in d || 'stageHistory' in d))) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };
                 // Nor its close-date history (state §0.239): the write appends each move.
                 if (data.some(d => d && 'closeDateHistory' in d)) return { statusCode: 400, headers, body: JSON.stringify({ error: HISTORY_WORDS.wholeList }) };
+                // Nor its created date (state §0.240): a row's is left out, so each keeps its stored one (partialRows).
+                for (const d of data) if (d && typeof d === 'object') delete d.createdDate;
                 // Reps may only overwrite their own or unassigned deals — the same
                 // check the single-record path applies below, resolved once for
                 // the batch.
@@ -585,7 +594,7 @@ export const handler = async (event) => {
                                 dealName:      written.opportunityName || 'Deal',
                                 account:       written.account,
                                 comment:       applied.note.text || '',
-                                commentBy:     applied.note.author || userId,
+                                commentBy:     applied.note.author || 'Someone',
                                 opportunityId: written.id,
                             }, orgId);
                         }
@@ -610,6 +619,7 @@ export const handler = async (event) => {
             delete data.stageHistory;
             delete data.stageChangedDate;
             delete data.closeDateMovedOn;
+            delete data.createdDate;   // the server's once the deal exists (state §0.240): the stored one kept
             const me = await resolveCaller(userId, orgId);
             const now = new Date().toISOString();
             const serverDay = now.slice(0, 10);
@@ -660,6 +670,11 @@ export const handler = async (event) => {
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             if (move) { clean.stageChangedDate = move.date; clean.stageHistory = [...notesOf(existing.stageHistory), move]; }
+            // The won date follows the stage (state §0.240; the review): a move into Closed Won is dated by the move unless
+            // the save names a real day of its own (not the one stored — a window's copy of an earlier win); a move out of
+            // Closed Won clears it, so a deal reopened on the board and won again is never dated by its first win.
+            if (move && move.stage === 'Closed Won') clean.wonDate = (isDay(data.wonDate) && data.wonDate !== existing.wonDate) ? data.wonDate : move.date;
+            else if (move && existing.stage === 'Closed Won') clean.wonDate = null;
             // The notes and the history are never in the update (state §0.236): a note posted, or a move appended,
             // between this request's read and its write would be written over. A move appends in SQL, to what is stored.
             const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
@@ -689,9 +704,16 @@ export const handler = async (event) => {
 
             const rep          = upserted.salesRep;
             const stageChanged = previousStage && upserted.stage !== previousStage;
+            // Who acted, by their member name — never the Clerk id, which the emails printed (state §0.240, finding 3);
+            // "Someone" for a caller with no member row, as the texts and Slack say. A rep is not emailed about their
+            // own move (Jeff, 10 Nov: "Skip own moves"), by owner id — the name was compared to a Clerk id, so every
+            // rep heard of their own edits (§0.176 (c)). `!!` both sides: an unassigned deal and a caller with no
+            // member row both read null (the null === null collision).
+            const actedBy = me.name || 'Someone';
+            const ownMove = !!upserted.ownerId && !!me.id && upserted.ownerId === me.id;
 
             // Email: stage changed (or deal closed)
-            if (rep && stageChanged) {
+            if (rep && stageChanged && !ownMove) {
                 const isClosedWon  = upserted.stage === 'Closed Won';
                 const isClosedLost = upserted.stage === 'Closed Lost';
 
@@ -702,7 +724,7 @@ export const handler = async (event) => {
                         account:       upserted.account,
                         arr:           upserted.arr,
                         outcome:       isClosedWon ? 'Won' : 'Lost',
-                        closedBy:      userId,
+                        closedBy:      actedBy,
                         opportunityId: upserted.id,
                     }, orgId);
                 } else {
@@ -713,7 +735,7 @@ export const handler = async (event) => {
                         arr:           upserted.arr,
                         fromStage:     previousStage,
                         toStage:       upserted.stage,
-                        changedBy:     userId,
+                        changedBy:     actedBy,
                         opportunityId: upserted.id,
                     }, orgId);
                 }
@@ -721,14 +743,14 @@ export const handler = async (event) => {
 
             // Email: general update — only if no stage change, to avoid double-emailing. A note is never part of
             // this save (state §0.236): the "new note" email is the note branch's, above.
-            if (rep && !stageChanged && rep !== userId) {
+            if (rep && !stageChanged && !ownMove) {
                 await maybeEmail(rep, 'opportunityUpdated', {
                     repName:       rep,
                     dealName:      upserted.opportunityName || 'Deal',
                     account:       upserted.account,
                     arr:           upserted.arr,
                     stage:         upserted.stage,
-                    updatedBy:     userId,
+                    updatedBy:     actedBy,
                     opportunityId: upserted.id,
                 }, orgId);
             }

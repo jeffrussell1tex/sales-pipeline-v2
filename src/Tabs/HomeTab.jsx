@@ -3,7 +3,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { useAuth } from '@clerk/clerk-react';
 import { quarterOf, quarterStartDate, quarterEndDate, fiscalStartOf } from '../utils/quarters';
-import { isoLocal } from '../utils/dateLocal';
+import { isoLocal, daysSince } from '../utils/dateLocal';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
@@ -439,7 +439,8 @@ export default function HomeTab() {
     const fmtRelDate = (dateStr) => {
         if (!dateStr) return '';
         const d = new Date(dateStr + 'T12:00:00');
-        const diffDays = Math.floor((now - d) / 86400000);
+        const diffDays = daysSince(dateStr, now);   // calendar days (state §0.240): it read -1 before noon
+        if (diffDays == null) return '';
         if (diffDays === 0) return 'Today';
         if (diffDays === 1) return '1d ago';
         if (diffDays < 7)  return diffDays + 'd ago';
@@ -494,7 +495,7 @@ export default function HomeTab() {
         activeOpps.forEach(opp => {
             const oppActs     = (activities||[]).filter(a => a.opportunityId === opp.id).sort((a,b) => (b.date||'').localeCompare(a.date||''));
             const lastActDate = oppActs[0]?.date || opp.createdDate;
-            const daysSinceAct = lastActDate ? Math.floor((now - new Date(lastActDate + 'T12:00:00'))/86400000) : null;
+            const daysSinceAct = lastActDate ? daysSince(lastActDate, now) : null;
             const arr          = parseFloat(opp.arr) || 0;
             const name         = opp.opportunityName || opp.account || 'Unnamed';
 
@@ -527,7 +528,7 @@ export default function HomeTab() {
                 });
             }
             // Velocity win
-            const createdDays = opp.createdDate ? Math.floor((now - new Date(opp.createdDate + 'T12:00:00'))/86400000) : null;
+            const createdDays = opp.createdDate ? daysSince(opp.createdDate, now) : null;
             const stageCount  = (opp.stageHistory||[]).length;
             if (createdDays !== null && createdDays <= 14 && stageCount >= 2) {
                 items.push({

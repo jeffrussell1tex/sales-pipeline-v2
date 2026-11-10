@@ -1896,7 +1896,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Recommended: keep (each is rare, or data from before the rule), but the
   merge's Undo's shapes by name, which have no age limit, are batch 3's
   to close (Jeff, 18 Oct: "Ship as is, file the edge" — §4.7).
-- **The deal PUT's "opportunity updated" email compares the rep's name to
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **The deal PUT's "opportunity updated" email compares the rep's name to
   the caller's Clerk id**, so a rep with that email on is emailed about their
   own edits. §0.176 (c).
 - **Deals on a pipeline that does not exist vanish.** 31 of the Test org's
@@ -2032,10 +2032,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `Authorization: Bearer` is the current header — both calls.)
 - **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
-- **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
+- **The server's day counts are UTC's, not the member's** (§0.240, Jeff: "App now, file server"): ai-score.mjs's prompt ("Deal age", "days PAST DUE" — a floor from 12:00 UTC), pipeline-alerts.mjs (`daysSince` from UTC noon at the member's alert hour; `todayStr` the UTC day for `daysLapsed` and task overdue) and digest.mjs (`daysOverdue` from UTC midnight) can be a day off for members far from UTC. Recommended: count from the member's day (`dayIn(tz, now)` — task-reminders.mjs's `getTodayInTimezone` lifted into dateLocal.js) with `calendarDays`; ai-score from the day the client sends or the caller's stored timezone. Low.
 - **An import's stage entry made in a race is dated the clock read before it** (§0.239's review, 10 Nov; opportunities.mjs `importStagesWith`): a save that moves a deal's stage between an Overwrite's read and its write, on a deal the file leaves at the stage it read, gets a reversal entry dated the deal's earlier clock (the batch backfills that row's `stageChangedDate` from the read), and the move is not in the batch's count, audit row or Slack post. Race-only; before §0.239 the save's own entry was lost instead. Recommended: date an entry the read did not expect with the import's day. Low.
-- **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
-- **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
 
 - **The Recommendation report's outcomes never move.** Nothing calls
   `recommendation-log.mjs`'s PUT, the sweep that marks a pending alert
@@ -3069,13 +3070,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   report** (§0.237's map): it names no saved report, and the app has no
   reader for one. Wants a `report` kind (src/utils/appLinks.js) and the
   Reports tab opening a saved report.
-- **A message link's notice is the five-second toast** (§0.237's browser
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A message link's notice is the five-second toast** (§0.237's browser
   check): "That deal isn't available to you" shows at load and goes after
   five seconds, often under the overdue-task reminder — a member who looks
   away misses it. And it carries the undo toast's ✓, so a refusal reads as
   done (§0.238's dev check, 10 Nov: "✓ That link is for an organization
   you're not a member of.").
-- **A member's deal email names who acted by their Clerk id** (§0.238's dev
+- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A member's deal email names who acted by their Clerk id** (§0.238's dev
   check, 10 Nov): "Hi Jeff RussellAdmin, user_3ASC6O… updated the stage on
   one of your deals." The deal PUT hands the stage email `changedBy:
   userId`, the close email `closedBy: userId` and the update email
@@ -3083,6 +3084,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Slack post beside them names the mover (`getCallerName`, :692).
   Recommended: the caller's name, as Slack's — with §4.2's "compares the
   rep's name to the caller's Clerk id" (the same `userId`, :659).
+- **Three stored `createdBy` columns hold a Clerk id** (§0.240's map): `audit-stream.mjs:72`, `automations.mjs:93`, `webhooks.mjs:190`, and Dispatch's status changes (`dispatch-jobs.mjs` `recordStatusChange(..., userId)` as `changedBy`). No screen shows them today (Automations resolves `triggeredBy` by `recordName`). Recommended: the member's app id where one is stored, before any screen reads them. Low.
 - **The Notifications tab files "Maintenance agreement expiring (Dispatch)"
   under "Quote alerts".** §0.158.
 - **The Monday team digest's Attainment reads "—" for every rep.**

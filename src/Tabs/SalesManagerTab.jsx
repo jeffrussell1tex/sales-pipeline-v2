@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
-import { isoLocal, todayLocal } from '../utils/dateLocal';
+import { isoLocal, todayLocal, daysSince } from '../utils/dateLocal';
 import { currentQuarter, fiscalStartOf, fiscalMonthOf } from '../utils/quarters';
 import { cleanQuotaPeriods, quotaPlanOf, quotaDraftRow, editQuotaDraft, checkQuotaSave, quotaRefusal, quotaYearsOffered } from '../utils/quotaPlan.js';
 import { fiscalRange } from '../utils/reportPeriod';
@@ -70,15 +70,17 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     // Activity recency
     const repActs     = (activities||[]).filter(a => a.salesRep === rep.name || a.author === rep.name);
     const lastActDate = [...repActs].sort((a,b) => (b.date||'').localeCompare(a.date||''))[0]?.date || null;
-    const daysSinceAct = lastActDate ? Math.floor((today - new Date(lastActDate+'T12:00:00'))/86400000) : null;
+    // Calendar days (state §0.240): measured from the day's noon, every count here ran one
+    // low before noon and today's read -1.
+    const daysSinceAct = lastActDate ? daysSince(lastActDate, today) : null;
 
-    // Activity last 7d
-    const act7d = repActs.filter(a => a.date && Math.floor((today - new Date(a.date+'T12:00:00'))/86400000) <= 7).length;
+    // Activity last 7d (an unreadable day is null, which `<= 7` would take; it read NaN)
+    const act7d = repActs.filter(a => { const n = a.date ? daysSince(a.date, today) : null; return n != null && n <= 7; }).length;
 
     // Stuck deals (no stage change in 14+ days)
     const stuck = activeOpps.filter(o => {
         if (!o.stageChangedDate) return false;
-        return Math.floor((today - new Date(o.stageChangedDate+'T12:00:00'))/86400000) >= 14;
+        return daysSince(o.stageChangedDate, today) >= 14;
     }).length;
 
     // Overdue tasks
@@ -1464,7 +1466,7 @@ export default function SalesManagerTab() {
         const stuckDeals = (opportunities||[])
             .filter(o => !['Closed Won','Closed Lost'].includes(o.stage) && o.stageChangedDate)
             .map(o => {
-                const days = Math.floor((today - new Date(o.stageChangedDate+'T12:00:00'))/86400000);
+                const days = daysSince(o.stageChangedDate, today);   // calendar days (§0.240)
                 return { ...o, daysSince:days };
             })
             .filter(o => o.daysSince >= 14)

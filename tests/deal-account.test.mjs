@@ -469,7 +469,7 @@ test("THE ENDPOINT: a deal keeps the account id; a new one must be this org's ac
     const post = between(raw, '            // Single insert', '            const [inserted] = await db.insert(opportunities)');
     assert.ok(post.includes('const link = await accountLink(data, null, orgId);'));
     assert.ok(post.includes('if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };'));
-    assert.ok(post.includes("stampOwnerId(sanitize(link.id ? { ...named, account: link.name, accountId: link.id } : named), 'opportunity',"), 'a new deal is linked to the account found, and named after it — its contacts checked too (§0.199)');
+    assert.ok(post.includes("stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity',"), 'a new deal is linked to the account found, and named after it — its contacts checked too (§0.199); dated by the server\'s rule (§0.240)');
     const put = between(raw, '            if (forbiddenPut) return forbiddenPut;', '            const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;');   // the notes and history out of the update since §0.236
     const at = put.indexOf('const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);');
     assert.ok(at > 0 && at < put.indexOf('const clean = sanitize({ ...existing, ...data });'), 'after the ownership check, before the write');

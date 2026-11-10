@@ -6,6 +6,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { popoverPlacement } from '../utils/popoverPlacement.js';
 import { T } from '../tokens.js';
 import { canEditCrm } from '../utils/roles.js';
+import { daysSince } from '../utils/dateLocal';
 
 // ── Design tokens ────────────────────────────────────────────
 
@@ -61,11 +62,12 @@ const relAge = (iso) => {
     if (!iso) return null;
     // createdAt arrives as a FULL ISO timestamp from the DB; the unconditional
     // +'T12:00:00' built an invalid date from it and every age rendered as
-    // "NaNyr" (the queued §0.54 timeline bug). Date-only strings still get the
-    // noon anchor so timezones cannot roll them a day.
-    const t = new Date(String(iso).includes('T') ? iso : iso + 'T12:00:00').getTime();
-    if (Number.isNaN(t)) return null;
-    const d = Math.floor((Date.now() - t) / 86400000);
+    // "NaNyr" (the queued §0.54 timeline bug). Counted in calendar days since
+    // state §0.240 (dateLocal.js daysSince): a date-only value is that day, never
+    // shifted by a timezone -- measured from its noon it read -1 all morning --
+    // and a timestamp counts as the local day it falls on.
+    const d = daysSince(iso);
+    if (d == null) return null;
     if (d === 0) return 'today';
     if (d === 1) return '1d';
     if (d < 30)  return d + 'd';

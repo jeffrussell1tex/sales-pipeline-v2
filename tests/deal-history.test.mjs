@@ -136,7 +136,7 @@ test('WIRING: the import — a row naming the list refused; the batch\'s moves a
 });
 
 test('WIRING: the screens — dealBody strips the list; the window leaves an untouched date out and sends the member\'s day; the History tab lists the moves', () => {
-    assert.ok(code(read('src/utils/dealNotes.js')).includes('const { comments: _notes, stageHistory: _history, closeDateHistory: _closeDates, ...rest } = row;'));
+    assert.ok(code(read('src/utils/dealNotes.js')).includes('const { comments: _notes, stageHistory: _history, closeDateHistory: _closeDates, createdDate: _created, ...rest } = row;'));
     const hook = code(read('src/hooks/useOpportunities.js'));
     assert.equal((hook.match(/closeDateMovedOn: today/g) || []).length, 2, 'the deal window\'s save and the Closed Lost dialog\'s');
     const m = code(read('src/components/modals/OpportunityModal.jsx'));

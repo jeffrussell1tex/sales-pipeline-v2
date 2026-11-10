@@ -357,6 +357,15 @@ One commit per verified batch; doc patch in the same commit.
   public API (`is not true` in its SQL) and the quote email's fallback
   recipient; Settings → Data's export runs and the backups keep every
   row, and each tab's Export follows its list (guide §18b99, §18b101).
+- A day count a member sees is whole calendar days — `calendarDays` /
+  `daysSince` (`src/utils/dateLocal.js`), never a stored day read at noon
+  or as UTC midnight and divided against now; a close date of today reads
+  "today" (THE GUARD, tests/date-local.test.mjs's count scan; guide §18b123).
+  A refusal is said as an error kept until closed, never under the undo
+  toast's ✓; a message names who acted by member name, never a Clerk id,
+  and a member is not told of their own act (by owner id). A deal's
+  created date is the server's once it exists; its won date follows the
+  stage (§0.240).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

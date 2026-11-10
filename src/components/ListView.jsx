@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { quarterOf, quarterRange, groupByQuarter, fiscalStartOf } from '../utils/quarters';
-import { todayLocal } from '../utils/dateLocal';
+import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
@@ -24,7 +24,9 @@ function fmtMoney(n) {
 
 function relativeDay(isoDate) {
     if (!isoDate) return '—';
-    const diff = Math.round((new Date(isoDate + 'T12:00:00') - new Date()) / 86400000);
+    // Signed calendar days (state §0.240); an unreadable day reads as no day, not "Invalid Date".
+    const diff = calendarDays(todayLocal(), isoDate);
+    if (diff === null) return '—';
     if (diff === 0)   return 'today';
     if (diff < 0)     return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     if (diff <= 14)   return diff + 'd';
@@ -94,7 +96,7 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isS
     const health    = calculateDealHealth(opp);
     const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
     const closeDays = opp.forecastedCloseDate
-        ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000)
+        ? calendarDays(todayLocal(), opp.forecastedCloseDate)   // signed calendar days: overdue from the next morning (§0.240)
         : null;
     const overdue   = closeDays !== null && closeDays < 0;
     const aiRisk    = opp.aiScore && opp.aiScore.score < 50;

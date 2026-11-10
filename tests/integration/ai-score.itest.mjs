@@ -337,6 +337,34 @@ test('busy, missing, refused or a dropped connection: the fallback answers, once
     }
 });
 
+test('a blank recommendation goes once to the fallback; kept with no next action when none brings one; a signal with no words dropped (§0.240)', async () => {
+    await setAi({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5' });
+    const answer = (body) => ({ status: 200, body: { content: [{ type: 'text', text: JSON.stringify(body) }], stop_reason: 'end_turn' } });
+    const blank = { ...reply(31, 'Critical'), recommendation: '  ', signals: [{ text: 'No reply in a month', sentiment: 'negative' }, { text: '', sentiment: 'warning' }] };
+    // blank first, the fallback brings one: the fallback's kept
+    MODEL.calls.length = 0; MODEL.plan = [answer(blank)];
+    MODEL.reply = reply(52, 'At Risk');
+    let r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5', 'claude-haiku-5-5'], 'REGRESSION: a blank next action kept without asking again');
+    assert.equal((await kept(DEAL)).recommendation, 'Book the walkthrough');
+    hasRow(await auditsOf('ai.deal_scored'), 'claude-haiku-5-5 · the site key · score 52 (At Risk) · after claude-opus-5-5: a blank recommendation');
+    // both blank: the score kept, with no next action, and said so (Jeff: "Keep score, no action")
+    MODEL.calls.length = 0; MODEL.plan = [answer(blank), answer({ ...blank, score: 29 })];
+    r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, 'never a 502 for a score with no next action');
+    const k = await kept(DEAL);
+    assert.deepEqual([k.score, k.model, k.recommendation], [29, 'claude-haiku-5-5', ''], 'the last answer that read');
+    assert.deepEqual(k.signals.map((s) => s.text), ['No reply in a month'], 'a signal with no words dropped');
+    hasRow(await auditsOf('ai.deal_scored'), 'claude-haiku-5-5 · the site key · score 29 (Critical) · after claude-opus-5-5: a blank recommendation · kept with no next action');
+    // blank first, the fallback busy: the first answer kept, the fallback named after it
+    MODEL.calls.length = 0; MODEL.plan = [answer({ ...blank, score: 33 }), err(529, 'overloaded_error', 'Overloaded')];
+    r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200);
+    assert.deepEqual([(await kept(DEAL)).score, (await kept(DEAL)).model], [33, 'claude-opus-5-5']);
+    hasRow(await auditsOf('ai.deal_scored'), 'claude-opus-5-5 · the site key · score 33 (Critical) · then claude-haiku-5-5: 529 overloaded_error: Overloaded · kept with no next action');
+});
+
 test('a refused key or request: no fallback, 502 with the cause in words, the deal unchanged, the failure in the log; both failing names both', async () => {
     await setAi({ model: 'claude-sonnet-5-5', fallback: 'claude-haiku-5-5' });
     for (const [first, cause, said] of [

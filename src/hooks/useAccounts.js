@@ -102,6 +102,7 @@ export function useAccounts(deps) {
             setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));
             // ...and gives them, and the accounts under them, the tiers the server wrote (D18).
             setAccounts(prev => withTiers(prev, lifted));
+            let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
                 // What did not delete is put back, and the first refusal is shown — the
                 // server's open-deal refusal names the deal.
@@ -109,9 +110,10 @@ export function useAccounts(deps) {
                     const have = new Set(prev.map(a => a.id));
                     return [...prev, ...failed.map(f => f.a).filter(a => !have.has(a.id))];
                 });
-                setUndoToast({ error: going.length === 1
+                failNote = going.length === 1
                     ? `Account not deleted — ${failed[0].error}`
-                    : `${failed.length} of ${going.length} accounts not deleted — ${failed[0].error}` });
+                    : `${failed.length} of ${going.length} accounts not deleted — ${failed[0].error}`;
+                setUndoToast({ error: failNote });
                 if (!deleted.length) return;   // nothing deleted, nothing to undo
             }
             softDelete(
@@ -176,6 +178,7 @@ export function useAccounts(deps) {
                     }
                 }
             );
+            if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
         });
     };
 

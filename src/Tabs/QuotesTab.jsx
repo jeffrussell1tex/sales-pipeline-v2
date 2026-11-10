@@ -7,6 +7,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
+import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
 import { esc } from '../utils/customerNotifications';
 // Quote → job (state §0.149): which quotes can be accepted, which become work.
@@ -34,7 +35,10 @@ const eyebrow = (color) => ({ fontSize: 10, fontWeight: 700, color: color || T.i
 
 const relDate = (iso) => {
     if (!iso) return '—';
-    const diff = Math.round((Date.now() - new Date(iso + (iso.includes('T') ? '' : 'T12:00:00')).getTime()) / 86400000);
+    // Signed calendar days (state §0.240): an audit instant counts as the local day it
+    // fell on, so last night at 23:00 is "yesterday" this morning, not "today".
+    const diff = calendarDays(iso, todayLocal());
+    if (diff === null) return '—';
     if (diff === 0) return 'today';
     if (diff === 1) return 'yesterday';
     if (diff < 0) return `in ${Math.abs(diff)}d`;
@@ -1861,7 +1865,8 @@ export default function QuotesTab() {
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px,1fr))', gap: 10 }}>
                                 {needsQuote.map(opp => {
                                     const stageColor = stageColors[opp.stage] || T.inkMid;
-                                    const closeIn    = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - Date.now()) / 86400000) : null;
+                                    // Signed calendar days (state §0.240): closes today on the day, overdue from the next morning.
+                                    const closeIn    = opp.forecastedCloseDate ? calendarDays(todayLocal(), opp.forecastedCloseDate) : null;
                                     const urgent     = closeIn !== null && closeIn >= 0 && closeIn <= 14;
                                     const overdue    = closeIn !== null && closeIn < 0;
                                     return (
