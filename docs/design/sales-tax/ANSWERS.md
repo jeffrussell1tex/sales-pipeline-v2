@@ -1,6 +1,6 @@
 # Sales tax on quotes — Jeff's answers (10 Nov 2026)
 
-The design: DESIGN.md beside this file (over 2769fd8). Asked 10 Nov in the dialog, each question standing on its own. The rate's source took a second round, after a web research pass on the US sales-tax rate services (docs/design/sales-tax/RESEARCH.md — sources dated 10 Nov 2026).
+The design: DESIGN.md beside this file (over 2769fd8). Asked 10 Nov in the dialog, each question standing on its own. The rate's source took a second round, after a web research pass on the US sales-tax rate services (docs/design/sales-tax/RESEARCH.md — sources dated 10 Nov 2026). Q9 and Q10 were asked after batch A's second review, 10 Nov.
 
 | # | Asked | Answer |
 |---|---|---|
@@ -12,5 +12,7 @@ The design: DESIGN.md beside this file (over 2769fd8). Asked 10 Nov in the dialo
 | Q6 | Whose account calls the tax service | **"One app account (Recommended)"** — AcceleRep holds one Zip-Tax account for every org (only the address is sent), built so an org could later link its own Avalara or Stripe account |
 | Q7 | Which address decides the rate | **"Deal's account address (Recommended)"** — with a per-quote override for a job at another site |
 | Q8 | No usable address, or the lookup fails | **"Org default, marked (Recommended)"** — the org's default rate, shown as "default rate (no address)", editable; the quote still saves and sends |
+| Q9 | Line cents — asked after batch A's second review | **"Round each line (Recommended)"** — each line's net price rounded to the cent, then times its quantity, to the cent, as the job and its invoice price a line: a row's Qty × Unit Price is its Total and the rows are the Subtotal; no stored quote's total moves (none of the 36 stored quotes had a fractional-cent net, a negative or fractional quantity, or a negative price) |
+| Q10 | Credits — asked after batch A's second review | **"Credit lowers tax (Recommended)"** — a taxable credit (a negative line) lowers the taxable base, below 0 too, on the quote as on its invoice, so the two agree to the cent |
 
-Still Jeff's: Zip-Tax's three written answers (batch B's gate); the schema apply when batch A is built.
+Still Jeff's: Zip-Tax's three written answers (batch B's gate). The schema apply: answered 10 Nov, "Apply it now (Recommended)" — the test and app databases (db/apply-sales-tax.mjs; state §0.241).

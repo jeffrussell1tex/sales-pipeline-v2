@@ -13,6 +13,10 @@ import { QPill, ATToggle } from './shared.jsx';
 import { EditBrandModal, BRAND_PRESET } from './EditBrandModal.jsx';
 import { useOrganization } from '@clerk/clerk-react';
 import { orgIdentityOf, profileOfSettings, brandLook } from '../../../utils/orgIdentity.js';
+// The org's default tax rate (state §0.241, R3): kept in quoteDefaults, read through the one clamped reader, typed by
+// the rule the quote builder uses.
+import { defaultTaxRateOf } from '../../../utils/quoteTotals.js';
+import { taxRateFromInput, taxRateInputOf } from '../../../utils/quoteMoneyRows.js';
 
 // TODO: read currentUser from session/AppContext — hard-coded for dev
 const CURRENT_USER = { id:'u_42', name:'Bea Chen', role:'admin' };
@@ -1049,6 +1053,9 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
 
     const [templates,    setTemplates]   = useState(() => JSON.parse(JSON.stringify(savedTemplates)));
     const [defaults,     setDefaults]    = useState({ ...savedDefaults });
+    // The default tax rate as typed (§0.241): `defaults.taxRate` holds it as a number (or none) whenever the words
+    // read as a rate; words that do not are refused at Save, nothing sent.
+    const [taxRateText,  setTaxRateText] = useState(() => taxRateInputOf(defaultTaxRateOf(savedDefaults)));
     const [boilerplate,  setBoilerplate] = useState(savedBoilerplate);
     const [selectedId,   setSelectedId]  = useState(templates[0]?.id || null);
     const [showNewModal, setShowNewModal] = useState(false);
@@ -1074,8 +1081,12 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
         setEditingName('');
     };
 
-    const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setBoilerplate(savedBoilerplate); setDirty(false); };
+    const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setTaxRateText(taxRateInputOf(defaultTaxRateOf(savedDefaults))); setBoilerplate(savedBoilerplate); setDirty(false); };
     const handleSave = once(async () => {
+        // A default tax rate the rules refuse is said, nothing sent — and the throw keeps the leave guard's "Save and
+        // continue" from moving on, as a refused save does.
+        const typedRate = taxRateFromInput(taxRateText);
+        if (typedRate.error) { setSaveError(typedRate.error); throw new Error(typedRate.error); }
         setSaving(true);
         try {
             const answer = await putSettings({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }, opened);
@@ -1129,6 +1140,12 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
     };
 
     const setfd = (k, v) => { setDefaults(p => ({ ...p, [k]:v })); setDirty(true); };
+    // The default tax rate's field: its words kept as typed; a rate they read as goes into the defaults to be saved.
+    const onTaxRateText = (text) => {
+        setTaxRateText(text);
+        const typed = taxRateFromInput(text);
+        if (typed.error) setDirty(true); else setfd('taxRate', typed.rate);
+    };
     const sel = (opts, val, onChange) => (
         <select value={val} onChange={e => onChange(e.target.value)}
             style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer',
@@ -1274,6 +1291,15 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
                                     {f.hint && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{f.hint}</span>}
                                 </div>
                             ))}
+                            {/* The org's default tax rate (§0.241, R3): filled on each new quote, changeable on the quote. */}
+                            <div style={{ marginBottom:12 }}>
+                                <label htmlFor="qd-tax-rate" style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Default tax rate %</label>
+                                {/* A text box, not type="number": a number box hands the code '' for words it cannot read ("8,25"), which would save as no tax without a word. */}
+                                <input id="qd-tax-rate" type="text" inputMode="decimal" autoComplete="off" value={taxRateText} placeholder="None"
+                                    onChange={e => onTaxRateText(e.target.value)}
+                                    style={{ width:'100%', padding:'7px 10px', border:`1px solid ${taxRateFromInput(taxRateText).error ? T.warn : T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>0 to 100, two decimal places. Filled on each new quote; a rep can change it on the quote. Blank: no tax.</span>
+                            </div>
                         </CSectionCard>
 
                         <CSectionCard title="Boilerplate text" description="Editable per template; this is the fallback.">

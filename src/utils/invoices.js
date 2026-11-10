@@ -14,6 +14,13 @@
 //     invoice when it is created and editable only while it is a draft;
 //   • dispatch_jobs.invoice_amount / invoice_status / invoice_paid_at MIRROR the
 //     job's live invoice — written by invoices.mjs alone (guide §18b44).
+//   • a quote's tax carries (state §0.241; docs/design/sales-tax R7, Jeff's Q4):
+//     each job line keeps its quote line's Taxable (none reads taxable), the
+//     quote's deal discount becomes discount lines on the job, and a new
+//     invoice's rate is the quote's (0 when it is exempt) unless the request
+//     names one — still editable on the draft.
+
+import { lineTaxable, cleanTaxRate, roundCents, quoteTotals } from './quoteTotals.js';
 
 export const INVOICE_STATUSES = Object.freeze(['draft', 'issued', 'paid', 'void']);
 
@@ -124,7 +131,9 @@ export const quoteCanBeAccepted = (quote) => QUOTE_ACCEPTABLE_STATUSES.includes(
 export const quoteCanBecomeJob = (quote) => quote?.status === 'Accepted';
 
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
-const cents = (n) => Math.round(n * 100) / 100;
+// To the cent, half up, the float's noise taken off — the one rounding a quote's lines use (quoteTotals.js), so a job
+// made from a quote, and its invoice, price every line as the quote did (state §0.241).
+const cents = (n) => roundCents(n);
 
 export const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 
@@ -194,7 +203,9 @@ export function invoiceTotals(lines, taxRate) {
         if (li.taxable !== false) taxable += t;
     }
     subtotal = cents(subtotal);
-    const taxAmount = cents(taxable * rate / 100);
+    // Half up to the cent, the float's noise taken off first (quoteTotals.js roundCents, state §0.241): 10.05 at 10% is
+    // 1.005 — 1.01, as the quote says it; Math.round of its float (100.49999…) said 1.00.
+    const taxAmount = roundCents(taxable * rate / 100);
     return { subtotal, taxRate: rate, taxAmount, total: cents(subtotal + taxAmount) };
 }
 
@@ -269,9 +280,65 @@ export function quoteLineToJobItem(li, index = 0, product = null, types = DEFAUL
         quantity:    String(quantity),
         unitPrice:   unitPrice.toFixed(2),
         totalPrice:  cents(unitPrice * quantity).toFixed(2),
-        taxable:     true,
+        taxable:     lineTaxable(li),   // the quote line's own switch; a line with no flag is taxable (Q2, Q4)
         sortOrder:   index,
     };
+}
+
+/**
+ * A quote's deal discount as the job's discount lines (R7 — until §0.241 it never
+ * reached the job or its invoice). `items` are the job items the quote's lines
+ * became (quoteLineToJobItem); `quote` the quote (its lines, deal discount, rate
+ * and exempt switch, as stored). Kind 'discount', quantity 1; none where the quote
+ * has no deal discount.
+ *
+ * The job's lines are the quote's to the cent (quoteLineToJobItem prices a line as
+ * quoteTotals does — its net to the cent, times the quantity; Jeff, 10 Nov: "Round
+ * each line"), so the discount is one line on the taxable items and one on the
+ * rest, each only where it is not 0:
+ *   - the taxable items' share is what takes them to the quote's taxable base —
+ *     the invoice's taxable lines then add up to the base the quote taxed, so its
+ *     tax at the quote's rate is the quote's tax, credits and all (Jeff, 10 Nov:
+ *     "Credit lowers tax");
+ *   - the rest is the remainder, so together they are the quote's own discount
+ *     (its subtotal less its total) and the job adds up to the quote's total.
+ * A credit (a negative line) can make a part a negative discount — kept, so the
+ * figures still match the quote.
+ */
+export function quoteDiscountJobItems(items, quote, startIndex = 0) {
+    const dd = num(quote?.dealDiscount, 0);
+    if (dd === 0) return [];
+    const q = quoteTotals({ lineItems: quote?.lineItems, dealDiscount: dd, taxRate: quote?.taxRate, taxExempt: quote?.taxExempt });
+    const whole = roundCents(q.subtotal - q.totalValue);
+    if (whole === 0) return [];
+    let taxed = 0;
+    for (const it of Array.isArray(items) ? items : []) if (it?.taxable !== false) taxed += num(it?.totalPrice, 0);
+    const onTaxed = roundCents(roundCents(taxed) - q.taxableBase);
+    const pct = String(roundCents(dd));
+    const parts = [
+        { amount: onTaxed, taxable: true },
+        { amount: roundCents(whole - onTaxed), taxable: false },
+    ].filter((part) => part.amount !== 0);
+    return parts.map((part, i) => ({
+        itemType:    'discount',
+        description: parts.length > 1 && !part.taxable ? `Discount (${pct}%), untaxed items` : `Discount (${pct}%)`,
+        partNumber:  null,
+        quantity:    '1',
+        unitPrice:   (-part.amount).toFixed(2),
+        totalPrice:  (-part.amount).toFixed(2),
+        taxable:     part.taxable,
+        sortOrder:   startIndex + i,
+    }));
+}
+
+/**
+ * A new invoice's tax rate from the quote its job came from (R7, Q4): 0 when the
+ * quote is exempt or holds no rate (every quote written before tax); else its
+ * stored rate (a numeric, "8.25"), read as quotes.mjs stores it.
+ */
+export function invoiceTaxRateOfQuote(quote) {
+    if (!quote || quote.taxExempt === true) return 0;
+    return cleanTaxRate(quote.taxRate) ?? 0;
 }
 
 /** The job's title and description from the quote (the " vN" suffix dropped). */

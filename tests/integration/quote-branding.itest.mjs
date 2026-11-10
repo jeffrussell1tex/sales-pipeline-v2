@@ -127,7 +127,12 @@ const pdfText = (b64) => {
     return { lines, all: lines.join('\n'), raw, author };
 };
 
-const QUOTE_BODY = { id: 'q_body', name: 'Itest Brand Quote', quoteNumber: 'Q-ITEST-1', version: 1, status: 'Draft', lineItems: [] };
+// What a request body may still carry: since §0.241 the PDF reads the STORED quote by its id (quote-pdf.mjs), so none
+// of this is printed — its name is not the stored quote's.
+const QUOTE_BODY = { id: 'q_body', name: 'Itest Body Quote Name', quoteNumber: 'Q-ITEST-BODY', version: 1, status: 'Draft', lineItems: [] };
+// The stored quote each org's PDF is asked for, one per org on a deal of its own: named 'Itest Brand Quote', no lines.
+const Q_PDF = { [A]: 'q_itest_brand_pdf_a', [C]: 'q_itest_brand_pdf_c', [D]: 'q_itest_brand_pdf_d' };
+const OPP_PDF = { [A]: OPP_A, [C]: 'opp_itest_brand_c', [D]: 'opp_itest_brand_d' };
 
 const cleanup = async () => {
     for (const o of [A, B, C, D]) {
@@ -160,6 +165,9 @@ before(async () => {
         lineItems: [{ productName: 'Itest Widget', productType: 'one_time', listPrice: 100, quantity: 1, discountPct: 0 }],
         billingContact: 'Pat Buyer <pat@customer.itest>', createdBy: 'Itest Brand Rep' });
     await db.insert(quotes).values([q(Q_MAIL), q(Q_NOREPLY)]);
+    await db.insert(opportunities).values([C, D].map((o) => ({ id: OPP_PDF[o], orgId: o, opportunityName: OPP_PDF[o], account: 'Itest Customer Co', pipelineId: 'default', stage: 'Proposal', arr: '1000.00' })));
+    await db.insert(quotes).values([A, C, D].map((o) => ({ id: Q_PDF[o], orgId: o, opportunityId: OPP_PDF[o], quoteNumber: 'Q-ITEST-1', version: 1,
+        name: 'Itest Brand Quote', status: 'Draft', lineItems: [] })));
 });
 after(async () => { await cleanup(); globalThis.fetch = realFetch; });
 
@@ -178,9 +186,10 @@ test('IDENTITY: each org reads its own Company profile; no display name — its 
 // ── PDF ──────────────────────────────────────────────────────────────────────
 
 test('PDF: the caller\'s org\'s name, address and contact — a body naming another org\'s profile changes nothing; no app name anywhere', async () => {
-    const r = await pdfFn(ev(A, { quote: QUOTE_BODY, opportunity: null, lines: [], companyProfile: { address: '9 Bravo Road', phone: '617-555-0909', notes: 'Bravo notes' } }));
+    const r = await pdfFn(ev(A, { quoteId: Q_PDF[A], quote: QUOTE_BODY, opportunity: null, lines: [], companyProfile: { address: '9 Bravo Road', phone: '617-555-0909', notes: 'Bravo notes' } }));
     assert.equal(r.statusCode, 200, r.body);
     const pdf = pdfText(r.body);
+    assert.ok(pdf.lines.includes('Itest Brand Quote') && !pdf.all.includes('Itest Body Quote Name'), 'REGRESSION (§0.241): the body\'s quote printed, not the stored one');
     for (const want of ['ALPHA QUOTES & CO', '1 Alpha Way', 'Austin, TX 78701', '512-555-0101 · help@alpha.itest']) {
         assert.ok(pdf.lines.includes(want), `REGRESSION (§0.234): the PDF lacks "${want}" — got ${JSON.stringify(pdf.lines.slice(0, 8))}`);
     }
@@ -193,9 +202,9 @@ test('PDF: the caller\'s org\'s name, address and contact — a body naming anot
 });
 
 test('PDF: no display name — the org\'s Clerk name; Clerk down — no name line and still a PDF; never the app\'s', async () => {
-    const c = pdfText((await pdfFn(ev(C, { quote: QUOTE_BODY, lines: [] }))).body);
+    const c = pdfText((await pdfFn(ev(C, { quoteId: Q_PDF[C] }))).body);
     assert.ok(c.lines.includes(('Clerk Name ' + C).toUpperCase()), 'REGRESSION (Q1): the Clerk name not printed');
-    const d = await pdfFn(ev(D, { quote: QUOTE_BODY, lines: [] }));
+    const d = await pdfFn(ev(D, { quoteId: Q_PDF[D] }));
     assert.equal(d.statusCode, 200, 'a quote still renders when Clerk is down');
     const dt = pdfText(d.body);
     assert.equal(dt.lines[0], 'Itest Brand Quote', 'no name: the quote name heads the page');

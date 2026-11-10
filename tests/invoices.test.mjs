@@ -296,7 +296,7 @@ test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoi
 
 test('quote-to-job.mjs: technician 403, the one Dispatch gate (the switch and the role) before any read, the quote read BY ORG, Accepted only, one job per quote, the link written on insert, the audit word', () => {
     const f = code(read('netlify/functions/quote-to-job.mjs'));
-    assert.ok(f.includes("import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, cleanProductTypes } from '../../src/utils/invoices.js';"));
+    assert.ok(f.includes("import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, quoteDiscountJobItems, cleanProductTypes } from '../../src/utils/invoices.js';"));
     assert.ok(f.includes("import { customerForDeal, dealCustomerRefusal } from '../../src/utils/dispatchCustomer.js';"), "the deal's customer by Dispatch's one rule (state §0.214)");
     assert.ok(f.includes("if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot convert quotes.' });"));
     assert.ok(!f.includes('requireWrite') && !f.includes('dispatchEnabledFor'), 'one gate, not a local copy of it');

@@ -142,7 +142,8 @@ test('KEPT: the totals and the four figures together, after the last row — for
             assert.equal(holders[0], pages.length - 1, `${n} lines: the summary on the last page (no notes)`);
             const lastRowPage = pages.reduce((at, p, i) => (rowNames(p).length ? i : at), 0);
             assert.ok(holders[0] >= lastRowPage, `${n} lines: after the last row`);
-            if (dealDiscount) assert.ok(words(pages[holders[0]]).some((w) => w.startsWith('Deal Discount (10%)')), 'the discount row with them');
+            // The row's words are the screens' since §0.241 (quoteMoneyRows.js): "Deal discount (10%)".
+            if (dealDiscount) assert.ok(words(pages[holders[0]]).some((w) => w.startsWith('Deal discount (10%)')), 'the discount row with them');
             assert.equal(pages.flatMap(words).filter((w) => w === 'QUOTE TOTAL').length, 1, 'once');
         }
     }
@@ -302,6 +303,63 @@ test('ROWS: a name past three lines is cut with an ellipsis; a one-line row keep
     // A service row 28 points: its "flat fee" line (16 down, 7 points) ran 2.5 points out of the old 22 (§0.235 review).
     const [svc] = await render({ ...quoteOf(0), lineItems: [{ productName: 'Svc', productType: 'service', quantity: 1, listPrice: 5 }, { productName: 'After', productType: 'one-time', quantity: 1, listPrice: 5 }] });
     assert.equal(+(svc.find((t) => t.text === 'Svc').y - svc.find((t) => t.text === 'After').y).toFixed(3), 28, 'REGRESSION (§0.235 review): a service row 22 points, its line out of it');
+});
+
+// ── TAX (state §0.241; docs/design/sales-tax R6) ─────────────────────────────
+// The quote as stored: numerics as strings ("10.00", "8.25"), a line with no flag taxable, one switched off.
+
+const TAXED_LINES = [
+    { productName: 'Taxed thing', productType: 'one_time', unit: 'flat', quantity: 1, listPrice: 600, discountPct: 0 },
+    { productName: 'Untaxed thing', productType: 'one_time', unit: 'flat', quantity: 1, listPrice: 400, discountPct: 0, taxable: false },
+];
+const taxedQuote = (extra = {}) => quoteOf(0, { lineItems: TAXED_LINES, dealDiscount: '10.00', taxRate: '8.25', taxExempt: false, ...extra });
+// The totals block's words in the order written: from "Subtotal" to the four figures.
+const totalsBlock = (page) => { const w = words(page); return w.slice(w.indexOf('Subtotal'), w.indexOf('QUOTE TOTAL')); };
+
+test('TAX: the totals block — Subtotal, Deal discount, Tax (rate%), Total with the tax, to the cent; "Tax exempt"; no tax row on a quote with no rate', async () => {
+    // 600 taxed + 400 not, 10% off, 8.25%: the tax on the taxed line's share after the discount (540) — 44.55.
+    const [taxed] = await render(taxedQuote());
+    assert.deepEqual(totalsBlock(taxed), ['Subtotal', '$1,000.00', 'Deal discount (10%)', '-$100.00', 'Tax (8.25%)', '$44.55', 'Total', '$944.55'],
+        'REGRESSION (§0.241): the PDF\'s totals block is not the quote\'s, to the cent');
+    const kpi = words(taxed);
+    assert.equal(kpi[kpi.indexOf('QUOTE TOTAL') + 1], '$945', 'the Quote Total figure is the Total, with the tax (whole dollars, as the four figures are)');
+    const [exempt] = await render(taxedQuote({ taxExempt: true }));
+    assert.deepEqual(totalsBlock(exempt), ['Subtotal', '$1,000.00', 'Deal discount (10%)', '-$100.00', 'Tax exempt', '$0.00', 'Total', '$900.00'], 'an exempt quote says so, and is taxed nothing');
+    // Written before tax: no rate, no switch, no flags — no tax row, its Total its pre-tax total, as before.
+    const [older] = await render(taxedQuote({ taxRate: null, taxExempt: null, lineItems: TAXED_LINES.map(({ taxable, ...li }) => li) }));
+    assert.deepEqual(totalsBlock(older), ['Subtotal', '$1,000.00', 'Deal discount (10%)', '-$100.00', 'Total', '$900.00'], 'REGRESSION (§0.241): a quote with no rate gains a tax row');
+    const [zero] = await render(taxedQuote({ taxRate: '0.00', dealDiscount: '0.00' }));
+    assert.deepEqual(totalsBlock(zero), ['Subtotal', '$1,000.00', 'Tax (0%)', '$0.00', 'Total', '$1,000.00'], 'a rate of 0 is a rate: shown, nothing added');
+    // The rows add up: the Subtotal less the discount, plus the tax, is the Total.
+    const cents = (s) => Math.round(Number(s.replace(/[$,]/g, '')) * 100);
+    const b = totalsBlock(taxed);
+    assert.equal(cents(b[1]) + cents(b[3]) + cents(b[5]), cents(b[7]));
+});
+
+test('TAX: the block with its tax row kept with the four figures, after the last row, at every length; within the floor', async () => {
+    for (const exempt of [false, true]) {
+        for (let n = 0; n <= 45; n++) {
+            const lineItems = items(n).map((it, i) => (i % 4 === 1 ? { ...it, taxable: false } : it));
+            const pages = await render(quoteOf(n, { lineItems, dealDiscount: '10.00', taxRate: '8.25', taxExempt: exempt }));
+            const label = `${n} lines, taxed${exempt ? ' (exempt)' : ''}`;
+            floorChecks(pages, label);
+            const SUMMARY = ['Subtotal', exempt ? 'Tax exempt' : 'Tax (8.25%)', 'Total', 'QUOTE TOTAL', 'AVG DISCOUNT'];
+            const holders = SUMMARY.map((s) => pages.findIndex((p) => words(p).includes(s)));
+            assert.ok(holders.every((h) => h >= 0), `${label}: the summary printed — ${JSON.stringify(holders)}`);
+            assert.equal(new Set(holders).size, 1, `REGRESSION (§0.241): ${label} — the tax row and the figures split across pages ${JSON.stringify(holders)}`);
+            assert.equal(holders[0], pages.length - 1, `${label}: the summary on the last page`);
+            assert.deepEqual(pages.flatMap(rowNames), items(n).map((it) => it.productName), `${label}: every row once, in order`);
+        }
+    }
+});
+
+test('TAX: a total too wide for its column is cut to its one line — never a second line, never a page of pdfkit\'s own', async () => {
+    const pages = await render(quoteOf(0, { lineItems: [{ productName: 'Big', productType: 'one_time', quantity: 1, listPrice: 99999999 }], taxRate: '8.25' }));
+    assert.equal(pages.length, 1, 'REGRESSION (§0.241): a long total made a page');
+    floorChecks(pages, 'a long total');
+    const block = totalsBlock(pages[0]);
+    assert.equal(block.length, 6, `REGRESSION (§0.241): a totals text wrapped onto a second line — ${JSON.stringify(block)}`);
+    assert.equal(block[4], 'Total');
 });
 
 // ── WIRING ───────────────────────────────────────────────────────────────────

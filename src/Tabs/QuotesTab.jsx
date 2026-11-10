@@ -18,6 +18,10 @@ import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApprova
 // What the approvals DID (§0.156): the server's record of each submission and
 // decision — the Approvals cards, the decisions and a quote's history read it.
 import { approvalSummary, formatHours, sendBackNoteOf } from '../utils/approvalStats.js';
+// A quote's money, one copy (state §0.241, docs/design/sales-tax R1): the server stores it, every screen here reads
+// it — the deal discount and the tax with it; the totals block's rows and the typed rate (R6, R3).
+import { quoteTotals, lineTaxable } from '../utils/quoteTotals.js';
+import { quoteMoneyRows, quoteTaxNote, taxRateFromInput, taxRateInputOf, productTaxable } from '../utils/quoteMoneyRows.js';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -93,29 +97,22 @@ function buildApprovalTiers(settingsApprovalTiers) {
 const approverWordsOf = (tier, approverNames) => tierApproverWords(tier, (id) => approverNames.get(id) || null);
 
 // ─── Quote math ───────────────────────────────────────────────
-function calcLineTotals(lineItems = [], products = []) {
-    let listTotal = 0, netTotal = 0, recurring = 0, oneTime = 0, costTotal = 0;
-    const lines = (lineItems || []).map(item => {
-        const p    = products.find(p => p.id === item.productId) || {};
-        const qty  = Number(item.quantity) || 1;
-        const list = Number(item.listPrice ?? p.listPrice ?? p.price) || 0;
-        const disc = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
-        const net  = list * (1 - disc / 100);
-        const lineList = list * qty;
-        const lineNet  = net * qty;
-        const cost     = (Number(p.cost) || 0) * qty;
-        listTotal += lineList;
-        netTotal  += lineNet;
-        costTotal += cost;
-        const normType = (item.productType || p.type || p.productType || '').replace('_', '-');
-        if (normType === 'recurring') recurring += item.unit === 'month' ? lineNet * 12 : lineNet;
-        else oneTime += lineNet;
-        return { ...item, netPrice: net, lineTotal: lineNet, lineList, productName: item.productName || p.name || '' };
-    });
-    const avgDisc  = listTotal > 0 ? 1 - netTotal / listTotal : 0;
+// A thin wrapper over quoteTotals (state §0.241, R1) — the money the server stores, worked out one way. It kept its
+// own copy, which ignored the deal discount: a quote with one showed a Net the server never stored. `terms` is the
+// quote (its dealDiscount, taxRate, taxExempt) — left out, no deal discount and no tax, as before. Only what the
+// screens add is here: the cost of each line for the margin, and the average line discount.
+function calcLineTotals(lineItems = [], products = [], terms = {}) {
+    const catalog = products || [];
+    const t = quoteTotals({ lineItems: lineItems || [], products: catalog, dealDiscount: terms?.dealDiscount, taxRate: terms?.taxRate ?? null, taxExempt: terms?.taxExempt });
+    const costTotal = t.lines.reduce((s, li) => s + (Number((catalog.find(p => p.id === li.productId) || {}).cost) || 0) * (Number(li.quantity) || 1), 0);
+    const netTotal = t.subtotal;
+    const avgDisc  = t.listTotal > 0 ? 1 - netTotal / t.listTotal : 0;
     const margin   = netTotal > 0 ? (netTotal - costTotal) / netTotal : 0;
-    return { lines, listTotal, netTotal, totalValue: netTotal, recurringValue: recurring, oneTimeValue: oneTime, avgDisc, avgDiscPct: avgDisc * 100, margin };
+    return { ...t, netTotal, avgDisc, avgDiscPct: avgDisc * 100, margin };
 }
+
+// The totals block's rows (R6) in each block's own shape ({ l, v, bold }) — money to the cent there only.
+const moneyRowsOf = (totals, dealDiscount) => quoteMoneyRows(totals, dealDiscount).map(r => ({ l: r.label, v: r.value, bold: !!r.total }));
 
 // ─── Status colours ───────────────────────────────────────────
 const STATUS_COLORS = {
@@ -279,7 +276,8 @@ const QuoteActivityLog = ({ quote, events, error }) => {
 // ─── PDF preview ──────────────────────────────────────────────
 // `org` is the sending org's identity (src/utils/orgIdentity.js) — what the PDF and the email print too.
 const QuotePDFPreview = ({ quote, opp, products, org }) => {
-    const { lines, listTotal, totalValue, avgDisc } = calcLineTotals(quote.lineItems || [], products || []);
+    const totals = calcLineTotals(quote.lineItems || [], products || [], quote);
+    const { lines, listTotal, netTotal, avgDisc } = totals;
     const orgContact = contactLineOf(org);
     return (
         <div style={{ background: '#fafaf7', padding: '20px 24px 24px', border: `1px solid ${T.border}`, borderRadius: T.r }}>
@@ -334,10 +332,11 @@ const QuotePDFPreview = ({ quote, opp, products, org }) => {
                 </table>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
                     <div style={{ width: 280 }}>
+                        {/* The totals block (R6): to the cent — Subtotal, the deal discount, the tax or "Tax exempt", Total. */}
                         {[
-                            { l: 'List total', v: fmtFull(listTotal), muted: true },
-                            { l: `Discount (${Math.round(avgDisc * 100)}%)`, v: '-' + fmtFull(listTotal - totalValue), muted: true },
-                            { l: 'Net total', v: fmtFull(totalValue), bold: true },
+                            { l: 'List total', v: fmtMoney(listTotal), muted: true },
+                            { l: `Discount (${Math.round(avgDisc * 100)}%)`, v: fmtMoney(-(listTotal - netTotal)), muted: true },
+                            ...moneyRowsOf(totals, quote.dealDiscount),
                         ].map(r => (
                             <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: r.bold ? '1.5px solid #2a2622' : undefined, marginTop: r.bold ? 4 : 0 }}>
                                 <span style={{ fontFamily: T.sans, fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.l}</span>
@@ -441,8 +440,10 @@ const TemplatePickerModal = ({ opp, templates, onPick, onClose }) => {
 // ─── Quote column — side-by-side comparator ───────────────────
 const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, onEdit }) => {
     const { approvalTiers, approverNames } = useQuoteConfig();
-    const { lines, listTotal, totalValue, avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
-    const otherResult = otherQuote ? calcLineTotals(otherQuote.lineItems || [], products || []) : null;
+    // Each version's own terms (§0.241): its deal discount, rate and exempt switch. The headline stays pre-tax.
+    const totals = calcLineTotals(quote.lineItems || [], products || [], quote);
+    const { lines, listTotal, netTotal, totalValue, avgDisc, margin } = totals;
+    const otherResult = otherQuote ? calcLineTotals(otherQuote.lineItems || [], products || [], otherQuote) : null;
     const otherIds    = new Set((otherQuote?.lineItems || []).map(li => li.productId));
     const myIds       = new Set((quote.lineItems || []).map(li => li.productId));
     // The tier as the server decides it (quoteRules.js) — the chip agrees with a save.
@@ -505,7 +506,9 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                     const isNew     = otherQuote && !otherIds.has(li.productId);
                     const discChg   = otherLi && (Number(otherLi.discountPct) || 0) !== (Number(li.discountPct) || 0);
                     const qtyChg    = otherLi && (Number(otherLi.quantity) || 1) !== (Number(li.quantity) || 1);
-                    const changed   = discChg || qtyChg;
+                    // A line switched taxable or not between versions is a change too (§0.241).
+                    const taxChg    = otherLi && lineTaxable(otherLi) !== li.taxable;
+                    const changed   = discChg || qtyChg || taxChg;
                     const p         = (products || []).find(p => p.id === li.productId) || {};
                     return (
                         <div key={li.productId + i} style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: '1fr 48px 52px 76px', gap: 6, alignItems: 'center', fontSize: 11.5, fontFamily: T.sans, background: isNew ? 'rgba(77,107,61,0.08)' : changed ? 'rgba(200,185,154,0.15)' : 'transparent', borderLeft: isNew ? `2px solid ${T.ok}` : changed ? `2px solid ${T.gold}` : '2px solid transparent', marginBottom: 2 }}>
@@ -513,6 +516,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                                 <div style={{ color: T.ink, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
                                     {li.productName || p.name}
                                     {isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.ok, background: `${T.ok}20`, padding: '1px 4px', borderRadius: 999 }}>ADDED</span>}
+                                    {!li.taxable && totals.taxRate != null && !totals.taxExempt && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.inkMid, background: T.surface2, padding: '1px 4px', borderRadius: 999 }}>NOT TAXED</span>}
                                 </div>
                                 <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.sku || ''}</div>
                             </div>
@@ -541,10 +545,11 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
 
             {/* Footer totals */}
             <div style={{ padding: '12px 16px', borderTop: `1px solid ${T.border}`, background: T.surface2, fontSize: 11.5, fontFamily: T.sans }}>
+                {/* The totals block (R6): to the cent — Subtotal, the deal discount, the tax or "Tax exempt", Total. */}
                 {[
-                    { label: 'List total',              value: fmtFull(listTotal),                 muted: true },
-                    { label: `Discount (${Math.round(avgDisc * 100)}%)`, value: '-' + fmtFull(listTotal - totalValue), color: T.warn },
-                    { label: 'Net',                     value: fmtFull(totalValue),                bold: true },
+                    { label: 'List total',              value: fmtMoney(listTotal),                muted: true },
+                    { label: `Discount (${Math.round(avgDisc * 100)}%)`, value: fmtMoney(-(listTotal - netTotal)), color: T.warn },
+                    ...moneyRowsOf(totals, quote.dealDiscount).map(r => ({ label: r.l, value: r.v, bold: r.bold })),
                     { label: 'Est. margin',             value: null, extra: <span style={{ color: margin > 0.5 ? T.ok : margin > 0.35 ? T.inkMid : T.warn, fontWeight: 600 }}>{Math.round(margin * 100)}%</span> },
                 ].map(r => (
                     <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: r.bold ? 12.5 : 11.5, fontWeight: r.bold ? 600 : 400, color: r.color || (r.bold ? T.ink : T.inkMid) }}>
@@ -571,10 +576,17 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
     const [paymentTerms,  setPaymentTerms]  = useState(quote.paymentTerms || 'Net 30 · Annual');
     const [validUntil,    setValidUntil]    = useState(quote.validUntil || '');
     const [notes,         setNotes]         = useState(quote.notes || '');
+    // The quote's own tax (state §0.241): its rate — filled from the org's default when the quote was made, changed
+    // here — and its "Tax exempt" switch. Stored on the quote; the server works the tax out from them on every save.
+    const [taxRateInput,  setTaxRateInput]  = useState(() => taxRateInputOf(quote.taxRate));
+    const [taxExempt,     setTaxExempt]     = useState(quote.taxExempt === true);
     const [error,         setError]         = useState(null);
     const { approvalTiers } = useQuoteConfig();
 
-    const { lines, listTotal, totalValue } = calcLineTotals(lineItems, products || []);
+    // The rate as typed; one the rules refuse shows the stored rate's tax until it is fixed (a save says why).
+    const typedRate = taxRateFromInput(taxRateInput);
+    const totals = calcLineTotals(lineItems, products || [], { dealDiscount: quote.dealDiscount, taxRate: typedRate.error ? quote.taxRate : typedRate.rate, taxExempt });
+    const { lines, listTotal, netTotal } = totals;
     // The discount and its tier as the server reads them (quoteRules.js, §0.155).
     const avgDiscPct = quoteDiscountPct(lineItems, quote.dealDiscount);
     const tier = approvalTierFor(avgDiscPct, approvalTiers);
@@ -609,6 +621,8 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
             quantity:    1,
             discountPct: 0,
             customPrice: prod.customPrice === true,
+            // The product's Taxable (Q2) — none is taxable; switched per line below.
+            taxable:     productTaxable(prod),
         }]);
     };
 
@@ -620,7 +634,9 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
 
     const handleSave = async () => {
         setError(null);
-        const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes };
+        // A rate the rules refuse is said here, never sent: the server would refuse it (§0.241).
+        if (typedRate.error) { setError(typedRate.error); return; }
+        const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };
         try { await onSave(payload); onClose(); }
         catch (err) { setError(err.message || 'Failed to save.'); }
     };
@@ -696,7 +712,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                 {/* RIGHT: Line items + meta */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '12px 16px', gap: 12 }}>
                     {/* Meta row */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1.4fr 96px 104px', gap: 10 }}>
                         <div>
                             <label style={lbl}>Payment Terms</label>
                             <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} style={inp}>
@@ -711,14 +727,29 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                             <label style={lbl}>Notes</label>
                             <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes…" style={inp} />
                         </div>
+                        {/* The quote's tax (§0.241): its rate, from the org's default (Settings → Quotes), and its switch. */}
+                        <div>
+                            <label htmlFor="quote-tax-rate" style={lbl}>Tax rate %</label>
+                            {/* A text box, not type="number": a number box hands the code '' for words it cannot read ("8,25"), which would save as no tax without a word. */}
+                            <input id="quote-tax-rate" type="text" inputMode="decimal" autoComplete="off" value={taxRateInput}
+                                onChange={e => setTaxRateInput(e.target.value)} placeholder="None"
+                                style={{ ...inp, textAlign: 'right', borderColor: typedRate.error ? T.warn : undefined }} />
+                        </div>
+                        <div>
+                            <span style={lbl}>Tax exempt</span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, fontSize: 12, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
+                                <input type="checkbox" checked={taxExempt} onChange={e => setTaxExempt(e.target.checked)} style={{ cursor: 'pointer' }} />
+                                No tax
+                            </label>
+                        </div>
                     </div>
 
                     {/* Line items table */}
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
                         {/* Column headers */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 28px', gap: 8, padding: '7px 12px', background: T.surface2, borderBottom: `1px solid ${T.border}` }}>
-                            {['Product', 'Type', 'Unit Price', 'Qty', 'Disc %', ''].map((h, i) => (
-                                <div key={i} style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: i >= 2 ? 'right' : 'left', fontFamily: T.sans }}>{h}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 56px 28px', gap: 8, padding: '7px 12px', background: T.surface2, borderBottom: `1px solid ${T.border}` }}>
+                            {['Product', 'Type', 'Unit Price', 'Qty', 'Disc %', 'Taxable', ''].map((h, i) => (
+                                <div key={i} style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: i === 5 ? 'center' : i >= 2 ? 'right' : 'left', fontFamily: T.sans }}>{h}</div>
                             ))}
                         </div>
                         {lines.length === 0 ? (
@@ -727,7 +758,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                             </div>
                         ) : (
                             lines.map((item) => (
-                                <div key={item._key} style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 28px', gap: 8, padding: '8px 12px', alignItems: 'center', borderBottom: `1px solid ${T.border}` }}>
+                                <div key={item._key} style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 56px 28px', gap: 8, padding: '8px 12px', alignItems: 'center', borderBottom: `1px solid ${T.border}` }}>
                                     <div>
                                         <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{item.productName}</div>
                                         {item.customPrice && <div style={{ fontSize: 10.5, color: T.info, fontFamily: T.sans }}>Custom price — enter below</div>}
@@ -754,6 +785,11 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                                             style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px', borderColor: Number(item.discountPct) >= 10 ? T.warn : undefined }}
                                         />
                                     </div>
+                                    {/* The line's Taxable (§0.241) — copied from its product when added; a line with none is taxable. */}
+                                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                        <input type="checkbox" checked={item.taxable} aria-label={`Taxable — ${item.productName || 'this line'}`}
+                                            onChange={e => updateLine(item._key, 'taxable', e.target.checked)} style={{ cursor: 'pointer' }} />
+                                    </div>
                                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                                         <button onClick={() => removeLine(item._key)} style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
                                     </div>
@@ -765,11 +801,13 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                     {/* Totals + actions */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 20, alignItems: 'flex-start' }}>
                         {/* Totals */}
-                        <div style={{ width: 260, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                        <div style={{ width: 280, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                            {/* The totals block (R6): to the cent — the lines at list and their discount, then Subtotal,
+                                the deal discount, the tax at the rate typed above (or "Tax exempt"), Total. */}
                             {[
-                                { l: 'Subtotal',                               v: fmtFull(listTotal),                muted: true },
-                                { l: `Avg discount (${Math.round(avgDiscPct)}%)`, v: '-' + fmtFull(listTotal - totalValue), color: avgDiscPct > 0 ? T.warn : T.inkMuted },
-                                { l: 'Net total',                              v: fmtFull(totalValue),               bold: true },
+                                { l: 'List total',                             v: fmtMoney(listTotal),               muted: true },
+                                { l: `Line discount (${Math.round(totals.avgDiscPct)}%)`, v: fmtMoney(-(listTotal - netTotal)), color: totals.avgDiscPct > 0 ? T.warn : T.inkMuted },
+                                ...moneyRowsOf(totals, quote.dealDiscount),
                             ].map(r => (
                                 <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: r.bold ? 'none' : `1px solid ${T.border}`, background: r.bold ? T.surface2 : 'transparent' }}>
                                     <span style={{ fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.color || (r.muted ? T.inkMid : T.ink), fontFamily: T.sans }}>{r.l}</span>
@@ -1020,7 +1058,8 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const [filterCat, setFilterCat] = useState('');
     const [sortBy,    setSortBy]    = useState('name');
 
-    const EMPTY = { name: '', category: '', productType: typeOpts[0]?.id || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false };
+    // Taxable (state §0.241, Q2): on for a new product; a product saved before tax (none) reads taxable.
+    const EMPTY = { name: '', category: '', productType: typeOpts[0]?.id || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false, taxable: true };
 
     const intelligence = useMemo(() => calcProductIntelligence(products, quotes, opportunities), [products, quotes, opportunities]);
     const activeP   = (products || []).filter(p => p.active !== false);
@@ -1044,7 +1083,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const filtered = sorted;
 
     const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
-    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0]?.id || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true }); setEditing(p.id); setError(null); };
+    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0]?.id || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true, taxable: productTaxable(p) }); setEditing(p.id); setError(null); };
     const cancel   = () => { setEditing(null); setError(null); };
 
     const handleSave = async () => {
@@ -1171,6 +1210,11 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                         <input type="checkbox" id="prod-active" checked={form.active !== false} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
                         <label htmlFor="prod-active" style={{ fontSize: '0.8125rem', color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>Active (visible in quote builder)</label>
                     </div>
+                    {/* Taxable (§0.241): copied onto a quote's line when the product is added; the rep can switch the line. */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <input type="checkbox" id="prod-taxable" checked={form.taxable !== false} onChange={e => setForm(f => ({ ...f, taxable: e.target.checked }))} />
+                        <label htmlFor="prod-taxable" style={{ fontSize: '0.8125rem', color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>Taxable (sales tax applies on a quote)</label>
+                    </div>
                     {error && <div style={{ color: T.danger, fontSize: '0.8125rem', marginBottom: '0.5rem', fontFamily: T.sans }}>{error}</div>}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={cancel} style={{ background: '#e8e3da', color: T.inkMuted, border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
@@ -1238,6 +1282,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                                             <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 6 }}>
                                                 {prod.name}
                                                 {prod.customPrice && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.info, background: `${T.info}14`, padding: '1px 4px', borderRadius: 2, textTransform: 'uppercase' }}>Custom</span>}
+                                                {!productTaxable(prod) && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.inkMid, border: `1px solid ${T.border}`, padding: '0 4px', borderRadius: 2, textTransform: 'uppercase' }}>Not taxed</span>}
                                                 {prod.isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 2, textTransform: 'uppercase' }}>NEW</span>}
                                             </div>
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>{typeLabel}{unitLabel ? ` · ${unitLabel}` : ''}</div>
@@ -1343,7 +1388,10 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {pending.map(q => {
                             const opp = oppOf(q);
-                            const { totalValue: tv } = calcLineTotals(q.lineItems || [], []);
+                            // The value stays pre-tax (what the deal's revenue takes); the tax is said beside it (§0.241).
+                            const qTotals = calcLineTotals(q.lineItems || [], [], q);
+                            const tv = qTotals.totalValue;
+                            const taxNote = quoteTaxNote(qTotals);
                             const avgDiscPct = quoteDiscountPct(q.lineItems, q.dealDiscount);
                             const tier = approvalTierFor(avgDiscPct, approvalTiers);
                             const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tierNeedsApproval(tier) ? Math.round((approvalTiers[approvalTiers.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
@@ -1370,6 +1418,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
                                         {/* Right: value + actions */}
                                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                             <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(q.totalValue || tv || 0)}</div>
+                                            {taxNote && <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{taxNote}</div>}
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 10, fontFamily: T.sans }}>{Math.round(avgDiscPct)}% disc · {tier.label}</div>
                                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                                                 <button onClick={() => onOpen(q)}
@@ -1691,6 +1740,13 @@ export default function QuotesTab() {
                 // dealDiscount was omitted entirely, so a deal-level discount reset
                 // to 0% on every new version and the rep had to re-enter it.
                 dealDiscount: source.dealDiscount || 0,
+                // The tax the same way (state §0.241, R2: a new version copies them) — the rate as
+                // the source stores it, none named as none (left out, the server would fill the org's
+                // default and a version of an untaxed quote would come back taxed); the switch as set
+                // (none left none: the server then reads it from the deal's customer). Each line's
+                // Taxable travels with the copied lines above.
+                taxRate: source.taxRate ?? null,
+                taxExempt: source.taxExempt ?? null,
                 notes: source.notes,
                 billingContact: source.billingContact || '',
                 status: 'Draft',
@@ -1768,9 +1824,14 @@ export default function QuotesTab() {
 
     const handleExportPDF = async () => {
         if (!activeQuote) return;
-        const { lines, netTotal } = calcLineTotals(activeQuote.lineItems || [], products || []);
+        const totals = calcLineTotals(activeQuote.lineItems || [], products || [], activeQuote);
+        const { lines } = totals;
+        // The print copy's totals block (R6), to the cent; its rows' words escaped as every interpolation is.
+        const moneyHtml = quoteMoneyRows(totals, activeQuote.dealDiscount)
+            .map(r => r.total ? `<p><strong>${esc(r.label)}: ${esc(r.value)}</strong></p>` : `<p>${esc(r.label)}: ${esc(r.value)}</p>`).join('');
         try {
-            const res = await dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quote: activeQuote, opportunity: configuratorOpp, lines }) });
+            // The stored quote by its id (state §0.241): the server reads it in this org, its deal's access checked, and prints its own figures.
+            const res = await dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) });
             if (!res.ok) throw new Error('PDF generation failed');
             const blob = await res.blob();
             const url  = URL.createObjectURL(blob);
@@ -1778,7 +1839,7 @@ export default function QuotesTab() {
         } catch {
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body>${orgIdentity.name ? `<p style="font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8a8378;margin:0">${esc(orgIdentity.name)}</p>` : ''}<h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body>${orgIdentity.name ? `<p style="font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8a8378;margin:0">${esc(orgIdentity.name)}</p>` : ''}<h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table>${moneyHtml}${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
             w.document.close(); setTimeout(() => w.print(), 400);
         }
     };
@@ -1908,7 +1969,10 @@ export default function QuotesTab() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 {oppQuoteSummaries.map(s => {
                                     const { opp, quotes: qs, latest } = s;
-                                    const { totalValue, avgDisc, margin } = calcLineTotals(latest?.lineItems || [], products || []);
+                                    // The latest version's own terms (§0.241): its value pre-tax, its tax said beside it.
+                                    const latestTotals = calcLineTotals(latest?.lineItems || [], products || [], latest);
+                                    const { totalValue, avgDisc, margin } = latestTotals;
+                                    const taxNote = quoteTaxNote(latestTotals);
                                     const sc = stageColors[opp.stage] || T.inkMid;
                                     return (
                                         <div key={opp.id} onClick={() => openConfigurator(opp.id, latest?.id)}
@@ -1947,6 +2011,7 @@ export default function QuotesTab() {
                                             <div style={{ textAlign: 'right' }}>
                                                 <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 2, fontFamily: T.sans }}>latest quote</div>
                                                 <div style={{ fontSize: 18, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(latest?.totalValue || totalValue || 0)}</div>
+                                                {taxNote && <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{taxNote}</div>}
                                                 <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{Math.round(avgDisc * 100)}% off list · {Math.round(margin * 100)}% margin</div>
                                             </div>
                                         </div>

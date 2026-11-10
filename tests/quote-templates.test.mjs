@@ -17,8 +17,8 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 
 const products = [
     { id: 'p1', name: 'SchedulePro Enterprise Edition', category: 'platform', productType: 'recurring', listPrice: 12000, unit: 'year' },
-    { id: 'p2', name: 'Shiftboard Enterprise', category: 'modules', type: 'one_time', price: 300, unit: 'flat' },
-    { id: 'p3', name: 'Onboarding', category: 'services', customPrice: true },
+    { id: 'p2', name: 'Shiftboard Enterprise', category: 'modules', type: 'one_time', price: 300, unit: 'flat', taxable: false },
+    { id: 'p3', name: 'Onboarding', category: 'services', customPrice: true, taxable: true },
 ];
 
 test('usableQuoteTemplates: only a saved template with product ids that resolve in the catalog can start a quote; the library’s illustrative defaults never qualify', () => {
@@ -44,12 +44,12 @@ test('usableQuoteTemplates: only a saved template with product ids that resolve 
     assert.deepEqual(usableQuoteTemplates(real, []), [], 'no catalog, no template');
 });
 
-test('templateLineItems: the configurator’s own line-item shape, one per resolved product, quantity 1, no discount, a custom price left blank', () => {
+test('templateLineItems: the configurator’s own line-item shape, one per resolved product, quantity 1, no discount, a custom price left blank, the product’s Taxable copied (none: taxable — state §0.241)', () => {
     const items = templateLineItems({ productIds: ['p1', 'p3', 'gone', 'p2'] }, products, 1000);
     assert.deepEqual(items, [
-        { _key: 1000, productId: 'p1', productName: 'SchedulePro Enterprise Edition', productType: 'recurring', unit: 'year', listPrice: 12000, quantity: 1, discountPct: 0, customPrice: false },
-        { _key: 1001, productId: 'p3', productName: 'Onboarding', productType: '', unit: 'flat', listPrice: '', quantity: 1, discountPct: 0, customPrice: true },
-        { _key: 1002, productId: 'p2', productName: 'Shiftboard Enterprise', productType: 'one-time', unit: 'flat', listPrice: 300, quantity: 1, discountPct: 0, customPrice: false },
+        { _key: 1000, productId: 'p1', productName: 'SchedulePro Enterprise Edition', productType: 'recurring', unit: 'year', listPrice: 12000, quantity: 1, discountPct: 0, customPrice: false, taxable: true },
+        { _key: 1001, productId: 'p3', productName: 'Onboarding', productType: '', unit: 'flat', listPrice: '', quantity: 1, discountPct: 0, customPrice: true, taxable: true },
+        { _key: 1002, productId: 'p2', productName: 'Shiftboard Enterprise', productType: 'one-time', unit: 'flat', listPrice: 300, quantity: 1, discountPct: 0, customPrice: false, taxable: false },
     ]);
     assert.deepEqual(templateLineItems(null, products), []);
     assert.deepEqual(templateLineItems({ productIds: ['p1'] }, undefined), []);

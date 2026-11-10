@@ -14,6 +14,8 @@ const headers = {
 const ALLOWED_FIELDS = [
     'id', 'name', 'sku', 'description', 'productType', 'listPrice',
     'minPrice', 'unit', 'category', 'active', 'sortOrder', 'createdBy',
+    // The Taxable switch (state §0.241): true or false, or none (null — taxable); cleaned by taxableOf below.
+    'taxable',
 ];
 
 function sanitize(data) {
@@ -21,6 +23,11 @@ function sanitize(data) {
         Object.entries(data).filter(([k]) => ALLOWED_FIELDS.includes(k))
     );
 }
+
+// A product's Taxable switch as a body names it: true, false, or none (null, which reads taxable); anything else is
+// refused (undefined here), never guessed. A body that leaves the key out names nothing — the PUT keeps the stored one.
+const TAXABLE_REFUSAL = 'taxable must be true or false';
+const taxableOf = (v) => (v === true || v === false ? v : v == null ? null : undefined);
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -55,12 +62,14 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name is required' }) };
             if (data.listPrice == null) return { statusCode: 400, headers, body: JSON.stringify({ error: 'listPrice is required' }) };
+            if (taxableOf(data.taxable) === undefined) return { statusCode: 400, headers, body: JSON.stringify({ error: TAXABLE_REFUSAL, field: 'taxable' }) };
 
             const payload = {
                 ...sanitize(data),
                 orgId,
                 listPrice: String(data.listPrice),
                 minPrice: data.minPrice != null ? String(data.minPrice) : null,
+                taxable: taxableOf(data.taxable),
             };
             const [inserted] = await db.insert(products).values(payload).returning();
             await auditAs(orgId, auth.userId, { action: 'product.created', entityType: 'product', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.category || 'uncategorised'} · list $${Number(inserted.listPrice || 0).toLocaleString()}` });
@@ -72,6 +81,9 @@ export const handler = async (event) => {
             if (!isAdmin) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Admin only' }) };
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            // The Taxable switch: kept as stored when the body leaves it out (the upsert's set names only the keys
+            // sent — sanitize drops the absent one); a value it names is true, false or none.
+            if ('taxable' in data && taxableOf(data.taxable) === undefined) return { statusCode: 400, headers, body: JSON.stringify({ error: TAXABLE_REFUSAL, field: 'taxable' }) };
 
             const payload = {
                 ...sanitize(data),

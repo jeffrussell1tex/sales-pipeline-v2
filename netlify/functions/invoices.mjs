@@ -4,7 +4,9 @@
 // POST { jobId, … }   → 201 { invoice, job } — a DRAFT from the job's line items
 //                       (or the body's), numbered INV-YYYY-NNNN, terms from the
 //                       quote the job came from (else Net 30), due date from the
-//                       terms. One live (non-void) invoice per job: 409 otherwise.
+//                       terms; the tax rate the body's, else that quote's (0 when
+//                       it is exempt or has none — state §0.241, R7), else 0.
+//                       One live (non-void) invoice per job: 409 otherwise.
 // PUT ?id= { … }      → 200 { invoice, job } — on a draft: lines, tax rate, dates,
 //                       terms, PO, notes (totals recomputed here, never trusted);
 //                       and/or a status move: issued (stamps issuedAt), paid
@@ -28,7 +30,7 @@ import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { normaliseJob } from './dispatch-jobs.mjs';
 import {
     canTransition, isInvoiceEditable, isLiveInvoice, cleanInvoicePatch, linesFromJobItems,
-    invoiceTotals, dueDateFromTerms, isYmd, todayYmd, mirrorForJob, DEFAULT_PAYMENT_TERMS,
+    invoiceTotals, dueDateFromTerms, isYmd, todayYmd, mirrorForJob, DEFAULT_PAYMENT_TERMS, invoiceTaxRateOfQuote,
 } from '../../src/utils/invoices.js';
 
 const headers = {
@@ -139,17 +141,20 @@ export const handler = async (event) => {
                     .where(and(eq(dispatchJobLineItems.orgId, orgId), eq(dispatchJobLineItems.jobId, jobId)));
                 lines = linesFromJobItems(items);
             }
-            // Terms: the quote the job came from, else the house default.
+            // Terms and the tax rate: the quote the job came from (read in this org) — its terms, else the house
+            // default; its rate (R7, Jeff's Q4: 0 when it is exempt or has none), unless the request names one. The
+            // rate stays editable on the draft.
             let paymentTerms = patch.paymentTerms;
-            if (paymentTerms === undefined) {
+            let taxRate = patch.taxRate;
+            if (paymentTerms === undefined || taxRate === undefined) {
                 const [q] = job.quoteId
-                    ? await db.select({ paymentTerms: quotes.paymentTerms }).from(quotes).where(and(eq(quotes.id, job.quoteId), eq(quotes.orgId, orgId))).limit(1)
+                    ? await db.select({ paymentTerms: quotes.paymentTerms, taxRate: quotes.taxRate, taxExempt: quotes.taxExempt }).from(quotes).where(and(eq(quotes.id, job.quoteId), eq(quotes.orgId, orgId))).limit(1)
                     : [null];
-                paymentTerms = q?.paymentTerms || DEFAULT_PAYMENT_TERMS;
+                if (paymentTerms === undefined) paymentTerms = q?.paymentTerms || DEFAULT_PAYMENT_TERMS;
+                if (taxRate === undefined) taxRate = invoiceTaxRateOfQuote(q);
             }
             const issueDate = patch.issueDate === undefined ? todayYmd() : patch.issueDate;
             const dueDate   = patch.dueDate   === undefined ? dueDateFromTerms(issueDate, paymentTerms) : patch.dueDate;
-            const taxRate   = patch.taxRate ?? 0;
             const id = 'inv_' + randomUUID();
             const now = new Date();
             const [inserted] = await withNumberRetry(async () => {

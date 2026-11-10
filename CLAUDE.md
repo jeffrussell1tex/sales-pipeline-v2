@@ -257,6 +257,27 @@ One commit per verified batch; doc patch in the same commit.
   pdfkit stays outside the quote PDF's bundle (netlify.toml). The quote PDF
   lays out its own pages (`_quotePdf.mjs`): nothing of the body below its
   floor, every text placed by position bounded to its lines (guide §18b118).
+- A quote's money is worked out once, in `src/utils/quoteTotals.js` —
+  quotes.mjs's stored totals, the Quotes tab, the PDF, the email, the
+  job's discount lines and the QA seed read it; the job's line price
+  (`quoteLineToJobItem`) is held to it by PARITY; no other copy. Each line's
+  net price is rounded to the cent, then times its quantity, to the cent.
+  `totalValue` stays pre-tax (an accept writes it to the deal's `arr`);
+  the tax sits beside it (`taxAmount`, the server's, null with no rate).
+  The rate is stored on the quote: a create that leaves `taxRate` out takes
+  the org's `quoteDefaults.taxRate` (read only through `defaultTaxRateOf`;
+  one naming null stores none), a save that leaves it out keeps the stored
+  one (null or blank takes it off), so a default change never reprices; a
+  named rate it cannot read is a 400 `field: 'taxRate'`, and the screens
+  refuse a typed one in words (`taxRateFromInput`). A line with no
+  `taxable` flag is taxable (`lineTaxable`), in the totals, the edit lock
+  and the job alike; a taxable credit lowers the tax. The totals block is
+  `quoteMoneyRows` wherever a quote shows; the PDF prints the stored quote
+  by id under the deal's read rule; a job takes the deal discount as
+  discount lines (`quoteDiscountJobItems`) and its invoice the quote's
+  rate (THE GUARD, tests/quote-totals.test.mjs, tests/sales-tax.test.mjs,
+  tests/quote-tax-screens.test.mjs, tests/quote-tax-docs.test.mjs; guide
+  §18b124).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

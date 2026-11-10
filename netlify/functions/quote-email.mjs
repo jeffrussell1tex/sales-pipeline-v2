@@ -34,6 +34,13 @@ import { esc } from '../../src/utils/customerNotifications.js';
 // account in it). Until §0.234 it was headed "Accelerep" and ended with a link to the CRM.
 import { orgIdentityFor } from './_orgIdentity.mjs';
 import { contactLineOf, emailOrNull } from '../../src/utils/orgIdentity.js';
+// The quote's money (state §0.241; docs/design/sales-tax R1, R6): its lines and totals through the one copy
+// (quoteTotals.js — what quotes.mjs stores, from the rate stored on the quote), its totals block through the rows every
+// quote screen and the PDF draw (quoteMoneyRows.js), to the cent. Until §0.241 each row read li.qty and li.unitPrice,
+// which no line carries: every row said Qty 1 at the list price, and the rows did not add up to the Total.
+import { quoteTotals } from '../../src/utils/quoteTotals.js';
+import { quoteMoneyRows } from '../../src/utils/quoteMoneyRows.js';
+import { fmtMoney } from '../../src/utils/invoices.js';
 
 const responseHeaders = {
     'Content-Type': 'application/json',
@@ -152,19 +159,22 @@ export const handler = async (event) => {
         }
 
         // ── 4. Format quote summary for email ─────────────────────────────────
-        const fmt = (v) => v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
-
-        const lineItems = Array.isArray(quote.lineItems) ? quote.lineItems : [];
-        const lineRows = lineItems.map(li => `
+        // Each row: the quantity the quote priced (`pricedQty` — not a positive number reads 1), the unit price after the line's discount,
+        // and the line's total — so a row's Qty × Unit Price is its Total, and the rows are the Subtotal.
+        const totals = quoteTotals({ lineItems: quote.lineItems, dealDiscount: quote.dealDiscount, taxRate: quote.taxRate, taxExempt: quote.taxExempt });
+        const lineRows = totals.lines.map(li => `
             <tr>
                 <td style="padding: 8px 12px; font-size: 13px; color: #44403c; border-bottom: 1px solid #f0ece4;">${esc(li.name || li.productName || '—')}</td>
-                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: center; border-bottom: 1px solid #f0ece4;">${esc(li.qty || 1)}</td>
-                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmt(li.unitPrice ?? li.listPrice))}</td>
-                <td style="padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1c1917; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmt((li.qty || 1) * (li.unitPrice ?? li.listPrice ?? 0)))}</td>
+                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: center; border-bottom: 1px solid #f0ece4;">${esc(li.pricedQty)}</td>
+                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmtMoney(li.netPrice))}</td>
+                <td style="padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1c1917; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmtMoney(li.lineTotal))}</td>
             </tr>
         `).join('');
 
-        const total = fmt(quote.totalValue ?? quote.subtotal);
+        // The totals block: Subtotal; Deal discount (where set); Tax (rate%) or "Tax exempt"; Total, with the tax.
+        const moneyRows = quoteMoneyRows(totals, quote.dealDiscount).map(r => r.total
+            ? `<div style="text-align:right;font-size:16px;font-weight:700;color:#1c1917;padding:8px 12px;border-top:2px solid #1c1917;">${esc(r.label)}: ${esc(r.value)}</div>`
+            : `<div style="text-align:right;font-size:13px;color:#57534e;padding:2px 12px;">${esc(r.label)}: ${esc(r.value)}</div>`).join('');
         const quoteNum = quote.quoteNumber || quote.id;
         const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
 
@@ -237,9 +247,7 @@ export const handler = async (event) => {
         </thead>
         <tbody>${lineRows}</tbody>
       </table>
-      <div style="text-align:right;font-size:16px;font-weight:700;color:#1c1917;padding:8px 12px;border-top:2px solid #1c1917;">
-        Total: ${esc(total)}
-      </div>` : ''}
+      ${moneyRows}` : ''}
 
       ${quote.notes ? `<div style="margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;"><strong>Notes:</strong> ${esc(quote.notes)}</div>` : ''}
 

@@ -12,10 +12,18 @@
  *   - the notes wrapped here, line by line, onto new pages as they need — never over the footer;
  *   - every page's footer: the org and the date; the quote number and version, and "Page i of N" when there are more;
  *   - nothing of the body below CONTENT_BOTTOM, and every footer text bounded (no page of its own).
+ *
+ * Its money (state §0.241; docs/design/sales-tax R1, R6): the quote's numbers through quoteTotals.js, the one copy —
+ * what quotes.mjs stores — and the totals block's rows through quoteMoneyRows.js, the rows every quote screen draws:
+ * Subtotal; Deal discount (where set); Tax (rate%) or "Tax exempt" (where the quote has a rate, or is exempt);
+ * Total, with the tax — money to the cent in that block, every text of it bounded to its line. A quote with no rate
+ * (every quote written before tax) prints no tax row, and its Total is its total as before.
  */
 
 import PDFDocument from 'pdfkit';
 import { contactLineOf } from '../../src/utils/orgIdentity.js';
+import { quoteTotals } from '../../src/utils/quoteTotals.js';
+import { quoteMoneyRows } from '../../src/utils/quoteMoneyRows.js';
 
 // ── Colour palette (the house warm stone) ────────────────────────────────────
 const COLOR = {
@@ -57,28 +65,13 @@ function pct(n) {
     return (parseFloat(n) || 0).toFixed(1) + '%';
 }
 
-function calcTotals(lineItems = [], dealDiscountPct = 0) {
-    let subtotal = 0, recurring = 0, oneTime = 0;
-    const lines = lineItems.map(item => {
-        const qty  = Number(item.quantity)   || 1;
-        const list = Number(item.listPrice)  || 0;
-        const disc = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
-        const net  = list * (1 - disc / 100);
-        const total = net * qty;
-        subtotal += total;
-        if (item.productType === 'recurring') {
-            recurring += item.unit === 'month' ? total * 12 : total;
-        } else {
-            oneTime += total;
-        }
-        return { ...item, netPrice: net, lineTotal: total };
-    });
-    const discAmt  = subtotal * (Number(dealDiscountPct) || 0) / 100;
-    const total    = subtotal - discAmt;
-    const avgDisc  = lineItems.length > 0
-        ? lineItems.reduce((a, i) => a + (Number(i.discountPct) || 0), 0) / lineItems.length
-        : 0;
-    return { lines, subtotal, totalValue: total, recurringValue: recurring, oneTimeValue: oneTime, avgDisc };
+// The quote's money, the one copy (quoteTotals.js — what quotes.mjs stores, from the rate stored on the quote), and
+// the average line discount the four figures show. Until §0.241 this file kept a copy of its own, untaxed.
+function calcTotals(quote, lineItems) {
+    const totals = quoteTotals({ lineItems, dealDiscount: quote.dealDiscount, taxRate: quote.taxRate, taxExempt: quote.taxExempt });
+    const { lines } = totals;
+    const avgDisc = lines.length > 0 ? lines.reduce((a, i) => a + (Number(i.discountPct) || 0), 0) / lines.length : 0;
+    return { ...totals, avgDisc };
 }
 
 // What pdfkit can print of a typed text: a tab as four spaces, any other control character gone. pdfkit 0.18 writes
@@ -113,6 +106,8 @@ export function wrapLines(doc, text, width) {
 // ── PDF builder ───────────────────────────────────────────────────────────────
 // `identity` is the sending org's (src/utils/orgIdentity.js): its name, address lines, phone and email. Rendered and
 // read back by tests/quote-pdf-pages.test.mjs (the pages) and tests/integration/quote-branding.itest.mjs (the org).
+// `quote` is the STORED quote (quote-pdf.mjs reads it by id in the caller's org, state §0.241); `inputLines` lines to
+// print in place of its own — the handler passes none.
 export function buildPDF(quote, opportunity, inputLines, identity) {
     return new Promise((resolve, reject) => {
         const org = identity || { name: '', addressLines: [], phone: '', email: '' };
@@ -138,8 +133,8 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         const MR = PW - 48; // margin right
         const CW = MR - ML; // content width = 516
 
-        const { lines, subtotal, totalValue, recurringValue, oneTimeValue, avgDisc } =
-            calcTotals(inputLines || quote.lineItems || [], quote.dealDiscount || 0);
+        const totals = calcTotals(quote, inputLines || quote.lineItems || []);
+        const { lines, grandTotal, recurringValue, oneTimeValue, avgDisc } = totals;
 
         const oppName  = opportunity ? (opportunity.opportunityName || opportunity.account || '') : '';
         const repName  = quote.createdBy || '';
@@ -318,13 +313,11 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         // ── TOTALS BLOCK + KPI STRIP — kept together ───────────────────────
         const totalsX = ML + CW - 220;
 
-        const totalsRows = [
-            { label: 'Subtotal',           value: fmtMoney(subtotal),       bold: false },
-        ];
-        if (Number(quote.dealDiscount) > 0) {
-            totalsRows.push({ label: 'Deal Discount (' + quote.dealDiscount + '%)', value: '−' + fmtMoney(subtotal * Number(quote.dealDiscount) / 100), bold: false, color: COLOR.amber });
-        }
-        totalsRows.push({ label: 'Total',   value: fmtMoney(totalValue),    bold: true });
+        // The rows every quote screen draws (quoteMoneyRows.js): Subtotal, Deal discount, Tax or "Tax exempt", Total —
+        // to the cent, so they add up.
+        const totalsRows = quoteMoneyRows(totals, quote.dealDiscount).map((row) => ({
+            label: row.label, value: row.value, bold: row.total === true, color: row.key === 'deal' ? COLOR.amber : null,
+        }));
 
         // The whole block's height: the gap, the totals rows, the rule, the four figures.
         const KPI_H = 52;
@@ -333,10 +326,12 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         y += 16;
 
         totalsRows.forEach(row => {
+            // Each text bounded to its one line (guide §18b118 rule 3): never a second line over the next row, never a
+            // page of pdfkit's own.
             doc.fillColor(hex(row.color || COLOR.muted)).fontSize(8).font(row.bold ? 'Helvetica-Bold' : 'Helvetica')
-                .text(row.label, totalsX, y, { width: 130 });
+                .text(row.label, totalsX, y, { width: 130, height: 10, ellipsis: true });
             doc.fillColor(hex(row.bold ? COLOR.nearBlack : COLOR.muted)).fontSize(row.bold ? 11 : 8).font(row.bold ? 'Helvetica-Bold' : 'Helvetica')
-                .text(row.value, totalsX + 130, y, { width: 90, align: 'right' });
+                .text(row.value, totalsX + 130, y, { width: 90, align: 'right', height: row.bold ? 14 : 10, ellipsis: true });
             y += row.bold ? 18 : 14;
         });
 
@@ -345,7 +340,7 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         y += 16;
 
         const kpis = [
-            { label: 'Quote Total',        value: fmtMoney(totalValue),    color: COLOR.blue   },
+            { label: 'Quote Total',        value: fmtMoney(grandTotal),    color: COLOR.blue   },   // with the tax: the Total above, in whole dollars
             { label: 'Annual Recurring',   value: fmtMoney(recurringValue), color: COLOR.purple },
             { label: 'One-time / Services',value: fmtMoney(oneTimeValue),  color: COLOR.amber  },
             { label: 'Avg Discount',       value: pct(avgDisc),            color: avgDisc >= 15 ? COLOR.red : COLOR.green },
@@ -363,7 +358,7 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
                 .text(kpi.label.toUpperCase(), kx + 10, y + 8, { width: kpiW - 20, characterSpacing: 0.5 });
             // Value
             doc.fillColor(hex(COLOR.nearBlack)).fontSize(14).font('Helvetica-Bold')
-                .text(kpi.value, kx + 10, y + 18, { width: kpiW - 20 });
+                .text(kpi.value, kx + 10, y + 18, { width: kpiW - 20, height: 18, ellipsis: true });   // one line, inside its box (§0.241)
         });
         y += KPI_H;
 

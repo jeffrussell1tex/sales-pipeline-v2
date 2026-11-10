@@ -164,8 +164,9 @@ test('THE GUARD reads what prints, not what is said about it: a comment naming t
 
 test('WIRING: the server reads who the org is by the caller\'s org, never from the body', () => {
     const pdf = code(read('netlify/functions/quote-pdf.mjs'));
-    assert.ok(pdf.includes('const pdfBuffer = await buildPDF(quote, opportunity, lines, await orgIdentityFor(auth.orgId));'), 'the PDF: the caller\'s org');
-    assert.ok(pdf.includes('const { quote, opportunity, lines } = body;') && !pdf.includes('companyProfile'),
+    assert.ok(pdf.includes('const pdfBuffer = await buildPDF(quote, opportunity || null, null, await orgIdentityFor(auth.orgId));'), 'the PDF: the caller\'s org');
+    // Since §0.241 the body names the quote's id alone — the quote, its deal and its lines are the stored ones.
+    assert.ok(pdf.includes('const { quoteId } = body;') && !pdf.includes('companyProfile'),
         'REGRESSION (R2): the PDF takes a company profile from the request body again');
     const email = code(read('netlify/functions/quote-email.mjs'));
     assert.ok(email.includes('const org = await orgIdentityFor(orgId);'), 'the email: the caller\'s org');

@@ -13,7 +13,8 @@
 //   (dispatchCustomer.js customerForDeal, state §0.214): the one customer linked
 //   to its account, else the one of its account's name — or created; two or more
 //   is a 409 naming them, nothing written (Jeff, 28 Oct: "Refuse, name both"); the job is inserted with quote_id, opportunity_id, account_id,
-//   the quote's lines as its line items (net price each), a status-history
+//   the quote's lines as its line items (net price each, each line's Taxable kept),
+//   the quote's deal discount as discount lines (state §0.241, R7), a status-history
 //   row, and an audit row that names the quote.
 // GET ?quoteId=   → 200 { job: { …, invoice } | null } — the linked job and its
 //   live invoice, for the quote card: READ-ONLY status for a quote the caller can
@@ -39,7 +40,7 @@ import { dealAccess } from './_dealAccess.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { nextJobNumber, normaliseJob } from './dispatch-jobs.mjs';
 import { nextCustomerNumber } from './dispatch-customers.mjs';
-import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, cleanProductTypes } from '../../src/utils/invoices.js';
+import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, quoteDiscountJobItems, cleanProductTypes } from '../../src/utils/invoices.js';
 import { customerForDeal, dealCustomerRefusal } from '../../src/utils/dispatchCustomer.js';
 
 const headers = {
@@ -196,6 +197,11 @@ export const handler = async (event) => {
                 ...quoteLineToJobItem(li, i, byId.get(li?.productId) || null, types),
                 createdAt: now, updatedAt: now,
             }));
+            // The deal discount the customer accepted, after the lines: one line on the taxable items and one on the rest,
+            // so the invoice taxes what the quote taxed (state §0.241, R7) — until §0.241 it never reached the job.
+            rows.push(...quoteDiscountJobItems(rows, quote, rows.length).map((item) => ({
+                id: 'djli_' + randomUUID(), orgId, jobId, ...item, createdAt: now, updatedAt: now,
+            })));
             await db.insert(dispatchJobLineItems).values(rows);
             lineCount = rows.length;
         }

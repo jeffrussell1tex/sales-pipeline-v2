@@ -830,7 +830,10 @@
       <tr><td>lineItems</td><td>array</td><td>Array of line item objects (see below).</td></tr>
       <tr><td>subtotal</td><td>string</td><td>Server-calculated before deal discount.</td></tr>
       <tr><td>dealDiscount</td><td>number</td><td>Deal-level discount percentage (0–100).</td></tr>
-      <tr><td>totalValue</td><td>string</td><td>Server-calculated after deal discount.</td></tr>
+      <tr><td>totalValue</td><td>string</td><td>Server-calculated after deal discount. Always before tax: accepting a quote writes it to the deal's revenue.</td></tr>
+      <tr><td>taxRate</td><td>string | null</td><td>The quote's sales tax rate, a percent with two decimal places (<code>"8.25"</code>), or <code>null</code> for no tax. A new quote that names none takes the organization's default rate (Settings → Quotes). It is stored on the quote, so a later change to the default never reprices it. A value that is not <code>null</code>, blank, or a number from 0 to 100 is refused with <code>400</code> (<code>field: "taxRate"</code>).</td></tr>
+      <tr><td>taxExempt</td><td>boolean | null</td><td>The quote's "Tax exempt" switch: no tax, whatever the rate. A new quote that names none takes the setting of the Dispatch customer linked to the deal's account.</td></tr>
+      <tr><td>taxAmount</td><td>string | null</td><td>Server-calculated sales tax, to the cent: the rate applied to the taxable lines after the deal discount. It is <code>null</code> when the quote has no rate. Never sent; the grand total is <code>totalValue</code> + <code>taxAmount</code>.</td></tr>
       <tr><td>recurringValue</td><td>string</td><td>Annualized recurring revenue portion.</td></tr>
       <tr><td>oneTimeValue</td><td>string</td><td>One-time fee portion.</td></tr>
       <tr><td>approvalTier</td><td>string</td><td>Computed approval tier label (e.g. <code>"Mgr approval"</code>).</td></tr>
@@ -848,7 +851,8 @@
       <tr><td>quantity</td><td>Number of units.</td></tr>
       <tr><td>unit</td><td><code>"month"</code> or <code>"year"</code> (for recurring). Monthly recurring is annualized × 12.</td></tr>
       <tr><td>listPrice</td><td>Per-unit list price before discount.</td></tr>
-      <tr><td>discountPct</td><td>Line-item discount 0–100.</td></tr>
+      <tr><td>discountPct</td><td>Line-item discount 0–100. The net price is rounded to the cent, then multiplied by the quantity.</td></tr>
+      <tr><td>taxable</td><td><code>false</code> when the line is not taxed. A line without the field is taxable. A new line takes its product's <code>taxable</code>.</td></tr>
     </tbody>
   </table>
 

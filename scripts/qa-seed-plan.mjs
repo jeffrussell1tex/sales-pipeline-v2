@@ -21,29 +21,22 @@ import {
 } from '../src/utils/invoices.js';
 import { contactNamesText } from '../src/utils/oppText.js';
 import { quoteDiscountPct, approvalTierFor, DEFAULT_QUOTE_APPROVAL_TIERS } from '../src/utils/quoteRules.js';
+import { quoteTotals as quoteMoney } from '../src/utils/quoteTotals.js';
 
 export const QA_ID_MARK = '_qa_';
 const pad = (n, w) => String(n).padStart(w, '0');
 const at = (ymd) => new Date(`${ymd}T12:00:00.000Z`);   // a timestamp ON a calendar day, deterministic
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-// quotes.mjs's calcTotals, the same arithmetic (it is not exported; the endpoint
-// recomputes on every save, so a seeded quote matches what a save would write).
+// What quotes.mjs's calcTotals stores, through the one copy of a quote's money
+// (src/utils/quoteTotals.js, state §0.241) — the endpoint recomputes on every
+// save, so a seeded quote matches what a save would write. Seeded quotes carry no
+// tax (no rate), as a quote written before tax.
 export function quoteTotals(lineItems = [], dealDiscountPct = 0) {
-    let subtotal = 0, recurringValue = 0, oneTimeValue = 0;
-    for (const item of lineItems) {
-        const qty = Number(item.quantity) || 1;
-        const listPrice = Number(item.listPrice) || 0;
-        const discountPct = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
-        const total = listPrice * (1 - discountPct / 100) * qty;
-        subtotal += total;
-        if (item.productType === 'recurring') recurringValue += item.unit === 'month' ? total * 12 : total;
-        else oneTimeValue += total;
-    }
-    const discountAmount = subtotal * (Number(dealDiscountPct) || 0) / 100;
+    const t = quoteMoney({ lineItems, dealDiscount: dealDiscountPct });
     return {
-        subtotal: subtotal.toFixed(2), totalValue: (subtotal - discountAmount).toFixed(2),
-        recurringValue: recurringValue.toFixed(2), oneTimeValue: oneTimeValue.toFixed(2),
+        subtotal: t.subtotal.toFixed(2), totalValue: t.totalValue.toFixed(2),
+        recurringValue: t.recurringValue.toFixed(2), oneTimeValue: t.oneTimeValue.toFixed(2),
     };
 }
 
@@ -111,6 +104,7 @@ export function buildQaSeed({ orgId, today, roster }) {
     ].map(([name, sku, productType, listPrice, unit, category], i) => ({
         id: `prod${QA_ID_MARK}${pad(i + 1, 2)}`, orgId, name, sku, productType, listPrice: listPrice.toFixed(2),
         unit, category, active: true, sortOrder: i, createdBy: admin?.name || null,
+        taxable: null,   // none reads taxable (§0.241); named so a --reset puts a Taxable switched while testing back
     }));
     const P = Object.fromEntries(products.map(p => [p.sku, p]));
 
@@ -287,6 +281,8 @@ export function buildQaSeed({ orgId, today, roster }) {
             id: `q${QA_ID_MARK}${pad(i + 1, 2)}`, orgId, opportunityId: o.id, quoteNumber: `Q-${year}-${pad(i + 1, 3)}`, version: 1,
             name: `${o.opportunityName} v1`, status, validUntil: d(30), paymentTerms: 'Net 30', billingContact: null,
             lineItems, dealDiscount: '0', ...totals,
+            // No tax, every field named, so a --reset puts a rate, a switch or an amount set while testing back (§0.241).
+            taxRate: null, taxAmount: null, taxExempt: null,
             // Every approval field named, so a --reset puts a quote back whole — a
             // send-back's note or an approval made while testing included (§0.156).
             approvalTier: null, approvalReason: null, approvedBy: null, approvedAt: null, approvalNote: null,

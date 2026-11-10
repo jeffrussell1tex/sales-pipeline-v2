@@ -16,6 +16,7 @@
 //
 // The words are the ones the app stores. 'Sent' and 'Rejected' are older words a
 // row may still hold; they lock like their current twins.
+import { lineTaxable, cleanTaxRate } from './quoteTotals.js';
 
 export const QUOTE_STATUSES = Object.freeze([
     'Draft', 'Pending Approval', 'Approved', 'Sent to Customer', 'Negotiating',
@@ -37,8 +38,9 @@ export const quoteIsHeld = (status) => status === 'Pending Approval';
 // May the lines and terms change now? Not once the quote is sent or closed, nor while held.
 export const quoteTermsEditable = (status) => !quoteIsLocked(status) && !quoteIsHeld(status);
 
-// What "the lines and terms" are — the fields the customer sees.
-export const QUOTE_TERMS_FIELDS = Object.freeze(['lineItems', 'dealDiscount', 'validUntil', 'paymentTerms', 'billingContact', 'notes']);
+// What "the lines and terms" are — the fields the customer sees. The tax rate and the "Tax exempt" switch too, and
+// each line's taxable flag (state §0.241): a sent quote's tax is what the customer holds.
+export const QUOTE_TERMS_FIELDS = Object.freeze(['lineItems', 'dealDiscount', 'validUntil', 'paymentTerms', 'billingContact', 'notes', 'taxRate', 'taxExempt']);
 
 // Who approves: the roles with write authority over other people's records.
 export const canApproveQuotes = (role) => role === 'Admin' || role === 'Manager';
@@ -253,24 +255,34 @@ export function quoteEditOutcome({ status, termsChanged }) {
 }
 
 // Did an edit change the terms? Compared as JSON of each field, the money as
-// numbers (the database returns "0.00" where the client sends 0).
+// numbers (the database returns "0.00" where the client sends 0) — the tax rate
+// too ("8.25" against 8.25), but none apart from 0: none shows no tax row on the
+// customer's copy, 0 shows "Tax (0%)", so a move between them is a change — and
+// "Tax exempt" as on or not (a quote written before tax holds none: not exempt).
 export function quoteTermsChanged(stored, next) {
     for (const k of QUOTE_TERMS_FIELDS) {
         const a = stored?.[k], b = next?.[k];
         if (k === 'dealDiscount') { if ((Number(a) || 0) !== (Number(b) || 0)) return true; continue; }
+        if (k === 'taxRate') { if (cleanTaxRate(a) !== cleanTaxRate(b)) return true; continue; }
+        if (k === 'taxExempt') { if (isOn(a) !== isOn(b)) return true; continue; }
         if (k === 'lineItems') { if (JSON.stringify(normLines(a)) !== JSON.stringify(normLines(b))) return true; continue; }
         if ((a ?? '') !== (b ?? '')) return true;
     }
     return false;
 }
+const isOn = (v) => v === true || v === 'true';
 
 // Line items compared by what they mean, not by key order (jsonb reorders keys).
+// A line's taxable flag is read as quoteTotals reads it: taxable unless it says
+// not — so a line with no flag (every quote written before tax) and one flagged
+// taxable are the same line, and an older quote never reads as changed.
 function normLines(lines) {
     return (Array.isArray(lines) ? lines : []).map(li => {
         const o = {};
-        for (const k of Object.keys(li || {}).sort()) {
-            const v = li[k];
-            o[k] = ['quantity', 'listPrice', 'discountPct', 'unitPrice', 'netPrice'].includes(k) ? Number(v) || 0 : v;
+        for (const k of [...new Set([...Object.keys(li || {}), 'taxable'])].sort()) {
+            const v = li?.[k];
+            o[k] = ['quantity', 'listPrice', 'discountPct', 'unitPrice', 'netPrice'].includes(k) ? Number(v) || 0
+                : k === 'taxable' ? lineTaxable(li) : v;
         }
         return o;
     });

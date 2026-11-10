@@ -608,6 +608,8 @@ export const products = pgTable('products', {
     category:     varchar('category', { length: 255 }),
     active:       boolean('active').notNull().default(true),
     sortOrder:    integer('sort_order').default(0),
+    // A product's Taxable switch (state §0.241): copied onto a quote line when added. None (null) is taxable.
+    taxable:      boolean('taxable'),
     createdBy:    varchar('created_by', { length: 255 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
@@ -636,6 +638,13 @@ export const quotes = pgTable('quotes', {
     totalValue:      decimal('total_value', { precision: 12, scale: 2 }),
     recurringValue:  decimal('recurring_value', { precision: 12, scale: 2 }),
     oneTimeValue:    decimal('one_time_value', { precision: 12, scale: 2 }),
+    // Sales tax (state §0.241; db/apply-sales-tax.mjs). The rate is STORED on the quote — filled from the org's
+    // default at create, changeable per quote — so a default change never reprices a sent quote; the server works
+    // out tax_amount from it on every save (src/utils/quoteTotals.js). Tax never enters total_value: accepting a
+    // quote writes total_value to the deal's arr. None of the three on a quote written before tax: no tax.
+    taxRate:         decimal('tax_rate', { precision: 5, scale: 2 }),
+    taxAmount:       decimal('tax_amount', { precision: 12, scale: 2 }),
+    taxExempt:       boolean('tax_exempt'),
     notes:           text('notes'),
     approvalNote:    text('approval_note'),
     approvalTier:    varchar('approval_tier', { length: 100 }),   // e.g. 'Mgr approval'

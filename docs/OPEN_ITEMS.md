@@ -1258,7 +1258,12 @@ docs/design/ai-scoring/ANSWERS.md):**
 - **An invoice PDF** (Jeff, 30 Sep: "we should also be able to generate a pdf
   of an invoice"; `quote-pdf.mjs` is the pattern), and an invoice email.
 - **A deep link** from the quote card to its job.
-- **Per-org defaults** for tax rate and terms.
+- **Per-org defaults** for tax rate and terms. The quote's default tax rate
+  is built (§0.241: Settings → Quote templates & branding → Defaults,
+  `quoteDefaults.taxRate`, filled on each new quote), and an invoice made from
+  a quote's job takes that quote's rate. Still open: an invoice whose job came
+  from no quote is rated 0 unless the request names a rate (invoices.mjs:147-155);
+  terms as before — the quote's, else `DEFAULT_PAYMENT_TERMS`.
 - **Sales tax on quotes** (Jeff, 9 Nov: "add sales tax calculation to quotes
   to our to do list"). Read 9 Nov: a quote carries no tax anywhere — no
   rate, no taxable flag on a line, no tax in its totals, preview, PDF or
@@ -1276,6 +1281,14 @@ docs/design/ai-scoring/ANSWERS.md):**
   an exempt switch prefilled from the linked Dispatch customer; carried to the job's invoice;
   one quote money function) next to build, **batch B** (the address lookup on one Zip-Tax
   account) gated on Zip-Tax's three written answers (Jeff's to get).
+  **Batch A built 10 Nov (state §0.241; guide §18b124; not yet shipped)** — the four
+  columns applied 10 Nov on Jeff's go (the test and app databases, `db/apply-sales-tax.mjs`);
+  harness deferred; its browser check PASSED as Karen. Batch B stays gated on Zip-Tax's
+  three written answers. Until §0.241 ships, prod's quotes endpoint never names the columns
+  (the database is shared): a quote taxed on dev and edited on prod keeps its old tax amount,
+  and one made a job on prod gets every line taxable, no discount line and an invoice at 0.
+  Strike batch A once §0.241 ships.
+- **A tax rate with three decimal places cannot be stored** (§0.241, 10 Nov): `quotes.tax_rate` is numeric(5,2), as `invoices.tax_rate` is (db/schema.ts:645, :696); the screens refuse a third place in words (`taxRateFromInput`, src/utils/quoteMoneyRows.js) and a request straight to the API has it kept to two (`cleanTaxRate`, src/utils/quoteTotals.js). Real US combined rates carry three (8.875%), and batch B's lookup returns them. Batch B must decide; widening the column is a type change, not an additive one — Jeff's go, both databases. Low until batch B.
 - **The dead `priceBookProducts` key.** Drop it from both settings.mjs halves.
 - **The quote Activity list** is derived from the current status, so earlier
   steps vanish. The audit log is the real history. §0.150, as recorded.
@@ -2154,6 +2167,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Quotes: the server takes two lines of one product** (the editor refuses
   a second; the version compare and the analytics assume one per product).
   No screen makes them; refusing them is quote-shape integrity, not tenancy.
+- **Quotes: the deal discount is never range-checked on the server** (§0.241's review, 10 Nov; read in code): quotes.mjs stores `String(data.dealDiscount || 0)` (:349, :498) and works the totals from it, so a request straight to the API can store a deal discount below 0 (a surcharge) or over 100 (a total below 0); no screen sends one. §0.241's job lines carry either as stored (`quoteDiscountJobItems`), so the job and its invoice still match the quote. Recommended: refuse a deal discount outside 0-100 with a 400 naming the field, as the tax rate is. Low.
+- **products.mjs PUT: a body that leaves fields out fails or wipes** (§0.241's review, 10 Nov; read in code; older than §0.241): the upsert's insert half takes the body as sent (products.mjs:88-97), so a PUT without `name` or `listPrice` is a 500 (both NOT NULL), and `minPrice` is written null whenever the body leaves it out (:92) — the `sanitize` full-row wipe CLAUDE.md names, a fourth instance. The Price Book sends the whole form, so no screen meets it. Recommended: merge over the stored row first (`sanitize({ ...existing, ...data })`, the users/leads pattern). Low.
 - **A deal's account by name: the report engine trims the name,
   `accountOfDeal` does not** (§0.210's doc check, 23 Oct; read in code,
   and run by a checker on made-up rows): the engine compares a deal's
@@ -2985,6 +3000,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   job's busy flag set mid-save (:6261) — remounts every card, so typed
   notes, an open card and the card's own error are lost (read from code,
   not seen). Module scope, as the house rule says.
+- **A job made from a taxed quote shows its value with the tax once invoiced** (§0.241, 10 Nov; by design, noted): a new invoice takes its quote's rate (R7), and the job's `invoice_amount` mirrors the invoice's total (`mirrorForJob`, src/utils/invoices.js:251), so the Dispatch board's value for such a job includes the tax while the quote's and the deal's figures stay pre-tax. Noted so the two are not read as a mismatch; no change recommended.
 
 ### 4.5 Notifications, email and digests
 
@@ -3105,7 +3121,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.174 (d).
 - **Imported leads fire no `lead.created` webhook or automation.** If that
   matters, it needs a batched dispatch. As recorded.
-- **A quote's email shows every line as 1 × list price** (the 4b-2 map, 15
+- **Fixed in §0.241 (10 Nov; not yet shipped; guide §18b124).** **A quote's email shows every line as 1 × list price** (the 4b-2 map, 15
   Oct; read in code, not run — customers see it). quote-email.mjs reads
   `li.qty` and `li.unitPrice`, which no line stores (a line holds
   `quantity`, `listPrice` and `discountPct` — QuotesTab.jsx), so each
@@ -3119,7 +3135,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **The quote PDF is built from the request body, not the stored quote**
+- **Fixed in §0.241 (10 Nov; not yet shipped; guide §18b124 — the stored quote by id under the deal's read rule; an unsaved edit is not in it).** **The quote PDF is built from the request body, not the stored quote**
   (the quote branding design, 9 Nov, Q4; read in code, not run): quote-pdf.mjs
   takes `{ quote, opportunity, lines }` from the body (:356) and checks only
   that the caller is signed in (:349) — no org check on the quote, no
@@ -4404,6 +4420,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   character in the org's display name would garble its run, as one did in
   the notes. The notes, product names, quote name, address lines and meta
   values are covered (`_quotePdf.mjs` `printable`).
+- **The quote PDF and email do not mark an untaxed line** (§0.241, 10 Nov): a quote with a rate taxes only its taxable lines and the Tax row says the rate, but neither document says which lines it left out — the version compare has a NOT TAXED pill (QuotesTab.jsx:519); the PDF (`_quotePdf.mjs`) and the email (quote-email.mjs) nothing. Recommended: a "Not taxed" mark on the line where the quote has a rate and is not exempt. Low.
+- **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
+- **Est. margin and the average discount leave out the deal discount** (§0.241's review, 10 Nov; older than §0.241): the tab's `calcLineTotals` (QuotesTab.jsx:104-112) works both from the lines' subtotal (`netTotal = t.subtotal`), so a quote with a deal discount shows a margin and an "N% off list" above what it earns. The totals block's rows include the deal discount since §0.241. Recommended: work both from `totalValue`. Low.
 
 - **Reports' Activity History declares eleven sub-components inside
   itself** (the cleanup batch's design, 18 Oct, §1 row P40's eighth item;

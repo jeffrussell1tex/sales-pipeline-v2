@@ -19,6 +19,8 @@
 // products it appears here and its pick seeds the quote (templateLineItems —
 // the configurator's own line-item shape).
 
+import { lineTaxable } from './quoteTotals.js';
+
 const arr = (v) => (Array.isArray(v) ? v : []);
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -47,7 +49,7 @@ export function usableQuoteTemplates(templates, products) {
  * The line items a template seeds into a new quote — the same shape the
  * configurator's "add product" builds, one per resolved product, quantity 1,
  * no discount. A catalog product's price is its listPrice (else price), or a
- * custom price the rep fills in.
+ * custom price the rep fills in; its Taxable is the product's (none: taxable).
  */
 export function templateLineItems(template, products, now = Date.now()) {
     const byId = new Map(arr(products).filter(p => p && p.id).map(p => [p.id, p]));
@@ -64,6 +66,8 @@ export function templateLineItems(template, products, now = Date.now()) {
             quantity:    1,
             discountPct: 0,
             customPrice: prod.customPrice === true,
+            // The product's Taxable, as the configurator's add copies it (state §0.241, Q2): none is taxable.
+            taxable:     lineTaxable(prod),
         };
     });
 }

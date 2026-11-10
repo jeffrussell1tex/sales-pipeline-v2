@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { quotes, opportunities, auditLog, users, settings as settingsTable } from '../../db/schema.js';
+import { quotes, opportunities, auditLog, users, settings as settingsTable, accounts, dispatchCustomers } from '../../db/schema.js';
 import { eq, asc, and, desc, sql, inArray, gte } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId } from './_lib.mjs';
@@ -23,6 +23,10 @@ import {
 import { APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, approvalTierStats } from '../../src/utils/approvalStats.js';
 import { checkLinks } from './_links.mjs';
 import { productIdsOf } from '../../src/utils/linkIds.js';
+// A quote's money, one copy (state §0.241): the pre-tax totals as they were always stored, and the tax beside them.
+import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf } from '../../src/utils/quoteTotals.js';
+// A new quote's "Tax exempt" is its deal's dispatch customer's — the customer found by Dispatch's one rule.
+import { customerForDeal } from '../../src/utils/dispatchCustomer.js';
 
 // The product each quote line names is one of this org's — any, an inactive one too — when a write names it
 // anew; one the stored lines hold is never asked again (state §0.204 — Jeff: "Any of this org's, refuse").
@@ -63,6 +67,9 @@ const ALLOWED_FIELDS = [
     'validUntil', 'paymentTerms', 'billingContact', 'lineItems',
     'subtotal', 'dealDiscount', 'totalValue', 'recurringValue', 'oneTimeValue',
     'notes', 'approvalNote', 'approvalTier', 'approvalReason', 'createdBy',
+    // The quote's tax rate and "Tax exempt" switch (state §0.241) — each cleaned below before it is stored; the
+    // tax AMOUNT is the server's, never the body's, so it is not here.
+    'taxRate', 'taxExempt',
 ];
 
 function sanitize(data) {
@@ -116,35 +123,50 @@ async function resolveQuoteNumber(orgId, data) {
     return nextQuoteNumber(orgId);
 }
 
-// Recalculate totals server-side from line items to prevent client tampering
-function calcTotals(lineItems = [], dealDiscountPct = 0) {
-    let subtotal = 0;
-    let recurringValue = 0;
-    let oneTimeValue = 0;
-
-    for (const item of lineItems) {
-        const qty = Number(item.quantity) || 1;
-        const listPrice = Number(item.listPrice) || 0;
-        const discountPct = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
-        const netPrice = listPrice * (1 - discountPct / 100);
-        const total = netPrice * qty;
-        subtotal += total;
-        if (item.productType === 'recurring') {
-            // Annualize: if unit is 'month', multiply by 12; otherwise treat as annual already
-            recurringValue += item.unit === 'month' ? total * 12 : total;
-        } else {
-            oneTimeValue += total;
-        }
-    }
-
-    const discountAmount = subtotal * (Number(dealDiscountPct) || 0) / 100;
-    const totalValue = subtotal - discountAmount;
+// Recalculate totals server-side from line items to prevent client tampering — through the one copy
+// (src/utils/quoteTotals.js, state §0.241), whose pre-tax figures are exactly what this function always stored.
+// totalValue stays PRE-TAX: an accept writes it to the deal's arr (syncToOpportunity), so tax never raises a deal's
+// revenue. The tax is worked out from the rate STORED on the quote — never the org's default read live, so a default
+// change never reprices a quote on its next save; a quote with no rate (every one written before tax) stores none.
+function calcTotals(lineItems = [], dealDiscountPct = 0, taxRate = null, taxExempt = null) {
+    const t = quoteTotals({ lineItems, dealDiscount: dealDiscountPct, taxRate, taxExempt });
     return {
-        subtotal: subtotal.toFixed(2),
-        totalValue: totalValue.toFixed(2),
-        recurringValue: recurringValue.toFixed(2),
-        oneTimeValue: oneTimeValue.toFixed(2),
+        subtotal: t.subtotal.toFixed(2),
+        totalValue: t.totalValue.toFixed(2),
+        recurringValue: t.recurringValue.toFixed(2),
+        oneTimeValue: t.oneTimeValue.toFixed(2),
+        taxAmount: t.taxRate == null ? null : t.taxAmount.toFixed(2),
     };
+}
+
+// A rate a request names that is not none (null or blank) and not a number 0-100 is refused, naming the field — never
+// stored as no tax without a word (the review, 10 Nov). A third decimal place is kept to two (the column's).
+const TAX_RATE_REFUSED = 'taxRate must be a number from 0 to 100, or null for no tax';
+const taxRateRefused = (data) => 'taxRate' in data && data.taxRate != null && data.taxRate !== '' && cleanTaxRate(data.taxRate) == null;
+
+// The org's default tax rate (R3): Settings → Quotes keeps it in quoteDefaults, read through the one clamped reader
+// (defaultTaxRateOf — the blob is stored as sent). Only a NEW quote reads it; from then on the rate is the quote's.
+// A failed read throws to the 500 — a quote quietly made untaxed is worse than one not made.
+export async function getDefaultTaxRate(orgId) {
+    const [row] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
+    return defaultTaxRateOf(row?.extra?.quoteDefaults);
+}
+
+// A new quote's "Tax exempt" (Jeff's Q3): on when the deal's dispatch customer is marked exempt — the customer
+// Dispatch's one rule finds (dispatchCustomer.js customerForDeal: the one linked to the deal's account, else the one
+// of its name), from this org's rows alone. No customer, or two (which that rule refuses to choose between): off.
+async function dealCustomerExempt(orgId, opportunityId) {
+    const [opp] = await db.select({ id: opportunities.id, accountId: opportunities.accountId, account: opportunities.account })
+        .from(opportunities).where(and(eq(opportunities.id, String(opportunityId)), eq(opportunities.orgId, orgId))).limit(1);
+    if (!opp) return false;
+    const orgCustomers = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name, accountId: dispatchCustomers.accountId,
+        customerNumber: dispatchCustomers.customerNumber, taxExempt: dispatchCustomers.taxExempt })
+        .from(dispatchCustomers).where(eq(dispatchCustomers.orgId, orgId));
+    if (!orgCustomers.length) return false;
+    const orgAccounts = await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived,
+        mergedIntoId: accounts.mergedIntoId, parentAccountId: accounts.parentAccountId })
+        .from(accounts).where(eq(accounts.orgId, orgId));
+    return customerForDeal(orgCustomers, opp, orgAccounts).customer?.taxExempt === true;
 }
 
 // ── Approval tiers: the org's (Settings → Quoting → Approval tiers), else the
@@ -307,7 +329,13 @@ export const handler = async (event) => {
             if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
 
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
-            const totals = calcTotals(lineItems, data.dealDiscount || 0);
+            if (taxRateRefused(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: TAX_RATE_REFUSED, field: 'taxRate' }) };
+            // Its tax (state §0.241): the rate the body names (a number 0-100, two places; anything else none — a new
+            // version copies its source's, none included), else the org's default, stored on the quote from now on;
+            // "Tax exempt" as the body names it, else the deal's dispatch customer's. The tax amount is the server's.
+            const taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : await getDefaultTaxRate(orgId);
+            const taxExempt = data.taxExempt != null ? cleanTaxExempt(data.taxExempt) : await dealCustomerExempt(orgId, access.deal.id);
+            const totals = calcTotals(lineItems, data.dealDiscount || 0, taxRate, taxExempt);
 
             const basePayload = {
                 ...sanitize(data),
@@ -315,6 +343,8 @@ export const handler = async (event) => {
                 opportunityId: access.deal.id,
                 lineItems,
                 ...totals,
+                taxRate: taxRate == null ? null : String(taxRate),
+                taxExempt,
                 version: Number(data.version) || 1,
                 dealDiscount: String(data.dealDiscount || 0),
                 status: 'Draft',
@@ -366,6 +396,7 @@ export const handler = async (event) => {
             if (linesMalformed(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: NOT_LINES, field: 'lineItems' }) };
             const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, { lineItems: productIdsOf(existing.lineItems) }, orgId);
             if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
+            if (taxRateRefused(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: TAX_RATE_REFUSED, field: 'taxRate' }) };
 
             // Merged over the stored row: a save names what it changes, and a field it
             // leaves out keeps its value — a PUT without lineItems used to write [] and
@@ -378,8 +409,13 @@ export const handler = async (event) => {
                 id: existing.id, opportunityId: existing.opportunityId, version: existing.version, createdBy: existing.createdBy,
                 approvalTier: existing.approvalTier, approvalReason: existing.approvalReason, approvalNote: existing.approvalNote,
             };
+            // Its tax (state §0.241): a rate or a switch the body names is cleaned as on a create; one it leaves out is
+            // the stored one — the org's default is never read again, so a default change never reprices a stored
+            // quote. Cleaned BEFORE the terms are compared: the database answers "8.25" where a screen sends 8.25.
+            merged.taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : existing.taxRate;
+            merged.taxExempt = 'taxExempt' in data ? cleanTaxExempt(data.taxExempt) : existing.taxExempt;
             const lineItems = Array.isArray(merged.lineItems) ? merged.lineItems : [];
-            const totals = calcTotals(lineItems, merged.dealDiscount || 0);
+            const totals = calcTotals(lineItems, merged.dealDiscount || 0, merged.taxRate, merged.taxExempt);
             const tiers = await getApprovalTiers(orgId);
 
             // The rules (src/utils/quoteRules.js — the client's buttons read the same):
@@ -457,6 +493,8 @@ export const handler = async (event) => {
                 ...fields,
                 lineItems,
                 ...totals,
+                taxRate: merged.taxRate == null ? null : String(merged.taxRate),
+                taxExempt: merged.taxExempt ?? null,
                 dealDiscount: String(merged.dealDiscount || 0),
                 status: to,
                 ...stamps,
