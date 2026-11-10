@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b121** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b122** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4674,3 +4674,16 @@ through `dbFetch`.
 8. **A value the settings PUT stores is one the list holds** — a model, fallback or "Available to" named anew off it is refused naming the field, nothing written; a value the row already holds is never asked again (`aiSettingsRefused`). The reader still reads through rule 1, for a restore writes the blob as it was.
 9. **The key check is the key's, now** (ai-models.mjs, an Admin's): the list's models the org's key — BYOK, else the site's — lists, asked as the panel opens; never cached across orgs or keys, never the key in the answer.
 10. **A control that enforces nothing comes out** (§18b64.1): the token budget, the residency, retention, PII and governance controls and the Reset dialog left the panel; the panel's save leaves their fields out (`aiSettingsToSave`, §18b64.5) — nothing is deleted to clean up.
+
+## 18b122. A Deal's Close-Date Moves Are Recorded By The Write That Makes Them, From The Date As Stored — And A Screen Sends A Date Only When It Was Changed There (hard rule)
+
+**Origin (§0.239, 10 Nov 2026 — OPEN_ITEMS §3.1 decision 3; docs/design/close-date-history, Jeff's Q1-Q4 and the review's "Open with the date empty").** AI scoring batch 2 learns from close-date moves, and nothing recorded one: no audit row, no history, so nothing could be backfilled. The stage history's pattern would have passed on two faults: the deal window sent its whole form — an undated deal opened on today and any save dated it; a window opened before a move elsewhere wrote the old date back — and a move's "from" was read before the write (an import's stage history worse: its lists written whole as read, a save landing between lost).
+
+1. **A move is decided in the write, in SQL** (`closeDatesWith`, opportunities.mjs): the date as stored at that moment against the one written — `IS DISTINCT FROM`, so a date set where there was none and a date cleared are moves (Q1) — appended to the list as stored, never one read. In `ON CONFLICT DO UPDATE` the table's column is the stored row and `excluded` the written one; one expression serves a single save and a whole import batch (`bulkUpsert`'s `extraSet`).
+2. **An entry is `{ from, to, date, timestamp, author, authorId, source }`**: the dates as stored, the member's day within a day of the server's (`moveDayOf`), the server's time, the caller's member name and app id (`resolveCaller` — never Clerk's), `deal` or `import`. A stage entry names the same id and source (§18b119 rule 5); an import's stage move is appended in the write the same way (`importStagesWith`), never a list built from the read.
+3. **Only the server writes it**: the key is never in `sanitize`; a single save or an import row naming it is refused (400), nothing written; `dealBody` strips it and THE GUARD fails a deal PUT that names it; a create makes none.
+4. **A save that does not name the date keeps it as stored** — and its quarter — never the copy read. A screen sends a date only when it was changed there (the deal window's `closeSeed`, the `leaveOut` rule); a record stored with no date opens empty, never on a value it does not hold, so whatever is picked is the move recorded.
+5. **One audit row per move** (§18b42): `opportunity.close_date_moved` "from → to", the move this write made by its time; one row per import batch, counting only the rows written.
+6. **A restore keeps a deal's histories entry by entry** (`restoredHistories`): the shape the server writes, else dropped. It checks the shape, not who made an entry — say so wherever it is described.
+7. **A list a row holds reads anything not a list as none** (`listOf`), and a stored date as the column holds it — an entry the server wrote is never hidden by its own reader nor dropped by a restore.
+8. **The column is additive** (§18c): `db/apply-close-date-history.mjs` — checks only without `--apply`, read back, its `--test` path refusing the shared app database's host; applied before any code that names it runs, local `netlify dev` included.

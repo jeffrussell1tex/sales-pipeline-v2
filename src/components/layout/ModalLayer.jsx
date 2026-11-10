@@ -699,6 +699,9 @@ export default function ModalLayer() {
                             // A CSV that named an account: the server kept a linked deal's spelling, or unlinked one
                             // renamed (§0.198) — the list reads the deals as stored, not as the file sent them.
                             if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities(() => {});
+                            // A CSV that named a stage or a close date: the server appended each move to the deal's history in
+                            // the write (state §0.239) — the list reads the deals as stored, so the History tab shows them.
+                            else if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'stage' in r || 'forecastedCloseDate' in r)) loadOpportunities(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
                         if (created) loadOpportunities(() => {});

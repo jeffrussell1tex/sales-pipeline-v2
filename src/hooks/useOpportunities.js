@@ -121,6 +121,9 @@ export function useOpportunities(deps) {
 
         const enrichedData = {
             ...formData,
+            // The member's day, for a close-date move the server records (state §0.239) — read only when the save
+            // sends the close date, within a day of the server's.
+            closeDateMovedOn: today,
             createdDate: prevOpp?.createdDate || today,
             stageChangedDate: stageChanged ? today : (prevOpp?.stageChangedDate || today),
             stageHistory: stageChanged
@@ -216,6 +219,7 @@ export function useOpportunities(deps) {
         const prevOppRef = editingOppRef ? opportunities.find(o => o.id === editingOppRef.id) : null;
         const enriched = {
             ...formData,
+            closeDateMovedOn: today,   // as the deal window's save (state §0.239)
             lostReason, lostCategory, lostDate: today,
             comments: prevOppRef?.comments || formData.comments || [],   // shown until the server answers; never sent (dealBody, §0.236)
             stageHistory: formData.stageHistory || prevOppRef?.stageHistory || [],

@@ -9,6 +9,7 @@
 // as fresh forever.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { entityName, deletionSnapshot, deletionAudit } from '../netlify/functions/_audit.mjs';
 import {
     parseDaysInStage, backdate, resolveStageChange, applyStageChanges, MAX_DAYS_IN_STAGE,
@@ -141,32 +142,34 @@ test('backdate crosses month and year boundaries correctly', () => {
 
 // ── history ──────────────────────────────────────────────────────────────────
 
-test('a stage change appends to the history already in the database', () => {
-    const { patch } = resolveStageChange({ stage: 'Proposal' }, prior, IMPORT_DATE);
-    assert.equal(patch.stageHistory.length, 2, 'appended, not replaced');
-    assert.deepEqual(patch.stageHistory[0], prior.stageHistory[0], 'the existing entry is intact');
-    assert.deepEqual(patch.stageHistory[1], {
-        prevStage: 'Qualification', stage: 'Proposal', date: IMPORT_DATE, source: 'import',
-    });
+// Since §0.239 (Jeff's Q4) an import's move is appended IN THE WRITE, to the history as stored (opportunities.mjs
+// importStagesWith; tests/integration/close-date-history.itest.mjs runs it): the patch never carries the history —
+// the list as read, written whole, lost a single save's move landing between the read and the write.
+test('a stage change reports the move and its clock, never a history list', () => {
+    const { changed, patch } = resolveStageChange({ stage: 'Proposal' }, prior, IMPORT_DATE);
+    assert.equal(changed, true);
+    assert.deepEqual(patch, { stageChangedDate: IMPORT_DATE }, 'the clock only — the write appends the entry');
 });
 
-test('REGRESSION: history is never replaced with an empty array', () => {
-    // 0A0000.1: an overwrite wrote stageHistory: [] over real data. This is the
-    // one place the field legitimately re-enters a write, so it is pinned here.
+test('REGRESSION: a row\'s own history never re-enters a write', () => {
+    // 0A0000.1: an overwrite wrote stageHistory: [] over real data.
     const { patch } = resolveStageChange({ stage: 'Proposal', stageHistory: [] }, prior, IMPORT_DATE);
-    assert.equal(patch.stageHistory.length, 2);
+    assert.equal('stageHistory' in patch, false);
 });
 
-test('the history entry carries the DERIVED date, not the import date', () => {
+test('the move\'s clock is the DERIVED date — the date the write gives its entry', () => {
     // Otherwise History contradicts the "days in stage" in the header.
     const { patch } = resolveStageChange({ stage: 'Proposal', daysInStage: 12 }, prior, IMPORT_DATE);
-    assert.equal(patch.stageHistory[1].date, '2026-08-05');
+    assert.equal(patch.stageChangedDate, '2026-08-05');
+    const opp = readFileSync(new URL('../netlify/functions/opportunities.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    assert.ok(opp.includes("'date', COALESCE(excluded.stage_changed_date, ${day}::text)"), 'the entry dated the clock written');
+    assert.ok(opp.includes("'prevStage', ${opportunities.stage}, 'stage', excluded.stage"), 'from the stage as stored at the write');
 });
 
-test('a deal with no prior history still gets its first entry', () => {
-    const { patch } = resolveStageChange({ stage: 'Proposal' }, { stage: 'Qualification' }, IMPORT_DATE);
-    assert.equal(patch.stageHistory.length, 1);
-    assert.equal(patch.stageHistory[0].prevStage, 'Qualification');
+test('a deal with no prior history moves the same way', () => {
+    const { changed, patch } = resolveStageChange({ stage: 'Proposal' }, { stage: 'Qualification' }, IMPORT_DATE);
+    assert.equal(changed, true);
+    assert.equal('stageHistory' in patch, false);
 });
 
 // ── batch ────────────────────────────────────────────────────────────────────

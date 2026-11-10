@@ -454,7 +454,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    scoped run (3,262/3,262; `b494e03..9dc9944`, Tests GREEN); its browser check PASSED as Karen
    and as an Admin, its dev checks on 10 Nov (a real score, the key check).
    Strike this once it ships. Next in §3.1: the close-date history column
-   (decision 3, its apply Jeff's), then batch 2.
+   (decision 3) — **built 10 Nov (state §0.239; guide §18b122), the column
+   applied on Jeff's go — NOT committed; harness deferred**, its browser
+   check PASSED as Jeff and as Karen — then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1030,8 +1032,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - an owner id on `spiff_claims` (§0.169 (d));
   - `org_id` in `document_links_unique_idx` (§0.166 (2));
   - a close-date history column on deals (§3.1). Decided 9 Nov (Jeff: "3
-    recommended"); needed before batch 2; its apply is put to Jeff when
-    built.
+    recommended"); **applied 10 Nov on Jeff's go** — `close_date_history`,
+    jsonb, nullable, no default, both databases (state §0.239). Strike this
+    once §0.239 ships.
   - A unique index on `users`, on the org plus the name with whitespace
     collapsed, trimmed and lowercased. It closes the race §0.196 leaves: every
     check reads, then writes, so two writes at one moment can still make a
@@ -1240,7 +1243,10 @@ docs/design/ai-scoring/ANSWERS.md):**
 3. **A history of close-date changes.** Recommended: yes. A new deal column,
    additive and nullable, both databases, with Jeff's go. **Designed and
    answered 10 Nov** (docs/design/close-date-history/DESIGN.md and
-   ANSWERS.md — Q1-Q4 each the Recommended, Q4 all three).
+   ANSWERS.md — Q1-Q4 each the Recommended, Q4 all three). **Built 10 Nov
+   (state §0.239); the column applied 10 Nov on Jeff's go** (the test and
+   app databases; `db/apply-close-date-history.mjs`). NOT committed;
+   harness deferred.
 4. **Which models to offer.** Recommended: the current Haiku, Sonnet and Opus,
    checked against what the workspace's key can call before they are listed.
 
@@ -2027,6 +2033,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
 - **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
+- **An import's stage entry made in a race is dated the clock read before it** (§0.239's review, 10 Nov; opportunities.mjs `importStagesWith`): a save that moves a deal's stage between an Overwrite's read and its write, on a deal the file leaves at the stage it read, gets a reversal entry dated the deal's earlier clock (the batch backfills that row's `stageChangedDate` from the read), and the move is not in the batch's count, audit row or Slack post. Race-only; before §0.239 the save's own entry was lost instead. Recommended: date an entry the read did not expect with the import's day. Low.
 - **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
 - **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
 

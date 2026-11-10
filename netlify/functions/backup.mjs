@@ -18,6 +18,8 @@ import { invalidateRoster } from './_lib.mjs';
 // A restored settings row's revision tokens are its own (state §0.224 — batch 4b-3, step B).
 import { REV_KEYS, revsMinted } from '../../src/utils/settingsRevs.js';
 import { mintRev } from './_settingsRevs.mjs';
+// A deal's stage and close-date histories, kept entry by entry on a restore (state §0.239).
+import { restoredHistories } from '../../src/utils/dealHistory.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -446,7 +448,9 @@ export const handler = async (event) => {
             for (const { key, table } of crmEntities) {
                 const rows = ents[key];
                 if (!Array.isArray(rows) || rows.length === 0) continue;
-                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }
+                // A deal's histories land only as entries in the shape the server writes (state §0.239; Jeff's Q4): a
+                // file's junk or a bare entry never lands — the shape is checked, not who made it.
+                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : key === 'opportunities' ? rows.map(restoredHistories) : rows); }
                 catch (e) { errs.push(`${key}: ${e.message}`); }
                 sayRefused(key, table);
             }

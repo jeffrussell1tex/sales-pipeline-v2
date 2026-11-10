@@ -47,9 +47,10 @@ import { parseDaysInStage, backdate } from '../../src/utils/stageClock.js';
  * Decide what an incoming import row does to one deal's stage clock and history.
  *
  * @param {Object} row     the incoming row (already narrowed to mapped columns)
- * @param {Object} prior   the stored row: { stage, stageHistory }
+ * @param {Object} prior   the stored row: { stage }
  * @param {string} importDate  yyyy-mm-dd
- * @returns {{changed:boolean, patch:Object}}  patch carries ONLY the keys to write
+ * @returns {{changed:boolean, patch:Object}}  patch carries ONLY the keys to write — the stage clock; never the
+ *   history, which the write appends to as stored (state §0.239: opportunities.mjs importStagesWith)
  */
 export function resolveStageChange(row, prior, importDate) {
     const patch = {};
@@ -73,21 +74,11 @@ export function resolveStageChange(row, prior, importDate) {
         patch.stageChangedDate = importDate;
     }
 
-    if (changed) {
-        // Appended to the array ALREADY IN THE DATABASE. The client never sends a
-        // stageHistory array — that is what wiped stage history in 0A0000.1, and
-        // this is the one place the field legitimately re-enters a write.
-        const existing = Array.isArray(prior?.stageHistory) ? prior.stageHistory : [];
-        patch.stageHistory = [...existing, {
-            prevStage: priorStage,
-            stage:     incomingStage,
-            // The DERIVED date, not the import date, or the History tab will
-            // contradict the "days in stage" shown in the header.
-            date:      patch.stageChangedDate || importDate,
-            source:    'import',
-        }];
-    }
-
+    // The move's history entry is not built here (state §0.239; docs/design/close-date-history, Jeff's Q4): it was the
+    // list as read before the write, with this entry on the end, written whole — a single save's move landing between
+    // the read and the write was written over. The write appends it to the history as stored, dated the DERIVED
+    // date above (the History tab agrees with "days in stage"), its "from" the stage as stored then — and only where
+    // the stage as stored still differs (opportunities.mjs importStagesWith).
     return { changed, patch };
 }
 
@@ -115,28 +106,27 @@ export function moveDayOf(sent, serverDay) {
  * one, the stage it has, or a deal with no stage stored (as an import reads it).
  * @param {Object} stored  the stored row: { stage }
  * @param {Object} body    the PUT's body
- * @param {Object} at      { day: yyyy-mm-dd, author: the caller's member name, now: ISO string }
+ * @param {Object} at      { day: yyyy-mm-dd, author: the caller's member name, authorId: their app id, now: ISO string }
  */
-export function stageMoveOf(stored, body, { day, author, now }) {
+export function stageMoveOf(stored, body, { day, author, authorId, now }) {
     const to = body?.stage;
     const from = stored?.stage ?? null;
     if (to === undefined || to === null || String(to).trim() === '' || from === null || to === from) return null;
-    return { stage: to, date: day, prevStage: from, author: author || '', timestamp: now };
+    // The author's member name AND id (guide §18b119 rule 5; state §0.239), and where it was made.
+    return { stage: to, date: day, prevStage: from, author: author || '', authorId: authorId ?? null, timestamp: now, source: 'deal' };
 }
 
-// The two columns this module DERIVES per row rather than reading from the CSV.
-// They are the reason applyStageChanges cannot simply hand its output to
-// partialRows -- see the batch-uniformity note on applyStageChanges below.
-const DERIVED_KEYS = ['stageChangedDate', 'stageHistory'];
+// The column this module DERIVES per row rather than reading from the CSV — the
+// reason applyStageChanges cannot simply hand its output to partialRows (the
+// batch-uniformity note below). The stage history was the second until §0.239: the
+// write now appends to it as stored, and no row carries it.
+const DERIVED_KEYS = ['stageChangedDate'];
 
 // The stored value for a derived key, used to backfill a row this import does not
 // touch. NOT sanitize()'s default: sanitize is a full-row builder, so its default
-// for stageChangedDate is null and for stageHistory is [] -- writing either over a
-// real row is the data loss this backfill exists to prevent.
+// for stageChangedDate is null -- writing it over a real row is the data loss this
+// backfill exists to prevent.
 function storedValue(key, prior) {
-    if (key === 'stageHistory') {
-        return Array.isArray(prior?.stageHistory) ? prior.stageHistory : [];
-    }
     return prior?.[key] ?? null;
 }
 
@@ -175,8 +165,8 @@ function storedValue(key, prior) {
  * batch where nothing moved and nothing asserted days adds neither key, the union
  * excludes both, and nothing is written -- the untouched case, unchanged.
  *
- * `priors` must therefore carry stageChangedDate as well as stage and
- * stageHistory. opportunities.mjs selects all three.
+ * `priors` must therefore carry stageChangedDate as well as stage.
+ * opportunities.mjs selects the stored rows whole.
  */
 export function applyStageChanges(rows, priors, importDate) {
     let changedCount = 0;

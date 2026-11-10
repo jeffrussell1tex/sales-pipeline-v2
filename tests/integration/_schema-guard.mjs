@@ -27,7 +27,8 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
-    ['invoices', 'id'],                              // §0.149: the invoice a job produces (db/apply-invoices.mjs --test)
+    ['opportunities', 'close_date_history'],         // §0.239: a deal's close-date moves (db/apply-close-date-history.mjs --test --apply)
+    ['invoices', 'id'],                             // §0.149: the invoice a job produces (db/apply-invoices.mjs --test)
     ['dispatch_jobs', 'quote_id'],                   // §0.149: the quote a job was made from (same script)
     ['dispatch_jobs', 'assigned_equipment_ids'],     // §0.116: the units reserved for a job at scheduling (db/apply-assigned-equipment.mjs --test)
     ['dispatch_jobs', 'public_token'],               // §0.111: the customer's status-link token and the notification trail (db/apply-customer-notifications.mjs --test)

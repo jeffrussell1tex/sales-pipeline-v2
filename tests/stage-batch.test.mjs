@@ -48,9 +48,10 @@ test('a row that does not move keeps its stored clock when another row in the ba
 
     const [a, b] = rows;
     assert.equal(a.stageChangedDate, '2026-08-06', 'untouched row must keep its stored date, not null');
-    assert.deepEqual(a.stageHistory, priors.get('a').stageHistory, 'untouched row must keep its stored history, not []');
     assert.equal(b.stageChangedDate, IMPORT_DATE);
-    assert.equal(b.stageHistory.length, 2);
+    // The history is in no row (state §0.239): the write appends a move to it as stored (importStagesWith), so no
+    // row's list — a moved one's or an untouched one's — is ever written whole.
+    for (const row of rows) assert.ok(!('stageHistory' in row), 'no row carries a history list');
 });
 
 test('the batch shape stays uniform — bulkUpsert sends one chunk as one INSERT', () => {
@@ -105,7 +106,7 @@ test('backfill uses the stored value even when it is genuinely null', () => {
         IMPORT_DATE,
     );
     assert.equal(rows[0].stageChangedDate, null, 'a null stored value stays null — a no-op write, not an erasure');
-    assert.deepEqual(rows[0].stageHistory, []);
+    assert.ok(!('stageHistory' in rows[0]), 'no history list in any row (state §0.239)');
 });
 
 test('daysInStage is stripped from every row — transport field, not a column', () => {
@@ -126,8 +127,7 @@ test('a row with no prior still shares the batch shape', () => {
         IMPORT_DATE,
     );
     assert.ok('stageChangedDate' in rows[0]);
-    assert.ok('stageHistory' in rows[0]);
-    assert.deepEqual(rows[0].stageHistory, []);
+    assert.ok(!('stageHistory' in rows[0]), 'no history list in any row (state §0.239)');
 });
 
 test('resolveStageChange still returns an EMPTY patch for the untouched case', () => {

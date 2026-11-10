@@ -163,7 +163,7 @@ const requiredColumns = (table) =>
 // The default is false, so a caller that forgets to pass it refuses Admins on
 // the bulk path rather than authorizing everyone. That is visible and annoying;
 // the other direction is silent and unbounded.
-export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerId = null, canSeeAll = false, client }) {
+export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerId = null, canSeeAll = false, client, extraSet = null }) {
     const db = client;
     if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };
 
@@ -231,6 +231,9 @@ export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, calle
     const cols = [...new Set(eligible.flatMap(Object.keys))]
         .filter(k => !BULK_IMMUTABLE.has(k) && table[k]?.name);
     const set = Object.fromEntries(cols.map(k => [k, sql`excluded.${sql.identifier(table[k].name)}`]));
+    // A column the write itself works out from the row as stored — a deal's stage and close-date moves (state
+    // §0.239): one expression for the batch, each row's own values read in it (the row as stored, `excluded`).
+    for (const [k, expr] of Object.entries(extraSet || {})) if (table[k]?.name) set[k] = expr;
     set.updatedAt = sql`now()`;
 
     // Backfill runs only on the VALUES, never on SET. These columns exist solely

@@ -90,9 +90,11 @@ test('RULE: mentions — each "@" read against the team\'s names, the longest th
 });
 
 test('RULE: a single save\'s move — the entry from the stored stage, dated the member\'s day within a day of the server\'s', () => {
-    const at = { day: '2026-11-09', author: 'Karen Russell', now: '2026-11-09T21:00:00.000Z' };
+    const at = { day: '2026-11-09', author: 'Karen Russell', authorId: 'usr_karen', now: '2026-11-09T21:00:00.000Z' };
+    // The author's name AND id, and where it was made (state §0.239; Jeff's Q4 — guide §18b119 rule 5).
     assert.deepEqual(stageMoveOf({ stage: 'Proposal' }, { stage: 'Negotiation' }, at),
-        { stage: 'Negotiation', date: '2026-11-09', prevStage: 'Proposal', author: 'Karen Russell', timestamp: '2026-11-09T21:00:00.000Z' });
+        { stage: 'Negotiation', date: '2026-11-09', prevStage: 'Proposal', author: 'Karen Russell', authorId: 'usr_karen', timestamp: '2026-11-09T21:00:00.000Z', source: 'deal' });
+    assert.equal(stageMoveOf({ stage: 'Proposal' }, { stage: 'Negotiation' }, { ...at, authorId: undefined }).authorId, null, 'a caller with no member row: no id, never another\'s');
     for (const body of [{}, { stage: '' }, { stage: '  ' }, { stage: null }, { stage: 'Proposal' }]) assert.equal(stageMoveOf({ stage: 'Proposal' }, body, at), null, JSON.stringify(body));
     assert.equal(stageMoveOf({ stage: null }, { stage: 'Proposal' }, at), null, 'no stored stage: no move, as an import reads it');
     assert.equal(moveDayOf('2026-11-08', '2026-11-09'), '2026-11-08', 'the member\'s day, a day behind the server\'s (an evening in Chicago)');
@@ -110,8 +112,8 @@ test('RULE: a restore keeps the stored owner by id — a member of this org, els
     assert.deepEqual(restoredOwner(named, null, null, 'assignedRep'), { ...named, ownerId: null }, 'a name stored with no id stays as stored (UKG\'s four)');
 });
 
-test('RULE: a deal\'s save sends neither its notes nor its stage history — the rest as given', () => {
-    assert.deepEqual(dealBody({ id: 'd', stage: 'X', comments: [1], stageHistory: [2], arr: 5 }), { id: 'd', stage: 'X', arr: 5 });
+test('RULE: a deal\'s save sends neither its notes nor its stage history nor its close-date history — the rest as given', () => {
+    assert.deepEqual(dealBody({ id: 'd', stage: 'X', comments: [1], stageHistory: [2], closeDateHistory: [3], arr: 5 }), { id: 'd', stage: 'X', arr: 5 });
     assert.equal(dealBody(null), null);
 });
 
@@ -147,7 +149,7 @@ export function dealPutsIn(src, file = 'src') {
         if (!sent) fault = 'a body not read';
         else if (sent.type === 'ObjectExpression') {
             const keys = sent.properties.map((p) => (p.type === 'SpreadElement' ? '...' : p.key?.name || p.key?.value));
-            if (keys.includes('comments') || keys.includes('stageHistory')) fault = 'sends notes or a stage history';
+            if (keys.includes('comments') || keys.includes('stageHistory') || keys.includes('closeDateHistory')) fault = 'sends notes or a stage history';
             else if (keys.includes('...')) fault = 'spreads a row (it would carry its notes)';
         } else if (!(sent.type === 'CallExpression' && sent.callee?.name === 'dealBody')) fault = 'a row not through dealBody';
         found.push({ file, line, fault });
@@ -168,6 +170,7 @@ test('THE GUARD reads what is sent: a list or history key, a spread row and a ba
     const one = (body) => { const [p] = dealPutsIn(`dbFetch('/.netlify/functions/opportunities', { method: 'PUT', body: JSON.stringify(${body}) });`); return p ? p.fault : 'none seen'; };
     assert.equal(one('{ id, comments }'), 'sends notes or a stage history');
     assert.equal(one('{ id, stageHistory: h }'), 'sends notes or a stage history');
+    assert.equal(one('{ id, closeDateHistory: h }'), 'sends notes or a stage history', 'nor a close-date history (state §0.239)');
     assert.equal(one('{ ...row, id }'), 'spreads a row (it would carry its notes)');
     assert.equal(one('sentBody(row)'), 'a row not through dealBody');
     assert.equal(one('row'), 'a row not through dealBody');
@@ -198,10 +201,10 @@ test('WIRING: a whole notes list is refused, a single save\'s history and stage 
     const s = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(s.includes("if ('comments' in data) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };"));
     assert.ok(s.includes("if (data.some(d => d && ('comments' in d || 'stageHistory' in d))) return { statusCode: 400"), 'nor in a bulk row');
-    assert.ok(s.includes('delete data.stageHistory;\n            delete data.stageChangedDate;'), 'a body\'s history and date never written');
-    assert.ok(s.includes('const move = stageMoveOf(existing, data, {\n                day: moveDayOf(sentDay, new Date().toISOString().slice(0, 10)),'));
+    assert.ok(s.includes('delete data.stageHistory;\n            delete data.stageChangedDate;\n            delete data.closeDateMovedOn;'), 'a body\'s history and dates never written');
+    assert.ok(s.includes('const move = stageMoveOf(existing, data, {\n                day: moveDayOf(sentDay, serverDay),\n                author: me.name || \'\', authorId: me.id ?? null,'));
     assert.ok(s.includes('const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;'), 'the notes and history out of the update');
-    assert.ok(s.includes("set: { ...updateData, ...(move ? { stageHistory: historyWith(move) } : {}), updatedAt: new Date() }"), 'a move appended in the write');
+    assert.ok(s.includes('...(move ? { stageHistory: historyWith(move) } : {}),'), 'a move appended in the write');
     assert.ok(s.includes("THEN ${opportunities.stageHistory} ELSE '[]'::jsonb END) || ${JSON.stringify([entry])}::jsonb`;"), 'to the history as stored');
     assert.ok(!s.includes('previousComments'), 'no diff of two lists');
 });

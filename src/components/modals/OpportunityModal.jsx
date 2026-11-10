@@ -18,6 +18,7 @@ import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped,
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
 import { mayChangeNote } from '../../utils/dealNotes.js';
+import { closeDateMovesOf } from '../../utils/dealHistory.js';
 import { quarterOf, fiscalStartOf } from '../../utils/quarters.js';
 import { painPointGroups } from '../../utils/painPoints.js';
 
@@ -221,6 +222,31 @@ const StageRibbon = ({ allStages, current, onStage }) => {
 //  Deal History — preserved from original, accessible via rail
 //  "See all" link
 // ─────────────────────────────────────────────────────────────
+// A deal's close-date moves, newest first (state §0.239; docs/design/close-date-history, Jeff's Q3): from → to, who,
+// when — as the server recorded them, only entries that read as entries. Nothing when the date never moved.
+const fmtMoveDay = (d) => (d ? (parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || d) : 'none');
+function CloseDateMoves({ deal }) {
+    const moves = closeDateMovesOf(deal);
+    if (moves.length === 0) return null;
+    return (
+        <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>Close date changes</span>
+                <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moves.length === 1 ? 'Moved once' : `Moved ${moves.length} times`}</span>
+            </div>
+            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface }}>
+                {moves.map((m, i) => (
+                    <div key={`${m.timestamp}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderTop: i ? `1px solid ${T.border}` : 'none', fontFamily: T.sans, fontSize: 12.5 }}>
+                        <span style={{ color: T.inkMuted, flexShrink: 0 }}>{fmtMoveDay(m.date)}</span>
+                        <span style={{ color: T.ink, fontWeight: 600 }}>{fmtMoveDay(m.from)} → {fmtMoveDay(m.to)}</span>
+                        <span style={{ marginLeft: 'auto', color: T.inkMuted, textAlign: 'right' }}>{m.author || 'Unknown'}{m.source === 'import' ? ' · import' : ''}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
     const { setViewingActivity } = useApp();   // a history row opens the read-only viewer (§0.93)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
@@ -438,6 +464,8 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                     </>
                 )}
             </div>
+
+            <CloseDateMoves deal={opportunity}/>
 
             {/* Activity list */}
             <div>
@@ -1037,7 +1065,10 @@ export default function OpportunityModal({
             nextSteps:       base.nextSteps ?? '',
             products:        base.products ?? '',
             unionized:       base.unionized ?? 'No',
-            forecastedCloseDate: base.forecastedCloseDate ?? [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
+            // A deal stored with no close date opens with the field empty (state §0.239 — the review; Jeff: "Open with the date
+            // empty"): the field is required, so its first save asks for a date and whatever is picked — today too — is
+            // the move recorded. A new deal (a lead's convert has no id) still opens on today.
+            forecastedCloseDate: base.forecastedCloseDate ?? (opportunity?.id ? '' : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-')),
             pipelineId:      base.pipelineId ?? activePipelineId ?? 'default',
             competitors:     base.competitors ?? [],
             reasonWon:       base.reasonWon ?? '',
@@ -1061,6 +1092,10 @@ export default function OpportunityModal({
     // opened too) and the Contacts — so the deal's links stand as stored, whatever this
     // window's lists say of them (the pre-ship round; utils/leaveOut.js).
     const linksSeed = useRef({ site: opportunity?.site ?? '', contactIds: [...(opportunity?.contactIds || [])], contacts: opportunity?.contacts ?? '' }).current;
+    // The close date the window opened with, taken once (state §0.239; Jeff's Q2): an edit's Save leaves it out when
+    // it is as it opened — a date nobody touched is never written back over one moved elsewhere since, and an undated
+    // deal (which opens on today) stays undated until someone picks a date.
+    const closeSeed = useRef(formData.forecastedCloseDate ?? '').current;
     const [siteSearch, setSiteSearch]                   = useState(opportunity?.site || '');
     // The Site Name the Account field emptied while its text stopped reading as the account
     // held — put back when the text reads as that account again, dropped by a pick or a Site Name
@@ -1216,6 +1251,7 @@ export default function OpportunityModal({
             ...(accountKept ? ['account', 'accountId'] : []),
             ...(accountKept && (formData.site ?? '') === linksSeed.site ? ['site'] : []),
             ...(sameList(selectedContactIds, linksSeed.contactIds) && (formData.contacts ?? '') === linksSeed.contacts ? ['contactIds', 'contacts'] : []),
+            ...((formData.forecastedCloseDate ?? '') === closeSeed ? ['forecastedCloseDate', 'closeQuarter'] : []),
         ];
         onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds }, left));
     };

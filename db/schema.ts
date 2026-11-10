@@ -202,6 +202,9 @@ export const opportunities = pgTable('opportunities', {
     createdDate:          varchar('created_date', { length: 20 }),
     createdBy:            varchar('created_by', { length: 255 }),
     stageHistory:         jsonb('stage_history').default('[]'),
+    // A deal's close-date moves, the server's alone (state §0.239; db/apply-close-date-history.mjs): no default —
+    // none until the date first moves; never in sanitize (opportunities.mjs), so no body writes it.
+    closeDateHistory:     jsonb('close_date_history'),
     comments:             jsonb('comments').default('[]'),
     aiScore:              jsonb('ai_score'),
     // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.

@@ -128,7 +128,11 @@ test('the deal window: an edit leaves out an untouched Account (and its Site Nam
         "            ...(accountKept ? ['account', 'accountId'] : []),\n" +
         "            ...(accountKept && (formData.site ?? '') === linksSeed.site ? ['site'] : []),\n" +
         "            ...(sameList(selectedContactIds, linksSeed.contactIds) && (formData.contacts ?? '') === linksSeed.contacts ? ['contactIds', 'contacts'] : []),\n" +
-        "        ];\n"), "a new deal (a lead's convert has no id) leaves nothing out; a Site Name typed is sent though its Account is not — the endpoint's lift keeps a Site Name only when the account id is sent");
+        "            ...((formData.forecastedCloseDate ?? '') === closeSeed ? ['forecastedCloseDate', 'closeQuarter'] : []),\n" +
+        "        ];\n"), "a new deal (a lead's convert has no id) leaves nothing out; a Site Name typed is sent though its Account is not — the endpoint's lift keeps a Site Name only when the account id is sent; an untouched close date (and its quarter) left out (state §0.239, Jeff's Q2)");
+    // The close date the window opened with, taken once from the form as it opened — an undated deal opens on today.
+    assert.ok(m.includes("    const closeSeed = useRef(formData.forecastedCloseDate ?? '').current;"));
+    assert.equal(count(m, 'closeSeed = useRef('), 1);
     assert.ok(m.includes('        onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id,'));
 });
 

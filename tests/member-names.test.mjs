@@ -363,7 +363,7 @@ test('backup.mjs: a member the file brings in under a taken name is restored num
         '                try { const own = restorableMembers(await memberNamesOf(orgId), ents.users); ents.users = own.rows; renamedMembers = own.renamed; errs.push(...droppedErrors(own.dropped)); }',
         '                catch (e) { ents.users = []; ',
         '            for (const { key, table } of crmEntities) {',
-        "                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }",
+        "                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : key === 'opportunities' ? rows.map(restoredHistories) : rows); }",   // a deal's histories kept entry by entry since §0.239
         '                    const landed = new Set((await memberNamesOf(orgId)).map((u) => u.id));',
         '                    notes.push(...restoreNotes(renamedMembers.filter((m) => landed.has(m.id))));',
         '                body: JSON.stringify({ ok: imported > 0, imported, unreached: missed, errors: errs, notes, snapId }),');

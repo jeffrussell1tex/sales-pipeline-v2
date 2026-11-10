@@ -11,7 +11,7 @@ import { postDealEvents, postBulkStageMove } from './send-slack.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
-    serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
+    serverErrorBody, writeAudit, auditAs, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
     resolveCaller, memberNamesOf,
 } from './_lib.mjs';
@@ -21,6 +21,8 @@ import { partialRows } from './_sanitize.mjs';
 import { applyStageChanges, moveDayOf, stageMoveOf } from './_stage.mjs';
 // A deal's team notes, one operation at a time (state §0.236): the rules, shared with the deal window.
 import { noteOpOf, applyNoteOp, notesOf, NOTE_WORDS } from '../../src/utils/dealNotes.js';
+// A deal's close-date history (state §0.239): the words a refusal says, and a move's from → to.
+import { HISTORY_WORDS, moveWords } from '../../src/utils/dealHistory.js';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
@@ -38,6 +40,18 @@ const notesStill = (stored) => (stored == null
 // A stage move's entry appended to the history AS STORED, in the write itself (state §0.236) — never a list a
 // body sent, never one read before the write.
 const historyWith = (entry) => sql`(CASE WHEN jsonb_typeof(${opportunities.stageHistory}) = 'array' THEN ${opportunities.stageHistory} ELSE '[]'::jsonb END) || ${JSON.stringify([entry])}::jsonb`;
+// A list column as stored — anything not a list (a deal from before the column, none yet) read as an empty one.
+const listOf = (col) => sql`(CASE WHEN jsonb_typeof(${col}) = 'array' THEN ${col} ELSE '[]'::jsonb END)`;
+// A close-date move, decided IN the write (state §0.239; docs/design/close-date-history R3, Jeff's Q1): where the date as
+// stored at that moment is not the one written — a date set where there was none and a date cleared included — its
+// entry is appended to the history as stored; else the history stays. In ON CONFLICT DO UPDATE a column names the row
+// as stored and `excluded` the row written, so neither the move nor its "from" can come from an older read: two saves
+// at once each record the date they replaced. One expression serves a single save and a whole import batch.
+const closeDatesWith = ({ day, author, authorId, now, source }) => sql`CASE WHEN ${opportunities.forecastedCloseDate} IS DISTINCT FROM excluded.forecasted_close_date THEN ${listOf(opportunities.closeDateHistory)} || jsonb_build_array(jsonb_build_object('from', ${opportunities.forecastedCloseDate}, 'to', excluded.forecasted_close_date, 'date', ${day}::text, 'timestamp', ${now}::text, 'author', ${author}::text, 'authorId', ${authorId}::text, 'source', ${source}::text)) ELSE ${opportunities.closeDateHistory} END`;
+// An import's stage move, appended in the write the same way (state §0.239, Jeff's Q4 — it was the list as read, written
+// whole): where the stage as stored is set and is not the one written, dated the stage clock the import derived
+// (applyStageChanges), else the import's day.
+const importStagesWith = ({ day, author, authorId, now }) => sql`CASE WHEN ${opportunities.stage} IS NOT NULL AND excluded.stage IS DISTINCT FROM ${opportunities.stage} THEN ${listOf(opportunities.stageHistory)} || jsonb_build_array(jsonb_build_object('prevStage', ${opportunities.stage}, 'stage', excluded.stage, 'date', COALESCE(excluded.stage_changed_date, ${day}::text), 'timestamp', ${now}::text, 'author', ${author}::text, 'authorId', ${authorId}::text, 'source', 'import')) ELSE ${opportunities.stageHistory} END`;
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -413,6 +427,8 @@ export const handler = async (event) => {
                 // No row writes a deal's notes or its stage history (state §0.236): the notes go one at a time
                 // (below), the history is the server's (applyStageChanges). An import's overwrite sends neither.
                 if (data.some(d => d && ('comments' in d || 'stageHistory' in d))) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };
+                // Nor its close-date history (state §0.239): the write appends each move.
+                if (data.some(d => d && 'closeDateHistory' in d)) return { statusCode: 400, headers, body: JSON.stringify({ error: HISTORY_WORDS.wholeList }) };
                 // Reps may only overwrite their own or unassigned deals — the same
                 // check the single-record path applies below, resolved once for
                 // the batch.
@@ -474,6 +490,12 @@ export const handler = async (event) => {
                 // The owner id moves with the owner name (state §0.193).
                 // A key one row leaves out (a blank cell, Q14) is filled from its stored row, never written empty.
                 const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize, priors), 'opportunity', { table: opportunities, orgId });
+                // The batch's stage and close-date moves, each appended in the write to the history as stored (state
+                // §0.239): only where the batch writes the stage or the close date — a row the file leaves alone carries
+                // its stored value, and makes no entry.
+                const sentKeys = new Set(keyed.rows.flatMap(r => Object.keys(r)));
+                const importer = await resolveCaller(userId, orgId);
+                const movedAt = { day: importDate, author: importer.name || '', authorId: importer.id ?? null, now: new Date().toISOString() };
                 const result = await bulkUpsert({
                     table: opportunities,
                     rows: keyed.rows,
@@ -482,7 +504,23 @@ export const handler = async (event) => {
                     ownerColumn: ownerColumnOf(opportunities, 'opportunity'),
                     callerId,
                     canSeeAll: canSeeAll(userRole),
+                    extraSet: {
+                        ...(sentKeys.has('stage') ? { stageHistory: importStagesWith(movedAt) } : {}),
+                        ...(sentKeys.has('forecastedCloseDate') ? { closeDateHistory: closeDatesWith({ ...movedAt, source: 'import' }) } : {}),
+                    },
                 });
+                // One audit record for the batch's close-date moves (Jeff's Q4): the rows written whose date is not the
+                // one read — a row refused or not found is not counted.
+                const unwritten = new Set([...(result.notFound || []), ...(result.forbidden || [])].map(x => (x && typeof x === 'object' ? x.id : x)));
+                const closeMoved = keyed.rows.filter(r => 'forecastedCloseDate' in r && priors.has(r.id) && !unwritten.has(r.id)
+                    && (priors.get(r.id).forecastedCloseDate ?? null) !== (r.forecastedCloseDate ?? null)).length;
+                if (closeMoved > 0) {
+                    await auditAs(orgId, userId, {
+                        action: 'opportunity.close_dates_moved_bulk', entityType: 'opportunity', entityId: 'BATCH',
+                        entityName: `${closeMoved} deals`,
+                        detail: `CSV import moved the close date of ${closeMoved} of ${data.length} deals`,
+                    });
+                }
                 // One audit record for the batch, not one per deal. A 500-row
                 // import moving 200 deals is one action by one person.
                 if (staged.changedCount > 0) {
@@ -561,17 +599,28 @@ export const handler = async (event) => {
             // A whole notes list is never written (state §0.236): a screen's list is its copy, and a copy older than
             // the stored list erased the notes posted since.
             if ('comments' in data) return { statusCode: 400, headers, body: JSON.stringify({ error: NOTE_WORDS.wholeList }) };
+            // Nor its close-date history (state §0.239): the write appends each move, below.
+            if ('closeDateHistory' in data) return { statusCode: 400, headers, body: JSON.stringify({ error: HISTORY_WORDS.wholeList }) };
             // The stage history and its date are the server's (state §0.236; Jeff's Q3): a body's are never written.
             // A move — a stage sent that is not the stored one — appends its entry to the history as stored, in the
             // write below, dated the member's day where it is within a day of the server's.
             const sentDay = data.stageChangedDate;
+            // The day the member moved the close date (state §0.239), as the stage's: theirs within a day of the server's.
+            const sentCloseDay = data.closeDateMovedOn;
             delete data.stageHistory;
             delete data.stageChangedDate;
+            delete data.closeDateMovedOn;
+            const me = await resolveCaller(userId, orgId);
+            const now = new Date().toISOString();
+            const serverDay = now.slice(0, 10);
             const move = stageMoveOf(existing, data, {
-                day: moveDayOf(sentDay, new Date().toISOString().slice(0, 10)),
-                author: (await resolveCaller(userId, orgId)).name || '',
-                now: new Date().toISOString(),
+                day: moveDayOf(sentDay, serverDay),
+                author: me.name || '', authorId: me.id ?? null,
+                now,
             });
+            // A save that names the close date may move it; one that does not keeps it as stored — never the copy read
+            // above (state §0.239, Jeff's Q2: the deal window leaves an untouched date out).
+            const closeNamed = 'forecastedCloseDate' in data;
             const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             // Each contact it names anew is one of this org's; one the deal already holds is not asked
@@ -614,13 +663,29 @@ export const handler = async (event) => {
             // The notes and the history are never in the update (state §0.236): a note posted, or a move appended,
             // between this request's read and its write would be written over. A move appends in SQL, to what is stored.
             const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
+            if (!closeNamed) { delete updateData.forecastedCloseDate; if (!('closeQuarter' in data)) delete updateData.closeQuarter; }
             const [upserted] = await db.insert(opportunities)
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({
                     target: opportunities.id, setWhere: eq(opportunities.orgId, orgId),
-                    set: { ...updateData, ...(move ? { stageHistory: historyWith(move) } : {}), updatedAt: new Date() }
+                    set: {
+                        ...updateData,
+                        ...(move ? { stageHistory: historyWith(move) } : {}),
+                        ...(closeNamed ? { closeDateHistory: closeDatesWith({ day: moveDayOf(sentCloseDay, serverDay), author: me.name || '', authorId: me.id ?? null, now, source: 'deal' }) } : {}),
+                        updatedAt: new Date(),
+                    }
                 })
                 .returning();
+            // The move this write made, by its time (Jeff's Q4): one audit row, from → to.
+            const closeMoves = Array.isArray(upserted?.closeDateHistory) ? upserted.closeDateHistory : [];
+            const closeMove = closeNamed ? closeMoves[closeMoves.length - 1] : null;
+            if (closeMove && closeMove.timestamp === now) {
+                await auditAs(orgId, userId, {
+                    action: 'opportunity.close_date_moved', entityType: 'opportunity', entityId: upserted.id,
+                    entityName: upserted.opportunityName || upserted.account || upserted.id,
+                    detail: moveWords(closeMove),
+                });
+            }
 
             const rep          = upserted.salesRep;
             const stageChanged = previousStage && upserted.stage !== previousStage;

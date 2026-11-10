@@ -188,7 +188,8 @@ test('HISTORY: a move appends to the history as stored — a body\'s history and
     assert.equal(d.stageChangedDate, today);
     assert.equal(d.stageHistory.length, 2, 'REGRESSION (Q3): a body\'s history written');
     assert.deepEqual(d.stageHistory[0], H1, 'the stored history kept');
-    assert.deepEqual({ ...d.stageHistory[1], timestamp: 't' }, { stage: 'Negotiation', date: today, prevStage: 'Proposal', author: KAREN.name, timestamp: 't' });
+    // The member's id and where it was made ride with the name since §0.239 (Jeff's Q4 — guide §18b119 rule 5).
+    assert.deepEqual({ ...d.stageHistory[1], timestamp: 't' }, { stage: 'Negotiation', date: today, prevStage: 'Proposal', author: KAREN.name, authorId: KAREN.id, timestamp: 't', source: 'deal' });
     const still = await put(A, KAREN, { id: DSTAGE, arr: 7, stageChangedDate: '2001-01-01', stageHistory: [] }, 'User');
     assert.equal(still.statusCode, 200, still.body);
     const e = await dealOf(DSTAGE);

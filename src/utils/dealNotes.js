@@ -91,10 +91,11 @@ export function applyNoteOp(stored, op, { me, now, newId, names } = {}) {
     return { list: list.map((n, i) => (i === at ? note : n)), note };
 }
 
-// What a deal's save sends: never its notes or its stage history — the server keeps the one and writes the
-// other (state §0.236). Every deal PUT a screen sends goes through this (THE GUARD, tests/deal-data.test.mjs).
+// What a deal's save sends: never its notes, its stage history or its close-date history — the server keeps the
+// one and writes the others (state §0.236, §0.239). Every deal PUT a screen sends goes through this (THE GUARD,
+// tests/deal-data.test.mjs).
 export function dealBody(row) {
     if (!row || typeof row !== 'object') return row;
-    const { comments: _notes, stageHistory: _history, ...rest } = row;
+    const { comments: _notes, stageHistory: _history, closeDateHistory: _closeDates, ...rest } = row;
     return rest;
 }

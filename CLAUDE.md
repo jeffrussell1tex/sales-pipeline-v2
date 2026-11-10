@@ -175,6 +175,13 @@ One commit per verified batch; doc patch in the same commit.
   history in the write (`_stage.mjs` stageMoveOf); a deal's save sends
   `dealBody(...)` (THE GUARD, tests/deal-data.test.mjs). A delete's Undo
   keeps the stored owner by id (`restoredOwner`), never the caller.
+  Since §0.239 a deal's close-date moves too (guide §18b122): each move
+  decided and appended in the write's own SQL from the date as stored
+  (`closeDatesWith`; an import's stage moves likewise, `importStagesWith`),
+  with the member's name and id; no body names the list (refused); a save
+  not naming the date keeps it; the deal window sends it only when changed
+  there and opens an undated deal empty; a restore keeps the histories
+  entry by entry, by shape (`src/utils/dealHistory.js`).
 - A link a message to a member carries is built by `appLink` and read by
   App.jsx's one reader (`takeAppLink`, src/utils/appLinks.js, guide §18b120):
   a record's link names it and its org; the reader opens it from the

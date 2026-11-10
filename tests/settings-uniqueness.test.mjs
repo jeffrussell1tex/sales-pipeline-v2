@@ -41,7 +41,7 @@ test("backup.mjs: a restored settings row is the restoring org's — its id, no 
     assert.ok(s.includes("                if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };"));
     assert.ok(s.includes('                delete extra.anthropicApiKey;'));
     assert.ok(s.includes('                return { ...r, id: orgId, extra };'), 'the id is the org\'s, never the file\'s');
-    assert.ok(s.includes("try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }"));
+    assert.ok(s.includes("try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : key === 'opportunities' ? rows.map(restoredHistories) : rows); }"));   // a deal's histories kept entry by entry since §0.239
 });
 
 test('email-inbound.mjs: no BCC_SECRET, no dropbox — the POST refuses before it reads a recipient', () => {
