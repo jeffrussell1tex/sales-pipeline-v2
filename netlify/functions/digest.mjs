@@ -12,6 +12,8 @@
  */
 
 import { db } from '../../db/index.js';
+// Every link into the app a digest carries (state §0.237).
+import { appLink } from '../../src/utils/appLinks.js';
 import { users, opportunities, tasks, activities } from '../../db/schema.js';
 import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
@@ -174,7 +176,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                     try {
                         await sendEmail({
                             to: user.email,
-                            ...emailTemplates.taskDigest({
+                            ...emailTemplates.taskDigest({ orgId: user.orgId,
                                 repName: user.name,
                                 tasks: dueTodayTasks.map(t => ({
                                     title:           t.title,
@@ -188,7 +190,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                             const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
-                                smsTemplates.digestSummary({ repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
+                                smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
                                 `taskDigest/${user.name}`
                             );
                         }
@@ -210,7 +212,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                     try {
                         await sendEmail({
                             to: user.email,
-                            ...emailTemplates.overdueTaskNudge({
+                            ...emailTemplates.overdueTaskNudge({ orgId: user.orgId,
                                 repName: user.name,
                                 tasks: overdueTasks.map(t => {
                                     const daysOverdue = Math.floor(
@@ -229,7 +231,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                             const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
-                                smsTemplates.digestSummary({ repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
+                                smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
                                 `overdueNudge/${user.name}`
                             );
                         }
@@ -276,9 +278,9 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                                     <h2>Your daily pipeline digest</h2>
                                     <p>Hi ${user.name}, here are the deals that were updated in the last 24 hours.</p>
                                     <div class="detail-box">${dealRows}</div>
-                                    <a class="btn" href="${process.env.APP_URL || 'https://salespipelinetracker.com'}">View Pipeline →</a>
+                                    <a class="btn" href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'pipeline', org: user.orgId })}">View Pipeline →</a>
                                 </div>
-                                <div class="footer"><p>You're receiving this as your daily digest. <a href="${process.env.APP_URL || 'https://salespipelinetracker.com'}/settings">Manage preferences</a></p></div>
+                                <div class="footer"><p>You're receiving this as your daily digest. <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: user.orgId })}">Manage preferences</a></p></div>
                             </div></body></html>`,
                         });
                         console.log(`opportunityDigest sent to ${user.email} (${updatedRecently.length} deals)`);
@@ -490,7 +492,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                             ${insights.length > 0 ? `<div class="insight-box"><div class="insight-title">Team coaching insights</div>${insightsHtml}</div>` : ''}
                             <a class="btn" href="${process.env.APP_URL || 'https://salespipelinetracker.com'}">Open Sales Manager →</a>
                         </div>
-                        <div class="footer"><p>Weekly manager digest · <a href="${process.env.APP_URL || 'https://salespipelinetracker.com'}/settings">Manage preferences</a></p></div>
+                        <div class="footer"><p>Weekly manager digest · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: mgr.orgId })}">Manage preferences</a></p></div>
                     </div></body></html>`;
 
                     await sendEmail({

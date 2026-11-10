@@ -118,6 +118,7 @@ const ALLOWED = [
     ['src/Tabs/SalesManagerTab.jsx', 'setSettings(prev => ({...prev, __qbTerrFilter:v}))', 'a screen filter kept on the settings object, never saved'],
     ['src/Tabs/SalesManagerTab.jsx', 'setSettings(prev=>({...prev,_spiffClaimFilter:s}))', 'a screen filter kept on the settings object, never saved'],
     ['src/Tabs/settings/shared/usePanelRevs.js', 'setSettings((prev) => ({ ...prev, revs: revsAfter(prev?.revs, answer?.revs) }))', 'merges the tokens a send answered; called only straight after one'],
+    ['src/App.jsx', 'setTasks(prev => (prev.some(t => t.id === task.id) ? prev : [...prev, task]))', 'a message link\'s task (§0.237): the row the server\'s own list answered (linkedRecord fetched it), added for the rail before the list\'s load lands'],
 ];
 
 const isFn = (n) => n && /^(ArrowFunctionExpression|FunctionExpression|FunctionDeclaration|ObjectMethod|ClassMethod)$/.test(n.type);

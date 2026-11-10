@@ -26,6 +26,8 @@
  */
 
 import { db } from '../../db/index.js';
+// Every link into the app an alert carries (state §0.237).
+import { appLink } from '../../src/utils/appLinks.js';
 import { opportunities, activities, users, recommendationLog, dispatchCustomers, dispatchServicePlans, tasks, automations } from '../../db/schema.js';
 import { eq, and, gte, inArray } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
@@ -302,16 +304,16 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (wantsAlert(resolvedProfile, 'dealSilent')) {
                             await sendEmail({
                                 to: repUser.email,
-                                ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
+                                ...emailTemplates.dealSilent({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(resolvedProfile) && smsPhone) {
-                                await trySendSms(smsPhone, smsTemplates.dealSilent({ dealName: name, daysSilent }), `dealSilent/${repName}`);
+                                await trySendSms(smsPhone, smsTemplates.dealSilent({ opportunityId: opp.id, orgId, dealName: name, daysSilent }), `dealSilent/${repName}`);
                                 smsSent++;
                             }
                         }
                         await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }), 'dealSilent');
+                        await sendSlackToOrg(orgId, slackTemplates.dealSilent({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }), 'dealSilent');
                         await dispatchAutomations(orgId, 'opportunity.silent', dealEventData(opp, { days_silent: daysSilent }));
                         console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
 
@@ -319,13 +321,13 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (daysSilent >= 21 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
                             await sendEmail({
                                 to: manager.email,
-                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }),
+                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
-                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'silent' }), `managerAlert-silent/${manager.name}`);
+                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ opportunityId: opp.id, orgId, repName, dealName: name, alertType: 'silent' }), `managerAlert-silent/${manager.name}`);
                                     smsSent++;
                                 }
                             }
@@ -344,16 +346,16 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (wantsAlert(resolvedProfile, 'dealStuck')) {
                             await sendEmail({
                                 to: repUser.email,
-                                ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
+                                ...emailTemplates.dealStuck({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(resolvedProfile) && smsPhone) {
-                                await trySendSms(smsPhone, smsTemplates.dealStuck({ dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
+                                await trySendSms(smsPhone, smsTemplates.dealStuck({ opportunityId: opp.id, orgId, dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
                                 smsSent++;
                             }
                         }
                         await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }), 'dealStuck');
+                        await sendSlackToOrg(orgId, slackTemplates.dealStuck({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }), 'dealStuck');
                         await dispatchAutomations(orgId, 'opportunity.stuck', dealEventData(opp, { days_in_stage: daysInStage, avg_days_in_stage: avgForStage }));
                         console.log(`dealStuck → ${repUser.email} (${name}, ${daysInStage}d)`);
 
@@ -362,13 +364,13 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (veryStuck && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
                             await sendEmail({
                                 to: manager.email,
-                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }),
+                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
-                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'stuck' }), `managerAlert-stuck/${manager.name}`);
+                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ opportunityId: opp.id, orgId, repName, dealName: name, alertType: 'stuck' }), `managerAlert-stuck/${manager.name}`);
                                     smsSent++;
                                 }
                             }
@@ -387,16 +389,16 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (wantsAlert(resolvedProfile, 'closeLapsed')) {
                             await sendEmail({
                                 to: repUser.email,
-                                ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
+                                ...emailTemplates.closeDateLapsed({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(resolvedProfile) && smsPhone) {
-                                await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ dealName: name, daysLapsed }), `closeLapsed/${repName}`);
+                                await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ opportunityId: opp.id, orgId, dealName: name, daysLapsed }), `closeLapsed/${repName}`);
                                 smsSent++;
                             }
                         }
                         await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
-                        await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }), 'closeLapsed');
+                        await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }), 'closeLapsed');
                         await dispatchAutomations(orgId, 'opportunity.close_lapsed', dealEventData(opp, { days_lapsed: daysLapsed }));
                         console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
 
@@ -404,13 +406,13 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
                             await sendEmail({
                                 to: manager.email,
-                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }),
+                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }),
                             });
                             emailsSent++;
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
-                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'lapsed' }), `managerAlert-lapsed/${manager.name}`);
+                                    await trySendSms(mgPhone, smsTemplates.managerDealAlert({ opportunityId: opp.id, orgId, repName, dealName: name, alertType: 'lapsed' }), `managerAlert-lapsed/${manager.name}`);
                                     smsSent++;
                                 }
                             }
@@ -432,12 +434,12 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (wantsAlert(resolvedProfile, 'dealMomentum')) {
                             await sendEmail({
                                 to: repUser.email,
-                                ...emailTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
+                                ...emailTemplates.dealMomentum({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
                             });
                             emailsSent++;
                         }
                         await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
+                        await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
                         await dispatchAutomations(orgId, 'opportunity.momentum', dealEventData(opp, { stage_count: stageCount, days_since_created: createdDays }));
                         console.log(`dealMomentum → ${repUser.email} (${name})`);
                     } catch (err) {
@@ -488,15 +490,15 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                                         </div>
                                     </div>
                                     <p>Stage: ${opp.stage} · ARR: ${Math.round(arr).toLocaleString()}</p>
-                                    <a class="btn" href="${process.env.APP_URL || 'https://salespipelinetracker.com'}">Review this deal →</a>
+                                    <a class="btn" href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'deal', id: opp.id, org: orgId })}">Review this deal →</a>
                                 </div>
-                                <div class="footer"><p>AI Score Alert · <a href="${process.env.APP_URL || 'https://salespipelinetracker.com'}/settings">Manage preferences</a></p></div>
+                                <div class="footer"><p>AI Score Alert · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: orgId })}">Manage preferences</a></p></div>
                             </div></body></html>`,
                         });
                         emailsSent++;
                         }
                         await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
-                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
+                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
                         await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));
                         console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);
 
@@ -504,7 +506,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (opp.aiScore.score < 25 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
                             await sendEmail({
                                 to: manager.email,
-                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `AI score ${opp.aiScore.score}/100 — ${verdictLabel}: ${headline}`, opportunityId: opp.id }),
+                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `AI score ${opp.aiScore.score}/100 — ${verdictLabel}: ${headline}`, opportunityId: opp.id }),
                             });
                             emailsSent++;
                         }
@@ -608,7 +610,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }
                         try {
                             if (wantsAlert(resolvedProfile, 'agreementRenewal')) {
-                                await sendEmail({ to: u.email, ...emailTemplates.agreementRenewal({ recipientName: u.name, ...detail }) });
+                                await sendEmail({ to: u.email, ...emailTemplates.agreementRenewal({ orgId, recipientName: u.name, ...detail }) });
                                 emailsSent++; renewalsSent++;
                                 console.log(`agreementRenewal → ${u.email} (${cust.name}, ${r.state} ${r.expiry})`);
                             }

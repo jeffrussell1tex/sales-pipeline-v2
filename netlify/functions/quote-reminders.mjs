@@ -52,7 +52,7 @@ export async function runQuoteReminders({ orgId = null, now = Date.now() } = {})
             const results = await Promise.allSettled(to.map(u => sendEmail({ to: u.email, ...emailTemplates.quoteWaiting({
                 name: u.name, quoteNumber: q.quoteNumber, account: deal?.account || '', dealName: deal?.opportunityName || '',
                 discountPct: Math.round(quoteDiscountPct(q.lineItems, q.dealDiscount)), value: q.totalValue, tierLabel: tier?.label || '',
-                url: quoteLink(appUrl(), q.id), reminder: true, waitedHours,
+                url: quoteLink(appUrl(), q.id, org), reminder: true, waitedHours, orgId: org,
             }) })));
             results.forEach((r, i) => { if (r.status === 'rejected') console.error(`quote-reminders: to ${to[i].id} failed:`, r.reason?.message); });
             emails += results.filter(r => r.status === 'fulfilled').length;

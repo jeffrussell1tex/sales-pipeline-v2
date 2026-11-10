@@ -28,6 +28,7 @@
  */
 
 import { db }      from '../../db/index.js';
+import { appLink } from '../../src/utils/appLinks.js';
 import { settings } from '../../db/schema.js';
 import { eq }      from 'drizzle-orm';
 import { serverErrorBody } from './_lib.mjs';
@@ -107,6 +108,7 @@ export async function postDealEvents(orgId, { before, after, mover } = {}) {
     const posted = [];
     for (const ev of dealSlackEvents({ before, after })) {
         const ctx = { mover: mover || after?.salesRep || 'Someone', repName: after?.salesRep || '—', dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
+        ctx.opportunityId = after?.id; ctx.orgId = orgId;   // the post's button opens the deal (state §0.237)
         const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);
         if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);
     }
@@ -122,11 +124,13 @@ export async function postDealEvents(orgId, { before, after, mover } = {}) {
  */
 export async function postBulkStageMove(orgId, { summary, total, mover } = {}) {
     if (!summary || !(summary.moved > 0)) return false;
-    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary }), 'stageChanged');
+    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary, orgId }), 'stageChanged');
 }
 
 // ── Message templates ─────────────────────────────────────────────────────────
 const APP_URL = process.env.APP_URL || process.env.URL || 'https://salespipelinetracker.com';
+// A deal post's button opens the deal, in its org (state §0.237 — src/utils/appLinks.js).
+const dealUrl = (opportunityId, orgId) => appLink(APP_URL, { kind: 'deal', id: opportunityId, org: orgId });
 
 const fmtArr = (v) => {
     const n = parseFloat(v) || 0;
@@ -179,7 +183,7 @@ export const slackTemplates = {
     },
 
     // Deal has gone silent (no activity in 14+ days)
-    dealSilent: ({ repName, dealName, account, arr, stage, daysSilent }) => ({
+    dealSilent: ({ repName, dealName, account, arr, stage, daysSilent, opportunityId, orgId }) => ({
         text: `⚠️ *${dealName}* has gone silent — ${daysSilent} days without activity`,
         blocks: [
             {
@@ -198,14 +202,14 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],
     }),
 
     // Deal stuck in stage
-    dealStuck: ({ repName, dealName, account, arr, stage, daysInStage, avgDays }) => ({
+    dealStuck: ({ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId, orgId }) => ({
         text: `🚧 *${dealName}* has been stuck in ${stage} for ${daysInStage} days`,
         blocks: [
             {
@@ -224,14 +228,14 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],
     }),
 
     // Close date has passed
-    closeDateLapsed: ({ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate }) => ({
+    closeDateLapsed: ({ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId, orgId }) => ({
         text: `🔴 *${dealName}* close date passed ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago`,
         blocks: [
             {
@@ -250,7 +254,7 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'Update close date →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'Update close date →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],
@@ -277,7 +281,7 @@ export const slackTemplates = {
     }),
 
     // AI score dropped
-    scoreDrop: ({ repName, dealName, account, arr, stage, score, verdict }) => ({
+    scoreDrop: ({ repName, dealName, account, arr, stage, score, verdict, opportunityId, orgId }) => ({
         text: `⚠️ *${dealName}* AI score dropped to ${score}/100 (${verdict})`,
         blocks: [
             {
@@ -296,14 +300,14 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'Review deal →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'Review deal →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],
     }),
 
     // A bulk stage move — one line for the batch (state §0.106)
-    bulkStageMoved: ({ mover, moved, won, total, byStage }) => {
+    bulkStageMoved: ({ mover, moved, won, total, byStage, orgId }) => {
         const where = (byStage || []).map(s => `*${s.n}* → ${s.to}`).join(' · ');
         return {
             text: `➡️ *${moved} deal${moved === 1 ? '' : 's'}* moved stage in an import by ${mover}${won ? ` · 🏆 ${won} closed won` : ''}`,
@@ -324,7 +328,7 @@ export const slackTemplates = {
                 {
                     type: 'actions',
                     elements: [
-                        { type: 'button', text: { type: 'plain_text', text: 'View pipeline →' }, url: APP_URL, action_id: 'view_pipeline' },
+                        { type: 'button', text: { type: 'plain_text', text: 'View pipeline →' }, url: appLink(APP_URL, { kind: 'pipeline', org: orgId }), action_id: 'view_pipeline' },
                     ],
                 },
             ],
@@ -345,7 +349,7 @@ export const slackTemplates = {
         ],
     }),
 
-    stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage }) => ({
+    stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage, opportunityId, orgId }) => ({
         text: `➡️ *${dealName}* moved to ${toStage}${fromStage ? ` (from ${fromStage})` : ''}`,
         blocks: [
             {
@@ -364,14 +368,14 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],
     }),
 
     // A deal was won — posted from the save (state §0.99)
-    dealWon: ({ mover, repName, dealName, account, arr, fromStage }) => ({
+    dealWon: ({ mover, repName, dealName, account, arr, fromStage, opportunityId, orgId }) => ({
         text: `🏆 *${dealName}* closed won — ${fmtArr(arr)} ARR (${repName})`,
         blocks: [
             {
@@ -390,7 +394,7 @@ export const slackTemplates = {
             {
                 type: 'actions',
                 elements: [
-                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: dealUrl(opportunityId, orgId), action_id: 'view_deal' },
                 ],
             },
         ],

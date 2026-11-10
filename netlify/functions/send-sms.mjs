@@ -1,4 +1,6 @@
 import { serverErrorBody } from './_lib.mjs';
+// Every link into the app a text carries (state §0.237): appLink, read by App.jsx's one reader.
+import { appLink } from '../../src/utils/appLinks.js';
 /**
  * send-sms.mjs
  * Shared SMS utility — all text message sending flows through this function.
@@ -143,33 +145,33 @@ export const smsTemplates = {
      * Task reminder — sent at task reminder time.
      * @param {{ repName, taskTitle, dueDate, dueTime }} data
      */
-    taskReminder({ repName, taskTitle, dueDate, dueTime }) {
+    taskReminder({ repName, taskTitle, dueDate, dueTime, taskId, orgId }) {
         const when = dueTime ? `${dueDate} at ${dueTime}` : dueDate;
-        return `Accelerep reminder: Task due ${when}\n"${taskTitle}"\nView: ${appUrl}?tab=tasks`;
+        return `Accelerep reminder: Task due ${when}\n"${taskTitle}"\nView: ${appLink(appUrl, { kind: 'task', id: taskId, org: orgId })}`;
     },
 
     /**
      * Task overdue nudge.
      * @param {{ taskTitle, daysOverdue }} data
      */
-    taskOverdue({ taskTitle, daysOverdue }) {
-        return `Accelerep: Overdue task (${daysOverdue}d) — "${taskTitle}"\nView: ${appUrl}?tab=tasks`;
+    taskOverdue({ taskTitle, daysOverdue, taskId, orgId }) {
+        return `Accelerep: Overdue task (${daysOverdue}d) — "${taskTitle}"\nView: ${appLink(appUrl, { kind: 'task', id: taskId, org: orgId })}`;
     },
 
     /**
      * Deal assigned to rep.
      * @param {{ repName, dealName, account, assignedBy }} data
      */
-    dealAssigned({ repName, dealName, account, assignedBy }) {
-        return `Accelerep: ${assignedBy} assigned you "${dealName}" (${account || 'No account'})\nView: ${appUrl}`;
+    dealAssigned({ repName, dealName, account, assignedBy, opportunityId, orgId }) {
+        return `Accelerep: ${assignedBy} assigned you "${dealName}" (${account || 'No account'})\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
      * Deal stage changed.
      * @param {{ dealName, fromStage, toStage, changedBy }} data
      */
-    stageChanged({ dealName, fromStage, toStage, changedBy }) {
-        return `Accelerep: "${dealName}" moved ${fromStage} → ${toStage} by ${changedBy}\nView: ${appUrl}`;
+    stageChanged({ dealName, fromStage, toStage, changedBy, opportunityId, orgId }) {
+        return `Accelerep: "${dealName}" moved ${fromStage} → ${toStage} by ${changedBy}\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
@@ -185,54 +187,54 @@ export const smsTemplates = {
      * Deal silent alert.
      * @param {{ dealName, daysSilent }} data
      */
-    dealSilent({ dealName, daysSilent }) {
-        return `Accelerep alert: "${dealName}" has been silent ${daysSilent} days. Log an activity to keep it moving.\nView: ${appUrl}`;
+    dealSilent({ dealName, daysSilent, opportunityId, orgId }) {
+        return `Accelerep alert: "${dealName}" has been silent ${daysSilent} days. Log an activity to keep it moving.\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
      * Deal stuck in stage.
      * @param {{ dealName, stage, daysInStage }} data
      */
-    dealStuck({ dealName, stage, daysInStage }) {
-        return `Accelerep alert: "${dealName}" stuck in ${stage} for ${daysInStage} days. Consider advancing or disqualifying.\nView: ${appUrl}`;
+    dealStuck({ dealName, stage, daysInStage, opportunityId, orgId }) {
+        return `Accelerep alert: "${dealName}" stuck in ${stage} for ${daysInStage} days. Consider advancing or disqualifying.\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
      * Close date lapsed.
      * @param {{ dealName, daysLapsed }} data
      */
-    closeDateLapsed({ dealName, daysLapsed }) {
-        return `Accelerep: "${dealName}" close date passed ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago. Update your forecast.\nView: ${appUrl}`;
+    closeDateLapsed({ dealName, daysLapsed, opportunityId, orgId }) {
+        return `Accelerep: "${dealName}" close date passed ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago. Update your forecast.\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
      * Daily digest summary (brief — directs to app for detail).
      * @param {{ repName, taskCount, overdueCount }} data
      */
-    digestSummary({ repName, taskCount, overdueCount }) {
+    digestSummary({ repName, taskCount, overdueCount, orgId }) {
         const parts = [];
         if (taskCount > 0) parts.push(`${taskCount} task${taskCount !== 1 ? 's' : ''} due today`);
         if (overdueCount > 0) parts.push(`${overdueCount} overdue`);
         const summary = parts.length > 0 ? parts.join(', ') : 'nothing due today';
-        return `Accelerep daily digest: ${summary}. View: ${appUrl}?tab=tasks`;
+        return `Accelerep daily digest: ${summary}. View: ${appLink(appUrl, { kind: 'tasks', org: orgId })}`;
     },
 
     /**
      * New comment/mention on a deal.
      * @param {{ dealName, commentBy }} data
      */
-    commentAdded({ dealName, commentBy }) {
-        return `Accelerep: ${commentBy} commented on "${dealName}"\nView: ${appUrl}`;
+    commentAdded({ dealName, commentBy, opportunityId, orgId }) {
+        return `Accelerep: ${commentBy} commented on "${dealName}"\nView: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 
     /**
      * Manager alert: rep deal needs attention.
      * @param {{ repName, dealName, alertType }} data
      */
-    managerDealAlert({ repName, dealName, alertType }) {
+    managerDealAlert({ repName, dealName, alertType, opportunityId, orgId }) {
         const alertLabels = { silent: 'gone silent', stuck: 'stuck in stage', lapsed: 'close date lapsed' };
         const label = alertLabels[alertType] || alertType;
-        return `Accelerep manager alert: ${repName}'s "${dealName}" has ${label}. View: ${appUrl}`;
+        return `Accelerep manager alert: ${repName}'s "${dealName}" has ${label}. View: ${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}`;
     },
 };
 

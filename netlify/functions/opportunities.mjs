@@ -99,7 +99,7 @@ async function maybeEmail(repName, alertType, templateArgs, orgId) {
         }
         await sendEmail({
             to: repUser.email,
-            ...emailTemplates[alertType](templateArgs),
+            ...emailTemplates[alertType]({ ...templateArgs, orgId }),   // its links name the deal's org (state §0.237)
         });
         console.log(`${alertType} email sent to`, repUser.email);
     } catch (err) {

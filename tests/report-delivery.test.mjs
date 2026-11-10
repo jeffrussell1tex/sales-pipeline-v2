@@ -184,7 +184,7 @@ test('report-deliveries: every five minutes (§0.140; hourly before), heartbeat-
     const jobs = code(read('src/utils/jobHealth.js'));
     assert.ok(jobs.includes("Object.freeze({ job: 'report-deliveries', label: 'Report delivery',  cron: '*/5 * * * *', cadenceMs: 300000 }),"), 'in the registry the Jobs tile reads, the same cadence');
     const email = code(read('netlify/functions/send-email.mjs'));
-    assert.ok(email.includes('reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }) {'), 'the email template');
+    assert.ok(email.includes('reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger, orgId = null }) {'), 'the email template (its footer names the org since §0.237)');
 });
 
 test('the pin list is a self-editable profile key, packed as strings only', () => {

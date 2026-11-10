@@ -92,8 +92,10 @@ test('postDealEvents posts each event through the org path with its type, and th
     assert.ok(s.includes('    for (const ev of dealSlackEvents({ before, after })) {'), 'the pure detector decides what happened');
     assert.ok(s.includes("        const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);"));
     assert.ok(s.includes('        if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);'), "the org's selection gates it, per type");
-    assert.ok(s.includes('    stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage }) => ({'));
-    assert.ok(s.includes('    dealWon: ({ mover, repName, dealName, account, arr, fromStage }) => ({'));
+    // Since §0.237 each names its deal and org — its button opens the deal (src/utils/appLinks.js).
+    assert.ok(s.includes('    stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage, opportunityId, orgId }) => ({'));
+    assert.ok(s.includes('    dealWon: ({ mover, repName, dealName, account, arr, fromStage, opportunityId, orgId }) => ({'));
+    assert.ok(s.includes('        ctx.opportunityId = after?.id; ctx.orgId = orgId;'), 'the deal and its org handed to the post');
 });
 
 test('the deal save posts the events the moment a stage changes, naming who moved it', () => {
@@ -172,8 +174,8 @@ test('the bulk stage move posts ONE line for the batch, under the stageChanged s
     const slack = code(read('netlify/functions/send-slack.mjs'));
     assert.ok(slack.includes('export async function postBulkStageMove(orgId, { summary, total, mover } = {}) {'));
     assert.ok(slack.includes('    if (!summary || !(summary.moved > 0)) return false;'), 'REGRESSION: an import that moved nothing posts nothing');
-    assert.ok(slack.includes("    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary }), 'stageChanged');"), 'one post, the org\'s stage-changed switch');
-    assert.ok(slack.includes('    bulkStageMoved: ({ mover, moved, won, total, byStage }) => {'), 'the template');
+    assert.ok(slack.includes("    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary, orgId }), 'stageChanged');"), 'one post, the org\'s stage-changed switch (its button the Pipeline tab in its org since §0.237)');
+    assert.ok(slack.includes('    bulkStageMoved: ({ mover, moved, won, total, byStage, orgId }) => {'), 'the template');
     assert.ok(slack.includes("{ type: 'mrkdwn', text: `Imported by *${mover}*` }"), 'names who imported');
     const opp = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(opp.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"));

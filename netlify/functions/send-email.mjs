@@ -4,6 +4,8 @@ import { serverErrorBody } from './_lib.mjs';
 // our own users' data and always have not.
 import { esc as escHtml } from '../../src/utils/customerNotifications.js';
 import { mailFromAs, emailOrNull } from '../../src/utils/orgIdentity.js';
+// Every link into the app a message carries (state §0.237): appLink, read by App.jsx's one reader.
+import { appLink } from '../../src/utils/appLinks.js';
 /**
  * send-email.mjs
  * Shared mailer utility — all email sending flows through this function.
@@ -82,7 +84,8 @@ export async function sendEmail({ to, subject, html, text, fromName = '', replyT
 
 const appUrl = process.env.APP_URL || 'https://salespipelinetracker.com';
 
-function layout(title, bodyHtml) {
+// `org`: the org whose event this is — its preferences link opens the Notifications tab there (state §0.237).
+function layout(title, bodyHtml, { org = null } = {}) {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,7 +135,7 @@ function layout(title, bodyHtml) {
     </div>
     <div class="footer">
       <p>You're receiving this because you have an account on <a href="${appUrl}">Accelerep</a>.</p>
-      <p><a href="${appUrl}/settings">Manage notification preferences</a></p>
+      <p><a href="${appLink(appUrl, { kind: 'notifications', org })}">Manage notification preferences</a></p>
     </div>
   </div>
 </body>
@@ -205,7 +208,7 @@ export const emailTemplates = {
      * A quote waits for approval — to the tier's approver(s) when it is submitted,
      * or, with `reminder`, to the backup once the tier's SLA has passed.
      */
-    quoteWaiting({ name, quoteNumber, account, dealName, discountPct, value, tierLabel, submittedBy, url, reminder = false, waitedHours = null }) {
+    quoteWaiting({ name, quoteNumber, account, dealName, discountPct, value, tierLabel, submittedBy, url, reminder = false, waitedHours = null, orgId = null }) {
         const subject = reminder
             ? `Reminder: quote ${quoteNumber} is still waiting for approval`
             : `Quote ${quoteNumber} is waiting for your approval`;
@@ -221,7 +224,7 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Value</span><span>${formatCurrency(value)}</span></div>
             </div>
             <a class="btn" href="${escHtml(url)}">Open the quote →</a>
-        `);
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -229,7 +232,7 @@ export const emailTemplates = {
      * An approver decided — to the person who submitted the quote: approved, or sent
      * back with the approver's note.
      */
-    quoteDecided({ name, quoteNumber, account, dealName, decision, decidedBy, note, url }) {
+    quoteDecided({ name, quoteNumber, account, dealName, decision, decidedBy, note, url, orgId = null }) {
         const approved = decision === 'approved';
         const subject = approved ? `Quote ${quoteNumber} is approved` : `Quote ${quoteNumber} was sent back`;
         const html = layout(escHtml(subject), `
@@ -241,7 +244,7 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Deal</span><span>${escHtml(dealName || '—')}</span></div>
             </div>
             <a class="btn" href="${escHtml(url)}">Open the quote →</a>
-        `);
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -250,7 +253,7 @@ export const emailTemplates = {
      * The table arrives already rendered and ESCAPED (reportDelivery.js).
      * @param {{ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }} d
      */
-    reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }) {
+    reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger, orgId = null }) {
         const title = name || 'Report';
         const subject = `${title} — ${source || 'Opportunities'} · ${period || 'All time'}`;
         const how = trigger === 'manual' ? 'sent now from Accelerep' : `your ${cadence || 'scheduled'} delivery`;
@@ -259,7 +262,7 @@ export const emailTemplates = {
             <p>${escHtml(source || 'Opportunities')} · ${escHtml(period || 'All time')}${ownerName ? ` · saved by ${escHtml(ownerName)}` : ''} · ${Number(count) || 0} row${Number(count) === 1 ? '' : 's'} in the period — ${escHtml(how)}.</p>
             ${tableHtml || '<p>Nothing in this period.</p>'}
             ${url ? `<a class="btn" href="${escHtml(url)}">Open in Accelerep →</a>` : ''}
-        `);
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -306,7 +309,7 @@ export const emailTemplates = {
      * or has expired (state §0.110). Sent to the org's Admins and Managers.
      * @param {{ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired }} data
      */
-    agreementRenewal({ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired }) {
+    agreementRenewal({ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired, orgId }) {
         const n = Math.abs(daysLeft);
         const when = expired ? `expired ${n} day${n === 1 ? '' : 's'} ago`
             : daysLeft === 0 ? 'expires today'
@@ -322,7 +325,7 @@ export const emailTemplates = {
             </div>
             <p>Renew it from Dispatch → Service Due, or edit the customer's agreement end date.</p>
             <a class="btn" href="${appUrl}">Open Dispatch →</a>
-        `);
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -330,7 +333,7 @@ export const emailTemplates = {
      * Sent when a deal is assigned to a rep.
      * @param {{ repName, dealName, account, arr, stage, assignedBy, opportunityId }} data
      */
-    dealAssigned({ repName, dealName, account, arr, stage, assignedBy, opportunityId }) {
+    dealAssigned({ repName, dealName, account, arr, stage, assignedBy, opportunityId, orgId }) {
         const subject = `Deal assigned to you: ${dealName}`;
         const html = layout(subject, `
             <h2>You've been assigned a deal</h2>
@@ -341,8 +344,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
                 <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -350,7 +353,7 @@ export const emailTemplates = {
      * Sent when a deal moves to a new stage.
      * @param {{ repName, dealName, account, arr, fromStage, toStage, changedBy, opportunityId }} data
      */
-    stageChanged({ repName, dealName, account, arr, fromStage, toStage, changedBy, opportunityId }) {
+    stageChanged({ repName, dealName, account, arr, fromStage, toStage, changedBy, opportunityId, orgId }) {
         const isWon  = toStage === 'Closed Won';
         const isLost = toStage === 'Closed Lost';
         const emoji  = isWon ? '🎉' : isLost ? '' : '📋';
@@ -365,8 +368,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Previous Stage</span><span>${stageBadge(fromStage)}</span></div>
                 <div class="detail-row"><span class="detail-label">New Stage</span><span>${stageBadge(toStage)}</span></div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -374,7 +377,7 @@ export const emailTemplates = {
      * Sent when a new opportunity is created.
      * @param {{ repName, dealName, account, arr, stage, createdBy, opportunityId }} data
      */
-    opportunityCreated({ repName, dealName, account, arr, stage, createdBy, opportunityId }) {
+    opportunityCreated({ repName, dealName, account, arr, stage, createdBy, opportunityId, orgId }) {
         const subject = `New opportunity assigned: ${dealName}`;
         const html = layout(subject, `
             <h2>A new opportunity has been created</h2>
@@ -385,8 +388,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
                 <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -394,7 +397,7 @@ export const emailTemplates = {
      * Sent when an opportunity is updated.
      * @param {{ repName, dealName, account, arr, stage, updatedBy, opportunityId }} data
      */
-    opportunityUpdated({ repName, dealName, account, arr, stage, updatedBy, opportunityId }) {
+    opportunityUpdated({ repName, dealName, account, arr, stage, updatedBy, opportunityId, orgId }) {
         const subject = `Deal updated: ${dealName}`;
         const html = layout(subject, `
             <h2>An opportunity was updated</h2>
@@ -405,8 +408,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
                 <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -414,7 +417,7 @@ export const emailTemplates = {
      * Sent when a deal is closed (won or lost).
      * @param {{ repName, dealName, account, arr, outcome, closedBy, opportunityId }} data
      */
-    dealClosed({ repName, dealName, account, arr, outcome, closedBy, opportunityId }) {
+    dealClosed({ repName, dealName, account, arr, outcome, closedBy, opportunityId, orgId }) {
         const isWon  = outcome === 'Won';
         const emoji  = isWon ? '🎉' : '📋';
         const subject = `${emoji} Deal ${isWon ? 'won' : 'lost'}: ${dealName}`;
@@ -427,8 +430,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
                 <div class="detail-row"><span class="detail-label">Outcome</span><span class="badge ${isWon ? 'badge-green' : 'badge-red'}">Closed ${outcome}</span></div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -436,7 +439,7 @@ export const emailTemplates = {
      * Sent when a comment is added to a deal.
      * @param {{ repName, dealName, account, comment, commentBy, opportunityId }} data
      */
-    commentAdded({ repName, dealName, account, comment, commentBy, opportunityId }) {
+    commentAdded({ repName, dealName, account, comment, commentBy, opportunityId, orgId }) {
         const subject = `New comment on ${dealName}`;
         const html = layout(subject, `
             <h2>New comment on your deal</h2>
@@ -449,8 +452,8 @@ export const emailTemplates = {
                     <span style="color:#4a4a6a; margin-top:4px; font-style:italic">"${comment}"</span>
                 </div>
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -458,7 +461,7 @@ export const emailTemplates = {
      * Daily morning digest of tasks due today (sent to individual reps).
      * @param {{ repName, tasks: Array<{ title, opportunityName, dueTime, priority }> }} data
      */
-    taskDigest({ repName, tasks: taskList }) {
+    taskDigest({ repName, tasks: taskList, orgId }) {
         const subject = `Your tasks for today (${taskList.length})`;
         const taskItems = taskList.map(t => `
             <li>
@@ -475,8 +478,8 @@ export const emailTemplates = {
             <h2>Good morning, ${repName} 👋</h2>
             <p>You have <strong>${taskList.length} task${taskList.length !== 1 ? 's' : ''}</strong> due today.</p>
             <ul class="task-list">${taskItems}</ul>
-            <a class="btn" href="${appUrl}?tab=tasks">View All Tasks →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'tasks', org: orgId })}">View All Tasks →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -484,7 +487,7 @@ export const emailTemplates = {
      * Daily nudge for overdue tasks (sent to individual reps).
      * @param {{ repName, tasks: Array<{ title, opportunityName, dueDate, daysOverdue }> }} data
      */
-    overdueTaskNudge({ repName, tasks: taskList }) {
+    overdueTaskNudge({ repName, tasks: taskList, orgId }) {
         const subject = `You have ${taskList.length} overdue task${taskList.length !== 1 ? 's' : ''}`;
         const taskItems = taskList.map(t => `
             <li class="task-overdue">
@@ -500,8 +503,8 @@ export const emailTemplates = {
             <h2>Overdue tasks need your attention</h2>
             <p>Hi ${repName}, the following tasks are past their due date.</p>
             <ul class="task-list">${taskItems}</ul>
-            <a class="btn" href="${appUrl}?tab=tasks">Resolve Tasks →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'tasks', org: orgId })}">Resolve Tasks →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -509,7 +512,7 @@ export const emailTemplates = {
      * Sent to managers when a new activity is logged on one of their deals.
      * @param {{ managerName, repName, activityType, dealName, account, note, opportunityId }} data
      */
-    activityLogged({ managerName, repName, activityType, dealName, account, note, opportunityId }) {
+    activityLogged({ managerName, repName, activityType, dealName, account, note, opportunityId, orgId }) {
         const subject = `New activity on ${dealName}`;
         const html = layout(subject, `
             <h2>Activity logged on your deal</h2>
@@ -520,8 +523,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Activity Type</span><span>${activityType}</span></div>
                 ${note ? `<div class="detail-row" style="flex-direction:column; gap:4px"><span class="detail-label">Note</span><span style="color:#4a4a6a;margin-top:4px">${note}</span></div>` : ''}
             </div>
-            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -529,7 +532,7 @@ export const emailTemplates = {
      * Weekly pipeline summary sent to managers every Monday morning.
      * @param {{ managerName, weekOf, totalArr, dealsOpen, dealsWonThisWeek, dealsLostThisWeek, arrWonThisWeek, topMovers: Array<{ name, account, fromStage, toStage, arr }> }} data
      */
-    weeklyManagerSummary({ managerName, weekOf, totalArr, dealsOpen, dealsWonThisWeek, dealsLostThisWeek, arrWonThisWeek, topMovers }) {
+    weeklyManagerSummary({ managerName, weekOf, totalArr, dealsOpen, dealsWonThisWeek, dealsLostThisWeek, arrWonThisWeek, topMovers, orgId }) {
         const subject = `Weekly pipeline summary — week of ${weekOf}`;
         const moverRows = (topMovers || []).map(d => `
             <div class="detail-row">
@@ -550,15 +553,15 @@ export const emailTemplates = {
                 <p style="font-weight:600; margin-bottom:8px;">Top movers this week</p>
                 <div class="detail-box">${moverRows}</div>
             ` : ''}
-            <a class="btn" href="${appUrl}?tab=reports">View Full Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'pipeline', org: orgId })}">View Full Pipeline →</a>
+        `, { org: orgId });
         return { subject, html };
     },
     /**
      * Rep alert: deal has gone silent (no activity in N days).
      * @param {{ repName, dealName, account, arr, stage, daysSilent, opportunityId }} data
      */
-    dealSilent({ repName, dealName, account, arr, stage, daysSilent, opportunityId }) {
+    dealSilent({ repName, dealName, account, arr, stage, daysSilent, opportunityId, orgId }) {
         const subject = `Action needed: "${dealName}" has been silent for ${daysSilent} days`;
         const html = layout(subject, `
             <h2>This deal needs your attention</h2>
@@ -572,8 +575,8 @@ export const emailTemplates = {
             <p style="color:#92400e;background:#fef3c7;padding:12px 16px;border-radius:6px;font-size:13px;">
                 <strong>Recommended action:</strong> Log a call or send a follow-up email today to keep this deal moving.
             </p>
-            <a class="btn" href="${appUrl}">Open Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -581,7 +584,7 @@ export const emailTemplates = {
      * Rep alert: deal stuck in stage longer than average.
      * @param {{ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId }} data
      */
-    dealStuck({ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId }) {
+    dealStuck({ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId, orgId }) {
         const subject = `"${dealName}" has been in ${stage} for ${daysInStage} days`;
         const html = layout(subject, `
             <h2>Deal may be stuck</h2>
@@ -595,8 +598,8 @@ export const emailTemplates = {
             <p style="color:#1e40af;background:#dbeafe;padding:12px 16px;border-radius:6px;font-size:13px;">
                 <strong>Recommended action:</strong> Schedule a next step, advance the stage, or mark as Closed Lost to keep your pipeline accurate.
             </p>
-            <a class="btn" href="${appUrl}">Open Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -604,7 +607,7 @@ export const emailTemplates = {
      * Rep alert: close date has lapsed.
      * @param {{ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId }} data
      */
-    closeDateLapsed({ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId }) {
+    closeDateLapsed({ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId, orgId }) {
         const subject = `Close date lapsed: "${dealName}" was due ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago`;
         const html = layout(subject, `
             <h2>Close date needs updating</h2>
@@ -615,8 +618,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
                 <div class="detail-row"><span class="detail-label">Was due</span><span>${originalCloseDate} (${daysLapsed}d ago)</span></div>
             </div>
-            <a class="btn" href="${appUrl}">Update Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">Update Close Date →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -624,7 +627,7 @@ export const emailTemplates = {
      * Manager alert: one of their reps has an at-risk deal.
      * @param {{ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId }} data
      */
-    managerDealAlert({ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId }) {
+    managerDealAlert({ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId, orgId }) {
         const alertLabels = { silent: 'Gone silent', stuck: 'Stuck in stage', lapsed: 'Close date lapsed' };
         const subject = `Pipeline alert: ${alertLabels[alertType] || alertType} — ${dealName} (${repName})`;
         const html = layout(subject, `
@@ -640,8 +643,8 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Detail</span><span>${detail}</span></div>
             </div>
             <p style="font-size:13px;color:#4a4a6a;">Consider reaching out to ${repName} to coach on next steps.</p>
-            <a class="btn" href="${appUrl}">View Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 
@@ -649,7 +652,7 @@ export const emailTemplates = {
      * Rep positive alert: high-velocity deal — keep momentum.
      * @param {{ repName, dealName, account, arr, stage, stageCount, daysSinceCreated, opportunityId }} data
      */
-    dealMomentum({ repName, dealName, account, arr, stage, stageCount, daysSinceCreated, opportunityId }) {
+    dealMomentum({ repName, dealName, account, arr, stage, stageCount, daysSinceCreated, opportunityId, orgId }) {
         const subject = `Great momentum: "${dealName}" is moving fast — keep it going!`;
         const html = layout(subject, `
             <h2>Keep this deal moving</h2>
@@ -663,8 +666,8 @@ export const emailTemplates = {
             <p style="color:#065f46;background:#d1fae5;padding:12px 16px;border-radius:6px;font-size:13px;">
                 <strong>Recommended action:</strong> Schedule the next step now to maintain velocity.
             </p>
-            <a class="btn" href="${appUrl}">Open Pipeline →</a>
-        `);
+            <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
+        `, { org: orgId });
         return { subject, html };
     },
 };

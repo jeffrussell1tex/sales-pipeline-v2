@@ -37,7 +37,7 @@ test('slackAlerts: agreementRenewal is an hourly type the company can switch off
 
 test('templates: the email and the Slack post exist and say when', () => {
     const e = code(read('netlify/functions/send-email.mjs'));
-    assert.ok(e.includes('agreementRenewal({ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired }) {'));
+    assert.ok(e.includes('agreementRenewal({ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired, orgId }) {'));   // its footer's preferences link names the org (§0.237)
     assert.ok(e.includes("const when = expired ? `expired ${n} day${n === 1 ? '' : 's'} ago`"));
     const k = code(read('netlify/functions/send-slack.mjs'));
     assert.ok(k.includes('agreementRenewal: ({ customerName, customerNumber, planName, expiry, daysLeft, expired }) => {'));

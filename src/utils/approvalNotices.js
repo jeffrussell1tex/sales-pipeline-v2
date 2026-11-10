@@ -16,6 +16,7 @@
 // empty, no one has an email — it falls to the next: the backup, then the org's
 // Admins (who may always approve), so a quote never waits unseen.
 import { canApproveQuotes, slaHours } from './quoteRules.js';
+import { appLink } from './appLinks.js';
 
 // The header menu's switches for these notices (AppHeader's DEFAULT_PREFS keys).
 // 'quoteRejected' is the stored key for "Quote sent back" — a key, not a word.
@@ -78,35 +79,7 @@ export function reminderDue({ status, submittedAt, remindedAt, sla, now = Date.n
     return now - sub >= hours * 3600000;
 }
 
-// The quote's link in the app (App.jsx reads ?quote= and opens it in the Quotes tab).
-export const quoteLink = (appUrl, quoteId) => `${String(appUrl || '').replace(/\/+$/, '')}/?quote=${encodeURIComponent(String(quoteId || ''))}`;
-
-// The app's side of that link. Opened signed out, it meets Clerk's <SignIn />, which
-// ends with a full page load of its after-sign-in URL — "/" here, as the app sets
-// none — and that load drops ?quote= (read in the clerk-js 5.128 the app loads:
-// RedirectUrls → navigate → window.location.href). So the id waits in the tab's
-// sessionStorage until the signed-in app has used it: App.jsx takes it once on
-// mount and drops it once the quotes are in. A link in the URL replaces a kept one;
-// an id that could not be a quote's ('qt_<uuid>', a seed's 'q_qa_02') is kept by
-// no one. Only an id waits, never a quote — whether anything opens is the server's
-// list's to say. These two touch the store they are handed (the tab's by default).
-export const QUOTE_LINK_KEY = 'accelerep.quoteLink';
-const QUOTE_LINK_ID = /^[A-Za-z0-9_-]{1,80}$/;
-const tabStore = () => { try { return globalThis.sessionStorage ?? null; } catch { return null; } };
-
-export function dropQuoteLink(store = tabStore()) {
-    try { store?.removeItem(QUOTE_LINK_KEY); } catch { /* storage unavailable */ }
-}
-
-export function takeQuoteLink(search, store = tabStore()) {
-    let id = null;
-    try { id = new URLSearchParams(typeof search === 'string' ? search : '').get('quote'); } catch { id = null; }
-    if (id !== null) {
-        if (!QUOTE_LINK_ID.test(id)) { dropQuoteLink(store); return null; }
-        try { store?.setItem(QUOTE_LINK_KEY, id); } catch { /* storage unavailable */ }
-        return id;
-    }
-    let kept = null;
-    try { kept = store?.getItem(QUOTE_LINK_KEY) ?? null; } catch { kept = null; }
-    return kept && QUOTE_LINK_ID.test(kept) ? kept : null;
-}
+// The quote's link in the app: one of the message links (state §0.237, src/utils/appLinks.js) — the app opens it
+// in the Quotes tab, switching to the quote's org where the member belongs to it. App.jsx reads it with the others
+// (takeAppLink — it survives the sign-in screen as the quote link always has, §0.158); an older ?quote= link is read too.
+export const quoteLink = (appUrl, quoteId, orgId) => appLink(appUrl, { kind: 'quote', id: String(quoteId ?? ''), org: orgId });

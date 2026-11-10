@@ -21,7 +21,7 @@ export async function sendApprovalNotices({ orgId, kind, quote, tier, actorId, a
     const roster = await db.select().from(users).where(eq(users.orgId, orgId));
     const [deal] = await db.select({ account: opportunities.account, opportunityName: opportunities.opportunityName, ownerId: opportunities.ownerId })
         .from(opportunities).where(and(eq(opportunities.id, quote.opportunityId), eq(opportunities.orgId, orgId))).limit(1);
-    const common = { quoteNumber: quote.quoteNumber, account: deal?.account || '', dealName: deal?.opportunityName || '', url: quoteLink(appUrl(), quote.id) };
+    const common = { orgId, quoteNumber: quote.quoteNumber, account: deal?.account || '', dealName: deal?.opportunityName || '', url: quoteLink(appUrl(), quote.id, orgId) };
 
     let sends = [];
     if (kind === 'submitted') {

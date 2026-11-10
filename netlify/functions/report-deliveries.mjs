@@ -109,7 +109,7 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
         try {
             const tpl = emailTemplates.reportDelivery({
                 name: row.name, source: row.source, period: periodLabel(period, from, to), ownerName: owner.name,
-                tableHtml: deliveryHtmlTable(table), count: table.count, url, cadence: d.cadence, trigger,
+                tableHtml: deliveryHtmlTable(table), count: table.count, url, cadence: d.cadence, trigger, orgId: row.orgId,
             });
             await sendEmail({ to: r.email, ...tpl });
             sent.email.push(r.email);

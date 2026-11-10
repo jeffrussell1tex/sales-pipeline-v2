@@ -221,6 +221,8 @@ export const runTaskReminders = async ({ now = new Date() } = {}) => {
                         taskTitle: task.title,
                         dueDate:   task.dueDate,
                         dueTime:   task.dueTime,
+                        taskId:    task.id,                       // the text opens the task, in its org (state §0.237)
+                        orgId:     task.orgId || user.orgId,
                     });
                     await sendSms({ to: normalizedPhone, body });
                     await logReminderSent(task.orgId || user.orgId, user.name, task);

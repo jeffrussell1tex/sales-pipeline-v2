@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b119** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b120** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4647,3 +4647,15 @@ through `dbFetch`.
 6. **A delete's Undo keeps the owner the record was stored with, by id** — a member of THIS org, else none and the owner's name with it; never the caller, never a name looked up again (`restoredOwner`; the account's since §0.198). For any role that may delete the record; a forged mark gains nothing a create naming any member does not already give.
 7. **A refusal answers what is stored**, and the screen shows it — a note deleted since, another's note — never its own guess.
 8. **Prove a race by making it happen.** An integration test runs the writers at once and asserts both landed (tests/integration/deal-data.itest.mjs: two posts, six moves); proven by hand to fail with the compare removed and with the append read-then-written (two moves at once did not overlap — six did).
+
+## 18b120. A Link In A Message Opens What The Message Is About — One Link Shape, One Reader, The Record's Org Named (hard rule)
+
+**Origin (§0.237, 9 Nov 2026 — OPEN_ITEMS §1 item 5, §4.5; docs/design/email-links, Jeff's four answers, each the Recommended).** Of every link into the app the members' messages carried, one was read (an approval email's `?quote=`, §0.158). "View Deal →", "View All Tasks →", "View Full Pipeline →" and every "Manage notification preferences" opened Home; deal alerts, texts and Slack buttons were handed their deal and linked the bare app; no link named the org its record lives in, so a member of two orgs landed in the wrong one.
+
+1. **One builder, one reader.** A message's link into the app is built by `appLink` (`src/utils/appLinks.js`) and read by App.jsx's one reader (`takeAppLink`) — never written by hand in a template (THE GUARD, tests/app-links.test.mjs: no `?deal=`, `?tab=`, `?quote=` or `/settings` in netlify/functions). A new place a link can open is a new kind, in both.
+2. **A message about one record links that record, naming its org.** A template handed a deal's or a task's id takes the org too and links them (THE GUARD reads every email, text and Slack template). A place (the Tasks tab, the Pipeline tab, the Notifications tab) is a kind with no id.
+3. **The member's own reads decide what opens.** The reader looks the record up in the server's own list for this member, after the org check — never the id alone, never another record. What the list lacks says so (a notice), never a blank Home.
+4. **A link to another of the member's orgs switches to it**, once, by Clerk's own membership list; an org they are not in is a notice, never entered.
+5. **A link survives the sign-in screen** (the tab's sessionStorage, taken once, dropped once used, replaced by a newer link; one that does not read drops the kept one) and **leaves the address bar once used**, its own parameters alone.
+6. **Links already in inboxes keep working**: the reader reads the shapes it replaced.
+7. **A message to a member closes with the org's preferences link** — the layout takes the event's org (`layout(title, body, { org })`), so its Notifications tab is the org's whose event it was.

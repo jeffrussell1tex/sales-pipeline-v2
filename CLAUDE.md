@@ -175,6 +175,12 @@ One commit per verified batch; doc patch in the same commit.
   history in the write (`_stage.mjs` stageMoveOf); a deal's save sends
   `dealBody(...)` (THE GUARD, tests/deal-data.test.mjs). A delete's Undo
   keeps the stored owner by id (`restoredOwner`), never the caller.
+- A link a message to a member carries is built by `appLink` and read by
+  App.jsx's one reader (`takeAppLink`, src/utils/appLinks.js, guide §18b120):
+  a record's link names it and its org; the reader opens it from the
+  member's own list, switching to the org where they belong, and says what
+  they cannot open; never `?deal=`, `?tab=` or `/settings` by hand (THE
+  GUARD, tests/app-links.test.mjs).
 - A Sales Rep's quota is a plan per fiscal year (`profile.quotaPlans`):
   `PUT /users?quotas=true` is its one writer; every other save keeps it
   (`storedQuota`, and `keepQuotaPlans` on any write of a member's whole

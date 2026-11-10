@@ -76,6 +76,7 @@ export default function AppHeader({
         quickLogOpen, setQuickLogOpen,
         calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
         calConnectResult, setCalConnectResult,
+        profileTabAsk, setProfileTabAsk,
         activeOrgId,
         escapeBlocked,
         anyLayerOpen,
@@ -276,6 +277,10 @@ export default function AppHeader({
     // Landing back from a calendar Connect that started on Home or in this panel
     // (state §0.97, item 30): App.jsx opens the panel; this selects the Calendar
     // tab so the outcome line is in view, and clears it once the panel closes.
+    // A message's "Manage notification preferences" (state §0.237): App opens the panel and asks for its tab.
+    useEffect(() => {
+        if (showProfilePanel && profileTabAsk) { setProfilePanelTab(profileTabAsk); setProfileTabAsk(null); }
+    }, [showProfilePanel, profileTabAsk, setProfileTabAsk]);
     const returnedHere = calConnectResult && (calConnectResult.from === 'profile' || calConnectResult.from === 'home');
     useEffect(() => {
         if (returnedHere && showProfilePanel) setProfilePanelTab('calendar');

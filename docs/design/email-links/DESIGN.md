@@ -1,4 +1,4 @@
-<!-- Email links (OPEN_ITEMS §1 item 5, §4.5): the design, 9 Nov 2026, over 28a9ebf. Answered 9 Nov — each of Q1-Q4 the Recommended (ANSWERS.md beside this file). Not built. -->
+<!-- Email links (OPEN_ITEMS §1 item 5, §4.5): the design, 9 Nov 2026, over 28a9ebf. Answered 9 Nov — each of Q1-Q4 the Recommended (ANSWERS.md beside this file). Built 9 Nov (state §0.237; guide §18b120); its browser check PASSED as Karen; NOT committed; harness deferred. -->
 
 # Design: a link in a message to a member opens what the message is about
 

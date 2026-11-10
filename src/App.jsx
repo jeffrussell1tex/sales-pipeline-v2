@@ -37,7 +37,8 @@ import { useMerge } from './hooks/useMerge';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { readCalendarReturn } from './utils/calendarReturn.js';
-import { takeQuoteLink, dropQuoteLink } from './utils/approvalNotices.js';
+// A message's link into the app — a deal, a task, a quote, a tab, the Notifications tab (state §0.237).
+import { takeAppLink, dropAppLink, withoutAppLink, APP_LINK_WORDS } from './utils/appLinks.js';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
@@ -806,6 +807,8 @@ dbFetch('/.netlify/functions/users?me=true')
     // caller's role in this org (roleKnown — the profile's, §0.163): the surface
     // it opens is an Admin's.
     const calReturnHandled = useRef(false);
+    // The profile panel's tab a message's link asks for (state §0.237): AppHeader selects it once the panel opens.
+    const [profileTabAsk, setProfileTabAsk] = useState(null);
     useEffect(() => {
         if (!clerkUser || !roleKnown || calReturnHandled.current) return;
         const r = readCalendarReturn(window.location.search);
@@ -972,28 +975,72 @@ dbFetch('/.netlify/functions/users?me=true')
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useQuotes();
 
-    // An approval email's link to a quote (§0.158): ?quote=<id> opens it in the Quotes
-    // tab once the quotes have loaded — the deal's configurator, as "Quotes" on a deal
-    // does. Read once; the parameter leaves the URL so a refresh does not reopen it. A
-    // quote this user cannot see — another org's, another rep's — is not in the list,
-    // and nothing opens. (The older emails' ?deal= links are read by nothing — §9.)
-    // Opened signed out, the link outlives the sign-in screen's reload of "/" in the
-    // tab's sessionStorage (takeQuoteLink) — taken once here, dropped once used.
-    const quoteLinkRef = useRef(undefined);
-    if (quoteLinkRef.current === undefined) quoteLinkRef.current = takeQuoteLink(window.location.search);
+    // A message's link into the app (state §0.237; src/utils/appLinks.js — Jeff's Q1-Q4): a deal opens its window,
+    // a task its rail, a quote its deal's configurator in Quotes (§0.158), a task digest the Tasks tab, the
+    // pipeline summary the Pipeline tab, a "Manage notification preferences" the profile panel's Notifications tab.
+    // Read once on mount; opened signed out, it outlives the sign-in screen's reload of "/" in the tab's
+    // sessionStorage (takeAppLink), and it leaves the URL once used, so a refresh does not reopen it. It waits for
+    // the profile in an org (roleKnown). A link naming another of the member's orgs switches to it first (Q2); one
+    // naming an org they're not in, or a record their list does not hold — another rep's, a deleted one — says so
+    // (Q3): the server's own list decides, never a guess. Before §0.237 only ?quote= was read: "View Deal →",
+    // "View All Tasks →", "View Full Pipeline →" and every preferences link opened Home.
+    const appLinkRef = useRef(undefined);
+    if (appLinkRef.current === undefined) appLinkRef.current = takeAppLink(window.location.search);
+    const appLinkSwitchRef = useRef(null);   // the org this link switched to — once
+    const doneWithAppLink = () => {
+        appLinkRef.current = null;
+        dropAppLink();
+        window.history.replaceState(null, '', withoutAppLink(window.location.href));
+    };
+    // A record a link names, from the server's own list for this member — or null when the list does not hold it.
+    const linkedRecord = async (fn, key, id) => {
+        const res = await dbFetch(`/.netlify/functions/${fn}`);
+        if (!res.ok) return null;
+        const body = await res.json().catch(() => null);
+        const list = Array.isArray(body) ? body : (body?.[key] || []);
+        return list.find(r => r && r.id === id) || null;
+    };
     useEffect(() => {
-        const id = quoteLinkRef.current;
-        if (!id || !(quotes || []).length) return;
-        quoteLinkRef.current = null;
-        dropQuoteLink();
-        const cleaned = new URL(window.location.href);
-        cleaned.searchParams.delete('quote');   // only the quote's parameter; any other stays
-        window.history.replaceState(null, '', cleaned.pathname + cleaned.search);
-        const q = quotes.find(x => x.id === id);
-        if (!q) return;
-        setQuotesDeepLinkOppId(q.opportunityId);
-        setActiveTab('quotes');
-    }, [quotes]);   // eslint-disable-line react-hooks/exhaustive-deps
+        const link = appLinkRef.current;
+        if (!link || !clerkUser || !organization?.id || !roleKnown) return;
+        if (link.org && link.org !== organization.id) {
+            if (appLinkSwitchRef.current === link.org) return;   // switching: this runs again in that org
+            const member = (userMemberships?.data || []).some(m => m.organization?.id === link.org);
+            if (!orgListLoaded) return;
+            if (!member) { doneWithAppLink(); offerUndo({ notice: APP_LINK_WORDS.org }); return; }
+            appLinkSwitchRef.current = link.org;
+            setActive({ organization: link.org });
+            return;
+        }
+        doneWithAppLink();
+        if (link.kind === 'tasks') { setActiveTab('tasks'); return; }
+        if (link.kind === 'pipeline') { setActiveTab('pipeline'); return; }
+        if (link.kind === 'notifications') { setProfileTabAsk('notifications'); setShowProfilePanel(true); return; }
+        const askedOrg = requestOrg();   // an answer for an org switched away from opens nothing (state §0.175)
+        (async () => {
+            if (link.kind === 'deal') {
+                const deal = await linkedRecord('opportunities', 'opportunities', link.id);
+                if (!stillOrg(askedOrg)) return;
+                if (!deal) { offerUndo({ notice: APP_LINK_WORDS.deal }); return; }
+                setActiveTab('pipeline');
+                setEditingOpp(_opportunitiesRef.current.find(o => o.id === deal.id) || deal);
+                setShowModal(true);
+            } else if (link.kind === 'task') {
+                const task = await linkedRecord('tasks', 'tasks', link.id);
+                if (!stillOrg(askedOrg)) return;
+                if (!task) { offerUndo({ notice: APP_LINK_WORDS.task }); return; }
+                setTasks(prev => (prev.some(t => t.id === task.id) ? prev : [...prev, task]));   // the rail finds it before the list's own load lands
+                setTaskRailId(task.id);
+                setTaskRailMode('view');
+            } else if (link.kind === 'quote') {
+                const q = await linkedRecord('quotes', 'quotes', link.id);
+                if (!stillOrg(askedOrg)) return;
+                if (!q) { offerUndo({ notice: APP_LINK_WORDS.quote }); return; }
+                setQuotesDeepLinkOppId(q.opportunityId);
+                setActiveTab('quotes');
+            }
+        })().catch(() => { if (stillOrg(askedOrg)) offerUndo({ notice: APP_LINK_WORDS[link.kind] || APP_LINK_WORDS.deal }); });
+    }, [clerkUser, organization?.id, roleKnown, orgListLoaded]);   // eslint-disable-line react-hooks/exhaustive-deps
 
 
     const toggleAccountExpanded = (accountId) => {
@@ -1877,6 +1924,7 @@ dbFetch('/.netlify/functions/users?me=true')
         meetingPrepOppId, setMeetingPrepOppId,
         calendarEvents, setCalendarEvents, calendarConnected, setCalendarConnected, calendarLoading, setCalendarLoading, calendarError, setCalendarError,
         calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,
+        profileTabAsk, setProfileTabAsk,
         fetchCalendarEvents,
         // Navigation
         activeTab, setActiveTab: navigateTo,   // the guarded switch (state §0.170)

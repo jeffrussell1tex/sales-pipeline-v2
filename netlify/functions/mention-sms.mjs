@@ -20,6 +20,8 @@
  */
 
 import { db } from '../../db/index.js';
+// The text's link opens the record, in its org (state §0.237).
+import { appLink } from '../../src/utils/appLinks.js';
 import { users, opportunities, tasks } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
@@ -112,16 +114,16 @@ export const handler = async (event) => {
         let body;
         switch (type) {
             case 'dealAssigned':
-                body = smsTemplates.dealAssigned({ repName, dealName, account: record.account || '', assignedBy: by });
+                body = smsTemplates.dealAssigned({ repName, dealName, account: record.account || '', assignedBy: by, opportunityId: record.id, orgId });
                 break;
             case 'stageChanged':
-                body = smsTemplates.stageChanged({ dealName, fromStage: move.fromStage, toStage: move.toStage, changedBy: by });
+                body = smsTemplates.stageChanged({ dealName, fromStage: move.fromStage, toStage: move.toStage, changedBy: by, opportunityId: record.id, orgId });
                 break;
             case 'dealClosedWon':
                 body = smsTemplates.dealClosedWon({ repName, dealName, account: record.account || '', arr: Number(record.arr) || 0 });
                 break;
             case 'taskAssigned':
-                body = `Accelerep: ${by} assigned you a task — "${record.title || 'Untitled'}"\nView: ${process.env.APP_URL || 'https://salespipelinetracker.com'}?tab=tasks`;
+                body = `Accelerep: ${by} assigned you a task — "${record.title || 'Untitled'}"\nView: ${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'task', id: record.id, org: orgId })}`;
                 break;
         }
 

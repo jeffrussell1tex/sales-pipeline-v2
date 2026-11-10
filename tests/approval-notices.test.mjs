@@ -13,7 +13,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     APPROVAL_NOTICE_KEYS, wantsNotice, reachable, waitingRecipients, reminderRecipients, reminderDue, quoteLink,
-    QUOTE_LINK_KEY, takeQuoteLink, dropQuoteLink,
 } from '../src/utils/approvalNotices.js';
 import { slaHours, cleanApprovalTiers, DEFAULT_QUOTE_APPROVAL_TIERS } from '../src/utils/quoteRules.js';
 
@@ -85,33 +84,13 @@ test('a tier\'s SLA reads as hours — "8h", "24 h", "2d" — and is saved that 
     const [rep, mgr] = DEFAULT_QUOTE_APPROVAL_TIERS;
     assert.equal(reminderDue({ status: 'Pending Approval', submittedAt: NOW - 9 * H, sla: mgr.sla, now: NOW }), true, 'the default Mgr band: due after 8h');
     assert.equal(reminderDue({ status: 'Pending Approval', submittedAt: NOW - 99 * H, sla: rep.sla, now: NOW }), false, 'the rep\'s band needs no one');
-    assert.equal(quoteLink('https://accelerep.netlify.app/', 'q_a b'), 'https://accelerep.netlify.app/?quote=q_a%20b');
+    // A message link since §0.237 (src/utils/appLinks.js; its reader's tests are tests/app-links.test.mjs).
+    assert.equal(quoteLink('https://accelerep.netlify.app/', 'qt_6f1c-22ab', 'org_A1'), 'https://accelerep.netlify.app/?open=quote&id=qt_6f1c-22ab&org=org_A1');
+    assert.equal(quoteLink('https://accelerep.netlify.app/', 'q_a b'), 'https://accelerep.netlify.app', 'an id that could not be a quote\'s: no link to it');
 });
 
-// A tab's sessionStorage, and one a privacy setting has shut.
-const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); } }; };
-const deadStore = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('QuotaExceededError'); }, removeItem() { throw new Error('SecurityError'); } };
-
-test('the quote link outlives the sign-in screen: kept in the tab through Clerk\'s reload of "/", used once, replaced by a new link', () => {
-    const tab = memStore();
-    assert.equal(takeQuoteLink('?quote=qt_6f1c-22ab', tab), 'qt_6f1c-22ab', 'opened signed out: read from the URL…');
-    assert.equal(tab.getItem(QUOTE_LINK_KEY), 'qt_6f1c-22ab', '…and kept');
-    assert.equal(takeQuoteLink('', tab), 'qt_6f1c-22ab', 'after sign-in the URL is "/": the kept id answers');
-    assert.equal(takeQuoteLink('?calconnect=success&from=home', tab), 'qt_6f1c-22ab', 'another parameter leaves it be');
-    dropQuoteLink(tab);
-    assert.equal(takeQuoteLink('', tab), null, 'used: dropped — a later visit opens nothing');
-    takeQuoteLink('?quote=q_qa_02', tab);
-    assert.equal(takeQuoteLink('?quote=q_qa_03', tab), 'q_qa_03', 'a new link replaces a kept one');
-    assert.equal(takeQuoteLink('?quote=%3Cimg%20src%3Dx%3E', tab), null, 'an id that could not be a quote\'s is refused…');
-    assert.equal(takeQuoteLink('', tab), null, '…and the kept one goes with it');
-    assert.equal(takeQuoteLink(`?quote=${'a'.repeat(81)}`, tab), null);
-    assert.equal(takeQuoteLink('?quote=', tab), null, 'an empty link');
-    assert.equal(takeQuoteLink('?quote=qt_9', null), 'qt_9', 'no storage: the URL still opens it');
-    assert.equal(takeQuoteLink('?quote=qt_9', deadStore), 'qt_9', 'storage that throws: the same');
-    assert.equal(takeQuoteLink('', deadStore), null);
-    dropQuoteLink(deadStore);
-    assert.equal(takeQuoteLink(undefined, tab), null);
-});
+// The quote link's reader is the message links' reader since §0.237: its tests (kept in the tab across the
+// sign-in screen, used once, replaced by a new link, a bad id refused with the kept one) are tests/app-links.test.mjs.
 
 // ── the wiring, by scan ──────────────────────────────────────────────────────
 
@@ -163,8 +142,8 @@ test('the templates escape what a person typed; the header menu: instant, "Quote
     assert.ok(!/alertType === 'quote(Approved|Rejected)'[^\n]*\) return null;/.test(h), 'every role has the approved / sent-back switches — any role may submit a quote');
     assert.ok(h.includes("{alertType === 'quoteApproved' && <div style=") && !h.includes("(alertType === 'quotePending' && (isManager || isAdmin))"), 'one "Quote alerts" heading, above every role\'s first quote switch');
     const a = code(read('src/App.jsx'));
-    assert.ok(a.includes('if (quoteLinkRef.current === undefined) quoteLinkRef.current = takeQuoteLink(window.location.search);') && a.includes("setActiveTab('quotes');"), 'taken once, from the URL or the tab');
-    assert.ok(a.includes('        quoteLinkRef.current = null;\n        dropQuoteLink();'), 'dropped once used');
+    assert.ok(a.includes('if (appLinkRef.current === undefined) appLinkRef.current = takeAppLink(window.location.search);') && a.includes("setActiveTab('quotes');"), 'taken once, from the URL or the tab (§0.237: the message links\' reader)');
+    assert.ok(a.includes('        appLinkRef.current = null;\n        dropAppLink();'), 'dropped once used');
     const t = code(read('src/Tabs/QuotesTab.jsx'));
     assert.ok(t.includes("'quote.reminded':  ['reminded',  'sent a reminder'],"), 'a reminder in the quote\'s history');
     const p = code(read('src/Tabs/settings/quoting/ApprovalTiersDetail.jsx'));

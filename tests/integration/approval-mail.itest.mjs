@@ -168,7 +168,7 @@ test('SUBMIT: by person, the named approver — not the backup, not the submitte
     assert.equal(d.account, 'Account P');
     assert.equal(d.tierLabel, 'Mgr approval');
     assert.equal(d.discountPct, 15);
-    assert.ok(d.url.endsWith(`/?quote=${Q.pSub}`), 'the link opens the quote');
+    assert.ok(d.url.endsWith(`/?open=quote&id=${Q.pSub}&org=${ORG.P}`), 'the link opens the quote, in its org (a message link since §0.237)');
 });
 
 test('SUBMIT: by role, every holder whose switch is on; an org that has not chosen, every Manager — and a failed send never undoes the save', async () => {

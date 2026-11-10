@@ -243,14 +243,14 @@ test('the mention text goes to the record\'s OWNER by id — not their namesake 
     assert.equal(texts.length, 1);
     assert.equal(texts[0].to, '+15550000001', 'the deal\'s owner, by id — not the member who bears the name the deal carries');
     const sent = JSON.parse(texts[0].body.replace(/^ASSIGNED /, ''));
-    assert.deepEqual(sent, { repName: 'Patricia Close', dealName: 'Pat Renewal', account: 'Close Co', assignedBy: 'Ada Close' }, 'every word the server\'s — the owner\'s roster name');
+    assert.deepEqual(sent, { repName: 'Patricia Close', dealName: 'Pat Renewal', account: 'Close Co', assignedBy: 'Ada Close', opportunityId: 'opp_itest_aclose_pat', orgId: 'itest_aclose_A' }, 'every word the server\'s — the owner\'s roster name; the deal and its org for the text\'s link (§0.237)');
 });
 
 test('the mention text: a stage change is the deal\'s own last move; a win must be a won deal; a task goes to its owner', async () => {
     texts.length = 0;
     const moved = await call('mention-sms', WHO.admin, 'POST', { type: 'stageChanged', recordId: 'opp_itest_aclose_pat' });
     assert.equal(moved.status, 200);
-    assert.deepEqual(JSON.parse(texts[0].body.replace(/^MOVED /, '')), { dealName: 'Pat Renewal', fromStage: 'Discovery', toStage: 'Proposal', changedBy: 'Ada Close' });
+    assert.deepEqual(JSON.parse(texts[0].body.replace(/^MOVED /, '')), { dealName: 'Pat Renewal', fromStage: 'Discovery', toStage: 'Proposal', changedBy: 'Ada Close', opportunityId: 'opp_itest_aclose_pat', orgId: 'itest_aclose_A' });
     const notWon = await call('mention-sms', WHO.admin, 'POST', { type: 'dealClosedWon', recordId: 'opp_itest_aclose_pat' });
     assert.equal(notWon.body.skipped, 'not_won', 'a deal in Proposal is no win to announce');
     const stale = await call('mention-sms', WHO.admin, 'POST', { type: 'stageChanged', recordId: 'opp_itest_aclose_stale' });
@@ -259,6 +259,7 @@ test('the mention text: a stage change is the deal\'s own last move; a win must 
     assert.equal(task.status, 200);
     assert.equal(texts.at(-1).to, '+15550000001');
     assert.ok(texts.at(-1).body.includes('Patricia Close assigned you a task — "Call the buyer"'), 'signed with the caller\'s roster name, the stored title');
+    assert.ok(texts.at(-1).body.includes('/?open=task&id=task_itest_aclose_pat&org=itest_aclose_A'), 'its link opens the task, in its org (§0.237)');
     assert.equal(texts.length, 2);
 });
 

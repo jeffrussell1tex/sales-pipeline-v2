@@ -488,7 +488,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    the deal texts linking the bare app, all opening Home; only `?quote=` is
    read. Q1 the whole class, one link shape and one reader; Q2 a link to
    another of the member's orgs switches, then opens; Q3 a record they can't
-   open says so; Q4 the weekly summary opens the Pipeline tab. Not built.
+   open says so; Q4 the weekly summary opens the Pipeline tab. **Built 9 Nov
+   (state §0.237; guide §18b120), its browser check PASSED as Karen — NOT
+   committed; harness deferred**: one link shape (`appLink`) and one reader;
+   every deal, task and quote link names its org; a preferences link opens
+   the Notifications tab. Strike this once it ships.
 
 ---
 
@@ -3018,12 +3022,20 @@ to add meetings. Nothing in the app adds a meeting to Google:
   reload pops everything still due again, and an org switch forgets them
   (§0.200 keeps it so — Jeff: "Forget on a switch" for the reminder's
   snooze and queue). Read 13 Oct.
-- **"View Deal →" in seven older email templates opens Home.** Nothing reads
-  `?deal=`. It wants App's `?quote=` pattern, surviving sign-in. §0.158;
-  re-read 7 Oct.
-- **The email footer's "Manage notification preferences" opens Home.** The
-  switches live in the profile panel's Notifications tab. §0.158; re-read
-  7 Oct.
+- **The members' email templates write names into their HTML unescaped**
+  (§0.237, read in send-email.mjs, 9 Nov): `${dealName}`, `${account}`, a
+  comment's text and the like go into the HTML as typed; the quote
+  templates escape theirs (`escHtml`). A deal named with markup renders it
+  in a member's inbox. Recommended: escape every field, as the quote
+  templates do.
+- **A report delivery's "Open in Accelerep →" opens the front page, not the
+  report** (§0.237's map): it names no saved report, and the app has no
+  reader for one. Wants a `report` kind (src/utils/appLinks.js) and the
+  Reports tab opening a saved report.
+- **A message link's notice is the five-second toast** (§0.237's browser
+  check): "That deal isn't available to you" shows at load and goes after
+  five seconds, often under the overdue-task reminder — a member who looks
+  away misses it.
 - **The Notifications tab files "Maintenance agreement expiring (Dispatch)"
   under "Quote alerts".** §0.158.
 - **The Monday team digest's Attainment reads "—" for every rep.**
