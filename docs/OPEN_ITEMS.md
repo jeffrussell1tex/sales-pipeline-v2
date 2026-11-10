@@ -481,6 +481,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    this once it ships.
 5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
+   **Designed and answered 9 Nov** (docs/design/email-links/DESIGN.md and
+   ANSWERS.md — Jeff's four answers, each the Recommended): the map found
+   the class wider — `?tab=tasks` (two emails, four texts), `?tab=reports`,
+   the digests' and AI alert's `/settings` footers, and five deal emails and
+   the deal texts linking the bare app, all opening Home; only `?quote=` is
+   read. Q1 the whole class, one link shape and one reader; Q2 a link to
+   another of the member's orgs switches, then opens; Q3 a record they can't
+   open says so; Q4 the weekly summary opens the Pipeline tab. Not built.
 
 ---
 
