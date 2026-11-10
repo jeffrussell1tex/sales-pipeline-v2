@@ -1238,7 +1238,9 @@ docs/design/ai-scoring/ANSWERS.md):**
    to" (a role check when scoring, small). Remove the budget until a per-org
    usage counter backs it.
 3. **A history of close-date changes.** Recommended: yes. A new deal column,
-   additive and nullable, both databases, with Jeff's go.
+   additive and nullable, both databases, with Jeff's go. **Designed and
+   answered 10 Nov** (docs/design/close-date-history/DESIGN.md and
+   ANSWERS.md — Q1-Q4 each the Recommended, Q4 all three).
 4. **Which models to offer.** Recommended: the current Haiku, Sonnet and Opus,
    checked against what the workspace's key can call before they are listed.
 
