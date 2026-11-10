@@ -1,12 +1,14 @@
 // settings/data/FeaturesDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 // The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
 import { putSettings } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { PANEL_CHANGED, PANEL_CHANGED_KEY } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
+// The AI models an Admin may choose and who may ask Claude (state §0.238); the panel asks which the key can call.
+import { AI_MODELS, AI_ACCESS, modelOf, fallbackOf, aiAccessOf, modelLabel, aiSettingsToSave } from '../../../utils/aiModels.js';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
 const FLAG_DEFS = [
@@ -30,59 +32,8 @@ const FLAG_DEFS = [
     { id:'workflows-loops',   name:'Workflow loops',         desc:'For-each automation steps over record collections.',                                         beta:true,  new:false, live:false },
 ];
 
-const ResetAiModal = ({ onClose }) => {
-    const [confirm, setConfirm] = useState('');
-    const [notify, setNotify]   = useState(true);
-    const ready = confirm.trim().toUpperCase() === 'RESET';
-    // Escape closes it as Cancel does (state §0.232) — the confirmation word is not typed work.
-    useLocalLayer(true, { onClose });
-    return (
-        <DataModal width={540} onClose={onClose}>
-            <DataModalHead onClose={onClose}
-                title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
-                    Reset AI training data?
-                </span>}
-                sub="Permanently delete this workspace's prompts and outputs from the AI provider."/>
-            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
-                <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
-                    {[
-                        { label:'Workspace',       value:'accelerep · acme', mono:true },
-                        { label:'Records to purge',value:'~84,200 prompts / outputs', bold:true },
-                        { label:'Provider',        value:'Anthropic · Claude Sonnet 4.5', mono:true },
-                        { label:'SLA',             value:'Up to 30 days to propagate' },
-                    ].map((r,i) => (
-                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
-                            <span style={{ color:T.inkMid }}>{r.label}</span>
-                            <span style={{ fontFamily:r.mono?'ui-monospace,Menlo,monospace':'inherit', fontWeight:r.bold?600:400, color:T.ink }}>{r.value}</span>
-                        </div>
-                    ))}
-                </div>
-                <div style={{ padding:'10px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:3, marginBottom:14, fontSize:12 }}>
-                    <span style={{ fontWeight:700, color:T.danger }}>This cannot be undone.</span>
-                    <span style={{ color:T.inkMid }}> Past AI suggestions referenced from records will continue to display, but the underlying training corpus will be erased.</span>
-                </div>
-                <div style={{ marginBottom:12 }}>
-                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
-                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESET</b> to confirm
-                    </label>
-                    <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESET"
-                        style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
-                </div>
-                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
-                    <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                        {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
-                    </span>
-                    Open a tracking ticket and email the workspace owner
-                </label>
-            </div>
-            <DataModalFoot>
-                <DataBtn label="Cancel" onClick={onClose}/>
-                <DataBtn label="Request reset" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
-            </DataModalFoot>
-        </DataModal>
-    );
-};
+// The "Reset AI training data?" dialog came out (state §0.238 — Jeff, 9 Nov, Q4): its facts were invented ("Claude
+// Sonnet 4.5", "~84,200 prompts") and "Request reset" only closed it (guide §18b64.1).
 
 const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>{children}</div>);
 
@@ -93,7 +44,6 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     const [loading,    setLoading]    = React.useState(true);
     const [saving,     setSaving]     = React.useState(false);
     const [dirty,      setDirty]      = React.useState(false);
-    const [showReset,  setShowReset]  = React.useState(false);
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
     // BYOK key input. This is WRITE-ONLY: the server never returns the plaintext
@@ -115,21 +65,13 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
+    // A workspace that never saved its AI settings (state §0.238): the list's defaults, all roles, no own key.
     const AI_DEFAULTS = {
-        model: 'claude-sonnet-4-6',
-        fallback: 'claude-haiku-4-5-20251001',
-        region: 'US · us-east-2',
-        tokenBudget: 25000000,
-        trainingOptIn: false,
-        zeroRetention: true,
-        piiRedaction: true,
+        model: modelOf(null),
+        fallback: fallbackOf(null),
         byok: false,
         byokProvider: 'Anthropic',   // provider LABEL — never the key itself
-        dpaSignedAt: '',
-        auditLogging: 'All AI requests · 13mo retention',
-        blockList: '',
-        budgetExceed: 'Throttle to 1 req/s',
-        availableTo: 'All roles',
+        availableTo: aiAccessOf(null).value,
     };
     React.useEffect(() => {
         if (!settings) return;
@@ -172,12 +114,14 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
         setError(null);
         // Declared out here so the catch knows whether a typed key went with the save (J-B12).
         let payload;
+        // The model, fallback and "Available to" as they run; the budget and the mock controls' fields left out (state §0.238).
+        const aiSent = aiSettingsToSave(aiSettings);
         try {
             // Only include anthropicApiKey when the admin set or cleared it.
             // Omitting the field entirely tells the server to preserve the
             // stored key; sending null clears it.
             payload = {
-                aiSettings,
+                aiSettings: aiSent,
                 featureFlags: flags,
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
@@ -196,7 +140,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
             setSettings(prev => ({
                 ...prev,
-                aiSettings,
+                aiSettings: aiSent,
                 featureFlags: flags,
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
@@ -257,7 +201,26 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     const keyIsSet = keyAction === 'clear' ? false : (settings?.anthropicApiKeySet === true || keyAction === 'set');
     const keyLast4 = settings?.anthropicApiKeyLast4 || null;
 
-    const aiRegion = aiSettings.region || 'US · us-east-2';
+    // Which of the models the key in use can call (state §0.238 — Jeff's decision 4): asked as the panel opens, by this
+    // org's key on the server (ai-models.mjs, an Admin's). A model the key cannot call is shown and cannot be picked.
+    const [keyCheck, setKeyCheck] = React.useState(null);   // null until answered; the server's answer after
+    React.useEffect(() => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        dbFetch('/.netlify/functions/ai-models')
+            .then(res => (res.ok ? res.json() : null))
+            .then(data => { if (stillOrg(askedOrg) && data) setKeyCheck(data); })
+            .catch(() => {});
+        // Asked again when a save installs, replaces or removes the workspace's own key (the mirror below sets these).
+    }, [settings?.anthropicApiKeySet, settings?.anthropicApiKeyLast4]);
+    const uncallable = (id) => keyCheck?.checked === true && Array.isArray(keyCheck.callable) && !keyCheck.callable.includes(id);
+    const keyWho = keyCheck?.usingOrgKey ? 'your key' : 'the site key';
+    const notCallable = AI_MODELS.filter(m => uncallable(m.id)).map(m => m.label);
+    const keyCheckWords = !keyCheck ? ''
+        : keyCheck.checked ? (notCallable.length ? `Checked against ${keyWho}: ${notCallable.join(' and ')} ${notCallable.length > 1 ? 'are' : 'is'} not available to it.` : `Checked against ${keyWho}: every model here is available to it.`)
+        : keyCheck.reason === 'no_key' ? 'No AI key is installed for this workspace.'
+        : keyCheck.reason === 'refused' ? `The AI key in use (${keyWho}) was refused when checked — an Admin can replace it under "AI · Your own key".`
+        : "Couldn't check which models the key can call.";
+    const hintSt = { fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans, lineHeight:1.45 };
 
     const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
@@ -279,13 +242,11 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showReset && <ResetAiModal onClose={() => setShowReset(false)}/>}
-
             <DataCrumb page="Features & AI" onBack={onBack}/>
             <DataTitle
                 title="Features & AI"
-                sub="App-wide feature flags and AI controls (model, Residency, Training, redaction)"
-                badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
+                sub="App-wide feature flags and AI controls (the model, who may use AI, your own key)"
+                badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${modelLabel(modelOf(aiSettings))}`}
                 dirty={dirty}
                 actions={[
                     <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
@@ -372,39 +333,32 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 })}
             </DataCard>
 
-            {/* ── AI model & access ── */}
-            <DataCard title="AI · Model & access" desc="Which model powers AI features and which roles can use them.">
+            {/* ── AI model & access (state §0.238 — Jeff, 9 Nov: decisions 2 and 4; Q1-Q3) ── */}
+            <DataCard title="AI · Model & access" desc="Which Claude model scores deals, and which roles may use AI in this workspace.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
                     <FL label="Model">
-                        <select style={selSt} value={aiSettings.model || 'claude-sonnet-4-6'} onChange={e => { setAiSettings(p => ({...p, model:e.target.value})); setDirty(true); }}>
-                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-                            <option value="claude-opus-4-6">claude-opus-4-6</option>
-                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                        <select style={selSt} value={modelOf(aiSettings)} onChange={e => { setAiSettings(p => ({...p, model:e.target.value})); setDirty(true); }}>
+                            {AI_MODELS.map(m => <option key={m.id} value={m.id} disabled={uncallable(m.id)}>{m.label}{uncallable(m.id) ? ' — not available to this key' : ''}</option>)}
                         </select>
+                        <div style={hintSt}>{AI_MODELS.find(m => m.id === modelOf(aiSettings))?.what}</div>
                     </FL>
                     <FL label="Fallback">
-                        <select style={selSt} value={aiSettings.fallback || 'claude-haiku-4-5-20251001'} onChange={e => { setAiSettings(p => ({...p, fallback:e.target.value})); setDirty(true); }}>
-                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
-                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                        <select style={selSt} value={fallbackOf(aiSettings)} onChange={e => { setAiSettings(p => ({...p, fallback:e.target.value})); setDirty(true); }}>
+                            {AI_MODELS.map(m => <option key={m.id} value={m.id} disabled={uncallable(m.id)}>{m.label}{uncallable(m.id) ? ' — not available to this key' : ''}</option>)}
                         </select>
+                        <div style={hintSt}>{fallbackOf(aiSettings) === modelOf(aiSettings)
+                            ? 'Used once when the chosen model fails or is busy: the same model is asked once more.'
+                            : 'Used once when the chosen model fails or is busy, so a rep still gets a score.'}</div>
                     </FL>
                     <FL label="Available to">
-                        <select style={selSt} value={aiSettings.availableTo || 'All roles'} onChange={e => { setAiSettings(p => ({...p, availableTo:e.target.value})); setDirty(true); }}>
-                            <option>All roles</option>
-                            <option>Admin + Manager only</option>
-                            <option>Admin only</option>
+                        <select style={selSt} value={aiAccessOf(aiSettings).value} onChange={e => { setAiSettings(p => ({...p, availableTo:e.target.value})); setDirty(true); }}>
+                            {AI_ACCESS.map(a => <option key={a.value} value={a.value}>{a.value}</option>)}
                         </select>
+                        <div style={hintSt}>Who may ask Claude: a deal's score, "Score all deals" and the report builder's Ask AI. A score a deal already has shows to everyone who sees the deal.</div>
                     </FL>
-                    <FL label="Daily token budget">
-                        <input style={inpSt} value={(aiSettings.tokenBudget || 25000000).toLocaleString()} onChange={e => { setAiSettings(p => ({...p, tokenBudget: parseInt(e.target.value.replace(/,/g,''))||25000000})); setDirty(true); }}/>
-                    </FL>
-                    <FL label="On budget exceed">
-                        <select style={selSt} value={aiSettings.budgetExceed || 'Throttle to 1 req/s'} onChange={e => { setAiSettings(p => ({...p, budgetExceed:e.target.value})); setDirty(true); }}>
-                            <option>Throttle to 1 req/s</option>
-                            <option>Block all AI requests</option>
-                            <option>Allow with warning</option>
-                        </select>
-                    </FL>
+                </div>
+                <div style={{ ...hintSt, marginTop:12 }}>
+                    {keyCheckWords ? keyCheckWords + ' ' : ''}Each score is one request to Anthropic, billed to the key in use — your own key if one is installed, otherwise the site's. Current prices are on Anthropic's pricing page.
                 </div>
                 {/* §0.141 — Claude reads report prompts. Off: the report builder's own reader
                     runs and tells members this is available. */}
@@ -433,43 +387,21 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                         <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude scores deals</div>
                         <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
                             {aiScoring
-                                ? `On · a deal's AI Score, and the Pipeline's "Score all deals", send the deal — its fields, notes and last ten activities — to Claude${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; each score is kept on the deal and written to the audit log.`
+                                ? `On · a deal's AI Score, and the Pipeline's "Score all deals", send the deal — its fields, notes and last ten activities — to Claude ${modelLabel(modelOf(aiSettings))}${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; each score is kept on the deal, with the model that made it, and written to the audit log.`
                                 : 'Off · no deal is scored: the deal window offers no AI Score and the Pipeline no "Score all deals". A score a deal already has still shows.'}
                         </div>
                     </div>
                 </div>
             </DataCard>
 
-            {/* ── AI Data Residency & Training ── */}
-            <DataCard title="AI · Data Residency & Training" desc="Where requests are processed and whether your data trains the model.">
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
-                    {[
-                        { id:'us', region:'US · us-east-2', latency:'+0ms'            },
-                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)'  },
-                    ].map(r => {
-                        const sel = aiRegion === r.region;
-                        return (
-                            <div key={r.id} onClick={() => { setAiSettings(p => ({...p, region:r.region})); setDirty(true); }}
-                                style={{ border:`1px solid ${sel?T.goldInk:T.border}`, background:sel?'rgba(200,185,154,0.10)':T.surface, borderRadius:6, padding:'12px 14px', cursor:'pointer', transition:'border-color 100ms' }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                    <span style={{ width:14, height:14, borderRadius:'50%', border:`1.5px solid ${sel?T.goldInk:T.inkMuted}`, position:'relative', flexShrink:0 }}>
-                                        {sel && <span style={{ position:'absolute', inset:3, borderRadius:'50%', background:T.goldInk }}/>}
-                                    </span>
-                                    <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.region}</span>
-                                </div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:4, marginLeft:22 }}>Latency: {r.latency}</div>
-                            </div>
-                        );
-                    })}
-                </div>
+            {/* ── AI · Your own key. The region, training opt-out, zero retention and PII redaction controls came out (state
+                §0.238 — Jeff, 9 Nov, Q4): saved, and enforced by nothing (guide §18b64.1). ── */}
+            <DataCard title="AI · Your own key" desc="Run this workspace's AI requests on your own Anthropic key instead of the site's.">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     {[
-                        { key:'trainingOptIn',  invert:true,  label:'Training opt-out',        desc:'Your prompts and outputs do not train the model.' },
-                        { key:'zeroRetention',  invert:false, label:'Zero data retention',     desc:'AI provider stores no request data after response.' },
-                        { key:'piiRedaction',   invert:false, label:'PII redaction',            desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
                         { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider || 'Anthropic'}${keyIsSet ? ' · key installed' : ' · no key yet'}` : 'Use your own model API key for AI requests.' },
                     ].map(t => {
-                        const rawVal = aiSettings[t.key] ?? (t.key === 'zeroRetention' || t.key === 'piiRedaction' ? true : false);
+                        const rawVal = aiSettings[t.key] ?? false;
                         const on = t.invert ? !rawVal : rawVal;
                         return (
                             <div key={t.key} onClick={() => { setAiSettings(p => ({...p, [t.key]: !p[t.key]})); setDirty(true); }}
@@ -539,29 +471,8 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 )}
             </DataCard>
 
-            {/* ── AI governance ── */}
-            <DataCard title="AI · Governance" desc="Compliance metadata and danger-zone actions.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:16 }}>
-                    <FL label="DPA signed">
-                        <input style={{ ...inpSt, cursor:'text' }} value={aiSettings.dpaSignedAt || ''} placeholder="YYYY-MM-DD" onChange={e => { setAiSettings(p => ({...p, dpaSignedAt:e.target.value})); setDirty(true); }}/>
-                    </FL>
-                    <FL label="Audit logging">
-                        <select style={selSt} value={aiSettings.auditLogging || 'All AI requests · 13mo retention'} onChange={e => { setAiSettings(p => ({...p, auditLogging:e.target.value})); setDirty(true); }}>
-                            <option>All AI requests · 13mo retention</option>
-                            <option>Errors only</option>
-                            <option>Disabled</option>
-                        </select>
-                    </FL>
-                    <FL label="Block list (regex, comma-separated)">
-                        <input style={inpSt} value={aiSettings.blockList || ''} placeholder="e.g. \bSSN\b, \bpassword\b" onChange={e => { setAiSettings(p => ({...p, blockList:e.target.value})); setDirty(true); }}/>
-                    </FL>
-                </div>
-                <div style={{ padding:'14px 16px', background:'rgba(156,58,46,0.06)', borderLeft:`3px solid ${T.danger}`, borderRadius:4 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:T.danger, marginBottom:4 }}>Reset training data</div>
-                    <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:10 }}>Removes any data your workspace has contributed to model training. Takes up to 30 days at the provider.</div>
-                    <DataBtn label="Request reset" danger onClick={() => setShowReset(true)}/>
-                </div>
-            </DataCard>
+            {/* The "AI · Governance" card came out (state §0.238 — Q4): its DPA date, audit logging choice and block list were
+                saved and read by nothing — every AI request is audited whatever it said — and its Reset only opened the dialog. */}
         </div>
     );
 };

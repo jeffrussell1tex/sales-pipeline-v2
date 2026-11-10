@@ -352,7 +352,8 @@ test('Settings\' layers each take their Escape, and do what their own close does
     has(S + 'data/BackupDetail.jsx', 'RestoreModal', "                <DataBtn label=\"Cancel\" onClick={requestClose} disabled={loading}/>", 'the restore\'s Cancel held while the snapshot downloads');
     has(S + 'data/ExportDetail.jsx', 'NewExportModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([nameNow, scope, fmt, cadence, dest]) !== opened, busy: saving });');
     has(S + 'data/ExportDetail.jsx', 'NewDsrModal', "    const requestClose = useLocalLayer(true, { onClose, dirty: !!(subject.trim() || notes.trim()) || type !== 'access', busy: saving });");
-    has(S + 'data/FeaturesDetail.jsx', 'ResetAiModal', '    useLocalLayer(true, { onClose });');
+    // The Reset AI training data dialog came out with the mock AI controls (state §0.238 — Q4): its facts were invented.
+    assert.ok(!read(S + 'data/FeaturesDetail.jsx').includes('ResetAiModal'), 'no Reset dialog left in Features');
     has(S + 'integrations/ApiKeysDetail.jsx', 'RevokeKeyModal', '    const requestClose = useLocalLayer(true, { onClose, busy: confirming });');
     has(S + 'integrations/ApiKeysDetail.jsx', 'DocsPopoverB', '    useLocalLayer(showKeyPicker, { onClose: () => setShowKeyPicker(false) });', 'its key picker, nested');
     has(S + 'integrations/AutomationsDetail.jsx', 'AutomationModal', '    const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([name, trigger, conditions, actions]) !== opened, busy: saving });');

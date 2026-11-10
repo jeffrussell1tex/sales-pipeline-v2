@@ -63,7 +63,7 @@ const ACTIONS = {
     'saved-reports.mjs':            ['saved_report.created', 'saved_report.updated', 'saved_report.shared', 'saved_report.unshared', 'saved_report.scheduled', 'saved_report.sent_now', 'saved_report.deleted'],
     'report-deliveries.mjs':        ['report_delivery.sent', 'report_delivery.failed'],
     'report-prompt.mjs':            ['ai.report_prompt'],
-    'ai-score.mjs':                 ['ai.deal_scored'],
+    'ai-score.mjs':                 ['ai.deal_scored', 'ai.deal_score_failed'],   // a failed score sent the deal too (state §0.238)
     'quotes.mjs':                   ['quote.created', 'quote.updated', 'quote.submitted', 'quote.approved', 'quote.rejected', 'quote.sent', 'quote.accepted', 'quote.deleted',
                                      // §0.156 — the approver's send-back, the rep's withdrawal
                                      'quote.sentback', 'quote.withdrawn'],
@@ -113,7 +113,12 @@ test('the two AI calls and the job say what left the app and as whom', () => {
     assert.ok(p.includes("action: 'ai.report_prompt', entityType: 'ai_reading', entityId: 'report-prompt', entityName: prompt.slice(0, 120),"), 'the sentence is the entity');
     assert.ok(p.includes("detail: `${REPORT_PROMPT_MODEL} · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · ${outcome}`"), 'which key, what happened');
     const a = code(src('ai-score.mjs'));
-    assert.ok(a.includes("action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName: opp.opportunityName || opp.account || 'Unnamed',"), 'a deal handed to the model is logged on the deal');
+    // One row each way, naming every model asked and why one failed (state §0.238).
+    assert.ok(a.includes("const entityName = opp.opportunityName || opp.account || 'Unnamed';"));
+    assert.ok(a.includes("action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName,"), 'a deal handed to the model is logged on the deal');
+    assert.ok(a.includes('detail: `${last.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}`,'), 'the model that answered, and the one that failed first');
+    assert.ok(a.includes("action: 'ai.deal_score_failed', entityType: 'opportunity', entityId: opportunityId, entityName,"), 'no score came back, and the deal still left the app');
+    assert.ok(a.includes('detail: `${keyWords} · ${tried}`,'));
     const j = code(src('report-deliveries.mjs'));
     assert.ok(j.includes("if (trigger === 'schedule') await writeAudit(row.orgId, {"), 'the job audits its own sends; Send now is the endpoint’s event');
     assert.ok(j.includes("userId: null, userName: 'Report delivery job',"), 'the job is named as the actor');

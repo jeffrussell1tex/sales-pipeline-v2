@@ -11,6 +11,8 @@ import { T } from '../../tokens.js';
 import { capMatches } from '../../utils/searchMatch.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
 import { storedScore, signalKind } from '../../utils/aiScore.js';
+// Who may ask Claude, and the model a score names (state §0.238).
+import { mayUseAi, aiAccessWords, modelLabel } from '../../utils/aiModels.js';
 import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
 import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, isHiddenAccount, HIDDEN_ACCOUNT_WORDS } from '../../utils/dealAccount.js';
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
@@ -647,7 +649,9 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
 // which ai-score.mjs answers 400, and kept `data.score`, a number, where it reads an
 // object. It shows the window's score (the deal's, or the one it just asked for), asks
 // with the deal's id, and hands the answer to the window and the lists.
-function AiScoreTab({ opportunity, aiScore, onScored, onClose, onUpdate }) {
+// `askWords`: null when this member's role may ask Claude; else the words saying who may ("Available to",
+// state §0.238) — the score the deal keeps still shows, with no Score or Refresh.
+function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, onUpdate }) {
     const { setOpportunities } = useApp();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -731,9 +735,11 @@ function AiScoreTab({ opportunity, aiScore, onScored, onClose, onUpdate }) {
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
                             <div style={{ fontSize: '0.6875rem', color: T.inkMuted, lineHeight: 1.5, fontFamily: T.sans }}>
-                                Powered by Claude AI · Deal data is sent to Anthropic's API
+                                {score.model ? `Scored by Claude ${modelLabel(score.model)}` : 'Powered by Claude AI'} · Deal data is sent to Anthropic's API
                             </div>
-                            <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>
+                            {askWords
+                                ? <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>{askWords}</div>
+                                : <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>}
                         </div>
                         {history.length > 0 && (
                             <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
@@ -764,7 +770,9 @@ function AiScoreTab({ opportunity, aiScore, onScored, onClose, onUpdate }) {
                     <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🤖</div>
                     <div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.ink, marginBottom: '4px', fontFamily: T.sans }}>No score yet</div>
                     <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginBottom: '1.25rem', fontFamily: T.sans }}>Generate an AI health assessment for this deal</div>
-                    <PrimaryBtn type="button" onClick={() => fetchScore(false)}>Score this deal</PrimaryBtn>
+                    {askWords
+                        ? <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>{askWords}</div>
+                        : <PrimaryBtn type="button" onClick={() => fetchScore(false)}>Score this deal</PrimaryBtn>}
                 </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
@@ -843,7 +851,7 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
 // ─────────────────────────────────────────────────────────────
 //  Right Rail — 3 sections (AI, Contacts, Activity)
 // ─────────────────────────────────────────────────────────────
-function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
+function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
     const { setViewingActivity } = useApp();   // a recent-activity row opens the read-only viewer (§0.93)
 
     // Last touch recency → engagement level
@@ -881,7 +889,7 @@ function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settin
             {/* ── AI Read — the deal's score; Score and the full analysis while the org's switch
                 is on (state §0.188): off, the AI Score tab is not offered, and "Score this deal"
                 led to a tab whose every answer was "disabled". ── */}
-            {(aiOn || aiScore) && (
+            {(aiAsk || aiScore) && (
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ ...ey(T.goldInk) }}>AI read</div>
@@ -1081,6 +1089,10 @@ export default function OpportunityModal({
     const [scoredNow, setScoredNow] = useState(null);   // { id, score }
     const aiScore = (scoredNow && scoredNow.id === opportunity?.id) ? scoredNow.score : (opportunity?.aiScore || null);
     const aiOn = !!settings?.aiScoringEnabled;
+    // "Available to" (state §0.238 — Q3 "Asking Claude only"): a role it leaves out is offered no Score or
+    // Refresh; the score the deal keeps, and its full analysis, still show.
+    const { userRole: aiRole } = useApp();
+    const aiAsk = aiOn && mayUseAi(aiRole, settings?.aiSettings);
 
     // Comment thread state (fully preserved)
     const [commentDraft, setCommentDraft]               = useState('');
@@ -1409,7 +1421,7 @@ export default function OpportunityModal({
                                 {[
                                     { id: 'history',   label: 'History'   },
                                     { id: 'contacts',  label: 'Contacts'  },
-                                    ...(settings?.aiScoringEnabled ? [{ id: 'ai-score', label: 'AI Score' }] : []),
+                                    ...(settings?.aiScoringEnabled && (aiAsk || aiScore) ? [{ id: 'ai-score', label: 'AI Score' }] : []),
                                     { id: 'quotes',    label: 'Quotes'    },
                                     { id: 'documents', label: 'Documents' },
                                 ].map(tab => (
@@ -1462,6 +1474,7 @@ export default function OpportunityModal({
                             )}
                             {detailTab === 'ai-score' && (
                                 <AiScoreTab opportunity={opportunity} aiScore={aiScore}
+                                    askWords={aiAsk ? null : aiAccessWords(settings?.aiSettings)}
                                     onScored={(score) => setScoredNow({ id: opportunity.id, score })}
                                     onClose={onClose}
                                     onUpdate={saveDeal}/>
@@ -2204,6 +2217,7 @@ export default function OpportunityModal({
                                             opportunity={opportunity}
                                             aiScore={aiScore}
                                             aiOn={aiOn}
+                                            aiAsk={aiAsk}
                                             oppActivities={oppActivities}
                                             contacts={contacts}
                                             settings={settings}

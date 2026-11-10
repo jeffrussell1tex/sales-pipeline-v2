@@ -1631,8 +1631,10 @@ test('S10 — a flat list\'s save (a function component, its key computed), run 
 
 test('S10 — Features\' save, run as written (J-B12): the tokens it opened with; stale — the key words when a key went, by the payload; unread — the typed key cleared, never kept across the latest', async () => {
     const { PANEL_CHANGED, PANEL_CHANGED_KEY } = await import('../src/utils/settingsRevs.js');
+    // The blob as it runs, the retired fields left out (state §0.238).
+    const { aiSettingsToSave } = await import('../src/utils/aiModels.js');
     const base = {
-        PANEL_CHANGED, PANEL_CHANGED_KEY,
+        PANEL_CHANGED, PANEL_CHANGED_KEY, aiSettingsToSave,
         aiSettings: { model: 'm' }, flags: { 'deal-scoring': true },
         tabViz: { leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false, repsCanUseDispatch: false },
         aiScoring: false, aiPrompts: true,
@@ -1649,6 +1651,8 @@ test('S10 — Features\' save, run as written (J-B12): the tokens it opened with
     assert.ok(put, 'REGRESSION: the save never went through the sender');
     assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
     assert.equal(put[1].anthropicApiKey, 'sk-new');
+    assert.deepEqual(put[1].aiSettings, { model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5', availableTo: 'All roles' },
+        'REGRESSION (state §0.238): the save sends the model as it runs — an id off the list is the default the panel showed');
     assert.equal(stepOf(ok, 'landed')?.[1], answer, 'the answer to landed');
     assert.deepEqual(ok.key, [['input', ''], ['action', null]], 'the plaintext dropped once saved');
 

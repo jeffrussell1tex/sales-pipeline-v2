@@ -18,7 +18,14 @@
  * If false, returns { disabled: true }.
  *
  * Who: a writer (requireWrite), on a deal they may edit — its rep, anyone
- * while it is unassigned, an Admin or a Manager (assertOwnership; §0.169).
+ * while it is unassigned, an Admin or a Manager (assertOwnership; §0.169) —
+ * in a role the org's "Available to" names (src/utils/aiModels.js; §0.238).
+ *
+ * The model: the Admin's choice (aiSettings.model, read through modelOf — a
+ * stored id off the list is the default, Haiku 5.5), asked once more on the
+ * fallback when the first answer is busy, missing, refused or unreadable
+ * (src/utils/aiCall.js; state §0.238). The score keeps the model that answered;
+ * one audit row each way names every attempt.
  */
 
 import { db } from '../../db/index.js';
@@ -30,7 +37,10 @@ import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
 // (state §0.141; this file carried its own copy of the decrypt before).
 import { resolveAnthropicKey } from './_aiKey.mjs';
 // The score's shape, the server's and the deal window's (state §0.188).
-import { withHistory } from '../../src/utils/aiScore.js';
+import { withHistory, cutAtWord } from '../../src/utils/aiScore.js';
+// The Admin's model and who may ask (state §0.238); one attempt's request and what its answer means.
+import { modelOf, fallbackOf, modelLabel, mayUseAi, aiAccessWords } from '../../src/utils/aiModels.js';
+import { MIN_ATTEMPT_MS, attemptTime, scoreRequestBody, attemptOutcome, causeWords } from '../../src/utils/aiCall.js';
 // A deal's people and who was engaged, by contact id — the deal window's own rule (state §0.192).
 import { activityContactIds, dealCommittee, engagedContacts, engagedLabel, personLabel } from '../../src/utils/dealEngagement.js';
 
@@ -44,6 +54,8 @@ const headers = {
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+    // The attempts share the function's time from here (state §0.238 — src/utils/aiCall.js BUDGET_MS).
+    const startedAt = Date.now();
 
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
@@ -77,6 +89,12 @@ export const handler = async (event) => {
             .where(eq(settings.orgId, orgId))
             .limit(1);
         const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);
+
+        // "Available to" (state §0.238 — Jeff, 9 Nov: decision 2; Q3 "Asking Claude only"): a role it leaves
+        // out asks nothing of Claude and is not handed the cached score either; the score a deal keeps still
+        // shows on every screen. Absent reads as All roles; a value the list does not hold, as Admin only.
+        const aiSettings = orgSettingsRow?.extra?.aiSettings;
+        if (!mayUseAi(auth.userRole, aiSettings)) return { statusCode: 403, headers, body: JSON.stringify({ error: aiAccessWords(aiSettings), code: 'ai_role' }) };
 
         if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
 
@@ -178,50 +196,64 @@ Scoring guide:
 
 Provide 3-5 signals. Be specific — reference actual days, stage names, contact names from the data. Avoid generic statements.`;
 
-        // ── Call Anthropic API ────────────────────────────────────────────────
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 600,
-                messages: [{ role: 'user', content: prompt }],
-            }),
-        });
+        // ── Ask Claude: the Admin's model, then once more on the fallback (state §0.238) ──────
+        // The same key and prompt both times. An attempt that is busy, finds no such model, refuses, stops
+        // short or answers what does not read goes to the fallback; a refused key or request does not — the
+        // second would fail alike (src/utils/aiCall.js attemptOutcome).
+        const model = modelOf(aiSettings);
+        const fallback = fallbackOf(aiSettings);
+        const ask = async (m) => {
+            try {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01',
+                    },
+                    body: JSON.stringify(scoreRequestBody(m, prompt)),
+                    signal: AbortSignal.timeout(attemptTime(Date.now() - startedAt)),
+                });
+                if (!response.ok) return attemptOutcome({ status: response.status, text: await response.text().catch(() => '') });
+                // A body that is not JSON is unreadable; a body still arriving when the time runs out is busy (the catch below).
+                return attemptOutcome({ status: 200, json: await response.json().catch((e) => { if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw e; return null; }) });
+            } catch (thrown) {
+                return attemptOutcome({ thrown });
+            }
+        };
+        const attempts = [{ model, outcome: await ask(model) }];
+        // Once, where the cause allows and the function's time still holds an attempt (else the row names the one).
+        if (!attempts[0].outcome.ok && attempts[0].outcome.retry && attemptTime(Date.now() - startedAt) >= MIN_ATTEMPT_MS) attempts.push({ model: fallback, outcome: await ask(fallback) });
+        const last = attempts[attempts.length - 1];
+        const keyWords = usingOrgKey ? 'the workspace’s key' : 'the site key';
+        const entityName = opp.opportunityName || opp.account || 'Unnamed';
 
-        if (!response.ok) {
-            const err = await response.text();
-            console.error('Anthropic API error:', response.status, err);
-            return { statusCode: 502, headers, body: JSON.stringify({ error: 'AI scoring service unavailable' }) };
+        if (!last.outcome.ok) {
+            // The deal still left the app, so the log says so — every attempt, its model and why it failed
+            // (guide §18b42; OPEN_ITEMS §4.2: the cause reached only the console). Never the key.
+            const tried = attempts.map((a) => `${a.model}: ${a.outcome.detail}`).join(' · ');
+            console.error('ai-score: no score —', tried);
+            await auditAs(orgId, auth.userId, {
+                action: 'ai.deal_score_failed', entityType: 'opportunity', entityId: opportunityId, entityName,
+                detail: `${keyWords} · ${tried}`,
+            });
+            return { statusCode: 502, headers, body: JSON.stringify({ error: causeWords(last.outcome.cause, modelLabel(last.model)), cause: last.outcome.cause }) };
         }
+        const parsed = last.outcome.parsed;
 
-        const aiResult = await response.json();
-        const rawText = aiResult.content?.[0]?.text || '';
-
-        // Parse JSON — strip any accidental markdown fences
-        let parsed;
-        try {
-            const clean = rawText.replace(/```json|```/g, '').trim();
-            parsed = JSON.parse(clean);
-        } catch {
-            console.error('Failed to parse AI response:', rawText);
-            return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
-        }
-
-        // Validate and sanitize
+        // Validate and sanitize — each text ended at a whole word (state §0.238; OPEN_ITEMS §4.2).
         const scoreData = {
-            score:          Math.max(0, Math.min(100, parseInt(parsed.score) || 50)),
+            // A score of 0 is a score (it read as 50); only one that is not a number reads as 50.
+            score:          Number.isFinite(parseInt(parsed.score, 10)) ? Math.max(0, Math.min(100, parseInt(parsed.score, 10))) : 50,
             verdict:        ['Strong','On Track','At Risk','Critical'].includes(parsed.verdict) ? parsed.verdict : 'At Risk',
-            headline:       (parsed.headline || '').slice(0, 120),
-            signals:        (parsed.signals || []).slice(0, 5).map(s => ({
-                text:      (s.text || '').slice(0, 100),
-                sentiment: ['positive','warning','negative'].includes(s.sentiment) ? s.sentiment : 'warning',
+            headline:       cutAtWord(parsed.headline, 120),
+            signals:        (Array.isArray(parsed.signals) ? parsed.signals : []).slice(0, 5).map(s => ({
+                text:      cutAtWord(s?.text, 100),
+                sentiment: ['positive','warning','negative'].includes(s?.sentiment) ? s.sentiment : 'warning',
             })),
-            recommendation: (parsed.recommendation || '').slice(0, 150),
+            recommendation: cutAtWord(parsed.recommendation, 150),
+            // The model that answered — the chosen one, or the fallback after it failed.
+            model:          last.model,
             scoredAt:       new Date().toISOString(),
         };
 
@@ -239,9 +271,11 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
         }
 
         // The deal's data left the app for the model — the log says so, on the deal (§0.143).
+        // The model that answered, and the one that failed first when it fell back (state §0.238).
+        const fellBack = attempts.length > 1 ? ` · after ${attempts[0].model}: ${attempts[0].outcome.detail}` : '';
         await auditAs(orgId, auth.userId, {
-            action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName: opp.opportunityName || opp.account || 'Unnamed',
-            detail: `claude-haiku-4-5 · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · score ${scoreData.score} (${scoreData.verdict})`,
+            action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName,
+            detail: `${last.model} · ${keyWords} · score ${scoreData.score} (${scoreData.verdict})${fellBack}`,
         });
         return { statusCode: 200, headers, body: JSON.stringify({ ...stored, usingOrgKey }) };
 

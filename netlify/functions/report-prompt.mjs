@@ -7,7 +7,7 @@
  *
  * Answers 200 with ONE of:
  *   { readBy: 'claude', model, usingOrgKey, definition, name, notes }
- *   { unavailable: true, reason: 'off' | 'no_key' | 'refused' | 'unreadable' | 'error' }
+ *   { unavailable: true, reason: 'off' | 'role' | 'no_key' | 'refused' | 'unreadable' | 'error' }
  * so the client always knows whether to run its own reader
  * (src/utils/reportPrompt.js) — the same shape either way (guide §18b41 item 5).
  *
@@ -17,7 +17,9 @@
  * become filters). Never a row of CRM data — this function reads no CRM table.
  *
  * Gates, in order: Clerk auth; the org's switch settings.extra
- * .aiReportPromptsEnabled (an Admin's, Settings → Features → AI); a key
+ * .aiReportPromptsEnabled (an Admin's, Settings → Features → AI); the org's
+ * "Available to" (src/utils/aiModels.js — a role it leaves out gets the
+ * built-in reader, nothing sent; state §0.238, Jeff's Q1); a key
  * (_aiKey.mjs: the org's BYOK key, else the site's). Every read is by the
  * caller's org. What Claude returns is NOT trusted as a definition: it is
  * passed through the same allowlists a saved report passes through
@@ -40,6 +42,7 @@ import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor
 import { promptVocabulary } from '../../src/utils/reportPrompt.js';
 import { openStagesOf } from '../../src/utils/stageOrder.js';
 import { fiscalStartOf } from '../../src/utils/quarters.js';
+import { mayUseAi } from '../../src/utils/aiModels.js';
 
 const headers = {
     'Content-Type':                 'application/json',
@@ -69,6 +72,9 @@ export const handler = async (event) => {
         const [row] = await db.select({ extra: settingsTable.extra, fiscalYearStart: settingsTable.fiscalYearStart, stages: settingsTable.stages })
             .from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
         if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });
+        // "Available to" covers Ask AI too (state §0.238 — Jeff, 9 Nov, Q1 "Roles both, model scoring"): a role it
+        // leaves out sends nothing to Claude, and its builder reads the prompt itself. The model stays this file's own.
+        if (!mayUseAi(auth.userRole, row?.extra?.aiSettings)) return answer(200, { unavailable: true, reason: 'role' });
         const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);
         if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });
 

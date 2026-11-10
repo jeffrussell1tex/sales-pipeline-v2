@@ -24,6 +24,8 @@ import { SETTINGS_LISTS, listShapeRefused } from '../../src/utils/linkIds.js';
 import { checkSettingsLinks } from './_links.mjs';
 // A team is one record (state §0.222): no new duplicate name; a rename renames every member holding the team.
 import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js';
+// The AI models an Admin may choose and who may ask Claude (state §0.238): a value named anew is on the list.
+import { aiSettingsRefused } from '../../src/utils/aiModels.js';
 import { sql } from 'drizzle-orm';
 import { invalidateRoster } from './_lib.mjs';
 // The stale settings save (state §0.224 — batch 4b-3, step B): a save writes only its own keys, each with a revision
@@ -345,6 +347,10 @@ const handle = async (event, retry) => {
             // anything is read or written.
             const teamNamed = 'teams' in data ? teamNameRefused(data.teams, existingExtra.teams) : null;
             if (teamNamed) return { statusCode: teamNamed.status, headers, body: JSON.stringify({ error: teamNamed.error, field: teamNamed.field }) };
+            // The AI blob's model, fallback and "Available to" (state §0.238): one the save names anew must be on the list —
+            // refused naming the field, nothing written; a value the row already holds is never asked again.
+            const aiRefused = 'aiSettings' in data ? aiSettingsRefused(data.aiSettings, existingExtra.aiSettings) : null;
+            if (aiRefused) return { statusCode: aiRefused.status, headers, body: JSON.stringify({ error: aiRefused.error, field: aiRefused.field }) };
             const linked = await checkSettingsLinks(data, existingExtra, orgId);
             if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             // The teams this save renames (state §0.222 — Q7): every member holding one is renamed with it, below.

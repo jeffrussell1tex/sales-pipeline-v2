@@ -181,6 +181,13 @@ One commit per verified batch; doc patch in the same commit.
   member's own list, switching to the org where they belong, and says what
   they cannot open; never `?deal=`, `?tab=` or `/settings` by hand (THE
   GUARD, tests/app-links.test.mjs).
+- An AI request asks the model the Admin chose, read through one list
+  (`src/utils/aiModels.js` modelOf — an id off it runs as the default),
+  once more on the fallback when the first answer is busy, missing,
+  refused or unreadable (`src/utils/aiCall.js`), and only for a role
+  "Available to" names (`mayUseAi`; before the key and any cached score);
+  one audit row each way, never the key; no model id written anywhere
+  else (THE GUARD, tests/ai-models.test.mjs; guide §18b121).
 - A Sales Rep's quota is a plan per fiscal year (`profile.quotaPlans`):
   `PUT /users?quotas=true` is its one writer; every other save keeps it
   (`storedQuota`, and `keepQuotaPlans` on any write of a member's whole

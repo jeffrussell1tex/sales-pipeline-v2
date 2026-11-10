@@ -60,14 +60,23 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
     namedExports: { dispatchAutomations: async () => {} },
 });
 
-// The model, answered here: each call recorded, its reply the one this file sets.
-const MODEL = { calls: [], reply: null };
+// The model, answered here: each call recorded, its reply the one this file sets. Since §0.238 a reply opens with
+// a thinking block, as the 5.5 models' can (the scorer read content[0].text); `plan` answers the next calls in
+// turn — a status and body, a refusal, or a thrown network error — before the default reply.
+const MODEL = { calls: [], reply: null, plan: [], listed: [], listCalls: [] };
+const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const realFetch = globalThis.fetch;
 mock.method(globalThis, 'fetch', async (url, init) => {
+    if (String(url).startsWith('https://api.anthropic.com/v1/models')) {
+        MODEL.listCalls.push({ headers: init?.headers || {} });
+        return json(200, { data: MODEL.listed.map((id) => ({ id, type: 'model' })), has_more: false });
+    }
     if (String(url).startsWith('https://api.anthropic.com/')) {
-        MODEL.calls.push({ headers: init?.headers || {}, body: JSON.parse(init?.body || '{}') });
-        return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(MODEL.reply) }] }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } });
+        MODEL.calls.push({ headers: init?.headers || {}, body: JSON.parse(init?.body || '{}'), signal: init?.signal });
+        const next = MODEL.plan.shift();
+        if (next === 'throw') throw new TypeError('fetch failed');
+        if (next) return json(next.status, next.body);
+        return json(200, { content: [{ type: 'thinking', thinking: '', signature: 's' }, { type: 'text', text: JSON.stringify(MODEL.reply) }], stop_reason: 'end_turn' });
     }
     return realFetch(url, init);
 });
@@ -75,6 +84,10 @@ mock.method(globalThis, 'fetch', async (url, init) => {
 const FN = {
     score: (await import('../../netlify/functions/ai-score.mjs')).handler,
     opps:  (await import('../../netlify/functions/opportunities.mjs')).handler,
+    // State §0.238: the settings PUT's rule for the AI blob, Ask AI's "Available to", and the key check.
+    settings: (await import('../../netlify/functions/settings.mjs')).handler,
+    prompt:   (await import('../../netlify/functions/report-prompt.mjs')).handler,
+    models:   (await import('../../netlify/functions/ai-models.mjs')).handler,
 };
 const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
@@ -88,6 +101,8 @@ const ORGS = [A, B];
 const WHO = {
     rep:  { user: 'clerk_itest_aiscore_rep',  role: 'User' },
     repB: { user: 'clerk_itest_aiscore_repb', role: 'User' },
+    mgr:  { user: 'clerk_itest_aiscore_mgr',  role: 'Manager' },
+    admin: { user: 'clerk_itest_aiscore_admin', role: 'Admin' },
 };
 const DEAL = 'opp_itest_aiscore_a';
 const DEAL_B = 'opp_itest_aiscore_b';
@@ -125,8 +140,9 @@ const cleanup = async () => {
 before(async () => {
     await cleanup();
     await db.insert(settings).values([
-        { id: 'settings_' + A, orgId: A, extra: { aiScoringEnabled: true } },
-        { id: 'settings_' + B, orgId: B, extra: { aiScoringEnabled: false } },
+        // A settings row's id is its org's, as the settings PUT writes it (state §0.238's PUT test saves through it).
+        { id: A, orgId: A, extra: { aiScoringEnabled: true } },
+        { id: B, orgId: B, extra: { aiScoringEnabled: false } },
     ]);
     await db.insert(users).values([
         { id: 'usr_itest_aiscore_rep',  orgId: A, clerkUserId: WHO.rep.user,  name: 'Rhea Aiscore', email: 'rhea@itest-aiscore.local', role: 'User' },
@@ -201,7 +217,7 @@ test('a refresh keeps the score it replaces at the head of the history — four 
     const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.score, 55);
-    assert.deepEqual(r.body.history, [{ score: first.score, verdict: first.verdict, scoredAt: first.scoredAt }]);
+    assert.deepEqual(r.body.history, [{ score: first.score, verdict: first.verdict, scoredAt: first.scoredAt, model: 'claude-haiku-5-5' }], 'its model too (state §0.238)');
     for (const n of [40, 35, 30, 25]) {
         MODEL.reply = reply(n, 'Critical');
         assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true })).status, 200);
@@ -260,4 +276,167 @@ test('the model is told who was engaged — by id, a merged duplicate as its sur
     assert.ok(!prompt.includes('Outsider'), 'an org-B contact\'s id on this deal names nobody');
     assert.ok(!prompt.includes('Ollie'), 'org B\'s activity on this deal\'s id is not read');
     assert.ok(!/Contacts engaged: none/.test(prompt));
+});
+
+// ── State §0.238: the Admin's model, the fallback, "Available to", the PUT's rule, the key check ───────────────
+
+const setAi = async (aiSettings, more = {}) => {
+    await db.update(settings).set({ extra: { aiScoringEnabled: true, ...more, ...(aiSettings === undefined ? {} : { aiSettings }) } }).where(eq(settings.orgId, A));
+};
+const auditsOf = async (action) => db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.action, action), eq(auditLog.entityId, DEAL)));
+// A row by its exact detail — rows written within a second cannot be ordered by their timestamps.
+const hasRow = (rows, detail) => assert.ok(rows.some((x) => x.detail === detail), `no row: ${detail} — ${JSON.stringify(rows.map((x) => x.detail))}`);
+const err = (status, type, message) => ({ status, body: { type: 'error', error: { type, message } } });
+
+test("the Admin's model is asked — at effort low, for JSON, room for thinking; the score and the audit row name it", async () => {
+    await setAi({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5' });
+    MODEL.calls.length = 0; MODEL.plan = [];
+    MODEL.reply = reply(66, 'On Track');
+    const audits = (await auditsOf('ai.deal_scored')).length;
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5']);
+    const body = MODEL.calls[0].body;
+    assert.equal(body.max_tokens, 4000);
+    assert.equal(body.output_config.effort, 'low');
+    assert.equal(body.output_config.format.type, 'json_schema');
+    for (const k of ['temperature', 'top_p', 'top_k', 'thinking']) assert.ok(!(k in body), `no ${k}`);
+    assert.ok(MODEL.calls[0].signal, 'the attempt has its own time limit');
+    assert.equal(r.body.model, 'claude-opus-5-5');
+    assert.equal((await kept(DEAL)).model, 'claude-opus-5-5', 'the deal keeps the model that answered');
+    const rows = await auditsOf('ai.deal_scored');
+    assert.equal(rows.length, audits + 1);
+    hasRow(rows, 'claude-opus-5-5 · the site key · score 66 (On Track)');
+});
+
+test('a stored model off the list runs as Haiku 5.5 (Q2) — what a panel nobody chose in stored', async () => {
+    await setAi({ model: 'claude-sonnet-4-6', fallback: 'claude-haiku-4-5-20251001' });
+    MODEL.calls.length = 0; MODEL.plan = [];
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-haiku-5-5']);
+});
+
+test('busy, missing, refused or a dropped connection: the fallback answers, once, with the same key — the row names both', async () => {
+    await setAi({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5' });
+    for (const [first, words] of [
+        [err(529, 'overloaded_error', 'Overloaded'), '529 overloaded_error: Overloaded'],
+        [err(404, 'not_found_error', 'model: claude-opus-5-5'), '404 not_found_error: model: claude-opus-5-5'],
+        [{ status: 200, body: { content: [], stop_reason: 'refusal', stop_details: { category: 'general_harms' } } }, 'declined (general_harms)'],
+        ['throw', 'network: TypeError'],
+    ]) {
+        MODEL.calls.length = 0; MODEL.plan = [first];
+        MODEL.reply = reply(44, 'At Risk');
+        const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+        assert.equal(r.status, 200, `${words}: ${JSON.stringify(r.body)}`);
+        assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5', 'claude-haiku-5-5'], words);
+        assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), ['itest-aiscore-site-key', 'itest-aiscore-site-key']);
+        assert.equal(MODEL.calls[0].body.messages[0].content, MODEL.calls[1].body.messages[0].content, 'the same prompt');
+        assert.equal((await kept(DEAL)).model, 'claude-haiku-5-5', 'the model that answered');
+        hasRow(await auditsOf('ai.deal_scored'), `claude-haiku-5-5 · the site key · score 44 (At Risk) · after claude-opus-5-5: ${words}`);
+    }
+});
+
+test('a refused key or request: no fallback, 502 with the cause in words, the deal unchanged, the failure in the log; both failing names both', async () => {
+    await setAi({ model: 'claude-sonnet-5-5', fallback: 'claude-haiku-5-5' });
+    for (const [first, cause, said] of [
+        [err(401, 'authentication_error', 'invalid x-api-key sk-ant-api03-secret'), 'key', /key was refused/],
+        [err(400, 'invalid_request_error', 'bad'), 'request', /tell your administrator/],
+    ]) {
+        const score = await kept(DEAL);
+        const fails = (await auditsOf('ai.deal_score_failed')).length;
+        MODEL.calls.length = 0; MODEL.plan = [first];
+        const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+        assert.equal(r.status, 502);
+        assert.equal(r.body.cause, cause);
+        assert.match(r.body.error, said);
+        assert.equal(MODEL.calls.length, 1, `${cause}: the fallback would fail alike`);
+        assert.deepEqual(await kept(DEAL), score, 'nothing kept');
+        const rows = await auditsOf('ai.deal_score_failed');
+        assert.equal(rows.length, fails + 1, 'the deal left the app — the log says so');
+        assert.ok(!rows.some((x) => x.detail.includes('sk-ant')), 'never the key');
+    }
+    MODEL.calls.length = 0; MODEL.plan = [err(529, 'overloaded_error', 'Overloaded'), err(500, 'api_error', 'Internal')];
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 502);
+    assert.deepEqual([r.body.cause, r.body.error], ['busy', 'Claude is busy — try again in a minute.']);
+    hasRow(await auditsOf('ai.deal_score_failed'), 'the site key · claude-sonnet-5-5: 529 overloaded_error: Overloaded · claude-haiku-5-5: 500 api_error: Internal');
+});
+
+test("the score's text ends at a whole word (OPEN_ITEMS §4.2)", async () => {
+    await setAi({});
+    MODEL.calls.length = 0; MODEL.plan = [];
+    MODEL.reply = { ...reply(50, 'At Risk'), headline: 'Proposal stalled twenty one days with the CFO unengaged and a three year price lock request still unanswered by anyone on the buying side', recommendation: 'r' };
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(r.body.headline.length <= 120 && r.body.headline.endsWith('…'), r.body.headline);
+    assert.ok(/[a-z]…$/.test(r.body.headline) && MODEL.reply.headline.startsWith(r.body.headline.slice(0, -1) + ' '), 'cut at a word');
+});
+
+test('"Available to": a role it leaves out asks nothing and gets no cached score (Q3); the roles it names score; a value off the list is Admin only', async () => {
+    await setAi({ availableTo: 'Admin + Manager only' });
+    MODEL.calls.length = 0; MODEL.plan = [];
+    const refused = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL });
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.code, 'ai_role');
+    assert.equal(refused.body.error, 'AI in this workspace is open to Admins and Managers.');
+    assert.ok(!('score' in refused.body), 'not the cached score either');
+    assert.equal(MODEL.calls.length, 0);
+    assert.equal((await call(FN.score, WHO.mgr, 'POST', { opportunityId: DEAL })).status, 200, 'a Manager');
+    await setAi({ availableTo: 'Admin only' });
+    assert.equal((await call(FN.score, WHO.mgr, 'POST', { opportunityId: DEAL })).status, 403);
+    assert.equal((await call(FN.score, WHO.admin, 'POST', { opportunityId: DEAL })).status, 200, 'an Admin');
+    await setAi({ availableTo: 'Everyone' });
+    assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL })).status, 403, 'off the list: closed');
+    assert.equal((await call(FN.score, WHO.admin, 'POST', { opportunityId: DEAL })).status, 200);
+    await setAi({ availableTo: 'All roles' });
+    assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL })).status, 200, 'All roles: a rep');
+    const [b] = await db.select().from(settings).where(eq(settings.orgId, B));
+    assert.deepEqual(b.extra, { aiScoringEnabled: false }, "org B's settings untouched by A's");
+});
+
+test('Ask AI follows "Available to" (Q1): a role it leaves out gets the built-in reader — nothing sent to Claude', async () => {
+    await setAi({ availableTo: 'Admin only' }, { aiReportPromptsEnabled: true });
+    MODEL.calls.length = 0; MODEL.plan = [];
+    const r = await call(FN.prompt, WHO.rep, 'POST', { prompt: 'deals by stage' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { unavailable: true, reason: 'role' });
+    assert.equal(MODEL.calls.length, 0);
+    const audits = await db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.action, 'ai.report_prompt')));
+    assert.equal(audits.length, 0, 'nothing left the app, nothing to log');
+});
+
+test('the settings PUT: a model, fallback or "Available to" named anew off the list is refused, nothing written; one the row holds still saves', async () => {
+    await setAi({ model: 'claude-sonnet-4-6', availableTo: 'All roles' });
+    const put = (aiSettings) => call(FN.settings, WHO.admin, 'PUT', { aiSettings });
+    for (const [blob, field] of [
+        [{ model: 'claude-opus-4-6', availableTo: 'All roles' }, 'aiSettings.model'],
+        [{ model: 'claude-sonnet-4-6', fallback: 'gpt-6', availableTo: 'All roles' }, 'aiSettings.fallback'],
+        [{ model: 'claude-sonnet-4-6', availableTo: 'Everyone' }, 'aiSettings.availableTo'],
+    ]) {
+        const r = await put(blob);
+        assert.equal(r.status, 400, JSON.stringify(r.body));
+        assert.equal(r.body.field, field);
+        const [row] = await db.select().from(settings).where(eq(settings.orgId, A));
+        assert.equal(row.extra.aiSettings.model, 'claude-sonnet-4-6', 'nothing written');
+    }
+    const held = await put({ model: 'claude-sonnet-4-6', availableTo: 'All roles', byok: false });
+    assert.equal(held.status, 200, JSON.stringify(held.body));
+    const chosen = await put({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5', availableTo: 'Admin + Manager only' });
+    assert.equal(chosen.status, 200, JSON.stringify(chosen.body));
+    const [row] = await db.select().from(settings).where(eq(settings.orgId, A));
+    assert.deepEqual(row.extra.aiSettings, { model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5', availableTo: 'Admin + Manager only' });
+});
+
+test("the key check: an Admin's; the models of the list this org's key lists — ids only, the site key's here", async () => {
+    await setAi({});
+    MODEL.listCalls.length = 0;
+    MODEL.listed = ['claude-fable-5-2', 'claude-haiku-5-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001'];
+    const r = await call(FN.models, WHO.admin, 'GET');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body, { checked: true, usingOrgKey: false, callable: ['claude-haiku-5-5', 'claude-opus-5-5'] });
+    assert.equal(MODEL.listCalls[0].headers['x-api-key'], 'itest-aiscore-site-key');
+    assert.ok(!JSON.stringify(r.body).includes('itest-aiscore-site-key'), 'never the key');
+    assert.equal((await call(FN.models, WHO.rep, 'GET')).status, 403, "a rep's is not to ask");
+    assert.equal(MODEL.listCalls.length, 1);
 });

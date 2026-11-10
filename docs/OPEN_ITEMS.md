@@ -449,7 +449,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    answered 9 Nov** (docs/design/ai-scoring/DESIGN.md; Q1-Q4 each the
    Recommended, Q4 all three): the chosen model with one fallback, the model
    kept and audited, "Available to" on scoring and the report builder's Ask
-   AI, the budget and the mock AI controls out, the cause named. Not built.
+   AI, the budget and the mock AI controls out, the cause named. **Built 9 Nov
+   (state §0.238; guide §18b121) — NOT committed; harness deferred**, its browser check PASSED as Karen
+   and as an Admin.
+   Strike this once it ships. Next in §3.1: the close-date history column
+   (decision 3, its apply Jeff's), then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1153,7 +1157,7 @@ way.
   converted and dead leads. Its threshold is 150 by default and never fewer
   than 20.
 
-**Batch 1: the Admin's model choice (small; recommended first).**
+**Batch 1: the Admin's model choice (small; recommended first).** **Built 9 Nov (state §0.238).**
 
 - The AI score uses the model the Admin chose, from a list the server
   accepts.
@@ -2001,30 +2005,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
   its own. §0.176 (d).
 - **Kanban:** check that closed deals leave the board now that closing is
   reachable. As recorded (Sep).
-- **The AI score's refusal says nothing of why.** ai-score answers every
-  refusal from Anthropic with 502 "AI scoring service unavailable", and the
-  status goes to a console Netlify does not keep. The report reader returns
-  the status, and the page names a rejected key (§0.141). Recommended: the
-  same — Anthropic's status in the answer, and the AI Score tab naming the
-  cause (a rejected key, the account, the model, busy). Found 8 Oct. The
-  same day showed the status alone is not enough: both calls keep only the
-  status, and Anthropic's error message, which names the cause (for one,
-  "This API key is not scoped to a workspace…", 8 Oct), reaches only the
-  console. Keep its error type and message (never the key) in the answer
-  and the audit row: an org's own key (BYOK) can be unscoped too, and its
-  Admin should read that.
-  While there: Anthropic's docs call `x-api-key` legacy, still supported;
-  `Authorization: Bearer` is the current header.
-- **The AI score's text is cut mid-sentence.** ai-score keeps the first 150
-  characters of the recommendation, 120 of the headline and 100 of each
-  signal (`slice`, ai-score.mjs:195-200). On 8 Oct the deal window showed
-  "…escalate to Sofia Rossi. Verify close date" for "Ironwood Manufacturing
-  — Safety Compliance Module" (Accelerep QA). Recommended: cut at the last
-  full sentence or word, or ask for shorter text and keep a longer cap.
-  Found 8 Oct. On prod too (9 Oct, "EDF Energy – HPC Project": "…schedule
-  specific check-in with legal team. Confir"). The same score's signal read
-  "foreclosed in 20 days" for forecast to close: the model's wording, a
-  prompt matter for §3.1's batches.
+- **The report reader's failures still name only a status.** §0.238 named
+  the AI score's cause (Anthropic's type and message in the audit row, the
+  words in the deal window); report-prompt.mjs still keeps only the status
+  in its row (`error <status>`), its message in the console. Recommended:
+  `attemptOutcome`'s detail in its row. Low. (While there, from the item
+  §0.238 closed: Anthropic's docs call `x-api-key` legacy, still supported;
+  `Authorization: Bearer` is the current header — both calls.)
+- **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
+- **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
 
 - **The Recommendation report's outcomes never move.** Nothing calls
   `recommendation-log.mjs`'s PUT, the sweep that marks a pending alert
@@ -2303,15 +2292,21 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "+ New crew". Older than §0.226. Wire them to a preset list or remove
   them. Low.
 - **More controls that do nothing** (Escape in the tabs' inventory and its
-  critique, 4 Nov; each re-read): Features' "Reset AI training data?" —
-  "Request reset" only closes the window (FeaturesDetail.jsx:78), its
-  facts hard-coded (:47-50); Webhooks' row menu "Send test event"
+  critique, 4 Nov; each re-read): Webhooks' row menu "Send test event"
   (`onClick={() => {}}`, WebhooksDetail.jsx:12); Dispatch skills' license
   "Rename" only closes its menu (DispatchSkillsDetail.jsx:221); and
   outside Settings, Leads' "See all" (a pointer, no handler,
   LeadsTab.jsx:516), Quotes' "☰ View bundles" (no onClick,
   QuotesTab.jsx:1129) and the Sub-accounts drawer's "Show all"
   (AccountsTab.jsx:291). Wire or remove each. Low.
+- **The BYOK switch decides nothing** (§0.238's map, 9 Nov; read in
+  `_aiKey.mjs`:19-24): a stored org key is used whenever it decrypts,
+  whatever "BYOK (bring your own key)" says; with the switch off the key
+  box is hidden, so an Admin cannot see or remove a stored key without
+  turning it on. A key that fails to decrypt silently becomes the site
+  key. Guide §18b64.1's class. Recommended: the switch off means the site
+  key (or the switch goes, the key's presence deciding), and a key that
+  will not decrypt is said on the panel. Low.
 - **Two deletes with no confirm** (the Settings reader, 4 Nov; re-read):
   a webhook endpoint's "Delete endpoint" (WebhooksDetail.jsx:14 →
   :297 → `handleDelete` :181) sends the DELETE at once; an automation's

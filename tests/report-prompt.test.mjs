@@ -364,7 +364,8 @@ test('the tab: Claude first when the switch is on, the built-in reader for every
     assert.ok(s.includes("else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed"), 'no key: said in words');
     assert.ok(s.includes("} catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }"), 'unreachable: the fallback, said');
     assert.ok(s.includes("else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired)"), 'a rejected key is named for the Admin (observed on dev: the site key answered 401)');
-    assert.ok(s.includes("        } else {\n            extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);\n        }"), 'off: the built-in reader and the note that AI is available');
+    // State §0.238: the note goes to one "Available to" names — a role it leaves out is told only who read it.
+    assert.ok(s.includes("        } else {\n            extraNotes.push(aiOpen ? PROMPT_AI_AVAILABLE_NOTE : 'Read by the built-in interpreter.');\n        }"), 'off: the built-in reader and the note that AI is available');
     assert.ok(s.includes("const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn \"Claude reads report prompts\" on under Settings → Features → AI.';"));
     assert.ok(s.includes("        if (!reading) {\n            const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });"), 'the built-in reader runs whenever Claude did not answer');
     assert.ok(s.includes("const r = { ...reading, understood: understoodFor(reading.definition), notes: [...reading.notes, ...extraNotes] };"), 'the chips describe the definition whichever reader made it');

@@ -27,6 +27,7 @@ import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
 // sets, drawn by the same component.
 import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';
 import { interpretPrompt, understoodFor, PROMPT_STARTERS } from '../utils/reportPrompt.js';
+import { mayUseAi, aiAccessWords } from '../utils/aiModels.js';
 import ReportChart from '../components/ReportChart.jsx';
 import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
@@ -2374,6 +2375,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [showCreateReport, setShowCreateReport] = React.useState(false);
     const [createMode, setCreateMode] = React.useState('picker');
     const [aiPrompt, setAiPrompt] = React.useState('');
+    // Whether this member's role may send a prompt to Claude ("Available to", state §0.238).
+    const { userRole: aiRole } = useApp();
     // §0.139 — what the last prompt was read as ({ prompt, understood, notes }),
     // shown above the builder it seeded; null when the builder was not seeded by a prompt.
     const [aiInterpretation, setAiInterpretation] = React.useState(null);
@@ -2417,7 +2420,12 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
         let reading = null, readBy = 'local';
         const extraNotes = [];
-        if (settings?.aiReportPromptsEnabled === true) {
+        // "Available to" covers Ask AI (state §0.238 — Jeff, 9 Nov, Q1): a role it leaves out sends nothing to
+        // Claude, and the built-in reader reads the prompt; the server refuses it the same way (reason 'role').
+        const aiOpen = mayUseAi(aiRole, settings?.aiSettings);
+        if (settings?.aiReportPromptsEnabled === true && !aiOpen) {
+            extraNotes.push(`${aiAccessWords(settings?.aiSettings)} Read by the built-in interpreter.`);
+        } else if (settings?.aiReportPromptsEnabled === true) {
             setPromptBusy(true);
             try {
                 const res = await dbFetch('/.netlify/functions/report-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, today: isoLocal(new Date()) }) });
@@ -2425,12 +2433,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 if (res.ok && data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }
                 else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed — an Admin adds one under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
                 else if (data.unavailable && data.reason === 'off') extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
+                else if (data.unavailable && data.reason === 'role') extraNotes.push(`${aiAccessWords(settings?.aiSettings)} Read by the built-in interpreter.`);
                 else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
                 else extraNotes.push('Claude could not read this one — read by the built-in interpreter instead.');
             } catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }
             finally { setPromptBusy(false); }
         } else {
-            extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
+            // Off: an Admin can turn it on — for a role "Available to" names; a role it leaves out is told nothing it could not use.
+            extraNotes.push(aiOpen ? PROMPT_AI_AVAILABLE_NOTE : 'Read by the built-in interpreter.');
         }
         if (!reading) {
             const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });

@@ -1,4 +1,4 @@
-<!-- AI deal scoring, batch 1 — the Admin's model choice (OPEN_ITEMS §1 item 2, §3.1): the design, 9 Nov 2026, over 194a1a7. Jeff's four plan decisions: ANSWERS.md beside this file. This batch's own questions: §4 below — answered 9 Nov, each the Recommended (Q4 all three; ANSWERS.md). Not built. -->
+<!-- AI deal scoring, batch 1 — the Admin's model choice (OPEN_ITEMS §1 item 2, §3.1): the design, 9 Nov 2026, over 194a1a7. Jeff's four plan decisions: ANSWERS.md beside this file. This batch's own questions: §4 below — answered 9 Nov, each the Recommended (Q4 all three; ANSWERS.md). Built 9 Nov (state §0.238; guide §18b121), its browser check PASSED as Karen and as an Admin; NOT committed; harness deferred. -->
 
 # Design: the AI score uses the model the Admin chose, falls back once, names what it used, and is open only to the roles "Available to" names
 

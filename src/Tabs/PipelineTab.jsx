@@ -3,6 +3,9 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+// "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
+import { mayUseAi } from '../utils/aiModels.js';
+import { storedScore } from '../utils/aiScore.js';
 import { isoLocal } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
@@ -401,6 +404,8 @@ export default function PipelineTab() {
     const [pipelineSortDir,     setPipelineSortDir]     = useState('asc');
     const [bulkScoring,         setBulkScoring]         = useState(false);
     const [bulkScoreProgress,   setBulkScoreProgress]   = useState(null);
+    // What the last "Score all deals" came to, when a deal went unscored (state §0.238): it counted a refusal as done.
+    const [bulkScoreNote,       setBulkScoreNote]       = useState(null);
 
     // ── Column sort handler ───────────────────────────────────
     const handleSort = (field) => {
@@ -569,24 +574,31 @@ export default function PipelineTab() {
         const active = visibleOpportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
         if (!active.length) return;
         setBulkScoring(true);
+        setBulkScoreNote(null);
         setBulkScoreProgress({ done: 0, total: active.length });
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-        let scored = 0;
-        for (const opp of active) {
-            if (!stillOrg(askedOrg)) return;   // the next score would be asked with the new org's token
-            try {
-                const res  = await dbFetch('/.netlify/functions/ai-score', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }) });
-                const data = await res.json();
-                if (!stillOrg(askedOrg)) return;
-                if (!data.disabled && data.score !== undefined) {
-                    setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: data } : o));
-                }
-            } catch (err) { console.warn('Bulk score failed for', opp.id, err.message); }
-            scored++;
-            setBulkScoreProgress({ done: scored, total: active.length });
+        let done = 0, kept = 0, firstCause = null;
+        try {
+            for (const opp of active) {
+                if (!stillOrg(askedOrg)) return;   // the next score would be asked with the new org's token
+                try {
+                    const res  = await dbFetch('/.netlify/functions/ai-score', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }) });
+                    const data = await res.json().catch(() => ({}));
+                    if (!stillOrg(askedOrg)) return;
+                    // What the deal keeps — the score without its transport flags, as the deal window keeps it (state §0.238).
+                    const score = res.ok ? storedScore(data) : null;
+                    if (score) { kept++; setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o)); }
+                    else if (!firstCause) firstCause = data.error || (data.disabled ? 'AI scoring is off for this workspace.' : 'Scoring failed.');
+                } catch (err) { console.warn('Bulk score failed for', opp.id, err.message); if (!firstCause) firstCause = 'Claude could not be reached.'; }
+                done++;
+                setBulkScoreProgress({ done, total: active.length });
+            }
+            if (kept < active.length) setBulkScoreNote(`Scored ${kept} of ${active.length} deals. ${firstCause}`);
+        } finally {
+            // Cut by an org switch too, the button comes back (it stayed "Scoring…").
+            setBulkScoring(false);
+            setBulkScoreProgress(null);
         }
-        setBulkScoring(false);
-        setBulkScoreProgress(null);
     };
 
     // ── Export CSV ────────────────────────────────────────────
@@ -895,14 +907,18 @@ export default function PipelineTab() {
             <div className="spt-pipeline-desktop">
 
                 {/* AI bulk score */}
-                {settings?.aiScoringEnabled && (
-                    <div style={{ padding: '0 0 8px' }}>
+                {/* Offered to a role "Available to" names (state §0.238); the server refuses the rest. */}
+                {settings?.aiScoringEnabled && mayUseAi(userRole, settings?.aiSettings) && (
+                    <div style={{ padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                         <button onClick={handleBulkScore} disabled={bulkScoring}
                             style={{ padding: '0.3rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: T.rSm, background: bulkScoring ? T.surface2 : T.surface, color: T.inkMid, fontSize: '0.75rem', fontWeight: '600', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                             {bulkScoring ? (
                                 <><span style={{ width: 10, height: 10, border: `2px solid ${T.border}`, borderTopColor: T.inkMid, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…</>
                             ) : '🤖 Score all deals'}
                         </button>
+                        {bulkScoreNote && !bulkScoring && (
+                            <span style={{ fontSize: '0.75rem', color: T.warn, fontFamily: T.sans }}>{bulkScoreNote}</span>
+                        )}
                     </div>
                 )}
 

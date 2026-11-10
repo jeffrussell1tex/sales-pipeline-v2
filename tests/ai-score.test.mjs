@@ -93,7 +93,7 @@ test("the verdicts are ai-score's four, and the tab colours each", () => {
 
 test('ai-score.mjs keeps the new score with the one it replaces in its history, and answers the score as kept', () => {
     const s = read('netlify/functions/ai-score.mjs');
-    assert.ok(s.includes("import { withHistory } from '../../src/utils/aiScore.js';"));
+    assert.ok(s.includes("import { withHistory, cutAtWord } from '../../src/utils/aiScore.js';"));
     assert.ok(s.includes('const cached = opp.aiScore;'));
     assert.ok(s.includes('const stored = withHistory(cached, scoreData);'));
     assert.ok(s.includes('.set({ aiScore: stored, updatedAt: new Date() })'));
@@ -130,7 +130,7 @@ test('the guard finds the shape as it was: the deal sanitize passing the window\
 
 test("the AI Score tab asks with the deal's id, checks the org before it sets the list, and hands the answer to the window", () => {
     const m = read('src/components/modals/OpportunityModal.jsx');
-    const tab = between(m, 'function AiScoreTab({ opportunity, aiScore, onScored, onClose, onUpdate }) {', '\n//  Quotes panel');
+    const tab = between(m, 'function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, onUpdate }) {', '\n//  Quotes panel');
     assert.ok(tab.includes('body: JSON.stringify({ opportunityId: dealId, forceRefresh }),'), 'the id the endpoint requires');
     assert.ok(tab.includes('const askedOrg = requestOrg();'));
     assert.ok(tab.indexOf('if (!stillOrg(askedOrg)) return;') > -1
@@ -142,8 +142,11 @@ test("the AI Score tab asks with the deal's id, checks the org before it sets th
     assert.ok(tab.includes('const history = Array.isArray(score?.history) ? score.history : [];'));
     assert.ok(tab.includes('an Admin turns it on in Settings → Features &amp; AI'));
     assert.ok(!tab.includes('useEffect('), "nothing asked or copied on open — the window's score is the tab's");
-    assert.ok(tab.includes('<GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>'));
-    assert.ok(tab.includes('<PrimaryBtn type="button" onClick={() => fetchScore(false)}>Score this deal</PrimaryBtn>'));
+    // A role "Available to" leaves out is offered neither — the words in their place (state §0.238).
+    assert.ok(tab.includes(': <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>}'));
+    assert.ok(tab.includes(': <PrimaryBtn type="button" onClick={() => fetchScore(false)}>Score this deal</PrimaryBtn>}'));
+    assert.equal(count(tab, '{askWords\n'), 2, 'Refresh and Score, each behind askWords');
+    assert.ok(tab.includes("{score.model ? `Scored by Claude ${modelLabel(score.model)}` : 'Powered by Claude AI'}"), 'the score names its model');
 });
 
 test("the window keeps the deal's score — the one it opened with, or the one just asked for — and the rail and the tab read it", () => {
@@ -155,10 +158,14 @@ test("the window keeps the deal's score — the one it opened with, or the one j
     assert.ok(m.includes('                                            aiScore={aiScore}\n                                            aiOn={aiOn}'), 'the rail is handed both');
     const rail = between(m, 'function RightRail(', '{/* ── Buying committee');
     assert.ok(rail.includes('const aiSignals = aiScore?.signals || [];'));
-    assert.ok(rail.includes('{(aiOn || aiScore) && ('), 'no score and the switch off: no AI read');
+    // "Available to" (state §0.238): a role it leaves out sees the score a deal keeps, and is offered no Score.
+    assert.ok(m.includes('const aiAsk = aiOn && mayUseAi(aiRole, settings?.aiSettings);'));
+    assert.ok(m.includes('                                            aiOn={aiOn}\n                                            aiAsk={aiAsk}'), 'the rail is handed whether this member may ask');
+    assert.ok(m.includes('askWords={aiAsk ? null : aiAccessWords(settings?.aiSettings)}'), 'the tab too');
+    assert.ok(rail.includes('{(aiAsk || aiScore) && ('), 'no score and no asking: no AI read');
     assert.ok(rail.includes('{aiOn && ('), 'the full analysis only where the tab is offered');
     assert.ok(rail.includes('<SignalChip key={i} kind={signalKind(s)} text={s.text}/>'));
-    assert.ok(m.includes("...(settings?.aiScoringEnabled ? [{ id: 'ai-score', label: 'AI Score' }] : []),"), 'the tab offered by the switch');
+    assert.ok(m.includes("...(settings?.aiScoringEnabled && (aiAsk || aiScore) ? [{ id: 'ai-score', label: 'AI Score' }] : []),"), 'the tab offered by the switch, to one who may ask or a deal with a score');
 });
 
 test("every detail tab's Save saves the deal — none submits the form a detail tab unmounts; a missing field opens the form", () => {
@@ -182,5 +189,5 @@ test('the switch: "Claude scores deals" in Settings → Features & AI, saved as 
     const s = read('netlify/functions/settings.mjs');
     assert.equal(count(s, 'aiScoringEnabled:'), 2, 'the GET projection AND the PUT whitelist (18b12)');
     assert.ok(read('src/utils/settingsDefaults.js').includes('    aiScoringEnabled: false,'), 'off by default');
-    assert.ok(read('src/Tabs/PipelineTab.jsx').includes('{settings?.aiScoringEnabled && ('), "the Pipeline's Score all deals, by the same switch");
+    assert.ok(read('src/Tabs/PipelineTab.jsx').includes('{settings?.aiScoringEnabled && mayUseAi(userRole, settings?.aiSettings) && ('), "the Pipeline's Score all deals, by the same switch and \"Available to\" (state §0.238)");
 });
