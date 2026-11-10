@@ -1270,7 +1270,12 @@ docs/design/ai-scoring/ANSWERS.md):**
   by the customer's location); which lines are taxable (per product?);
   tax-exempt customers; whether the quote's rate carries to its job's
   invoice; and the schema change it needs (additive and nullable, both
-  databases, Jeff's go). Not designed.
+  databases, Jeff's go). **Designed and answered 10 Nov** (docs/design/sales-tax/DESIGN.md,
+  ANSWERS.md, RESEARCH.md): the rate by customer location, in two batches — **batch A**
+  (tax on quotes with an org default rate changeable per quote; taxable per product and line;
+  an exempt switch prefilled from the linked Dispatch customer; carried to the job's invoice;
+  one quote money function) next to build, **batch B** (the address lookup on one Zip-Tax
+  account) gated on Zip-Tax's three written answers (Jeff's to get).
 - **The dead `priceBookProducts` key.** Drop it from both settings.mjs halves.
 - **The quote Activity list** is derived from the current status, so earlier
   steps vanish. The audit log is the real history. §0.150, as recorded.
