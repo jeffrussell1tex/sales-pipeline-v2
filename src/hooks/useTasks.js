@@ -26,8 +26,6 @@ export function useTasks(deps) {
     const [tasks, setTasks] = useState([]);
     const [taskModalError, setTaskModalError] = useState(null);
     const [taskModalSaving, setTaskModalSaving] = useState(false);
-    const [calendarAddingTaskId, setCalendarAddingTaskId] = useState(null);
-    const [calendarAddFeedback, setCalendarAddFeedback] = useState({});
 
     // The latest load of the tasks: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
@@ -86,37 +84,14 @@ export function useTasks(deps) {
         });
     };
 
-    const fireCalendarEvent = async (task, opportunities) => {
-        if (!task.addToCalendar || !task.dueDate) return;
-        try {
-            const relatedOpp = task.opportunityId
-                ? (opportunities || []).find(o => o.id === task.opportunityId)
-                : null;
-            const description = [
-                task.description || task.notes || '',
-                relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                task.type ? 'Type: ' + task.type : '',
-            ].filter(Boolean).join('\n');
-            // dbFetch, for the sign-in token (state §0.169): verifyAuth reads only
-            // the Authorization header, and a bare fetch sent none — every call was
-            // refused, and no event was ever added. A refusal, and a 200 that says
-            // { connected: false } (no Google calendar connected), add nothing:
-            // both reach the warning below.
-            const res = await dbFetch('/.netlify/functions/calendar-add-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
-            });
-            const result = await res.json().catch(() => ({}));
-            if (!res.ok || result.connected === false) throw new Error(result.error || result.message || `the server returned ${res.status}`);
-        } catch (err) {
-            console.warn('Calendar event creation failed (non-blocking):', err);
-        }
-    };
+    // No calendar event at a save, and no task "add to calendar" (state §0.246, docs/design/refusal-sweep 7c; Jeff's
+    // Q16): fireCalendarEvent added one only for an `addToCalendar` no screen sent, and handleAddTaskToCalendar was
+    // handed out by App and called by no screen — each failure said only to the console, or a flag cleared after 3 s.
+    // They are gone with Quick Log's box; a real calendar event is §3.6's meetings.
 
     const handleSaveTask = async (taskData, ctx) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-        const { editingTask, setShowTaskModal, opportunities } = ctx;
+        const { editingTask, setShowTaskModal } = ctx;
         setTaskModalError(null);
         setTaskModalSaving(true);
         if (editingTask) {
@@ -132,7 +107,6 @@ export function useTasks(deps) {
                 if (taskData.assignedTo && editingTask.assignedTo !== taskData.assignedTo) {
                     fireMentionSms({ type: 'taskAssigned', recordId: editingTask.id });
                 }
-                fireCalendarEvent(payload, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
@@ -155,7 +129,6 @@ export function useTasks(deps) {
                 if (taskData.assignedTo) {
                     fireMentionSms({ type: 'taskAssigned', recordId: newId });
                 }
-                fireCalendarEvent(newTask, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
@@ -212,40 +185,6 @@ export function useTasks(deps) {
         return { ok: true };
     };
 
-    const handleAddTaskToCalendar = async (e, task, opportunities) => {
-        e.stopPropagation();
-        if (!task.dueDate) return;
-        setCalendarAddingTaskId(task.id);
-        try {
-            const relatedOpp = task.opportunityId
-                ? (opportunities || []).find(o => o.id === task.opportunityId)
-                : null;
-            const description = [
-                task.notes || '',
-                relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                task.type ? 'Type: ' + task.type : '',
-            ].filter(Boolean).join('\n');
-            // dbFetch, for the sign-in token (state §0.169), as above. A 200 that
-            // says { connected: false } added nothing — no Google calendar is
-            // connected — so it is not a success.
-            const res = await dbFetch('/.netlify/functions/calendar-add-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
-            });
-            const result = await res.json().catch(() => ({}));
-            if (!res.ok || result.connected === false) throw new Error('Failed');
-            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'success' }));
-        } catch {
-            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'error' }));
-        } finally {
-            setCalendarAddingTaskId(null);
-            setTimeout(() => setCalendarAddFeedback(prev => {
-                const n = { ...prev }; delete n[task.id]; return n;
-            }), 3000);
-        }
-    };
-
     return {
         tasks,
         setTasks,
@@ -253,12 +192,9 @@ export function useTasks(deps) {
         setTaskModalError,
         taskModalSaving,
         setTaskModalSaving,
-        calendarAddingTaskId,
-        calendarAddFeedback,
         loadTasks,
         handleDeleteTask,
         handleSaveTask,
         handleCompleteTask,
-        handleAddTaskToCalendar,
     };
 }

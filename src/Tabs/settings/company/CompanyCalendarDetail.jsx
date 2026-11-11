@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { STILL_SAVING } from '../../../utils/settingsRevs.js';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -141,16 +142,20 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const handleSync = async () => {
         // The gate is taken before the holidays GET (state §0.228): an Add or Delete meanwhile is refused, and the two
         // keys this sends are not moved under it.
-        if (inFlight.current) { setSyncMsg(`Not synced — ${STILL_SAVING}`); setTimeout(() => setSyncMsg(''), 6000); return; }
+        // Said on the red line under the Sync button, kept until its Close or the next Sync (state §0.246, Q11).
+        if (inFlight.current) { setSyncMsg(`Not synced — ${STILL_SAVING}`); return; }
         inFlight.current = true;
         setSyncing(true);
         setSyncMsg('');
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
-            const data = await res.json();
+            // The ok check before the body (state §0.246): a 502's page said "Unexpected token '<'"; a refusal says the
+            // server's words with their ref, else "The server returned N.".
+            const why  = res.ok ? '' : await readRefusal(res);
+            const data = res.ok ? await res.json() : null;
             if (!stillOrg(askedOrg)) { inFlight.current = false; return; }
-            if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
+            if (why) throw new Error(why);
             if (!data || !data.holidays) throw new Error('No holidays in response');
             // Merge: keep custom holidays, replace all observed/federal entries with fresh API data
             const fresh = data.holidays; // observed entries from API
@@ -177,13 +182,17 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                 setSettings(prev => ({ ...prev, ...held }));
                 throw e;
             }
-            setSyncMsg(`✓ Synced ${fresh.length} federal holidays for ${year}`);
-            setTimeout(() => setSyncMsg(''), 4000);
+            // The success's timer clears only its own words, never a later failure (Q10).
+            const done = `✓ Synced ${fresh.length} federal holidays for ${year}`;
+            setSyncMsg(done);
+            setTimeout(() => setSyncMsg(m => (m === done ? '' : m)), 4000);
         } catch (err) {
             inFlight.current = false;   // the GET failed or the save was refused: the gate opens at once
+            // An answer that could not be read after an org switch (a 200's page, not JSON) says nothing (state §0.175).
+            if (!stillOrg(askedOrg)) return;
             console.error('sync holidays error', err);
-            setSyncMsg(`Failed to sync — ${err.message}`);
-            setTimeout(() => setSyncMsg(''), 6000);
+            // The house words, kept until its Close or the next Sync — never on a timer (state §0.246, Q11).
+            setSyncMsg(`Failed to sync — ${failureWords(err)}`);
         }
         setSyncing(false);
     };
@@ -313,7 +322,7 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                         style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background: syncing ? T.borderStrong : T.surface, color: syncing ? T.inkMuted : T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: syncing ? 'default' : 'pointer', fontFamily:T.sans, transition:'all 120ms' }}>
                         <LIcon name="refresh" size={13} color={syncing ? T.inkMuted : T.ink}/> {syncing ? 'Syncing…' : 'Sync federal holidays'}
                     </button>
-                    {syncMsg && <div style={{ fontSize:11, color: syncMsg.startsWith('✓') ? T.ok : T.danger, fontFamily:T.sans, fontWeight:600 }}>{syncMsg}</div>}
+                    {syncMsg && <div role={syncMsg.startsWith('✓') ? undefined : 'alert'} style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color: syncMsg.startsWith('✓') ? T.ok : T.danger, fontFamily:T.sans, fontWeight:600 }}>{syncMsg}{!syncMsg.startsWith('✓') && <button onClick={() => setSyncMsg('')} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>Close</button>}</div>}
                 </div>
             </div>
 

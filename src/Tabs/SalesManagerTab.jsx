@@ -849,7 +849,7 @@ export default function SalesManagerTab() {
         currentUser, userRole,
         getQuarter, getQuarterLabel,
         exportToCSV, exportingCSV, showConfirm, softDelete, setUndoToast,
-        coachingNotes, showCoachingNote, deleteCoachingNote, currentUserId,
+        coachingNotes, coachingNotesError, showCoachingNote, deleteCoachingNote, currentUserId,
         activeTab, setActiveTab, setViewingRep,
         setEditingTask, setTaskRailId, setTaskRailMode,
         spiffClaims, setSpiffClaims,
@@ -1405,12 +1405,30 @@ export default function SalesManagerTab() {
                 );
             })()}
 
+            {/* A refused coaching-note delete, kept until its Close (state §0.246, docs/design/refusal-sweep 7b) — as
+                AdminTab's banner. The tab remounts on an org switch (App.jsx's keyed fragment), so a late answer sets
+                nothing shown. */}
             {saveState.status === 'error' && (
-                <div style={{ padding:'8px 12px', marginBottom:12, background:'rgba(156,58,46,0.08)', border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12, color:T.danger, fontFamily:T.sans }}>{saveState.msg}</div>
+                <div role="alert" style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', marginBottom:12, background:'rgba(156,58,46,0.08)', border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12, color:T.danger, fontFamily:T.sans }}>
+                    <span style={{ flex:1 }}>{saveState.msg}</span>
+                    <button onClick={() => setSaveState({ status:'idle', msg:'' })} title="Close"
+                        style={{ marginLeft:'auto', background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14 }}>×</button>
+                </div>
             )}
             {/* Recent coaching — the coaching_notes table, server-filtered (state §0.82). The
-                inert "See all →" button is gone; the header states what the list is. */}
-            {recentNotes.length > 0 && (
+                inert "See all →" button is gone; the header states what the list is. A failed load is said, never
+                hidden as if there were none (state §0.246, Jeff's Q17). */}
+            {coachingNotesError && (
+                <div style={card}>
+                    <div style={{ ...cardHdr }}>
+                        <span style={{ fontSize:14, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink }}>Recent coaching</span>
+                    </div>
+                    <div role="alert" style={{ padding:'12px 16px', fontSize:12, color:T.danger, fontFamily:T.sans, lineHeight:1.45 }}>
+                        Coaching notes couldn't be loaded ({coachingNotesError}). Reload the page to try again.
+                    </div>
+                </div>
+            )}
+            {!coachingNotesError && recentNotes.length > 0 && (
                 <div style={card}>
                     <div style={{ ...cardHdr }}>
                         <span style={{ fontSize:14, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink }}>Recent coaching</span>

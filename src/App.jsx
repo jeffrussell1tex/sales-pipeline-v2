@@ -366,10 +366,9 @@ function App() {
         taskModalError, setTaskModalError,
         taskModalSaving,
         setTaskModalSaving,
-        calendarAddingTaskId, calendarAddFeedback,
         loadTasks,
         handleDeleteTask, handleSaveTask,
-        handleCompleteTask, handleAddTaskToCalendar,
+        handleCompleteTask,
     } = useTasks(_deps);
 
     const {
@@ -753,7 +752,7 @@ dbFetch('/.netlify/functions/users?me=true')
     }, [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps -- the org's own load is the effect above
 
     // Coaching notes (state §0.82) — the server returns only what this caller may see.
-    const { coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });
+    const { coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });
 
 
 
@@ -1068,10 +1067,6 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // handleCompleteTask managed by useTasks hook
 
-
-
-    // handleAddTaskToCalendar managed by useTasks hook
-
     const handleAddContact = () => {
         setContactRailId('new');
         setContactRailMode('new');
@@ -1281,7 +1276,6 @@ dbFetch('/.netlify/functions/users?me=true')
             notes: [ev.summary || '', ev.description || ''].filter(Boolean).join('\n'),
             opportunityId: opportunityId || '',
             companyName: relatedOpp?.account || '',
-            addToCalendar: false,
         };
         await handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults });
         if (!stillOrg(askedOrg)) return;
@@ -1860,7 +1854,7 @@ dbFetch('/.netlify/functions/users?me=true')
         showConfirm,
         showPrompt,
         showCoachingNote,
-        coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,
+        coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,
         softDelete,
         addAudit,
         isRepVisible,
@@ -1882,7 +1876,6 @@ dbFetch('/.netlify/functions/users?me=true')
         handleAddTask,
         handleEditTask,
         handleCompleteTask,
-        handleAddTaskToCalendar,
         handleAddActivity,
         handleDeleteActivity,
         handleLogActivity,

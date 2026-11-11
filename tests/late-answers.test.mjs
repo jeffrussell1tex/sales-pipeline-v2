@@ -65,11 +65,13 @@ const CALLBACK = /^on(?!(Close|Cancel|Back|Progress|Error)$)[A-Z]\w*$/;
 
 // A write request: dbWrite, or dbFetch — or a fetch handed in (fetchFn) — with a
 // non-GET method in its options literal.
-// Helpers that send a write of their own: the client audit row, the SMS and the
-// calendar-event POSTs (src/App.jsx, src/hooks/useOpportunities.js, useTasks.js,
-// useActivities.js), and the settings senders (src/Tabs/settings/shared/saveSettings.js —
-// state §0.225, JB2-11). Called after a switch, each would carry the new org's token.
-const WRITING_HELPERS = /^(addAudit|fireMentionSms|fireActivityCalendarEvent|fireCalendarEvent|putSettings|writeSettings|addToSettingsList)$/;
+// Helpers that send a write of their own: the client audit row, the SMS (src/App.jsx,
+// src/hooks/useOpportunities.js, useTasks.js), and the settings senders
+// (src/Tabs/settings/shared/saveSettings.js — state §0.225, JB2-11). Called after a switch,
+// each would carry the new org's token. The calendar-event POSTs (fireActivityCalendarEvent,
+// fireCalendarEvent) are gone since §0.246 (docs/design/refusal-sweep 7c) — their names
+// retired here, named in the state section.
+const WRITING_HELPERS = /^(addAudit|fireMentionSms|putSettings|writeSettings|addToSettingsList)$/;
 
 const writeRequest = (call) => {
     const c = call.callee;

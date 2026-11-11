@@ -486,10 +486,18 @@ const SWEPT = [
     // The rest of the sweep (state §0.245, docs/design/refusal-sweep; each Part adds the files it cleans — RUN in
     // tests/refusal-sweep.test.mjs). Part 1: the Pipeline's stage drag, the deals hook, the press notice.
     'src/components/KanbanView.jsx', 'src/hooks/useOpportunities.js', 'src/utils/pressNotice.js',
-    // Part 2: the Tasks tab's ✓ and Snooze, and the task write's answer (useTasks.js waits for Parts 7 and 10: its
-    // calendar reads and its saves).
+    // Part 2: the Tasks tab's ✓ and Snooze, and the task write's answer (useTasks.js waits for Part 10: its saves;
+    // its calendar reads left with Part 7).
     'src/Tabs/TasksTab.jsx', 'src/utils/taskWrite.js',
     // Part 4: Export's Delete and its two windows' saves — ExportDetail.jsx, swept since §0.243 (the first line above).
+    // Part 5 (§0.246): the report saves and the holiday Sync read the ok check first now, but neither file joins yet —
+    // ReportsTab.jsx's library reads (patchReport, the pin and the send) wait for Part 12, CompanyCalendarDetail.jsx's
+    // calendar load for Part 9; their RUN tests are tests/refusal-sweep.test.mjs Part 5 and settings-saves S10.
+    // Part 7 (§0.246): the quote PDF's answer, the coaching notes hook (its writes through one ok-first reader, its load
+    // ok-first) and Home ("Mark read"; its pinned reports read ok-first already). useTasks.js's and useActivities.js's
+    // calendar reads are gone with Quick Log's box (7c); their saves wait for Part 10. QuotesTab.jsx waits for Part 12
+    // (its job and version reads); its PDF's RUN is tests/refusal-sweep.test.mjs Part 7a.
+    'src/utils/quotePdfAnswer.js', 'src/hooks/useCoachingNotes.js', 'src/Tabs/HomeTab.jsx',
 ];
 // A body read before its ok check by design: { file, text (the trimmed line), why }.
 const BODY_FIRST = [

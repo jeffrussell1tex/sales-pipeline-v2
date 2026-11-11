@@ -4,6 +4,9 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
+// A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { notFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
@@ -4920,11 +4923,12 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
         // Warn before booking someone out over work they are already committed to.
         // Saving silently would leave jobs assigned to a technician who is away.
         const clashing = jobsDuringBlock(jobs, editing);
-        if (clashing.length > 0) { setConflict({ block: editing, jobs: clashing }); return; }
+        // The last attempt's words go with it: the conflict step shares this line (state §0.246).
+        if (clashing.length > 0) { setErr(''); setConflict({ block: editing, jobs: clashing }); return; }
 
         setBusy(true); setErr('');
         try { await onSaveBlock(editing); setEditing(null); }
-        catch (e) { setErr(e.message); }
+        catch (e) { setErr(failureWords(e)); }
         finally { setBusy(false); }
     };
 
@@ -4933,7 +4937,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
         try {
             await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));
             setConflict(null); setEditing(null);
-        } catch (e) { setErr(e.message); }
+        } catch (e) { setErr(failureWords(e)); }
         finally { setBusy(false); }
     };
 
@@ -5157,7 +5161,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
                             {!editing._isNew && (
-                                <button onClick={async () => { setBusy(true); try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(e.message); } finally { setBusy(false); } }}
+                                <button onClick={async () => { setBusy(true); try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(failureWords(e)); } finally { setBusy(false); } }}
                                     disabled={busy}
                                     style={{ marginRight: 'auto', padding: '7px 12px', background: 'transparent', color: T.danger,
                                         border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
@@ -6229,23 +6233,32 @@ export default function DispatchTab() {
     // unassignJobIds: work the technician can no longer do. Saved first so the
     // block is recorded even if a later unassign fails, then each job is returned
     // to the queue and the dispatcher is taken there to re-crew it.
+    // A job not returned is said on the banner across the top of Dispatch (state §0.246, Q12), kept until its Close and
+    // cleared when the next save with jobs to return begins; the save still answers normally — a throw would keep the
+    // dialog open, and a second press re-saves the block and re-sends every unassign. The block's own refusal throws,
+    // in the server's words (a 403 the role's sentence, Q13), the ok check before the body.
+    const [unassignError, setUnassignError] = useState('');
     const saveBlock = async (blk, unassignJobIds = []) => {
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         const isNew = !!blk._isNew;
         const body = { ...blk }; delete body._isNew;
+        if (unassignJobIds.length) setUnassignError('');
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
             + (isNew ? '' : '?id=' + encodeURIComponent(blk.id)), {
             method: isNew ? 'POST' : 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            if (res.status === 403) throw new Error('Your role cannot change availability.');
-            throw new Error(data.error || ('HTTP ' + res.status));
-        }
-        const saved = data.block;
-        setBlocks(prev => {
+        if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change availability.' : await readRefusal(res));
+        const data = await res.json().catch(() => null);
+        const saved = data && data.block;
+        // Landed (a 2xx) with an answer that cannot be read: with jobs to return they still go back to the queue, the
+        // banner saying the time off shows after a refresh (any job left is added after it) — a throw here sent no
+        // unassign and named no job (review, 11 Nov); with none to return the dialog says it.
+        const unread = "The time off was saved, but its answer couldn't be read. Refresh to see it.";
+        if (!saved && !unassignJobIds.length) throw new Error(unread);
+        if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }
+        else setBlocks(prev => {
             const i = prev.findIndex(b => b.id === saved.id);
             if (i === -1) return [...prev, saved];
             const next = [...prev]; next[i] = saved; return next;
@@ -6253,7 +6266,7 @@ export default function DispatchTab() {
 
         if (!unassignJobIds.length) return;
 
-        const freed = [];
+        const freed = [], notFreed = [];
         for (const jobId of unassignJobIds) {
             if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
             try {
@@ -6266,7 +6279,8 @@ export default function DispatchTab() {
                     }),
                 });
                 if (r.ok) freed.push(jobId);
-            } catch (e) { /* counted below by omission */ }
+                else notFreed.push({ id: jobId, words: await readRefusal(r) });
+            } catch (e) { notFreed.push({ id: jobId, words: failureWords(e) }); }
         }
 
         if (!stillOrg(askedOrg)) return;   // and no audit row filed in the new org
@@ -6282,13 +6296,19 @@ export default function DispatchTab() {
                 (freed.length !== unassignJobIds.length ? ` — ${unassignJobIds.length - freed.length} failed` : ''));
         }
 
+        // Each job still on the technician, by name and why — never only the audit row's count (state §0.246, Q12).
+        // Added after any words another save said while this one was out (the dialog left and opened again), never over them.
+        const techLabel = `${techName.firstName || ''} ${techName.lastName || ''}`.trim();
+        const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length) : '';
+        if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));
+
         // Drop the dispatcher into the queue so the freed work is in front of them.
         if (freed.length) { setSelectedJobId(freed[0]); setView('queue'); }
     };
 
     const deleteBlock = async (id) => {
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks?id=' + encodeURIComponent(id), { method: 'DELETE' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error(await readRefusal(res));
         setBlocks(prev => prev.filter(b => b.id !== id));
     };
 
@@ -6649,6 +6669,21 @@ export default function DispatchTab() {
                     </div>
                 );
             })()}
+
+            {/* Time off saved with jobs still on the technician (state §0.246, Q12): above every view, each job by name and
+                why, kept until its Close — never on a timer; the next save with jobs to return clears it. */}
+            {unassignError && (
+                <div role="alert" style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px',
+                    marginBottom: 12, background: 'rgba(156,58,46,0.08)', borderLeft: `3px solid ${T.danger}`, borderRadius: T.r,
+                    fontSize: 12.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>✕ {unassignError}</span>
+                    <button onClick={() => setUnassignError('')}
+                        style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer',
+                            fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
 
             {/* Main content */}
             <div style={{ flex: 1, overflow: 'hidden' }}>

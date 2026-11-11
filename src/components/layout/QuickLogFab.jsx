@@ -145,20 +145,13 @@ export default function QuickLogFab() {
                             </div>
                         </div>
 
-                        {/* Add to Calendar */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                            <input type="checkbox" id="quickLogCal" checked={!!quickLogForm.addToCalendar}
-                                onChange={e => setQuickLogForm(f => ({ ...f, addToCalendar: e.target.checked }))}
-                                style={{ width: '16px', height: '16px', accentColor: '#1c1917', cursor: 'pointer', flexShrink: 0 }} />
-                            <label htmlFor="quickLogCal" style={{ fontSize: '0.875rem', fontWeight: '500', color: '#1c1917', cursor: 'pointer', userSelect: 'none' }}>
-                                📅 Add to Google Calendar
-                            </label>
-                            <span style={{ fontSize: '0.75rem', color: T.inkMuted }}>Creates an all-day event</span>
-                        </div>
+                        {/* No calendar box (state §0.246, docs/design/refusal-sweep 7c; Jeff's Q16): it promised an event
+                            the submit never asked for — no flag was sent and no calendar was called. A real calendar event
+                            is §3.6's meetings. */}
 
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '0.625rem', paddingTop: '0.25rem' }}>
-                            <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false }); setQuickLogContactResults([]); }}
+                            <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
                                 style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: T.inkMid, fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 Cancel
                             </button>
@@ -196,7 +189,7 @@ export default function QuickLogFab() {
                                 }
                                 if (linkedOpp) setFollowUpPrompt({ opportunityId: linkedOpp.id, opportunityName: linkedOpp.opportunityName || linkedOpp.account });
                                 setQuickLogOpen(false);
-                                setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
+                                setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
                                 setQuickLogContactResults([]);
                             }} style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: 'none', background: '#1c1917', color: '#f5f1eb', fontSize: '0.875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 Log Activity

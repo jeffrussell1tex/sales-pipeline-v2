@@ -245,12 +245,16 @@ test('automations: read by the roles that manage them — one gate, before both 
 
 // ── 8. The calendar ──────────────────────────────────────────────────────────
 
-test('calendar: every call sends the sign-in token, and “not connected” is not a success', () => {
-    const tasks = code(read('src/hooks/useTasks.js'));
-    const acts = code(read('src/hooks/useActivities.js'));
-    for (const [name, s, n] of [['useTasks', tasks, 2], ['useActivities', acts, 1]]) {
-        assert.equal(count(s, "dbFetch('/.netlify/functions/calendar-add-event'"), n, `${name}: dbFetch`);
-        assert.equal(count(s.replaceAll('dbFetch(', 'DBFETCH('), "fetch('/.netlify/functions/calendar-add-event'"), 0, `${name}: no bare fetch`);
-        assert.equal(count(s, 'result.connected === false'), n, `${name}: a 200 that added nothing is not a success`);
+// Since §0.246 (docs/design/refusal-sweep 7c; Jeff's Q16, "Remove it") no screen adds a calendar event: Quick Log's
+// box, fireCalendarEvent, handleAddTaskToCalendar and fireActivityCalendarEvent are gone, and with them this test's
+// counts of their calls (two in useTasks.js, one in useActivities.js) — RETIRED, named in the state section. What
+// stands: a call that comes back sends the sign-in token, never a bare fetch (held here over the hooks that had them);
+// tests/refusal-sweep.test.mjs Part 7c holds that no src file reads addToCalendar and that no caller of
+// calendar-add-event has a catch that only logs.
+test('calendar: no bare fetch of calendar-add-event in the hooks that had one, and no save-time add (§0.246)', () => {
+    for (const f of ['src/hooks/useTasks.js', 'src/hooks/useActivities.js']) {
+        const s = code(read(f));
+        assert.equal(count(s.replaceAll('dbFetch(', 'DBFETCH('), "fetch('/.netlify/functions/calendar-add-event'"), 0, `${f}: no bare fetch`);
+        assert.equal(count(s, 'addToCalendar'), 0, `${f}: no save-time calendar add (§0.246)`);
     }
 });

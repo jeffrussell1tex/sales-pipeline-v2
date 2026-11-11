@@ -35,7 +35,8 @@
 //       forms, kept when refused; Edit brand's Save, close and Escape; the Sales Manager's saveExtra,
 //       saveAdminDrafts (partial, over saveExtra's own refusal too), its cards' flights and the flags that lock them,
 //       a SPIFF's Remove answered late, its drafts' setters; Connected apps' Slack Save, Disconnect, web form and
-//       request, and its copy read for an org that saved no settings (state §0.229)
+//       request, and its copy read for an org that saved no settings (state §0.229); the calendar's Sync's words — the
+//       house words, kept until closed, a success's timer clearing only its own (state §0.246)
 //   S11 AdminView's panelStale and guardSave, run as written; Back, another card and Discard
 //   S12 the pins: App's leave guard, the words (J-B11, JB3-2, JB3-8, JB3-4), reopen, one save at a time on every guarded
 //       file (B-3a's by once, the Sales Manager's by its flights), JB3-6, JB3-7a; the gate's release, Edit brand's window
@@ -1693,7 +1694,7 @@ const optimisticRig = async (file, component, handler, sayer, extra = () => ({})
         revs: { pipelines: 'R0', customHolidays: 'C0', other: 'O0' },
     };
     const st = { settings, copy: settings, opened: { ...settings.revs }, gate: { current: false }, sends: [], landed: [], handed: [], said: [], took: false,
-        syncing: [], gets: [], org: 'org_A' };
+        syncing: [], gets: [], org: 'org_A', shown: '', timers: [] };
     const fnSrc = handlerIn(read(file), component, handler);
     const scope = {
         STILL_SAVING, settings, opened: st.opened, inFlight: st.gate,
@@ -1701,7 +1702,9 @@ const optimisticRig = async (file, component, handler, sayer, extra = () => ({})
         putSettings: (...args) => { const d = deferred(); st.sends.push({ args, ...d }); return d.p; },
         landed: (a) => st.landed.push(a),
         panelStale: async (e, words) => { st.handed.push([e, words]); if (!st.hold) return st.took; const d = deferred(); st.answerStale = d.resolve; return d.p; },
-        [sayer]: (v) => { if (v) st.said.push(v); },
+        // The words as React holds them (`shown`): an updater — a success's timer clearing only its own words (state
+        // §0.246, Q10) — is applied to them and never counted as said; a value is shown, and said when not empty.
+        [sayer]: (v) => { if (typeof v === 'function') { st.shown = v(st.shown); return; } st.shown = v; if (v) st.said.push(v); },
         ...extra(st),
     };
     st.call = (...args) => runAs(fnSrc, scope, ...args);
@@ -1854,19 +1857,30 @@ test('S10 — the calendar\'s persistHolidays, run as written: the tokens it ope
     assert.deepEqual([st.copy.revs, st.said.at(-1), st.gate.current], [st.settings.revs, `Holiday not saved — ${refusal.message}`, false], 'the server\'s words; the gate opened');
 });
 
-test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with the tokens it opened with; a refusal puts back those two keys alone, never the tokens; stale, nothing; the gate taken before the GET, opened by a refusal, a failed GET or a switch', async () => {
-    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
-    const FRESH = [{ date: 'Jan 1', name: 'New Year' }];
-    const run = () => optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'handleSync', 'setSyncMsg', (st) => ({
+// The calendar's Sync as written (state §0.228; §0.246's words): the holidays GET answers FRESH, or a refusal with
+// `getFails`, or whatever `getAnswer(st)` answers (a page, a throw); each timer is queued (`st.timers`) and run by
+// flushTimers; the words read through refusalWords (readRefusal, failureWords), as the panel imports them.
+const SYNC_FRESH = [{ date: 'Jan 1', name: 'New Year' }];
+const syncRig = async () => {
+    const { readRefusal, failureWords } = await import('../src/utils/refusalWords.js');
+    return optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'handleSync', 'setSyncMsg', (st) => ({
         year: 2026, customHolidays: st.settings.customHolidays, console: { error: () => {} },
-        setTimeout: () => {}, setSyncing: (v) => st.syncing.push(v),
-        requestOrg: () => 'org_A', stillOrg: (o) => o === st.org,
+        setTimeout: (f, ms) => { st.timers.push([f, ms]); }, setSyncing: (v) => st.syncing.push(v),
+        requestOrg: () => 'org_A', stillOrg: (o) => o === st.org, readRefusal, failureWords,
         dbFetch: async (url) => {
             st.gets.push(url);
+            if (st.getAnswer) return st.getAnswer(st);
             return st.getFails ? { ok: false, status: 502, json: async () => ({ error: 'Holidays service down' }) }
-                : { ok: true, status: 200, json: async () => ({ holidays: FRESH }) };
+                : { ok: true, status: 200, json: async () => ({ holidays: SYNC_FRESH }) };
         },
     }));
+};
+const flushTimers = (st) => { while (st.timers.length) st.timers.shift()[0](); };
+
+test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with the tokens it opened with; a refusal puts back those two keys alone, never the tokens; stale, nothing; the gate taken before the GET, opened by a refusal, a failed GET or a switch', async () => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const FRESH = SYNC_FRESH;
+    const run = syncRig;
 
     let st = await run();
     const synced = st.call();
@@ -1882,6 +1896,7 @@ test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with t
     st = await run(); st.gate.current = true;
     assert.deepEqual(await outcome(st.call()), { v: undefined }, 'answered at once, nothing awaited');
     assert.deepEqual([st.gets, st.sends.length, st.syncing, st.said], [[], 0, [], [`Not synced — ${STILL_SAVING}`]], 'REGRESSION (JB3-8): a Sync sent while a change is out');
+    assert.deepEqual(st.timers, [], 'REGRESSION (state §0.246, Q11): "Not synced" closed on a timer — kept until its Close or the next Sync');
 
     st = await run();
     const refused = st.call();
@@ -1936,6 +1951,83 @@ test('S10 — the calendar\'s Sync, run as written (critic B7): both keys with t
     st = await run(); st.org = 'org_B';
     assert.deepEqual(await outcome(st.call()), { v: undefined }, 'REGRESSION: the last org\'s holidays sent after a switch');
     assert.deepEqual([st.sends.length, st.gate.current], [0, false], 'REGRESSION: the gate held for a send that never goes — every change after said to be still saving');
+});
+
+// The Sync's words (state §0.246, docs/design/refusal-sweep 5b; Jeff's Q10, Q11): the ok check before the body, the
+// house words, kept on the red line until its Close or the next Sync — never on a timer; a success's timer clears only
+// its own words.
+test('S10 — the calendar\'s Sync says a failure in the house words, kept until closed (state §0.246, Q11): a 502\'s page, a refusal with its ref, a 200\'s page, the network, no holidays — no timer; after a switch nothing — run as written', async () => {
+    const page = (status) => ({ ok: status < 400, status, json: async () => { throw new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"); } });
+    const CASES = [
+        [() => page(502), 'The server returned 502.'],
+        [() => ({ ok: false, status: 500, json: async () => ({ error: 'Holidays service down', requestId: 'r9' }) }), 'Holidays service down (ref r9)'],
+        [() => ({ ok: false, status: 403, json: async () => ({}) }), 'The server returned 403.'],
+        [() => page(200), 'Its answer could not be read.'],
+        [() => { throw new TypeError('Failed to fetch'); }, 'The server could not be reached.'],
+        [() => ({ ok: true, status: 200, json: async () => ({}) }), 'No holidays in response'],
+    ];
+    for (const [answer, why] of CASES) {
+        const st = await syncRig(); st.getAnswer = answer;
+        assert.deepEqual(await outcome(st.call()), { v: undefined });
+        assert.deepEqual(st.said, [`Failed to sync — ${why}`], `REGRESSION: a failed Sync said in raw words ("Unexpected token '<'", "Failed to fetch") or not at all (${why})`);
+        assert.deepEqual([st.sends.length, st.syncing, st.gate.current], [0, [true, false], false], 'nothing sent; the gate opened at once');
+        assert.deepEqual(st.timers, [], `REGRESSION (Q11): the failure closed on a timer (${why})`);
+        flushTimers(st);
+        assert.equal(st.shown, `Failed to sync — ${why}`, 'kept until its Close or the next Sync');
+    }
+    // After an org switch the answer — a refusal, or a 200's page not read — writes and says nothing; the gate opens.
+    for (const [answer] of [CASES[0], CASES[3], CASES[4]]) {
+        const st = await syncRig(); st.getAnswer = (s) => { s.org = 'org_B'; return answer(); };
+        assert.deepEqual(await outcome(st.call()), { v: undefined });
+        assert.deepEqual([st.said, st.sends.length, st.copy, st.gate.current], [[], 0, st.settings, false],
+            'REGRESSION (state §0.175): an answer after an org switch said on the new org\'s screen');
+    }
+});
+
+test('S10 — the calendar\'s Sync: a success\'s timer clears only its own words (Q10) — a later failure, or "Not synced", kept; a refused save\'s words kept — run as written', async () => {
+    const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    let st = await syncRig();
+    const alone = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].resolve({ success: true, revs: {} });
+    await alone;
+    assert.equal(st.shown, '✓ Synced 1 federal holidays for 2026');
+    assert.deepEqual(st.timers.map(([, ms]) => ms), [4000], 'a success keeps its short timer');
+    flushTimers(st);
+    assert.equal(st.shown, '', 'a success alone clears');
+
+    // A success, then a failed Sync before its timer runs: the timer leaves the failure standing.
+    st = await syncRig();
+    const first = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].resolve({ success: true, revs: {} });
+    await first;
+    st.gate.current = false;   // the landed render's [opened] effect (pinned in S12)
+    st.getFails = true;
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'answered at once, nothing awaited');
+    assert.deepEqual(st.said, ['✓ Synced 1 federal holidays for 2026', 'Failed to sync — Holidays service down']);
+    flushTimers(st);
+    assert.equal(st.shown, 'Failed to sync — Holidays service down', 'REGRESSION (Q10): a success\'s timer wiped a later failure');
+
+    // A success, then a Sync refused as still saving: kept the same way.
+    st = await syncRig();
+    const again = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].resolve({ success: true, revs: {} });
+    await again;
+    // The gate still shut: refused at once — never awaited (a Sync sent through the gate would wait on its save forever).
+    assert.deepEqual(await outcome(st.call()), { v: undefined }, 'REGRESSION (JB3-8): a Sync sent while the last one\'s render is out');
+    flushTimers(st);
+    assert.equal(st.shown, `Not synced — ${STILL_SAVING}`, 'REGRESSION (Q10, Q11): "Not synced" wiped by a success\'s timer');
+
+    // The save refused: put back, the words kept after every timer.
+    st = await syncRig();
+    const refused = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].reject(new Error('Admin only'));
+    await refused;
+    flushTimers(st);
+    assert.deepEqual([st.said, st.shown, st.copy.federalHolidays], [['Failed to sync — Admin only'], 'Failed to sync — Admin only', undefined]);
 });
 
 // Edit brand's Save as written: the window's brand and its token (`base`); writeSettings answers `answer`; the latest,

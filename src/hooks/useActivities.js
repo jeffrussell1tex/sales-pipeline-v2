@@ -86,39 +86,9 @@ export function useActivities(deps) {
         return { ok: true };
     };
 
-    const fireActivityCalendarEvent = async (activity, opportunities) => {
-        if (!activity.addToCalendar || !activity.date) return;
-        try {
-            const relatedOpp = activity.opportunityId
-                ? (opportunities || []).find(o => o.id === activity.opportunityId)
-                : null;
-            const description = [
-                activity.notes || '',
-                relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                activity.companyName ? 'Company: ' + activity.companyName : '',
-            ].filter(Boolean).join('\n');
-            // dbFetch, for the sign-in token (state §0.169): verifyAuth reads only
-            // the Authorization header, and a bare fetch sent none — every call was
-            // refused, and no event was ever added. A refusal, and a 200 that says
-            // { connected: false } (no Google calendar connected), add nothing:
-            // both reach the warning below.
-            const res = await dbFetch('/.netlify/functions/calendar-add-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: activity.type
-                        + (activity.companyName ? ' — ' + activity.companyName : '')
-                        + (relatedOpp ? ' — ' + (relatedOpp.opportunityName || relatedOpp.account) : ''),
-                    date: activity.date,
-                    description,
-                }),
-            });
-            const result = await res.json().catch(() => ({}));
-            if (!res.ok || result.connected === false) throw new Error(result.error || result.message || `the server returned ${res.status}`);
-        } catch (err) {
-            console.warn('Calendar event creation failed (non-blocking):', err);
-        }
-    };
+    // No calendar event at a save (state §0.246, docs/design/refusal-sweep 7c; Jeff's Q16): fireActivityCalendarEvent
+    // added one only for an `addToCalendar` no screen sent (Quick Log's box never sent it, and logs by its own write),
+    // and a failure went to the console alone. It is gone with the box; a real calendar event is §3.6's meetings.
 
     // Answers { ok: true } once saved, or the server's refusal — { ok: false, status, error, field } — for a
     // caller that acts on it (the task rail's completion notes, state §0.199); nothing when it left early (the
@@ -145,7 +115,6 @@ export function useActivities(deps) {
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
-                fireActivityCalendarEvent(payload, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
@@ -162,7 +131,6 @@ export function useActivities(deps) {
                 if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => [...prev, data.activity || newActivity]);
-                fireActivityCalendarEvent(newActivity, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
@@ -182,7 +150,7 @@ export function useActivities(deps) {
         }
 
         setQuickLogOpen(false);
-        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
+        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
         setQuickLogContactResults([]);
         return { ok: true };
     };

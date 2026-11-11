@@ -19,6 +19,7 @@ import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { matchSearch } from '../utils/searchMatch.js';
 import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
@@ -2130,6 +2131,18 @@ export default function ReportsTab({ leadsEnabled = true }) {
 // mark and the controls this viewer may use: Pin / Pinned (mine to choose — it
 // puts the report on my Home), Share / Unshare and Deliver (the owner's or an
 // Admin's), and delete (the same). A template report has no query to deliver.
+// A refused report save (state §0.246, docs/design/refusal-sweep 5a; Jeff's Q9): said beside the control pressed — by
+// each template's Save and above the Duplicate list — in the house words, kept until its Close, never on a timer.
+// Module scope (guide §16): drawn inside SavedReportsTab's templates, never declared there.
+function SaveRefusalNote({ words, onClose }) {
+    return (
+        <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:10, maxWidth:380, padding:'6px 10px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.danger, fontFamily:T.sans }}>
+            <span style={{ flex:1, minWidth:0 }}>✕ {words}</span>
+            <button onClick={onClose} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>Close</button>
+        </div>
+    );
+}
+
 const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare, onDeliver, onDelete }) => {
     const small = (active) => ({ background: 'transparent', border: `1px solid ${active ? T.goldInk : T.border}`, borderRadius: 999, color: active ? T.goldInk : T.inkMid, cursor: 'pointer', fontSize: 10, fontWeight: 600, padding: '2px 7px', lineHeight: 1.4, fontFamily: T.sans });
     const stop = (fn) => (e) => { e.stopPropagation(); fn(r); };
@@ -2609,14 +2622,25 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         openCard(r);
     }, [savedReportsList]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Where a save was pressed (state §0.246, Q9): the six templates, the Duplicate list and the builder share one save
+    // state, so a refusal is said only on the screen whose Save was pressed — kept there until its Close, never shown
+    // beside a Save on another screen, and one answered after the member moved on waits on the screen it came from.
+    const [saveErrorAt, setSaveErrorAt] = React.useState(null);
+    const savePlace = showCreateReport ? `create:${createMode}` : (activeTemplate || 'library');
+    const savePlaceRef = React.useRef(savePlace);
+    savePlaceRef.current = savePlace;
+    const refusalHere = saveState === 'error' && saveErrorAt === savePlace;
+
     // Save report handler — used by both blank and AI builder Save to library buttons
     const handleSaveReport = React.useCallback(async ({ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null }) => {
+        const at = savePlaceRef.current;   // the screen pressed from — read now, not when the answer lands
         setSaveState('saving');
         setSaveError(null);
         // §0.133: a report opened from the library saves back to ITS row (PUT);
         // a new one is a POST. The endpoint's PUT is an owner-or-Admin upsert.
         const id = existingId || ('rpt_' + crypto.randomUUID());
         const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters, ownerId: currentUser, ownerName: currentUser };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
             // read `data?.report` off the Response AND never checked ok, so a
@@ -2626,20 +2650,27 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            // The server's words (state §0.246, Q9): a teammate's shared report saved back is a 403 with its reason.
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             const saved = data?.report || payload;
             setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]);
             setSaveState('saved');
-            setTimeout(() => setSaveState('idle'), 3000);
+            // The success's timer clears only a success, never a later refusal (Q10).
+            setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 3000);
             setShowCreateReport(false);
             setCreateMode('picker');
         } catch (err) {
+            if (!stillOrg(askedOrg)) return;
+            // Kept until its Close (SaveRefusalNote, BuilderHeader's line) — never on a timer.
             setSaveState('error');
-            setSaveError('Failed to save. Check your connection and try again.');
-            setTimeout(() => setSaveState('idle'), 4000);
+            setSaveError(`The report was not saved — ${failureWords(err)}`);
+            setSaveErrorAt(at);
         }
     }, [currentUser]);
+    // A refusal's Close: its words go, and the button reads as before (only while it still says the refusal).
+    const closeSaveRefusal = () => { setSaveError(null); setSaveState(s => (s === 'error' ? 'idle' : s)); };
 
     // ── Design tokens
     const ebS = c => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
@@ -2861,8 +2892,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Your 1:1-ready view. Commits you promised, deals slipping, and what's entered the pipe since last review.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Deal review — weekly', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Deal review — weekly template', config:{ templateId:'t1' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Deal review — weekly', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Deal review — weekly template', config:{ templateId:'t1' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3082,8 +3114,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Funnel with average days in stage, entered vs advanced, and the real reasons for each drop-off.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Stage conversion deep-dive', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Stage conversion deep-dive template', config:{ templateId:'t5' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Stage conversion deep-dive', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Stage conversion deep-dive template', config:{ templateId:'t5' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3304,8 +3337,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Closed-won against quota, by quarter, with a per-rep roll-up. The "forecast" line is each quarter's quota.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Forecast vs actual', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Forecast vs actual template', config:{ templateId:'t6' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Forecast vs actual', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Forecast vs actual template', config:{ templateId:'t6' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3515,8 +3549,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Closed deals with reason breakdown, competitor comparison, and cycle length — who we beat, who beat us, and why.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Win / loss analysis', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Win / loss analysis template', config:{ templateId:'t2' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Win / loss analysis', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Win / loss analysis template', config:{ templateId:'t2' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3725,8 +3760,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Single-rep view of all the fundamentals — attainment, win rate, cycle, activity, recent deals.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Rep scorecard', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Rep scorecard template', config:{ templateId:'t3' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Rep scorecard', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Rep scorecard template', config:{ templateId:'t3' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -4009,8 +4045,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Activity density by territory, industry, and deal-size tier — find the under-covered pockets before they show up as a missed quarter.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        {refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button onClick={()=>handleSaveReport({ name:'Territory coverage', source:'Activity', dims:[], metrics:[], chartType:'template', description:'Saved from the Territory coverage template', config:{ templateId:'t4' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
+                        <button onClick={()=>handleSaveReport({ name:'Territory coverage', source:'Activity', dims:[], metrics:[], chartType:'template', description:'Saved from the Territory coverage template', config:{ templateId:'t4' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':refusalHere?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -4179,7 +4216,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0, marginLeft:20 }}>
                     <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back to picker</GhostBtnD>
                     <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
-                    {saveState==='error' && <span style={{ fontSize:11, color:T.danger, fontFamily:T.sans }}>{saveError}</span>}
+                    {refusalHere && <span role="alert" style={{ display:'inline-flex', alignItems:'center', gap:8, fontSize:11, color:T.danger, fontWeight:600, fontFamily:T.sans }}>✕ {saveError}<button onClick={closeSaveRefusal} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>Close</button></span>}
                     {saveState==='saved' && <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>✓ Saved to library</span>}
                     <button onClick={onSave} disabled={saveState==='saving'}
                         style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:saveState==='saving'?T.borderStrong:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:saveState==='saving'?'default':'pointer', fontFamily:T.sans }}>
@@ -4331,6 +4368,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                             <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
                         </div>
                     </div>
+                    {refusalHere && <div style={{ marginBottom:10 }}><SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/></div>}
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1 }}>
                         {DUPES.map((r,i)=>(
                             <div key={r.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:i<DUPES.length-1?`1px solid ${T.border}`:'none' }}>
@@ -4340,7 +4378,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                     <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>by {r.owner} · updated {r.updated}</div>
                                 </div>
                                 <button onClick={()=>handleSaveReport({ name: r.src.name + ' (copy)', source:r.src.source, dims:r.src.dims||[], metrics:r.src.metrics||[], chartType:r.src.chartType, description:r.src.description, config:r.src.config||null })}
-                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                    disabled={saveState==='saving'}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, fontWeight:600, color:T.inkMid, cursor:saveState==='saving'?'default':'pointer', opacity:saveState==='saving'?0.6:1, fontFamily:T.sans }}>
                                     Duplicate →
                                 </button>
                             </div>
@@ -5635,9 +5674,13 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     // ── Action buttons ─────────────────────────────────────────
     const [saveReportState, setSaveReportState] = React.useState('idle'); // idle | saving | saved | error
+    // A refused "Save as report" (state §0.246, Q9): one banner at the top of Activity history for its three buttons,
+    // in the house words, kept until its Close — never on a timer.
+    const [saveReportError, setSaveReportError] = React.useState('');
 
     const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
         setSaveReportState('saving');
+        setSaveReportError('');
         const id = 'rpt_' + crypto.randomUUID();
         const name = entityName ? `${entityType} history — ${entityName}` : `${entityType} history report`;
         const payload = {
@@ -5657,18 +5700,21 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
             // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
             if (onSaveReport) onSaveReport(data?.report || payload);
             setSaveReportState('saved');
-            setTimeout(() => setSaveReportState('idle'), 3000);
-        } catch {
+            // The success's timer clears only a success, never a later refusal (Q10).
+            setTimeout(() => setSaveReportState(s => (s === 'saved' ? 'idle' : s)), 3000);
+        } catch (e) {
+            if (!stillOrg(askedOrg)) return;
             setSaveReportState('error');
-            setTimeout(() => setSaveReportState('idle'), 3000);
+            setSaveReportError(`The history report was not saved — ${failureWords(e)}`);
         }
     }, [currentUser, onSaveReport]);
+    const closeSaveReportRefusal = () => { setSaveReportError(''); setSaveReportState(s => (s === 'error' ? 'idle' : s)); };
 
     const handleExportPDF = React.useCallback((entityName, entityType, events) => {
         const win = window.open('', '_blank', 'width=900,height=700');
@@ -5753,6 +5799,16 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 
     return (
         <div style={{ padding:'1rem 1.25rem 1.5rem', display:'flex', flexDirection:'column', gap:0 }}>
+            {/* A refused "Save as report" (§0.246, Q9): one banner for the three buttons, kept until its Close. */}
+            {saveReportError && (
+                <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', marginBottom:12, background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12.5, color:T.danger, fontWeight:600, fontFamily:T.sans }}>
+                    <span style={{ flex:1, minWidth:0 }}>✕ {saveReportError}</span>
+                    <button onClick={closeSaveReportRefusal}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
             {/* Sub-tab strip */}
             <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
                 <SubTabBtn value="account" label="Account history"/>

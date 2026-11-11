@@ -29,9 +29,40 @@
 // undone). It is said on the panel's banner, kept until its Close, and only its own row is put back. A refused schedule
 // save or GDPR request was window.alert("Save failed: Failed to fetch"); it is said inside the open window, above its
 // buttons, in the house words, and the window stays open until it saves or is closed (Q8).
+//
+// Part 5 (5a-5b; state §0.246, Jeff, 11 Nov: "proceed" — Parts 5-7): errors that left on a timer. Reports' saves said
+// "Failed to save. Check your connection" whatever the cause, or "Error — retry" with no reason, and cleared after 4 s
+// or 3 s; a success's timer reset a later refusal. They say the server's words beside the control pressed, kept until
+// a Close (Q9); a success's timer clears only that success (Q10). The holiday Sync read its body before the ok check
+// ("Failed to sync — Unexpected token '<'") and cleared after 6 s; it says the house words on its red line, kept until
+// a Close or the next Sync (Q11) — its RUN cases are tests/settings-saves.test.mjs S10's.
+//
+// Part 6 (6a-6b; state §0.246): Dispatch time off. Saving time off over booked work sends one PUT per job to return it
+// to the queue; a refused or unsent PUT was counted only in the audit row — both dialogs closed and the view jumped to
+// the Queue, so the dispatcher took every job as freed. A banner across the top of Dispatch names each job still
+// assigned and why, kept until its Close (Q12). The block save read its body before the ok check ("HTTP 500", the ref
+// dropped) and the Delete said "HTTP N"; they say the server's words (a 403 the role's sentence, Q13), and ScheduleView
+// says failureWords, never a raw e.message.
+//
+// Part 7 (7a-7c; state §0.246): three more silent ones. The quote PDF threw 'PDF generation failed' on a refusal and
+// opened a print copy in a new tab on ANY failure, with no word — that hid every PDF a 500 until §0.234 — and the copy's
+// lines were whole dollars beside totals to the cent. A PDF not made is said under Download PDF in the house words
+// (quotePdfOf), kept until its Close, with "Print a copy instead" a button (Q14); the copy's lines to the cent (Q15).
+// Coaching notes' writes rejected offline — the dialog stayed "Saving…" for good — Home's "Mark read" ignored its
+// answer, a failed load read as no notes, and TeamTab's delete banner had no Close: no write rejects now, Mark read says
+// a refusal in a press notice (Q1), a failed load is said on both screens (Q17), and the banner has a Close. Quick
+// Log's "Add to Google Calendar" box made no event and said nothing: it is gone, with the save-time adds and the task
+// button nothing reached (Q16).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { parse } from '@babel/parser';
+import { quotePdfOf } from '../src/utils/quotePdfAnswer.js';
+import { quoteTotals } from '../src/utils/quoteTotals.js';
+import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
+import { fmtMoney } from '../src/utils/invoices.js';
+import { esc } from '../src/utils/customerNotifications.js';
+import { T } from '../src/tokens.js';
 import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
 import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
@@ -39,6 +70,7 @@ import { taskWriteAnswer } from '../src/utils/taskWrite.js';
 import { sentBody, shownRow } from '../src/utils/leaveOut.js';
 import { dealBody } from '../src/utils/dealNotes.js';
 import { contactNamesText } from '../src/utils/oppText.js';
+import { notFreedWords } from '../src/utils/dispatchUnassign.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -429,7 +461,8 @@ test('Part 2a: taskWriteAnswer — a refusal in the server\'s words with their r
 // as stored and writes its audit row; an answer after an org switch changes nothing and answers undefined.
 let builtComplete;
 const completeTask = () => builtComplete || (builtComplete = (() => {
-    const fn = between(code(read('src/hooks/useTasks.js')), '    const handleCompleteTask = async (taskId, newStatus) => {', '\n    };\n\n    const handleAddTaskToCalendar') + '\n    };';
+    // Its end: the hook's return (handleAddTaskToCalendar, which followed it, is gone since §0.246 — Part 7c).
+    const fn = between(code(read('src/hooks/useTasks.js')), '    const handleCompleteTask = async (taskId, newStatus) => {', '\n    };\n\n    return {\n        tasks,') + '\n    };';
     return new Function('tasks', 'setTasks', 'dbFetch', 'taskWriteAnswer', 'addAudit', 'requestOrg', 'stillOrg', 'console',
         `${fn}\nreturn handleCompleteTask;`);
 })());
@@ -1068,4 +1101,813 @@ test('Part 4a/4b: WIRING — no window.alert; each window draws its words above 
     assert.ok(ex.includes('<span onClick={() => handleDeleteSched(s)} style='), 'REGRESSION: the Delete hands an id — its row cannot be put back or named');
     assert.equal(count(ex, 'setError('), 1, 'REGRESSION: the load\'s error set by something other than the load — the whole page replaced');
     order(between(ex, '        const load = async () => {', '\n        };'), '} catch (e) {', 'if (!cancelled) setError(e.message);');
+});
+
+// ── Part 5 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Reports' saves (5a): the builder, the six templates and Duplicate (handleSaveReport), and Activity history's three
+// "Save as report" buttons (handleSaveAsReport), extracted with their useCallback wrapper stripped and run over stubs —
+// every timer queued (st.timers) and run by flush(). A refusal said "Failed to save. Check your connection" whatever the
+// cause, or "Error — retry" with no reason, and left after 4 s or 3 s; a success's timer reset a later refusal to idle.
+const callbackOf = (src, name, deps) => {
+    const head = `    const ${name} = React.useCallback(`;
+    const whole = between(src, head, `\n    }, ${deps});`);
+    return `const ${name} = ${whole.slice(head.length)}\n    };`;
+};
+const SHARED_403 = 'Forbidden: you can only modify your own saved reports';   // saved-reports.mjs forbiddenOwner
+const REPORT_REFUSALS = () => [
+    [answerOf(403, { error: SHARED_403 }), SHARED_403],
+    [answerOf(400, { error: 'name is required', requestId: 'r2' }), 'name is required (ref r2)'],
+    [PAGE_502(), 'The server returned 502.'],
+    [new TypeError('Failed to fetch'), 'The server could not be reached.'],
+    [answerOf(200, new SyntaxError("Unexpected token '<'")), 'Its answer could not be read.'],
+];
+const LIB_A = Object.freeze({ id: 'rpt_a', name: 'Pipeline by rep' });
+const reportSaves = (which) => {
+    const r = reportsSrc();
+    const st = { state: stateOf('idle'), words: stateOf(which === 'library' ? null : ''), list: stateOf([LIB_A]), said: [], timers: [], sent: [],
+        closed: [], modes: [], handed: [], answers: [], org: 'org_a', switchAt: -1 };
+    const dbFetch = async (url, opts) => {
+        st.sent.push([url, opts.method, JSON.parse(opts.body)]);
+        if (st.onSend) st.onSend();   // the member moves on while the request is out
+        const a = st.answers.shift();
+        if (st.sent.length - 1 === st.switchAt) st.org = 'org_b';
+        if (a instanceof Error) throw a;
+        return a;
+    };
+    const setWords = (v) => { st.words.set(v); if (typeof v !== 'function' && v) st.said.push(v); };
+    const common = [() => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, (f, ms) => { st.timers.push([f, ms]); },
+        { randomUUID: () => 'u' + st.sent.length }, 'Karen Rep'];
+    const names = ['requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setTimeout', 'crypto', 'currentUser'];
+    if (which === 'library') {
+        const fn = callbackOf(r, 'handleSaveReport', '[currentUser]');
+        st.at = stateOf(null);
+        st.place = { current: 't3' };   // savePlaceRef: the screen shown — the Rep scorecard template unless a case moves it
+        st.call = new Function(...names, 'setSaveState', 'setSaveError', 'setSavedReportsList', 'setShowCreateReport', 'setCreateMode',
+            'setSaveErrorAt', 'savePlaceRef',
+            `${fn}\nreturn handleSaveReport;`)(...common, st.state.set, setWords, st.list.set, (v) => st.closed.push(v), (v) => st.modes.push(v),
+            st.at.set, st.place);
+    } else {
+        const fn = callbackOf(r, 'handleSaveAsReport', '[currentUser, onSaveReport]');
+        st.call = new Function(...names, 'setSaveReportState', 'setSaveReportError', 'onSaveReport',
+            `${fn}\nreturn handleSaveAsReport;`)(...common, st.state.set, setWords, (rep) => st.handed.push(rep));
+    }
+    st.flush = () => { while (st.timers.length) st.timers.shift()[0](); };
+    return st;
+};
+const TEMPLATE_SAVE = { name: 'Rep scorecard', source: 'Performance', dims: [], metrics: [], chartType: 'template', description: 'Saved from the Rep scorecard template', config: { templateId: 't3' } };
+
+test('Part 5a: a refused or unsent report save says why — the house words — and keeps "error" after every timer; nothing added, the builder left open — RUN', async () => {
+    for (const [answer, why] of REPORT_REFUSALS()) {
+        const st = reportSaves('library');
+        st.answers.push(answer);
+        await st.call(TEMPLATE_SAVE);
+        assert.deepEqual(st.sent.map(([url, m]) => [url, m]), [['/.netlify/functions/saved-reports', 'POST']]);
+        assert.equal(st.state.value, 'error');
+        assert.deepEqual(st.said, [`The report was not saved — ${why}`], `REGRESSION: "Failed to save. Check your connection" whatever the cause, or no reason at all (${why})`);
+        assert.deepEqual(st.timers, [], `REGRESSION (Q9): the refusal closed on a timer (${why})`);
+        st.flush();
+        assert.equal(st.state.value, 'error', 'kept until its Close');
+        assert.equal(st.words.value, `The report was not saved — ${why}`);
+        assert.deepEqual([st.list.value, st.closed, st.modes], [[LIB_A], [], []], 'nothing added; the builder stays open');
+        assert.equal(st.at.value, 't3', 'REGRESSION (Q9): the refusal not tied to the screen whose Save was pressed');
+    }
+    // Answered after the member moved to another screen: the refusal stays with the screen it was pressed from — never
+    // said beside a Save on the screen the member is on now (review, 11 Nov).
+    for (const moveTo of ['library', 't1', 'create:blank', 'create:duplicate']) {
+        const late = reportSaves('library');
+        late.onSend = () => { late.place.current = moveTo; };
+        late.answers.push(PAGE_502());
+        await late.call(TEMPLATE_SAVE);
+        assert.equal(late.state.value, 'error');
+        assert.equal(late.at.value, 't3', `REGRESSION (Q9): a refusal pressed on Rep scorecard said on ${moveTo}`);
+    }
+    // A teammate's shared report opened and saved back is a PUT to its row — the 403 the member meets (saved-reports.mjs:97).
+    const st = reportSaves('library');
+    st.answers.push(answerOf(403, { error: SHARED_403 }));
+    await st.call({ ...TEMPLATE_SAVE, id: 'rpt_a', name: 'Pipeline by rep' });
+    assert.deepEqual([st.sent[0][1], st.sent[0][2].id], ['PUT', 'rpt_a']);
+    assert.deepEqual(st.said, [`The report was not saved — ${SHARED_403}`]);
+});
+
+test('Part 5a: a landed report save shows "saved", takes the stored row, closes the builder, and its timer clears only that success (Q10) — RUN', async () => {
+    const STORED = { id: 'u0', name: 'Rep scorecard', source: 'Performance', stored: true };
+    const st = reportSaves('library');
+    st.answers.push(answerOf(200, { report: STORED }));
+    await st.call(TEMPLATE_SAVE);
+    assert.equal(st.sent[0][2].id, 'rpt_u0', 'a new report\'s id');
+    assert.deepEqual([st.state.value, st.list.value, st.closed, st.modes, st.said], ['saved', [STORED, LIB_A], [false], ['picker'], []]);
+    assert.deepEqual(st.timers.map(([, ms]) => ms), [3000], 'a success keeps its short timer');
+    st.flush();
+    assert.equal(st.state.value, 'idle', 'a success alone clears');
+    // A success, then a refusal before the first timer runs: the timer leaves the refusal standing.
+    const race = reportSaves('library');
+    race.answers.push(answerOf(200, { report: STORED }), PAGE_502());
+    await race.call(TEMPLATE_SAVE);
+    await race.call(TEMPLATE_SAVE);
+    assert.equal(race.state.value, 'error');
+    race.flush();
+    assert.equal(race.state.value, 'error', 'REGRESSION (Q10): a success\'s timer reset a later refusal to idle');
+    assert.equal(race.words.value, 'The report was not saved — The server returned 502.');
+    // A save again after a refusal clears its words as it starts.
+    const retry = reportSaves('library');
+    retry.answers.push(PAGE_502(), answerOf(200, { report: STORED }));
+    await retry.call(TEMPLATE_SAVE);
+    await retry.call(TEMPLATE_SAVE);
+    assert.deepEqual([retry.state.value, retry.words.value], ['saved', null]);
+});
+
+test('Part 5a: a report save answered after an org switch — refused or landed — writes and says nothing — RUN', async () => {
+    for (const answer of [answerOf(403, { error: SHARED_403 }), new TypeError('Failed to fetch'), answerOf(200, { report: { id: 'u0' } })]) {
+        const st = reportSaves('library');
+        st.answers.push(answer);
+        st.switchAt = 0;
+        await st.call(TEMPLATE_SAVE);
+        assert.deepEqual([st.state.value, st.said, st.list.value, st.closed, st.timers], ['saving', [], [LIB_A], [], []],
+            'REGRESSION (state §0.175): an answer after an org switch said or written on the new org\'s screen');
+    }
+});
+
+test('Part 5a: Activity history\'s "Save as report" — a refusal says why, kept after every timer; a landed save hands its row, its timer clearing only that success — RUN', async () => {
+    for (const [answer, why] of REPORT_REFUSALS()) {
+        const st = reportSaves('history');
+        st.answers.push(answer);
+        await st.call('Acme', 'Account');
+        assert.deepEqual(st.said, [`The history report was not saved — ${why}`], `REGRESSION: "Error — retry" for 3 s, never a reason (${why})`);
+        assert.equal(st.state.value, 'error');
+        assert.deepEqual(st.timers, [], `REGRESSION (Q9): the refusal closed on a timer (${why})`);
+        st.flush();
+        assert.deepEqual([st.state.value, st.words.value, st.handed], ['error', `The history report was not saved — ${why}`, []]);
+    }
+    const STORED = { id: 'u0', name: 'Account history — Acme', stored: true };
+    const st = reportSaves('history');
+    st.answers.push(answerOf(200, { report: STORED }));
+    await st.call('Acme', 'Account');
+    assert.deepEqual(st.sent[0][2].name, 'Account history — Acme');
+    assert.deepEqual([st.state.value, st.handed, st.said], ['saved', [STORED], []]);
+    st.flush();
+    assert.equal(st.state.value, 'idle', 'a success alone clears');
+    const race = reportSaves('history');
+    race.answers.push(answerOf(200, { report: STORED }), answerOf(403, { error: SHARED_403 }));
+    await race.call('Acme', 'Account');
+    await race.call('Beta', 'Contact');
+    race.flush();
+    assert.deepEqual([race.state.value, race.words.value], ['error', `The history report was not saved — ${SHARED_403}`],
+        'REGRESSION (Q10): a success\'s timer reset a later refusal');
+    const retry = reportSaves('history');
+    retry.answers.push(PAGE_502(), answerOf(200, { report: STORED }));
+    await retry.call('Acme', 'Account');
+    await retry.call('Acme', 'Account');
+    assert.deepEqual([retry.state.value, retry.words.value], ['saved', ''], 'a save again clears the banner as it starts');
+    for (const answer of [answerOf(403, { error: SHARED_403 }), answerOf(200, { report: STORED })]) {
+        const sw = reportSaves('history');
+        sw.answers.push(answer);
+        sw.switchAt = 0;
+        await sw.call('Acme', 'Account');
+        assert.deepEqual([sw.state.value, sw.said, sw.handed], ['saving', [], []], 'REGRESSION (state §0.175): an answer after an org switch said or handed on');
+    }
+});
+
+test('Part 5a: WIRING — no refusal on a timer; SaveRefusalNote at module scope, by each template\'s Save and above the Duplicate list; the builder\'s line and Activity history\'s banner each with a Close', () => {
+    const raw = read('src/Tabs/ReportsTab.jsx');
+    const r = reportsSrc();
+    assert.ok(!/setTimeout\([^)]*set(SaveError|SaveReportError)/.test(r), 'REGRESSION: a refusal\'s words closed on a timer');
+    assert.ok(!r.includes("setSaveState('idle'), 4000"), 'REGRESSION: the refusal reset after 4 s');
+    assert.ok(!/setTimeout\(\(\) => set(SaveState|SaveReportState)\('idle'\)/.test(r), 'REGRESSION (Q10): a success\'s timer resets whatever is shown');
+    assert.ok(!r.includes('Failed to save. Check your connection and try again.'), 'the old sentence, whatever the cause');
+    assert.ok(!r.includes("throw new Error('HTTP ' + res.status)"), 'REGRESSION: "HTTP N" — the server\'s words dropped');
+    assert.ok(r.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    // Module scope: declared at column 0, never inside a component (guide §16).
+    assert.ok(raw.includes('\nfunction SaveRefusalNote({ words, onClose }) {'), 'SaveRefusalNote at module scope');
+    const note = between(r, 'function SaveRefusalNote({ words, onClose }) {', '\n}\n');
+    order(note, '<div role="alert"', '✕ {words}', '<button onClick={onClose}', '>Close</button>');
+    assert.equal(count(r, '<SaveRefusalNote '), 7, 'six templates and the Duplicate list');
+    assert.equal(count(r, "{refusalHere && <SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>}"), 6, 'by each template\'s Save');
+    // Said only on the screen whose Save was pressed (Q9; review, 11 Nov): the screen is read at the press, the refusal
+    // tied to it, and every place that draws a refusal or "Error — retry" asks refusalHere — never the shared state alone.
+    order(r, "const [saveErrorAt, setSaveErrorAt] = React.useState(null);",
+        "const savePlace = showCreateReport ? `create:${createMode}` : (activeTemplate || 'library');",
+        'const savePlaceRef = React.useRef(savePlace);', 'savePlaceRef.current = savePlace;',
+        "const refusalHere = saveState === 'error' && saveErrorAt === savePlace;",
+        'const handleSaveReport = React.useCallback(', 'const at = savePlaceRef.current;', "setSaveState('saving');",
+        "setSaveError(`The report was not saved — ${failureWords(err)}`);", 'setSaveErrorAt(at);');
+    assert.equal(count(r, "saveState==='error'"), 0, 'REGRESSION (Q9): a refusal drawn beside a Save on another screen');
+    assert.equal(count(r, "saveState === 'error' &&"), 1, 'refusalHere alone');
+    assert.equal(count(r, "refusalHere?'Error — retry'"), 6, 'each template\'s Save reads "Error — retry" only for its own refusal');
+    assert.equal(count(r, 'setSaveErrorAt('), 1);
+    for (const t of ['t1', 't2', 't3', 't4', 't5', 't6']) {
+        const at = r.indexOf(`config:{ templateId:'${t}' } })} disabled={saveState==='saving'}`);
+        assert.ok(at > 0, t);
+        const head = r.lastIndexOf("<div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>", at);
+        assert.ok(r.slice(head, at).includes('<SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/>'), `REGRESSION: template ${t}'s Save says no reason`);
+    }
+    const dupes = between(r, "if (createMode === 'duplicate') {", "if (createMode === 'blank') {");
+    order(dupes, "{refusalHere && <div style={{ marginBottom:10 }}><SaveRefusalNote words={saveError} onClose={closeSaveRefusal}/></div>}", '{DUPES.map(', "disabled={saveState==='saving'}");
+    const header = between(r, 'const BuilderHeader = ({title, breadcrumb, onSave}) => (', '\n        );');
+    order(header, "{refusalHere && <span role=\"alert\"", '✕ {saveError}', '<button onClick={closeSaveRefusal}', '>Close</button></span>}');
+    assert.ok(r.includes("const closeSaveRefusal = () => { setSaveError(null); setSaveState(s => (s === 'error' ? 'idle' : s)); };"));
+    const history = r.slice(r.indexOf('function ActivityHistoryTab('));
+    order(history, "const [saveReportError, setSaveReportError] = React.useState('');",
+        "const closeSaveReportRefusal = () => { setSaveReportError(''); setSaveReportState(s => (s === 'error' ? 'idle' : s)); };",
+        "<div style={{ padding:'1rem 1.25rem 1.5rem', display:'flex', flexDirection:'column', gap:0 }}>",
+        '{saveReportError && (', '<div role="alert"', '✕ {saveReportError}', '<button onClick={closeSaveReportRefusal}', 'Close', '{/* Sub-tab strip */}');
+    assert.equal(count(history, 'handleSaveAsReport('), 2, 'the three buttons — ActionButtons (drawn twice) and the Opportunity tab\'s — share the one banner');
+});
+
+// The holiday Sync (5b): its RUN cases are S10's (tests/settings-saves.test.mjs); this holds the line it is said on.
+test('Part 5b: WIRING — the Sync reads the ok check first; its failure is kept on the red line with a Close; no failure on a timer', () => {
+    const cal = code(read('src/Tabs/settings/company/CompanyCalendarDetail.jsx'));
+    const sync = between(cal, '    const handleSync = async () => {', '\n    };');
+    order(sync, "const why  = res.ok ? '' : await readRefusal(res);", 'const data = res.ok ? await res.json() : null;',
+        'if (!stillOrg(askedOrg)) { inFlight.current = false; return; }', 'if (why) throw new Error(why);');
+    order(sync, '} catch (err) {', 'inFlight.current = false;', 'if (!stillOrg(askedOrg)) return;', 'setSyncMsg(`Failed to sync — ${failureWords(err)}`);');
+    assert.ok(!sync.includes('err.message') && !sync.includes('Server error'), 'REGRESSION: raw words — "Unexpected token \'<\'", "Failed to fetch"');
+    assert.ok(!/setTimeout\(\(\) => setSyncMsg\(''\)/.test(sync), 'REGRESSION (Q10, Q11): a timer that clears whatever is shown');
+    assert.equal(count(sync, 'setTimeout('), 1, 'the success\'s alone');
+    order(sync, 'const done = `✓ Synced', 'setSyncMsg(done);', 'setTimeout(() => setSyncMsg(m => (m === done ? \'\' : m)), 4000);');
+    const line = between(cal, '{syncMsg && <div', '</div>}');
+    order(line, "role={syncMsg.startsWith('✓') ? undefined : 'alert'}", "{!syncMsg.startsWith('✓') && <button onClick={() => setSyncMsg('')}", '>Close</button>}');
+});
+
+// ── Part 6 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Dispatch time off (6a, 6b): saveBlock and deleteBlock, extracted from DispatchTab.jsx and run over stubs — dbFetch
+// answers per URL (the block, then each job's PUT by its id). DispatchTab remounts on an org switch (App.jsx's keyed
+// Fragment), and saveBlock checks stillOrg before each PUT and before anything it says.
+const DISPATCH = 'src/Tabs/DispatchTab.jsx';
+const dispatchSrc = () => code(read(DISPATCH));
+const BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, _isNew: true });
+const STORED_BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, notes: 'stored' });
+const TJ1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', assignedTechIds: ['tech_1'], status: 'scheduled', start: 9 });
+const TJ2 = Object.freeze({ id: 'job_2', title: '', customer: 'Gutter clean', assignedTechIds: ['tech_1'], status: 'scheduled', start: 11 });
+const TJ3 = Object.freeze({ id: 'job_3', title: 'Filter swap', customer: 'Beta', assignedTechIds: ['tech_1'], status: 'scheduled', start: 14 });
+const TECHS = [{ id: 'tech_1', firstName: 'Ann', lastName: 'Lee' }];
+const timeOff = async ({ blk = BLOCK, unassign = [], blockAnswer = answerOf(200, { block: STORED_BLOCK }), jobAnswers = {}, switchAt = -1,
+    blocks = [], jobs = [TJ1, TJ2, TJ3], banner = 'An earlier save\'s words', onPut } = {}) => {
+    const fn = between(dispatchSrc(), '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };') + '\n    };';
+    const st = { sent: [], bannerSets: [], blockSets: [], audit: [], views: [], selected: [], org: 'org_a',
+        banner: stateOf(banner), blocks: stateOf(blocks), jobs: stateOf(jobs) };
+    const dbFetch = async (url, opts) => {
+        st.sent.push([url, opts.method, opts.body ? JSON.parse(opts.body) : undefined]);
+        if (st.sent.length - 1 === switchAt) st.org = 'org_b';
+        const id = new URL(url, 'http://x.test').searchParams.get('id');
+        const a = url.includes('dispatch-schedule-blocks') ? blockAnswer : (jobAnswers[id] || answerOf(200, { job: { id } }));
+        if (onPut && !url.includes('dispatch-schedule-blocks')) onPut(st.banner);
+        if (a instanceof Error) throw a;
+        return a;
+    };
+    const saveBlock = new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'notFreedWords', 'setUnassignError',
+        'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', `${fn}\nreturn saveBlock;`)(
+        () => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, notFreedWords,
+        (v) => { st.banner.set(v); st.bannerSets.push(st.banner.value); },
+        (u) => { st.blockSets.push(u); st.blocks.set(u); }, st.jobs.set, TECHS, jobs,
+        (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v));
+    st.threw = null;
+    try { await saveBlock(blk, unassign); } catch (e) { st.threw = e; }
+    return st;
+};
+const UNSENT = () => new TypeError('Failed to fetch');
+
+test('Part 6a: notFreedWords — each job by name and why, the technician named, singular and plural; none, no words — RUN', () => {
+    const jobs = [TJ1, TJ2, TJ3];
+    assert.equal(notFreedWords([{ id: 'job_1', words: 'Forbidden: read-only role' }, { id: 'job_2', words: 'The server could not be reached.' }], jobs, 'Ann Lee', 3),
+        'The time off was saved, but 2 of 3 jobs were not returned to the queue and are still assigned to Ann Lee — '
+        + 'Boiler service: Forbidden: read-only role; Gutter clean: The server could not be reached. Unassign them from the Job Board.');
+    assert.equal(notFreedWords([{ id: 'job_3', words: 'Forbidden: read-only role' }], jobs, 'Ann Lee', 2),
+        'The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — '
+        + 'Filter swap: Forbidden: read-only role. Unassign it from the Job Board.', 'a sentence ends once: a period added where the words have none');
+    assert.equal(notFreedWords([{ id: 'job_9', words: 'Job not found' }], jobs, '', 1),
+        'The time off was saved, but 1 of 1 job was not returned to the queue and is still assigned to the technician — '
+        + 'job_9: Job not found. Unassign it from the Job Board.', 'a job the screen no longer holds named by its id; no name, "the technician"');
+    // A reason with its own full stop before another job's: "; " between them, never ".;" (review, 11 Nov).
+    assert.equal(notFreedWords([{ id: 'job_2', words: 'The server could not be reached.' }, { id: 'job_1', words: 'The server returned 502.' }], jobs, 'Ann Lee', 3),
+        'The time off was saved, but 2 of 3 jobs were not returned to the queue and are still assigned to Ann Lee — '
+        + 'Gutter clean: The server could not be reached; Boiler service: The server returned 502. Unassign them from the Job Board.',
+        'REGRESSION: ".;" between two jobs\' reasons');
+    assert.equal(notFreedWords([], jobs, 'Ann Lee', 3), '');
+    assert.equal(notFreedWords(undefined, jobs, 'Ann Lee', 3), '');
+});
+
+test('Part 6a: every unassign refused — the banner names each job and the server\'s words; no jump to the Queue, nothing freed — RUN', async () => {
+    const st = await timeOff({ unassign: ['job_1', 'job_2', 'job_3'], jobAnswers: {
+        job_1: answerOf(403, { error: 'Forbidden: read-only role' }), job_2: answerOf(500, { error: 'Database error', requestId: 'r9' }), job_3: PAGE_502() } });
+    assert.equal(st.threw, null, 'REGRESSION: a throw keeps the dialog open — a second press re-saves the block and re-sends every unassign');
+    assert.deepEqual(st.sent.map(([url, m]) => [url, m]), [['/.netlify/functions/dispatch-schedule-blocks', 'POST'],
+        ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_2', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_3', 'PUT']]);
+    assert.deepEqual(st.sent[0][2], { id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true }, 'the block sent without _isNew');
+    assert.deepEqual(st.bannerSets, ['',
+        'The time off was saved, but 3 of 3 jobs were not returned to the queue and are still assigned to Ann Lee — Boiler service: '
+        + 'Forbidden: read-only role; Gutter clean: Database error (ref r9); Filter swap: The server returned 502. Unassign them from the Job Board.'],
+        'REGRESSION: a refused unassign said nothing — only the audit row\'s "— 3 failed"');
+    assert.deepEqual([st.views, st.selected], [[], []], 'nothing freed, no jump to the Queue');
+    assert.deepEqual(st.jobs.value, [TJ1, TJ2, TJ3]);
+    assert.equal(st.jobs.value[0], TJ1, 'the same rows');
+    assert.deepEqual(st.blocks.value, [STORED_BLOCK], 'the block as stored');
+    assert.match(st.audit[0][4], /— 0 job\(s\) returned to the queue — 3 failed$/);
+});
+
+test('Part 6a: one unsent and one freed — the banner says the one, the Queue shows the freed job; all freed, no words — RUN', async () => {
+    const st = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: UNSENT() } });
+    assert.equal(st.threw, null);
+    assert.deepEqual(st.bannerSets, ['',
+        'The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — Boiler service: '
+        + 'The server could not be reached. Unassign it from the Job Board.'], 'REGRESSION: an unsent unassign "counted below by omission"');
+    assert.deepEqual([st.views, st.selected], [['queue'], ['job_2']], 'the dispatcher still goes to the Queue with the freed job (Q12)');
+    assert.equal(st.jobs.value[0], TJ1, 'the job not freed left as it was');
+    assert.equal(st.jobs.value[1].status, 'unscheduled');
+    assert.deepEqual(st.jobs.value[1].assignedTechIds, []);
+    assert.equal(st.jobs.value[2], TJ3);
+    const all = await timeOff({ unassign: ['job_1', 'job_3'] });
+    assert.deepEqual(all.bannerSets, [''], 'all freed: an earlier save\'s words cleared as this one began, none said');
+    assert.equal(all.banner.value, '');
+    assert.deepEqual([all.views, all.selected], [['queue'], ['job_1']]);
+    // Another save's words landed while this one was out (the dialog left and opened again): this save's are added, never over them.
+    const FIRST = 'The time off was saved, but 1 of 1 job was not returned to the queue and is still assigned to Bo Ray — Roof check: Forbidden. Unassign it from the Job Board.';
+    const raced = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: UNSENT() }, onPut: (b) => { if (!b.value) b.set(FIRST); } });
+    assert.equal(raced.banner.value, `${FIRST} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
+        + 'Boiler service: The server could not be reached. Unassign it from the Job Board.', 'REGRESSION: a save\'s words written over another save\'s');
+    // A save with no jobs to return leaves the banner as it stands: it is about jobs another save left.
+    const none = await timeOff({});
+    assert.deepEqual([none.bannerSets, none.banner.value, none.views, none.audit], [[], 'An earlier save\'s words', [], []]);
+    assert.deepEqual(none.sent.length, 1);
+});
+
+test('Part 6a: an org switch during the unassigns — nothing more sent, nothing said, no audit row, no jump — RUN', async () => {
+    const after1 = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: answerOf(403, { error: 'Forbidden: read-only role' }) }, switchAt: 1 });
+    assert.equal(after1.sent.length, 2, 'the next PUT would carry the new org\'s token');
+    assert.deepEqual([after1.bannerSets, after1.audit, after1.views, after1.selected], [[''], [], [], []],
+        'REGRESSION (state §0.175): a refusal from the old org said on the new org\'s Dispatch');
+    assert.deepEqual(after1.jobs.value, [TJ1, TJ2, TJ3]);
+    const afterBlock = await timeOff({ unassign: ['job_1'], switchAt: 0 });
+    assert.equal(afterBlock.sent.length, 1, 'no PUT after a switch');
+    assert.deepEqual([afterBlock.bannerSets, afterBlock.audit, afterBlock.views], [[''], [], []]);
+    // The switch during the last PUT: the loop is done; the check after it says and files nothing, freed or refused.
+    for (const answer of [answerOf(403, { error: 'Forbidden: read-only role' }), answerOf(200, { job: { id: 'job_2' } })]) {
+        const last = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_2: answer }, switchAt: 2 });
+        assert.equal(last.sent.length, 3);
+        assert.deepEqual([last.bannerSets, last.audit, last.views, last.selected], [[''], [], [], []],
+            'REGRESSION (state §0.175): the last answer after a switch said, filed or jumped on the new org\'s Dispatch');
+        assert.deepEqual(last.jobs.value, [TJ1, TJ2, TJ3]);
+    }
+});
+
+test('Part 6b: a refused block save throws the server\'s words — a 403 the role\'s sentence — before any unassign; nothing set — RUN', async () => {
+    const cases = [
+        [answerOf(403, { error: 'Forbidden' }), 'Your role cannot change availability.'],
+        [answerOf(500, { error: 'Database error', requestId: 'r1' }), 'Database error (ref r1)'],
+        [answerOf(400, {}), 'The server returned 400.'],
+        [PAGE_502(), 'The server returned 502.'],
+        [UNSENT(), 'The server could not be reached.'],
+    ];
+    for (const [blockAnswer, why] of cases) {
+        const st = await timeOff({ unassign: ['job_1'], blockAnswer });
+        assert.ok(st.threw, why);
+        assert.equal(failureWords(st.threw), why, `REGRESSION: "HTTP N", the ref dropped, or a parse error's words (${why})`);
+        assert.equal(st.sent.length, 1, 'no unassign sent for a block not saved');
+        assert.deepEqual([st.blockSets, st.views, st.audit], [[], [], []]);
+    }
+    // A real answer's body reads once: the ok check before the body, or the refusal's words are lost to "already read".
+    let reads = 0;
+    const once = { ok: false, status: 500, json: async () => { if (reads++) throw new TypeError('Body is unusable: Body has already been read'); return { error: 'Database error', requestId: 'r2' }; } };
+    const read1 = await timeOff({ unassign: ['job_1'], blockAnswer: once });
+    assert.equal(failureWords(read1.threw), 'Database error (ref r2)', 'REGRESSION: the body read before the ok check — the server\'s words lost');
+    const edit = await timeOff({ blk: { ...STORED_BLOCK }, blockAnswer: answerOf(409, { error: 'That block belongs to another workspace' }) });
+    assert.deepEqual([edit.sent[0][0], edit.sent[0][1]], ['/.netlify/functions/dispatch-schedule-blocks?id=dblk_1', 'PUT']);
+    assert.equal(failureWords(edit.threw), 'That block belongs to another workspace');
+});
+
+test('Part 6b: a landed block whose answer cannot be read says so — setBlocks never handed undefined; its jobs still go back to the queue, any left named after it — RUN', async () => {
+    const UNREAD = "The time off was saved, but its answer couldn't be read. Refresh to see it.";
+    for (const blockAnswer of [answerOf(200, new SyntaxError("Unexpected token '<'")), answerOf(200, {}), answerOf(200, null)]) {
+        // No jobs to return: the dialog says it (a throw), nothing else sent.
+        const none = await timeOff({ blockAnswer, blocks: [STORED_BLOCK] });
+        assert.equal(failureWords(none.threw), UNREAD, 'REGRESSION: the unchecked saved.id — a TypeError, or undefined put in the list');
+        assert.deepEqual([none.blockSets, none.sent.length, none.blocks.value], [[], 1, [STORED_BLOCK]]);
+        // Jobs to return: the block landed, so they still go back — a throw sent none and named none (review, 11 Nov).
+        const st = await timeOff({ unassign: ['job_1'], blockAnswer, blocks: [STORED_BLOCK] });
+        assert.equal(st.threw, null, 'REGRESSION: a landed block\'s unreadable answer stopped its jobs going back to the queue');
+        assert.deepEqual([st.blockSets, st.blocks.value], [[], [STORED_BLOCK]], 'nothing put in the list');
+        assert.deepEqual(st.sent.map(([url, m]) => [url, m]).slice(1), [['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']]);
+        assert.equal(st.banner.value, UNREAD, 'the banner says the time off shows after a refresh');
+        // One refused: named after it.
+        const left = await timeOff({ unassign: ['job_1', 'job_2'], blockAnswer, jobAnswers: { job_2: PAGE_502() } });
+        assert.equal(left.threw, null);
+        assert.equal(left.banner.value, `${UNREAD} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
+            + 'Gutter clean: The server returned 502. Unassign it from the Job Board.');
+    }
+    // After an org switch while the block was out: nothing said (the loop's own check then stops before any PUT).
+    const moved = await timeOff({ unassign: ['job_1'], blockAnswer: answerOf(200, {}), switchAt: 0 });
+    assert.deepEqual([moved.threw, moved.sent.length, moved.bannerSets.filter((v) => v === UNREAD)], [null, 1, []]);
+    const landed = await timeOff({ blocks: [{ ...STORED_BLOCK, notes: 'old' }, { id: 'dblk_2' }] });
+    assert.equal(landed.threw, null);
+    assert.deepEqual(landed.blocks.value, [STORED_BLOCK, { id: 'dblk_2' }], 'the block as stored, in its place');
+});
+
+test('Part 6b: a refused Delete throws the server\'s words, else the status; a landed Delete takes the block out — RUN', async () => {
+    const fn = between(dispatchSrc(), '    const deleteBlock = async (id) => {', '\n    };') + '\n    };';
+    const run = async (answer) => {
+        const blocks = stateOf([STORED_BLOCK, { id: 'dblk_2' }]);
+        const sent = [];
+        const deleteBlock = new Function('dbFetch', 'readRefusal', 'setBlocks', `${fn}\nreturn deleteBlock;`)(
+            async (url, opts) => { sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, blocks.set);
+        let threw = null;
+        try { await deleteBlock('dblk_1'); } catch (e) { threw = e; }
+        return { threw, sent, blocks: blocks.value };
+    };
+    for (const [answer, why] of [[answerOf(500, { error: 'Database error', requestId: 'r4' }), 'Database error (ref r4)'],
+        [PAGE_502(), 'The server returned 502.'], [answerOf(403, { error: 'Forbidden' }), 'Forbidden'], [UNSENT(), 'The server could not be reached.']]) {
+        const r = await run(answer);
+        assert.equal(failureWords(r.threw), why, `REGRESSION: "HTTP N" (${why})`);
+        assert.deepEqual(r.blocks, [STORED_BLOCK, { id: 'dblk_2' }], 'the block left in place');
+    }
+    const ok = await run(answerOf(200, { ok: true }));
+    assert.deepEqual([ok.threw, ok.sent, ok.blocks], [null, [['/.netlify/functions/dispatch-schedule-blocks?id=dblk_1', 'DELETE']], [{ id: 'dblk_2' }]]);
+});
+
+test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; no omission; ScheduleView says failureWords', () => {
+    const raw = read(DISPATCH);
+    const d = dispatchSrc();
+    assert.ok(!raw.includes('/* counted below by omission */'), 'REGRESSION: a failed unassign counted only by omission');
+    assert.ok(d.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    assert.ok(d.includes("import { notFreedWords } from '../utils/dispatchUnassign.js';"));
+    const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
+    order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', 'if (!res.ok) throw new Error(', 'const data = await res.json()',
+        'if (!saved && !unassignJobIds.length) throw new Error(unread);', 'if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }',
+        'else setBlocks(', 'if (r.ok) freed.push(jobId);', 'else notFreed.push({ id: jobId, words: await readRefusal(r) });',
+        'notFreed.push({ id: jobId, words: failureWords(e) });', '// and no audit row', 'const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length)',
+        'if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));', "setView('queue');");
+    assert.ok(!save.includes("'HTTP '"), 'REGRESSION: "HTTP N"');
+    assert.ok(d.includes("const [unassignError, setUnassignError] = useState('');"));
+    assert.equal(count(d, 'setUnassignError('), 4,'cleared as a save with jobs to return begins, an unreadable landed answer, set from the answer, the Close — none else');
+    assert.ok(!/setTimeout\([^;]*setUnassignError/.test(d), 'REGRESSION: the banner closed on a timer');
+    // The banner: above {/* Main content */}, outside every view's branch, so it shows in every view.
+    const banner = between(d, '{unassignError && (', '{/* Main content */}');
+    order(banner, '<div role="alert"', '✕ {unassignError}', "<button onClick={() => setUnassignError('')}", 'Close', '</button>');
+    order(d, '{/* Sub-tabs', '{unassignError && (', '{/* Main content */}', "{view === 'board' ? (");
+    assert.equal(count(d, '{unassignError && ('), 1);
+    // ScheduleView's three catches say failureWords — never a raw e.message ("Failed to fetch", "Unexpected token").
+    const sv = between(d, 'const ScheduleView = ', 'const ShiftPatternDialog = ');
+    assert.equal(count(sv, 'setErr(failureWords(e))'), 3, 'Save, Accept & re-crew, Delete');
+    assert.ok(!sv.includes('setErr(e.message)'), 'REGRESSION: a raw e.message in the time off dialogs');
+    order(between(sv, '    const submit = async () => {', '\n    };'), 'try { await onSaveBlock(editing); setEditing(null); }', 'catch (e) { setErr(failureWords(e)); }');
+    // The conflict step shares the dialog's error line: opening it clears the last attempt's words (pane, 11 Nov — a
+    // refused Save's words stood in "Already scheduled" before anything there was pressed).
+    assert.ok(between(sv, '    const submit = async () => {', '\n    };').includes("if (clashing.length > 0) { setErr(''); setConflict({ block: editing, jobs: clashing }); return; }"),
+        'REGRESSION: the conflict step opens with the last refusal\'s words');
+    order(between(sv, '    const confirmWithUnassign = async () => {', '\n    };'), 'await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));', '} catch (e) { setErr(failureWords(e)); }');
+    assert.ok(sv.includes('try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(failureWords(e)); }'));
+});
+
+// ── Part 7 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const QUOTES = 'src/Tabs/QuotesTab.jsx';
+const quotesSrc = () => code(read(QUOTES));
+const pdfAnswer = (status, body) => ({ ok: status < 400, status, json: async () => { if (body instanceof Error) throw body; return body; },
+    blob: async () => { if (body instanceof Error) throw body; return body; } });
+const PDF_REFUSALS = () => [
+    [pdfAnswer(404, { error: 'Quote not found' }), 'Quote not found'],
+    [pdfAnswer(403, { error: 'Forbidden: you can only read your own deals' }), 'Forbidden: you can only read your own deals'],
+    [pdfAnswer(500, { error: 'The PDF could not be made', requestId: 'r7' }), 'The PDF could not be made (ref r7)'],
+    [PAGE_502(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+
+// quotePdfOf (7a): the ok check first, then the file; { blob } or { error } in the house words, never a throw.
+test('Part 7a: quotePdfOf — a refusal in the server\'s words with their ref, else the status; unsent, the plain words; a file that cannot be read says so; never throws — RUN', async () => {
+    const BLOB = { size: 4, type: 'application/pdf' };
+    assert.deepEqual(await quotePdfOf(async () => pdfAnswer(200, BLOB)), { blob: BLOB });
+    for (const [answer, words] of PDF_REFUSALS()) {
+        const r = await quotePdfOf(async () => { if (answer instanceof Error) throw answer; return answer; });
+        assert.deepEqual(r, { error: words }, `REGRESSION: 'PDF generation failed' — the server's words dropped (${words})`);
+    }
+    const unreadable = await quotePdfOf(async () => pdfAnswer(200, new TypeError('Body is unusable: Body has already been read')));
+    assert.deepEqual(unreadable, { error: 'Its answer could not be read.' }, 'a 200 whose file cannot be read is no PDF, said plainly');
+    const raw = await quotePdfOf(async () => { throw new SyntaxError("Unexpected token '<'"); });
+    assert.deepEqual(raw, { error: 'Its answer could not be read.' }, 'REGRESSION: a parse error\'s own words');
+});
+
+// handleExportPDF (7a), extracted and run over the real quotePdfOf and stubs: a PDF not made is said for its quote,
+// nothing opened; a landed one downloads; an answer after an org switch downloads and says nothing; one at a time.
+let builtExport;
+const exportPdf = () => builtExport || (builtExport = (() => {
+    const fn = between(quotesSrc(), '    const handleExportPDF = async () => {', '\n    };') + '\n    };';
+    return new Function('activeQuote', 'pdfBusy', 'setPdfError', 'setPdfBusy', 'quotePdfOf', 'dbFetch', 'requestOrg', 'stillOrg', 'URL', 'document', 'window',
+        `${fn}\nreturn handleExportPDF;`);
+})());
+const Q7 = Object.freeze({ id: 'q_7', quoteNumber: 'Q-2026-013', version: 2, lineItems: [] });
+const pressPdf = async ({ answer, busy = false, switchOrg = false, quote = Q7 }) => {
+    const did = { sent: [], errors: [], busy: [], clicks: [], opened: 0, revoked: [] };
+    let org = 'org_a';
+    const doc = { createElement: (tag) => { const el = { tag }; el.click = () => did.clicks.push({ href: el.href, download: el.download }); return el; } };
+    const url = { createObjectURL: (b) => `blob:${b.size}`, revokeObjectURL: (u) => did.revoked.push(u) };
+    const win = { open: () => { did.opened++; return null; } };
+    const run = exportPdf()(quote, busy, (e) => did.errors.push(e), (b) => did.busy.push(b), quotePdfOf,
+        async (u, opts) => { did.sent.push([u, opts.method, JSON.parse(opts.body)]); if (switchOrg) org = 'org_b'; if (answer instanceof Error) throw answer; return answer; },
+        () => 'org_a', (o) => o === org, url, doc, win);
+    await run();
+    return did;
+};
+
+test('Part 7a: a PDF not made is said for its quote in the house words — nothing downloaded, no copy opened on its own — RUN', async () => {
+    for (const [answer, words] of PDF_REFUSALS()) {
+        const d = await pressPdf({ answer });
+        assert.deepEqual(d.sent, [['/.netlify/functions/quote-pdf', 'POST', { quoteId: 'q_7' }]], 'the stored quote by its id');
+        assert.deepEqual(d.errors, [null, { quoteId: 'q_7', words: `The PDF was not made — ${words}` }], `REGRESSION: a PDF not made said nothing (${words})`);
+        assert.deepEqual(d.busy, [true, false], 'one request at a time, let go once answered');
+        assert.deepEqual([d.clicks, d.opened], [[], 0], 'REGRESSION: the print copy opened on its own, with no word');
+    }
+});
+
+test('Part 7a: a landed PDF downloads under its name and says nothing; a press while one is out sends nothing — RUN', async () => {
+    const d = await pressPdf({ answer: pdfAnswer(200, { size: 9 }) });
+    assert.deepEqual(d.errors, [null], 'the words cleared at the press, none set');
+    assert.deepEqual(d.busy, [true, false]);
+    assert.deepEqual(d.clicks, [{ href: 'blob:9', download: 'Q-2026-013-v2.pdf' }]);
+    assert.deepEqual([d.revoked, d.opened], [['blob:9'], 0]);
+    const busy = await pressPdf({ answer: pdfAnswer(200, { size: 9 }), busy: true });
+    assert.deepEqual([busy.sent, busy.errors, busy.busy, busy.clicks], [[], [], [], []], 'REGRESSION: a second press while the first is out');
+    const none = await pressPdf({ answer: pdfAnswer(200, { size: 9 }), quote: null });
+    assert.deepEqual(none.sent, []);
+});
+
+test('Part 7a: an answer after an org switch — refused or landed — downloads nothing and says nothing — RUN', async () => {
+    for (const answer of [pdfAnswer(500, { error: 'Database error' }), UNSENT(), pdfAnswer(200, { size: 9 })]) {
+        const d = await pressPdf({ answer, switchOrg: true });
+        assert.deepEqual([d.errors, d.busy, d.clicks, d.opened], [[null], [true], [], 0], 'REGRESSION: the org check after the answer is gone');
+    }
+});
+
+// printQuoteCopy (7a, Q15), extracted with calcLineTotals and run over the real quoteTotals and quoteMoneyRows: opened
+// only when called, its lines to the cent and adding up to its own Subtotal.
+let builtPrint;
+const printCopy = () => builtPrint || (builtPrint = (() => {
+    const s = quotesSrc();
+    const calc = between(s, 'function calcLineTotals(', '\n}\n') + '\n}';
+    const fn = between(s, 'const printQuoteCopy = (', '\n};') + '\n};';
+    return new Function('quoteTotals', 'quoteMoneyRows', 'esc', 'fmtMoney', 'T', 'window', 'setTimeout', `${calc}\n${fn}\nreturn printQuoteCopy;`);
+})());
+const printed = (quote, { blocked = false } = {}) => {
+    const did = { html: '', closed: 0, printed: 0, timers: [] };
+    const w = { document: { write: (h) => { did.html += h; }, close: () => { did.closed++; } }, print: () => { did.printed++; } };
+    printCopy()(quoteTotals, quoteMoneyRows, esc, fmtMoney, T, { open: () => (blocked ? null : w) }, (f, ms) => did.timers.push([f, ms]))(
+        { activeQuote: quote, products: [], orgIdentity: { name: 'Acme & Sons' }, configuratorOpp: { account: 'Beta <Co>' } });
+    for (const [f] of did.timers) f();
+    return did;
+};
+
+test('Part 7a: the print copy\'s lines are to the cent and add up to its own Subtotal; it names the org, escaped — RUN', () => {
+    const quote = { id: 'q_7', quoteNumber: 'Q-2026-013', name: 'Renewal', lineItems: [
+        { productName: 'Seats', listPrice: 19.99, quantity: 3 }, { productName: 'Setup', listPrice: 0.5, quantity: 1 }], paymentTerms: 'Net 30' };
+    const d = printed(quote);
+    assert.ok(d.html.includes('<td>$59.97</td>') && d.html.includes('<td>$0.50</td>'), 'REGRESSION (Q15): the lines in whole dollars ($60, $1) beside a Subtotal of $60.47');
+    assert.ok(d.html.includes('<p>Subtotal: $60.47</p>') && d.html.includes('<p><strong>Total: $60.47</strong></p>'));
+    assert.ok(d.html.includes('Acme &amp; Sons') && d.html.includes('Beta &lt;Co&gt;'), 'the org\'s name and the account, escaped');
+    assert.deepEqual([d.closed, d.printed], [1, 1]);
+    const blocked = printed(quote, { blocked: true });
+    assert.deepEqual([blocked.html, blocked.printed], ['', 0], 'a tab the browser blocked writes nothing');
+});
+
+test('Part 7a: WIRING — the PDF\'s words under Download PDF with a Close; the copy only by "Print a copy instead"; the request by id', () => {
+    const s = quotesSrc();
+    assert.ok(s.includes("import { dbFetch, requestOrg, stillOrg } from '../utils/storage';"));
+    assert.ok(s.includes("import { quotePdfOf } from '../utils/quotePdfAnswer.js';"));
+    const fn = between(s, '    const handleExportPDF = async () => {', '\n    };');
+    order(fn, 'if (!activeQuote || pdfBusy) return;', 'const askedOrg = requestOrg();', 'setPdfError(null); setPdfBusy(true);',
+        "quotePdfOf(() => dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) }));",
+        'if (!stillOrg(askedOrg)) return;', 'if (answer.error) { setPdfError({ quoteId, words: `The PDF was not made — ${answer.error}` }); setPdfBusy(false); return; }',
+        'setPdfBusy(false);', 'URL.createObjectURL(answer.blob)');
+    // The org check is the first thing after the answer — before any setter.
+    const after = fn.slice(fn.indexOf('quotePdfOf('));
+    assert.ok(after.indexOf('if (!stillOrg(askedOrg)) return;') < after.indexOf('setPdf'), 'REGRESSION: a setter before the org check');
+    assert.ok(!fn.includes('window.open') && !fn.includes('printQuoteCopy') && !fn.includes('catch'), 'REGRESSION: the print copy opened on a failure, with no word');
+    assert.ok(!s.includes("'PDF generation failed'"), 'REGRESSION: the server\'s words dropped');
+    assert.equal(count(s, 'window.open('), 1, 'one tab opened, by the print copy');
+    assert.equal(count(between(s, 'const printQuoteCopy = (', '\n};'), 'window.open('), 1);
+    assert.ok(s.includes('const [pdfBusy,            setPdfBusy]          = useState(false);') && s.includes('const [pdfError,           setPdfError]         = useState(null);'));
+    assert.equal(count(s, 'setPdfError('), 3, 'cleared at a press, set on a refusal, the Close — none else');
+    assert.ok(!/setTimeout\([^;]*setPdfError/.test(s), 'REGRESSION: the words leave on a timer');
+    // Drawn under Download PDF, only for its quote, kept until its Close; the copy a button there — its one call.
+    const drawn = between(s, '{pdfError && pdfError.quoteId === activeQuote.id && (', '\n                                            )}');
+    order(s, '<button onClick={handleExportPDF} disabled={pdfBusy}', '{pdfError && pdfError.quoteId === activeQuote.id && (');
+    order(drawn, '<div role="alert"', '⚠ {pdfError.words}', '<button onClick={() => setPdfError(null)}', 'Close</button>',
+        '<button onClick={() => printQuoteCopy({ activeQuote, products, orgIdentity, configuratorOpp })}', 'Print a copy instead</button>');
+    assert.equal(count(s, 'printQuoteCopy({'), 1, 'the copy opened only by the button');
+});
+
+// The coaching hook (7b), extracted whole and run over a stand-in React (each useState a recorded cell, an effect run
+// as it is declared, a callback itself) and a stubbed dbFetch: no write rejects; a failed load is said.
+let builtCoaching;
+const coachingHook = () => builtCoaching || (builtCoaching = (() => {
+    const s = code(read('src/hooks/useCoachingNotes.js'));
+    const body = s.slice(s.indexOf("const URL = '/.netlify/functions/coaching-notes';")).replace('export function useCoachingNotes', 'function useCoachingNotes');
+    return new Function('useState', 'useEffect', 'useCallback', 'dbFetch', 'requestOrg', 'stillOrg', 'readRefusal', 'failureWords', 'console',
+        `${body}\nreturn useCoachingNotes;`);
+})());
+const NOTE = Object.freeze({ id: 'cn_1', text: 'Strong call', readBy: [] });
+const coaching = async ({ answers = [], orgId = 'org_a', switchOrg = null, initial = [NOTE] } = {}) => {
+    const cells = [];
+    const sent = [];
+    let org = 'org_a';
+    const queue = [...answers];
+    const hook = coachingHook()(
+        (init) => { const c = stateOf(init); cells.push(c); return [c.value, c.set]; },
+        (fn) => { fn(); },
+        (fn) => fn,
+        async (u, opts = {}) => {
+            sent.push([u, opts.method || 'GET']);
+            if (switchOrg === sent.length) org = 'org_b';
+            const a = queue.shift();
+            if (a instanceof Error) throw a;
+            return a;
+        },
+        () => org, (o) => o === org, readRefusal, failureWords, quiet)({ orgId, waitForToken: async () => {} });
+    await settle();
+    const [notes, , error] = cells;
+    if (initial && !switchOrg) notes.set(initial);
+    return { hook, notes, error, sent, setOrg: (o) => { org = o; } };
+};
+const COACH_REFUSALS = () => [
+    [answerOf(403, { error: 'Forbidden: only the author or an Admin may change this note' }), 'Forbidden: only the author or an Admin may change this note'],
+    [answerOf(500, { error: 'Database error', requestId: 'r9' }), 'Database error (ref r9)'],
+    [PAGE_502(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+const LOAD_OK = () => answerOf(200, { coachingNotes: [NOTE] });
+
+test('Part 7b: the coaching notes\' load — landed, the notes; refused, unsent or unreadable, coachingNotesError in the house words, never "no notes" — RUN', async () => {
+    const ok = await coaching({ answers: [LOAD_OK()], initial: null });
+    assert.deepEqual([ok.notes.value, ok.error.value, ok.sent], [[NOTE], '', [['/.netlify/functions/coaching-notes', 'GET']]]);
+    for (const [answer, words] of [...COACH_REFUSALS(), [answerOf(200, new SyntaxError("Unexpected token '<'")), 'Its answer could not be read.']]) {
+        const st = await coaching({ answers: [answer], initial: null });
+        assert.equal(st.error.value, words, `REGRESSION: a failed load read as no notes (${words})`);
+        assert.deepEqual(st.notes.value, []);
+    }
+    const noOrg = await coaching({ answers: [LOAD_OK()], orgId: null, initial: null });
+    assert.deepEqual([noOrg.sent, noOrg.error.value], [[], '']);
+});
+
+test('Part 7b: a load answered after an org switch — refused or landed — sets nothing and says nothing — RUN', async () => {
+    for (const answer of [answerOf(500, { error: 'Database error' }), UNSENT(), LOAD_OK()]) {
+        const st = await coaching({ answers: [answer], switchOrg: 1, initial: null });
+        assert.deepEqual([st.notes.value, st.error.value], [[], ''], 'REGRESSION: another org\'s answer said on this org\'s screen');
+    }
+});
+
+test('Part 7b: add, mark read and delete never reject — each refusal answers { ok: false, error } in the house words, the list unchanged — RUN', async () => {
+    const WRITES = [
+        ['add', (h) => h.addCoachingNote({ text: 'x' }), 'POST'],
+        ['mark read', (h) => h.markCoachingNoteRead('cn_1'), 'PUT'],
+        ['delete', (h) => h.deleteCoachingNote('cn_1'), 'DELETE'],
+    ];
+    for (const [what, run, method] of WRITES) {
+        for (const [answer, words] of COACH_REFUSALS()) {
+            const st = await coaching({ answers: [LOAD_OK(), answer] });
+            let r, threw = null;
+            try { r = await run(st.hook); } catch (e) { threw = e; }
+            assert.equal(threw, null, `REGRESSION: ${what} rejected — the dialog stayed "Saving…" for good (${words})`);
+            assert.deepEqual(r, { ok: false, error: words }, `${what}: ${words}`);
+            assert.equal(st.sent[1][1], method);
+            assert.deepEqual(st.notes.value, [NOTE], `${what}: the list unchanged`);
+        }
+    }
+    // A landed add or mark read whose answer cannot be read says so; a delete reads no body, so it landed.
+    for (const [what, run] of WRITES.slice(0, 2)) {
+        const st = await coaching({ answers: [LOAD_OK(), answerOf(200, new SyntaxError("Unexpected token '<'"))] });
+        assert.deepEqual(await run(st.hook), { ok: false, error: 'Its answer could not be read.' }, `${what}: never a parse error's words`);
+    }
+    const del = await coaching({ answers: [LOAD_OK(), answerOf(200, new SyntaxError("Unexpected token '<'"))] });
+    assert.deepEqual(await del.hook.deleteCoachingNote('cn_1'), { ok: true });
+    assert.deepEqual(del.notes.value, []);
+    assert.equal(del.sent[1][0], '/.netlify/functions/coaching-notes?id=cn_1');
+});
+
+test('Part 7b: a landed write takes the note as stored; after an org switch it answers but changes nothing on screen — RUN', async () => {
+    const READ = { ...NOTE, readBy: ['usr_1'] };
+    const NEW = { id: 'cn_2', text: 'New', readBy: [] };
+    const add = await coaching({ answers: [LOAD_OK(), answerOf(201, { coachingNote: NEW })] });
+    assert.deepEqual(await add.hook.addCoachingNote({ text: 'New' }), { ok: true, note: NEW, created: true });
+    assert.deepEqual(add.notes.value, [NEW, NOTE]);
+    const read1 = await coaching({ answers: [LOAD_OK(), answerOf(200, { coachingNote: READ })] });
+    assert.deepEqual(await read1.hook.markCoachingNoteRead('cn_1'), { ok: true, note: READ });
+    assert.deepEqual(read1.notes.value, [READ]);
+    for (const [run, answer] of [[(h) => h.addCoachingNote({}), answerOf(201, { coachingNote: NEW })], [(h) => h.markCoachingNoteRead('cn_1'), answerOf(200, { coachingNote: READ })],
+        [(h) => h.deleteCoachingNote('cn_1'), answerOf(200, {})]]) {
+        const st = await coaching({ answers: [LOAD_OK(), answer] });
+        const out = run(st.hook);
+        st.setOrg('org_b');
+        assert.equal((await out).ok, true, 'the caller still gets its result');
+        assert.deepEqual(st.notes.value, [NOTE], 'REGRESSION: another org\'s screen changed');
+    }
+});
+
+// Home's "Mark read" (7b), extracted and run over stubs: a refusal said in a press notice, only for the org that asked.
+let builtMarkRead;
+const markRead = () => builtMarkRead || (builtMarkRead = (() => {
+    const fn = between(code(read('src/Tabs/HomeTab.jsx')), '    const markNoteRead = async (n) => {', '\n    };') + '\n    };';
+    return new Function('markCoachingNoteRead', 'setPressNotices', 'pressNoticeOf', 'requestOrg', 'stillOrg', `${fn}\nreturn markNoteRead;`);
+})());
+const pressMarkRead = async ({ answer, switchOrg = false }) => {
+    const notices = stateOf([]);
+    const asked = [];
+    let org = 'org_a';
+    await markRead()(async (id) => { asked.push(id); if (switchOrg) org = 'org_b'; return answer; }, notices.set, pressNoticeOf, () => 'org_a', (o) => o === org)(NOTE);
+    return { notices: notices.value, asked };
+};
+
+test('Part 7b: Home\'s "Mark read" says a refusal in a press notice — "Not marked read: <why>" — and nothing when it landed or the org switched — RUN', async () => {
+    for (const [, words] of COACH_REFUSALS()) {
+        const st = await pressMarkRead({ answer: { ok: false, error: words } });
+        assert.deepEqual(st.asked, ['cn_1']);
+        assert.equal(st.notices.length, 1, `REGRESSION: a refused Mark read said nothing (${words})`);
+        assert.deepEqual([st.notices[0].title, st.notices[0].words, st.notices[0].refused], ['Coaching note', `Not marked read: ${words}`, null]);
+    }
+    assert.deepEqual((await pressMarkRead({ answer: { ok: true, note: NOTE } })).notices, []);
+    assert.deepEqual((await pressMarkRead({ answer: { ok: false, error: 'Database error' }, switchOrg: true })).notices, [], 'REGRESSION: said on another org\'s screen');
+});
+
+test('Part 7b: WIRING — the hook reads ok first and never rejects; App hands out coachingNotesError; Home and Sales Manager say a failed load; TeamTab\'s banner has a Close', () => {
+    const hook = code(read('src/hooks/useCoachingNotes.js'));
+    assert.ok(hook.includes("import { dbFetch, requestOrg, stillOrg } from '../utils/storage.js';"));
+    assert.ok(hook.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    assert.ok(!hook.includes('errorOf'), 'REGRESSION: the old reader — the ref dropped, the body read before the ok check');
+    const answered = between(hook, 'const answered = async (send, { body = true } = {}) => {', '\n};');
+    order(answered, 'const res = await send();', 'if (!res.ok) return { ok: false, error: await readRefusal(res) };', 'await res.json()', '} catch (e) { return { ok: false, error: failureWords(e) }; }');
+    assert.equal(count(hook, 'await answered('), 3, 'each write through the one reader');
+    assert.equal(count(hook, 'await dbFetch('), 1, 'the load alone sends by itself');
+    const effect = between(hook, '    useEffect(() => {', '    }, [enabled, orgId, waitForToken, reload]);');
+    order(effect, "setCoachingNotesError('');", 'const askedOrg = requestOrg();', 'await reload();', '} catch (err) {',
+        'if (!cancelled && stillOrg(askedOrg)) setCoachingNotesError(failureWords(err));');
+    assert.ok(!effect.includes('console.warn'), 'REGRESSION: a failed load said only to the console');
+    assert.ok(hook.includes('return { coachingNotes, coachingNotesLoaded, coachingNotesError, reloadCoachingNotes: reload, addCoachingNote, markCoachingNoteRead, deleteCoachingNote };'));
+    const app = read('src/App.jsx');
+    assert.ok(app.includes('const { coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });'));
+    assert.ok(between(app, 'const appContextValue = {', '\n    };').includes('coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,'), 'handed to the screens');
+    const said = "Coaching notes couldn't be loaded ({coachingNotesError}). Reload the page to try again.";
+    const home = code(read('src/Tabs/HomeTab.jsx'));
+    assert.ok(home.includes('coachingNotes, coachingNotesError, markCoachingNoteRead, currentUserId, setPressNotices,'));
+    assert.ok(home.includes('<button onClick={() => markNoteRead(n)}') && !home.includes('onClick={() => markCoachingNoteRead(n.id)}'), 'REGRESSION: Mark read ignores its answer');
+    order(home, '{coachingNotesError && (', 'Notes from your manager', said, '{!coachingNotesError && myCoachingNotes.length > 0 && (');
+    const sm = code(read('src/Tabs/SalesManagerTab.jsx'));
+    order(sm, '{coachingNotesError && (', 'Recent coaching', said, '{!coachingNotesError && recentNotes.length > 0 && (');
+    const banner = between(sm, "{saveState.status === 'error' && (\n                <div role=\"alert\"", '{coachingNotesError && (');
+    order(banner, '{saveState.msg}', "<button onClick={() => setSaveState({ status:'idle', msg:'' })}", '×</button>');
+    assert.ok(sm.includes('if (!r.ok) setSaveState({ status: \'error\', msg: `Not deleted — ${r.error}` });'), 'the delete\'s refusal on that banner');
+});
+
+// 7c: Quick Log's calendar box and the adds nothing reached are gone (Q16).
+const strip = (s) => code(s).replace(/\/\*[\s\S]*?\*\//g, '');
+const srcFiles = () => {
+    const out = [];
+    const walk = (rel) => {
+        for (const name of readdirSync(new URL(rel, ROOT))) {
+            const p = `${rel}${name}`;
+            if (statSync(new URL(p, ROOT)).isDirectory()) walk(`${p}/`);
+            else if (/\.(js|jsx)$/.test(name)) out.push(p);
+        }
+    };
+    walk('src/');
+    return out;
+};
+// A function that names calendar-add-event and has a catch that only logs (console.warn / console.error alone): an
+// event that was not added, said to the console only. { line } per such catch.
+const silentCalendarCatches = (src) => {
+    const program = parse(src, { sourceType: 'module', plugins: ['jsx'], errorRecovery: true }).program;
+    const FN = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ObjectMethod', 'ClassMethod']);
+    const kids = (n) => Object.keys(n).filter((k) => !['loc', 'start', 'end', 'extra', 'leadingComments', 'trailingComments', 'innerComments'].includes(k))
+        .flatMap((k) => (Array.isArray(n[k]) ? n[k] : [n[k]])).filter((c) => c && typeof c.type === 'string');
+    const names = (n) => { let hit = false; const look = (x) => { if (hit) return; if ((x.type === 'StringLiteral' && x.value.includes('calendar-add-event')) || (x.type === 'TemplateElement' && x.value.raw.includes('calendar-add-event'))) { hit = true; return; } kids(x).forEach(look); }; look(n); return hit; };
+    const logsOnly = (block) => block.body.length > 0 && block.body.every((st) => st.type === 'ExpressionStatement' && st.expression.type === 'CallExpression'
+        && st.expression.callee.type === 'MemberExpression' && st.expression.callee.object.name === 'console' && ['warn', 'error', 'log'].includes(st.expression.callee.property.name));
+    const out = [];
+    const walk = (n, fn) => {
+        const here = FN.has(n.type) ? n : fn;
+        if (n.type === 'CatchClause' && here && names(here) && logsOnly(n.body)) out.push({ line: n.loc.start.line });
+        kids(n).forEach((k) => walk(k, here));
+    };
+    walk(program, null);
+    return out;
+};
+
+test('Part 7c: no src file reads addToCalendar; Quick Log draws no calendar box; the task button, its state and the save-time adds are gone', () => {
+    const readers = srcFiles().filter((f) => strip(read(f)).includes('addToCalendar'));
+    assert.deepEqual(readers, [], 'REGRESSION: a calendar flag no submit sends — a box that promises an event and makes none');
+    const fab = strip(read('src/components/layout/QuickLogFab.jsx'));
+    assert.ok(!fab.includes('Add to Google Calendar') && !fab.includes('quickLogCal'), 'REGRESSION: the box is back');
+    for (const f of ['src/App.jsx', 'src/hooks/useTasks.js', 'src/hooks/useActivities.js']) {
+        const s = strip(read(f));
+        for (const name of ['handleAddTaskToCalendar', 'calendarAddingTaskId', 'calendarAddFeedback', 'fireCalendarEvent', 'fireActivityCalendarEvent'])
+            assert.ok(!s.includes(name), `${f}: ${name} is gone`);
+    }
+    assert.ok(read('src/hooks/useUIState.js').includes("useOrgBoundState(resets, { type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });"));
+});
+
+test('Part 7c: no caller of calendar-add-event has a catch that only logs — scanned over src/ — and the scan catches one', () => {
+    const found = srcFiles().flatMap((f) => silentCalendarCatches(read(f)).map((x) => `${f}:${x.line}`));
+    assert.deepEqual(found, [], 'a calendar event not added, said to the console only — say it, or name the place');
+    // Self-test: the shape that was in useTasks.js and useActivities.js, and the shapes that pass.
+    const was = "async function fire(t) { try { const res = await dbFetch('/.netlify/functions/calendar-add-event', { method: 'POST' }); } catch (err) { console.warn('Calendar event creation failed (non-blocking):', err); } }";
+    assert.equal(silentCalendarCatches(was).length, 1, 'the console-only catch');
+    assert.equal(silentCalendarCatches("const f = async () => { try { await dbFetch(`/.netlify/functions/calendar-add-event`); } catch { console.error('x'); } };").length, 1, 'a template literal, an arrow');
+    assert.equal(silentCalendarCatches("async function f() { try { await dbFetch('/.netlify/functions/calendar-add-event'); } catch (e) { setErr(failureWords(e)); } }").length, 0, 'said');
+    assert.equal(silentCalendarCatches("async function f() { try { await dbFetch('/.netlify/functions/other'); } catch (e) { console.warn(e); } }").length, 0, 'another request');
 });

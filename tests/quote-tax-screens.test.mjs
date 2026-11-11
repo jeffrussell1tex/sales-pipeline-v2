@@ -229,12 +229,15 @@ test('QuotesTab: every totals block draws the rows (preview, compare columns, bu
     assert.ok(column.includes('{fmt(totalValue)}'), 'the column headline stays pre-tax');
     const editor = between(s, 'const LineItemEditor = (', '\n};\n');
     assert.equal(count(editor, '...moneyRowsOf(totals, quote.dealDiscount),'), 1);
-    const print = between(s, '    const handleExportPDF = async () => {', '\n    };\n');
+    // Since §0.246 (docs/design/refusal-sweep 7a) the print copy is its own module-scope function, opened only by
+    // "Print a copy instead" — the same text; its lines to the cent too (Q15).
+    const print = between(s, 'const printQuoteCopy = ({ activeQuote, products, orgIdentity, configuratorOpp }) => {', '\n};\n');
     assert.ok(print.includes('const totals = calcLineTotals(activeQuote.lineItems || [], products || [], activeQuote);'));
     assert.ok(print.includes('const moneyHtml = quoteMoneyRows(totals, activeQuote.dealDiscount)'));
     assert.ok(print.includes('`<p><strong>${esc(r.label)}: ${esc(r.value)}</strong></p>` : `<p>${esc(r.label)}: ${esc(r.value)}</p>`'), 'the rows escaped');
     assert.ok(print.includes('</tbody></table>${moneyHtml}${activeQuote.paymentTerms'), 'the block where the Total was');
     assert.ok(!print.includes('Math.round(netTotal)'), 'REGRESSION: the print copy\'s whole-dollar pre-tax Total');
+    assert.ok(print.includes('<td>${esc(fmtMoney(li.lineTotal))}</td>') && !print.includes('Math.round(li.lineTotal)'), 'REGRESSION (§0.246, Q15): the print copy\'s lines in whole dollars');
 });
 
 test('QuotesTab: the builder edits the rate and the "Tax exempt" switch, and each line\'s Taxable; a refused rate is said, never sent', () => {

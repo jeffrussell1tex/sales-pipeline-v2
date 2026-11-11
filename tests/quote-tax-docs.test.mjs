@@ -188,7 +188,8 @@ test('WIRING: the PDF reads the STORED quote by its id in the caller\'s org, its
     assert.ok(read1 > 0 && access > read1 && opp > access && draw > opp, 'the quote in the org, then its deal\'s access, then its deal in the org, then the PDF');
     assert.ok(f.includes("if (!quote) return json(404, { error: 'Quote not found' });"), 'another org\'s quote is a 404');
     const tab = code(read('src/Tabs/QuotesTab.jsx'));
-    assert.ok(tab.includes("dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) });"),
+    // Since §0.246 (docs/design/refusal-sweep 7a) the request is quotePdfOf's to send — its answer read ok-first.
+    assert.ok(tab.includes("quotePdfOf(() => dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) }));"),
         'the screen asks for the quote by its id');
     assert.ok(!tab.includes('JSON.stringify({ quote: activeQuote'), 'REGRESSION (§0.241): the screen sends its own copy of the quote to print');
 });

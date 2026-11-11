@@ -8,7 +8,8 @@ import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 import { T } from '../tokens.js';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { pressNoticeOf } from '../utils/pressNotice.js';
 import { startCalendarConnect } from '../utils/calendarConnect.js';
 // Pinned saved reports (state §0.135): the same engine and chart the Reports tab uses.
 import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
@@ -156,7 +157,7 @@ export default function HomeTab() {
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
         calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
-        coachingNotes, markCoachingNoteRead, currentUserId,
+        coachingNotes, coachingNotesError, markCoachingNoteRead, currentUserId, setPressNotices,
         myProfile, myProfileHere, leads,
         settingsOrgId, activeOrgId,
         setEditingOpp, setShowModal,
@@ -256,6 +257,14 @@ export default function HomeTab() {
     const myTeamId        = (settings?.users || []).find(u => u.id === currentUserId)?.teamId || null;
     const myCoachingNotes = sortNotes((coachingNotes || []).filter(n => isAddressedTo(n, currentUserId, myTeamId)));
     const unreadCoaching  = myCoachingNotes.filter(n => !isReadBy(n, currentUserId)).length;
+    // "Mark read" (state §0.246, docs/design/refusal-sweep 7b; Jeff's Q1): a refusal is said in a press notice,
+    // bottom-left, kept until its ✕ — it ignored its answer, and the note stayed unread with no word. An answer after
+    // an org switch says nothing (the notices are cleared by the switch; the hook changes nothing on screen).
+    const markNoteRead = async (n) => {
+        const askedOrg = requestOrg();
+        const r = await markCoachingNoteRead(n.id);
+        if (!r.ok && stillOrg(askedOrg)) setPressNotices(list => [...list, pressNoticeOf('Coaching note', `Not marked read: ${r.error}`)]);
+    };
 
     // ── Task / calendar data ──────────────────────────────────
     const openTasks    = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed');
@@ -652,8 +661,17 @@ export default function HomeTab() {
                         )}
                     </div>
 
-                    {/* NOTES FROM YOUR MANAGER — coaching notes addressed to me (state §0.82) */}
-                    {myCoachingNotes.length > 0 && (
+                    {/* NOTES FROM YOUR MANAGER — coaching notes addressed to me (state §0.82). A failed load is said, never
+                        hidden as if there were none (state §0.246, Jeff's Q17). */}
+                    {coachingNotesError && (
+                        <div>
+                            <div style={{ ...eyebrow(T.goldInk), marginBottom: '0.625rem' }}>Notes from your manager</div>
+                            <div role="alert" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '0.75rem 1rem', fontSize: '0.8125rem', color: T.danger, fontFamily: T.sans, lineHeight: 1.45 }}>
+                                Coaching notes couldn't be loaded ({coachingNotesError}). Reload the page to try again.
+                            </div>
+                        </div>
+                    )}
+                    {!coachingNotesError && myCoachingNotes.length > 0 && (
                         <div>
                             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
                                 <div style={eyebrow(T.goldInk)}>Notes from your manager</div>
@@ -673,7 +691,7 @@ export default function HomeTab() {
                                                 <div style={{ fontSize: '0.875rem', color: T.ink, fontFamily: T.sans, marginTop: 2, lineHeight: 1.45 }}>{n.text}</div>
                                             </div>
                                             {unread && (
-                                                <button onClick={() => markCoachingNoteRead(n.id)}
+                                                <button onClick={() => markNoteRead(n)}
                                                     style={{ fontSize: '0.75rem', color: T.goldInk, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans, flexShrink: 0 }}>
                                                     Mark read
                                                 </button>

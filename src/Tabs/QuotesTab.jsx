@@ -5,7 +5,8 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { orgIdentityOf, profileOfSettings, contactLineOf } from '../utils/orgIdentity.js';
 import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { quotePdfOf } from '../utils/quotePdfAnswer.js';
 import { T } from '../tokens.js';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -116,6 +117,21 @@ function calcLineTotals(lineItems = [], products = [], terms = {}) {
 
 // The totals block's rows (R6) in each block's own shape ({ l, v, bold }) — money to the cent there only.
 const moneyRowsOf = (totals, dealDiscount) => quoteMoneyRows(totals, dealDiscount).map(r => ({ l: r.label, v: r.value, bold: !!r.total }));
+
+// The quote's print copy (state §0.246, docs/design/refusal-sweep 7a; Jeff's Q14, Q15): opened only by "Print a copy
+// instead" under a PDF not made — a click, so the browser lets the tab open — never on its own. Its lines to the cent,
+// as its totals block is (§18b124 rule 2): whole dollars, its rows did not add up to its own Subtotal.
+const printQuoteCopy = ({ activeQuote, products, orgIdentity, configuratorOpp }) => {
+    const totals = calcLineTotals(activeQuote.lineItems || [], products || [], activeQuote);
+    const { lines } = totals;
+    // The print copy's totals block (R6), to the cent; its rows' words escaped as every interpolation is.
+    const moneyHtml = quoteMoneyRows(totals, activeQuote.dealDiscount)
+        .map(r => r.total ? `<p><strong>${esc(r.label)}: ${esc(r.value)}</strong></p>` : `<p>${esc(r.label)}: ${esc(r.value)}</p>`).join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body>${orgIdentity?.name ? `<p style="font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8a8378;margin:0">${esc(orgIdentity.name)}</p>` : ''}<h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>${esc(fmtMoney(li.lineTotal))}</td></tr>`).join('')}</tbody></table>${moneyHtml}${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
+    w.document.close(); setTimeout(() => w.print(), 400);
+};
 
 // ─── Status colours ───────────────────────────────────────────
 const STATUS_COLORS = {
@@ -1547,6 +1563,10 @@ export default function QuotesTab() {
     const [jobLoading,         setJobLoading]       = useState(false);
     const [jobBusy,            setJobBusy]          = useState(false);
     const [jobError,           setJobError]         = useState('');
+    // The quote PDF (state §0.246, docs/design/refusal-sweep 7a; Jeff's Q14): one request at a time, and a PDF not made
+    // said under that quote's Download PDF — { quoteId, words } — kept until its Close, with the print copy a button.
+    const [pdfBusy,            setPdfBusy]          = useState(false);
+    const [pdfError,           setPdfError]         = useState(null);
 
     const setTab = (t) => { setSubTabRaw(t); localStorage.setItem('tab:quotes:subTab', t); };
 
@@ -1846,26 +1866,24 @@ export default function QuotesTab() {
     };
     const handleDeleteProductLocal = async (id) => { await handleDeleteProduct(id); };
 
+    // The quote PDF (state §0.246, docs/design/refusal-sweep 7a; Jeff's Q14): a PDF not made is said under Download PDF in
+    // the house words (quotePdfOf: the server's words with their ref, else "The server returned N.", or "The server could
+    // not be reached."), kept until its Close, with "Print a copy instead" a button — the copy is never opened on its own.
+    // One request at a time; an answer after an org switch downloads and says nothing; the words name their quote, drawn
+    // only while it is the one shown.
     const handleExportPDF = async () => {
-        if (!activeQuote) return;
-        const totals = calcLineTotals(activeQuote.lineItems || [], products || [], activeQuote);
-        const { lines } = totals;
-        // The print copy's totals block (R6), to the cent; its rows' words escaped as every interpolation is.
-        const moneyHtml = quoteMoneyRows(totals, activeQuote.dealDiscount)
-            .map(r => r.total ? `<p><strong>${esc(r.label)}: ${esc(r.value)}</strong></p>` : `<p>${esc(r.label)}: ${esc(r.value)}</p>`).join('');
-        try {
-            // The stored quote by its id (state §0.241): the server reads it in this org, its deal's access checked, and prints its own figures.
-            const res = await dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) });
-            if (!res.ok) throw new Error('PDF generation failed');
-            const blob = await res.blob();
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a'); a.href = url; a.download = (activeQuote.quoteNumber || 'quote') + '-v' + (activeQuote.version || 1) + '.pdf'; a.click(); URL.revokeObjectURL(url);
-        } catch {
-            const w = window.open('', '_blank');
-            if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body>${orgIdentity.name ? `<p style="font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8a8378;margin:0">${esc(orgIdentity.name)}</p>` : ''}<h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table>${moneyHtml}${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
-            w.document.close(); setTimeout(() => w.print(), 400);
-        }
+        if (!activeQuote || pdfBusy) return;
+        const quoteId  = activeQuote.id;
+        const fileName = (activeQuote.quoteNumber || 'quote') + '-v' + (activeQuote.version || 1) + '.pdf';
+        const askedOrg = requestOrg();
+        setPdfError(null); setPdfBusy(true);
+        // The stored quote by its id (state §0.241): the server reads it in this org, its deal's access checked, and prints its own figures.
+        const answer = await quotePdfOf(() => dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) }));
+        if (!stillOrg(askedOrg)) return;
+        if (answer.error) { setPdfError({ quoteId, words: `The PDF was not made — ${answer.error}` }); setPdfBusy(false); return; }
+        setPdfBusy(false);
+        const url  = URL.createObjectURL(answer.blob);
+        const a    = document.createElement('a'); a.href = url; a.download = fileName; a.click(); URL.revokeObjectURL(url);
     };
 
     // ── Stage colour map ──────────────────────────────────────
@@ -2229,9 +2247,18 @@ export default function QuotesTab() {
                                         <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                             {activeCanSend && <button onClick={handleSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>Send to customer →</button>}
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                                                <button onClick={handleExportPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Download PDF</button>
+                                                <button onClick={handleExportPDF} disabled={pdfBusy} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: pdfBusy ? 'default' : 'pointer', fontFamily: T.sans, opacity: pdfBusy ? 0.6 : 1 }}>{pdfBusy ? 'Making PDF…' : 'Download PDF'}</button>
                                                 <button onClick={() => setViewMode('build')} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>← Back to build</button>
                                             </div>
+                                            {pdfError && pdfError.quoteId === activeQuote.id && (
+                                                <div role="alert" style={{ background: T.surface, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 10px', fontFamily: T.sans }}>
+                                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                                        <span style={{ flex: 1, fontSize: 11.5, fontWeight: 600, color: T.danger, lineHeight: 1.45 }}>⚠ {pdfError.words}</span>
+                                                        <button onClick={() => setPdfError(null)} style={{ background: 'none', border: 'none', color: T.inkMid, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, fontFamily: T.sans, padding: 0 }}>Close</button>
+                                                    </div>
+                                                    <button onClick={() => printQuoteCopy({ activeQuote, products, orgIdentity, configuratorOpp })} style={{ marginTop: 6, background: 'transparent', color: T.ink, border: `1px solid ${T.borderStrong}`, padding: '5px 10px', fontSize: 11.5, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Print a copy instead</button>
+                                                </div>
+                                            )}
                                         </div>
                                         <QuoteActivityLog quote={activeQuote} events={quoteHistory.events} error={quoteHistory.error} />
                                     </div>

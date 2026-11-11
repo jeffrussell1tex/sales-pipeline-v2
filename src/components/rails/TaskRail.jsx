@@ -392,7 +392,6 @@ export default function TaskRail() {
                 opportunityId: task.opportunityId || '',
                 contactId:     task.contactId     || '',
                 accountId:     task.accountId     || '',   // by id: activities keep no company name (activities.mjs sanitize), so the name sent here was dropped and the activity logged no account
-                addToCalendar: false,
             };
             if (handleSaveActivity) {
                 // The task's links are copied onto the activity: one the server refuses — its record deleted

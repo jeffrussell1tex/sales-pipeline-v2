@@ -534,32 +534,52 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    DESIGN.md and ANSWERS.md, committed `058469e`: twelve Parts; Jeff, 11
    Nov: "Refusal sweep", then "Parts 1-4 now (Recommended)" and Q1-Q20
    "All Recommended (Recommended)"). **Parts 1-4 built 11 Nov (state
-   §0.245; guide §18b125 rules 5 and 9) — NOT committed; not yet shipped;
-   harness deferred**, its rep-path browser check PASSED as Karen, the
-   Admin check (Export) PASSED as Jeff: a refusal at a press with no
-   error place of its own said in a press notice kept until its ✕
+   §0.245; guide §18b125 rules 5 and 9) — committed `b1b56e7`; NOT pushed;
+   not yet shipped; harness deferred**, its rep-path browser check
+   PASSED as Karen, the Admin check (Export) PASSED as Jeff: a refusal
+   at a press with no error place of its own said in a press notice
+   kept until its ✕
    (`pressNoticeOf`) — the Pipeline's stage drag (offered only to a member
    who may change deals) and the Tasks tab's ✓ and Snooze; the deal
    window's refused or unsent save in the house words; Reports' "Contacts
    on this deal" on one banner with a Close; Export's Delete on its banner
    and its two windows' saves inside the window, never `window.alert`;
    each optimistic change putting back only its own copy; Home's dead
-   Complete removed (Q5). Strike them once §0.245 ships. What remains is
-   Parts 5-12 of the design — the next batches (its batches 2-5: Parts
-   5-7, 8-9, 10-11 and 12; Q4 and Q9-Q20 answered for them):
+   Complete removed (Q5). Strike them once §0.245 ships. **Parts 5-7
+   built 11 Nov (state §0.246; guide §18b125 rule 5, since §0.246; Jeff,
+   11 Nov: "proceed", Q9-Q17 answered) — NOT committed; not yet shipped;
+   harness deferred**, its Admin browser check PASSED as Jeff, the
+   rep-path check PASSED as Karen: no refusal on a timer, each
+   said beside the control pressed — Reports' saves (tied to the screen
+   pressed, `refusalHere`), Activity history's "Save as report", the
+   holiday Sync — and a success's timer clearing only that success;
+   Dispatch's time off naming each job it left on a technician, and why,
+   on a banner above every view (`notFreedWords`), a landed block whose
+   answer cannot be read still returning its jobs; the quote PDF saying
+   why it was not made (`quotePdfOf`), one request at a time, the print
+   copy a button with its lines to the cent; the coaching notes hook
+   never rejecting, a failed load said on Home and Sales Manager, Home's
+   "Mark read" a press notice; Quick Log's calendar box removed (Q16).
+   Strike them once §0.246 ships. What remains is Parts 8-12 of the
+   design — the next batches (its batches 3-5: Parts 8-9, 10-11 and 12;
+   Q4, Q13 and Q18-Q20 answered for them):
    - ~~the Kanban stage drag with no rollback; a task's complete and snooze
      un-ticking without a word (TasksTab); Reports' deal contact add,
-     remove and persona~~ (DONE in §0.245, Parts 1-3; not committed, not
-     yet shipped — and HomeTab's PlateRow, once listed here, has drawn no
+     remove and persona~~ (DONE in §0.245, Parts 1-3; committed `b1b56e7`,
+     not yet shipped — and HomeTab's PlateRow, once listed here, has drawn no
      Complete since `7ae0608`, 5 Jun 2026: its dead code removed, Q5);
-     calendar adds that only `console.warn` (Part 7; Q16 removes the box —
-     real meetings are §3.6's); ~~ExportDetail's delete error replacing the
-     page and its `window.alert`~~ (DONE in §0.245, Part 4; not committed);
-     the report save timers (4 s, 3 s) and the holiday sync's 6 s (Part 5);
-     coaching-note network rejects (Part 7); `saveBlock`'s unassign
-     failures (Part 6); the quote PDF's silent fallback (Part 7 — its
-     `window.open` after an await, which may be popup-blocked, is moot once
-     the copy is a button; the design's OUT, §0.245, 11 Nov).
+     ~~calendar adds that only `console.warn`~~ (DONE in §0.246, Part 7:
+     Q16 removed the box and the adds nothing reached — real meetings are
+     §3.6's); ~~ExportDetail's delete error replacing the
+     page and its `window.alert`~~ (DONE in §0.245, Part 4; committed
+     `b1b56e7`); ~~the report save timers (4 s, 3 s) and the holiday
+     sync's 6 s~~ (DONE in §0.246, Part 5); ~~coaching-note network
+     rejects~~ (DONE in §0.246, Part 7); ~~`saveBlock`'s unassign
+     failures~~ (DONE in §0.246, Part 6); ~~the quote PDF's silent
+     fallback~~ (DONE in §0.246, Part 7 — the copy a button, so its
+     `window.open` after an await, which may be popup-blocked, is gone;
+     the design's OUT, §0.245, 11 Nov). Parts 5-7 not committed, not yet
+     shipped.
    - about 20 other raw `e.message` sites in the swept panels and
      DispatchVehiclesDetail (§0.243's re-check, 10 Nov): a request that
      never reached the server says "Failed to fetch" there — said by
@@ -570,12 +590,20 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      ok check — the design's count over `f5f0139`, by the guard's own scan
      over src: 202 reads, 108 flagged (109 with the named BackupDetail
      read; "67 lines" here was an earlier line scan); Parts 1-2 cleaned the
-     deal window's two and the task completion's (useTasks.js's others wait
-     for Parts 7 and 10), not recounted — Parts 9-12, area by area,
+     deal window's two and the task completion's (useTasks.js's calendar
+     reads left with Part 7 in §0.246, and useActivities.js's; their saves
+     wait for Part 10), not recounted — Parts 9-12, area by area,
      each adding the files it cleans to `SWEPT`; Part 12 makes `SWEPT` all
      of src/. tests/refusals-said.test.mjs's scan (iii) covers only its
      `SWEPT` list (since §0.245 with KanbanView.jsx, useOpportunities.js,
-     pressNotice.js, TasksTab.jsx and taskWrite.js).
+     pressNotice.js, TasksTab.jsx and taskWrite.js; since §0.246 with
+     quotePdfAnswer.js, useCoachingNotes.js and HomeTab.jsx —
+     ReportsTab.jsx waits for Part 12 and CompanyCalendarDetail.jsx for
+     Part 9, though their Part 5 reads are ok-first now; QuotesTab.jsx
+     for Part 12, its job and version reads).
+   - Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
+     `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
+     joining `SWEPT` (§0.246's build, 11 Nov; read in code).
 
 ---
 
@@ -1646,10 +1674,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   through `dbWrite`, the list taking `data.opportunity` through
   `setOpportunities` (as the Closed Lost save does, useOpportunities.js:243)
   and the local ids retired; the refusal's words beside the panel and the
-  table. **Since §0.245 (11 Nov; not committed)** the refusal half is
-  done: the add and remove send through `dbWrite`, a refused add, remove
-  or persona is said on one banner in the section, kept until its Close
-  (Q6), and an answer after another deal was picked sets nothing. What
+  table. **Since §0.245 (11 Nov; committed `b1b56e7`, not pushed)** the
+  refusal half is done: the add and remove send through `dbWrite`, a
+  refused add, remove or persona is said on one banner in the section,
+  kept until its Close (Q6), and an answer after another deal was
+  picked sets nothing. What
   stays is Q7 — its own small batch, filed (§0.245, 11 Nov; Jeff's "All
   Recommended (Recommended)" took Q7's "Yes, as its own small batch,
   filed"): a landed add, remove or persona change
@@ -1726,10 +1755,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing (§0.199's review); the task rail's Complete says it (§0.199's
   re-check). Recommended: the same rule as the links (send what
   changed), or a stale-row check on the server (`updatedAt`). Jeff decides.
-  **Since §0.245 (11 Nov; not committed)** the Tasks tab's Complete and
-  snooze and Reports' contact and persona edits say a refusal, Home's
-  complete toggle is gone, and Reports' persona edit sends only `{ id,
-  buyerPersona }`. Still so (the refusal sweep's OUT, §0.245, 11 Nov): the
+  **Since §0.245 (11 Nov; committed `b1b56e7`, not pushed)** the Tasks
+  tab's Complete and snooze and Reports' contact and persona edits say a
+  refusal, Home's complete toggle is gone, and Reports' persona edit
+  sends only `{ id, buyerPersona }`. Still so (the refusal sweep's OUT,
+  §0.245, 11 Nov): the
   complete sends `next` and the snooze a whole row (now without the feed's
   `source` and `when`); tasks.mjs merges it (:142, as recorded), so a stale
   link is asked again (§18b125 rule 1) — a partial body needs
@@ -2117,7 +2147,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   update-only — a 404 for no member (found unmarked 2 Nov)); after a self-rename the app keeps the old name until a
   reload; ~~Kanban's drag and Reports' deal-contact PUTs and the Tasks
   complete/snooze paths show a refused save nowhere~~ (DONE in §0.245, 11
-  Nov, not committed: each said, kept until closed); ~~SalesManagerTab's user
+  Nov, committed `b1b56e7`: each said, kept until closed);
+  ~~SalesManagerTab's user
   save writes its cached name back~~ (DONE in §0.205: each save sends only
   its field (found unmarked 2 Nov)); users.mjs does not cut a name to 255; a
   SPIFF claim edit is authorized by name; the deal form's "Reason Lost" select
@@ -2287,6 +2318,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A persona that lands after another deal was picked does not update the map** (§0.245, 11 Nov — the review's fix; read in code; not new): the answer returns before the map once another deal is shown (`shownOppIdRef`, ReportsTab.jsx:6415), and picking a deal empties `localPersonaMap` — so a contact on both deals shows the loaded persona until a reload, as before §0.245. With Q7's batch (above). Low.
 - **The deal window's catch also catches a throw from its landed branch** (§0.245's build, 11 Nov; read in code; existed before): `handleSave`'s `.catch` (src/hooks/useOpportunities.js:191, :210) takes a throw in what follows a landed save — `addAudit`, the SMS sends — and says it as a failure ("Its answer could not be read.") though the deal saved; before §0.245 it said "…check your connection". Recommended: the landed branch's own try, logging. Low.
 - **An `addAudit` throw after a landed task completion is unhandled** (§0.245's build, 11 Nov; read in code; not verified): `handleCompleteTask` (src/hooks/useTasks.js) has no try/catch since §0.245, so a throw from `addAudit` after a landed completion would reject the call — the old catch rolled the row back and answered not ok. No path was found where `addAudit` throws. Recommended: read `addAudit` through; if it can throw, wrap the audit line alone. Low.
+- **A report save made while no org is known never settles** (§0.246, 11 Nov — its build; read in code; not verified): since §0.246 Reports' `handleSaveReport` takes `requestOrg()` at the press and returns at `!stillOrg(askedOrg)` after the body read and at the head of its catch (Activity history's `handleSaveAsReport` already did), so a save made while `requestOrg()` is null returns on both paths and its button stays "Saving…". Not reachable from a shown tab as far as read — not verified. Recommended: settle whether a shown tab can press Save with no org before changing it. Low.
+- **A landed report save still closes the create flow after the member moved on** (§0.246, 11 Nov — its build; read in code; older): `handleSaveReport`'s success calls `setShowCreateReport(false)` and `setCreateMode('picker')` whatever screen is shown when the answer lands; what that does to each screen the member may have moved to was not traced. §0.246 ties only the refusal to the screen pressed. Low.
+- **The shared "✓ Saved" and "Saving…" show beside another screen's Save** (§0.246, 11 Nov — its build and review; read in code): the six report templates, the Duplicate list and the builder share one `saveState`; since §0.246 a refusal is tied to the screen pressed (`refusalHere`), but a success's "✓ Saved" (its 3 s) and a save's "Saving…" are not — another template's button reads them (the "Saving…" older). Recommended: the same place tag on both, if Jeff wants it. Low.
 
 ### 4.3 Settings
 
@@ -2466,8 +2500,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   confirm). Recommended: App's confirm, as the rest do.
 - **`window.alert` for a refused save, as a class** (4 Nov; re-read):
   ~~Export's two dialogs (ExportDetail.jsx:275, :285)~~ (DONE in §0.245,
-  11 Nov, not committed: said inside the open window), Territories' CSV
-  import (TerritoriesDetail.jsx:228, :233, :252, :254, :255), Reports'
+  11 Nov, committed `b1b56e7`: said inside the open window), Territories'
+  CSV import (TerritoriesDetail.jsx:228, :233, :252, :254, :255), Reports'
   PDF export and owner email (ReportsTab.jsx:452, :6073), a blocked policy
   (security/shared.jsx:85). The house shows words on the screen.
 - **Half-typed add and rename forms are invisible to both leave guards**
@@ -2876,7 +2910,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Settings → Pipelines draws figures from nothing** (the save cleanup design's OUT, 10 Nov; read in code): the stage table's "Avg days" is `5+i*2` and its "Open" `Math.max(5, 42-i*5)` — the row's position (src/Tabs/settings/salesProcess/PipelinesDetail.jsx:537-538); "Default prob." reads the file's own `STAGE_PROBS` (:32, :535), not the org's stages. Recommended: real figures, or no columns. Low.
 - **A settings row whose id is not its org cannot be saved** (§0.242's itest seed, 10 Nov; open question): the settings PUT writes its row as `id: orgId` with the conflict target the id (settings.mjs:504, :526); a row stored under another id meets the org's unique key instead, which the PUT reads as a lost first insert (`lostFirstInsert`, :83-85, :545) and, after its retries, answers 409 "stale" (:550-555). Seen only with a test seed; whether any row in the app database has an id other than its org: not checked (a SELECT, on Jeff's go). Low.
 - **Export's schedule Delete deletes with no confirm** (the refusal sweep's OUT, §0.245, 11 Nov; read in code): Settings → Data → Export's Delete (src/Tabs/settings/data/ExportDetail.jsx:395 → `handleDeleteSched`, :162) sends the DELETE at once; since §0.245 a refusal puts the row back and says why. Beside "Two deletes with no confirm" above, and Vehicles and equipment's (§4.4); whether a confirm is a house rule for every delete: not checked. Recommended: App's confirm, as most Settings deletes do. Low.
-- **holidays.mjs calls `raw.filter` without an array check** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map, not re-read): netlify/functions/holidays.mjs:51 — an answer from the holiday source that is not a list would throw there. Recommended: a list check before the filter, said as the Sync's failure (the sweep's Part 5). Low.
+- **holidays.mjs calls `raw.filter` without an array check** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map, not re-read): netlify/functions/holidays.mjs:51 — an answer from the holiday source that is not a list would throw there. Recommended: a list check before the filter, said as the Sync's failure (the sweep's Part 5). Low. Still so after §0.246 (11 Nov): Part 5 changed the Sync's screen only — no server change; whatever the server answers is now said on the Sync's red line in the house words, kept until its Close.
 
 ### 4.4 Dispatch
 
@@ -3108,7 +3142,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   guard at all — a list pick or a sub-tab switch drops an unsaved job edit.
 - **Work Schedules' time-off Delete has no confirm** (the Dispatch reader,
   4 Nov; re-read): "Delete" in Mark unavailable / Edit time off
-  (DispatchTab.jsx:5136) sends it at once (`deleteBlock` :6242).
+  (DispatchTab.jsx:5164) sends it at once (`deleteBlock` :6309). Still
+  so after §0.246 (11 Nov), whose Delete says a refusal in the server's
+  words and keeps the dialog open; beside Export's (§4.3) and Vehicles
+  and equipment's (below) deletes with no confirm.
 - **The technician's field view defines a component inside a component**
   (4 Nov; re-read): `Section` (DispatchTab.jsx:5367) inside
   `TechnicianView` (:5351) draws each `TechJobCard`; any re-render — a
@@ -3121,7 +3158,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A Technician's filtered read over-counts the import card** (§0.243's build, 10 Nov; read in code): a Technician's read of the vehicles is filtered to their own and those on their jobs (dispatch-vehicles.mjs:63-70), so for one the card would count rows another holds as missing; their POSTs are refused by the dispatch gate, said since §0.243 in its words. Whether a Technician reaches this panel: not read. Low.
 - **A technicians read that failed shows assigned technicians as none** (§0.243's re-check, 10 Nov; read in code): with the technicians read apart since §0.243, a failed read leaves their names unknown, and the vehicle and equipment tables show "—" for an assigned technician (DispatchVehiclesDetail.jsx:507, :563) — which reads as unassigned — and the vehicle form's picker "— Unassigned —" (:112); a save keeps the stored id, which the draft holds. The page's banner says why. Low.
 - **Vehicles and equipment Delete with no confirm** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map, not re-read): Settings → Vehicles & equipment's Delete (DispatchVehiclesDetail.jsx:134, :192) deletes at once — as Export's (§4.3). Recommended: App's confirm. Low.
-- **`jobsDuringBlock` may include completed jobs in the unassign list** (the refusal sweep's OUT, §0.245, 11 Nov; not read): the design names it as a possibility only — whether a completed job can be in the list time off unassigns was not read. Read it with the sweep's Part 6 (`saveBlock`'s unassign failures). Low.
+- **`jobsDuringBlock` may include completed jobs in the unassign list** (the refusal sweep's OUT, §0.245, 11 Nov; not read): the design names it as a possibility only — whether a completed job can be in the list time off unassigns was not read. Read it with the sweep's Part 6 (`saveBlock`'s unassign failures). Low. **§0.246 (11 Nov — Part 6's build; read in code):** still not read; the build found the list is built from `jobsWithBridge`, so a won-deal placeholder job may be in it too — its unassign PUT refused, and since §0.246 that refusal named on Dispatch's banner by the job's title. Not verified in a browser.
+- **Time off has no one-save-at-a-time lock** (§0.246, 11 Nov — Part 6's build; read in code): leaving Work Schedules and coming back while a time-off save is out remounts the dialog not busy, so a second save can start while the first's unassigns are still going out; since §0.246 the second's words on the banner are added after the first's, never written over. A lock would need new words a member sees — Jeff's call. Low.
 - **`recordVisit` treats a 200 with no `visit` as a refusal** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): it says "(HTTP 200)" (DispatchTab.jsx:5612-5614); the sweep's Part 11 replaces the words; whether such an answer can happen was not read. Low.
 
 ### 4.5 Notifications, email and digests
@@ -3254,7 +3292,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   WebhooksDetail.jsx — the 4b-2 map): spiff-claims.mjs never calls
   dispatchWebhook, as opportunities.mjs does for deals. A subscriber gets
   nothing.
-- **Coaching notes: a lost answer makes a note twice; a late success closes another dialog** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map): a note whose answer was lost is re-sent with a new id, so it can be made twice; a late success closes whichever coaching dialog is open by then. The sweep's Part 7 says the network rejects; these two are not in it. Low.
+- **Coaching notes: a lost answer makes a note twice; a late success closes another dialog** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map): a note whose answer was lost is re-sent with a new id, so it can be made twice; a late success closes whichever coaching dialog is open by then. The sweep's Part 7 says the network rejects; these two are not in it. Low. **More reachable since §0.246 (11 Nov — Part 7's build; read in code):** an add that landed with an answer that could not be read now says "Its answer could not be read." and keeps the dialog open, so a second Send makes the note again with a new id. Both still so.
+- **The coaching notes' load failure reads "(The server returned 502.)."** (§0.246, 11 Nov — the batch's own; read in code): Home's "Notes from your manager" and Sales Manager's "Recent coaching" say "Coaching notes couldn't be loaded (<why>). Reload the page to try again.", and `readRefusal`'s fallback words end in a full stop, so the brackets close after a full stop — doubled punctuation. Recommended: drop the reason's trailing full stop inside the brackets, as `notFreedWords` does (§0.246's review). Low.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
@@ -4556,6 +4595,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   the notes. The notes, product names, quote name, address lines and meta
   values are covered (`_quotePdf.mjs` `printable`).
 - **The quote PDF and email do not mark an untaxed line** (§0.241, 10 Nov): a quote with a rate taxes only its taxable lines and the Tax row says the rate, but neither document says which lines it left out — the version compare has a NOT TAXED pill (QuotesTab.jsx:519); the PDF (`_quotePdf.mjs`) and the email (quote-email.mjs) nothing. Recommended: a "Not taxed" mark on the line where the quote has a rate and is not exempt. Low.
+- **A quote PDF landing after another quote was opened still downloads** (§0.246, 11 Nov — Part 7's build; read in code): within one org, a Download PDF answered after the member opened another quote still downloads its file, named for its own quote (the name taken at the press); a PDF not made is said only when its quote is shown again (`pdfError.quoteId`). After an org switch nothing downloads or is said. Guide §18b125 rule 9's "an answer for a record no longer shown writes nothing and says nothing" may call for dropping the file too — Jeff's call. Low.
 - **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 5 — `handleSaveProduct` answers `{ ok, error | quiet }`; the form closes only on success and draws the server's words).** **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
 - **Est. margin and the average discount leave out the deal discount** (§0.241's review, 10 Nov; older than §0.241): the tab's `calcLineTotals` (QuotesTab.jsx:104-112) works both from the lines' subtotal (`netTotal = t.subtotal`), so a quote with a deal discount shows a margin and an "N% off list" above what it earns. The totals block's rows include the deal discount since §0.241. Recommended: work both from `totalValue`. Low.
 - **Day words from 24-hour spans** (the save cleanup design's OUT, 10 Nov; as recorded): AdminView, AuditDetail, BackupDetail's `fmtWhen`, ExportDetail, ApiKeysDetail and TasksTab's `fmtAgo` say "yesterday" or "N days ago" from a span of time rounded to days, not from calendar days (§18b123 rule 1's class, for words). Recommended: `calendarDays` where a day is said. Low.
@@ -4590,7 +4630,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   :5330 it calls) moved out or passed; then `npm run check:tdz` (guide
   §18b0, "Hoisting a component strands its closure reads"). Delete
   `Toolbar`. Opportunistic; eleven of the churn-only count below.
-  (Named again by the refusal sweep's OUT, §0.245, 11 Nov.)
+  (Named again by the refusal sweep's OUT, §0.245, 11 Nov; and by
+  §0.246, 11 Nov — `ActionButtons` still declared inside
+  ActivityHistoryTab, which §0.246 gave a refusal banner and
+  `handleSaveAsReport`'s words; the new UI it added is inline JSX or
+  module scope.)
 - **The document link picker says "Opportunitys" and "Activitys"**
   (§0.209's browser check, 23 Oct; read in code): its type pills and its
   group headings append "s" to each entity's label
@@ -4767,7 +4811,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `Toggle` (UserModal.jsx:207), Reports' `PanelB` (ReportsTab.jsx:1293) and
   its six `PanelD` (:2773, :2959, :3213, :3411, :3596, :3861 — the same
   panel declared six times; §0.213's read). Opportunistic. (Named again
-  by the refusal sweep's OUT, §0.245, 11 Nov.)
+  by the refusal sweep's OUT, §0.245, 11 Nov; and by §0.246, 11 Nov —
+  `BuilderHeader` still declared inside SavedReportsTab, its refusal line
+  given a Close there; the note §0.246 added, `SaveRefusalNote`, is
+  module scope.)
   Reports' SavedReportsTab declares its preview primitives inside itself
   (`AvatarS`, `MiniBar`, `MiniBarH`, `MiniLineS`, `MiniStackedS`,
   `MiniFunnelS` — ReportsTab.jsx:2647-2669; the save cleanup design's
@@ -5214,3 +5261,4 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A raw `.message` scan over all of src/** (the refusal sweep's OUT, §0.245, 11 Nov; a grep, as recorded): the sweep's Part 8 adds scan (iv) over an explicit list of files; over all of src/ a grep finds 140 `.message` reads, the error boundaries by design and the putSettings panels' always-plain words among them — each to be named or cleaned before the scan can widen. Low.
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
+- **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run.

@@ -14,7 +14,7 @@ export function useUIState() {
 
     // QuickLog
     const [quickLogOpen, setQuickLogOpen] = useOrgBoundState(resets, false);
-    const [quickLogForm, setQuickLogForm] = useOrgBoundState(resets, { type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
+    const [quickLogForm, setQuickLogForm] = useOrgBoundState(resets, { type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
     const [quickLogContactResults, setQuickLogContactResults] = useOrgBoundState(resets, []);
     const [followUpPrompt, setFollowUpPrompt] = useOrgBoundState(resets, null);
 

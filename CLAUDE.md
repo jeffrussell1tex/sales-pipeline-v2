@@ -406,7 +406,9 @@ One commit per verified batch; doc patch in the same commit.
   `src/utils/refusalWords.js`; THE GUARD, tests/refusals-said.test.mjs;
   guide §18b125 rule 5) — never under the undo
   toast's ✓; at a press with no error place of its own, a press notice
-  kept until its ✕ (`pressNoticeOf`, §0.245); a message names who acted
+  kept until its ✕ (`pressNoticeOf`, §0.245); else beside the control
+  pressed, on the screen it was pressed on, never on a timer — a
+  success's timer clears only its own success (§0.246); a message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the
