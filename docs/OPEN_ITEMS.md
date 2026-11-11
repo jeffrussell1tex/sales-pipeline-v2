@@ -455,7 +455,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    and as an Admin, its dev checks on 10 Nov (a real score, the key check).
    Strike this once it ships. Next in §3.1: the close-date history column
    (decision 3) — **built 10 Nov (state §0.239; guide §18b122), the column
-   applied on Jeff's go — NOT committed; harness deferred**, its browser
+   applied on Jeff's go — committed `de2bd08`; harness deferred**, its browser
    check PASSED as Jeff and as Karen — then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
@@ -521,7 +521,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    percent a request names anew in range or refused naming the field; a
    day shown for an instant the member's day. **Parts 5-6 built 10 Nov
    (state §0.243; guide §18b125 rules 5, 7 and 8; Q7 "Send only what's
-   missing (Recommended)") — NOT committed; harness deferred**, its
+   missing (Recommended)") — committed `94b5729`; harness deferred**, its
    rep-path browser check PASSED as Karen, its Admin check as Jeff
    (the import card not opened: QA holds no old list): a refusal said in the server's words or plain ones
    (`readRefusal`, `failureWords`) in the four Settings panels, Backup,
@@ -1284,14 +1284,16 @@ docs/design/ai-scoring/ANSWERS.md):**
    org's patterns to its prompt.
 2. **"Available to" and the token budget.** Recommended: enforce "Available
    to" (a role check when scoring, small). Remove the budget until a per-org
-   usage counter backs it.
+   usage counter backs it. **Built 9 Nov in AI scoring batch 1** (state
+   §0.238: "Available to" decides who may ask Claude, the token budget out;
+   committed `3395b01`, pushed to dev 10 Nov; not yet shipped).
 3. **A history of close-date changes.** Recommended: yes. A new deal column,
    additive and nullable, both databases, with Jeff's go. **Designed and
    answered 10 Nov** (docs/design/close-date-history/DESIGN.md and
    ANSWERS.md — Q1-Q4 each the Recommended, Q4 all three). **Built 10 Nov
    (state §0.239); the column applied 10 Nov on Jeff's go** (the test and
-   app databases; `db/apply-close-date-history.mjs`). NOT committed;
-   harness deferred.
+   app databases; `db/apply-close-date-history.mjs`). Committed `de2bd08`;
+   harness deferred; not yet shipped.
 4. **Which models to offer.** Recommended: the current Haiku, Sonnet and Opus,
    checked against what the workspace's key can call before they are listed.
 
@@ -3033,7 +3035,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship); ~~a
   re-run of Settings → Vehicles & equipment's legacy import resets an
   imported row's technician, holder and status (a full-row upsert)~~ —
-  fixed in §0.243 (10 Nov; NOT committed; guide §18b125 rule 7): a press
+  fixed in §0.243 (10 Nov; committed `94b5729`; not yet shipped; guide §18b125 rule 7): a press
   sends only the rows the tables do not hold; the
   crew builder prints a technician's vehicle id, not its name; the
   technician↔vehicle pairing is kept twice
