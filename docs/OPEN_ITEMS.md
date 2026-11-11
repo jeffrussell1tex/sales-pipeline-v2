@@ -455,7 +455,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    and as an Admin, its dev checks on 10 Nov (a real score, the key check).
    Strike this once it ships. Next in §3.1: the close-date history column
    (decision 3) — **built 10 Nov (state §0.239; guide §18b122), the column
-   applied on Jeff's go — committed `de2bd08`; harness deferred**, its browser
+   applied on Jeff's go — committed `de2bd08`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its browser
    check PASSED as Jeff and as Karen — then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
@@ -512,7 +512,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    (docs/design/save-cleanup/DESIGN.md and ANSWERS.md — S "Parts 1-4 now
    (Recommended)", Q1-Q6 each the Recommended). **Parts 1-4 built 10 Nov
    (state §0.242; guide §18b125), `products.custom_price` applied on Jeff's
-   go — committed `6342364`; harness deferred**, its Admin browser check PASSED
+   go — committed `6342364`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its Admin browser check PASSED
    as Jeff: a save writes only what it names (the products PUT a strict
    update, 404 for an id the org does not hold; the export schedule and
    GDPR request PUTs merged over the stored row; the backup schedule field
@@ -521,7 +521,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    percent a request names anew in range or refused naming the field; a
    day shown for an instant the member's day. **Parts 5-6 built 10 Nov
    (state §0.243; guide §18b125 rules 5, 7 and 8; Q7 "Send only what's
-   missing (Recommended)") — committed `94b5729`; harness deferred**, its
+   missing (Recommended)") — committed `94b5729`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its
    rep-path browser check PASSED as Karen, its Admin check as Jeff
    (the import card not opened: QA holds no old list): a refusal said in the server's words or plain ones
    (`readRefusal`, `failureWords`) in the four Settings panels, Backup,
@@ -1328,7 +1328,7 @@ docs/design/ai-scoring/ANSWERS.md):**
   an exempt switch prefilled from the linked Dispatch customer; carried to the job's invoice;
   one quote money function) next to build, **batch B** (the address lookup on one Zip-Tax
   account) gated on Zip-Tax's three written answers (Jeff's to get).
-  **Batch A built 10 Nov (state §0.241; guide §18b124; not yet shipped)** — the four
+  **Batch A built 10 Nov (state §0.241; guide §18b124; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); not yet shipped)** — the four
   columns applied 10 Nov on Jeff's go (the test and app databases, `db/apply-sales-tax.mjs`);
   harness deferred; its browser check PASSED as Karen, its Admin check (the default rate, the
   Price Book's Taxable) as Jeff. Batch B stays gated on Zip-Tax's
