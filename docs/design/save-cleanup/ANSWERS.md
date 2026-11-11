@@ -11,7 +11,7 @@ The design: DESIGN.md beside this file (over `bb0c88e`). Asked 10 Nov in the dia
 | Q4 | A rep types a line discount above 100 or below 0 | **"Refuse, name the line (Recommended)"** — Save refused in words naming the line, the typed value kept to fix |
 | Q5 | How the corrected date labels read | **"Keep each look (Recommended)"** — only the day corrected, each label its current shape |
 | Q6 | Export file names (Accounts, Contacts, Audit, Users, Pipelines) | **"Your local day (Recommended)"** — named by the member's day, not UTC's |
+| Q7 | The Dispatch "Import from the old settings list" card (asked 10 Nov, when Parts 5-6 began: "then do 1 please") | **"Send only what's missing (Recommended)"** — count and send only entries not yet in the tables; the card goes once all are in; a re-press never overwrites an edited vehicle or a checked-out unit (a vehicle deleted after import shows again and would be re-created if pressed) |
 
-Not asked (Part 6, the next batch): Q7, the Dispatch "Import from the old settings list" card.
 
 Pre-build census (SELECT only, 10 Nov): no settings row holds a `quoteDefaults.taxRate`; 2 service plans, none out of range; 0 quotes with a deal discount out of range or a line discount outside 0-100 (the mapper's); `products.custom_price` not yet a column. Still Jeff's: the schema apply of `products.custom_price` — applied 10 Nov on Jeff's go ("Apply it now (Recommended)"), the test then the app database, read back (state §0.242).
