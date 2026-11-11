@@ -20,15 +20,19 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
     const [saving, setSaving] = React.useState(false);
     // The name is an uncontrolled field; what it holds now, for the close's question (state §0.232).
     const [nameNow, setNameNow] = React.useState(existing?.name || '');
+    // A refused or unsent save, said here above the buttons and kept while the window is open (§0.245 4b, Q8).
+    const [saveError, setSaveError] = React.useState('');
     const [opened] = React.useState(() => JSON.stringify([existing?.name || '', existing?.scope || 'accounts', existing?.format || 'CSV', existing?.cadence || 'Weekly · Mondays 06:00 UTC', existing?.destination || 'download']));
     const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([nameNow, scope, fmt, cadence, dest]) !== opened, busy: saving });
 
     const handleSave = async () => {
         const name = nameRef.current?.value?.trim();
         if (!name) return;
+        setSaveError('');
         setSaving(true);
-        await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' });
+        const why = await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' });
         setSaving(false);
+        if (why) setSaveError(why);
     };
 
     return (
@@ -71,6 +75,7 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
                     <b style={{ color:T.info }}>Note:</b> Automated delivery (S3, SFTP, Snowflake) is on the roadmap. Schedules created today can be triggered manually from the export page.
                 </div>
             </div>
+            {saveError && <div role="alert" style={{ flexShrink:0, padding:'10px 22px', background:'rgba(156,58,46,0.08)', borderTop:`1px solid ${T.border}`, fontSize:12.5, color:T.danger, fontWeight:600 }}>✕ {saveError}</div>}
             <DataModalFoot>
                 <DataBtn label="Cancel" onClick={requestClose}/>
                 <DataBtn label={saving ? 'Saving…' : (existing ? 'Save changes' : 'Create schedule')} primary disabled={saving} onClick={handleSave}/>
@@ -93,8 +98,8 @@ export const ExportDetail = ({ onBack }) => {
     const [adhocLoading, setAdhocLoading] = React.useState(false);
     const [adhocError,   setAdhocError]   = React.useState(null);
     const [editingSched, setEditingSched] = React.useState(null); // schedule being edited
-    // A refused Pause / Enable or Mark complete (§0.243's second fix round): what was not done and why, kept until closed
-    // (§18b123 rule 4) — the row went back and nothing said why.
+    // A refused Pause / Enable or Mark complete (§0.243's second fix round), or Delete (§0.245 4a): what was not done and
+    // why, kept until closed (§18b123 rule 4) — the row went back and nothing said why.
     const [actionError,  setActionError]  = React.useState('');
 
     // ── load all three endpoints on mount ─────────────────────
@@ -154,18 +159,47 @@ export const ExportDetail = ({ onBack }) => {
     };
 
     // ── delete schedule ───────────────────────────────────────
-    const handleDeleteSched = async (id) => {
-        // Optimistic removal, restored if the delete does not land. dbFetch
-        // resolves for ANY status (guide 18b1), so the old catch fired on a
-        // network failure only and the row vanished until the next reload.
-        const snapshot = schedules;
-        setSchedules(prev => prev.filter(s => s.id !== id));
-        setError('');
-        const r = await dbWrite(`/.netlify/functions/export-schedules?id=${id}`, { method:'DELETE' });
-        if (!r.ok) {
-            setSchedules(snapshot);
-            setError(`Schedule not deleted — ${r.error}`);
-        }
+    const handleDeleteSched = async (sched) => {
+        // Optimistic removal, put back if the delete does not land (dbWrite never throws: a refusal in its words, a
+        // request that never left in NETWORK_ERROR's). Said on the panel's banner, kept until closed (§0.245,
+        // docs/design/refusal-sweep 4a) — never the load's `error`, which replaced the whole page with a red box. Only
+        // its own row is put back, where it stood: a Pause or a new schedule that landed meanwhile stands.
+        const at = Math.max(0, schedules.findIndex(s => s.id === sched.id));
+        setSchedules(prev => prev.filter(s => s.id !== sched.id));
+        const r = await dbWrite(`/.netlify/functions/export-schedules?id=${encodeURIComponent(sched.id)}`, { method:'DELETE' });
+        if (r.ok) { setActionError(prev => (prev.startsWith(`"${sched.name}" was not `) ? '' : prev)); return; }
+        setSchedules(prev => (prev.some(s => s.id === sched.id) ? prev : [...prev.slice(0, at), sched, ...prev.slice(at)]));
+        setActionError(`"${sched.name}" was not deleted — ${r.error}`);
+    };
+
+    // ── save a schedule / a GDPR request (the two windows' onSave) ──
+    // Each answers '' when it landed (the window closed) or the words why not, which its window draws above its buttons
+    // and keeps open (§0.245, docs/design/refusal-sweep 4b, Q8) — never window.alert, which said "Save failed: Failed to
+    // fetch" over whatever screen was open by then.
+    const saveSchedule = async (payload) => {
+        try {
+            const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
+            const method = isEdit ? 'PUT' : 'POST';
+            if (!isEdit) payload.id = 'sch_' + crypto.randomUUID();
+            const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json();
+            if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? data.schedule : s));
+            else        setSchedules(prev => [data.schedule, ...prev]);
+            setShowModal(false); setEditingSched(null);
+            return '';
+        } catch(e) { return `The schedule was not saved — ${failureWords(e)}`; }
+    };
+    const saveDsr = async (payload) => {
+        try {
+            payload.id = 'dsr_' + crypto.randomUUID();
+            const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json();
+            setDsrItems(prev => [data.dsr, ...prev]);
+            setShowDsrModal(false);
+            return '';
+        } catch(e) { return `The request was not saved — ${failureWords(e)}`; }
     };
 
     // ── ad-hoc export ─────────────────────────────────────────
@@ -261,29 +295,8 @@ export const ExportDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal    && <NewExportModal onClose={() => { setShowModal(false); setEditingSched(null); }} existing={editingSched} onSave={async (payload) => {
-                try {
-                    const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
-                    const method = isEdit ? 'PUT' : 'POST';
-                    if (!isEdit) payload.id = 'sch_' + crypto.randomUUID();
-                    const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
-                    if (!res.ok) throw new Error(await readRefusal(res));
-                    const data = await res.json();
-                    if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? data.schedule : s));
-                    else        setSchedules(prev => [data.schedule, ...prev]);
-                    setShowModal(false); setEditingSched(null);
-                } catch(e) { alert('Save failed: ' + e.message); }
-            }}/>}
-            {showDsrModal && <NewDsrModal onClose={() => setShowDsrModal(false)} onSave={async (payload) => {
-                try {
-                    payload.id = 'dsr_' + crypto.randomUUID();
-                    const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
-                    if (!res.ok) throw new Error(await readRefusal(res));
-                    const data = await res.json();
-                    setDsrItems(prev => [data.dsr, ...prev]);
-                    setShowDsrModal(false);
-                } catch(e) { alert('Save failed: ' + e.message); }
-            }}/>}
+            {showModal    && <NewExportModal onClose={() => { setShowModal(false); setEditingSched(null); }} existing={editingSched} onSave={saveSchedule}/>}
+            {showDsrModal && <NewDsrModal onClose={() => setShowDsrModal(false)} onSave={saveDsr}/>}
 
             <DataCrumb page="Export" onBack={onBack}/>
             <DataTitle
@@ -302,7 +315,7 @@ export const ExportDetail = ({ onBack }) => {
                 ]}
             />
 
-            {/* A refused Pause / Enable or Mark complete (§0.243): kept until closed, never on a timer. */}
+            {/* A refused Pause / Enable, Mark complete (§0.243) or Delete (§0.245): kept until closed, never on a timer. */}
             {actionError && (
                 <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
                     <span style={{ flex:1, minWidth:0 }}>✕ {actionError}</span>
@@ -379,7 +392,7 @@ export const ExportDetail = ({ onBack }) => {
                                                         {s.enabled ? 'Pause' : 'Enable'}
                                                     </span>
                                                     <span onClick={() => { setEditingSched(s); setShowModal(true); }} style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
-                                                    <span onClick={() => handleDeleteSched(s.id)} style={{ fontSize:11, color:T.danger, cursor:'pointer', fontWeight:600 }}>Delete</span>
+                                                    <span onClick={() => handleDeleteSched(s)} style={{ fontSize:11, color:T.danger, cursor:'pointer', fontWeight:600 }}>Delete</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -455,13 +468,17 @@ const NewDsrModal = ({ onClose, onSave }) => {
     const [type,    setType]    = React.useState('access');
     const [notes,   setNotes]   = React.useState('');
     const [saving,  setSaving]  = React.useState(false);
+    // A refused or unsent save, said here above the buttons and kept while the window is open (§0.245 4b, Q8).
+    const [saveError, setSaveError] = React.useState('');
     const requestClose = useLocalLayer(true, { onClose, dirty: !!(subject.trim() || notes.trim()) || type !== 'access', busy: saving });
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
     const handleSave = async () => {
         if (!subject.trim()) return;
+        setSaveError('');
         setSaving(true);
-        await onSave({ subject: subject.trim(), type, notes: notes.trim() || null });
+        const why = await onSave({ subject: subject.trim(), type, notes: notes.trim() || null });
         setSaving(false);
+        if (why) setSaveError(why);
     };
     return (
         <DataModal onClose={requestClose}>
@@ -476,6 +493,7 @@ const NewDsrModal = ({ onClose, onSave }) => {
                 </FLm>
                 <FLm label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any context…" style={{ ...inpStyle, resize:'vertical' }}/></FLm>
             </div>
+            {saveError && <div role="alert" style={{ flexShrink:0, padding:'10px 22px', background:'rgba(156,58,46,0.08)', borderTop:`1px solid ${T.border}`, fontSize:12.5, color:T.danger, fontWeight:600 }}>✕ {saveError}</div>}
             <DataModalFoot>
                 <DataBtn label="Cancel" onClick={requestClose}/>
                 <DataBtn label={saving ? 'Saving…' : 'Create request'} primary disabled={!subject.trim() || saving} onClick={handleSave}/>

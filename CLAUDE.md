@@ -405,7 +405,9 @@ One commit per verified batch; doc patch in the same commit.
   body; a thrown failure in plain words (`failureWords`;
   `src/utils/refusalWords.js`; THE GUARD, tests/refusals-said.test.mjs;
   guide §18b125 rule 5) — never under the undo
-  toast's ✓; a message names who acted by member name, never a Clerk id,
+  toast's ✓; at a press with no error place of its own, a press notice
+  kept until its ✕ (`pressNoticeOf`, §0.245); a message names who acted
+  by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the
   stage (§0.240).

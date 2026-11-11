@@ -962,6 +962,7 @@ export default function PipelineTab() {
                         selectedOpps={selectedOpps}
                         setSelectedOpps={setSelectedOpps}
                         selectMode={selectMode}
+                        canEdit={canEdit}
                     />
                 )}
 

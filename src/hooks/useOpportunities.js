@@ -3,6 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped, NETWORK_ERROR } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { dealBody } from '../utils/dealNotes.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -160,9 +161,11 @@ export function useOpportunities(deps) {
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) })   // the links nobody touched left out (§0.198); never the notes or the stage history — the server keeps the one and writes the other (§0.236)
                 .then(async res => {
-                    const data = await res.json();
+                    // The ok check first, the house words (state §0.245, docs/design/refusal-sweep 1c; Jeff's Q3): a 502's page
+                    // said "…Please check your connection" though the server answered, and a refusal with no words a fallback.
+                    if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setOppModalError(why); return; }
+                    const data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
-                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || shownRow(updatedOpp)) : opp));
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
                     // SMS: rep reassigned
@@ -185,7 +188,7 @@ export function useOpportunities(deps) {
                     }
                     setShowModal(false); setOppModalError(null);
                 })
-                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to update opportunity:', err); setOppModalError(failureWords(err)); })
                 .finally(() => setOppModalSaving(false));
         } else {
             const newId = 'id_' + crypto.randomUUID();
@@ -193,9 +196,9 @@ export function useOpportunities(deps) {
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {
-                    const data = await res.json();
+                    if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setOppModalError(why); return; }   // as the edit's (§0.245)
+                    const data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
-                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => [...prev, data.opportunity || newOpp]);
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
                     // SMS: deal assigned to rep on creation
@@ -204,7 +207,7 @@ export function useOpportunities(deps) {
                     }
                     setShowModal(false); setOppModalError(null);
                 })
-                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError(failureWords(err)); })
                 .finally(() => setOppModalSaving(false));
         }
     };
@@ -239,11 +242,12 @@ export function useOpportunities(deps) {
         if (editingOppRef && editingOppRef.id) {
             const updatedOpp = { ...enriched, id: editingOppRef.id };
             const before = opportunities.find(o => o.id === editingOppRef.id);
-            setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));
+            const shown = shownRow(updatedOpp);   // the copy this save shows — a refusal puts back only it (state §0.245, 1e)
+            setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shown : opp));
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });   // as the deal window left it (§0.198); never the notes or the stage history (§0.236)
             if (!stillOrg(askedOrg)) return stopped();
             if (!r.ok) {
-                setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));   // never show what was not stored; nothing else is undone
+                setOpportunities(prev => prev.map(o => (o === shown && before ? before : o)));   // never show what was not stored; nothing else is undone — a list read again since keeps what it holds
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };   // the dialog says why; no audit
             }
             // The list takes the deal as stored — the account and id the server kept (a new

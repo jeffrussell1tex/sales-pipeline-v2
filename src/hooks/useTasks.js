@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
+import { taskWriteAnswer } from '../utils/taskWrite.js';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -169,7 +170,9 @@ export function useTasks(deps) {
         // Compute the next task shape from the current row (needed for both the
         // optimistic update and the DB payload).
         const current = tasks.find(t => t.id === taskId);
-        if (!current) return;
+        // A task gone from the list since (deleted, or a load that no longer holds it) is said, never a silent nothing
+        // (state §0.245, docs/design/refusal-sweep 2b); undefined stays the answer of an org switch alone.
+        if (!current) return { ok: false, error: 'The task could not be found. Reload the page to try again.' };
         let next;
         if (newStatus !== undefined) {
             next = { ...current, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? today : current.completedDate };
@@ -187,26 +190,26 @@ export function useTasks(deps) {
         // roll the row back so local state cannot drift from the DB. It answers
         // whether it landed — the server's words when refused, none when nothing
         // answered — for a screen that goes on after it (the task rail's notes,
-        // state §0.199's re-check).
-        let refused;
-        try {
-            const res = await dbFetch('/.netlify/functions/tasks', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(next),
-            });
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { refused = data.error || 'Failed to save task'; throw new Error(refused); }
-            setTasks(prev => prev.map(t => t.id === taskId ? (data.task || next) : t));
-            addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');
-            return { ok: true };
-        } catch (err) {
-            if (!stillOrg(askedOrg)) return;
-            console.error('Failed to persist task completion:', err);
-            setTasks(prev => prev.map(t => t.id === taskId ? current : t));
-            return { ok: false, error: refused };
+        // state §0.199's re-check). Since §0.245 (docs/design/refusal-sweep 2b) the
+        // ok check comes first and the words are the house's (taskWriteAnswer): the
+        // server's with their ref, else "The server returned N.", or "The server could
+        // not be reached." — a landed answer that is not JSON is landed, never rolled
+        // back. The rollback puts back only this press's own copy, by identity: a
+        // newer row a load brought in since stands.
+        const answer = await taskWriteAnswer(() => dbFetch('/.netlify/functions/tasks', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(next),
+        }));
+        if (!stillOrg(askedOrg)) return;
+        if (!answer.ok) {
+            console.error('Failed to persist task completion:', answer.error);
+            setTasks(prev => prev.map(t => (t === next ? current : t)));
+            return { ok: false, error: answer.error };
         }
+        setTasks(prev => prev.map(t => t.id === taskId ? (answer.task || next) : t));
+        addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');
+        return { ok: true };
     };
 
     const handleAddTaskToCalendar = async (e, task, opportunities) => {

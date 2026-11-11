@@ -18,7 +18,7 @@
 //        never a name the file binds itself (a useState, a const or let, a parameter, a catch param, an import);
 //   (ii) no `throw new Error(<expr>.error)` without fallback words (`x.error || '…'`), unless NAMED below;
 //   (iii) in the files the sweep owns (SWEPT: the four Settings panels, BackupDetail, the Documents library and its
-//        hook, Dispatch's Vehicles & equipment), no body read (`res.json()`) before that response's ok check, unless
+//        hook, Dispatch's Vehicles & equipment; since §0.245 each Part of docs/design/refusal-sweep its own), no body read (`res.json()`) before that response's ok check, unless
 //        NAMED below. Outside them the shape is the filed rest of the sweep, not scanned here.
 // A named one that is gone fails until its name goes (no stale names). Self-tests show each scan catches its shape.
 // KNOWN LIMITS (filed, not chased — §0.243's second fix round):
@@ -483,11 +483,20 @@ const SWEPT = [
     'src/Tabs/settings/integrations/AutomationsDetail.jsx', 'src/Tabs/settings/integrations/WebhooksDetail.jsx',
     'src/Tabs/settings/data/BackupDetail.jsx', 'src/Tabs/DocumentsTab.jsx', 'src/hooks/useDocuments.js',
     'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx',
+    // The rest of the sweep (state §0.245, docs/design/refusal-sweep; each Part adds the files it cleans — RUN in
+    // tests/refusal-sweep.test.mjs). Part 1: the Pipeline's stage drag, the deals hook, the press notice.
+    'src/components/KanbanView.jsx', 'src/hooks/useOpportunities.js', 'src/utils/pressNotice.js',
+    // Part 2: the Tasks tab's ✓ and Snooze, and the task write's answer (useTasks.js waits for Parts 7 and 10: its
+    // calendar reads and its saves).
+    'src/Tabs/TasksTab.jsx', 'src/utils/taskWrite.js',
+    // Part 4: Export's Delete and its two windows' saves — ExportDetail.jsx, swept since §0.243 (the first line above).
 ];
 // A body read before its ok check by design: { file, text (the trimmed line), why }.
 const BODY_FIRST = [
     { file: 'src/Tabs/settings/data/BackupDetail.jsx', text: 'data = await res.json().catch(() => null);   // an answer that is no JSON is no answer (state §0.205)',
         why: 'the restore\'s answer is read at any status: a refused restore\'s errors and counts are its words, read before res.ok is (§0.205)' },
+    { file: 'src/hooks/useOpportunities.js', text: 'try { body = await res.json(); } catch { body = null; }',
+        why: 'saveDealNote: a refused note\'s answer carries the notes as stored (§0.236) — the list takes them on a refusal too; its words fall back to the status' },
 ];
 
 test('(iii) in the files the sweep owns, no body is read before its response\'s ok check, unless named', () => {

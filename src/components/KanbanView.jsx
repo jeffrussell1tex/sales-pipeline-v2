@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { pressNoticeOf } from '../utils/pressNotice.js';
 import { T } from '../tokens.js';
 import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 
@@ -184,6 +185,11 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
     );
 }
 
+// A drag of a deal whose last drag is still unanswered begins from that drag's own copy: a refusal of both put back
+// drag 2's start — drag 1's copy, a stage the server never stored (state §0.245, the review). Each copy names the copy
+// its chain began from, and a refusal puts back that.
+const dragBase = new WeakMap();   // an optimistic drag copy -> the copy its chain of drags began from
+
 // ── Main KanbanView ──────────────────────────────────────────
 export default function KanbanView({
     pipelineFilteredOpps,
@@ -195,20 +201,17 @@ export default function KanbanView({
     selectedOpps = [],
     setSelectedOpps,
     selectMode = false,
+    canEdit = false,   // canEditCrm(userRole), PipelineTab's: only a member who may change deals is offered the drag (§0.245, Q2)
 }) {
-    const { stages, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim } = useApp();
+    const { stages, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim, setPressNotices } = useApp();
 
     const handleKanbanDrop = (toStage) => {
         if (!kanbanDragging || kanbanDragging.fromStage === toStage) {
             setKanbanDragging(null); setKanbanDragOver(null); return;
         }
-        const today = [
-            new Date().getFullYear(),
-            String(new Date().getMonth() + 1).padStart(2, '0'),
-            String(new Date().getDate()).padStart(2, '0'),
-        ].join('-');
+        const today = todayLocal();   // the member's day (state §0.245, docs/design/refusal-sweep 1d)
         const updatedOpp = opportunities.find(o => o.id === kanbanDragging.oppId);
-        if (!updatedOpp) return;
+        if (!updatedOpp) { setKanbanDragging(null); setKanbanDragOver(null); return; }   // a deal gone since: the drag ends
         const newOpp = {
             ...updatedOpp,
             stage: toStage,
@@ -218,8 +221,8 @@ export default function KanbanView({
                 { stage: toStage, date: today, prevStage: updatedOpp.stage, author: currentUser || '', timestamp: new Date().toISOString() },
             ],
         };
+        dragBase.set(newOpp, dragBase.get(updatedOpp) ?? updatedOpp);
         setOpportunities(prev => prev.map(o => o.id === kanbanDragging.oppId ? newOpp : o));
-        // dbFetch returns a Response and does NOT throw on 4xx/5xx.
         // The drag sends what it changes — the stage, its date and its history — and nothing
         // else: the server merges a PUT over the stored row, so the rest stays as stored. It sent
         // the whole row this list holds, and a list loaded before another session's save wrote
@@ -228,19 +231,30 @@ export default function KanbanView({
         // Not its history (state §0.236): the server appends the move to the history as stored — a list this board
         // built from its own copy dropped a move made elsewhere since. The board shows the move at once and takes the
         // deal as stored from the answer — once the org is still the one it asked in (state §0.175).
+        // A refused or unsent move is said and put back (state §0.245, docs/design/refusal-sweep 1a; Jeff's Q1): the card
+        // went back to nothing, and the deal window opened on the list's copy sent the refused stage with the next save.
+        // Put back by identity — this drag's own copy only: a list read again since, or a later drag of the deal, keeps
+        // what it holds. What it puts back is the copy this drag's chain began from (dragBase): a second drag made while
+        // the first is unanswered began from the first's copy, never stored. Said in a press notice, kept until its ✕ or an
+        // org switch — the toast is one slot a later toast replaces. dbWrite never throws, so the catch sees only a throw
+        // in what follows a landed move.
         const askedOrg = requestOrg();
-        dbFetch('/.netlify/functions/opportunities', {
+        dbWrite('/.netlify/functions/opportunities', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate }),
-        }).then(async res => {
+        }).then(r => {
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { console.error('Stage change not saved:', res.status); return; }
-            const stored = (await res.json().catch(() => null))?.opportunity;
-            if (!stillOrg(askedOrg)) return;
+            if (!r.ok) {
+                const base = dragBase.get(newOpp);   // the copy this chain of drags began from
+                setOpportunities(prev => prev.map(o => (o === newOpp ? base : o)));   // this drag's copy only
+                setPressNotices(list => [...list, pressNoticeOf(updatedOpp.opportunityName || updatedOpp.account || 'A deal', `Not moved to ${toStage}: ${r.error}`)]);
+                return;
+            }
+            const stored = r.data?.opportunity;
             if (stored) setOpportunities(prev => prev.map(o => (o.id === stored.id ? stored : o)));
             if (toStage === 'Closed Won') promptSpiffClaim?.(stored || newOpp);
-        }).catch(console.error);
+        }).catch(console.error);   // a throw in what follows a landed move; dbWrite itself never throws
         setKanbanDragging(null);
         setKanbanDragOver(null);
     };
@@ -312,10 +326,10 @@ export default function KanbanView({
                             {colOpps.map(opp => (
                                 <div
                                     key={opp.id}
-                                    draggable
-                                    onDragStart={() => setKanbanDragging({ oppId: opp.id, fromStage: stage })}
+                                    draggable={canEdit}
+                                    onDragStart={() => { if (canEdit) setKanbanDragging({ oppId: opp.id, fromStage: stage }); }}
                                     onDragEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}
-                                    onTouchStart={() => setKanbanDragging({ oppId: opp.id, fromStage: stage })}
+                                    onTouchStart={() => { if (canEdit) setKanbanDragging({ oppId: opp.id, fromStage: stage }); }}
                                     onTouchEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}>
                                     <KanbanCard
                                         opp={opp}

@@ -482,10 +482,13 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     assert.ok(t.includes('            e.preventDefault();\n            if (!isEditing) closeRail();\n') && t.includes('onClick={!isEditing ? closeRail : undefined}'),
         'the rail still closes on Escape and the backdrop while a press is out, and the press then says only what did not land, in a notice of its own (Jeff, 13 Oct: "Let it close"; the fourth re-check, code C3; the fifth, proof P6)');
     const k = code(read('src/hooks/useTasks.js'));
-    assert.ok(k.includes("if (!res.ok) { refused = data.error || 'Failed to save task'; throw new Error(refused); }"), "the completion keeps the server's words");
-    assert.ok(inOrder(k, "addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');",
-        '            return { ok: true };\n        } catch (err) {',
-        '            setTasks(prev => prev.map(t => t.id === taskId ? current : t));\n            return { ok: false, error: refused };\n'),
+    // (§0.245 moved: the completion reads its answer through taskWriteAnswer — the ok check first, the server's words with
+    // their ref (docs/design/refusal-sweep 2b); RUN in tests/refusal-sweep.test.mjs.)
+    assert.ok(k.includes("const answer = await taskWriteAnswer(() => dbFetch('/.netlify/functions/tasks', {"), "the completion keeps the server's words");
+    assert.ok(inOrder(k, '        if (!stillOrg(askedOrg)) return;\n        if (!answer.ok) {\n',
+        '            setTasks(prev => prev.map(t => (t === next ? current : t)));\n            return { ok: false, error: answer.error };\n        }\n',
+        "addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');",
+        '        return { ok: true };\n    };'),
         'and answers whether it landed (the re-check, code R2)');
     assert.ok(t.includes("        setTaskModalError?.(null);\n        setCompletionPrompt(false);\n        setCompletionNotes('');\n        setCompletionError('');\n"),
         'a prompt left by the last task never opens on this one (the fix review, screens F4)');

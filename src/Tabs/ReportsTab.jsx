@@ -5059,10 +5059,19 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [selectedAccountId, setSelectedAccountId] = React.useState('');
     const [selectedContactId, setSelectedContactId] = React.useState('');
     const [selectedOppId,     setSelectedOppId]     = React.useState('');
+    // The deal shown now, read by an answer to "Contacts on this deal" (state §0.245, the review): an answer that lands
+    // after the member picked another deal sets nothing and says nothing — never the last deal's words or list on this one.
+    const shownOppIdRef = React.useRef(''); shownOppIdRef.current = selectedOppId;
     const [showAddContact,    setShowAddContact]    = React.useState(false);
     const [addContactSaving,  setAddContactSaving]  = React.useState(false);
     const [localContactIds,   setLocalContactIds]   = React.useState(null);
     const [localPersonaMap,   setLocalPersonaMap]   = React.useState({}); // contactId → personaId override
+    // One buyer persona save at a time per contact (state §0.245, the review): a second pick while the first is out
+    // sends nothing — two refused picks put back the first pick, never stored.
+    const personaSavingRef = React.useRef(new Set());
+    // A refused add, remove or buyer persona on "Contacts on this deal" (state §0.245, Q6): one banner in that section,
+    // kept until its Close — never on a timer; a landed change clears it, and so does picking another deal.
+    const [dealContactsError, setDealContactsError] = React.useState('');
     const [period, setPeriod] = React.useState('6months');
     const [oppPeriod, setOppPeriod] = React.useState('all');
     const [showFilter, setShowFilter] = React.useState('all');
@@ -6028,7 +6037,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ maxHeight:260, overflowY:'auto' }}>
                                             {shownOpps.map(o => (
                                                 <div key={o.id}
-                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); setLocalPersonaMap({}); }}
+                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); setLocalPersonaMap({}); setDealContactsError(''); }}
                                                     style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
                                                         background: o.id === selectedOppId ? `${T.goldInk}14` : 'transparent',
                                                         display:'flex', alignItems:'center', gap:10 }}
@@ -6281,6 +6290,16 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 </button>
                                             )}
                                         </div>
+                                        {/* A refused add, remove or buyer persona (§0.245, Q6): said where it was made, kept until closed. */}
+                                        {dealContactsError && (
+                                            <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', margin:'12px 22px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12.5, color:T.danger, fontWeight:600 }}>
+                                                <span style={{ flex:1, minWidth:0 }}>✕ {dealContactsError}</span>
+                                                <button onClick={() => setDealContactsError('')}
+                                                    style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                                                    Close
+                                                </button>
+                                            </div>
+                                        )}
                                         {showAddContact && selectedOpp && (
                                             <AddContactToOppPanel
                                                 opp={{ ...selectedOpp, contactIds: oppContactIds }}
@@ -6289,6 +6308,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 onCancel={() => setShowAddContact(false)}
                                                 onSave={async (newIds) => {
                                                     if (!newIds.length) return;
+                                                    const forDeal = selectedOpp.id;   // the deal asked about; another picked since hears nothing
                                                     setAddContactSaving(true);
                                                     try {
                                                         const mergedIds = [...new Set([...oppContactIds, ...newIds])];
@@ -6299,18 +6319,20 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                         // What it changes and nothing else, merged over the stored row (state
                                                         // §0.198, as the Kanban's drag): the whole row this report loaded wrote
                                                         // back another session's save — a deal re-linked, its Site Name reset.
-                                                        const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
+                                                        // A refusal is said in the section's banner (§0.245, Q6), the panel left open.
+                                                        const added = await dbWrite(`/.netlify/functions/opportunities?id=${forDeal}`, {
                                                             method: 'PUT',
                                                             body: JSON.stringify({
-                                                                id:         selectedOpp.id,
+                                                                id:         forDeal,
                                                                 contactIds: mergedIds,
                                                                 contacts:   contactNamesText(mergedNames),
                                                             }),
                                                         });
-                                                        if (res.ok) {
-                                                            setLocalContactIds(mergedIds);
-                                                            setShowAddContact(false);
-                                                        }
+                                                        if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its section hears nothing
+                                                        if (!added.ok) { setDealContactsError(`${newIds.length === 1 ? 'The contact was' : `${newIds.length} contacts were`} not added to this deal — ${added.error}`); return; }
+                                                        setDealContactsError('');
+                                                        setLocalContactIds(mergedIds);
+                                                        setShowAddContact(false);
                                                     } catch (e) {
                                                         console.error('Add contact to opp failed:', e);
                                                     } finally {
@@ -6356,28 +6378,50 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             const cx = (contacts||[]).find(x => x.id === id);
                                                             return cx ? ((cx.firstName||'')+' '+(cx.lastName||'')).trim() : null;
                                                         }).filter(Boolean);
-                                                        try {
-                                                            // The contacts alone, as the add path sends them (state §0.198).
-                                                            const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
-                                                                method: 'PUT',
-                                                                body: JSON.stringify({ id: selectedOpp.id, contactIds: merged, contacts: contactNamesText(mergedNames) }),
-                                                            });
-                                                            if (res.ok) setLocalContactIds(merged);
-                                                        } catch(e) { console.error('Remove contact failed:', e); }
+                                                        const name = ((contact.firstName||'')+' '+(contact.lastName||'')).trim();
+                                                        const forDeal = selectedOpp.id;   // the deal asked about; another picked since hears nothing
+                                                        // The contacts alone, as the add path sends them (state §0.198); a refusal said in the
+                                                        // section's banner, the contact left on the deal (§0.245, Q6).
+                                                        const removed = await dbWrite(`/.netlify/functions/opportunities?id=${forDeal}`, {
+                                                            method: 'PUT',
+                                                            body: JSON.stringify({ id: forDeal, contactIds: merged, contacts: contactNamesText(mergedNames) }),
+                                                        });
+                                                        if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its section hears nothing
+                                                        if (!removed.ok) { setDealContactsError(`${name || 'The contact'} was not taken off this deal — ${removed.error}`); return; }
+                                                        setDealContactsError('');
+                                                        setLocalContactIds(merged);
                                                     };
 
                                                     const handleSetPersona = async (contact, personaId) => {
-                                                        setLocalPersonaMap(prev => ({ ...prev, [contact.id]: personaId }));
-                                                        // The revert existed but was
-                                                        // unreachable: dbFetch resolves
-                                                        // for ANY status (guide 18b1),
-                                                        // so a 403 never hit the catch.
-                                                        const rp = await dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, {
-                                                            method: 'PUT',
-                                                            body: JSON.stringify({ ...contact, buyerPersona: personaId }),
-                                                        });
-                                                        if (!rp.ok) {
-                                                            setLocalPersonaMap(prev => { const n={...prev}; delete n[contact.id]; return n; });
+                                                        // One save at a time per contact (the review): a pick while one is out sends nothing.
+                                                        if (personaSavingRef.current.has(contact.id)) return;
+                                                        personaSavingRef.current.add(contact.id);
+                                                        try {
+                                                            // What the chip showed when the member picked, by its own fallback (§0.245): a refusal
+                                                            // puts that back — never the loaded copy, which reverted a persona that landed earlier.
+                                                            const shown = localPersonaMap[contact.id] ?? contact.buyerPersona ?? contact.persona ?? '';
+                                                            const name = ((contact.firstName||'')+' '+(contact.lastName||'')).trim();
+                                                            const forDeal = selectedOpp.id;   // the deal shown at the pick; another picked since hears nothing
+                                                            setLocalPersonaMap(prev => ({ ...prev, [contact.id]: personaId }));
+                                                            // The revert existed but was
+                                                            // unreachable: dbFetch resolves
+                                                            // for ANY status (guide 18b1),
+                                                            // so a 403 never hit the catch.
+                                                            // Only what changes (guide §18b125 rule 1): the whole loaded copy wrote every stale field.
+                                                            const rp = await dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, {
+                                                                method: 'PUT',
+                                                                body: JSON.stringify({ id: contact.id, buyerPersona: personaId }),
+                                                            });
+                                                            if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its map and banner hear nothing
+                                                            if (!rp.ok) {
+                                                                // Only while this pick is still the one shown: a later pick stands.
+                                                                setLocalPersonaMap(prev => (prev[contact.id] === personaId ? { ...prev, [contact.id]: shown } : prev));
+                                                                setDealContactsError(`${name || 'The contact'}'s buyer persona was not saved — ${rp.error}`);
+                                                                return;
+                                                            }
+                                                            setDealContactsError('');
+                                                        } finally {
+                                                            personaSavingRef.current.delete(contact.id);
                                                         }
                                                     };
 

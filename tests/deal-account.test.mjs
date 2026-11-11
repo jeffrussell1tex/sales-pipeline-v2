@@ -645,13 +645,19 @@ test("H4: the Kanban's stage drag sends the stage and its date — never the who
 
 test("J4: Reports' add and remove on \"Contacts on this deal\" send the deal's id and its contacts alone — never the whole row the report loaded, which re-linked a deal another session had moved and reset its Site Name", () => {
     const r = read('src/Tabs/ReportsTab.jsx');
-    const add = between(r, 'onSave={async (newIds) => {', 'if (res.ok) {');
-    assert.ok(add.includes('                                                            body: JSON.stringify({\n                                                                id:         selectedOpp.id,\n                                                                contactIds: mergedIds,\n                                                                contacts:   contactNamesText(mergedNames),\n                                                            }),\n'), 'the add: the id, the ids it merged, their names');
-    const remove = between(r, 'const handleRemove = async (contact) => {', 'if (res.ok) setLocalContactIds(merged);');
-    assert.ok(remove.includes('body: JSON.stringify({ id: selectedOpp.id, contactIds: merged, contacts: contactNamesText(mergedNames) }),'), 'the remove: the same three');
+    // The end anchors moved with §0.245 Part 3 (the refusal said): the send is dbWrite's, the ok check `!added.ok` / `!removed.ok`.
+    // Moved pins (§0.245, the review): each handler names its deal `forDeal` (selectedOpp.id, taken before the await) so
+    // an answer after another deal was picked is heard by nobody; the id sent is that one.
+    const add = between(r, 'onSave={async (newIds) => {', 'if (!added.ok)');
+    assert.ok(add.includes('const forDeal = selectedOpp.id;'), 'the add\'s deal is the one shown');
+    assert.ok(add.includes('                                                            body: JSON.stringify({\n                                                                id:         forDeal,\n                                                                contactIds: mergedIds,\n                                                                contacts:   contactNamesText(mergedNames),\n                                                            }),\n'), 'the add: the id, the ids it merged, their names');
+    const remove = between(r, 'const handleRemove = async (contact) => {', 'if (!removed.ok)');
+    assert.ok(remove.includes('const forDeal = selectedOpp.id;'), 'the remove\'s deal is the one shown');
+    assert.ok(remove.includes('body: JSON.stringify({ id: forDeal, contactIds: merged, contacts: contactNamesText(mergedNames) }),'), 'the remove: the same three');
     assert.equal(count(r, 'JSON.stringify({ ...selectedOpp'), 0, 'REGRESSION: the whole stale row');
     assert.equal(count(r, "method: 'PUT',\n                                                            body: JSON.stringify({\n                                                                ...selectedOpp"), 0);
-    assert.equal(count(r, '/.netlify/functions/opportunities?id=${selectedOpp.id}'), 2, 'the two deal PUTs of the Reports tab, both here');
+    assert.equal(count(r, '/.netlify/functions/opportunities?id=${forDeal}'), 2, 'the two deal PUTs of the Reports tab, both here');
+    assert.equal(count(r, '/.netlify/functions/opportunities?id=${selectedOpp.id}'), 0);
 });
 
 test('dealAccount.js is pure: it imports only the matcher and pickLink.js', () => {

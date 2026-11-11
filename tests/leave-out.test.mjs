@@ -72,7 +72,9 @@ test('THE GUARD: each hook sends an edit through sentBody — never the data who
         assert.ok(src.includes(list), `${file}: the list takes the server's row, else the data without the names`);
     }
     const opps = code(read('src/hooks/useOpportunities.js'));
-    assert.ok(opps.includes("setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));\n            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });"),
+    // Moved pin (state §0.245, refusal-sweep 1e): the copy shown is kept as `shown` (shownRow(updatedOpp)) for the rollback.
+    assert.ok(opps.includes("const shown = shownRow(updatedOpp);   // the copy this save shows"));
+    assert.ok(opps.includes("setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shown : opp));\n            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });"),
         'the Closed Lost dialog sends the deal as the window left it — without its notes or stage history (§0.236)');
 });
 

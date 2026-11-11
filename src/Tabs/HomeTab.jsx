@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { useAuth } from '@clerk/clerk-react';
@@ -154,7 +154,6 @@ export default function HomeTab() {
         getStageColor,
         calculateDealHealth, getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
-        handleCompleteTask,
         calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
         coachingNotes, markCoachingNoteRead, currentUserId,
@@ -305,8 +304,6 @@ export default function HomeTab() {
             arr:       null,
             stage:     null,
             ctaLabel:  'View task',
-            // Inline complete — tasks only
-            onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
             onClick:   () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
             item:      t,
             isMeeting: false,
@@ -329,7 +326,6 @@ export default function HomeTab() {
             stage:     linkedOpp?.stage || null,
             // "Open prep" wires to Meeting Prep panel
             ctaLabel:  linkedOpp ? 'Open prep' : null,
-            onComplete: null,
             onClick: linkedOpp
                 ? () => {
                     setMeetingPrepEvent(ev);
@@ -349,7 +345,7 @@ export default function HomeTab() {
                 type: 'meeting', urgency: 'meeting',
                 timeLabel: 'All day', timeColor: T.inkMid,
                 title: h.name, sub: 'Corporate · Company calendar',
-                arr: null, stage: null, ctaLabel: null, onComplete: null, onClick: null,
+                arr: null, stage: null, ctaLabel: null, onClick: null,
                 item: h, isMeeting: true,
             });
         });
@@ -367,7 +363,6 @@ export default function HomeTab() {
             arr:       relOpp ? parseFloat(relOpp.arr)||0 : null,
             stage:     relOpp?.stage || null,
             ctaLabel:  relOpp ? 'Open deal' : 'View task',
-            onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
             onClick: relOpp
                 ? () => { setEditingOpp(relOpp); setShowModal(true); }
                 : () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
@@ -951,20 +946,11 @@ export default function HomeTab() {
 // ─────────────────────────────────────────────────────────────
 //  PlateRow — extracted to keep HomeTab render clean
 // ─────────────────────────────────────────────────────────────
+// A plate row draws no Complete (since 7ae0608, 5 Jun 2026): each row opens the task window, which completes the task
+// and says why when it does not. Its dead handler and the plate's onComplete closures left (state §0.245,
+// docs/design/refusal-sweep 2d; Jeff's Q5).
 function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr }) {
-    const [completing, setCompleting] = useState(false);
     const sc = item.stage && getStageColor ? getStageColor(item.stage) : { text: T.inkMuted };
-
-    const handleComplete = async (e) => {
-        e.stopPropagation();
-        if (!item.onComplete || completing) return;
-        setCompleting(true);
-        try {
-            await item.onComplete();
-        } finally {
-            setCompleting(false);
-        }
-    };
 
     const baseBg = idx === 0 && item.urgency === 'overdue' ? 'rgba(156,58,46,0.03)' : 'transparent';
     return (

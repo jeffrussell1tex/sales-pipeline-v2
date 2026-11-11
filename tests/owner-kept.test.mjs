@@ -140,9 +140,13 @@ test('DIALOG: the Closed Lost save answers the dialog — refused, it says why a
     assert.ok(fn.includes('if (editingOppRef && editingOppRef.id) {'), 'a seeded deal with no id is new');
     assert.equal(count(fn, 'return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };'), 2);
     // The edit branch: the stored deal taken before the optimistic write, put back before it answers.
+    // Moved pins (state §0.245, docs/design/refusal-sweep 1e): the optimistic copy is kept as `shown`, and the rollback
+    // puts back only it, by identity — a list read again since (an org away and back) keeps what it holds.
     const cap = fn.indexOf('const before = opportunities.find(o => o.id === editingOppRef.id);');
-    const opt = fn.indexOf('setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shownRow(updatedOpp) : opp));');
-    const rb = fn.indexOf('setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));');
+    const opt = fn.indexOf('setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shown : opp));');
+    const rb = fn.indexOf('setOpportunities(prev => prev.map(o => (o === shown && before ? before : o)));');
+    const kept = fn.indexOf('const shown = shownRow(updatedOpp);');
+    assert.ok(kept > cap && kept < opt, 'the copy shown is the one put back');
     const ret = fn.indexOf('return { ok: false, error: `Not saved as Closed Lost');
     assert.ok(cap >= 0 && opt > cap, 'the stored deal is taken before the optimistic write');
     assert.ok(rb > opt && rb < ret, 'rolled back before it answers');

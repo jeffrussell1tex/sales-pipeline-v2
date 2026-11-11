@@ -130,7 +130,7 @@ export default function ModalLayer() {
         leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
-        handleDeleteActivity, handleDeleteTask, handleCompleteTask, handleLogActivity, saveDealNote,
+        handleDeleteActivity, handleDeleteTask, handleLogActivity, saveDealNote,
         addAudit, softDelete, showConfirm, loadOpportunities, loadAccounts,
         loadContacts, loadTasks, loadActivities,
         setActiveTab, activeTab,

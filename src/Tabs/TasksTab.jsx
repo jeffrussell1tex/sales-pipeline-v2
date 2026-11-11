@@ -3,6 +3,8 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { taskWriteAnswer } from '../utils/taskWrite.js';
+import { pressNoticeOf } from '../utils/pressNotice.js';
 import { isoLocal, shortDayLabel } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
@@ -155,7 +157,7 @@ function SnoozePicker({ onSnooze, onClose, anchorRect, anchorRef }) {
 
 // ── QRow — the new clean task row ───────────────────────────────
 // Module-scope component (NOT defined inside TasksTab) — avoids React #310 remount bug.
-function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen }) {
+function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen, onRefused }) {
     const [hov, setHov]                   = useState(false);
     const [snoozeOpen, setSnoozeOpen]     = useState(false);
     const [snoozeRect, setSnoozeRect]     = useState(null);
@@ -169,32 +171,39 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         ? fmtClock(task.completedAt || task.updatedAt || task.when)
         : fmtTime(task.dueTime);
 
+    // A ✓ or Snooze that did not land is said (state §0.245, docs/design/refusal-sweep 2c; Jeff's Q1): in a press
+    // notice TasksTab keeps (onRefused) — this row unmounts during the await, its task gone from the list it was in —
+    // "⚠ <title> — Not completed: <why>", kept until its ✕. It un-ticked without a word. An undefined answer is an
+    // org switch's: nothing said — nor any answer once the org has changed.
     const handleComplete = async e => {
         e.stopPropagation();
         if (!canEdit || completing) return;
         setCompleting(true);
-        try { await handleCompleteTask(task.id, 'Completed'); } finally { setCompleting(false); }
+        const askedOrg = requestOrg();   // after an org switch its answer says nothing (state §0.175)
+        try {
+            const done = await handleCompleteTask(task.id, 'Completed');
+            if (!stillOrg(askedOrg)) return;
+            if (done && !done.ok) onRefused(task, `Not completed: ${done.error}`);
+        } finally { setCompleting(false); }
     };
 
     const handleSnooze = async newDate => {
         setSnoozeOpen(false);
         if (!canEdit) return;
-        const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
+        const { source, when, ...row } = task;   // the feed's keys stay out of the body and out of the rollback
+        const updated = { ...row, dueDate: newDate, status: 'Open', completed: false };
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
-        // dbFetch returns a Response — check ok, then parse. This used to read
-        // `data?.task` straight off the Response (always undefined), so the
-        // else branch reverted the snooze even when the server had saved it.
-        try {
-            const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
-            setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
-        } catch {
-            if (!stillOrg(askedOrg)) return;
-            setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+        // The ok check first, the house words (taskWriteAnswer, §0.245): a refusal threw 'HTTP ' + status and
+        // put the row back without a word. The rollback puts back only this press's own copy, by identity.
+        const answer = await taskWriteAnswer(() => dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
+        if (!stillOrg(askedOrg)) return;
+        if (!answer.ok) {
+            setTasks(prev => prev.map(t => (t === updated ? row : t)));
+            onRefused(task, `Not snoozed: ${answer.error}`);
+            return;
         }
+        setTasks(prev => prev.map(t => t.id === task.id ? (answer.task || updated) : t));
     };
 
     return (
@@ -476,6 +485,7 @@ export default function TasksTab() {
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         setViewingTask,
         isMobile,
+        setPressNotices,
     } = useApp();
 
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
@@ -601,7 +611,10 @@ export default function TasksTab() {
             setViewingTask(item);
         }
     };
-    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen: openFeedItem };
+    // A row's ✓ or Snooze that did not land, said in a press notice of its own (§0.245, Q1): kept until its ✕, cleared
+    // by an org switch — never the one-slot toast a later toast replaces, never on a timer.
+    const sayRefused = (task, words) => setPressNotices(list => [...list, pressNoticeOf(task.title || 'A task', words)]);
+    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen: openFeedItem, onRefused: sayRefused };
     const handleAddTask = () => { setTaskRailId('new'); setTaskRailMode('new'); };
 
     // ── View tabs config ───────────────────────────────────────
