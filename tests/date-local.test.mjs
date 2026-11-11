@@ -261,10 +261,10 @@ const ALLOWED_FILES = [
     /[\\/]stageClock\.js$/,   // backdate(): a deliberate UTC round trip on a UTC-parsed day
     /[\\/]dateLocal\.js$/,    // the header quotes the shape it replaces
 ];
-const ALLOWED_LINES = [
-    /a\.download\s*=/,                // an export filename: the instant of export is fine
-    /exportToCSV\(`[a-z]+-\$\{/,     // same
-];
+// The five export file names (Accounts, Contacts, Audit, Users, Pipelines) were named here as exceptions until
+// state §0.242 (Q6 — Jeff, 10 Nov: "Your local day"): each is now named by the member's day (todayLocal), so no
+// line is excepted. A new one is a wall-calendar day like any other.
+const ALLOWED_LINES = [];
 const walk = (dir, out = []) => {
     for (const name of readdirSync(dir)) {
         const p = join(dir, name);
@@ -294,6 +294,164 @@ test('the scan still sees the shape it guards (a scan that matches nothing prove
     assert.ok(UTC_DAY.test("priorFrom = prior.toISOString().slice(0,10);"));
     assert.ok(UTC_DAY.test("d.toISOString().slice(0, 10)"));
     assert.ok(!UTC_DAY.test("createdAt: new Date().toISOString()"), 'an instant is not the shape');
+});
+
+test('the five export file names are the member\'s day (state §0.242, Q6)', () => {
+    const at = (file) => readFileSync(fileURLToPath(new URL('../' + file, import.meta.url)), 'utf8');
+    assert.ok(at('src/Tabs/AccountsTab.jsx').includes('exportToCSV(`accounts-${todayLocal()}.csv`'));
+    assert.ok(at('src/Tabs/ContactsTab.jsx').includes('exportToCSV(`contacts-${todayLocal()}.csv`'));
+    assert.ok(at('src/Tabs/settings/audit/AuditDetail.jsx').includes('a.download = `accelerep-audit-${todayLocal()}.${ext}`;'));
+    assert.ok(at('src/Tabs/settings/people/UsersDetail.jsx').includes('a.download = `accelerep-users-${todayLocal()}.${format.toLowerCase()}`;'));
+    assert.ok(at('src/Tabs/settings/salesProcess/PipelinesDetail.jsx').includes('a.download = `accelerep-pipelines-${todayLocal()}.json`;'));
+});
+
+// ── A DAY SHOWN FOR AN INSTANT IS THE MEMBER'S DAY (§0.242) ──
+// Guide §18b125 rule 4. Three shapes the UTC_DAY scan above cannot see, each of which
+// printed a day one out west of Greenwich every evening (or all day):
+//   INSTANT_SLICE -- the first ten (or the 5th-10th) characters of an instant's string,
+//     `createdAt.slice(0,10)`, `(q.updatedAt || q.createdAt || '').slice(5, 10)`,
+//     `String(d.at || '').slice(0, 10)`, `dateTime.split('T')[0]`: the UTC day. Read it
+//     with dayOf (reportPeriod.js), which takes an instant on the local clock.
+//   DAY_AS_UTC -- a stored day handed whole to `new Date(...)` and printed with toLocale*:
+//     UTC midnight, the evening before west of Greenwich, so every row read the day
+//     before. Read it with parseLocalDate (local noon).
+//   UTC_ZONE -- `timeZone: 'UTC'` inside a toLocale* call: a member's clock is never UTC.
+// Not scanned (fixed by hand, 0.242): a noon appended to a value that may be an instant
+// (`x + 'T12:00:00'` where x is createdDate || createdAt) -- not reliably one shape.
+// The chain before the slice may be `||` or `??` (the review: `(a.createdAt ?? '').slice(0, 10)` slipped past), and an
+// instant spliced into a template string and sliced is the same thing (TEMPLATE_SLICE).
+const INSTANT_SLICE = /\.(?:[A-Za-z_$][\w$]*At|at|timestamp|dateTime)\b(?:\s*(?:\|\||\?\?)\s*[^)|?]*?)*(\)?)\s*\??\.\s*(?:slice\(\s*[05]\s*,\s*10\s*\)|substring\(\s*0\s*,\s*10\s*\)|split\(\s*['"]T['"]\s*\)\s*\[\s*0\s*\])/g;
+const TEMPLATE_SLICE = /`\$\{[^}`]*\.(?:[A-Za-z_$][\w$]*At|at|timestamp|dateTime)\b[^}`]*\}`\s*\??\.\s*(?:slice\(\s*[05]\s*,\s*10\s*\)|substring\(\s*0\s*,\s*10\s*\)|split\(\s*['"]T['"]\s*\)\s*\[\s*0\s*\])/;
+// A word before a group that is no call: the group's own value is sliced (the review: `return (q.updatedAt || '')
+// .slice(0, 10)` passed as though `return` were a function giving a day).
+const NOT_A_CALL = new Set(['return', 'await', 'typeof', 'void', 'case', 'in', 'of', 'new', 'delete', 'throw', 'yield', 'else', 'do', 'instanceof']);
+const DAY_AS_UTC = /new Date\(\s*[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\??\.(?:date|[a-z][\w$]*Date)\s*\)\s*\??\.\s*toLocale\w*\(/;
+const UTC_ZONE = /toLocale\w*\([^)]*timeZone\s*:\s*['"]UTC['"]/;
+
+// An instant sliced -- unless the slice reads a call's answer that is already a day
+// (`dayOf(q.updatedAt || q.createdAt).slice(5, 10)`): a group closed before the slice counts
+// when nothing opens it, or String(...) does (the instant as text still).
+function isInstantSlice(line) {
+    if (TEMPLATE_SLICE.test(line)) return true;
+    for (const m of line.matchAll(INSTANT_SLICE)) {
+        if (!m[1]) return true;
+        let i = m.index + m[0].indexOf(')') - 1, depth = 0;
+        for (; i >= 0; i--) {
+            if (line[i] === ')') depth++;
+            else if (line[i] === '(') { if (depth === 0) break; depth--; }
+        }
+        const opener = /([A-Za-z_$][\w$]*)\s*$/.exec(line.slice(0, Math.max(0, i)));
+        if (!opener || opener[1] === 'String' || NOT_A_CALL.has(opener[1])) return true;
+    }
+    return false;
+}
+const isDayAsUtc = (line) => DAY_AS_UTC.test(line);
+const isUtcZone = (line) => UTC_ZONE.test(line);
+
+// The seven calendar sites read an Outlook or Google event's start the same way: `dateTime`
+// as the provider sends it -- Graph's default is UTC with no Prefer header and no isAllDay
+// read, so the day it names awaits a live check of an Outlook connection (the Outlook
+// question, OPEN_ITEMS). Named, with their count, until that is answered.
+const OUTLOOK = 'the Outlook question, OPEN_ITEMS';
+const INSTANT_SLICE_EXCEPTIONS = [
+    { file: /[\\/]App\.jsx$/, line: /const eventDate = ev\.start\?\.date \|\| \(ev\.start\?\.dateTime \? ev\.start\.dateTime\.split\('T'\)\[0\] : /, count: 1, why: OUTLOOK },
+    { file: /[\\/]MeetingPrepPanel\.jsx$/, line: /const evDate = ev\.start\?\.date \|\| \(ev\.start\?\.dateTime \? ev\.start\.dateTime\.split\('T'\)\[0\] : ''\);/, count: 1, why: OUTLOOK },
+    { file: /[\\/]HomeTab\.jsx$/, line: /^\s*const d = ev\.start\?\.date \|\| ev\.start\?\.dateTime\?\.split\('T'\)\[0\];$/, count: 3, why: OUTLOOK },
+    { file: /[\\/]TasksTab\.jsx$/, line: /const d = ev\.start\?\.date \|\| ev\.start\?\.dateTime\?\.split\('T'\)\[0\]; return d === calDayStr;/, count: 1, why: OUTLOOK },
+    { file: /[\\/]TasksTab\.jsx$/, line: /const evd = ev\.start\?\.date \|\| ev\.start\?\.dateTime\?\.split\('T'\)\[0\]; return evd === ds;/, count: 1, why: OUTLOOK },
+];
+
+test('a day shown for an instant in src/ is the member\'s day: the three scans, each exception named', () => {
+    const srcDir = fileURLToPath(new URL('../src/', import.meta.url));
+    const offenders = [];
+    const used = new Map();
+    for (const file of walk(srcDir)) {
+        readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+            if (line.trim().startsWith('//')) return;
+            const where = `${file.slice(srcDir.length)}:${i + 1}`;
+            if (isInstantSlice(line)) {
+                const x = INSTANT_SLICE_EXCEPTIONS.find(x => x.file.test(file) && x.line.test(line));
+                if (x) used.set(x, (used.get(x) || 0) + 1);
+                else offenders.push(`${where} (an instant sliced to its UTC day -- dayOf)`);
+            }
+            if (isDayAsUtc(line)) offenders.push(`${where} (a stored day read as UTC midnight -- parseLocalDate)`);
+            if (isUtcZone(line)) offenders.push(`${where} (timeZone 'UTC' on a member's screen)`);
+        });
+    }
+    assert.deepEqual(offenders, [], 'a day shown for an instant, or a stored day read as UTC:\n  ' + offenders.join('\n  '));
+    // Each exception names exactly the lines it was named for -- one gone is dropped, one more is a new site.
+    for (const x of INSTANT_SLICE_EXCEPTIONS) assert.equal(used.get(x) || 0, x.count, `${x.file} ${x.line}: ${x.count} line(s), ${x.why}`);
+});
+
+test('the three scans still see the shapes they guard (a scan that matches nothing proves nothing)', () => {
+    // Each label site the 0.242 batch replaced, as it stood.
+    assert.ok(isInstantSlice("<div style={{ fontSize: 9.5 }}>{(q.updatedAt || q.createdAt || '').slice(5, 10)}</div>"), 'QuotesTab version timeline');
+    assert.ok(isInstantSlice("{d.by || '—'} · {String(d.at || '').slice(0, 10) || '—'}</div>"), 'QuotesTab approvals');
+    assert.ok(isInstantSlice("{selectedAccount.createdAt && <> &nbsp;·&nbsp; Customer since {selectedAccount.createdAt.slice(0,10)}</>}"), 'ReportsTab account');
+    assert.ok(isInstantSlice("First touch {selectedContact.createdAt.slice(0,10)}</>}"), 'ReportsTab contact');
+    assert.ok(isInstantSlice("const day = it.when.split('T')[0]; const at = row.timestamp.substring(0, 10);"), 'substring on a timestamp');
+    assert.ok(isInstantSlice("const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];"), 'a calendar dateTime');
+    // The review's misses (10 Nov): a keyword before the group, `??`, a template string.
+    assert.ok(isInstantSlice("    return (q.updatedAt || q.createdAt || '').slice(0, 10);"), 'REGRESSION: a keyword read as a call');
+    assert.ok(isInstantSlice("x = await (a.createdAt || '').slice(0,10)"), 'await is no call');
+    assert.ok(isInstantSlice("{(a.createdAt ?? '').slice(0, 10)}"), 'REGRESSION: ?? let through');
+    assert.ok(isInstantSlice("String(d.at ?? '').slice(0, 10)"), '?? inside String');
+    assert.ok(isInstantSlice("{`${a.createdAt}`.slice(0, 10)}"), 'REGRESSION: a template string let through');
+    assert.ok(isDayAsUtc("const date = e.date ? new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';"), 'ReportsTab history PDF');
+    assert.ok(isDayAsUtc("{new Date(job.scheduledDate).toLocaleDateString('en-US', { month: 'short' })}"), 'a scheduled day');
+    assert.ok(isUtcZone("return 'yesterday, ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'UTC' });"), 'BackupDetail');
+    assert.ok(isUtcZone("x.toLocaleDateString('en-US', { timeZone: \"UTC\" })"));
+    // What they must not take: a day read through dayOf or parseLocalDate, a stored day sliced, an
+    // instant printed whole, a day read at noon, a zone other than UTC.
+    assert.ok(!isInstantSlice("{dayOf(q.updatedAt || q.createdAt).slice(5, 10)}"), 'dayOf answers a day');
+    assert.ok(!isInstantSlice("{dayOf(d.at) || '—'}"));
+    assert.ok(!isInstantSlice("const close = (o.forecastedCloseDate || '').slice(0, 10);"), 'a stored day is not an instant');
+    assert.ok(!isInstantSlice("createdAt: new Date().toISOString(),"));
+    assert.ok(!isInstantSlice("const fmt = row.format.slice(0, 10);"), 'a word ending "at" is not the member');
+    assert.ok(!isDayAsUtc("parseLocalDate(e.date)?.toLocaleDateString('en-US',{month:'short'}) || '—'"));
+    assert.ok(!isDayAsUtc("new Date(t.dueDate + 'T12:00:00').toLocaleDateString()"), 'a day at noon');
+    assert.ok(!isDayAsUtc("new Date(q.createdAt).toLocaleDateString()"), 'an instant printed on the local clock');
+    assert.ok(!isDayAsUtc("new Date(a.date) > new Date(latest.date)"), 'two days compared alike is no label');
+    assert.ok(!isUtcZone("d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' })"));
+    assert.ok(!isUtcZone("d.toLocaleString('en-US', { timeZone: tz })"));
+});
+
+test('the 0.242 label sites read the member\'s day, each keeping its look (Q5)', () => {
+    const at = (file) => readFileSync(fileURLToPath(new URL('../' + file, import.meta.url)), 'utf8');
+    const quotes = at('src/Tabs/QuotesTab.jsx');
+    assert.ok(quotes.includes("import { dayOf } from '../utils/reportPeriod';"));
+    assert.ok(quotes.includes("{dayOf(q.updatedAt || q.createdAt).slice(5, 10)}</div>"), 'the version timeline: mm-dd');
+    assert.ok(quotes.includes("{d.by || '—'} · {dayOf(d.at) || '—'}</div>"), 'the approvals: yyyy-mm-dd');
+    const reports = at('src/Tabs/ReportsTab.jsx');
+    assert.ok(reports.includes('Customer since {dayOf(selectedAccount.createdAt)}</>'));
+    assert.ok(reports.includes('First touch {dayOf(selectedContact.createdAt)}</>'));
+    assert.ok(reports.includes("const date = parseLocalDate(e.date)?.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) || '—';"), 'the history PDF');
+    // Unguarded by the scans (a noon appended to a createdAt instant read "Invalid Date"): pinned here.
+    assert.ok(reports.includes("const openedLabel = parseLocalDate(openedRaw)?.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) || null;"), 'the deal\'s opened day');
+    assert.ok(!reports.includes("new Date(openedRaw+'T12:00:00')"), 'REGRESSION: noon appended to an instant');
+    assert.ok(!/\bbyRep3\b|\brepActRows3\b/.test(reports), 'the dead rep summary is gone');
+    assert.ok(!/\bgroupByDay\b/.test(at('src/Tabs/TasksTab.jsx')), 'the dead groupByDay is gone');
+    const dispatch = at('src/Tabs/DispatchTab.jsx');
+    assert.ok(dispatch.includes('const d = fromYmd(j.scheduledDate);'), '"hours this week" reads the job\'s day at local midnight');
+    assert.ok(!dispatch.includes('new Date(j.scheduledDate)'), 'REGRESSION: a scheduled day read as UTC midnight');
+});
+
+test('America/Chicago: dayOf reads an evening instant as that evening\'s day; the UTC slice read tomorrow', (t) => {
+    const script = `
+import { dayOf } from ${JSON.stringify(new URL('../src/utils/reportPeriod.js', import.meta.url).href)};
+import { parseLocalDate } from ${JSON.stringify(MODULE_URL)};
+const evening = '2026-11-11T02:30:00.000Z';            // 20:30 on 10 Nov in Chicago
+console.log(JSON.stringify({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone, out: {
+    day: dayOf(evening), slice: evening.slice(0, 10), md: dayOf(evening).slice(5, 10),
+    stored: parseLocalDate('2026-11-10').getDate(), utcMidnight: new Date('2026-11-10').getDate(),
+} }));`;
+    const r = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ: 'America/Chicago' }, encoding: 'utf8' }).trim().split('\n').pop());
+    if (!r.tz.includes('Chicago')) { t.skip(`child did not adopt TZ (reported ${r.tz})`); return; }
+    assert.equal(r.out.day, '2026-11-10', 'the member\'s day');
+    assert.equal(r.out.slice, '2026-11-11', 'the old slice: tomorrow -- the contrast');
+    assert.equal(r.out.md, '11-10');
+    assert.equal(r.out.stored, 10, 'a stored day at local noon is that day');
+    assert.equal(r.out.utcMidnight, 9, 'new Date(day) is the evening before -- the contrast');
 });
 
 // ── COUNTING DAYS (0.240) ────────────────────────────────────

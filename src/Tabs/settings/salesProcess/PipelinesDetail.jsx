@@ -9,6 +9,7 @@ import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+import { todayLocal } from '../../../utils/dateLocal';
 
 const STAGE_COLORS = {
     'Prospecting':'#e07b4a','Qualification':'#d4a847','Discovery':'#8aab5a',
@@ -255,7 +256,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href     = url;
-        a.download = `accelerep-pipelines-${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `accelerep-pipelines-${todayLocal()}.json`;
         a.click();
         URL.revokeObjectURL(url);
     };

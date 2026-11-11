@@ -6,7 +6,7 @@ import { canEditCrm } from '../utils/roles.js';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { unarchived } from '../utils/pickLink.js';
-import { daysSince } from '../utils/dateLocal';
+import { daysSince, todayLocal } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -799,7 +799,7 @@ export default function ContactsTab() {
     const handleExport = () => {
         const headers = ['First Name', 'Last Name', 'Company', 'Title', 'Email', 'Phone', 'Role'];
         const csvRows = sorted.map(c => [c.firstName||'', c.lastName||'', c.company||'', c.title||'', c.email||'', c.phone||'', c.role||'']);
-        exportToCSV(`contacts-${new Date().toISOString().slice(0,10)}.csv`, headers, csvRows, 'contacts');
+        exportToCSV(`contacts-${todayLocal()}.csv`, headers, csvRows, 'contacts');
     };
 
     // ── Rows with letter anchors (flat modes) ─────────────────

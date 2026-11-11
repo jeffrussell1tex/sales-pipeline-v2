@@ -4,6 +4,8 @@
 
 ## The batch
 
+**Parts 1-4 built 10 Nov** (state §0.242; guide §18b125; NOT committed; harness deferred) as answered (ANSWERS.md), with two changes at build: the products POST stamps the caller's name, not `auth.userId` (the column's stored values, read 10 Nov, were names: 6 of 18 rows, the rest none), and the itest is tests/integration/save-cleanup.itest.mjs; `products.custom_price` applied 10 Nov on Jeff's go to the test and app databases. Parts 5 and 6 are the next batch (OPEN_ITEMS §1 item 6).
+
 ### Part 1: Products (server, Price Book, refusal)
 
 **1a. products.mjs PUT becomes a strict update.**

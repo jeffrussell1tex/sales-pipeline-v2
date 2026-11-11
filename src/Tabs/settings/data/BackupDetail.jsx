@@ -374,7 +374,7 @@ export const BackupDetail = ({ onBack }) => {
         if (diffMin < 2)  return 'just now';
         if (diffMin < 60) return `${diffMin} minutes ago`;
         if (diffH < 24)   return `${diffH} hour${diffH===1?'':'s'} ago`;
-        if (diffD === 1)  return 'yesterday, ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'UTC' });
+        if (diffD === 1)  return 'yesterday, ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
         if (diffD < 7)    return `${diffD} days ago`;
         if (diffD < 14)   return '1 week ago';
         return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });

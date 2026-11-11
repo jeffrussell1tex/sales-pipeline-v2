@@ -24,7 +24,7 @@ import { APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, approvalTierStats } from '../../
 import { checkLinks } from './_links.mjs';
 import { productIdsOf } from '../../src/utils/linkIds.js';
 // A quote's money, one copy (state §0.241): the pre-tax totals as they were always stored, and the tax beside them.
-import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf } from '../../src/utils/quoteTotals.js';
+import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, samePercent } from '../../src/utils/quoteTotals.js';
 // A new quote's "Tax exempt" is its deal's dispatch customer's — the customer found by Dispatch's one rule.
 import { customerForDeal } from '../../src/utils/dispatchCustomer.js';
 
@@ -143,6 +143,12 @@ function calcTotals(lineItems = [], dealDiscountPct = 0, taxRate = null, taxExem
 // stored as no tax without a word (the review, 10 Nov). A third decimal place is kept to two (the column's).
 const TAX_RATE_REFUSED = 'taxRate must be a number from 0 to 100, or null for no tax';
 const taxRateRefused = (data) => 'taxRate' in data && data.taxRate != null && data.taxRate !== '' && cleanTaxRate(data.taxRate) == null;
+// The deal discount and each line's discount a request names (state §0.242, guide §18b125 rule 3 — Jeff, 10 Nov:
+// "Refuse it"): none or a number 0-100, else refused naming the field and nothing written — before the deal's sync.
+// The value the quote already holds (its stored deal discount; a stored line's product at its discount) is never
+// asked again. A save that leaves the deal discount out keeps the stored one; a create's is 0.
+const DEAL_DISCOUNT_REFUSED = 'dealDiscount must be a number from 0 to 100';
+const dealDiscountRefused = (data, stored) => 'dealDiscount' in data && percentRefused(data.dealDiscount, stored);
 
 // The org's default tax rate (R3): Settings → Quotes keeps it in quoteDefaults, read through the one clamped reader
 // (defaultTaxRateOf — the blob is stored as sent). Only a NEW quote reads it; from then on the rate is the quote's.
@@ -327,15 +333,29 @@ export const handler = async (event) => {
             if (linesMalformed(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: NOT_LINES, field: 'lineItems' }) };
             const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, null, orgId);
             if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
+            // A new version (state §0.242, the review): what it copies from its source — a quote of this deal with the
+            // number it names, in this org, as resolveQuoteNumber verifies it — is the source's, held, never asked
+            // again (a restore could land a value out of range, and no screen edits a deal discount).
+            const claimedNumber = String(data.quoteNumber || '').trim();
+            const versions = (Number(data.version) || 1) > 1 && claimedNumber
+                ? await db.select({ dealDiscount: quotes.dealDiscount, lineItems: quotes.lineItems }).from(quotes)
+                    .where(and(eq(quotes.orgId, orgId), eq(quotes.opportunityId, access.deal.id), eq(quotes.quoteNumber, claimedNumber)))
+                : [];
+            const heldLines = versions.flatMap((q) => (Array.isArray(q.lineItems) ? q.lineItems : []));
+            const heldDeal = versions.find((q) => samePercent(data.dealDiscount, q.dealDiscount))?.dealDiscount ?? null;
+            const lineDiscount = lineDiscountRefusal(data.lineItems, heldLines);
+            if (lineDiscount) return { statusCode: 400, headers, body: JSON.stringify({ error: lineDiscount, field: 'lineItems' }) };
 
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
             if (taxRateRefused(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: TAX_RATE_REFUSED, field: 'taxRate' }) };
+            if (dealDiscountRefused(data, heldDeal)) return { statusCode: 400, headers, body: JSON.stringify({ error: DEAL_DISCOUNT_REFUSED, field: 'dealDiscount' }) };
+            const dealDiscount = cleanDealDiscount(data.dealDiscount) ?? heldDeal;
             // Its tax (state §0.241): the rate the body names (a number 0-100, two places; anything else none — a new
             // version copies its source's, none included), else the org's default, stored on the quote from now on;
             // "Tax exempt" as the body names it, else the deal's dispatch customer's. The tax amount is the server's.
             const taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : await getDefaultTaxRate(orgId);
             const taxExempt = data.taxExempt != null ? cleanTaxExempt(data.taxExempt) : await dealCustomerExempt(orgId, access.deal.id);
-            const totals = calcTotals(lineItems, data.dealDiscount || 0, taxRate, taxExempt);
+            const totals = calcTotals(lineItems, dealDiscount, taxRate, taxExempt);
 
             const basePayload = {
                 ...sanitize(data),
@@ -346,7 +366,7 @@ export const handler = async (event) => {
                 taxRate: taxRate == null ? null : String(taxRate),
                 taxExempt,
                 version: Number(data.version) || 1,
-                dealDiscount: String(data.dealDiscount || 0),
+                dealDiscount: String(dealDiscount),
                 status: 'Draft',
                 // A new draft carries no approval stamp — the server writes one when
                 // the quote is submitted.
@@ -396,7 +416,10 @@ export const handler = async (event) => {
             if (linesMalformed(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: NOT_LINES, field: 'lineItems' }) };
             const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, { lineItems: productIdsOf(existing.lineItems) }, orgId);
             if (lined.error) return { statusCode: lined.status, headers, body: JSON.stringify({ error: lined.error, field: lined.field }) };
+            const lineDiscount = 'lineItems' in data ? lineDiscountRefusal(data.lineItems, existing.lineItems) : null;
+            if (lineDiscount) return { statusCode: 400, headers, body: JSON.stringify({ error: lineDiscount, field: 'lineItems' }) };
             if (taxRateRefused(data)) return { statusCode: 400, headers, body: JSON.stringify({ error: TAX_RATE_REFUSED, field: 'taxRate' }) };
+            if (dealDiscountRefused(data, existing.dealDiscount)) return { statusCode: 400, headers, body: JSON.stringify({ error: DEAL_DISCOUNT_REFUSED, field: 'dealDiscount' }) };
 
             // Merged over the stored row: a save names what it changes, and a field it
             // leaves out keeps its value — a PUT without lineItems used to write [] and
@@ -414,8 +437,11 @@ export const handler = async (event) => {
             // quote. Cleaned BEFORE the terms are compared: the database answers "8.25" where a screen sends 8.25.
             merged.taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : existing.taxRate;
             merged.taxExempt = 'taxExempt' in data ? cleanTaxExempt(data.taxExempt) : existing.taxExempt;
+            // Its deal discount (state §0.242): one the body names, cleaned (two places; blank or none is 0) — or, named as
+            // stored, the stored one; one it leaves out, the stored one (none reads 0).
+            merged.dealDiscount = 'dealDiscount' in data ? (cleanDealDiscount(data.dealDiscount) ?? existing.dealDiscount) : (existing.dealDiscount ?? 0);
             const lineItems = Array.isArray(merged.lineItems) ? merged.lineItems : [];
-            const totals = calcTotals(lineItems, merged.dealDiscount || 0, merged.taxRate, merged.taxExempt);
+            const totals = calcTotals(lineItems, merged.dealDiscount ?? 0, merged.taxRate, merged.taxExempt);
             const tiers = await getApprovalTiers(orgId);
 
             // The rules (src/utils/quoteRules.js — the client's buttons read the same):
@@ -495,7 +521,7 @@ export const handler = async (event) => {
                 ...totals,
                 taxRate: merged.taxRate == null ? null : String(merged.taxRate),
                 taxExempt: merged.taxExempt ?? null,
-                dealDiscount: String(merged.dealDiscount || 0),
+                dealDiscount: String(merged.dealDiscount ?? 0),
                 status: to,
                 ...stamps,
                 updatedAt: new Date(),

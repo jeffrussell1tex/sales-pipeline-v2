@@ -610,6 +610,9 @@ export const products = pgTable('products', {
     sortOrder:    integer('sort_order').default(0),
     // A product's Taxable switch (state §0.241): copied onto a quote line when added. None (null) is taxable.
     taxable:      boolean('taxable'),
+    // "Custom / Variable Price" (state §0.242; db/apply-product-custom-price.mjs): the rep enters the price on each
+    // quote, and the product stores a list price of 0. None (null) is a list-priced product.
+    customPrice:  boolean('custom_price'),
     createdBy:    varchar('created_by', { length: 255 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),

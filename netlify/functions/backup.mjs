@@ -255,28 +255,25 @@ export const handler = async (event) => {
         // ── PUT: save schedule config ─────────────────────────────────────────
         if (event.httpMethod === 'PUT') {
             const body = JSON.parse(event.body || '{}');
-            const { frequency, timeUtc, retentionDays, notifyOnFailure } = body;
             const schedId = `sched_${orgId}`;
 
-            await db.insert(backupSchedule).values({
-                id:              schedId,
-                orgId,
-                frequency:       frequency       || 'Daily',
-                timeUtc:         timeUtc         || '03:00',
-                retentionDays:   retentionDays != null ? Number(retentionDays) : 30,
-                notifyOnFailure: notifyOnFailure || '',
-                updatedAt:       new Date(),
-            }).onConflictDoUpdate({
+            // The org's one schedule row (sched_<org>) stays an upsert — the first save makes it — but each field is the
+            // body's when it names it, else the stored one, else the default (state §0.242, guide §18b125 rule 1). A save
+            // that left a field out wrote its default: a body without notifyOnFailure blanked the failure address. An
+            // explicit '' still clears it.
+            const [stored] = await db.select().from(backupSchedule).where(eq(backupSchedule.orgId, orgId)).limit(1);
+            const pick = (k, clean, dflt) => (k in body ? clean(body[k]) : stored?.[k] ?? dflt);
+            const frequency       = pick('frequency',       (v) => v || 'Daily', 'Daily');
+            const timeUtc         = pick('timeUtc',         (v) => v || '03:00', '03:00');
+            const retentionDays   = pick('retentionDays',   (v) => (v != null ? Number(v) : 30), 30);
+            const notifyOnFailure = pick('notifyOnFailure', (v) => v || '', '');
+            const schedule = { frequency, timeUtc, retentionDays, notifyOnFailure, updatedAt: new Date() };
+
+            await db.insert(backupSchedule).values({ id: schedId, orgId, ...schedule }).onConflictDoUpdate({
                 target: backupSchedule.id, setWhere: eq(backupSchedule.orgId, orgId),
-                set: {
-                    frequency:       frequency       || 'Daily',
-                    timeUtc:         timeUtc         || '03:00',
-                    retentionDays:   retentionDays != null ? Number(retentionDays) : 30,
-                    notifyOnFailure: notifyOnFailure || '',
-                    updatedAt:       new Date(),
-                },
+                set: schedule,
             });
-            await auditAs(orgId, userId, { action: 'backup.schedule_set', entityType: 'backup', entityId: schedId, entityName: 'Backup schedule', detail: `${frequency || 'Daily'} at ${timeUtc || '03:00'} UTC · keep ${retentionDays != null ? Number(retentionDays) : 30} days` });
+            await auditAs(orgId, userId, { action: 'backup.schedule_set', entityType: 'backup', entityId: schedId, entityName: 'Backup schedule', detail: `${frequency} at ${timeUtc} UTC · keep ${retentionDays} days` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }

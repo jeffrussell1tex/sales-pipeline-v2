@@ -7,6 +7,11 @@ import { serverErrorBody, auditAs } from './_lib.mjs';
 import { techScopeOf } from './_techScope.mjs';
 import { checkLinks } from './_links.mjs';
 import { coveredJobTypesOf, coveredToStore } from '../../src/utils/planLinks.js';
+// A plan's discount (state §0.242, guide §18b125 rule 3 — Jeff, 10 Nov: "Refuse it"): a percent a write names anew is
+// none (null or blank — stored as none) or a number 0-100, else refused naming the field and nothing is written; the
+// discount the plan already holds is never asked again.
+import { percentRefused } from '../../src/utils/quoteTotals.js';
+const DISCOUNT_REFUSED = 'discountPercent must be a number from 0 to 100, or blank for none';
 
 // A plan's links (state §0.223 — batch 4b-3 of OPEN_ITEMS §1 item 1, step D; Q11): its visit template and covered job
 // types name entries of THIS org's job templates and job types lists ("Any of this org's, refuse"), asked when a write
@@ -125,10 +130,11 @@ export const handler = async (event) => {
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
             // Its links (state §0.223): asked against the plan this upsert would overwrite IN THIS ORG, read first — a value
             // it holds is never asked again; another org's id reads none, so every link it names is asked.
-            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, coveredJobTypes: dispatchServicePlans.coveredJobTypes })
+            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, discountPercent: dispatchServicePlans.discountPercent, coveredJobTypes: dispatchServicePlans.coveredJobTypes })
                 .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));
             const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            if (percentRefused(data.discountPercent, prior?.discountPercent)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };
 
             const cadence = data.cadence ?? 'annual';
             const row = {
@@ -146,7 +152,7 @@ export const handler = async (event) => {
                 coveredJobTypes: coveredToStore(data.coveredJobTypes),
                 includedHours:   data.includedHours   ?? null,
                 responseHours:   data.responseHours   ?? null,
-                discountPercent: data.discountPercent ?? null,
+                discountPercent: data.discountPercent === '' ? null : data.discountPercent ?? null,
                 price:           data.price           ?? null,
                 billingPeriod:   data.billingPeriod   ?? 'annual',
                 active:          data.active !== false,
@@ -184,6 +190,7 @@ export const handler = async (event) => {
             if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             const linked = await checkLinks(PLAN_LINKS, data, current, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
+            if ('discountPercent' in data && percentRefused(data.discountPercent, current.discountPercent)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };
             const updates = { updatedAt: new Date() };
 
             [
@@ -191,6 +198,7 @@ export const handler = async (event) => {
                 'responseHours', 'discountPercent', 'price', 'billingPeriod', 'active', 'notes',
                 'leadDays', 'anchorMode',
             ].forEach(f => { if (f in data) updates[f] = data[f]; });
+            if (updates.discountPercent === '') updates.discountPercent = null;
             if ('renewalLeadDays' in data) {
                 const n = parseInt(data.renewalLeadDays, 10);
                 updates.renewalLeadDays = Number.isFinite(n) ? Math.max(0, n) : null;

@@ -21,6 +21,9 @@ import { approvalSummary, formatHours, sendBackNoteOf } from '../utils/approvalS
 // A quote's money, one copy (state §0.241, docs/design/sales-tax R1): the server stores it, every screen here reads
 // it — the deal discount and the tax with it; the totals block's rows and the typed rate (R6, R3).
 import { quoteTotals, lineTaxable } from '../utils/quoteTotals.js';
+import { lineDiscountRefusal } from '../utils/quoteTotals.js';
+import { productForm, productChanges } from '../utils/productChanges.js';
+import { dayOf } from '../utils/reportPeriod';
 import { quoteMoneyRows, quoteTaxNote, taxRateFromInput, taxRateInputOf, productTaxable } from '../utils/quoteMoneyRows.js';
 
 // ─── Design tokens ────────────────────────────────────────────
@@ -636,6 +639,11 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
         setError(null);
         // A rate the rules refuse is said here, never sent: the server would refuse it (§0.241).
         if (typedRate.error) { setError(typedRate.error); return; }
+        // A line discount outside 0-100 likewise (state §0.242, Q4 — Jeff, 10 Nov: "Refuse, name the line"): said here
+        // in the server's own words naming the line, the typed value kept to fix, nothing sent. A line the quote holds
+        // as stored is never asked again — the server's rule, one function.
+        const lineRefusal = lineDiscountRefusal(lineItems, quote.lineItems);
+        if (lineRefusal) { setError(lineRefusal); return; }
         const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };
         try { await onSave(payload); onClose(); }
         catch (err) { setError(err.message || 'Failed to save.'); }
@@ -1083,16 +1091,24 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const filtered = sorted;
 
     const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
-    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0]?.id || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true, taxable: productTaxable(p) }); setEditing(p.id); setError(null); };
+    // The form's first type and unit, shown for a product that holds none (productChanges.js productForm).
+    const formDefaults = { typeId: typeOpts[0]?.id || 'recurring', unit: unitOpts[0] || 'flat' };
+    const openEdit = (p) => { setForm(productForm(p, formDefaults)); setEditing(p.id); setError(null); };
     const cancel   = () => { setEditing(null); setError(null); };
 
+    // A save sends only what changed (state §0.242, productChanges.js): a new product the whole form, an edit the
+    // fields that differ from the product as stored — an edit that changed nothing sends nothing. A refused save keeps
+    // the form open and says why (the server's words) until it is saved or cancelled.
     const handleSave = async () => {
         if (!form.name.trim()) { setError('Product name is required.'); return; }
         if (!form.customPrice && (form.listPrice === '' || isNaN(Number(form.listPrice)))) { setError('A valid list price is required.'); return; }
+        const stored = editing === 'new' ? null : (products || []).find(p => p.id === editing) || null;
+        if (editing !== 'new' && !stored) { setError('This product is no longer in the Price Book — cancel and reload.'); return; }
+        const changes = productChanges(stored, form, formDefaults);
+        if (stored && !Object.keys(changes).length) { cancel(); return; }
         setSaving(true);
         try {
-            const payload = { ...form, listPrice: form.customPrice ? null : Number(form.listPrice), id: editing === 'new' ? undefined : editing };
-            await onSave(payload, editing === 'new' ? null : (products || []).find(p => p.id === editing) || null);
+            await onSave(stored ? { ...changes, id: stored.id } : changes, stored);
             cancel();
         } catch (err) { setError(err.message || 'Failed to save.'); }
         finally { setSaving(false); }
@@ -1484,7 +1500,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
                                     </div>
                                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                         <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q?.totalValue || 0)}</div>
-                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>{d.by || '—'} · {String(d.at || '').slice(0, 10) || '—'}</div>
+                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>{d.by || '—'} · {dayOf(d.at) || '—'}</div>
                                     </div>
                                 </div>
                             );
@@ -1819,7 +1835,12 @@ export default function QuotesTab() {
     const handleSendBack        = async (q, note) => !!(await moveQuote(q, 'Draft', { sendBack: true, sendBackNote: note }));
     // The rep takes her quote back out of the queue, to change it.
     const handleWithdraw        = (q) => moveQuote(q, 'Draft');
-    const handleSaveProductLocal  = async (data) => { await handleSaveProduct(data, data.id ? (products || []).find(p => p.id === data.id) || null : null); };
+    // A refused product save is said (state §0.242): the server's words, thrown so the Price Book form stays open and
+    // draws them; an answer for an org switched away from is quiet.
+    const handleSaveProductLocal  = async (data, stored) => {
+        const result = await handleSaveProduct(data, stored);
+        if (!result?.ok && !result?.quiet) throw new Error(result?.error || 'The product was not saved.');
+    };
     const handleDeleteProductLocal = async (id) => { await handleDeleteProduct(id); };
 
     const handleExportPDF = async () => {
@@ -2000,7 +2021,7 @@ export default function QuotesTab() {
                                                             <React.Fragment key={q.id}>
                                                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, opacity: faded ? 0.5 : 1 }}>
                                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 13, background: isLatest ? sc2.dot : T.bg, border: `1.5px solid ${sc2.dot}`, color: isLatest ? '#fff' : sc2.fg, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, fontFamily: T.sans }}>v{q.version || 1}</div>
-                                                                    <div style={{ fontSize: 9.5, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>{(q.updatedAt || q.createdAt || '').slice(5, 10)}</div>
+                                                                    <div style={{ fontSize: 9.5, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>{dayOf(q.updatedAt || q.createdAt).slice(5, 10)}</div>
                                                                 </div>
                                                                 {i < arr.length - 1 && <div style={{ width: 12, height: 1, background: T.border }} />}
                                                             </React.Fragment>

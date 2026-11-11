@@ -64,7 +64,7 @@ test('a quote written before tax never reads as changed: no rate (null) against 
 
 test('quotes.mjs: its money is quoteTotals\'s; the rate stored on the quote, the tax the server\'s; the deal\'s arr the pre-tax total', () => {
     const s = code(read('netlify/functions/quotes.mjs'));
-    assert.equal(count(s, "import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf } from '../../src/utils/quoteTotals.js';"), 1);
+    assert.equal(count(s, "import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, samePercent } from '../../src/utils/quoteTotals.js';"), 1);
     assert.equal(count(s, "import { customerForDeal } from '../../src/utils/dispatchCustomer.js';"), 1);
     const calc = between(s, 'function calcTotals(', '\n}\n');
     assert.ok(calc.includes('const t = quoteTotals({ lineItems, dealDiscount: dealDiscountPct, taxRate, taxExempt });'), 'one copy of the money');
@@ -93,7 +93,7 @@ test('quotes.mjs: its money is quoteTotals\'s; the rate stored on the quote, the
         REFUSE,
         "const taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : await getDefaultTaxRate(orgId);",
         'const taxExempt = data.taxExempt != null ? cleanTaxExempt(data.taxExempt) : await dealCustomerExempt(orgId, access.deal.id);',
-        'const totals = calcTotals(lineItems, data.dealDiscount || 0, taxRate, taxExempt);',
+        'const totals = calcTotals(lineItems, dealDiscount, taxRate, taxExempt);',
         '...sanitize(data),',
         '...totals,',
         'taxRate: taxRate == null ? null : String(taxRate),',
@@ -106,7 +106,7 @@ test('quotes.mjs: its money is quoteTotals\'s; the rate stored on the quote, the
         '...existing, ...sanitize(data),',
         "merged.taxRate = 'taxRate' in data ? cleanTaxRate(data.taxRate) : existing.taxRate;",
         "merged.taxExempt = 'taxExempt' in data ? cleanTaxExempt(data.taxExempt) : existing.taxExempt;",
-        'const totals = calcTotals(lineItems, merged.dealDiscount || 0, merged.taxRate, merged.taxExempt);',
+        'const totals = calcTotals(lineItems, merged.dealDiscount ?? 0, merged.taxRate, merged.taxExempt);',
         'const termsChanged = quoteTermsChanged(existing, merged);',
         'await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);',
         '...totals,',
@@ -126,10 +126,12 @@ test('products.mjs: Taxable is true, false or none — refused otherwise; a save
         'taxable: taxableOf(data.taxable),',
         'db.insert(products).values(payload)');
     const put = between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
+    // The PUT is an update of the keys the body names (state §0.242): the stored row read in the org, then sanitize's keys.
     order(put,
         "if ('taxable' in data && taxableOf(data.taxable) === undefined) return { statusCode: 400,",
-        '...sanitize(data),',
-        'set: payload');
+        'const { id: _id, ...named } = sanitize(data);',
+        'const changes = { ...named, ...pricesOf(data, stored.customPrice), updatedAt: new Date() };',
+        'db.update(products).set(changes)');
     assert.ok(!/taxable:\s*taxableOf/.test(put), 'the save names taxable only when the body does (sanitize) — never written as none for a body that left it out');
 });
 

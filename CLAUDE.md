@@ -134,8 +134,10 @@ One commit per verified batch; doc patch in the same commit.
 - `sanitize()` is a full-row builder: a partial PUT payload wipes absent
   columns unless the endpoint merges first —
   `sanitize({ ...existing, ...data })` (the users/leads pattern). Check this
-  shape on every endpoint before trusting its PUT; it has been wrong three
-  times (the third: `saved-reports`, 14 Sep 2026 — state §0.135). The
+  shape on every endpoint before trusting its PUT; it has been wrong four
+  times (the third: `saved-reports`, 14 Sep 2026 — state §0.135; the
+  fourth: `products`, with `export-schedules` and `export-dsr`, 10 Nov
+  2026 — state §0.242, guide §18b125). The
   accounts, contacts and deals bulk PUTs hand `partialRows` the stored rows,
   read whole in the org: a key
   one row leaves out and another sends is filled from its stored row,
@@ -278,6 +280,22 @@ One commit per verified batch; doc patch in the same commit.
   rate (THE GUARD, tests/quote-totals.test.mjs, tests/sales-tax.test.mjs,
   tests/quote-tax-screens.test.mjs, tests/quote-tax-docs.test.mjs; guide
   §18b124).
+- A save writes only what it names (guide §18b125): a PUT reads the row in
+  the org and updates the keys the body names — an id the org does not
+  hold is a 404, nothing written (products.mjs; export-schedules.mjs and
+  export-dsr.mjs merge over the stored row; backup.mjs's schedule field
+  by field); who made a product, export schedule or GDPR request is the server's, never a body's (quotes and deals not yet — OPEN_ITEMS §4.6); the Price
+  Book sends only what changed (`src/utils/productChanges.js`) and says
+  a refusal. A new insert or upsert in a PUT or PATCH block fails THE
+  GUARD (tests/put-upserts.test.mjs) until named with its reason. A
+  percent a request names anew — a quote's deal and line discounts, the
+  default tax rate, a service plan's discount — is none or 0-100, else a
+  400 naming the field, nothing written; a held value is never asked
+  again (`percentRefused`, `src/utils/quoteTotals.js`; THE GUARD,
+  tests/percent-ranges.test.mjs, tests/products-write.test.mjs). A day
+  shown for an instant is the member's day (`dayOf`, `parseLocalDate`;
+  an export's file name `todayLocal`) — THE GUARD, tests/date-local.test.mjs's
+  three scans.
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

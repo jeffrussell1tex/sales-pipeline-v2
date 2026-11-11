@@ -1454,10 +1454,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             });
                             const maxAct3 = Math.max(...oppActs.map(o=>o.actCount),1);
 
-                            // ── Rep activity summary (existing logic preserved)
-                            const byRep3 = allActs.reduce((acc,a)=>{ const r=a.rep||a.salesRep||a.assignedTo||a.author||'Unknown'; if(!acc[r])acc[r]={count:0,lastDate:null,thisWeek:0}; acc[r].count++; const d=new Date(a.date||a.createdAt||0); if(!acc[r].lastDate||d>acc[r].lastDate)acc[r].lastDate=d; const weekAgo=new Date(now-7*86400000); if(d>=weekAgo)acc[r].thisWeek++; return acc; },{});
-                            const repActRows3 = Object.entries(byRep3).sort((a,b)=>b[1].count-a[1].count);
-
                             // ── Task completion (existing)
                             const allTasks3 = roleFilteredTasks;
                             const getStatus3 = t => t.status || (t.completed?'Completed':'Open');
@@ -5673,7 +5669,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const typeLabelsP = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', 'Task Done':'TASK DONE', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
         const rowsHtml = events.map(e => {
             const lbl = typeLabelsP[e.actType] || (e.actType||'').toUpperCase().slice(0,10);
-            const date = e.date ? new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+            // A day read at local noon, an instant on the local clock (state §0.242): new Date(day) printed the day before west of Greenwich.
+            const date = parseLocalDate(e.date)?.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) || '—';
             const amt = e.amount > 0 ? '$' + (e.amount >= 1e6 ? (e.amount/1e6).toFixed(1)+'M' : e.amount >= 1e3 ? Math.round(e.amount/1e3)+'K' : Math.round(e.amount)) : '';
             return `<tr><td>${date}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:0.5px">${lbl}</span></td><td>${esc(e.label||'—')}</td><td style="color:#8a8378;font-size:11px">${esc(e.sub||'')}</td><td style="color:#8a8378">${esc(e.rep||'')}</td><td style="text-align:right;font-weight:${e.amount>0?700:400};color:${e.type==='won'?'#4d6b3d':e.type==='lost'?'#9c3a2e':'#2a2622'}">${amt}</td></tr>`;
         }).join('');
@@ -5786,7 +5783,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                             <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:12 }}>
                                 Owner <strong style={{ color:T.ink }}>{selectedAccount.accountOwner || selectedAccount.assignedRep || '—'}</strong>
                                 {selectedAccount.csm && <> &nbsp;·&nbsp; CSM <strong style={{ color:T.ink }}>{selectedAccount.csm}</strong></>}
-                                {selectedAccount.createdAt && <> &nbsp;·&nbsp; Customer since {selectedAccount.createdAt.slice(0,10)}</>}
+                                {selectedAccount.createdAt && <> &nbsp;·&nbsp; Customer since {dayOf(selectedAccount.createdAt)}</>}
                             </div>
 
                             {/* KPI strip */}
@@ -5847,7 +5844,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                             {/* First touch line */}
                             <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:12 }}>
                                 Owner <strong style={{ color:T.ink }}>{selectedContact.assignedRep || selectedContact.accountOwner || '—'}</strong>
-                                {selectedContact.createdAt && <> &nbsp;·&nbsp; First touch {selectedContact.createdAt.slice(0,10)}</>}
+                                {selectedContact.createdAt && <> &nbsp;·&nbsp; First touch {dayOf(selectedContact.createdAt)}</>}
                             </div>
 
                             {/* KPI strip */}
@@ -6176,9 +6173,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                     const age = openedRaw
                                         ? daysSince(openedRaw)
                                         : null;
-                                    const openedLabel = openedRaw
-                                        ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-                                        : null;
+                                    // A createdDate day at local noon, a createdAt instant on the local clock (state §0.242): noon
+                                    // appended to an instant read "Invalid Date". Not guarded by a scan (the shape is not reliably one).
+                                    const openedLabel = parseLocalDate(openedRaw)?.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) || null;
                                     // Days in current stage: prefer stageHistory match, fall back to stageChangedDate
                                     const stageEnteredRaw = (() => {
                                         const history = selectedOpp.stageHistory || [];

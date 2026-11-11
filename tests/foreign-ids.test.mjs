@@ -78,11 +78,12 @@ test('every dispatch create answers 409 for an id another org holds — never a 
 test('a PUT naming a record another org holds answers 404 — spiff claims and products now; the four strictly-update PUTs already did', () => {
     // Each pins the line that answers it. A claim is read in this org before anything else, and one it does not hold is
     // not found, for every role (state §0.204): its `if (!existing)`. Its `if (!updated)` answers only a claim deleted
-    // while the save was out now (tests/sales-links.test.mjs and tests/in-org-gates.test.mjs pin it). A product's upsert
-    // writes nothing for another org's id: its `if (!updated)`.
+    // while the save was out now (tests/sales-links.test.mjs and tests/in-org-gates.test.mjs pin it). A product is read in
+    // this org before anything is written, and one it does not hold is not found (state §0.242 — the PUT is an update, no
+    // longer an upsert): its `if (!stored)`; its `if (!updated)` answers only a product deleted while the save was out.
     for (const [file, v, noun, crash] of [
         ['spiff-claims', 'existing', 'Claim', "a rep's save, or one naming the claim's SPIFF or rep, reads the claim it did not find"],
-        ['products', 'updated', 'Product', 'the audit reads the row the upsert did not write'],
+        ['products', 'stored', 'Product', 'the audit reads the row the update did not write'],
     ]) {
         assert.ok(fn(file).includes(`if (!${v}) return { statusCode: 404, headers, body: JSON.stringify({ error: '${noun} not found in your organization' }) };`),
             `REGRESSION: ${file}'s PUT crashes on another org's record — ${crash}: a 500 that says it exists`);

@@ -204,7 +204,8 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
     // the plan before every write; the list itself stored (JD2); the GET answers a list.
     const sp = fn('dispatch-service-plans');
     assert.ok(sp.includes("const PLAN_LINKS = [{ key: 'visitTemplateId', kind: 'jobTemplate' }, { key: 'coveredJobTypes', kind: 'jobType', shape: 'many' }];"));
-    assert.ok(inOrder(sp, '            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, coveredJobTypes: dispatchServicePlans.coveredJobTypes })',
+    // The read holds the plan's discount too (state §0.242: a stored discount is never asked again).
+    assert.ok(inOrder(sp, '            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, discountPercent: dispatchServicePlans.discountPercent, coveredJobTypes: dispatchServicePlans.coveredJobTypes })',
         '                .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));',
         '            const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);', REFUSE, '            const row = {'),
         "the create (an upsert): the plan it would overwrite IN THIS ORG read first, its template and covered types held — another org's id reads none");

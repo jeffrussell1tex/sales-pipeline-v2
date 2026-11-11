@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { quoteTotals } from '../src/utils/quoteTotals.js';
 import { quoteMoneyRows, quoteTaxNote, taxRateFromInput, taxRateInputOf, productTaxable, TAX_RATE_REFUSAL } from '../src/utils/quoteMoneyRows.js';
 import { quoteTermsChanged, quoteEditOutcome } from '../src/utils/quoteRules.js';
+import { productForm, productChanges } from '../src/utils/productChanges.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
@@ -286,10 +287,17 @@ test('QuotesTab: "Total quoted", the waiting value and the card headlines stay p
 test('QuotesTab → Price Book: a Taxable switch per product — on for a new one, the stored one (none: on) on an edit, sent on every save', () => {
     const cat = between(code(read(TAB)), 'function CatalogTab(', '\n}\n');
     assert.ok(cat.includes("description: '', active: true, customPrice: false, taxable: true };"), 'a new product is taxable');
-    assert.ok(cat.includes('customPrice: p.customPrice === true, taxable: productTaxable(p) });'), 'an edit opens with the stored Taxable');
+    // Moved in §0.242: the form an edit opens with is productForm (src/utils/productChanges.js), the body productChanges.
+    assert.ok(cat.includes('const openEdit = (p) => { setForm(productForm(p, formDefaults)); setEditing(p.id); setError(null); };'), 'an edit opens with the stored Taxable');
+    assert.equal(productForm({ id: 'p1', name: 'A', taxable: false }).taxable, false);
+    assert.equal(productForm({ id: 'p1', name: 'A', taxable: null }).taxable, true, 'none reads taxable');
     assert.ok(cat.includes('<input type="checkbox" id="prod-taxable" checked={form.taxable !== false} onChange={e => setForm(f => ({ ...f, taxable: e.target.checked }))} />'));
     assert.ok(cat.includes('<label htmlFor="prod-taxable"'));
-    assert.ok(cat.includes('const payload = { ...form, listPrice: form.customPrice ? null : Number(form.listPrice), id: editing === \'new\' ? undefined : editing };'), 'the form, Taxable with it, is the body');
+    assert.ok(cat.includes('const changes = productChanges(stored, form, formDefaults);') && cat.includes('await onSave(stored ? { ...changes, id: stored.id } : changes, stored);'), 'the form, Taxable with it, is the body');
+    // A new product sends its Taxable; an edit sends it when switched (§0.242: only what changed).
+    const NEW = { name: 'A', category: '', productType: 'recurring', listPrice: '10', unit: 'flat', description: '', active: true, customPrice: false, taxable: false };
+    assert.equal(productChanges(null, NEW).taxable, false);
+    assert.deepEqual(productChanges({ id: 'p1', name: 'A', productType: 'recurring', listPrice: '10.00', unit: 'flat', taxable: true }, { ...NEW }), { taxable: false });
     assert.ok(cat.includes('{!productTaxable(prod) && <span'), 'the list says which products are not taxed');
 });
 

@@ -26,6 +26,8 @@ import { checkSettingsLinks } from './_links.mjs';
 import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js';
 // The AI models an Admin may choose and who may ask Claude (state §0.238): a value named anew is on the list.
 import { aiSettingsRefused } from '../../src/utils/aiModels.js';
+// The org's default tax rate a save names (state §0.242): a percent, checked by the quote money's one rule.
+import { percentRefused } from '../../src/utils/quoteTotals.js';
 import { sql } from 'drizzle-orm';
 import { invalidateRoster } from './_lib.mjs';
 // The stale settings save (state §0.224 — batch 4b-3, step B): a save writes only its own keys, each with a revision
@@ -81,6 +83,13 @@ export const putSeam = { beforeWrite: null };
 const ROW_KEYS = ['settings_pkey', 'settings_org_id_uniq'];
 const lostFirstInsert = (err) => [err, err?.cause].some((e) => e?.code === '23505'
     && (ROW_KEYS.includes(e?.constraint) || ROW_KEYS.some((c) => String(e?.message || '').includes(`"${c}"`))));
+
+// The org's default tax rate (state §0.242, guide §18b125 rule 3 — Jeff, 10 Nov: "Refuse it"): a rate a save's
+// quoteDefaults names is none (blank) or a number 0-100, else refused naming the blob and nothing is written; the rate
+// the row already holds is never asked again. Readers keep defaultTaxRateOf's clamp (quoteTotals.js).
+const QUOTE_DEFAULT_RATE_REFUSED = 'The default tax rate must be a number from 0 to 100, or blank for none.';
+const quoteDefaultRateRefused = (data, existingExtra) => 'quoteDefaults' in data && !!data.quoteDefaults && typeof data.quoteDefaults === 'object'
+    && percentRefused(data.quoteDefaults.taxRate, existingExtra?.quoteDefaults?.taxRate);
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 // retry: how many times this save has been tried again on a fresh read (a save that lost its race, J-B15). Never the
@@ -351,6 +360,7 @@ const handle = async (event, retry) => {
             // refused naming the field, nothing written; a value the row already holds is never asked again.
             const aiRefused = 'aiSettings' in data ? aiSettingsRefused(data.aiSettings, existingExtra.aiSettings) : null;
             if (aiRefused) return { statusCode: aiRefused.status, headers, body: JSON.stringify({ error: aiRefused.error, field: aiRefused.field }) };
+            if (quoteDefaultRateRefused(data, existingExtra)) return { statusCode: 400, headers, body: JSON.stringify({ error: QUOTE_DEFAULT_RATE_REFUSED, field: 'quoteDefaults' }) };
             const linked = await checkSettingsLinks(data, existingExtra, orgId);
             if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             // The teams this save renames (state §0.222 — Q7): every member holding one is renamed with it, below.

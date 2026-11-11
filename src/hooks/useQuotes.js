@@ -24,8 +24,6 @@ export function useQuotes() {
     // ── Modal / saving state ──────────────────────────────────────────────────
     const [quoteModalError, setQuoteModalError]     = useState(null);
     const [quoteModalSaving, setQuoteModalSaving]   = useState(false);
-    const [productModalError, setProductModalError] = useState(null);
-    const [productModalSaving, setProductModalSaving] = useState(false);
 
     // ── Deep link: navigate from opp modal → Quotes tab pre-filtered ─────────
     const [quotesDeepLinkOppId, setQuotesDeepLinkOppId] = useState(null);
@@ -129,10 +127,12 @@ export function useQuotes() {
     }, []);
 
     // ── Product CRUD ──────────────────────────────────────────────────────────
+    // A product save's answer (state §0.242, §18b123 rule 4): { ok: true, product } once saved; { ok: false, error }
+    // when refused — the server's words, else "The server returned N." — for the Price Book to draw; and
+    // { ok: false, quiet: true } when the org changed while it was out (state §0.175): that answer changes nothing
+    // and says nothing. `formData` is the body as the screen built it (productChanges.js — only what changed).
     const handleSaveProduct = useCallback(async (formData, editingProduct = null) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-        setProductModalError(null);
-        setProductModalSaving(true);
         try {
             const isEdit = !!editingProduct;
             const payload = isEdit
@@ -144,26 +144,19 @@ export function useQuotes() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return null;
-            if (!res.ok) {
-                setProductModalError(data.error || 'Failed to save product.');
-                return null;
-            }
+            const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+            if (!res.ok) return { ok: false, error: data.error || `The server returned ${res.status}.` };
             const saved = data.product || payload;
             setProducts(prev =>
                 isEdit
                     ? prev.map(p => p.id === saved.id ? saved : p)
                     : [...prev, saved]
             );
-            setProductModalError(null);
-            return saved;
+            return { ok: true, product: saved };
         } catch (err) {
-            if (!stillOrg(askedOrg)) return null;
-            setProductModalError('Failed to save product. Check your connection.');
-            return null;
-        } finally {
-            setProductModalSaving(false);
+            if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+            return { ok: false, error: 'The product was not saved — check your connection.' };
         }
     }, []);
 
@@ -214,9 +207,7 @@ export function useQuotes() {
         quoteModalSaving, setQuoteModalSaving,
         handleSaveQuote,
         handleDeleteQuote,
-        // Product ops
-        productModalError, setProductModalError,
-        productModalSaving, setProductModalSaving,
+        // Product ops — a save answers { ok, error | quiet }, drawn by the Price Book's own form (state §0.242)
         handleSaveProduct,
         handleDeleteProduct,
         // Helpers

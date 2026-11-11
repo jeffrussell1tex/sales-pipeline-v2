@@ -968,8 +968,6 @@ dbFetch('/.netlify/functions/users?me=true')
         quoteModalError, setQuoteModalError,
         quoteModalSaving, setQuoteModalSaving,
         handleSaveQuote, handleDeleteQuote,
-        productModalError, setProductModalError,
-        productModalSaving, setProductModalSaving,
         handleSaveProduct, handleDeleteProduct,
         getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
@@ -1942,8 +1940,6 @@ dbFetch('/.netlify/functions/users?me=true')
         handleSaveProduct, handleDeleteProduct,
         quoteModalError, setQuoteModalError,
         quoteModalSaving,
-        productModalError, setProductModalError,
-        productModalSaving,
         getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
         // SPIFF

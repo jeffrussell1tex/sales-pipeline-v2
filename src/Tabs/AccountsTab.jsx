@@ -6,7 +6,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 import { unarchived } from '../utils/pickLink.js';
 // Imported under another name: getWarmth's own `daysSince` (its result's key) would shadow it.
-import { daysSince as daysSinceDay } from '../utils/dateLocal';
+import { daysSince as daysSinceDay, todayLocal } from '../utils/dateLocal';
 
 // ── Design tokens ─────────────────────────────────────────────
 
@@ -773,7 +773,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                 a.website || '',
             ];
         });
-        exportToCSV(`accounts-${new Date().toISOString().slice(0,10)}.csv`, headers, rows, 'accounts');
+        exportToCSV(`accounts-${todayLocal()}.csv`, headers, rows, 'accounts');
     };
 
     // ── Views config — List → Business Book → Signal ─────────

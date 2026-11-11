@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['products', 'custom_price'],                    // §0.242: the Price Book's custom price (db/apply-product-custom-price.mjs --test --apply)
     ['quotes', 'tax_rate'],                          // §0.241: sales tax on quotes (db/apply-sales-tax.mjs --test --apply)
     ['quotes', 'tax_amount'],                        // (same script)
     ['quotes', 'tax_exempt'],                        // (same script)

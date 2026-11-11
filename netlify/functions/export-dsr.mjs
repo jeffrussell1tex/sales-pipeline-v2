@@ -113,31 +113,35 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };
 
-            const clean = sanitize(data);
-            const { id, ...updateFields } = clean;
+            // The request as stored, in this org (state §0.242, guide §18b125 rule 1): a save names what it changes, and
+            // a field it leaves out keeps its value — merged over the stored row, written as an update. It was an upsert
+            // of the body alone: a status change ({ id, status }) wrote the subject as none (a NOT NULL 500) and the
+            // notes and author as none; an id this org does not hold made a request, its SLA counted from that save.
+            // Now that is a 404, nothing written. Who made it is the stored one (rule 2); the SLA deadline is the one
+            // the create set, never counted again.
+            const [existing] = await db.select().from(dsrQueue)
+                .where(and(eq(dsrQueue.id, String(data.id)), eq(dsrQueue.orgId, orgId))).limit(1);
+            if (!existing) return { statusCode: 404, headers: HEADERS, body: JSON.stringify({ error: 'Request not found' }) };
+            const { id: _id, ...updateFields } = sanitize({ ...existing, ...data, createdBy: existing.createdBy });
 
-            // If marking completed, record the timestamp
-            const completedAt = data.status === 'completed' ? new Date() : null;
+            // When it was completed: stamped as the request moves into 'completed', cleared as it moves out of it, and
+            // otherwise the stored one.
+            const wasDone = existing.status === 'completed';
+            const isDone = updateFields.status === 'completed';
+            const completed = isDone && !wasDone ? { completedAt: new Date() } : wasDone && !isDone ? { completedAt: null } : {};
 
-            const [upserted] = await db
-                .insert(dsrQueue)
-                .values({ ...clean, orgId, slaDeadline: data.slaDeadline ? new Date(data.slaDeadline) : addDays(new Date(), SLA_DAYS) })
-                .onConflictDoUpdate({
-                    target: dsrQueue.id, setWhere: eq(dsrQueue.orgId, orgId),
-                    set: {
-                        ...updateFields,
-                        ...(completedAt ? { completedAt } : {}),
-                        updatedAt: new Date(),
-                    },
-                })
+            const [updated] = await db.update(dsrQueue)
+                .set({ ...updateFields, ...completed, updatedAt: new Date() })
+                .where(and(eq(dsrQueue.id, existing.id), eq(dsrQueue.orgId, orgId)))
                 .returning();
-            await auditAs(orgId, userId, { action: 'dsr.updated', entityType: 'dsr', entityId: upserted.id, entityName: upserted.subject, detail: `${upserted.type} · ${upserted.status || 'open'}` });
+            if (!updated) return { statusCode: 404, headers: HEADERS, body: JSON.stringify({ error: 'Request not found' }) };
+            await auditAs(orgId, userId, { action: 'dsr.updated', entityType: 'dsr', entityId: updated.id, entityName: updated.subject, detail: `${updated.type} · ${updated.status || 'open'}` });
 
             return {
                 statusCode: 200,
                 headers: HEADERS,
                 body: JSON.stringify({
-                    dsr: { ...upserted, slaLabel: slaLabel(upserted.slaDeadline) },
+                    dsr: { ...updated, slaLabel: slaLabel(updated.slaDeadline) },
                 }),
             };
         }

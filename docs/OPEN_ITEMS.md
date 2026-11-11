@@ -507,6 +507,49 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    3,262/3,262; the reader checked on dev, a switch of org included): one link shape (`appLink`) and one reader;
    every deal, task and quote link names its org; a preferences link opens
    the Notifications tab. Strike this once it ships.
+6. **The save cleanup batch** (Jeff, 10 Nov: "Cleanup batch" — the items
+   §0.241 filed). **Designed and answered 10 Nov**
+   (docs/design/save-cleanup/DESIGN.md and ANSWERS.md — S "Parts 1-4 now
+   (Recommended)", Q1-Q6 each the Recommended). **Parts 1-4 built 10 Nov
+   (state §0.242; guide §18b125), `products.custom_price` applied on Jeff's
+   go — NOT committed; harness deferred**, its Admin browser check PASSED
+   as Jeff: a save writes only what it names (the products PUT a strict
+   update, 404 for an id the org does not hold; the export schedule and
+   GDPR request PUTs merged over the stored row; the backup schedule field
+   by field; who made a row the server's); Custom / Variable Price a real
+   column; the Price Book sends only what changed and says a refusal; a
+   percent a request names anew in range or refused naming the field; a
+   day shown for an instant the member's day. Strike Parts 1-4 once §0.242
+   ships. **The next batch** (DESIGN.md's lists, as of `bb0c88e`):
+   - **Part 5, the refusal sweep:** the thirteen `throw new Error(x.error)`
+     with no fallback words (ExportDetail.jsx :138, :205, :259, :270;
+     ApiKeysDetail.jsx :427, :484; AutomationsDetail.jsx :358, :375, :385;
+     WebhooksDetail.jsx :164, :179, :189 — re-read 10 Nov), each to say
+     the server's words or "The server returned N." (ModalLayer.jsx:810 and
+     QuoteTemplatesDetail.jsx:1089 named exceptions); Backup's two
+     downloads (BackupDetail.jsx:414, :646) saving a refusal's JSON to disk
+     as `<id>.json` — check `ok`, save nothing, say why; QuotesTab's
+     `handleNewQuoteForOpp` opening the configurator on a failed save
+     (`if (!saved) return;`, as `handleNewVersion` does); `docsError`
+     (useDocuments.js:64) drawn in the Documents library as a read failure
+     (its draw site not yet read); THE GUARD tests/refusals-said.test.mjs
+     (an error state nothing reads but its setter; a throw with no
+     fallback words; self-tests). Beside it, the rest of the sweep (the
+     design's OUT, as recorded): the Kanban stage drag with no rollback;
+     a task's complete and snooze un-ticking without a word (TasksTab,
+     HomeTab's PlateRow); Reports' deal contact add, remove and persona;
+     calendar adds that only `console.warn`; ExportDetail's toggles, its
+     delete error replacing the page, its `window.alert`; the report save
+     timers (4 s, 3 s) and the holiday sync's 6 s; coaching-note network
+     rejects; `saveBlock`'s unassign failures; the quote PDF's silent
+     fallback.
+   - **Part 6, the Dispatch legacy import** (Dispatch → Vehicles &
+     equipment, "Import from the old settings list"; a live trap in one
+     demo org): a re-press re-sends every entry, nulling an edited
+     vehicle's make, VIN or service dates and clearing an equipment
+     check-out. Q7, not yet asked: send and count only the entries not yet
+     in the tables, refuse while the load failed, the card gone once all
+     are in (Recommended) — or empty the old lists after a clean import.
 
 ---
 
@@ -1348,6 +1391,13 @@ docs/design/ai-scoring/ANSWERS.md):**
   Microsoft answers in UTC unless asked otherwise (its documentation; not
   tested), so Outlook meetings would likely show at the wrong hour. Yahoo is
   not read at all.
+  **The Outlook question** (§0.242, 10 Nov): seven calendar sites read an
+  event's day as the first ten characters of its `dateTime` (App.jsx:1275,
+  which stores the day; MeetingPrepPanel.jsx; HomeTab.jsx ×3; TasksTab.jsx
+  ×2) — Graph's default is UTC, with no Prefer header sent and no `isAllDay`
+  read. tests/date-local.test.mjs names them as exceptions with their
+  counts until a live check of an Outlook connection answers which day
+  they should read.
 - **`dispatchJobTypes` and `dispatchTrades` settings panels.** `jobType` and
   `trade` are hard-coded and nothing branches on them.
 - **A dispatch job create in one transaction.** Today the New Job flow is three
@@ -2052,8 +2102,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
 - **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
-- **The server's day counts are UTC's, not the member's** (§0.240, Jeff: "App now, file server"): ai-score.mjs's prompt ("Deal age", "days PAST DUE" — a floor from 12:00 UTC), pipeline-alerts.mjs (`daysSince` from UTC noon at the member's alert hour; `todayStr` the UTC day for `daysLapsed` and task overdue) and digest.mjs (`daysOverdue` from UTC midnight) can be a day off for members far from UTC. Recommended: count from the member's day (`dayIn(tz, now)` — task-reminders.mjs's `getTodayInTimezone` lifted into dateLocal.js) with `calendarDays`; ai-score from the day the client sends or the caller's stored timezone. Low.
-- **A version's date on a Quotes card is its timestamp's UTC day** (found 10 Nov, §0.241's Admin check): src/Tabs/QuotesTab.jsx:2003 prints `(q.updatedAt || q.createdAt || '').slice(5, 10)` — the ISO string's UTC month and day, so a quote saved after 6 pm Central reads tomorrow (on the local server a day ahead all evening: the `timestamp without time zone` read back as local time). src/Tabs/ReportsTab.jsx:5789 ("Customer since") and :5850 ("First touch") slice a timestamp the same way. The class of guide §18b123 (a day a member sees is their own calendar day) for dates, not counts. Recommended: one local-day formatter in src/utils/dateLocal.js and a guard scan for a timestamp sliced to a day. Low.
+- **The server's day counts are UTC's, not the member's** (§0.240, Jeff: "App now, file server"): ai-score.mjs's prompt ("Deal age", "days PAST DUE" — a floor from 12:00 UTC), pipeline-alerts.mjs (`daysSince` from UTC noon at the member's alert hour; `todayStr` the UTC day for `daysLapsed` and task overdue) and digest.mjs (`daysOverdue` from UTC midnight) can be a day off for members far from UTC. Recommended: count from the member's day (`dayIn(tz, now)` — task-reminders.mjs's `getTodayInTimezone` lifted into dateLocal.js) with `calendarDays`; ai-score from the day the client sends or the caller's stored timezone. Low. The days the server prints are the same class (the save cleanup design's OUT, 10 Nov; as recorded where no line is given): the quote PDF's date line (`_quotePdf.mjs:390`, the function's clock), the digest's "Week of" (digest.mjs:475), the days opportunities, leads, email-inbound, invoices and `_coaching` stamp, and the UTC year in record numbers — each needs the member's day or time zone.
+- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 4 — `dayOf`; Reports' "Customer since" and "First touch" with it; the date guard's three scans).** **A version's date on a Quotes card is its timestamp's UTC day** (found 10 Nov, §0.241's Admin check): src/Tabs/QuotesTab.jsx:2003 prints `(q.updatedAt || q.createdAt || '').slice(5, 10)` — the ISO string's UTC month and day, so a quote saved after 6 pm Central reads tomorrow (on the local server a day ahead all evening: the `timestamp without time zone` read back as local time). src/Tabs/ReportsTab.jsx:5789 ("Customer since") and :5850 ("First touch") slice a timestamp the same way. The class of guide §18b123 (a day a member sees is their own calendar day) for dates, not counts. Recommended: one local-day formatter in src/utils/dateLocal.js and a guard scan for a timestamp sliced to a day. Low.
+- **Days compared through `new Date(day)` are not scanned** (§0.242's guard, 10 Nov; read in code): tests/date-local.test.mjs's DAY_AS_UTC takes a stored day handed to `new Date` only where it is printed (toLocale*). Four comparisons read both sides the same way, so they agree today and pass: src/components/FunnelView.jsx:302 (a sort by `stageChangedDate`), src/components/KanbanView.jsx:72 (the latest activity by `date`), src/Tabs/PipelineTab.jsx:983 (`forecastedCloseDate` against a history entry's `date`), src/Tabs/ReportsTab.jsx:5929 (the timeline's sort by `rawDate`). A day compared that way with an instant or with now would be a day off west of Greenwich. Recommended: `parseLocalDate` when each is next touched. Low.
 - **An import's stage entry made in a race is dated the clock read before it** (§0.239's review, 10 Nov; opportunities.mjs `importStagesWith`): a save that moves a deal's stage between an Overwrite's read and its write, on a deal the file leaves at the stage it read, gets a reversal entry dated the deal's earlier clock (the batch backfills that row's `stageChangedDate` from the read), and the move is not in the batch's count, audit row or Slack post. Race-only; before §0.239 the save's own entry was lost instead. Recommended: date an entry the read did not expect with the import's day. Low.
 - **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
 - **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
@@ -2169,8 +2220,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Quotes: the server takes two lines of one product** (the editor refuses
   a second; the version compare and the analytics assume one per product).
   No screen makes them; refusing them is quote-shape integrity, not tenancy.
-- **Quotes: the deal discount is never range-checked on the server** (§0.241's review, 10 Nov; read in code): quotes.mjs stores `String(data.dealDiscount || 0)` (:349, :498) and works the totals from it, so a request straight to the API can store a deal discount below 0 (a surcharge) or over 100 (a total below 0); no screen sends one. §0.241's job lines carry either as stored (`quoteDiscountJobItems`), so the job and its invoice still match the quote. Recommended: refuse a deal discount outside 0-100 with a 400 naming the field, as the tax rate is. Low.
-- **products.mjs PUT: a body that leaves fields out fails or wipes** (§0.241's review, 10 Nov; read in code; older than §0.241): the upsert's insert half takes the body as sent (products.mjs:88-97), so a PUT without `name` or `listPrice` is a 500 (both NOT NULL), and `minPrice` is written null whenever the body leaves it out (:92) — the `sanitize` full-row wipe CLAUDE.md names, a fourth instance. The Price Book sends the whole form, so no screen meets it. Recommended: merge over the stored row first (`sanitize({ ...existing, ...data })`, the users/leads pattern). Low.
+- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 3 — a 400 naming `dealDiscount` before any write, a held value never asked again; a line's discount likewise, naming `lineItems`).** **Quotes: the deal discount is never range-checked on the server** (§0.241's review, 10 Nov; read in code): quotes.mjs stores `String(data.dealDiscount || 0)` (:349, :498) and works the totals from it, so a request straight to the API can store a deal discount below 0 (a surcharge) or over 100 (a total below 0); no screen sends one. §0.241's job lines carry either as stored (`quoteDiscountJobItems`), so the job and its invoice still match the quote. Recommended: refuse a deal discount outside 0-100 with a 400 naming the field, as the tax rate is. Low.
+- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 1 — a strict update of the keys named, read in the org; 404 for an id it does not hold, nothing written). Corrected 10 Nov: "no screen meets it" was wrong — the Price Book's form never sent `minPrice`, so every edit wiped it (the save cleanup design's critic).** **products.mjs PUT: a body that leaves fields out fails or wipes** (§0.241's review, 10 Nov; read in code; older than §0.241): the upsert's insert half takes the body as sent (products.mjs:88-97), so a PUT without `name` or `listPrice` is a 500 (both NOT NULL), and `minPrice` is written null whenever the body leaves it out (:92) — the `sanitize` full-row wipe CLAUDE.md names, a fourth instance. The Price Book sends the whole form, so no screen meets it. Recommended: merge over the stored row first (`sanitize({ ...existing, ...data })`, the users/leads pattern). Low.
+- **A product switched off custom with no list price keeps 0** (§0.242, 10 Nov; read in code): products.mjs `pricesOf` (:60) writes a list price only when the body names one, or 0 while the product stays custom-priced, so a PUT of `{ customPrice: false }` alone leaves the stored 0 and the product reads list-priced at $0. The Price Book always sends the typed price with the switch (`productChanges`; its own check refuses an empty one), so only a request straight to the API meets it. Recommended: refuse a switch off that names no list price, naming `listPrice`. Low.
+- **A product set inactive leaves the Price Book after a reload** (the save cleanup design's OUT, 10 Nov; read in code): the app loads products once, with no `includeInactive` (App.jsx:512 `loadProducts()`; useQuotes.js:48), and the products GET answers an inactive one only when asked, to an Admin (products.mjs:80-82) — so after a reload an inactive product is in no list the app draws, and the Price Book cannot set it active again. The quote builder filters `active` itself (QuotesTab.jsx:600); the other product readers are not read. Recommended: the Price Book loads with `includeInactive` for an Admin, and each other reader filters. Low.
+- **Percents and amounts the save cleanup batch left unchecked** (the design's OUT, 10 Nov; as recorded): a deal's probability (no range check; an import's "0" becomes none; a stage default copies the funnel weight unclamped) needs a census of probabilities and funnel weights first — a deal window re-sending a stored 150 would be refused, and the import's Preview needs per-row refusals — beside §4.3's Funnel stages item (Medium); a SPIFF's percent and a claim's amount; commission tiers (no reader); KPI thresholds; lead conversion benchmarks; a lead score's `?? 50`. Low.
 - **A deal's account by name: the report engine trims the name,
   `accountOfDeal` does not** (§0.210's doc check, 23 Oct; read in code,
   and run by a checker on made-up rows): the engine compares a deal's
@@ -2766,6 +2820,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   never. Recommended: "1 contact still uses this", with §4.8's
   "Opportunitys" and "Activitys" in one pass over the app's counted
   words.
+- **Settings → Pipelines draws figures from nothing** (the save cleanup design's OUT, 10 Nov; read in code): the stage table's "Avg days" is `5+i*2` and its "Open" `Math.max(5, 42-i*5)` — the row's position (src/Tabs/settings/salesProcess/PipelinesDetail.jsx:537-538); "Default prob." reads the file's own `STAGE_PROBS` (:32, :535), not the org's stages. Recommended: real figures, or no columns. Low.
+- **A settings row whose id is not its org cannot be saved** (§0.242's itest seed, 10 Nov; open question): the settings PUT writes its row as `id: orgId` with the conflict target the id (settings.mjs:504, :526); a row stored under another id meets the org's unique key instead, which the PUT reads as a lost first insert (`lostFirstInsert`, :83-85, :545) and, after its retries, answers 409 "stale" (:550-555). Seen only with a test seed; whether any row in the app database has an id other than its org: not checked (a SELECT, on Jeff's go). Low.
 
 ### 4.4 Dispatch
 
@@ -3425,6 +3481,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - a backup restore's other links: its clean-up (§0.199, §0.201) clears
     batch 4's fields, a deal's account and Dispatch's; these fields stay as
     the file has them.
+- **A quote's or deal's maker can come from the body** (§0.242's doc check, 10 Nov; read in code): quotes.mjs:69 (`'createdBy'` in ALLOWED_FIELDS) and :375 (the create's `|| data.createdBy` when the roster lookup comes back empty); opportunities.mjs:169 (`createdBy: data.createdBy || null` in sanitize), reaching the create (:379) and the merged PUT (:656), so a deal PUT naming createdBy overwrites it. Recommended: drop `createdBy` from both allowlists; the create stamps the caller's name, a save keeps the stored one (as products since §0.242, guide §18b125 rule 2). Low.
 - **Creates that crash on an id another org holds — the rest of the class**
   (the 4b-2 map, 15 Oct; read in code; Jeff: "file the rest" — one class
   batch with a scan test). The products, saved-reports, coaching-notes,
@@ -3443,6 +3500,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a scope such as 'toString' passes the "Unknown scope" check and the read
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
+  Since §0.242 (10 Nov; not yet shipped; guide §18b125): the products
+  create answers 409 for a taken id, this org's or another's; the
+  export-schedules and export-dsr PUTs are updates merged over the stored
+  row read in the org — an id the org does not hold a 404, nothing written,
+  the maker the stored one — so neither crashes on another org's id nor
+  blanks what a save leaves out. The rest of the class stands.
+- **export-dsr's PUT takes any request type** (§0.242, 10 Nov; read in code): the POST refuses a type that is not `access` or `erasure` (export-dsr.mjs:85-86); the PUT, merged since §0.242, writes `sanitize`'s `type: d.type || 'access'` (:32), so any other text a body names is stored. Admin only. Recommended: refuse it as the POST does, naming `type`. Low.
+- **An export schedule's save naming `name: ''` is a 500** (§0.242, 10 Nov; read in code): `sanitize` writes a blank as none (`d.name || null`, export-schedules.mjs:22) into a NOT NULL column (db/schema.ts:779); `scope` and `cadence` have the same shape (:23-24; schema :780-781). Admin only; the merge keeps them when a body leaves them out. Recommended: a 400 naming the field. Low.
+- **Whether the merged PUT upserts still create on an id the org does not hold** (§0.242, 10 Nov; open question): the accounts, activities, contacts, leads, opportunities and tasks PUTs are upserts merged over the stored row (`setWhere` on the org); tests/put-upserts.test.mjs names each with its reason — it does not settle whether a PUT naming an unknown id makes a row past the POST's checks. Recommended: an itest per endpoint, then a 404 where one creates (as products, §0.242).
+- **webhooks.mjs updates a subscription by id alone** (the save cleanup design's OUT, 10 Nov; read in code): the PUT's write is `.where(eq(webhookSubscriptions.id, data.id))` (webhooks.mjs:241), with no org; the row was read in the org first (`existing`), so it is a breach of the house rule (every write org-scoped), not a leak. Recommended: add the org to the write's where. Low.
+- **A coaching note's `readBy` is rebuilt whole from a read** (the save cleanup design's OUT, 10 Nov; read in code): coaching-notes.mjs:138-139 builds the map from the note as read and writes it whole, so two readers marking it at once can lose one mark. Recommended: merge the key in SQL (`readBy || jsonb_build_object(...)`). Low.
 - ~~**Two jobs write the whole `settings.extra` back with no lock**~~ — DONE
   in §0.224 (committed `a03b958`; pushed to dev 4 Nov, SHIPPED 4 Nov, the forty-fourth ship): each merges only its key, guarded on what it
   read (the nightly scoring and Train now; integration requests).
@@ -4423,8 +4491,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   the notes. The notes, product names, quote name, address lines and meta
   values are covered (`_quotePdf.mjs` `printable`).
 - **The quote PDF and email do not mark an untaxed line** (§0.241, 10 Nov): a quote with a rate taxes only its taxable lines and the Tax row says the rate, but neither document says which lines it left out — the version compare has a NOT TAXED pill (QuotesTab.jsx:519); the PDF (`_quotePdf.mjs`) and the email (quote-email.mjs) nothing. Recommended: a "Not taxed" mark on the line where the quote has a rate and is not exempt. Low.
-- **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
+- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 5 — `handleSaveProduct` answers `{ ok, error | quiet }`; the form closes only on success and draws the server's words).** **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
 - **Est. margin and the average discount leave out the deal discount** (§0.241's review, 10 Nov; older than §0.241): the tab's `calcLineTotals` (QuotesTab.jsx:104-112) works both from the lines' subtotal (`netTotal = t.subtotal`), so a quote with a deal discount shows a margin and an "N% off list" above what it earns. The totals block's rows include the deal discount since §0.241. Recommended: work both from `totalValue`. Low.
+- **Day words from 24-hour spans** (the save cleanup design's OUT, 10 Nov; as recorded): AdminView, AuditDetail, BackupDetail's `fmtWhen`, ExportDetail, ApiKeysDetail and TasksTab's `fmtAgo` say "yesterday" or "N days ago" from a span of time rounded to days, not from calendar days (§18b123 rule 1's class, for words). Recommended: `calendarDays` where a day is said. Low.
+- **Home's "completed this week" compares an instant's text with a day** (the save cleanup design's OUT, 10 Nov; read in code): src/Tabs/HomeTab.jsx:476-479 takes `t.completedDate || t.updatedAt` and compares the text with the week's first day (`comp >= weekStartStr`) — an `updatedAt` instant compares by its UTC day. Low. Beside it, not read: the format of Dispatch's certificate `expiresAt`.
+- **The API docs on quotes** (the save cleanup design's OUT, 10 Nov; read in code): public/api-docs.html:914 says the quotes PUT "Upserts by `id`"; its status list (:827) names Draft, Sent, Viewed, Accepted and Declined; :832's "dealDiscount … (0–100)" is true since §0.242. Recommended: correct the two with the next API docs pass. Low.
 
 - **Reports' Activity History declares eleven sub-components inside
   itself** (the cleanup batch's design, 18 Oct, §1 row P40's eighth item;
@@ -4630,6 +4701,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `Toggle` (UserModal.jsx:207), Reports' `PanelB` (ReportsTab.jsx:1293) and
   its six `PanelD` (:2773, :2959, :3213, :3411, :3596, :3861 — the same
   panel declared six times; §0.213's read). Opportunistic.
+  Reports' SavedReportsTab declares its preview primitives inside itself
+  (`AvatarS`, `MiniBar`, `MiniBarH`, `MiniLineS`, `MiniStackedS`,
+  `MiniFunnelS` — ReportsTab.jsx:2647-2669; the save cleanup design's
+  OUT, 10 Nov), against CLAUDE.md's frontend rule.
 - **A quote template's starting blocks are cut off at 260 px and never
   scroll** (§0.213's read, 28 Oct; read in code, not seen in the pane): a
   blank template's "Starting blocks" list (QuoteTemplatesDetail.jsx:355,
@@ -4993,6 +5068,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `editingSubAccount`, which no caller reaches now. Recommended: a
   class-wide pass with an unused-binding guard (a parse, committed as a
   test), rather than more of batch 1.
+  TasksTab's `groupByDay` (and Reports' `byRep3` / `repActRows3`) were
+  deleted in §0.242. The save cleanup design's OUT adds, as recorded:
+  useUserHandlers' `handleDeleteUser`, useQuotes' delete handlers and
+  App's Log-from-calendar.
 - **A memory-note amendment for Jeff to approve** (to
   bash-heredoc-backslashes): the Write tool is safe for a backslash before
   `(` or `{`, but turns a backslash, "u" and four hex digits into that

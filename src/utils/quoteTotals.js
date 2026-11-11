@@ -45,6 +45,34 @@ export function cleanTaxRate(v) {
     return n >= 0 && n <= 100 ? roundCents(n) : null;
 }
 
+// A percent a request names (state §0.242, guide §18b125 rule 3): none (null or blank) or a number 0-100 — anything
+// else is refused, naming the field, and nothing is written. The value the row already holds, named again (by meaning:
+// the stored "12.50" and a screen's 12.5), is never asked again (§0.204), whatever it is. `stored` is that value, or
+// none for a create.
+// The same value by meaning when both are numbers; else the same text — a held value that is not a number (one stored
+// before §0.242, "8,25") re-sent as it stands is still the row's own (the review).
+export const samePercent = (v, stored) => (rateLike(v) && rateLike(stored) && Number(v) === Number(stored))
+    || (stored != null && stored !== '' && typeof v !== 'object' && typeof stored !== 'object' && String(v).trim() === String(stored).trim());
+export const percentRefused = (v, stored) => v != null && v !== '' && cleanTaxRate(v) == null && !samePercent(v, stored);
+
+// A quote's deal discount as a request names it (state §0.242): a number 0-100, kept to two places; none (null or
+// blank, or a body that leaves it out) is 0; anything else is refused (null) — quotes.mjs answers 400 naming the field.
+export function cleanDealDiscount(v) {
+    if (v == null || v === '') return 0;
+    return cleanTaxRate(v);
+}
+
+// A quote's lines whose discount a request names out of range (state §0.242): a line's discountPct is none (null or
+// blank) or a number 0-100. A line the stored lines hold — the same product at the same discount — is never asked
+// again. The refusal names the line, counted from 1 ("Line 2: …"); null when every line stands.
+export function lineDiscountRefusal(lineItems, storedLines = []) {
+    const lines = Array.isArray(lineItems) ? lineItems : [];
+    const held = Array.isArray(storedLines) ? storedLines : [];
+    const at = lines.findIndex((li) => li && typeof li === 'object' && percentRefused(li.discountPct, null)
+        && !held.some((s) => s && typeof s === 'object' && s.productId === li.productId && samePercent(li.discountPct, s.discountPct)));
+    return at < 0 ? null : `Line ${at + 1}: discount must be a number from 0 to 100.`;
+}
+
 // The org's default rate (R3), read through this one reader: Settings → Quotes keeps it in the quoteDefaults blob,
 // which the settings PUT stores as sent — so it is clamped here, 0-100 and two places, and anything that is not a
 // number is none (null). `quoteDefaults` is the blob (settings.extra.quoteDefaults, or the settings GET's).

@@ -5809,7 +5809,9 @@ export default function DispatchTab() {
                 const hoursMap = {};
                 dbJobs.forEach(j => {
                     if (!j.scheduledDate || !j.durationMinutes) return;
-                    const d = new Date(j.scheduledDate);
+                    // The job's day at local midnight (state §0.242): new Date(day) is UTC midnight, the evening before west
+                    // of Greenwich, so a job this Sunday fell out of "hours this week".
+                    const d = fromYmd(j.scheduledDate);
                     if (d < weekStart || d >= weekEnd) return;
                     const hrs = j.durationMinutes / 60;
                     const techIds = [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean);

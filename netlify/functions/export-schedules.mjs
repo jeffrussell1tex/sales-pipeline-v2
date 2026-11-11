@@ -73,19 +73,23 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };
 
-            const clean = sanitize(data);
-            const { id, ...updateFields } = clean;
+            // The schedule as stored, in this org (state §0.242, guide §18b125 rule 1): a save names what it changes, and
+            // a field it leaves out keeps its value — merged over the stored row, written as an update. It was an upsert
+            // of the body alone: a toggle ({ id, enabled }) wrote the name, scope and cadence as none (a NOT NULL 500)
+            // and the author as none; an id this org does not hold made a schedule. Now that is a 404, nothing written.
+            // Who made it is the stored one (rule 2), never the body's.
+            const [existing] = await db.select().from(exportSchedules)
+                .where(and(eq(exportSchedules.id, String(data.id)), eq(exportSchedules.orgId, orgId))).limit(1);
+            if (!existing) return { statusCode: 404, headers: HEADERS, body: JSON.stringify({ error: 'Schedule not found' }) };
+            const { id: _id, ...updateFields } = sanitize({ ...existing, ...data, createdBy: existing.createdBy });
 
-            const [upserted] = await db
-                .insert(exportSchedules)
-                .values({ ...clean, orgId })
-                .onConflictDoUpdate({
-                    target: exportSchedules.id, setWhere: eq(exportSchedules.orgId, orgId),
-                    set: { ...updateFields, updatedAt: new Date() },
-                })
+            const [updated] = await db.update(exportSchedules)
+                .set({ ...updateFields, updatedAt: new Date() })
+                .where(and(eq(exportSchedules.id, existing.id), eq(exportSchedules.orgId, orgId)))
                 .returning();
-            await auditAs(orgId, userId, { action: 'export_schedule.updated', entityType: 'export_schedule', entityId: upserted.id, entityName: upserted.name, detail: `${upserted.scope} · ${upserted.format || 'CSV'} · ${upserted.cadence || 'scheduled'} · ${upserted.enabled === false ? 'paused' : 'active'}` });
-            return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ schedule: upserted }) };
+            if (!updated) return { statusCode: 404, headers: HEADERS, body: JSON.stringify({ error: 'Schedule not found' }) };
+            await auditAs(orgId, userId, { action: 'export_schedule.updated', entityType: 'export_schedule', entityId: updated.id, entityName: updated.name, detail: `${updated.scope} · ${updated.format || 'CSV'} · ${updated.cadence || 'scheduled'} · ${updated.enabled === false ? 'paused' : 'active'}` });
+            return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ schedule: updated }) };
         }
 
         // ── DELETE — remove a schedule ────────────────────────────────────

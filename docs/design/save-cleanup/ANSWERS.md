@@ -14,4 +14,4 @@ The design: DESIGN.md beside this file (over `bb0c88e`). Asked 10 Nov in the dia
 
 Not asked (Part 6, the next batch): Q7, the Dispatch "Import from the old settings list" card.
 
-Pre-build census (SELECT only, 10 Nov): no settings row holds a `quoteDefaults.taxRate`; 2 service plans, none out of range; 0 quotes with a deal discount out of range or a line discount outside 0-100 (the mapper's); `products.custom_price` not yet a column. Still Jeff's: the schema apply of `products.custom_price`.
+Pre-build census (SELECT only, 10 Nov): no settings row holds a `quoteDefaults.taxRate`; 2 service plans, none out of range; 0 quotes with a deal discount out of range or a line discount outside 0-100 (the mapper's); `products.custom_price` not yet a column. Still Jeff's: the schema apply of `products.custom_price` — applied 10 Nov on Jeff's go ("Apply it now (Recommended)"), the test then the app database, read back (state §0.242).

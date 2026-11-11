@@ -60,20 +60,6 @@ const dayLabelShort = isoDay => {
     return d.toLocaleDateString('en-US', { weekday: 'short' });
 };
 
-// Group activity items by ISO day, newest first
-function groupByDay(items) {
-    const map = new Map();
-    for (const it of items) {
-        if (!it.when) continue;
-        const day = it.when.split('T')[0];
-        if (!map.has(day)) map.set(day, []);
-        map.get(day).push(it);
-    }
-    return [...map.entries()]
-        .sort(([a], [b]) => b.localeCompare(a))
-        .map(([day, dayItems]) => ({ day, items: dayItems.sort((a, b) => (b.when || '').localeCompare(a.when || '')) }));
-}
-
 function resolveAccountName(item, opportunities, accounts) {
     if (item.accountId) {
         const a = accounts.find(a => a.id === item.accountId);

@@ -29,6 +29,7 @@ import { popoverPlacement } from '../../../utils/popoverPlacement.js';
 // seeded with the label, so an untouched row invited someone as 'Sales Rep' —
 // which auth.mjs did not recognise, and used to wave through as a rep anyway.
 import { ROLE_OPTIONS } from '../../../utils/roles.js';
+import { todayLocal } from '../../../utils/dateLocal';
 const ROLE_LABEL = ROLE_OPTIONS.reduce((m, o) => { m[o.value] = o.label; return m; }, {});
 // A role we do not know is rendered AS ITSELF, never translated and never hidden.
 // Legacy rows still hold `member`, `admin` and `Sales Rep`; showing the raw string
@@ -360,7 +361,7 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
             const csv = [header, ...rows].join('\n');
             const blob = new Blob([csv], { type:'text/csv' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `accelerep-users-${new Date().toISOString().split('T')[0]}.${format.toLowerCase()}`;
+            const a = document.createElement('a'); a.href = url; a.download = `accelerep-users-${todayLocal()}.${format.toLowerCase()}`;
             a.click(); URL.revokeObjectURL(url);
             setExporting(false); setExportDone(true);
             setTimeout(() => setExportDone(false), 3000);

@@ -23,6 +23,7 @@
 import React from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch } from '../../../utils/storage';
+import { todayLocal } from '../../../utils/dateLocal';
 import { useApp } from '../../../AppContext';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, DropdownPanel, DropdownOption, PolicySelect } from '../security/shared.jsx';
@@ -98,7 +99,7 @@ const downloadEvents = (events, fmt) => {
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `accelerep-audit-${new Date().toISOString().split('T')[0]}.${ext}`;
+    a.href = url; a.download = `accelerep-audit-${todayLocal()}.${ext}`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
 };
