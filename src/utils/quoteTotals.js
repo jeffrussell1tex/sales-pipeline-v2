@@ -73,6 +73,15 @@ export function lineDiscountRefusal(lineItems, storedLines = []) {
     return at < 0 ? null : `Line ${at + 1}: discount must be a number from 0 to 100.`;
 }
 
+// A new version's deal discount as its source holds it (state §0.242, the review; §0.244): `versions` are the stored
+// quotes of the number the new version names (quotes.mjs reads them in the org, on the deal). The value one of them
+// holds — the same percent — is held, never asked again (a restore could land one out of range, and no screen edits
+// a deal discount); null when none holds it, so a value named anew is asked.
+export function heldDealDiscount(dealDiscount, versions = []) {
+    const held = Array.isArray(versions) ? versions : [];
+    return held.find((q) => q && typeof q === 'object' && samePercent(dealDiscount, q.dealDiscount))?.dealDiscount ?? null;
+}
+
 // The org's default rate (R3), read through this one reader: Settings → Quotes keeps it in the quoteDefaults blob,
 // which the settings PUT stores as sent — so it is clamped here, 0-100 and two places, and anything that is not a
 // number is none (null). `quoteDefaults` is the blob (settings.extra.quoteDefaults, or the settings GET's).

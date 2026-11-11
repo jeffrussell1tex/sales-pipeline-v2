@@ -24,7 +24,7 @@ import { APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, approvalTierStats } from '../../
 import { checkLinks } from './_links.mjs';
 import { productIdsOf } from '../../src/utils/linkIds.js';
 // A quote's money, one copy (state §0.241): the pre-tax totals as they were always stored, and the tax beside them.
-import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, samePercent } from '../../src/utils/quoteTotals.js';
+import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, heldDealDiscount } from '../../src/utils/quoteTotals.js';
 // A new quote's "Tax exempt" is its deal's dispatch customer's — the customer found by Dispatch's one rule.
 import { customerForDeal } from '../../src/utils/dispatchCustomer.js';
 
@@ -342,7 +342,7 @@ export const handler = async (event) => {
                     .where(and(eq(quotes.orgId, orgId), eq(quotes.opportunityId, access.deal.id), eq(quotes.quoteNumber, claimedNumber)))
                 : [];
             const heldLines = versions.flatMap((q) => (Array.isArray(q.lineItems) ? q.lineItems : []));
-            const heldDeal = versions.find((q) => samePercent(data.dealDiscount, q.dealDiscount))?.dealDiscount ?? null;
+            const heldDeal = heldDealDiscount(data.dealDiscount, versions);
             const lineDiscount = lineDiscountRefusal(data.lineItems, heldLines);
             if (lineDiscount) return { statusCode: 400, headers, body: JSON.stringify({ error: lineDiscount, field: 'lineItems' }) };
 

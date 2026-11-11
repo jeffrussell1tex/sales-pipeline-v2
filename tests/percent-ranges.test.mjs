@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { cleanDealDiscount, percentRefused, samePercent, lineDiscountRefusal, cleanTaxRate, defaultTaxRateOf } from '../src/utils/quoteTotals.js';
+import { cleanDealDiscount, percentRefused, samePercent, lineDiscountRefusal, cleanTaxRate, defaultTaxRateOf, heldDealDiscount } from '../src/utils/quoteTotals.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
@@ -72,6 +72,22 @@ test('the readers keep their clamps (Q3: no new clamps, none taken away)', () =>
     assert.equal(defaultTaxRateOf({ taxRate: -3 }), 0);
 });
 
+// A new version's copied deal discount (state §0.244): "§0.242 review: a new version's copied deal discount asked as
+// new" survived the scoped run of 11 Nov — the rule sat in quotes.mjs, which `npm test` cannot load. It is
+// heldDealDiscount's now, RUN here; where it is read is pinned by the scan below.
+test('heldDealDiscount: the value a source version holds is held, never asked again; a value named anew is asked', () => {
+    const versions = [{ dealDiscount: '150' }, { dealDiscount: '10' }];
+    assert.equal(heldDealDiscount('150', versions), '150', 'the source\'s out-of-range value, held');
+    assert.equal(percentRefused('150', heldDealDiscount('150', versions)), false, 'so the copy is not refused');
+    assert.equal(heldDealDiscount(150, versions), '150', 'the same percent as a number');
+    assert.equal(heldDealDiscount('10.00', versions), '10', 'the same percent, written apart');
+    assert.equal(heldDealDiscount('200', versions), null, 'a value no version holds is not held');
+    assert.equal(percentRefused('200', heldDealDiscount('200', versions)), true, 'so it is asked, and refused');
+    assert.equal(heldDealDiscount('150', []), null, 'a first version holds nothing');
+    assert.equal(heldDealDiscount('150', undefined), null);
+    assert.equal(heldDealDiscount('150', [null, 'x', { dealDiscount: '150' }]), '150', 'a row that is not a quote is passed over');
+});
+
 // ── where each refusal sits, by scan ─────────────────────────────────────────
 
 test('quotes.mjs: the deal discount and each line\'s discount are refused, naming the field, before the totals, the deal\'s sync and any write', () => {
@@ -82,6 +98,7 @@ test('quotes.mjs: the deal discount and each line\'s discount are refused, namin
     const post = between(s, "if (event.httpMethod === 'POST') {", "if (event.httpMethod === 'PUT') {");
     order(post,
         "if (linesMalformed(data)) return",
+        'const heldDeal = heldDealDiscount(data.dealDiscount, versions);',
         'const lineDiscount = lineDiscountRefusal(data.lineItems, heldLines);',
         LINE,
         'if (dealDiscountRefused(data, heldDeal)) ' + DEAL,

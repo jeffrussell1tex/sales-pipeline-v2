@@ -64,7 +64,7 @@ test('a quote written before tax never reads as changed: no rate (null) against 
 
 test('quotes.mjs: its money is quoteTotals\'s; the rate stored on the quote, the tax the server\'s; the deal\'s arr the pre-tax total', () => {
     const s = code(read('netlify/functions/quotes.mjs'));
-    assert.equal(count(s, "import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, samePercent } from '../../src/utils/quoteTotals.js';"), 1);
+    assert.equal(count(s, "import { quoteTotals, cleanTaxRate, cleanTaxExempt, defaultTaxRateOf, cleanDealDiscount, percentRefused, lineDiscountRefusal, heldDealDiscount } from '../../src/utils/quoteTotals.js';"), 1);
     assert.equal(count(s, "import { customerForDeal } from '../../src/utils/dispatchCustomer.js';"), 1);
     const calc = between(s, 'function calcTotals(', '\n}\n');
     assert.ok(calc.includes('const t = quoteTotals({ lineItems, dealDiscount: dealDiscountPct, taxRate, taxExempt });'), 'one copy of the money');

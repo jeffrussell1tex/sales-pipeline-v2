@@ -20193,10 +20193,21 @@ const mutations = [
         "netlify/functions/quotes.mjs",
         "            const lineDiscount = lineDiscountRefusal(data.lineItems, heldLines);",
         "            const lineDiscount = null;"],
+    // (§0.244 repointed "a new version's copied deal discount asked as new" from quotes.mjs — which `npm test` cannot
+    // load, so it survived the scoped run of 11 Nov — onto heldDealDiscount (src/utils/quoteTotals.js); RUN by
+    // tests/percent-ranges.test.mjs. The endpoint's read is §0.244's own entry below, caught by that suite's scan.)
     ["§0.242 review: a new version's copied deal discount asked as new (the source's held value refused)",
+        "src/utils/quoteTotals.js",
+        "    return held.find((q) => q && typeof q === 'object' && samePercent(dealDiscount, q.dealDiscount))?.dealDiscount ?? null;",
+        "    return null;"],
+    ["§0.244 quotes: a new version's deal discount held by no source again",
         "netlify/functions/quotes.mjs",
-        "            const heldDeal = versions.find((q) => samePercent(data.dealDiscount, q.dealDiscount))?.dealDiscount ?? null;",
+        "            const heldDeal = heldDealDiscount(data.dealDiscount, versions);",
         "            const heldDeal = null;"],
+    ["§0.244 a new version's discount held by a version that holds another",
+        "src/utils/quoteTotals.js",
+        "    return held.find((q) => q && typeof q === 'object' && samePercent(dealDiscount, q.dealDiscount))?.dealDiscount ?? null;",
+        "    return held.find((q) => q && typeof q === 'object')?.dealDiscount ?? null;"],
     ["§0.242 quotes: a save's line discounts asked against no stored lines (a quote re-sent as stored refused)",
         "netlify/functions/quotes.mjs",
         "            const lineDiscount = 'lineItems' in data ? lineDiscountRefusal(data.lineItems, existing.lineItems) : null;",
