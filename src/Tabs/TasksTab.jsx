@@ -3,7 +3,7 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
-import { isoLocal, todayLocal, calendarDays } from '../utils/dateLocal';
+import { isoLocal, shortDayLabel } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -47,17 +47,6 @@ const fmtAgo = iso => {
     if (diffDay === 1)     return 'yesterday';
     if (diffDay < 7)       return diffDay + 'd ago';
     return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-// Compact day label for "Coming up" strip
-const dayLabelShort = isoDay => {
-    const d   = new Date(isoDay + 'T12:00:00');
-    // Calendar days (state §0.240): the day's noon less today's midnight is 0.5, which
-    // Math.round takes to 1 -- today read "Tomorrow" and tomorrow its weekday.
-    const diff = calendarDays(todayLocal(), isoDay);
-    if (diff === 0)  return 'Today';
-    if (diff === 1)  return 'Tomorrow';
-    return d.toLocaleDateString('en-US', { weekday: 'short' });
 };
 
 function resolveAccountName(item, opportunities, accounts) {
@@ -782,7 +771,7 @@ export default function TasksTab() {
                                             style={{ display: 'grid', gridTemplateColumns: '70px 18px 1fr auto', gap: 12, padding: '9px 14px', borderBottom: i < Math.min(upcomingItems.length, 4) - 1 ? `1px solid ${T.border}` : 'none', alignItems: 'center', fontSize: 12.5, cursor: 'pointer', fontFamily: T.sans }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.06)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>{dayLabelShort(t.dueDate)}</div>
+                                            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>{shortDayLabel(t.dueDate)}</div>
                                             <span style={{ color: meta.color, display: 'flex', alignItems: 'center' }}>{meta.icon}</span>
                                             <div style={{ color: T.ink, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {t.title}

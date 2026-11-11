@@ -24,7 +24,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { isoLocal, todayLocal, parseLocalDate, toLocalDay, calendarDays, daysSince, inDaysWords } from '../src/utils/dateLocal.js';
+import { isoLocal, todayLocal, parseLocalDate, toLocalDay, calendarDays, daysSince, inDaysWords, shortDayLabel } from '../src/utils/dateLocal.js';
 
 const MODULE_URL = new URL('../src/utils/dateLocal.js', import.meta.url).href;
 
@@ -742,4 +742,24 @@ test('WIRING (0.244): the bell\'s close reminder and the deal health\'s "Closing
     assert.ok(app.includes("message: `${opp.account} closing ${inDaysWords(daysToClose)}`,"), 'the bell');
     assert.ok(app.includes("reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities');"), 'the deal health');
     assert.ok(!/closing in \$\{daysToClose\}|'Closing in ' \+ daysToClose/.test(app), 'no count said by hand');
+});
+
+// "Tasks never says Tomorrow again" survived the same run: the Tasks tab's "Coming up" label sat in the screen.
+// It is shortDayLabel's now, counted from the day it is handed — RUN here against fixed days.
+test('RULE (0.244): the Coming up label — Today, Tomorrow, else the short weekday, by calendar day', () => {
+    const today = '2026-11-11'; // a Wednesday
+    assert.equal(shortDayLabel('2026-11-11', today), 'Today', 'today is Today, never Tomorrow');
+    assert.equal(shortDayLabel('2026-11-12', today), 'Tomorrow', 'tomorrow is Tomorrow, never its weekday');
+    assert.equal(shortDayLabel('2026-11-13', today), 'Fri');
+    assert.equal(shortDayLabel('2026-11-10', today), 'Tue', 'yesterday is its weekday');
+    assert.equal(shortDayLabel('2026-12-31', '2026-12-30'), 'Tomorrow', 'across a month');
+    assert.equal(shortDayLabel('2027-01-01', '2026-12-31'), 'Tomorrow', 'across a year');
+    assert.equal(shortDayLabel('not a day', today), '', 'unreadable reads blank, never "Invalid Date"');
+    assert.equal(shortDayLabel(todayLocal()), 'Today', 'today by default');
+});
+
+test('WIRING (0.244): the Tasks tab draws shortDayLabel, and keeps no label of its own', () => {
+    const tasks = readSrc('src/Tabs/TasksTab.jsx');
+    assert.ok(tasks.includes('{shortDayLabel(t.dueDate)}'), 'the Coming up strip');
+    assert.ok(!/'Tomorrow'\s*;/.test(tasks.replace(/label: 'Tomorrow'/g, '')), 'no Tomorrow worked out in the screen');
 });

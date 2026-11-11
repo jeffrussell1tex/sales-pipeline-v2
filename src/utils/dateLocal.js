@@ -148,6 +148,17 @@ export function inDaysWords(n) {
     return n === 0 ? 'today' : `in ${n} ${n === 1 ? 'day' : 'days'}`;
 }
 
+// The Tasks tab's "Coming up" label for a due day (state §0.240, §0.244): Today, Tomorrow, else its short weekday,
+// counted in calendar days from `today` -- the day's noon less today's midnight is 0.5, which Math.round took to 1,
+// so today read "Tomorrow" and tomorrow its weekday. An unreadable day reads blank (it read "Invalid Date").
+export function shortDayLabel(isoDay, today = todayLocal()) {
+    const diff = calendarDays(today, isoDay);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Tomorrow';
+    const d = parseLocalDate(isoDay);
+    return d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+}
+
 // The deal timeline's bucket for a day (ReportsTab), placed by calendar day against
 // `now` (a Date): a later day 'Upcoming', today 'Today', the day before 'Yesterday',
 // back to this week's Sunday 'This week', back to the first of last month 'Last

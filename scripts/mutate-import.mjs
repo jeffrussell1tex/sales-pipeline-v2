@@ -19773,10 +19773,17 @@ const mutations = [
         "src/components/KanbanView.jsx",
         "        ? daysSince(opp.stageChangedDate)   // calendar days",
         "        ? Math.max(0, Math.floor((Date.now() - new Date(opp.stageChangedDate + 'T12:00:00').getTime()) / 86400000))   // calendar days"],
+    // (§0.244 repointed "Tasks never says Tomorrow again" from TasksTab.jsx — where no test ran, so it survived the
+    // scoped run of 11 Nov — onto shortDayLabel, the label the Coming up strip now draws; RUN by
+    // tests/date-local.test.mjs against fixed days. The screen's call is §0.244's own entry below.)
     ["§0.240 Tasks never says Tomorrow again",
+        "src/utils/dateLocal.js",
+        "    const diff = calendarDays(today, isoDay);",
+        "    const diff = Math.round((new Date(isoDay + 'T12:00:00') - new Date(today + 'T00:00:00')) / 86400000);"],
+    ["§0.244 the Coming up strip works out its own day label again",
         "src/Tabs/TasksTab.jsx",
-        "    const diff = calendarDays(todayLocal(), isoDay);",
-        "    const diff = Math.round((new Date(isoDay + 'T12:00:00') - new Date(todayLocal() + 'T00:00:00')) / 86400000);"],
+        "{shortDayLabel(t.dueDate)}",
+        "{(() => { const n = Math.round((new Date(t.dueDate + 'T12:00:00') - new Date()) / 86400000); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : new Date(t.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }); })()}"],
     ["§0.240 an unreadable activity day said as null days",
         "src/App.jsx",
         "            if (daysSinceActivity == null) { /* an activity date that does not read says nothing of the days (state §0.240) */ }\n            else if (daysSinceActivity > 30)",
