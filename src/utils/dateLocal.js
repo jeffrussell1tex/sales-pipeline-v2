@@ -141,6 +141,13 @@ export function daysSince(day, today = todayLocal()) {
     return n == null ? null : Math.max(0, n);
 }
 
+// The words for a count of days ahead -- "today", "in 1 day", "in N days" (state §0.240, §0.244): the close day
+// itself reads "today", never "in 0 days". The bell's close reminder and the deal health's say it here, where a test
+// runs it.
+export function inDaysWords(n) {
+    return n === 0 ? 'today' : `in ${n} ${n === 1 ? 'day' : 'days'}`;
+}
+
 // The deal timeline's bucket for a day (ReportsTab), placed by calendar day against
 // `now` (a Date): a later day 'Upcoming', today 'Today', the day before 'Yesterday',
 // back to this week's Sunday 'This week', back to the first of last month 'Last

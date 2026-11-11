@@ -24,7 +24,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { isoLocal, todayLocal, parseLocalDate, toLocalDay, calendarDays, daysSince } from '../src/utils/dateLocal.js';
+import { isoLocal, todayLocal, parseLocalDate, toLocalDay, calendarDays, daysSince, inDaysWords } from '../src/utils/dateLocal.js';
 
 const MODULE_URL = new URL('../src/utils/dateLocal.js', import.meta.url).href;
 
@@ -723,4 +723,23 @@ test('America/Chicago: the timeline buckets by calendar day', (t) => {
     assert.equal(r.out.empty, 'Earlier');
     assert.equal(r.out.sunOnSun, 'Today');
     assert.equal(r.out.satOnMon, 'Last month', 'on Monday the week is Sunday alone, and Sunday is Yesterday');
+});
+
+// ── THE WORDS FOR A COUNT OF DAYS (0.244) ────────────────────────────────────
+// The scoped run of 11 Nov: "the bell says "closing in 0 days" again" survived — the bell's words sat in App.jsx,
+// where no test runs. They are inDaysWords' now, RUN here; the screens' calls are pinned by scan.
+const readSrc = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+
+test('RULE (0.244): the close day reads "today", never "in 0 days"; one day is singular', () => {
+    assert.equal(inDaysWords(0), 'today');
+    assert.equal(inDaysWords(1), 'in 1 day');
+    assert.equal(inDaysWords(2), 'in 2 days');
+    assert.equal(inDaysWords(7), 'in 7 days');
+});
+
+test('WIRING (0.244): the bell\'s close reminder and the deal health\'s "Closing" say inDaysWords', () => {
+    const app = readSrc('src/App.jsx');
+    assert.ok(app.includes("message: `${opp.account} closing ${inDaysWords(daysToClose)}`,"), 'the bell');
+    assert.ok(app.includes("reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities');"), 'the deal health');
+    assert.ok(!/closing in \$\{daysToClose\}|'Closing in ' \+ daysToClose/.test(app), 'no count said by hand');
 });

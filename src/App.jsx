@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, Organ
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
-import { todayLocal, daysSince, calendarDays } from './utils/dateLocal';
+import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
@@ -1329,7 +1329,7 @@ dbFetch('/.netlify/functions/users?me=true')
         if (daysToClose != null) {
             if (daysToClose < 0) { score -= 35; reasons.push('Close date is ' + Math.abs(daysToClose) + ' days overdue'); }
             // The close day itself reads "today", never "in 0 days" (state §0.240).
-            else if (daysToClose < 7 && oppActivities.length === 0) { score -= 20; reasons.push((daysToClose === 0 ? 'Closing today' : 'Closing in ' + daysToClose + (daysToClose === 1 ? ' day' : ' days')) + ' with no activities'); }
+            else if (daysToClose < 7 && oppActivities.length === 0) { score -= 20; reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities'); }
             else if (daysToClose < 14) { reasons.push(daysToClose === 0 ? 'Close date is today' : 'Close date approaching in ' + daysToClose + (daysToClose === 1 ? ' day' : ' days')); }
         }
         
@@ -1396,7 +1396,7 @@ dbFetch('/.netlify/functions/users?me=true')
                             id: `closing-${opp.id}`,
                             type: 'info',
                             // The close day itself reads "today", never "in 0 days" (state §0.240).
-                            message: daysToClose === 0 ? `${opp.account} closing today` : `${opp.account} closing in ${daysToClose} ${daysToClose === 1 ? 'day' : 'days'}`,
+                            message: `${opp.account} closing ${inDaysWords(daysToClose)}`,
                             opportunityId: opp.id,
                             date: now.toISOString()
                         });

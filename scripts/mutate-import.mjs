@@ -19731,10 +19731,21 @@ const mutations = [
         "src/utils/dateLocal.js",
         "    if (n < 0) return 'Upcoming';\n",
         ""],
+    // (§0.244 repointed "the bell says "closing in 0 days" again" from App.jsx — where no test ran, so it survived the
+    // scoped run of 11 Nov — onto inDaysWords, the words the bell and the deal health now say; RUN by
+    // tests/date-local.test.mjs. The two screen calls are §0.244's own entries below.)
     ["§0.240 the bell says \"closing in 0 days\" again",
+        "src/utils/dateLocal.js",
+        "    return n === 0 ? 'today' : `in ${n} ${n === 1 ? 'day' : 'days'}`;",
+        "    return false ? 'today' : `in ${n} ${n === 1 ? 'day' : 'days'}`;"],
+    ["§0.244 the bell counts its own days again (\"closing in 0 days\")",
         "src/App.jsx",
-        "message: daysToClose === 0 ? `${opp.account} closing today` :",
-        "message: false ? `${opp.account} closing today` :"],
+        "message: `${opp.account} closing ${inDaysWords(daysToClose)}`,",
+        "message: `${opp.account} closing in ${daysToClose} ${daysToClose === 1 ? 'day' : 'days'}`,"],
+    ["§0.244 the deal health counts its own \"Closing\" days again",
+        "src/App.jsx",
+        "reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities');",
+        "reasons.push('Closing in ' + daysToClose + ' days with no activities');"],
     ["§0.240 the board's close countdown rounds against now again",
         "src/components/KanbanView.jsx",
         "calendarDays(todayLocal(), opp.forecastedCloseDate)",
