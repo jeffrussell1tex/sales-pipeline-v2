@@ -19784,10 +19784,25 @@ const mutations = [
         "src/Tabs/TasksTab.jsx",
         "{shortDayLabel(t.dueDate)}",
         "{(() => { const n = Math.round((new Date(t.dueDate + 'T12:00:00') - new Date()) / 86400000); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : new Date(t.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }); })()}"],
+    // (§0.244 repointed "an unreadable activity day said as null days" from App.jsx — where no test ran, so it survived
+    // the scoped run of 11 Nov — onto activityHealth (src/utils/dealHealth.js), the deal health's last-activity part;
+    // RUN by tests/date-local.test.mjs. The screen's read is §0.244's own entries below.)
     ["§0.240 an unreadable activity day said as null days",
+        "src/utils/dealHealth.js",
+        "    if (days == null) return null;\n",
+        ""],
+    ["§0.244 the deal health takes points for an unreadable activity day",
         "src/App.jsx",
-        "            if (daysSinceActivity == null) { /* an activity date that does not read says nothing of the days (state §0.240) */ }\n            else if (daysSinceActivity > 30)",
-        "            if (daysSinceActivity > 30)"],
+        "            if (activity) { score -= activity.penalty; reasons.push(activity.reason); }",
+        "            score -= activity?.penalty ?? 30; if (activity) reasons.push(activity.reason);"],
+    ["§0.244 the deal health counts its own activity days again",
+        "src/App.jsx",
+        "            const activity = activityHealth(daysSince(lastActivity, now));",
+        "            const activity = activityHealth(Math.floor((now - lastActivity) / 86400000));"],
+    ["§0.244 a recent activity's day said in the plural",
+        "src/utils/dealHealth.js",
+        "(days !== 1 ? 's' : '')",
+        "'s'"],
     // ── §0.241 sales tax on quotes, batch A's core (docs/design/sales-tax; Jeff's answers 10 Nov) ───────────────
     // Added as text, harness deferred (Jeff: "do not run harness yet"); each anchor one line of the tree it names.
     // tests/quote-totals.test.mjs and tests/sales-tax.test.mjs joined SUITES with them.

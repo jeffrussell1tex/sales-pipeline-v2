@@ -5,6 +5,7 @@ import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
+import { activityHealth } from './utils/dealHealth.js';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
@@ -1301,13 +1302,9 @@ dbFetch('/.netlify/functions/users?me=true')
         const oppActivities = activities.filter(a => a.opportunityId === opportunity.id);
         if (oppActivities.length > 0) {
             const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
-            const daysSinceActivity = daysSince(lastActivity, now);
-
-            if (daysSinceActivity == null) { /* an activity date that does not read says nothing of the days (state §0.240) */ }
-            else if (daysSinceActivity > 30) { score -= 40; reasons.push('No activity in over 30 days (' + daysSinceActivity + ' days)'); }
-            else if (daysSinceActivity > 14) { score -= 25; reasons.push('No activity in over 14 days (' + daysSinceActivity + ' days)'); }
-            else if (daysSinceActivity > 7) { score -= 10; reasons.push('No activity in over 7 days (' + daysSinceActivity + ' days)'); }
-            else { reasons.push('Recent activity ' + daysSinceActivity + ' day' + (daysSinceActivity !== 1 ? 's' : '') + ' ago'); }
+            // An activity date that does not read says nothing of the days (state §0.240): activityHealth answers null.
+            const activity = activityHealth(daysSince(lastActivity, now));
+            if (activity) { score -= activity.penalty; reasons.push(activity.reason); }
         } else {
             score -= 30;
             reasons.push('No activities logged for this opportunity');

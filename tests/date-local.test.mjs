@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { isoLocal, todayLocal, parseLocalDate, toLocalDay, calendarDays, daysSince, inDaysWords, shortDayLabel } from '../src/utils/dateLocal.js';
+import { activityHealth } from '../src/utils/dealHealth.js';
 
 const MODULE_URL = new URL('../src/utils/dateLocal.js', import.meta.url).href;
 
@@ -762,4 +763,24 @@ test('WIRING (0.244): the Tasks tab draws shortDayLabel, and keeps no label of i
     const tasks = readSrc('src/Tabs/TasksTab.jsx');
     assert.ok(tasks.includes('{shortDayLabel(t.dueDate)}'), 'the Coming up strip');
     assert.ok(!/'Tomorrow'\s*;/.test(tasks.replace(/label: 'Tomorrow'/g, '')), 'no Tomorrow worked out in the screen');
+});
+
+// "an unreadable activity day said as null days" survived the same run: the deal health's last-activity part sat in
+// App.jsx. It is activityHealth's now (src/utils/dealHealth.js), RUN here.
+test('RULE (0.244): the deal health\'s last activity — an unreadable day says nothing; each band its points and words', () => {
+    assert.equal(activityHealth(null), null, 'unreadable: no points, no reason — never "null days"');
+    assert.equal(activityHealth(undefined), null);
+    assert.deepEqual(activityHealth(0), { penalty: 0, reason: 'Recent activity 0 days ago' });
+    assert.deepEqual(activityHealth(1), { penalty: 0, reason: 'Recent activity 1 day ago' });
+    assert.deepEqual(activityHealth(7), { penalty: 0, reason: 'Recent activity 7 days ago' });
+    assert.deepEqual(activityHealth(8), { penalty: 10, reason: 'No activity in over 7 days (8 days)' });
+    assert.deepEqual(activityHealth(15), { penalty: 25, reason: 'No activity in over 14 days (15 days)' });
+    assert.deepEqual(activityHealth(31), { penalty: 40, reason: 'No activity in over 30 days (31 days)' });
+});
+
+test('WIRING (0.244): the deal health reads activityHealth over daysSince, and takes nothing when it answers null', () => {
+    const app = readSrc('src/App.jsx');
+    assert.ok(app.includes('const activity = activityHealth(daysSince(lastActivity, now));'), 'read through activityHealth');
+    assert.ok(app.includes('if (activity) { score -= activity.penalty; reasons.push(activity.reason); }'), 'null takes nothing');
+    assert.ok(!app.includes("'Recent activity ' +"), 'no activity words in the screen');
 });
