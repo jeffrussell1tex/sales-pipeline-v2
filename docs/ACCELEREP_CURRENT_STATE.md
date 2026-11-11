@@ -8032,6 +8032,13 @@ Its check found that round's own Rename stage change could rename the wrong pipe
 
 **Verified:** (10 Nov, in the repo) SIX gates green (check:tdz and check:dupes on 237 files, check:inline 0 user-visible across 115 — 67 churn-only, check:fnscope 121 function files, check:dbfetch 0, check:handoff identical) · build OK (`index-Kt28XX1G.js`; `dist/` removed) · **2203 tests** (2202 pass, 0 fail, 1 skipped) · test:int 744/744 (the full run, on the final tree) · **harness deferred** — the stale check 0 of 4,809; the 103 added and 4 repointed not yet proved by hand · the rep-path check PASSED as Karen · the Admin check PASSED as Jeff. **Built 10 Nov; NOT committed; harness deferred.**
 
+### 0.244 The scoped run's five survivors: each fixed in its own commit — one retired as an equivalent mutant, four reached by a test (the code each reads moved into a helper a test runs, the screen's call pinned by scan). 11 Nov; **NOT pushed**
+
+**What it was** (Jeff, 11 Nov: "Yes, fix them"). The scoped run before the dev push — `node scripts/mutate-scope.mjs --base 9dc9944` from the harness copy, over §0.239-§0.243, 10-11 Nov — printed "Baseline: green.", 0 stale of 4,809, and caught 4,088 of 4,093 (exit 1). Five survived: "§0.240 the bell says "closing in 0 days" again", "§0.240 days counted in fractions", "§0.240 Tasks never says Tomorrow again", "§0.240 an unreadable activity day said as null days" and "§0.242 review: a new version's copied deal discount asked as new (the source's held value refused)". The copy was read back after the run: every code file byte-identical with the repo (no mutant left on disk). A survivor is fixed in its own commit before the push (CLAUDE.md).
+
+**What changed** (one commit each):
+- **1. "§0.240 days counted in fractions" — retired, an equivalent mutant.** `dayNumber` (src/utils/dateLocal.js:115) reads both sides through `Date.UTC` at midnight — a whole multiple of 86400000 — so `b - a` in `calendarDays` (:132) is always whole and its `Math.round` changes nothing: no test can tell the mutant apart. The entry is now a comment saying so (scripts/mutate-import.mjs, in the §0.240 block). The code is unchanged.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

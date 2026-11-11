@@ -19755,10 +19755,9 @@ const mutations = [
         "src/utils/dateLocal.js",
         "return d ? Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 : null;",
         "return d ? d.getTime() / 86400000 : null;"],
-    ["§0.240 days counted in fractions",
-        "src/utils/dateLocal.js",
-        "return a == null || b == null ? null : Math.round(b - a);",
-        "return a == null || b == null ? null : b - a;"],
+    // (§0.244 retired "§0.240 days counted in fractions": an equivalent mutant — dayNumber reads both sides through
+    // Date.UTC at midnight, a whole multiple of 86400000, so b - a is always whole and Math.round changes nothing; it
+    // survived the scoped run of 11 Nov (4,088/4,093) and no test can tell it apart.)
     ["§0.240 the board counts from the day's noon again",
         "src/components/KanbanView.jsx",
         "        ? daysSince(opp.stageChangedDate)   // calendar days",
