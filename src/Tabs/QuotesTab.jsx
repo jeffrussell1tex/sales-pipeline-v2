@@ -1719,8 +1719,11 @@ export default function QuotesTab() {
                 createdBy: currentUser,
                 paymentTerms: 'Net 30 · Annual',
             };
-            await handleSaveQuote(payload, null);
-            openConfigurator(oppId, payload.id);
+            const saved = await handleSaveQuote(payload, null);
+            // Refused: the server's own words are on the banner already — handleSaveQuote keeps them in
+            // quoteModalError — and no builder opens on a quote that was never made (state §0.243, as
+            // handleNewVersion). The id is the saved quote's: the hook issues its own.
+            if (saved) openConfigurator(oppId, saved.id || payload.id);
         } catch (err) { setError(err.message || 'Failed to create quote.'); }
         finally { setSaving(false); }
     };

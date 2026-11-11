@@ -512,44 +512,46 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    (docs/design/save-cleanup/DESIGN.md and ANSWERS.md — S "Parts 1-4 now
    (Recommended)", Q1-Q6 each the Recommended). **Parts 1-4 built 10 Nov
    (state §0.242; guide §18b125), `products.custom_price` applied on Jeff's
-   go — NOT committed; harness deferred**, its Admin browser check PASSED
+   go — committed `6342364`; harness deferred**, its Admin browser check PASSED
    as Jeff: a save writes only what it names (the products PUT a strict
    update, 404 for an id the org does not hold; the export schedule and
    GDPR request PUTs merged over the stored row; the backup schedule field
    by field; who made a row the server's); Custom / Variable Price a real
    column; the Price Book sends only what changed and says a refusal; a
    percent a request names anew in range or refused naming the field; a
-   day shown for an instant the member's day. Strike Parts 1-4 once §0.242
-   ships. **The next batch** (DESIGN.md's lists, as of `bb0c88e`):
-   - **Part 5, the refusal sweep:** the thirteen `throw new Error(x.error)`
-     with no fallback words (ExportDetail.jsx :138, :205, :259, :270;
-     ApiKeysDetail.jsx :427, :484; AutomationsDetail.jsx :358, :375, :385;
-     WebhooksDetail.jsx :164, :179, :189 — re-read 10 Nov), each to say
-     the server's words or "The server returned N." (ModalLayer.jsx:810 and
-     QuoteTemplatesDetail.jsx:1089 named exceptions); Backup's two
-     downloads (BackupDetail.jsx:414, :646) saving a refusal's JSON to disk
-     as `<id>.json` — check `ok`, save nothing, say why; QuotesTab's
-     `handleNewQuoteForOpp` opening the configurator on a failed save
-     (`if (!saved) return;`, as `handleNewVersion` does); `docsError`
-     (useDocuments.js:64) drawn in the Documents library as a read failure
-     (its draw site not yet read); THE GUARD tests/refusals-said.test.mjs
-     (an error state nothing reads but its setter; a throw with no
-     fallback words; self-tests). Beside it, the rest of the sweep (the
-     design's OUT, as recorded): the Kanban stage drag with no rollback;
-     a task's complete and snooze un-ticking without a word (TasksTab,
-     HomeTab's PlateRow); Reports' deal contact add, remove and persona;
-     calendar adds that only `console.warn`; ExportDetail's toggles, its
-     delete error replacing the page, its `window.alert`; the report save
-     timers (4 s, 3 s) and the holiday sync's 6 s; coaching-note network
-     rejects; `saveBlock`'s unassign failures; the quote PDF's silent
-     fallback.
-   - **Part 6, the Dispatch legacy import** (Dispatch → Vehicles &
-     equipment, "Import from the old settings list"; a live trap in one
-     demo org): a re-press re-sends every entry, nulling an edited
-     vehicle's make, VIN or service dates and clearing an equipment
-     check-out. Q7, not yet asked: send and count only the entries not yet
-     in the tables, refuse while the load failed, the card gone once all
-     are in (Recommended) — or empty the old lists after a clean import.
+   day shown for an instant the member's day. **Parts 5-6 built 10 Nov
+   (state §0.243; guide §18b125 rules 5, 7 and 8; Q7 "Send only what's
+   missing (Recommended)") — NOT committed; harness deferred**, its
+   rep-path browser check PASSED as Karen, its Admin check as Jeff
+   (the import card not opened: QA holds no old list): a refusal said in the server's words or plain ones
+   (`readRefusal`, `failureWords`) in the four Settings panels, Backup,
+   New quote and the Documents library, THE GUARD
+   tests/refusals-said.test.mjs; a backup's file saved only when the
+   server sent it; the backup schedule never written from values never
+   read; the Dispatch legacy import sends only what the tables do not
+   hold. Strike Parts 1-6 once §0.242 and §0.243 ship. **The rest of the
+   sweep** (the design's OUT, as recorded, and what §0.243 left):
+   - the Kanban stage drag with no rollback; a task's complete and snooze
+     un-ticking without a word (TasksTab, HomeTab's PlateRow); Reports'
+     deal contact add, remove and persona; calendar adds that only
+     `console.warn`; ExportDetail's delete error replacing the page
+     (`handleDeleteSched`, ExportDetail.jsx:157-168, sets the `error` that
+     draws in place of the page, :255) and its `window.alert`; the report
+     save timers (4 s, 3 s) and the holiday sync's 6 s; coaching-note
+     network rejects; `saveBlock`'s unassign failures; the quote PDF's
+     silent fallback.
+   - about 20 other raw `e.message` sites in the swept panels and
+     DispatchVehiclesDetail (§0.243's re-check, 10 Nov): a request that
+     never reached the server says "Failed to fetch" there — said by
+     `failureWords` instead (guide §18b125 rule 5); and
+     DispatchVehiclesDetail's deletes still say "HTTP N"
+     (DispatchVehiclesDetail.jsx:339, :381).
+   - outside the files the sweep owns, a body read before its response's
+     ok check (a line scan, 10 Nov: 67 lines where `x = await
+     <res>.json()` comes within three lines before a `!<res>.ok` — hooks,
+     Dispatch, Quotes, Settings — many with a `.catch` fallback; not each
+     read); tests/refusals-said.test.mjs's scan (iii) covers only its
+     `SWEPT` list.
 
 ---
 
@@ -2413,7 +2415,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   and then sends it. Every other delete in Settings asks first (App's
   confirm). Recommended: App's confirm, as the rest do.
 - **`window.alert` for a refused save, as a class** (4 Nov; re-read):
-  Export's two dialogs (ExportDetail.jsx:258, :268), Territories' CSV
+  Export's two dialogs (ExportDetail.jsx:275, :285), Territories' CSV
   import (TerritoriesDetail.jsx:228, :233, :252, :254, :255), Reports'
   PDF export and owner email (ReportsTab.jsx:452, :6073), a blocked policy
   (security/shared.jsx:85). The house shows words on the screen.
@@ -3028,9 +3030,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Smaller, from §0.201's map:** ~~Settings → Service plans' seed from legacy
   tiers derives `plan_legacy_<tier>` ids, so a second org's seed of a tier
   another org seeded is refused ("That plan id is already in use.")~~ —
-  DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship); a
+  DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship); ~~a
   re-run of Settings → Vehicles & equipment's legacy import resets an
-  imported row's technician, holder and status (a full-row upsert); the
+  imported row's technician, holder and status (a full-row upsert)~~ —
+  fixed in §0.243 (10 Nov; NOT committed; guide §18b125 rule 7): a press
+  sends only the rows the tables do not hold; the
   crew builder prints a technician's vehicle id, not its name; the
   technician↔vehicle pairing is kept twice
   (`dispatch_vehicles.assigned_tech_id` and
@@ -3059,6 +3063,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   notes, an open card and the card's own error are lost (read from code,
   not seen). Module scope, as the house rule says.
 - **A job made from a taxed quote shows its value with the tax once invoiced** (§0.241, 10 Nov; by design, noted): a new invoice takes its quote's rate (R7), and the job's `invoice_amount` mirrors the invoice's total (`mirrorForJob`, src/utils/invoices.js:251), so the Dispatch board's value for such a job includes the tax while the quote's and the deal's figures stay pre-tax. Noted so the two are not read as a mismatch; no change recommended.
+- **Two Import presses at once can still overwrite** (§0.243's review, 10 Nov; read in code): each press of Settings → Vehicles & equipment's "Import from the old settings list" plans against its own read made at the press (`readHeld`, DispatchVehiclesDetail.jsx:208), so with two presses at once — two tabs or two members — and an edit landing between one's POST and the other's, the second can send a row the table has come to hold, and the POST (a designed upsert, §0.201) replaces the edit. The fix needs an endpoint change (a create that refuses a held id) the design ruled out. Low.
+- **Duplicate ids in the old Dispatch lists** (§0.243's build, 10 Nov; read in code; as before §0.243): two old entries with one id — or both with none, `imp_undefined` — plan two rows of one id (src/utils/legacyDispatchImport.js:23, :39); the second POST replaces the first, and the count says 2 where 1 is made. How the old entries' ids were made: not read (no screen in src writes the old lists now — a grep, 10 Nov). Low.
+- **A Technician's filtered read over-counts the import card** (§0.243's build, 10 Nov; read in code): a Technician's read of the vehicles is filtered to their own and those on their jobs (dispatch-vehicles.mjs:63-70), so for one the card would count rows another holds as missing; their POSTs are refused by the dispatch gate, said since §0.243 in its words. Whether a Technician reaches this panel: not read. Low.
+- **A technicians read that failed shows assigned technicians as none** (§0.243's re-check, 10 Nov; read in code): with the technicians read apart since §0.243, a failed read leaves their names unknown, and the vehicle and equipment tables show "—" for an assigned technician (DispatchVehiclesDetail.jsx:507, :563) — which reads as unassigned — and the vehicle form's picker "— Unassigned —" (:112); a save keeps the stored id, which the draft holds. The page's banner says why. Low.
 
 ### 4.5 Notifications, email and digests
 
@@ -4571,7 +4579,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   org-switch reset and no dismiss — org B's Quotes banner shows org A's
   last refusal until a quote save starts in B. Since §0.204 a refused New
   version is shown only there. Recommended: reset it on an org switch.
-  (`productModalError` is App-level too, but no screen reads it.)
+  (`productModalError` was App-level too, read by no screen — removed in §0.242.)
 - **The Leads tab's lead-requests load throws an uncaught rejection on a
   dropped connection** (§0.199's pane check, 13 Oct — the pane's console
   showed "Uncaught (in promise) TypeError: Failed to fetch" during a burst
@@ -5126,6 +5134,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Object.freeze(['Manager', 'Admin'])` outside roles.js. A class item:
   widen the scan, and move APPROVER_ROLES to roles.js or name it there.
   (The profile page's Manager box reads `canSeeAll`, no list — §0.211.)
+- **tests/refusals-said.test.mjs's known limits** (§0.243's second fix
+  round, 10 Nov; all but the last written in its header): scan (i) takes a state handed out
+  through an expression (`{ k: x || null }`) as an own read, and asks
+  nothing elsewhere; a useMemo'd return passes by its dependency list,
+  whether any screen reads the state or not; `var` hoisted out of a block,
+  and a class's name inside its own body are not bound as the language
+  binds them; a read in another file through a member (`hook.loadError`)
+  is no read of the key; scan (iii) takes any earlier `.ok` mention of the response as its
+  check, and reads `.json()` only, never `.text()`. Low.
 - **The `companyProfile` settings key has no writer** (the quote branding
   design, 9 Nov; read in code): `{ address, phone, notes }`
   (settingsDefaults.js:74, settings.mjs:162 and :409, `REV_KEYS`) — no

@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { canEditCrm } from '../../utils/roles.js';
+import { failureWords } from '../../utils/refusalWords.js';
 import { sharablePeople, sharedNames, toggled } from '../../utils/documentPeople.js';
 import {
     T, fmtSize, fmtDateLong, fileMeta, FileTypeBadge, CategoryPill,
@@ -50,7 +51,8 @@ export default function DocumentRail() {
 
     const [versions, setVersions] = useState([]);
     const [loadingVersions, setLoadingVersions] = useState(false);
-    const [versionsFailed, setVersionsFailed] = useState(false);
+    // Why the history did not load ('' while it has not failed): the server's words, else plain ones (§0.243).
+    const [versionsFailed, setVersionsFailed] = useState('');
     const [note, setNote] = useState('');
     // Choosing the people a Specific document is shared with (state §0.183): the list
     // ticked so far, saved with the visibility in one PUT.
@@ -75,11 +77,11 @@ export default function DocumentRail() {
         if (!doc) return;
         let cancelled = false;
         setLoadingVersions(true);
-        setVersionsFailed(false);
+        setVersionsFailed('');
         Promise.resolve(fetchVersions ? fetchVersions(doc.id) : [])
             .then((vs) => { if (!cancelled) setVersions(Array.isArray(vs) ? vs : []); })
-            // A history that did not load says so (state §0.181) — it said "No version history."
-            .catch(() => { if (!cancelled) { setVersions([]); setVersionsFailed(true); } })
+            // A history that did not load says so (state §0.181) — it said "No version history." — and why (§0.243).
+            .catch((e) => { if (!cancelled) { setVersions([]); setVersionsFailed(failureWords(e)); } })
             .finally(() => { if (!cancelled) setLoadingVersions(false); });
         return () => { cancelled = true; };
     }, [doc?.id, doc?.version, fetchVersions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -252,7 +254,7 @@ export default function DocumentRail() {
                     {loadingVersions && versions.length === 0 ? (
                         <div style={{ fontSize: 12, color: T.inkMuted }}>Loading…</div>
                     ) : versionsFailed ? (
-                        <div style={{ fontSize: 12, color: T.inkMuted }}>Version history could not be loaded.</div>
+                        <div style={{ fontSize: 12, color: T.inkMuted }}>Version history could not be loaded ({String(versionsFailed).replace(/[.\s]+$/, '')}).</div>
                     ) : versions.length === 0 ? (
                         <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No version history.</div>
                     ) : (

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -51,9 +52,12 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                 method: 'POST',
                 body: JSON.stringify({ name: name.trim(), targetUrl: url.trim(), eventTypes: [...checked] }),
             });
-            const data = await res.json();
+            // The ok check first (§0.243): a refusal reads its words (else its status), the endpoint's answer is parsed
+            // as sent — then the org is checked, after every read, before anything is done.
+            const why  = res.ok ? '' : await readRefusal(res);
+            const data = res.ok ? await res.json() : null;
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Failed to create');
+            if (why) throw new Error(why);
             setSecret(data.secret || '');
             if (onCreated) onCreated(data.subscription);
             setStep('created');
@@ -160,8 +164,8 @@ export const WebhooksDetail = ({ onBack }) => {
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/webhooks');
+            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setWebhooks(data.subscriptions || []);
         } catch (e) { setError(e.message); }
         finally { setLoading(false); }
@@ -175,8 +179,8 @@ export const WebhooksDetail = ({ onBack }) => {
                 method: 'PUT',
                 body: JSON.stringify({ id: wh.id, active: !wh.active }),
             });
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setWebhooks(prev => prev.map(w => w.id === wh.id ? data.subscription : w));
         } catch (e) { setError(e.message); }
         setActiveMenu(null);
@@ -186,7 +190,7 @@ export const WebhooksDetail = ({ onBack }) => {
         setDeleting(wh.id);
         try {
             const res = await dbFetch(`/.netlify/functions/webhooks?id=${wh.id}`, { method: 'DELETE' });
-            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            if (!res.ok) throw new Error(await readRefusal(res));
             setWebhooks(prev => prev.filter(w => w.id !== wh.id));
         } catch (e) { setError(e.message); }
         finally { setDeleting(null); setActiveMenu(null); }

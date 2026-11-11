@@ -97,7 +97,7 @@ function Select({ value, onChange, children }) {
 
 export default function DocumentsTab() {
     const {
-        documents = [], docsLoading,
+        documents = [], docsLoading, docsError,
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
         downloadDoc, previewDoc, removeDocument, showConfirm, userRole,
     } = useApp();
@@ -145,10 +145,17 @@ export default function DocumentsTab() {
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', paddingBottom: 14 }}>
                 <div>
                     <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>Documents</div>
+                    {/* A failed read is no count (§0.243, §18b123 rule 4): it read "0 files · 0 B". */}
                     <div style={{ fontSize: 12, color: T.inkMuted }}>
-                        <span style={{ fontWeight: 600, color: T.ink }}>{documents.length}</span> {documents.length === 1 ? 'file' : 'files'}
-                        <span style={{ margin: '0 7px', color: T.border }}>·</span>
-                        <span style={{ fontWeight: 600, color: T.ink }}>{fmtSize(totalSize)}</span>
+                        {docsError ? (
+                            <span style={{ fontWeight: 600, color: T.danger }}>The library couldn't be read</span>
+                        ) : (
+                            <>
+                                <span style={{ fontWeight: 600, color: T.ink }}>{documents.length}</span> {documents.length === 1 ? 'file' : 'files'}
+                                <span style={{ margin: '0 7px', color: T.border }}>·</span>
+                                <span style={{ fontWeight: 600, color: T.ink }}>{fmtSize(totalSize)}</span>
+                            </>
+                        )}
                     </div>
                 </div>
                 {canEdit && (
@@ -175,8 +182,16 @@ export default function DocumentsTab() {
                     <option value="all">Any owner</option>
                     {owners.map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
-                <span style={{ fontSize: 12, color: T.inkMuted, marginLeft: 'auto' }}>{filtered.length} shown</span>
+                <span style={{ fontSize: 12, color: T.inkMuted, marginLeft: 'auto' }}>{docsError ? "Couldn't be read" : `${filtered.length} shown`}</span>
             </div>
+
+            {/* A library that did not load says so (state §0.243; §18b123 rule 4 — a read that failed, apart from a
+                refusal): it couldn't be opened, why, and that a reload tries again. It read "No documents yet". */}
+            {docsError && (
+                <div role="alert" style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '9px 12px', marginBottom: 14, fontSize: 12.5, color: T.danger }}>
+                    ⚠ The documents couldn't be opened ({String(docsError).replace(/[.\s]+$/, '')}). Reload the page to try again.
+                </div>
+            )}
 
             {/* Table */}
             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', background: T.surface }}>
@@ -187,7 +202,7 @@ export default function DocumentsTab() {
                     <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>Loading documents…</div>
                 ) : filtered.length === 0 ? (
                     <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>
-                        {documents.length === 0 ? (canEdit ? 'No documents yet. Upload your first file to get started.' : 'No documents yet.') : 'No documents match your filters.'}
+                        {documents.length === 0 ? (docsError ? 'Nothing to show until the documents can be opened.' : canEdit ? 'No documents yet. Upload your first file to get started.' : 'No documents yet.') : 'No documents match your filters.'}
                     </div>
                 ) : (
                     filtered.map((doc) => (

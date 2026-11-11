@@ -12,6 +12,7 @@
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus.js';
 import { dbFetch, waitForToken, requestOrg, stillOrg, refusalOf, NETWORK_ERROR } from '../utils/storage.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 import {
     uploadNewDocument,
     uploadNewVersion,
@@ -75,14 +76,17 @@ export function useDocuments(_deps = {}) {
             const r = await dbFetch(DOCS_FN);
             if (!stillOrg(askedOrg)) return;
             if (setDbOffline) setDbOffline(dbStatusOf(r));
-            if (!r.ok) throw new Error('HTTP ' + r.status);
+            // A read refused or failed: the library says it couldn't be opened, and why (DocumentsTab, state §0.243) —
+            // the server's words, else its status.
+            if (!r.ok) throw new Error(await readRefusal(r));
             const data = await r.json();
             if (!stillOrg(askedOrg)) return;
             setDocuments(Array.isArray(data.documents) ? data.documents : []);
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
             console.error('Failed to load documents:', e);
-            setDocsError(e.message || 'Failed to load documents');
+            // A refusal's words, else plain words (§0.243's second fix round) — never a parse error's or "Failed to fetch".
+            setDocsError(failureWords(e));
         } finally {
             if (stillOrg(askedOrg)) setDocsLoading(false);
         }
@@ -91,9 +95,11 @@ export function useDocuments(_deps = {}) {
     // ── Version history for one document (detail rail) ──────────────────────
     // NOTE: backed by GET ?action=versions&id= — that endpoint ships in the
     // documents.mjs update that accompanies the Documents UI batch.
+    // A refused history throws the server's words, else its status (§0.243's second fix round) — it threw "HTTP 403";
+    // the document rail says them (failureWords) beside "Version history could not be loaded".
     const fetchVersions = useCallback(async (id) => {
         const r = await dbFetch(`${DOCS_FN}?action=versions&id=${encodeURIComponent(id)}`);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (!r.ok) throw new Error(await readRefusal(r));
         const data = await r.json();
         return Array.isArray(data.versions) ? data.versions : [];
     }, []);

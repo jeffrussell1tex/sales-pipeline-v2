@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { LIcon } from '../shared/ui.jsx';
 import { DataStatCard, DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -18,6 +19,44 @@ const saidBy = (d) => (d && typeof d === 'object' && !('imported' in d) && !('er
 // A function crash — serverErrorBody's 500, with its requestId — may come after the restore wrote records: its words and
 // ref, then what no answer says (state §0.205).
 const crashedWords = (said) => `${said} — the restore may have written records. Run the file again: a record already here is left as it is, never written twice.`;
+// A snapshot's file (state §0.243; docs/design/save-cleanup 5b): saved only when the server sent it. A refused download
+// was saved anyway — its error body written to disk as `<id>.json`, which reads as a backup — and the table's Download
+// and the run's own download said nothing at all. Answers '' once the file is saved, else why not: the server's words
+// (else its status), for the screen to say until it is closed.
+const saveSnapshotFile = async (id) => {
+    let res;
+    try { res = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(id)}&download=1`); }
+    catch { return 'The server could not be reached.'; }
+    if (!res.ok) return readRefusal(res);
+    let text;
+    try { text = await res.text(); } catch { return 'Its file could not be read.'; }
+    // The answer as text, untouched, so the JSON reaches the Blob as the server wrote it.
+    const blob = new Blob([text], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return '';
+};
+// The words of one that was not saved, with no stop of their own (a sentence follows them).
+const unstopped = (why) => String(why).replace(/[.\s]+$/, '');
+// The download banner ({ id, words }) names the snapshot whose file was not saved (§0.243): it clears once THAT file is
+// saved — by the table's Download or the restore window — and stays over another file's save; never on a timer.
+const clearedBy = (banner, id) => (banner && banner.id === id ? null : banner);
+// The schedule's fields a save sends (§0.243's second fix round): only those the Admin changed from the schedule as READ —
+// backup.mjs keeps every field a body leaves out as stored, so a field the Admin never touched is never written. A form
+// that sent the whole working copy wrote every field from it: over a failed read, the client's defaults (Daily, 03:00,
+// 30 days, no failure address) over the real stored schedule.
+const SCHEDULE_FIELDS = ['frequency', 'timeUtc', 'retentionDays', 'notifyOnFailure'];
+const scheduleChanges = (stored, edited) => {
+    const out = {};
+    for (const k of SCHEDULE_FIELDS) if (edited && k in edited && edited[k] !== (stored ? stored[k] : undefined)) out[k] = edited[k];
+    return out;
+};
 
 const ImportBackupModal = ({ onClose, onSuccess }) => {
     const [file,      setFile]      = useState(null);
@@ -225,7 +264,7 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
     );
 };
 
-const RestoreModal = ({ snap, onClose }) => {
+const RestoreModal = ({ snap, onClose, onSaved }) => {
     const [confirm, setConfirm] = useState('');
     const [notify, setNotify]   = useState(true);
     const [loading, setLoading] = useState(false);
@@ -234,23 +273,15 @@ const RestoreModal = ({ snap, onClose }) => {
 
     const handleDownload = async () => {
         if (!ready) return;
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setLoading(true);
         setError('');
         try {
-            const dlRes = await dbFetch(
-                `/.netlify/functions/backup?id=${encodeURIComponent(snap.id)}&download=1`
-            );
-            if (!dlRes.ok) throw new Error('Server error');
-            const text = await dlRes.text();
-            const blob = new Blob([text], { type: 'application/json' });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `${snap.id}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // Refused: nothing saved, and the window stays open saying why (§0.243).
+            const why = await saveSnapshotFile(snap.id);
+            if (!stillOrg(askedOrg)) return;
+            if (why) { setError(`The snapshot was not downloaded (${unstopped(why)}). Please try again.`); return; }
+            if (onSaved) onSaved(snap.id);   // its file is saved: a banner saying it was not goes
             onClose();
         } catch (e) {
             setError('Download failed. Please try again.');
@@ -313,6 +344,10 @@ export const BackupDetail = ({ onBack }) => {
     // ── Data state
     const [snapshots,    setSnapshots]    = useState([]);
     const [schedule,     setSchedule]     = useState({ frequency:'Daily', timeUtc:'03:00', retentionDays:30, notifyOnFailure:'' });
+    // The schedule as the server answered it (§0.243's second fix round): until it was READ, `schedule` holds only the
+    // client's defaults — the Retention card says no number and the form offers nothing to save, so nothing is ever
+    // written from defaults never read (a failed read showed "30 days" and saved Daily · 03:00 over the stored schedule).
+    const [scheduleRead, setScheduleRead] = useState(false);
     const [loading,      setLoading]      = useState(true);
     const [loadError,    setLoadError]    = useState('');
 
@@ -322,6 +357,15 @@ export const BackupDetail = ({ onBack }) => {
     const [runningBackup,setRunningBackup]= useState(false);
     const [backupError,  setBackupError]  = useState('');
     const [backupSuccess,setBackupSuccess]= useState('');
+    // A snapshot's file not saved ({ id, words }; §0.243), apart from a refused run: kept until closed or until that file
+    // is saved (clearedBy), and brought into view when said — the table's Download sits far below the banner.
+    const [downloadError, setDownloadError] = useState(null);
+    const downloadBannerRef = useRef(null);
+    const fileSaved = (id) => setDownloadError((banner) => clearedBy(banner, id));
+    useEffect(() => {
+        const el = downloadBannerRef.current;
+        if (downloadError && el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    }, [downloadError]);
 
     // ── Schedule edit state
     const [schedDirty,   setSchedDirty]   = useState(false);
@@ -346,15 +390,19 @@ export const BackupDetail = ({ onBack }) => {
             setLoadError('');
             try {
                 const res  = await dbFetch('/.netlify/functions/backup');
+                // The ok check first (§0.243): a refused read's body was read as the list — "No backups yet", no error.
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
                 if (cancelled) return;
                 setSnapshots(data.snapshots || []);
-                if (data.schedule) {
+                if (data.schedule && typeof data.schedule === 'object') {
                     setSchedule(data.schedule);
                     setEditSched(data.schedule);
+                    setScheduleRead(true);
                 }
             } catch (e) {
-                if (!cancelled) setLoadError('Failed to load backup data. Please refresh.');
+                // Plain words for a failure that is no refusal (§0.243's second fix round): never a parse error's.
+                if (!cancelled) setLoadError(`Failed to load backup data (${unstopped(failureWords(e))}). Please refresh.`);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -390,8 +438,10 @@ export const BackupDetail = ({ onBack }) => {
             // POST creates the snapshot row and returns metadata (no payload inline
             // to stay within Netlify's 6MB response limit)
             const res  = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
+            // The ok check first (§0.243): a refusal says the server's words, else its status — the body read before it
+            // said "Unexpected token '<'" for a page that was not JSON. The backup's own answer is parsed as sent.
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Backup failed');
 
             // Prepend new snapshot to list immediately
             setSnapshots(prev => [{
@@ -408,25 +458,10 @@ export const BackupDetail = ({ onBack }) => {
 
             setBackupSuccess(`Backup complete · ${data.recordCount?.toLocaleString() || '—'} records · ${data.sizeLabel || '—'} · ${data.id}`);
 
-            // Fetch the export as raw text — must use res.text() so the JSON string
-            // reaches the Blob constructor untouched (dbFetch returns a raw Response).
-            try {
-                const dlRes  = await dbFetch(
-                    `/.netlify/functions/backup?id=${encodeURIComponent(data.id)}&download=1`
-                );
-                const text = await dlRes.text();
-                const blob = new Blob([text], { type: 'application/json' });
-                const url  = URL.createObjectURL(blob);
-                const a    = document.createElement('a');
-                a.href     = url;
-                a.download = `${data.id}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            } catch {
-                // Download failed but backup succeeded — user can download from the table
-            }
+            // The backup is made; its file is saved only when the server sends it, and a download refused is said —
+            // kept until closed — while the backup stands in the table to download again (§0.243).
+            const why = await saveSnapshotFile(data.id);
+            if (why) setDownloadError({ id: data.id, words: `The backup was made, but its file was not downloaded (${unstopped(why)}). Download it from the table below.` });
         } catch (e) {
             setBackupError(e.message || 'Backup failed. Please try again.');
         } finally {
@@ -437,22 +472,29 @@ export const BackupDetail = ({ onBack }) => {
     // ── Save schedule
     const handleSaveSchedule = async () => {
         if (schedSaving) return;
+        // Never from a schedule not read (§0.243's second fix round): the form offers no Save then; this refuses in words.
+        if (!scheduleRead) { setSchedError('The schedule could not be read, so nothing was saved. Reload the page to try again.'); return; }
+        // Only the fields the Admin changed; none changed is nothing to send.
+        const changes = scheduleChanges(schedule, editSched);
+        if (Object.keys(changes).length === 0) { setEditSched(schedule); setSchedDirty(false); setSchedError(''); return; }
         setSchedSaving(true);
         setSchedError('');
         setSchedSaved(false);
         try {
             const res  = await dbFetch('/.netlify/functions/backup', {
                 method: 'PUT',
-                body: JSON.stringify(editSched),
+                body: JSON.stringify(changes),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Save failed');
-            setSchedule(editSched);
+            // The ok check first (§0.243): the server's words, else its status. The answer's body is not used.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const saved = { ...schedule, ...changes };
+            setSchedule(saved);
+            setEditSched(saved);
             setSchedDirty(false);
             setSchedSaved(true);
             setTimeout(() => setSchedSaved(false), 3000);
         } catch (e) {
-            setSchedError(e.message || 'Failed to save schedule.');
+            setSchedError(failureWords(e));
         } finally {
             setSchedSaving(false);
         }
@@ -474,7 +516,7 @@ export const BackupDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
+            {restoreSnap && <RestoreModal snap={restoreSnap} onSaved={fileSaved} onClose={()=>setRestoreSnap(null)}/>}
             {/* The import window stays open on its answer until its Close (state §0.205 — Jeff, 16 Oct: "Fold it in"): it closed in the render that set the result, so no count, error or note was ever seen */}
             {showImport  && <ImportBackupModal onClose={()=>setShowImport(false)}/>}
 
@@ -506,9 +548,24 @@ export const BackupDetail = ({ onBack }) => {
                     ✓ {backupSuccess}
                 </div>
             )}
+            {/* Kept until closed (§18b123 rule 4): a refused backup or download, never on a timer. */}
             {backupError && (
-                <div style={{ padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
-                    ✕ {backupError}
+                <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
+                    <span style={{ flex:1, minWidth:0 }}>✕ {backupError}</span>
+                    <button onClick={() => setBackupError('')}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
+            {/* A snapshot's file not saved (§0.243): kept until closed or until that file is saved, and scrolled into view when said. */}
+            {downloadError && (
+                <div ref={downloadBannerRef} role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
+                    <span style={{ flex:1, minWidth:0 }}>✕ {downloadError.words}</span>
+                    <button onClick={() => setDownloadError(null)}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
                 </div>
             )}
             {loadError && (
@@ -519,21 +576,23 @@ export const BackupDetail = ({ onBack }) => {
 
             {/* KPI stat cards */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                {/* A failed read is no count (§0.243, §18b123 rule 4): "Never" and 0 said it had none. */}
                 <DataStatCard label="Last backup"
-                    value={loading ? '…' : lastSnap ? fmtWhen(lastSnap.createdAt) : 'Never'} mono/>
+                    value={loading ? '…' : loadError ? '—' : lastSnap ? fmtWhen(lastSnap.createdAt) : 'Never'} mono/>
                 <DataStatCard label="Backups stored"
-                    value={loading ? '…' : snapshots.length}/>
+                    value={loading ? '…' : loadError ? '—' : snapshots.length}/>
                 <DataStatCard label="Total size"
-                    value={loading ? '…' : totalSizeLabel}/>
+                    value={loading ? '…' : loadError ? '—' : totalSizeLabel}/>
+                {/* The client's default is no retention (§0.243's second fix round): a schedule not read says no number. */}
                 <DataStatCard label="Retention"
-                    value={`${schedule.retentionDays} days`}/>
+                    value={loading ? '…' : !scheduleRead ? '—' : `${schedule.retentionDays} days`}/>
             </div>
 
             {/* Schedule form */}
             <DataCard title="Schedule"
                 desc="Backups are automated; you can also run a snapshot at any time."
                 headAction={
-                    schedDirty ? (
+                    scheduleRead && schedDirty ? (
                         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                             {schedSaved && <span style={{ fontSize:12, color:T.ok, fontWeight:600 }}>✓ Saved</span>}
                             {schedError && <span style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{schedError}</span>}
@@ -544,6 +603,14 @@ export const BackupDetail = ({ onBack }) => {
                         <span style={{ fontSize:12, color:T.ok, fontWeight:600 }}>✓ Saved</span>
                     ) : null
                 }>
+                {/* Drawn only once the schedule is read (§0.243's second fix round): the defaults were drawn as stored, and saved. */}
+                {loading ? (
+                    <div style={{ padding:'12px 0', color:T.inkMuted, fontSize:13 }}>Loading the schedule…</div>
+                ) : !scheduleRead ? (
+                    <div role="alert" style={{ padding:'10px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:3, fontSize:12.5, color:T.danger }}>
+                        The schedule couldn't be read, so it can't be changed here. Reload the page to try again.
+                    </div>
+                ) : (
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
                     {/* Frequency */}
                     <div>
@@ -590,6 +657,7 @@ export const BackupDetail = ({ onBack }) => {
                             placeholder="email or Slack handle" style={inpSt}/>
                     </div>
                 </div>
+                )}
             </DataCard>
 
             {/* Snapshots table */}
@@ -598,6 +666,10 @@ export const BackupDetail = ({ onBack }) => {
                 headAction={<span style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>Storage: Neon PostgreSQL</span>}>
                 {loading ? (
                     <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading snapshots…</div>
+                ) : snapshots.length === 0 && loadError ? (
+                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                        Nothing to show until the backups can be loaded.
+                    </div>
                 ) : snapshots.length === 0 ? (
                     <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
                         No backups yet. Click <b>Run backup now</b> to create your first snapshot.
@@ -642,17 +714,10 @@ export const BackupDetail = ({ onBack }) => {
                                                     Restore
                                                 </button>
                                                 <button onClick={async () => {
-                                                    try {
-                                                        const dlRes = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
-                                                        const text  = await dlRes.text();
-                                                        const blob  = new Blob([text], { type:'application/json' });
-                                                        const url   = URL.createObjectURL(blob);
-                                                        const a     = document.createElement('a');
-                                                        a.href = url; a.download = `${s.id}.json`;
-                                                        document.body.appendChild(a); a.click();
-                                                        document.body.removeChild(a);
-                                                        URL.revokeObjectURL(url);
-                                                    } catch { /* silent */ }
+                                                    // Refused: nothing saved, said until closed (§0.243) — it was silent, and saved the refusal.
+                                                    const why = await saveSnapshotFile(s.id);
+                                                    if (why) setDownloadError({ id: s.id, words: `Backup ${s.id} was not downloaded (${unstopped(why)}). Please try again.` });
+                                                    else fileSaved(s.id);
                                                 }} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>
                                                     Download
                                                 </button>

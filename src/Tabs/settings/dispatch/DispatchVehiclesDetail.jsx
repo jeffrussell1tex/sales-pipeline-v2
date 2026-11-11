@@ -21,6 +21,8 @@
 // decisions any more, but deleting live data to tidy up is not worth the risk.
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal } from '../../../utils/refusalWords.js';
+import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -194,33 +196,33 @@ const EquipmentForm = ({ draft, set, categories, techs, onSave, onDelete, onCanc
     </div>
 );
 
-// Legacy blob → table rows. Ids are derived from the blob id so the import is
-// idempotent: the POST upserts on id, so running it twice cannot duplicate.
-const plannedVehicleImports = (blob) => (blob || [])
-    .filter(v => (v.name || '').trim())
-    .map(v => ({
-        id:           'imp_' + v.id,
-        name:         v.name.trim(),
-        type:         String(v.type || v.kind || 'van').toLowerCase(),
-        licensePlate: v.plate || v.licensePlate || null,
-        notes:        v.notes || null,
-    }));
+// Legacy blob → table rows: src/utils/legacyDispatchImport.js (state §0.243, Q7 "Send only
+// what's missing"). The POSTs are designed upserts (§0.201) — a row sent again is replaced
+// whole — so the import sends only the rows the tables do not hold yet.
 
-const plannedEquipmentImports = (blob) => {
-    const out = [];
-    (blob || []).filter(e => (e.name || '').trim()).forEach(e => {
-        const q = parseInt(e.qty, 10);
-        const units = q > 0 ? q : 1;
-        for (let i = 1; i <= units; i++) {
-            out.push({
-                id:       'imp_' + e.id + '_u' + i,
-                name:     units > 1 ? `${e.name.trim()} #${i}` : e.name.trim(),
-                category: e.name.trim(),
-                notes:    e.notes || null,
-            });
-        }
-    });
-    return out;
+// The words of a refusal, with no stop of their own (a sentence follows them).
+const unstopped = (why) => String(why).replace(/[.\s]+$/, '');
+
+// The tables as they are now, read for the import's plan — never this panel's earlier load:
+// another tab or member may have imported since. Throws the words of a read that failed.
+const readHeld = async () => {
+    let vRes, eRes;
+    try {
+        [vRes, eRes] = await Promise.all([
+            dbFetch('/.netlify/functions/dispatch-vehicles'),
+            dbFetch('/.netlify/functions/dispatch-equipment'),
+        ]);
+    } catch {
+        throw new Error('the server could not be reached');
+    }
+    if (!vRes.ok) throw new Error(`the vehicles couldn't be read (${unstopped(await readRefusal(vRes))})`);
+    if (!eRes.ok) throw new Error(`the equipment couldn't be read (${unstopped(await readRefusal(eRes))})`);
+    try {
+        const [vJson, eJson] = await Promise.all([vRes.json(), eRes.json()]);
+        return { vehicles: vJson && vJson.vehicles, equipment: eJson && eJson.equipment };
+    } catch {
+        throw new Error("the vehicles and equipment answer couldn't be read");
+    }
 };
 
 export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) => {
@@ -229,6 +231,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
     const [techs,     setTechs]     = useState([]);
     const [loading,   setLoading]   = useState(true);
     const [loadError, setLoadError] = useState('');
+    // The technicians are read apart from the fleet (§0.243): their refusal is said as its own and fails
+    // neither the vehicles and equipment nor the import, which plans by those two alone.
+    const [techsError, setTechsError] = useState('');
+    // True once the tables have answered a load; false until then and after one fails.
+    // The import's plan counts against them only when they did (Q7).
+    const [fleetLoaded, setFleetLoaded] = useState(false);
 
     const [vDraft, setVDraft] = useState(null);
     const [eDraft, setEDraft] = useState(null);
@@ -238,6 +246,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
 
     const [importing,    setImporting]    = useState(false);
     const [importResult, setImportResult] = useState('');
+    const [importError,  setImportError]  = useState('');   // kept until closed
 
     const legacyVehicles  = settings?.dispatchVehicles  || [];
     const legacyEquipment = settings?.dispatchEquipment || [];
@@ -245,23 +254,36 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
     const load = useCallback(async () => {
         setLoading(true);
         setLoadError('');
+        setTechsError('');
         try {
             const [vRes, eRes, tRes] = await Promise.all([
                 dbFetch('/.netlify/functions/dispatch-vehicles'),
                 dbFetch('/.netlify/functions/dispatch-equipment'),
                 dbFetch('/.netlify/functions/dispatch-technicians'),
             ]);
+            // The technicians first, apart (§0.243): a refusal of theirs failed the whole load, so the
+            // import card blamed the vehicles and equipment and refused an import that could run.
+            // Their names stay as last read; the words say why they may be missing.
+            if (!tRes.ok) {
+                setTechsError(`The technicians couldn't be read (${unstopped(await readRefusal(tRes))}), so who is assigned to what may not show. Refresh to try again.`);
+            } else {
+                const tJson = await tRes.json().catch(() => null);
+                if (tJson) setTechs(tJson.technicians || []);
+                else setTechsError("The technicians' answer couldn't be read, so who is assigned to what may not show. Refresh to try again.");
+            }
             // dbFetch returns a Response and does not throw on 4xx/5xx. Reading
             // `.vehicles` off an error body would fall through `|| []` and render
             // as an empty fleet — a failure indistinguishable from no data.
-            const bad = [['vehicles', vRes], ['equipment', eRes], ['technicians', tRes]].filter(([, r]) => !r.ok);
-            if (bad.length) throw new Error('Failed to load ' + bad.map(([n, r]) => `${n} (${r.status})`).join(', '));
-            const [vJson, eJson, tJson] = await Promise.all([vRes.json(), eRes.json(), tRes.json()]);
+            // A refusal says the server's words, else its status (§0.243) — it said "Failed to load vehicles (403)".
+            if (!vRes.ok) throw new Error(`The vehicles couldn't be read (${unstopped(await readRefusal(vRes))}).`);
+            if (!eRes.ok) throw new Error(`The equipment couldn't be read (${unstopped(await readRefusal(eRes))}).`);
+            const [vJson, eJson] = await Promise.all([vRes.json(), eRes.json()]);
             setVehicles(vJson.vehicles    || []);
             setEquipment(eJson.equipment  || []);
-            setTechs(tJson.technicians    || []);
+            setFleetLoaded(true);
         } catch (err) {
             setLoadError(err.message || 'Failed to load fleet.');
+            setFleetLoaded(false);
         }
         setLoading(false);
     }, []);
@@ -298,8 +320,8 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change vehicles.' : (data.error || 'HTTP ' + res.status));
+            // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change vehicles.' : await readRefusal(res));
             await load();
             setVDraft(null);
         } catch (err) {
@@ -340,8 +362,8 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change equipment.' : (data.error || 'HTTP ' + res.status));
+            // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change equipment.' : await readRefusal(res));
             await load();
             setEDraft(null);
         } catch (err) {
@@ -366,61 +388,104 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
     };
 
     // ── One-time import from the retired settings blobs ──────────────────────
+    // Only what the tables do not hold yet is sent (Q7): the POSTs upsert, so a row sent again
+    // would replace an edited vehicle's make, VIN and service dates, or clear a unit's check-out.
+    // With no answered load, every row would look missing — it refuses and says so.
     const runImport = async () => {
-        setImporting(true); setImportResult('');
-        const vPlan = plannedVehicleImports(legacyVehicles);
-        const ePlan = plannedEquipmentImports(legacyEquipment);
+        if (loadError || !fleetLoaded) { setImportError(IMPORT_UNREAD); return; }
+        setImporting(true); setImportResult(''); setImportError('');
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+        let plan;
+        try {
+            plan = planImport({ vehicles: legacyVehicles, equipment: legacyEquipment }, await readHeld());
+        } catch (err) {
+            if (!stillOrg(askedOrg)) return;
+            setImportError(`The import didn't run: ${unstopped(err.message)}. Refresh, then try again.`);
+            setImporting(false);
+            return;
+        }
+        if (!stillOrg(askedOrg)) return;
+        if (!plan.known) { setImportError(IMPORT_UNREAD); setImporting(false); return; }
         let ok = 0; const failed = [];
-        for (const row of vPlan) {
+        for (const row of plan.vehicles) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-vehicles', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                if (!res.ok) { failed.push(`${row.name}: ${unstopped(await readRefusal(res))}`); continue; }
                 ok++;
-            } catch (err) { failed.push(`${row.name}: ${err.message}`); }
+            } catch { failed.push(`${row.name}: the server could not be reached`); }
         }
-        for (const row of ePlan) {
+        for (const row of plan.equipment) {
             if (!stillOrg(askedOrg)) return;
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-equipment', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                if (!res.ok) { failed.push(`${row.name}: ${unstopped(await readRefusal(res))}`); continue; }
                 ok++;
-            } catch (err) { failed.push(`${row.name}: ${err.message}`); }
+            } catch { failed.push(`${row.name}: the server could not be reached`); }
         }
         await load();
-        setImportResult(failed.length
-            ? `Imported ${ok}. ${failed.length} failed — ${failed.slice(0, 3).join('; ')}${failed.length > 3 ? '…' : ''}`
-            : `Imported ${ok} record${ok === 1 ? '' : 's'}. Re-running is safe; ids are derived from the originals.`);
+        if (!stillOrg(askedOrg)) return;
+        if (failed.length) {
+            setImportError(`Imported ${ok} of ${plan.count}. ${failed.length} not imported — ${failed.slice(0, 3).join('; ')}${failed.length > 3 ? '…' : ''}.`);
+        } else {
+            setImportResult(plan.count === 0
+                ? 'Nothing was missing: every entry of the old list is already in the tables.'
+                : `Imported ${ok} record${ok === 1 ? '' : 's'}.`);
+        }
         setImporting(false);
     };
 
-    const importPending = plannedVehicleImports(legacyVehicles).length + plannedEquipmentImports(legacyEquipment).length;
+    // What the card counts: the rows still to import, against the tables as last loaded —
+    // not known (and nothing counted) until a load answered, or after one failed.
+    const importPlan = planImport({ vehicles: legacyVehicles, equipment: legacyEquipment },
+        fleetLoaded && !loadError ? { vehicles, equipment } : null);
+    const showImport = importCardShows(importPlan,
+        { importing, said: !!(importResult || importError), loadFailed: !!loadError });
+    const closeImportWords = () => { setImportResult(''); setImportError(''); };
 
     return (
-        <CategoryDetailChrome error={loadError} crumb="Vehicles & equipment" category="Dispatch" title="Vehicles & equipment"
+        <CategoryDetailChrome error={[loadError, techsError].filter(Boolean).join(' ')} crumb="Vehicles & equipment" category="Dispatch" title="Vehicles & equipment"
             subtitle="Your fleet and tool inventory. Each equipment row is one physical unit; jobs require a category, and scheduling counts the units actually available."
             onBack={onBack}
             rightActions={
                 <button onClick={load} disabled={loading} style={btnGhost}>{loading ? 'Loading…' : 'Refresh'}</button>
             }>
 
-            {importPending > 0 && (
+            {showImport && (
                 <CSectionCard title="Import from the old settings list"
-                    desc="Vehicles and equipment used to live in workspace settings, where nothing operational read them. These entries have not been carried across.">
+                    desc="Vehicles and equipment used to live in workspace settings, where nothing operational read them.">
                     <div style={{ fontSize: 12.5, fontFamily: T.sans, color: T.inkMid, lineHeight: 1.6 }}>
-                        Creates <strong style={{ color: T.ink }}>{plannedVehicleImports(legacyVehicles).length} vehicle(s)</strong> and{' '}
-                        <strong style={{ color: T.ink }}>{plannedEquipmentImports(legacyEquipment).length} equipment unit(s)</strong>.
-                        An item with a quantity becomes that many units, all sharing one category.
-                        Nothing is deleted from the old list, and re-running the import cannot create duplicates.
+                        {!importPlan.known ? (
+                            <>The vehicles and equipment couldn't be read, so what the old list still has to import can't be counted. Refresh to try again.</>
+                        ) : importPlan.count > 0 ? (
+                            <>
+                                Creates <strong style={{ color: T.ink }}>{importPlan.vehicles.length} vehicle(s)</strong> and{' '}
+                                <strong style={{ color: T.ink }}>{importPlan.equipment.length} equipment unit(s)</strong> — the old list's entries not in the tables yet.
+                                An item with a quantity becomes that many units, all sharing one category.
+                                A vehicle or unit already in the tables is never sent again, so nothing changed since is overwritten;
+                                one deleted after an import counts here again. Nothing is deleted from the old list.
+                            </>
+                        ) : (
+                            <>Every entry of the old list is in the tables.</>
+                        )}
                     </div>
                     <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <button onClick={runImport} disabled={importing} style={{ ...btnPrimary, opacity: importing ? 0.6 : 1 }}>
-                            {importing ? 'Importing…' : 'Import now'}
-                        </button>
+                        {importPlan.count > 0 && (
+                            <button onClick={runImport} disabled={importing || loading || !importPlan.known}
+                                style={{ ...btnPrimary, opacity: importing || loading ? 0.6 : 1 }}>
+                                {importing ? 'Importing…' : 'Import now'}
+                            </button>
+                        )}
                         {importResult && <span style={{ fontSize: 12, fontFamily: T.sans, color: T.inkMid }}>{importResult}</span>}
+                        {importError && <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans, color: T.danger, flex: 1, minWidth: 0 }}>{importError}</span>}
+                        {(importResult || importError) && !importing && (
+                            <button onClick={closeImportWords}
+                                style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                                Close
+                            </button>
+                        )}
                     </div>
                 </CSectionCard>
             )}

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
 import { useApp } from '../../../AppContext';
@@ -175,9 +176,12 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                 method: editing ? 'PUT' : 'POST',
                 body: JSON.stringify({ ...(editing ? { id: rule.id } : {}), name: name.trim(), triggerEvent: trigger, conditions, actions }),
             });
-            const data = await res.json();
+            // The ok check first (§0.243): a refusal reads its words (else its status), the rule's answer is parsed as
+            // sent — then the org is checked, after every read, before anything is done.
+            const why  = res.ok ? '' : await readRefusal(res);
+            const data = res.ok ? await res.json() : null;
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || (editing ? 'Failed to save' : 'Failed to create'));
+            if (why) throw new Error(why);
             if (onSaved) onSaved(data.automation);
             onClose();
         } catch(e) {
@@ -354,8 +358,8 @@ export const AutomationsDetail = ({ onBack }) => {
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/automations');
+            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setAutomationList(data.automations || []);
         } catch(e) { setError(e.message); }
         finally { setLoading(false); }
@@ -371,8 +375,8 @@ export const AutomationsDetail = ({ onBack }) => {
                 method: 'PUT',
                 body: JSON.stringify({ id: rule.id, active: !rule.active }),
             });
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setAutomationList(prev => prev.map(r => r.id===rule.id ? data.automation : r));
         } catch(e) { setError(e.message); load(); }
     };
@@ -382,7 +386,7 @@ export const AutomationsDetail = ({ onBack }) => {
         setActiveMenu(null);
         try {
             const res = await dbFetch(`/.netlify/functions/automations?id=${rule.id}`, { method: 'DELETE' });
-            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            if (!res.ok) throw new Error(await readRefusal(res));
         } catch(e) { setError(e.message); load(); }
     };
 
@@ -392,9 +396,11 @@ export const AutomationsDetail = ({ onBack }) => {
         setRunsFor({ rule, runs: [] });
         try {
             const res  = await dbFetch(`/.netlify/functions/automations?runs=${rule.id}`);
+            // A refused read is not "No runs yet" (§0.243): the history says it couldn't be opened, and why.
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             setRunsFor({ rule, runs: data.runs || [] });
-        } catch(e) { setError(e.message); }
+        } catch(e) { setRunsFor({ rule, runs: [], error: e.message || 'No answer from the server.' }); }
         finally { setRunsLoading(false); }
     };
 
@@ -428,6 +434,8 @@ export const AutomationsDetail = ({ onBack }) => {
                         <div style={{ flex:1, overflowY:'auto', padding:'12px 0' }}>
                             {runsLoading ? (
                                 <div style={{ padding:32, textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
+                            ) : runsFor.error ? (
+                                <div style={{ margin:'8px 20px', padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12.5, color:T.danger }}>⚠ The run history couldn't be opened ({String(runsFor.error).replace(/[.\s]+$/, '')}). Close it and open it again to try again.</div>
                             ) : runsFor.runs.length === 0 ? (
                                 <div style={{ padding:32, textAlign:'center', color:T.inkMuted, fontSize:13 }}>No runs yet. This automation fires when the trigger event occurs in your CRM.</div>
                             ) : runsFor.runs.map((run, i) => (

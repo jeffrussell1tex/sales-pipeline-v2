@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, dbWrite } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
@@ -92,6 +93,9 @@ export const ExportDetail = ({ onBack }) => {
     const [adhocLoading, setAdhocLoading] = React.useState(false);
     const [adhocError,   setAdhocError]   = React.useState(null);
     const [editingSched, setEditingSched] = React.useState(null); // schedule being edited
+    // A refused Pause / Enable or Mark complete (§0.243's second fix round): what was not done and why, kept until closed
+    // (§18b123 rule 4) — the row went back and nothing said why.
+    const [actionError,  setActionError]  = React.useState('');
 
     // ── load all three endpoints on mount ─────────────────────
     React.useEffect(() => {
@@ -104,12 +108,14 @@ export const ExportDetail = ({ onBack }) => {
                     dbFetch('/.netlify/functions/export-dsr'),
                 ]);
                 if (cancelled) return;
+                // The ok checks first (§0.243): a refusal says which list and the server's words, else its status — the
+                // bodies read before them said "Unexpected token '<'" for a page that was not JSON.
+                if (!schRes.ok)  throw new Error(`Failed to load schedules: ${await readRefusal(schRes)}`);
+                if (!runRes.ok)  throw new Error(`Failed to load runs: ${await readRefusal(runRes)}`);
+                if (!dsrRes.ok)  throw new Error(`Failed to load DSR queue: ${await readRefusal(dsrRes)}`);
                 const [schData, runData, dsrData] = await Promise.all([
                     schRes.json(), runRes.json(), dsrRes.json(),
                 ]);
-                if (!schRes.ok)  throw new Error(schData.error || 'Failed to load schedules');
-                if (!runRes.ok)  throw new Error(runData.error || 'Failed to load runs');
-                if (!dsrRes.ok)  throw new Error(dsrData.error || 'Failed to load DSR queue');
                 setSchedules(schData.schedules || []);
                 setRuns(runData.runs || []);
                 setDsrItems(dsrData.dsrQueue || []);
@@ -134,12 +140,16 @@ export const ExportDetail = ({ onBack }) => {
         setSchedules(prev => prev.map(s => s.id === sched.id ? updated : s));
         try {
             const res  = await dbFetch('/.netlify/functions/export-schedules', { method:'PUT', body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setSchedules(prev => prev.map(s => s.id === sched.id ? (data.schedule || updated) : s));
+            // A banner about this schedule is no longer true once its retry lands (the re-check, 10 Nov); one about
+            // another row stands until closed.
+            setActionError(prev => (prev.startsWith(`"${sched.name}" was not `) ? '' : prev));
         } catch (e) {
-            // Revert on error
+            // Revert on error, and say why
             setSchedules(prev => prev.map(s => s.id === sched.id ? sched : s));
+            setActionError(`"${sched.name}" was not ${sched.enabled ? 'paused' : 'enabled'} — ${failureWords(e)}`);
         }
     };
 
@@ -168,8 +178,8 @@ export const ExportDetail = ({ onBack }) => {
                 method: 'POST',
                 body: JSON.stringify({ id, scope: adHocScope, format: adHocFmt }),
             });
+            if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first (§0.243): its words, else its status
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Export failed');
 
             // Trigger browser download from base64 payload
             const dl  = data.download;
@@ -201,11 +211,13 @@ export const ExportDetail = ({ onBack }) => {
         setDsrItems(prev => prev.map(d => d.id === dsr.id ? updated : d));
         try {
             const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'PUT', body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setDsrItems(prev => prev.map(d => d.id === dsr.id ? (data.dsr || updated) : d));
+            setActionError(prev => (prev.startsWith(`Request ${dsr.id} was not `) ? '' : prev));
         } catch (e) {
             setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
+            setActionError(`Request ${dsr.id} was not ${newStatus === 'completed' ? 'marked complete' : 'updated'} — ${failureWords(e)}`);
         }
     };
 
@@ -255,8 +267,8 @@ export const ExportDetail = ({ onBack }) => {
                     const method = isEdit ? 'PUT' : 'POST';
                     if (!isEdit) payload.id = 'sch_' + crypto.randomUUID();
                     const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
+                    if (!res.ok) throw new Error(await readRefusal(res));
                     const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
                     if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? data.schedule : s));
                     else        setSchedules(prev => [data.schedule, ...prev]);
                     setShowModal(false); setEditingSched(null);
@@ -266,8 +278,8 @@ export const ExportDetail = ({ onBack }) => {
                 try {
                     payload.id = 'dsr_' + crypto.randomUUID();
                     const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
+                    if (!res.ok) throw new Error(await readRefusal(res));
                     const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
                     setDsrItems(prev => [data.dsr, ...prev]);
                     setShowDsrModal(false);
                 } catch(e) { alert('Save failed: ' + e.message); }
@@ -289,6 +301,17 @@ export const ExportDetail = ({ onBack }) => {
                     <DataBtn key="new" label="+ New scheduled export" primary onClick={() => { setEditingSched(null); setShowModal(true); }}/>,
                 ]}
             />
+
+            {/* A refused Pause / Enable or Mark complete (§0.243): kept until closed, never on a timer. */}
+            {actionError && (
+                <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
+                    <span style={{ flex:1, minWidth:0 }}>✕ {actionError}</span>
+                    <button onClick={() => setActionError('')}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
 
             {/* Failing callout */}
             {failing && (

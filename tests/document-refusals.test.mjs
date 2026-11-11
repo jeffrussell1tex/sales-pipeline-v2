@@ -153,7 +153,8 @@ const REPORTS = ['updateDocument', 'removeDocument', 'restoreVersion', 'linkDocu
 // it throws, and every call is caught where it is made (scanned below) — the uploads,
 // whose screen holds the file and shows the error beside it, and the reads —
 const THROWS = ['createDocument', 'addDocumentVersion', 'fetchVersions'];   // fetchRecordDocuments had no caller — removed (§0.182)
-// not a request, or the library's load, which the app's banner reports (dbStatusOf).
+// not a request, or the library's load, which the app's banner reports (dbStatusOf) and the library draws as a read
+// that failed (docsError, DocumentsTab — state §0.243; tests/refusals-said.test.mjs).
 const OTHER = ['documents', 'setDocuments', 'docsLoading', 'docsError', 'loadDocuments'];
 
 const jsx = (src) => parse(src, { sourceType: 'module', plugins: ['jsx'] });
@@ -231,9 +232,34 @@ test('the document rail closes on a delete that landed, and says when the histor
     assert.ok(onDelete.includes('removeDocument && removeDocument(doc.id);'), 'the delete is sent');
     assert.ok(!onDelete.includes('close()'), 'and the rail stays until the document leaves the library — a refused delete leaves it open');
     assert.ok(rail.includes('useEffect(() => { if (documentRailId && !doc) close(); }, [documentRailId, doc, close]);'), 'what closes it: the document gone');
-    assert.ok(rail.includes('.catch(() => { if (!cancelled) { setVersions([]); setVersionsFailed(true); } })'), 'a history that did not load is marked');
+    // Moved pins (§0.243's second fix round): the history that did not load keeps WHY (failureWords) and says it —
+    // `setVersionsFailed(true)` and the bare "Version history could not be loaded." before.
+    assert.ok(rail.includes('.catch((e) => { if (!cancelled) { setVersions([]); setVersionsFailed(failureWords(e)); } })'), 'a history that did not load is marked, with why');
+    assert.ok(rail.includes("import { failureWords } from '../../utils/refusalWords.js';"));
     assert.ok(rail.includes(') : versionsFailed ? ('), 'and shown before "No version history."');
-    assert.ok(rail.includes('Version history could not be loaded.'));
+    assert.ok(rail.includes("Version history could not be loaded ({String(versionsFailed).replace(/[.\\s]+$/, '')}).</div>"), 'and why');
+    assert.ok(rail.includes("const [versionsFailed, setVersionsFailed] = useState('');") && rail.includes("setVersionsFailed('');"), 'cleared as each load begins');
+});
+
+// fetchVersions, the REAL hook (§0.243's second fix round): a refused history throws the server's words — it threw
+// "HTTP 403" — and what the rail says of each failure (failureWords) is plain words, never a parse error's.
+test('a refused version history throws the server\'s words, else its status; the rail says plain words', async () => {
+    const { failureWords } = await import('../src/utils/refusalWords.js');
+    const failed = async () => { try { await docs.fetchVersions('doc_1'); return null; } catch (e) { return [e.message, failureWords(e)]; } };
+    sent.length = 0;
+    answer = () => respond(403, { error: 'Forbidden: not shared with you' });
+    assert.deepEqual(await failed(), ['Forbidden: not shared with you', 'Forbidden: not shared with you'], 'REGRESSION: "HTTP 403"');
+    assert.deepEqual(sent, [`GET ${DOCS}?action=versions&id=doc_1`]);
+    answer = () => respond(500, { error: 'Internal error', requestId: 'req-243' });
+    assert.deepEqual(await failed(), ['Internal error (ref req-243)', 'Internal error (ref req-243)']);
+    answer = () => respond(502, undefined);
+    assert.deepEqual(await failed(), ['The server returned 502.', 'The server returned 502.'], 'a page that was not JSON');
+    answer = () => { throw new TypeError('Failed to fetch'); };
+    assert.deepEqual((await failed())[1], 'The server could not be reached.');
+    answer = () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token '<'"); } });
+    assert.deepEqual((await failed())[1], 'Its answer could not be read.', 'a 200 whose body is not JSON');
+    answer = () => respond(200, { versions: [{ v: 1 }, { v: 2 }] });
+    assert.deepEqual(await docs.fetchVersions('doc_1'), [{ v: 1 }, { v: 2 }]);
 });
 
 test('the link picker stays open on a refused link; a record\'s Link existing stops at one', () => {

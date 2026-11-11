@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -37,9 +38,12 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
                 method: 'POST',
                 body: JSON.stringify({ name: name.trim(), scopes: [...scopes] }),
             });
-            const data = await res.json();
+            // The ok check first (§0.243): a refusal reads its words (else its status), the key's answer is parsed as
+            // sent — then the org is checked, after every read, before anything is done.
+            const why  = res.ok ? '' : await readRefusal(res);
+            const data = res.ok ? await res.json() : null;
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Failed to create key');
+            if (why) throw new Error(why);
             setResult(data);
             if (onCreated) onCreated(data.key);
             setStep('reveal');
@@ -424,7 +428,7 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch(`/.netlify/functions/api-keys?id=${keyRecord.id}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             if (onRevoked) onRevoked(keyRecord.id);
             onClose();
         } catch(e) { setError(e.message); setConfirming(false); }
@@ -480,8 +484,8 @@ export const ApiKeysDetail = ({ onBack }) => {
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/api-keys');
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
             setKeys(data.keys || []);
         } catch(e) { setError(e.message); }
         finally { setLoading(false); }

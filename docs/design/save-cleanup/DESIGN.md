@@ -4,7 +4,9 @@
 
 ## The batch
 
-**Parts 1-4 built 10 Nov** (state §0.242; guide §18b125; NOT committed; harness deferred) as answered (ANSWERS.md), with two changes at build: the products POST stamps the caller's name, not `auth.userId` (the column's stored values, read 10 Nov, were names: 6 of 18 rows, the rest none), and the itest is tests/integration/save-cleanup.itest.mjs; `products.custom_price` applied 10 Nov on Jeff's go to the test and app databases. Parts 5 and 6 are the next batch (OPEN_ITEMS §1 item 6).
+**Parts 1-4 built 10 Nov** (state §0.242; guide §18b125; committed `6342364`; harness deferred) as answered (ANSWERS.md), with two changes at build: the products POST stamps the caller's name, not `auth.userId` (the column's stored values, read 10 Nov, were names: 6 of 18 rows, the rest none), and the itest is tests/integration/save-cleanup.itest.mjs; `products.custom_price` applied 10 Nov on Jeff's go to the test and app databases. Parts 5 and 6 follow (below).
+
+**Parts 5-6 built 10 Nov** (state §0.243; guide §18b125 rules 5, 7 and 8; NOT committed; harness deferred — Parts 1-4 committed `6342364`) as answered (Q7 "Send only what's missing (Recommended)"), with these changes at build: one helper for the throws (`readRefusal`, src/utils/refusalWords.js), the tree holding twelve, not thirteen; New quote opens the saved quote's id (`saved.id`), the hook issuing its own; the import planned against a read made at the press, its planner lifted to src/utils/legacyDispatchImport.js; and, from the reviews, `failureWords`, the backup schedule saved only once read and only what changed, and the guard's third scan (no body read before its ok check, in the swept files).
 
 ### Part 1: Products (server, Price Book, refusal)
 
