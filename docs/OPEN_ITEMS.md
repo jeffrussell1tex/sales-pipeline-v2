@@ -534,7 +534,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    DESIGN.md and ANSWERS.md, committed `058469e`: twelve Parts; Jeff, 11
    Nov: "Refusal sweep", then "Parts 1-4 now (Recommended)" and Q1-Q20
    "All Recommended (Recommended)"). **Parts 1-4 built 11 Nov (state
-   §0.245; guide §18b125 rules 5 and 9) — committed `b1b56e7`; NOT pushed;
+   §0.245; guide §18b125 rules 5 and 9) — committed `b1b56e7`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN);
    not yet shipped; harness deferred**, its rep-path browser check
    PASSED as Karen, the Admin check (Export) PASSED as Jeff: a refusal
    at a press with no error place of its own said in a press notice
@@ -547,7 +547,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    each optimistic change putting back only its own copy; Home's dead
    Complete removed (Q5). Strike them once §0.245 ships. **Parts 5-7
    built 11 Nov (state §0.246; guide §18b125 rule 5, since §0.246; Jeff,
-   11 Nov: "proceed", Q9-Q17 answered) — NOT committed; not yet shipped;
+   11 Nov: "proceed", Q9-Q17 answered) — committed `16b0ffb`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN); not yet shipped;
    harness deferred**, its Admin browser check PASSED as Jeff, the
    rep-path check PASSED as Karen: no refusal on a timer, each
    said beside the control pressed — Reports' saves (tied to the screen
@@ -578,7 +578,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      failures~~ (DONE in §0.246, Part 6); ~~the quote PDF's silent
      fallback~~ (DONE in §0.246, Part 7 — the copy a button, so its
      `window.open` after an await, which may be popup-blocked, is gone;
-     the design's OUT, §0.245, 11 Nov). Parts 5-7 not committed, not yet
+     the design's OUT, §0.245, 11 Nov). Parts 5-7 committed `16b0ffb`, pushed to dev 12 Nov, not yet
      shipped.
    - about 20 other raw `e.message` sites in the swept panels and
      DispatchVehiclesDetail (§0.243's re-check, 10 Nov): a request that
@@ -1674,7 +1674,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   through `dbWrite`, the list taking `data.opportunity` through
   `setOpportunities` (as the Closed Lost save does, useOpportunities.js:243)
   and the local ids retired; the refusal's words beside the panel and the
-  table. **Since §0.245 (11 Nov; committed `b1b56e7`, not pushed)** the
+  table. **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov)** the
   refusal half is done: the add and remove send through `dbWrite`, a
   refused add, remove or persona is said on one banner in the section,
   kept until its Close (Q6), and an answer after another deal was
@@ -1755,7 +1755,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing (§0.199's review); the task rail's Complete says it (§0.199's
   re-check). Recommended: the same rule as the links (send what
   changed), or a stale-row check on the server (`updatedAt`). Jeff decides.
-  **Since §0.245 (11 Nov; committed `b1b56e7`, not pushed)** the Tasks
+  **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov)** the Tasks
   tab's Complete and snooze and Reports' contact and persona edits say a
   refusal, Home's complete toggle is gone, and Reports' persona edit
   sends only `{ id, buyerPersona }`. Still so (the refusal sweep's OUT,
@@ -3586,6 +3586,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     batch 4's fields, a deal's account and Dispatch's; these fields stay as
     the file has them.
 - **A quote's or deal's maker can come from the body** (§0.242's doc check, 10 Nov; read in code): quotes.mjs:69 (`'createdBy'` in ALLOWED_FIELDS) and :375 (the create's `|| data.createdBy` when the roster lookup comes back empty); opportunities.mjs:169 (`createdBy: data.createdBy || null` in sanitize), reaching the create (:379) and the merged PUT (:656), so a deal PUT naming createdBy overwrites it. Recommended: drop `createdBy` from both allowlists; the create stamps the caller's name, a save keeps the stored one (as products since §0.242, guide §18b125 rule 2). Low.
+- **A saved report's owner name comes from the body** (§0.246's dev check, 12 Nov; read in code): saved-reports.mjs:39 (`ownerName: data.ownerName ?? null` in sanitize) — the POST (:133) stamps `ownerId` with the caller but keeps the body's `ownerName`; the screens send `ownerName: currentUser` (ReportsTab.jsx:2642, :5691). A report stored with none ("Pane check report 0.205", Accelerep QA) reads "by —" in Duplicate's list (:4357), and the library's card — drawn for "Your reports" and "Shared with you" alike — fills the gap with the viewer's own name (:2166 `r.ownerName || currentUser`), so a shared report with none names the viewer as its maker. Recommended: the POST stamps the caller's member name, a save keeps the stored one (as products since §0.242, guide §18b125 rule 2); a report with no name reads its maker by `ownerId`, never the viewer. Low.
 - **Creates that crash on an id another org holds — the rest of the class**
   (the 4b-2 map, 15 Oct; read in code; Jeff: "file the rest" — one class
   batch with a scan test). The products, saved-reports, coaching-notes,
