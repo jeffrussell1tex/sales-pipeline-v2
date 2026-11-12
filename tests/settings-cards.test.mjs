@@ -108,7 +108,9 @@ test('the catalogue carries no invented edit history and no hand-typed attention
 
 test('AdminView reads card state, attention and health from the module; the footer says only what is true', () => {
     const av = read('src/Tabs/AdminView.jsx');
-    assert.match(av, /import \{ cardStateOf, healthChecksOf, healthSummaryOf \} from '\.\.\/utils\/settingsCards';/);
+    // Moved pin (§0.247, docs/design/refusal-sweep Part 9): the import names liveCountsOf too — and (Jeff, 12 Nov: "Name
+    // the unread (Recommended)") the unread checks' three.
+    assert.match(av, /import \{ cardStateOf, healthChecksOf, healthSummaryOf, liveCountsOf, unreadChecksOf, unreadSentenceOf, allClearOf \} from '\.\.\/utils\/settingsCards';/);
     assert.ok(av.includes('const { status, statusDetail, attention } = cardStateOf(item, settings, liveCounts);'));
     assert.ok(av.includes('<span>{item.managedIn ? `Managed in ${item.managedIn}` : \'\'}</span>'), 'the footer');
     assert.doesNotMatch(av, /Never changed|Edited \$\{item\.updatedAt\}/, 'the invented footer');
@@ -117,7 +119,11 @@ test('AdminView reads card state, attention and health from the module; the foot
     assert.ok(av.includes('const activeHealthChecks = healthChecksOf(settings, liveCounts, isHidden);'));
     assert.ok(av.includes('{health.sentence}'), 'the tile sentence comes from the checks');
     assert.doesNotMatch(av, /Set up SSO and enforce MFA|'MFA enforced'|'Session policy set'|ok: true\s+\}/, 'the constants');
-    assert.ok(av.includes('if (backupRes.value.ok) counts.backupChecked = true;') && av.includes('counts.backupLastHours = diffH;'), 'backup answers reach the checks');
+    // Moved pin (§0.247, docs/design/refusal-sweep Part 9): the count block is settingsCards.js liveCountsOf — the backup
+    // answer read ok-first by answerOf; RUN in tests/refusal-sweep.test.mjs Part 9.
+    const sc = read('src/utils/settingsCards.js');
+    assert.ok(av.includes('const counts = await liveCountsOf(results);'), 'AdminView counts through the one reader');
+    assert.ok(sc.includes('    if (!res.ok) return null;') && sc.includes('if (d) counts.backupChecked = true;') && sc.includes('counts.backupLastHours = diffH;'), 'backup answers reach the checks');
 });
 
 test('the shared panel headers show "Last edited" only when both values are given, and no panel types its own', () => {

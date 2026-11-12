@@ -1810,7 +1810,9 @@ test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.2
 
 test('S10 — the calendar\'s persistHolidays, run as written: the tokens it opened with; refused while a Sync is out; the gate shut once it lands; a refusal puts back the holidays alone, never the tokens; a stale one, nothing', async () => {
     const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
-    const run = () => optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'persistHolidays', 'setCalError');
+    // The words through failureWords, as the panel imports it (§0.247, docs/design/refusal-sweep Part 8): it said e.message.
+    const { failureWords } = await import('../src/utils/refusalWords.js');
+    const run = () => optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'persistHolidays', 'setCalError', () => ({ failureWords }));
     const C1 = [{ date: 'Jan 2', name: 'Ours' }, { date: 'Mar 3', name: 'New' }];
 
     let st = await run();
@@ -1833,6 +1835,12 @@ test('S10 — the calendar\'s persistHolidays, run as written: the tokens it ope
     assert.deepEqual([st.copy.customHolidays, st.copy.pipelines, st.copy.revs], [st.settings.customHolidays, [], { pipelines: 'R0', customHolidays: 'C0', other: 'O1' }],
         'REGRESSION (J-B10): a key it never sent, or the tokens, put back');
     assert.deepEqual([st.said, st.gate.current], [['Holiday not saved — gone'], false]);
+    // Never sent (§0.247): plain words, never "Failed to fetch".
+    st = await run();
+    const unsent = st.call({ customHolidays: C1 }, 'Holiday');
+    st.sends[0].reject(new TypeError('Failed to fetch'));
+    assert.equal(await unsent, false);
+    assert.deepEqual(st.said, ['Holiday not saved — The server could not be reached.'], 'REGRESSION: "Failed to fetch" said');
 
     st = await run(); st.took = true;
     const refusal = await staleRefusal('customHolidays');

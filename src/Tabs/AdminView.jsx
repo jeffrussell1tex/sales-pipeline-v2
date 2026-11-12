@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../hooks/useLocalLayer';
 import { dbFetch } from '../utils/storage';
-import { jobHealth } from '../utils/jobHealth.js';
 import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
 import { T, eb } from './settings/shared/tokens.js';
@@ -59,7 +58,10 @@ import { DispatchServicePlansDetail } from './settings/dispatch/DispatchServiceP
 import { DispatchCustomerNotificationsDetail } from './settings/dispatch/DispatchCustomerNotificationsDetail.jsx';
 import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropertyTypesDetail.jsx';
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
-import { cardStateOf, healthChecksOf, healthSummaryOf } from '../utils/settingsCards';
+import { cardStateOf, healthChecksOf, healthSummaryOf, liveCountsOf, unreadChecksOf, unreadSentenceOf, allClearOf } from '../utils/settingsCards';
+
+// "Recently changed" when the audit log could not be read (state §0.247, Q18): never an empty card, as though nothing changed.
+const RECENT_UNREAD = 'The recent changes could not be read.';
 
 const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     const [hov, setHov] = useState(false);
@@ -315,7 +317,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         setLiveCounts({});
         const fetchCounts = async () => {
             try {
-                const [keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes, jobsRes] = await Promise.allSettled([
+                const results = await Promise.allSettled([
                     dbFetch('/.netlify/functions/api-keys'),
                     dbFetch('/.netlify/functions/webhooks'),
                     dbFetch('/.netlify/functions/automations'),
@@ -325,53 +327,10 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                     dbFetch('/.netlify/functions/job-status'),
                 ]);
                 if (cancelled) return;
-                const counts = {};
-                if (keysRes.status === 'fulfilled') {
-                    const d = await keysRes.value.json().catch(() => ({}));
-                    const keys = d.keys || [];
-                    counts.apiKeysActive  = keys.filter(k => !k.revokedAt).length;
-                    counts.apiKeysTotal   = keys.length;
-                }
-                if (webhooksRes.status === 'fulfilled') {
-                    const d = await webhooksRes.value.json().catch(() => ({}));
-                    const subs = d.subscriptions || [];
-                    counts.webhooksTotal   = subs.length;
-                    counts.webhooksActive  = subs.filter(s => s.active).length;
-                    counts.webhooksFailing = subs.filter(s => s.active && s.lastStatus && s.lastStatus >= 400).length;
-                }
-                if (autosRes.status === 'fulfilled') {
-                    const d = await autosRes.value.json().catch(() => ({}));
-                    const autos = d.automations || [];
-                    counts.autosTotal  = autos.length;
-                    counts.autosActive = autos.filter(a => a.active).length;
-                }
-                if (auditRes.status === 'fulfilled') {
-                    const d = await auditRes.value.json().catch(() => ({}));
-                    counts.auditEvents = (d.entries || []).length;
-                }
-                if (backupRes.status === 'fulfilled') {
-                    const d = await backupRes.value.json().catch(() => ({}));
-                    const snaps = d.snapshots || [];
-                    if (backupRes.value.ok) counts.backupChecked = true;   // an answer, even "no snapshots"
-                    if (snaps[0]) {
-                        const last = snaps[0];
-                        const diffH = Math.round((Date.now() - new Date(last.createdAt)) / 3600000);
-                        counts.backupLastLabel = diffH < 1 ? 'just now' : diffH < 24 ? diffH + 'h ago' : Math.round(diffH/24) + 'd ago';
-                        counts.backupFreq = d.schedule?.frequency || 'Daily';
-                        counts.backupLastHours = diffH;
-                    }
-                }
-                // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank.
-                if (mfaRes.status === 'fulfilled' && mfaRes.value.ok) {
-                    const d = await mfaRes.value.json().catch(() => ({}));
-                    if (typeof d.total === 'number') counts.mfa = { enrolled: d.enrolled, total: d.total };
-                }
-                // Admin-only, site-wide: the four scheduled jobs' heartbeats (§0.98). The
-                // verdict is computed here from the rows, against the server's clock.
-                if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
-                    const d = await jobsRes.value.json().catch(() => ({}));
-                    if (Array.isArray(d.jobs)) counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });
-                }
+                // Each answer read ok-first by one reader (settingsCards.js liveCountsOf, state §0.247, Q18): a refused
+                // or failed read leaves its count out — the card blank, no Health check — never "No endpoints" or 0.
+                const counts = await liveCountsOf(results);
+                if (cancelled) return;
                 setLiveCounts(counts);
             } catch (e) { /* silent — badges just stay empty */ }
         };
@@ -381,13 +340,18 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
 
     // Recently changed feed — loaded from audit log (must be before early return)
     const [recentFeed, setRecentFeed] = React.useState([]);
+    // A feed that could not be read says so in its place (state §0.247, Q18) — it read the body with no ok check and
+    // stayed empty, nothing said.
+    const [recentError, setRecentError] = React.useState('');
     React.useEffect(() => {
         let cancelled = false;
         setRecentFeed([]);   // the last org's rows never show under this org's name
+        setRecentError('');
         dbFetch('/.netlify/functions/audit-log')
-            .then(r => r.json())
+            .then(r => (r.ok ? r.json() : null))
             .then(data => {
                 if (cancelled) return;
+                if (!data) { setRecentError(RECENT_UNREAD); return; }
                 const entries = data.entries || [];
                 const fmtAge = (iso) => {
                     if (!iso) return '—';
@@ -410,7 +374,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                 }));
                 if (mapped.length > 0) setRecentFeed(mapped);
             })
-            .catch(() => {});
+            .catch(() => { if (!cancelled) setRecentError(RECENT_UNREAD); });
         return () => { cancelled = true; };
     }, [activeOrgId]);
 
@@ -585,6 +549,12 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
     const health    = healthSummaryOf(activeHealthChecks);
     const healthOk  = health.ok;
     const healthPct = health.pct;
+    // The checks a failed read left out, named (settingsCards.js unreadChecksOf, §0.247; Jeff, 12 Nov: "Name the unread
+    // (Recommended)"): the score counts only what was read, the tile says what was not, and Needs attention never says
+    // every check passes while one is unread. Hidden by the same isHidden as the checks.
+    const unreadChecks   = unreadChecksOf(liveCounts, isHidden);
+    const unreadSentence = unreadSentenceOf(unreadChecks);
+    const allClear       = allClearOf(hiddenCount, unreadChecks.length);
 
 
     // Group items by category
@@ -623,6 +593,9 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                             <div style={{ ...eb(T.ok), marginBottom:4 }}>WORKSPACE HEALTH</div>
                             <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {activeHealthChecks.length} checks passing</div>
                             <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>{health.sentence}</div>
+                            {unreadSentence && (
+                                <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans, marginTop:2 }}>{unreadSentence}</div>
+                            )}
                         </div>
                     </div>
                     {/* Needs attention */}
@@ -750,14 +723,10 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                             );
                         })}
 
-                        {/* All clear states */}
-                        {visibleAttention.length === 0 && hiddenCount === 0 && (
-                            <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>
-                        )}
-                        {visibleAttention.length === 0 && hiddenCount > 0 && (
-                            <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>
-                                All visible checks passing — {hiddenCount} hidden.
-                            </div>
+                        {/* All clear states — settingsCards.js allClearOf: today's words with every check read, never
+                            "All checks passing" while one is unread (§0.247) */}
+                        {visibleAttention.length === 0 && (
+                            <div style={allClear.ok ? { fontSize:12, color:T.ok, fontFamily:T.sans } : { fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>{allClear.words}</div>
                         )}
 
                         {/* Info strip — most recently hidden item */}
@@ -784,6 +753,9 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                             <span>RECENTLY CHANGED</span>
                             <span style={{ fontSize:10.5, color:T.info, cursor:'pointer', fontWeight:600, letterSpacing:0, textTransform:'none', fontFamily:T.sans }}>View audit log →</span>
                         </div>
+                        {recentError && (
+                            <div role="alert" style={{ fontSize:12, color:T.danger, lineHeight:1.4, fontFamily:T.sans }}>{recentError}</div>
+                        )}
                         {recentFeed.slice(0,4).map((r, i) => (
                             <div key={i} style={{ padding:'6px 0', borderBottom: i < 3 ? `1px dashed ${T.border}` : 'none', display:'flex', alignItems:'center', gap:10 }}>
                                 <Avatar name={r.who} size={22}/>

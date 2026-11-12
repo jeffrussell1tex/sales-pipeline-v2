@@ -135,7 +135,8 @@ test('a download or a preview refused says so; one that gets its link opens it',
         messages.length = 0;
         answer = () => { throw new TypeError('Failed to fetch'); };
         assert.equal((await run()).ok, false, 'a network failure resolves');
-        assert.deepEqual(messages, [{ error: `${said} — Failed to fetch` }]);
+        // Moved pin (§0.247, docs/design/refusal-sweep Part 8): the raw "Failed to fetch" became failureWords' plain words.
+        assert.deepEqual(messages, [{ error: `${said} — The server could not be reached.` }], 'REGRESSION: "Failed to fetch" said');
         messages.length = 0;
         answer = () => respond(200, { url: 'https://files.example/doc_1' });
         assert.equal((await run()).ok, true);

@@ -560,9 +560,25 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    copy a button with its lines to the cent; the coaching notes hook
    never rejecting, a failed load said on Home and Sales Manager, Home's
    "Mark read" a press notice; Quick Log's calendar box removed (Q16).
-   Strike them once §0.246 ships. What remains is Parts 8-12 of the
-   design — the next batches (its batches 3-5: Parts 8-9, 10-11 and 12;
-   Q4, Q13 and Q18-Q20 answered for them):
+   Strike them once §0.246 ships. **Parts 8-9 built 12 Nov (state
+   §0.247; guide §18b125 rules 5 and 9, since §0.247; Jeff, 12 Nov: "lets
+   proceed in that order", Q13, Q18 and Q19 answered; then "Name the
+   unread (Recommended)" and "Fix in this batch (Recommended)") — NOT
+   committed; not yet shipped; harness deferred**, its Admin browser
+   check PASSED as Jeff, the rep-path check PASSED as Karen: a failure
+   said in plain words in the swept files (`failureWords`; putSettings
+   `refusalWords`, the ref kept; scan (iv)); a read that failed never a
+   count, "none" or a passing check — the Settings overview's cards and
+   its Health tile (naming the checks it could not read), Recently
+   changed, Approval tiers, the corporate calendars, Job templates,
+   Property types, Crews, and the API keys', Automations' and Webhooks'
+   counts; Automations', Export's and Webhooks' Pause / Resume and Delete
+   putting back only the flag, one request per row, a banner cleared by
+   id; Webhooks reading its server's answers (wrong in prod since 11 May
+   2026, `5772f63`) and the API page naming the same keys. Strike them
+   once §0.247 ships. What remains is Parts 10-12 of the
+   design — the next batches (its batches 4-5: Parts 10-11 and 12;
+   Q4, Q13 and Q20 answered for them):
    - ~~the Kanban stage drag with no rollback; a task's complete and snooze
      un-ticking without a word (TasksTab); Reports' deal contact add,
      remove and persona~~ (DONE in §0.245, Parts 1-3; committed `b1b56e7`,
@@ -580,27 +596,36 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      `window.open` after an await, which may be popup-blocked, is gone;
      the design's OUT, §0.245, 11 Nov). Parts 5-7 committed `16b0ffb`, pushed to dev 12 Nov, not yet
      shipped.
-   - about 20 other raw `e.message` sites in the swept panels and
+   - ~~about 20 other raw `e.message` sites in the swept panels and
      DispatchVehiclesDetail (§0.243's re-check, 10 Nov): a request that
      never reached the server says "Failed to fetch" there — said by
      `failureWords` instead (guide §18b125 rule 5); and
      DispatchVehiclesDetail's deletes still say "HTTP N"
-     (DispatchVehiclesDetail.jsx:339, :381) — Part 8.
+     (DispatchVehiclesDetail.jsx:339, :381) — Part 8~~ (DONE in §0.247,
+     Part 8: every one says `failureWords`, scan (iv) holding the swept
+     files to it; the fleet's Deletes say the server's words, a 403 "Your
+     role cannot delete vehicles." or "… equipment." (Q13); not
+     committed, not yet shipped). Still so: useOpportunities.js:41's
+     deals load throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's
+     build; read in code) — Part 10's, with the record hooks.
    - outside the files the sweep owns, a body read before its response's
      ok check — the design's count over `f5f0139`, by the guard's own scan
      over src: 202 reads, 108 flagged (109 with the named BackupDetail
      read; "67 lines" here was an earlier line scan); Parts 1-2 cleaned the
      deal window's two and the task completion's (useTasks.js's calendar
      reads left with Part 7 in §0.246, and useActivities.js's; their saves
-     wait for Part 10), not recounted — Parts 9-12, area by area,
+     wait for Part 10), not recounted — Parts 10-12 (Part 9's done in
+     §0.247), area by area,
      each adding the files it cleans to `SWEPT`; Part 12 makes `SWEPT` all
      of src/. tests/refusals-said.test.mjs's scan (iii) covers only its
      `SWEPT` list (since §0.245 with KanbanView.jsx, useOpportunities.js,
      pressNotice.js, TasksTab.jsx and taskWrite.js; since §0.246 with
-     quotePdfAnswer.js, useCoachingNotes.js and HomeTab.jsx —
-     ReportsTab.jsx waits for Part 12 and CompanyCalendarDetail.jsx for
-     Part 9, though their Part 5 reads are ok-first now; QuotesTab.jsx
-     for Part 12, its job and version reads).
+     quotePdfAnswer.js, useCoachingNotes.js and HomeTab.jsx; since §0.247
+     with AdminView.jsx, settingsCards.js, ApprovalTiersDetail,
+     CompanyCalendarDetail, DispatchJobTemplatesDetail,
+     DispatchPropertyTypesDetail and DispatchCrewsDetail —
+     ReportsTab.jsx waits for Part 12, though its Part 5 reads are
+     ok-first now; QuotesTab.jsx for Part 12, its job and version reads).
    - Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
      `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
      joining `SWEPT` (§0.246's build, 11 Nov; read in code).
@@ -2911,6 +2936,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A settings row whose id is not its org cannot be saved** (§0.242's itest seed, 10 Nov; open question): the settings PUT writes its row as `id: orgId` with the conflict target the id (settings.mjs:504, :526); a row stored under another id meets the org's unique key instead, which the PUT reads as a lost first insert (`lostFirstInsert`, :83-85, :545) and, after its retries, answers 409 "stale" (:550-555). Seen only with a test seed; whether any row in the app database has an id other than its org: not checked (a SELECT, on Jeff's go). Low.
 - **Export's schedule Delete deletes with no confirm** (the refusal sweep's OUT, §0.245, 11 Nov; read in code): Settings → Data → Export's Delete (src/Tabs/settings/data/ExportDetail.jsx:395 → `handleDeleteSched`, :162) sends the DELETE at once; since §0.245 a refusal puts the row back and says why. Beside "Two deletes with no confirm" above, and Vehicles and equipment's (§4.4); whether a confirm is a house rule for every delete: not checked. Recommended: App's confirm, as most Settings deletes do. Low.
 - **holidays.mjs calls `raw.filter` without an array check** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map, not re-read): netlify/functions/holidays.mjs:51 — an answer from the holiday source that is not a list would throw there. Recommended: a list check before the filter, said as the Sync's failure (the sweep's Part 5). Low. Still so after §0.246 (11 Nov): Part 5 changed the Sync's screen only — no server change; whatever the server answers is now said on the Sync's red line in the house words, kept until its Close.
+- **The Workspace Health tile shows the green all-clear while its reads are still out** (§0.247, 12 Nov — the second review's tile lens, refuted as the batch's defect: as at HEAD, and by design "unread" means a read that failed; read in code): until AdminView's seven count reads settle, `liveCounts` is `{}`, so Needs attention says "All checks passing ✓" and the tile shows every settings check it can judge as passing (e.g. "3 of 3 checks passing", 100%, where every settings check passes) — for seconds on a large org (clerk-mfa-status asks Clerk once per member); whether it can last the whole visit was argued and not shown (the skeptic: a function past its limit answers 5xx, which reads as unread, and no input reaches a throw in `liveCountsOf`). Recommended: a "still reading" state while no `unread` list exists (src/utils/settingsCards.js `allClearOf`, `unreadChecksOf`), never the green all-clear. Low.
+- **Export's schedule window re-enables a paused schedule and resets a failing one** (§0.247, 12 Nov — found with the Pause class; read in code; Jeff decides): the window's save always sends `enabled: true, status: 'ok'` (src/Tabs/settings/data/ExportDetail.jsx:33), so an Edit of a paused schedule turns it back on and an Edit of a failing one marks it ok. Recommended: send only what the window edits (§18b125 rule 1), the flag left to Pause / Enable — or Jeff decides an Edit should resume. Low.
+- **Export's Mark complete still sends the whole request and puts back the press's copy** (§0.247, 12 Nov — found with the Pause class; read in code; no reachable harm found): `handleDsrStatus` PUTs `{ ...dsr, status }` and, refused, puts back `dsr` (ExportDetail.jsx:273-286); nothing else edits a request, the link goes once completed, and export-dsr.mjs merges over the stored row. Recommended: `{ id, status }` and only the status put back, as the schedule toggle since §0.247. Low.
+- **The integrations' menu rows have no disabled state** (§0.247, 12 Nov; read in code; looks only): `MenuRow` (src/Tabs/settings/integrations/shared.jsx:74), used by two panels (API keys, Webhooks), draws no busy or disabled look, so Webhooks' menu Pause / Resume and Delete look pressable while that endpoint's request is out — the handlers send nothing (`busyHooks`). Recommended: a `disabled` prop with the house busy look and title. Low.
+- **Webhooks' Delete dims one row at a time** (§0.247, 12 Nov; read in code; looks only): one `deleting` id (WebhooksDetail.jsx:171, :319) — a second endpoint's Delete pressed while the first is out un-dims on the first's answer though its own request is still out. Recommended: dim by `busyIds`. Low.
+- **Job templates' Save is offered while the equipment list is unread** (§0.247, 12 Nov — review fix 10's optional half, not done): a press says "Not saved — the equipment list couldn't be read, so these templates can't be saved. Reload the page to try again." and sends nothing. Recommended: the primary button disabled, with a title, while the list is unread. Low.
+- **A landed corporate calendar Disconnect whose reload fails keeps its row** (§0.247, 12 Nov — the review, refuted as the batch's: older; read in code): `disconnectCorporateCalendar` (CompanyCalendarDetail.jsx) reloads the list instead of dropping the row; when that reload fails, the row still reads "Corporate · connected" with a live Disconnect (a second press: "Connection not found"), the "could not be read" words beside it since §0.247. Recommended: drop the row by id when the DELETE lands, before the reload. Low.
+- **A Backups download with no org known saves and says nothing** (§0.247, 12 Nov — review fix 2's verifier; open question): `stillOrg(null)` is false, so if `requestOrg()` answered none on Settings → Data the table's Download would now save nothing and say nothing (it saved before); the restore window and Run backup already behaved so. Whether a session with no org reaches the screen was not checked. Low.
 
 ### 4.4 Dispatch
 
@@ -3161,6 +3194,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **`jobsDuringBlock` may include completed jobs in the unassign list** (the refusal sweep's OUT, §0.245, 11 Nov; not read): the design names it as a possibility only — whether a completed job can be in the list time off unassigns was not read. Read it with the sweep's Part 6 (`saveBlock`'s unassign failures). Low. **§0.246 (11 Nov — Part 6's build; read in code):** still not read; the build found the list is built from `jobsWithBridge`, so a won-deal placeholder job may be in it too — its unassign PUT refused, and since §0.246 that refusal named on Dispatch's banner by the job's title. Not verified in a browser.
 - **Time off has no one-save-at-a-time lock** (§0.246, 11 Nov — Part 6's build; read in code): leaving Work Schedules and coming back while a time-off save is out remounts the dialog not busy, so a second save can start while the first's unassigns are still going out; since §0.246 the second's words on the banner are added after the first's, never written over. A lock would need new words a member sees — Jeff's call. Low.
 - **`recordVisit` treats a 200 with no `visit` as a refusal** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): it says "(HTTP 200)" (DispatchTab.jsx:5612-5614); the sweep's Part 11 replaces the words; whether such an answer can happen was not read. Low.
+- **Property types: the last type's title, and an orphan type added back** (§0.247, 12 Nov — review fix 3's verifier; read in code; older or harmless): with one type left, its disabled × still reads "In use by customers — reassign them first" whatever its use; a type customer records use but the list does not hold, added back by "Add it back", is removable while in use ("3 in use" beside an active Remove) — removing it only undoes the draft's Add, but the comment saying a draft-only type is on no customer record is wrong for it; `DEFAULT_PROPERTY_TYPES` count as stored when nothing is saved (the cautious choice, as customer records carry those ids). Recommended: the last row's title says it is the last; the orphan's row keeps its usage words. Low.
+- **Crews' "+ Add member" stays pressable while the technicians are unread** (§0.247, 12 Nov — the review, refuted as a defect: the reason is said beside it; read in code): the picker is hidden under `showAddMember && !techsError`, so a press shows nothing while the Members card says "The technicians could not be read — <why>". Recommended: the button disabled with a title while `techsError` stands. Low.
 
 ### 4.5 Notifications, email and digests
 
@@ -3851,6 +3886,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   "Failed to Save User"). Against guide §18b76 (a control is offered to the
   roles that write). Recommended: offer "+ New Rep" to the roles that write
   members, and pin it with the role gate's other controls.
+- **Recently changed names a member by their Clerk id** (§0.247, 12 Nov — the Admin browser check, seen as Jeff in Accelerep QA; read in code): Settings' Recently changed listed "user_3ASC… coaching note created". AdminView.jsx:368 draws `e.userName || e.userId || 'System'`, and coaching-notes.mjs:121 (created) and :153 (deleted) call `writeAudit` with no `userName` — about 18 calls to _lib.mjs's `writeAudit` (a text parse) name no member (`auditAs`, netlify/functions/_lib.mjs, names the caller). Against CLAUDE.md (a message names who acted by member name, never a Clerk id). Recommended: those writes through `auditAs`, and the feed never draws a raw id (the member's name from the org's roster, else "A member"). Not fixed. Low.
 
 ### 4.7 Imports and merge
 
@@ -4602,6 +4638,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Day words from 24-hour spans** (the save cleanup design's OUT, 10 Nov; as recorded): AdminView, AuditDetail, BackupDetail's `fmtWhen`, ExportDetail, ApiKeysDetail and TasksTab's `fmtAgo` say "yesterday" or "N days ago" from a span of time rounded to days, not from calendar days (§18b123 rule 1's class, for words). Recommended: `calendarDays` where a day is said. Low.
 - **Home's "completed this week" compares an instant's text with a day** (the save cleanup design's OUT, 10 Nov; read in code): src/Tabs/HomeTab.jsx:476-479 takes `t.completedDate || t.updatedAt` and compares the text with the week's first day (`comp >= weekStartStr`) — an `updatedAt` instant compares by its UTC day. Low. Beside it, not read: the format of Dispatch's certificate `expiresAt`.
 - **The API docs on quotes** (the save cleanup design's OUT, 10 Nov; read in code): public/api-docs.html:914 says the quotes PUT "Upserts by `id`"; its status list (:827) names Draft, Sent, Viewed, Accepted and Declined; :832's "dealDiscount … (0–100)" is true since §0.242. Recommended: correct the two with the next API docs pass. Low.
+- **The API docs on webhooks leave out keys the server sends** (§0.247, 12 Nov — the second review's verifier, "a docs-completeness note for the next API docs pass"; read in code): §0.247 put the right `webhooks` / `webhook` / `{ success: true }` keys on public/api-docs.html, but it does not name the GET's `supportedEvents`, a row's `createdAt`, `updatedAt` and `secretMasked`, or the PUT's `rotateSecret`, answered with `newSecret` (netlify/functions/webhooks.mjs). Recommended: add them with the next API docs pass. Low.
 
 - **Reports' Activity History declares eleven sub-components inside
   itself** (the cleanup batch's design, 18 Oct, §1 row P40's eighth item;
@@ -5259,7 +5296,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   profile's own keys, remove the key from the defaults, both halves of
   settings.mjs and `REV_KEYS` together (stored rows can keep it — keys are
   additive).
-- **A raw `.message` scan over all of src/** (the refusal sweep's OUT, §0.245, 11 Nov; a grep, as recorded): the sweep's Part 8 adds scan (iv) over an explicit list of files; over all of src/ a grep finds 140 `.message` reads, the error boundaries by design and the putSettings panels' always-plain words among them — each to be named or cleaned before the scan can widen. Low.
+- **A raw `.message` scan over all of src/** (the refusal sweep's OUT, §0.245, 11 Nov; a grep, as recorded): the sweep's Part 8 adds scan (iv) over an explicit list of files; over all of src/ a grep finds 140 `.message` reads, the error boundaries by design and the putSettings panels' always-plain words among them — each to be named or cleaned before the scan can widen. Low. **Since §0.247 (12 Nov)** scan (iv) runs over `SWEPT` plus CompanyCalendarDetail.jsx (`caughtMessagesOf`, tests/refusals-said.test.mjs).
+- **Scan (iv) reads only a catch clause's own `.message`** (§0.247, 12 Nov — the review's tests lens, refuted as a defect: the design's stated scope; none of the shapes is in the scanned files): a promise handler's `.catch(err => setError(err.message))`, an alias (`const err = e; err.message`), a destructure in the body (`const { message } = e`), `String(e)` or `` `${e}` `` ("TypeError: Failed to fetch") and `e['message']` pass it; its header's "no catch param's `.message` is read" overstates it. Recommended: a KNOWN LIMITS line in the header now, and these shapes with the all-src widening above. Low.
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
 - **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run.

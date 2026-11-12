@@ -21,6 +21,7 @@ import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -156,8 +157,9 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
-            // Keep the panel dirty: the change was NOT saved (a 400 names why).
-            setSaveError(e.message);
+            // Keep the panel dirty: the change was NOT saved (a 400 names why). putSettings' words pass through
+            // failureWords; a failure of its own says plain words, never a raw e.message (§0.247).
+            setSaveError(failureWords(e));
             // Clear the spinner, then rethrow: the leave guard's "Save and
             // continue" runs this too, and only a throw keeps it from moving on.
             setSaving(false);
@@ -217,15 +219,22 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
     // ── Live approval stats (the record's — §0.156) ──────────
     const [approvalStats, setApprovalStats] = useState(null);
     const [statsLoading,  setStatsLoading]  = useState(false);
+    // A record that could not be read is said in place of the tier rows (state §0.247, Q19): it read the body with no
+    // ok check, and every tier showed 0 — a count over a read that failed.
+    const [statsError,    setStatsError]    = useState('');
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             setStatsLoading(true);
             try {
                 const res = await dbFetch('/.netlify/functions/quotes?approvalStats=true');
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
                 if (!cancelled && data.approvalStats) setApprovalStats(data.approvalStats);
-            } catch (e) { console.error('fetch approval stats', e); }
+            } catch (e) {
+                console.error('fetch approval stats', e);
+                if (!cancelled) setStatsError(`The approval record could not be read — ${failureWords(e)}`);
+            }
             if (!cancelled) setStatsLoading(false);
         })();
         return () => { cancelled = true; };
@@ -427,7 +436,10 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
                             {statsLoading && (
                                 <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, padding:'8px 0' }}>Loading…</div>
                             )}
-                            {!statsLoading && tiers.map((t,i) => {
+                            {!statsLoading && statsError && (
+                                <div role="alert" style={{ fontSize:12, color:T.danger, lineHeight:1.45, fontFamily:T.sans, padding:'8px 0' }}>{statsError}</div>
+                            )}
+                            {!statsLoading && !statsError && tiers.map((t,i) => {
                                 // The server's, from the record (state §0.156): approved and
                                 // sent back in 90 days, waiting now, hours to a decision.
                                 const u = approvalStats?.find(s => s.tier === t.label) || { quotes:0, approved:0, sentBack:0, pending:0, avgHours:0 };
@@ -448,7 +460,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
                                     </div>
                                 );
                             })}
-                            {!statsLoading && approvalStats && approvalStats.every(s => s.quotes === 0) && (
+                            {!statsLoading && !statsError && approvalStats && approvalStats.every(s => s.quotes === 0) && (
                                 <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, padding:'8px 0' }}>No approval activity in the last 90 days.</div>
                             )}
                         </CSectionCard>

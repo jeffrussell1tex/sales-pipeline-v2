@@ -96,7 +96,7 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             if (e.stale && await panelStale(e)) return false;
             setSettings(prev => ({ ...prev, ...held }));
-            setCalError(`${label} not saved — ${e.message}`);
+            setCalError(`${label} not saved — ${failureWords(e)}`);   // putSettings' words pass through (§0.247)
             // The gate opens only now (state §0.228): opened before panelStale answered, a change made while
             // AdminView read the latest went out with the old tokens.
             inFlight.current = false;
@@ -104,13 +104,26 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         }
     };
 
+    // A read that failed is no "No corporate calendar connected." (state §0.247, Part 9): it read the body with no ok
+    // check, and a refusal or a 502's page read as none. Its words are its own state — never calError, which the holiday
+    // saves and the disconnect clear — kept until its Close; a good read clears them. `orgCalsUnread` holds that the
+    // last read failed, so the empty words stay away after the Close too, until a read lands.
+    const [orgCalsError, setOrgCalsError]   = useState('');
+    const [orgCalsUnread, setOrgCalsUnread] = useState(false);
     const loadOrgCals = async () => {
         setOcl(true);
         try {
             const res = await dbFetch('/.netlify/functions/calendar-connections');
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             setOrgCals(data.orgConnections || []);
-        } catch (e) { console.error('load org calendars', e); }
+            setOrgCalsUnread(false);
+            setOrgCalsError('');
+        } catch (e) {
+            console.error('load org calendars', e);
+            setOrgCalsUnread(true);
+            setOrgCalsError(`Corporate calendars could not be read — ${failureWords(e)}`);
+        }
         setOcl(false);
     };
     useEffect(() => { loadOrgCals(); /* eslint-disable-next-line */ }, []);
@@ -342,9 +355,15 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                             </div>
                         ))}
                     </div>
-                ) : (
+                ) : !orgCalsUnread && (
                     <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>
                         {orgCalsLoading ? 'Loading…' : 'No corporate calendar connected. Events from a connected company calendar show on every user’s Home calendar.'}
+                    </div>
+                )}
+                {orgCalsError && (
+                    <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, marginTop: orgCals.length > 0 ? 10 : 0, padding:'10px 14px', background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5, fontFamily:T.sans }}>
+                        <span style={{ flex:1, minWidth:0 }}>{orgCalsError}</span>
+                        <button onClick={() => setOrgCalsError('')} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>Close</button>
                     </div>
                 )}
                 {isAdmin && (

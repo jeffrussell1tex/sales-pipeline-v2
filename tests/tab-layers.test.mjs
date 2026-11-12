@@ -386,7 +386,10 @@ test('the secrets shown once close only by "I\'ve stored it" (Q2, §0.232): Esca
     const hook = decl(read(S + 'integrations/WebhooksDetail.jsx'), 'NewWebhookModal');
     assert.ok(hook.includes("busy: saving || step !== 'form' });"), 'the webhook\'s signing secret: held while it is made and once it shows');
     assert.equal(count(hook, ' onClose={requestClose}'), 2, 'its backdrop and ×');
-    assert.ok(hook.includes('<IntBtn label="I\'ve saved it — close" primary onClick={onClose}/>'));
+    // Moved pin (§0.247, Jeff 12 Nov: "Fix in this batch (Recommended)"): the button reads "I've saved it" only when a
+    // secret was shown — a made endpoint whose secret could not be read closes by "Close"; still the one way out.
+    assert.ok(hook.includes('<IntBtn label={secret ? "I\'ve saved it — close" : \'Close\'} primary onClick={onClose}/>'));
+    assert.equal(count(hook, 'onClick={onClose}'), 1, 'one button closes it without the held close');
     const audit = decl(read(S + 'audit/AuditDetail.jsx'), 'SecretRevealModal');
     assert.ok(audit.includes('    useLocalLayer(true, { onClose, busy: true });') && audit.includes('<SecBtn label="I have stored it" primary onClick={onClose}/>'), 'the audit stream\'s: Escape taken, nothing closes it but "I have stored it"');
 });

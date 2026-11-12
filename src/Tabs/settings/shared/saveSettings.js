@@ -46,6 +46,7 @@
 import { dbFetch, requestOrg, stillOrg, stopped, refusalOf, NETWORK_ERROR } from '../../../utils/storage.js';
 import { withIfRevs, staleOf, revsAfter } from '../../../utils/settingsRevs.js';
 import { settingsAsLoaded } from '../../../utils/settingsDefaults.js';
+import { refusalWords } from '../../../utils/refusalWords.js';
 
 const SETTINGS_URL = '/.netlify/functions/settings';
 
@@ -65,8 +66,12 @@ export async function putSettings(payload, revs) {
     if (!stillOrg(askedOrg)) return stopped();
     if (!res.ok) {
         if (res.status === 403) throw new Error('You need the Admin role to change these settings.');
-        let msg = 'HTTP ' + res.status, stale = null;
-        try { const d = await res.json(); if (d?.error) msg = d.error; stale = staleOf(res.status, d); } catch (_) {}
+        // The server's words with their ref, else "The server returned N." (§0.247, docs/design/refusal-sweep Part 8) —
+        // it said "HTTP N" and dropped the ref. A body that is not JSON is none; staleOf reads none as no stale refusal.
+        let d = null;
+        try { d = await res.json(); } catch (_) {}
+        const msg = refusalWords(res, d);
+        const stale = staleOf(res.status, d);
         if (stale && stillOrg(askedOrg)) throw Object.assign(new Error(msg), { stale });
         if (!stillOrg(askedOrg)) return stopped();
         throw new Error(msg);

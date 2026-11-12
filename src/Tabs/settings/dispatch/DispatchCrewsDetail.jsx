@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -11,6 +12,12 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 // colour edge when the crew was selected (state §0.179).
 const crewEdge = (selected) => `1.5px solid ${selected ? T.goldInk : T.border}`;
 
+// A crew's stored default vehicle the vehicle list does not hold (§0.247 review fix): "Unknown vehicle" only once the
+// list was read — over a read that failed it is not checked, and while the read is out it is the saved one. The stored
+// id stays selected and is saved as is.
+const heldVehicleLabel = (id, vehiclesRead, vehiclesError) => (vehiclesRead ? `Unknown vehicle (${id})`
+    : vehiclesError ? `Saved vehicle (${id}) — not checked` : `Saved vehicle (${id})`);
+
 export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchCrews || [];
     const skills = settings?.dispatchSkills || [];
@@ -18,17 +25,24 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     // read settings.dispatchVehicles — a blob that neither the dispatch board
     // filter nor the technician record reads, so a crew's default vehicle could
     // name a van that existed nowhere else in the system.
+    // A picker whose list could not be read says so beside it (state §0.247, docs/design/refusal-sweep Part 9) — it
+    // stayed empty with nothing said: no vehicles to pick, and a crew's members drawn as "No members yet."
     const [vehicles, setVehicles] = useState([]);
+    const [vehiclesError, setVehiclesError] = useState('');
+    const [vehiclesRead, setVehiclesRead] = useState(false);
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-vehicles');
-                if (!res.ok) return;                     // leave empty rather than render {error}
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
                 if (cancelled) return;
                 setVehicles(data.vehicles || []);
-            } catch (e) { /* picker stays empty */ }
+                setVehiclesRead(true);
+            } catch (e) {
+                if (!cancelled) setVehiclesError(`The vehicles could not be read — ${failureWords(e)}`);
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -37,12 +51,13 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     // nothing sets any more (and which never persisted), so the member picker
     // was always empty and no one could be added to a crew.
     const [users, setUsers] = useState([]);
+    const [techsError, setTechsError] = useState('');
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-technicians');
-                if (!res.ok) return;                     // leave empty rather than render {error}
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
                 if (cancelled) return;
                 setUsers((data.technicians || [])
@@ -54,7 +69,9 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                         dispatchLicense: t.licenseLevel || null,
                         hoursCap:       40,
                     })));
-            } catch (e) { /* picker stays empty */ }
+            } catch (e) {
+                if (!cancelled) setTechsError(`The technicians could not be read — ${failureWords(e)}`);
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -87,8 +104,8 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved, and clearing the
-            // flag here is what made a 403 look like success.
-            setSaveError(e.message);
+            // flag here is what made a 403 look like success. putSettings' words pass through failureWords (§0.247).
+            setSaveError(failureWords(e));
             // Clear the spinner BEFORE rethrowing — the `setSaving(false)` after
             // this try/catch is skipped by the throw, and the panel would sit on
             // "Saving…" for the rest of the session.
@@ -238,10 +255,11 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                         style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', background: T.surface, boxSizing: 'border-box' }}>
                                         <option value="">— None —</option>
                                         {selectedCrew.defaultVehicle && !vehicles.some(v => v.id === selectedCrew.defaultVehicle) && (
-                                            <option value={selectedCrew.defaultVehicle}>Unknown vehicle ({selectedCrew.defaultVehicle})</option>
+                                            <option value={selectedCrew.defaultVehicle}>{heldVehicleLabel(selectedCrew.defaultVehicle, vehiclesRead, vehiclesError)}</option>
                                         )}
                                         {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
                                     </select>
+                                    {vehiclesError && <div role="alert" style={{ marginTop: 5, fontSize: 11.5, color: T.danger, lineHeight: 1.4, fontFamily: T.sans }}>{vehiclesError}</div>}
                                 </div>
                             </div>
                         </div>
@@ -265,7 +283,11 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                         </button>
                                     </div>
 
-                                    {memberUsers.length === 0 ? (
+                                    {techsError ? (
+                                        <div role="alert" style={{ padding: '10px 12px', color: T.danger, fontSize: 12.5, lineHeight: 1.45, fontFamily: T.sans, border: `1px solid ${T.danger}`, borderRadius: T.r, background: 'rgba(156,58,46,0.08)' }}>
+                                            {techsError}
+                                        </div>
+                                    ) : memberUsers.length === 0 ? (
                                         <div style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 12.5, fontStyle: 'italic', fontFamily: T.sans, border: `1px dashed ${T.borderStrong}`, borderRadius: T.r }}>
                                             No members yet. Click "+ Add member" to assign techs to this crew.
                                         </div>
@@ -341,7 +363,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                     )}
 
                                     {/* Add member picker — inline expandable */}
-                                    {showAddMember && (
+                                    {showAddMember && !techsError && (
                                         <div style={{ marginTop: 12 }}>
                                             {nonMembers.length === 0 ? (
                                                 <div style={{ fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, padding: '8px 0' }}>All dispatch-enabled techs are already in this crew.</div>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -55,14 +55,18 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
             // The ok check first (§0.243): a refusal reads its words (else its status), the endpoint's answer is parsed
             // as sent — then the org is checked, after every read, before anything is done.
             const why  = res.ok ? '' : await readRefusal(res);
-            const data = res.ok ? await res.json() : null;
+            // The server answers 201 { webhook, secret } (webhooks.mjs POST). It was read as `subscription` from 11 May 2026
+            // (5772f63) to §0.247: the list took undefined and its next draw threw (Jeff, 12 Nov: "Fix in this batch
+            // (Recommended)"). Landed is landed: an answer that cannot be read, or names no endpoint, is still an endpoint
+            // made — never Create again (a second one); the list is read again and a secret not read is said so.
+            const data = res.ok ? await res.json().catch(() => null) : null;
             if (!stillOrg(askedOrg)) return;
             if (why) throw new Error(why);
-            setSecret(data.secret || '');
-            if (onCreated) onCreated(data.subscription);
+            setSecret(typeof data?.secret === 'string' ? data.secret : '');
+            if (onCreated) onCreated(data && data.webhook && data.webhook.id ? data.webhook : null);
             setStep('created');
         } catch (e) {
-            setError(e.message);
+            setError(failureWords(e));
         } finally {
             setSaving(false);
         }
@@ -71,7 +75,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
     return (
         <IntModal width={620} onClose={requestClose}>
             <IntModalHeader onClose={requestClose}
-                title={step==='form' ? 'New webhook endpoint' : 'Endpoint created — save your secret'}
+                title={step==='form' ? 'New webhook endpoint' : secret ? 'Endpoint created — save your secret' : 'Endpoint created'}
                 sub={step==='form' ? "Accelerep will POST a signed JSON payload to your URL on each event." : undefined}/>
             <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
                 {step === 'form' ? (
@@ -117,19 +121,26 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                             <span style={{ fontSize:22, color:T.ok }}>✓</span>
                             <div>
                                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Endpoint created</div>
-                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Save your signing secret now — it won't be shown again.</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>{secret ? "Save your signing secret now — it won't be shown again." : 'Its signing secret could not be read.'}</div>
                             </div>
                         </div>
+                        {/* A secret the answer did not give is said, never a placeholder to "save" (§0.247): it is not shown again. */}
+                        {!secret ? (
+                            <div role="alert" style={{ padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:14, fontSize:12.5, color:T.danger, lineHeight:1.5 }}>
+                                The endpoint was created, but its signing secret could not be read, and it is not shown again. Delete this endpoint and create it again to get a new secret.
+                            </div>
+                        ) : (
                         <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
                             <div style={{ fontSize:10, fontWeight:700, color:'rgba(200,185,154,0.7)', letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Signing secret</div>
                             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{secret || 'whsec_••••••••••••••••'}</code>
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{secret}</code>
                                 <button onClick={() => { navigator.clipboard?.writeText(secret); setCopiedSec(true); setTimeout(()=>setCopiedSec(false),2000); }}
                                     style={{ padding:'5px 12px', background:copiedSec?'rgba(77,107,61,0.5)':'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
                                     {copiedSec ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
                         </div>
+                        )}
                         <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, fontSize:12, color:T.inkMid, lineHeight:1.5 }}>
                             Verify the <code style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>X-SPT-Signature</code> header on every incoming request.
                             Use HMAC-SHA256(secret, rawBody) and compare with <code>sha256=...</code>.
@@ -144,7 +155,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                         <IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||!name.trim()||!url.trim()}/>
                     </>
                 ) : (
-                    <IntBtn label="I've saved it — close" primary onClick={onClose}/>
+                    <IntBtn label={secret ? "I've saved it — close" : 'Close'} primary onClick={onClose}/>
                 )}
             </IntModalFooter>
         </IntModal>
@@ -161,39 +172,65 @@ export const WebhooksDetail = ({ onBack }) => {
     const menuRefs = React.useRef({});
 
     // Load from DB
+    // A list that could not be read is no "0 endpoints" or "No webhook endpoints yet" (state §0.247,
+    // docs/design/refusal-sweep Part 9): its counts read "—" until a load lands, after the banner's Close too.
+    const [loadFailed, setLoadFailed] = React.useState(false);
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/webhooks');
             if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             const data = await res.json();
-            setWebhooks(data.subscriptions || []);
-        } catch (e) { setError(e.message); }
+            // The server's answer (webhooks.mjs GET) is { webhooks: [...], supportedEvents }. It was read as `subscriptions`
+            // from 11 May 2026 (5772f63) to §0.247, so no endpoint was ever listed (Jeff, 12 Nov: "Fix in this batch
+            // (Recommended)"). An answer without the list is a read that failed, never "No webhook endpoints yet" — thrown with
+            // no words of its own, so failureWords says "Its answer could not be read."
+            if (!Array.isArray(data?.webhooks)) throw new Error('');
+            setWebhooks(data.webhooks);
+            setLoadFailed(false);
+        } catch (e) { setError(failureWords(e)); setLoadFailed(true); }
         finally { setLoading(false); }
     }, []);
 
     React.useEffect(() => { load(); }, []);
 
+    // One request per endpoint at a time (§0.247 review fix): a Pause / Resume or Delete pressed while its endpoint's
+    // request is out sends nothing — a second Delete said "Webhook not found." beside an endpoint the first had deleted.
+    // The ref is the synchronous guard; busyIds draws it — the toggle waits, titled "Saving…", while its request is out.
+    // The menu closes at the press, never when an answer lands (that closed a menu opened on another row meanwhile).
+    const busyHooks = React.useRef(new Set());
+    const [busyIds, setBusyIds] = React.useState([]);
     const handleToggle = async (wh) => {
+        setActiveMenu(null);
+        if (busyHooks.current.has(wh.id)) return;
+        busyHooks.current.add(wh.id);
+        setBusyIds([...busyHooks.current]);
         try {
             const res  = await dbFetch('/.netlify/functions/webhooks', {
                 method: 'PUT',
                 body: JSON.stringify({ id: wh.id, active: !wh.active }),
             });
             if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
-            setWebhooks(prev => prev.map(w => w.id === wh.id ? data.subscription : w));
-        } catch (e) { setError(e.message); }
-        setActiveMenu(null);
+            // Landed is landed (§0.247 review fix): the PUT answers { success: true } (newSecret when rotated) and never a
+            // row (webhooks.mjs), and the row became undefined — the next draw threw. Its body is not read (Jeff, 12 Nov:
+            // "Fix in this batch (Recommended)" — the key it looked for is not the server's); the row as it is now takes
+            // the flag, so a 200 whose body is not JSON is landed too.
+            setWebhooks(prev => prev.map(w => w.id === wh.id ? { ...w, active: !wh.active } : w));
+        } catch (e) { setError(failureWords(e)); }
+        finally { busyHooks.current.delete(wh.id); setBusyIds([...busyHooks.current]); }
     };
 
     const handleDelete = async (wh) => {
+        setActiveMenu(null);
+        if (busyHooks.current.has(wh.id)) return;
+        busyHooks.current.add(wh.id);
+        setBusyIds([...busyHooks.current]);
         setDeleting(wh.id);
         try {
             const res = await dbFetch(`/.netlify/functions/webhooks?id=${wh.id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error(await readRefusal(res));
             setWebhooks(prev => prev.filter(w => w.id !== wh.id));
-        } catch (e) { setError(e.message); }
-        finally { setDeleting(null); setActiveMenu(null); }
+        } catch (e) { setError(failureWords(e)); }
+        finally { busyHooks.current.delete(wh.id); setBusyIds([...busyHooks.current]); setDeleting(null); }
     };
 
     const fmtDate = (iso) => {
@@ -211,17 +248,27 @@ export const WebhooksDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewWebhookModal onClose={() => setShowModal(false)} onCreated={sub => { setWebhooks(prev => [sub, ...prev]); }}/>}
+            {/* An endpoint made whose answer names none (or cannot be read): the list is read again, never handed undefined (§0.247). */}
+            {showModal && <NewWebhookModal onClose={() => setShowModal(false)} onCreated={wh => { if (wh && !loadFailed) setWebhooks(prev => [wh, ...prev]); else load(); }}/>}
             <IntCrumb page="Webhooks" onBack={onBack}/>
             <IntTitle
                 title="Webhooks"
-                sub={loading ? 'Loading…' : `${webhooks.length} endpoint${webhooks.length!==1?'s':''} · ${activeCount} active · receive real-time CRM events`}
+                sub={loading ? 'Loading…' : loadFailed ? '— endpoints · — active · receive real-time CRM events' : `${webhooks.length} endpoint${webhooks.length!==1?'s':''} · ${activeCount} active · receive real-time CRM events`}
                 actions={[
                     <a key="ref" href="/api-docs.html#webhooks" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}><IntBtn label="Event reference ↗"/></a>,
                     <IntBtn key="new" label="+ New endpoint" primary onClick={() => setShowModal(true)}/>,
                 ]}/>
 
-            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
+            {/* Kept until its Close (§18b123 rule 4; §0.247 Part 8), never on a timer. */}
+            {error && (
+                <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>
+                    <span style={{ flex:1, minWidth:0 }}>{error}</span>
+                    <button onClick={() => setError(null)}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
 
             {/* Failing callout */}
             {failingCount > 0 && (
@@ -248,6 +295,8 @@ export const WebhooksDetail = ({ onBack }) => {
 
                 {loading ? (
                     <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading endpoints…</div>
+                ) : webhooks.length === 0 && loadFailed ? (
+                    <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>The endpoints could not be read. Reload the page to try again.</div>
                 ) : webhooks.length === 0 ? (
                     <div style={{ padding:'48px', textAlign:'center', fontFamily:T.sans }}>
                         <div style={{ fontSize:24, marginBottom:8, opacity:0.3 }}>⚡</div>
@@ -262,6 +311,7 @@ export const WebhooksDetail = ({ onBack }) => {
                     webhooks.map((wh, i) => {
                         const isFailing = wh.active && wh.lastStatus && wh.lastStatus >= 400;
                         const isMenuOpen = activeMenu === wh.id;
+                        const isBusy = busyIds.includes(wh.id);   // its Pause / Resume or Delete is out (§0.247 review fix)
                         return (
                             <div key={wh.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 120px 120px 90px 36px', gap:8,
                                 padding:'11px 16px', borderBottom:i<webhooks.length-1?`1px solid ${T.border}`:'none',
@@ -291,8 +341,8 @@ export const WebhooksDetail = ({ onBack }) => {
                                     ) : <span style={{ color:T.inkMuted, fontSize:12 }}>—</span>}
                                 </div>
                                 {/* Active toggle */}
-                                <div onClick={() => handleToggle(wh)}
-                                    style={{ width:30, height:18, borderRadius:9, background:wh.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                <div onClick={() => handleToggle(wh)} aria-disabled={isBusy} title={isBusy ? 'Saving…' : undefined}
+                                    style={{ width:30, height:18, borderRadius:9, background:wh.active?T.ok:T.border, position:'relative', cursor:isBusy?'not-allowed':'pointer', opacity:isBusy?0.5:1, transition:'background 120ms', flexShrink:0 }}>
                                     <span style={{ position:'absolute', top:2, left:wh.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
                                 </div>
                                 {/* ⋯ menu */}

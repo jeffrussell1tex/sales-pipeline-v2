@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -48,7 +48,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
             if (onCreated) onCreated(data.key);
             setStep('reveal');
         } catch (e) {
-            setError(e.message);
+            setError(failureWords(e));
             setStep('form');
         }
     };
@@ -202,7 +202,8 @@ const SDK_LIST = [
     { lang:'Go',         ver:'v0.9.3', cmd:'go get github.com/accelerep/go', url:'https://pkg.go.dev/github.com/accelerep/go' },
 ];
 
-const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
+// `loadFailed`: the keys could not be read (§0.247 review fix) — no key known is then no "No active keys".
+const DocsPopoverB = ({ keys = [], loadFailed = false, onClose, btnRef }) => {
     const ref    = React.useRef(null);
     const posRef = React.useRef(false);
     const [pos,     setPos]     = React.useState(null);
@@ -323,7 +324,9 @@ data = res.json()`,
                     <div style={{ marginTop:6, padding:'6px 10px', background:T.surface2,
                         border:`1px solid ${T.border}`, borderRadius:3, fontSize:10.5,
                         color:T.inkMid, display:'flex', alignItems:'center', gap:6, position:'relative' }}>
-                        {activeKeys.length === 0 ? (
+                        {activeKeys.length === 0 && loadFailed ? (
+                            <span>The keys could not be read. Reload the page to try again.</span>
+                        ) : activeKeys.length === 0 ? (
                             <span>No active keys — <span style={{ color:T.info, cursor:'pointer', fontWeight:600 }}>create one</span> to use this snippet</span>
                         ) : (<>
                             <span>Key:</span>
@@ -431,7 +434,7 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
             if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             if (onRevoked) onRevoked(keyRecord.id);
             onClose();
-        } catch(e) { setError(e.message); setConfirming(false); }
+        } catch(e) { setError(failureWords(e)); setConfirming(false); }
     };
 
     return (
@@ -481,13 +484,17 @@ export const ApiKeysDetail = ({ onBack }) => {
     const [revoking,   setRevoking]   = React.useState(null); // key record
     const docsBtnRef = React.useRef(null);
 
+    // A list that could not be read is no "0 active keys" or "No keys yet" (state §0.247, docs/design/refusal-sweep
+    // Part 9): its counts read "—" until a load lands, after the banner's Close too.
+    const [loadFailed, setLoadFailed] = React.useState(false);
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/api-keys');
             if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             setKeys(data.keys || []);
-        } catch(e) { setError(e.message); }
+            setLoadFailed(false);
+        } catch(e) { setError(failureWords(e)); setLoadFailed(true); }
         finally { setLoading(false); }
     }, []);
 
@@ -520,7 +527,7 @@ export const ApiKeysDetail = ({ onBack }) => {
             <IntCrumb page="API keys" onBack={onBack}/>
             <IntTitle
                 title="API keys"
-                sub={loading ? 'Loading…' : `${activeCount} active key${activeCount!==1?'s':''} · workspace REST API credentials`}
+                sub={loading ? 'Loading…' : loadFailed ? '— active keys · workspace REST API credentials' : `${activeCount} active key${activeCount!==1?'s':''} · workspace REST API credentials`}
                 actions={[
                     <div key="docs" style={{ position:'relative' }}>
                         <button ref={docsBtnRef}
@@ -532,17 +539,26 @@ export const ApiKeysDetail = ({ onBack }) => {
                                 display:'inline-flex', alignItems:'center', gap:4 }}>
                             View docs <span style={{ fontSize:10 }}>↗</span>
                         </button>
-                        {showDocs && <DocsPopoverB keys={keys} onClose={() => setShowDocs(false)} btnRef={docsBtnRef}/>}
+                        {showDocs && <DocsPopoverB keys={keys} loadFailed={loadFailed} onClose={() => setShowDocs(false)} btnRef={docsBtnRef}/>}
                     </div>,
                     <IntBtn key="new" label="+ Create key" primary onClick={() => setShowModal(true)}/>,
                 ]}/>
 
-            {error && <div style={{ padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
+            {/* Kept until its Close (§18b123 rule 4; §0.247 Part 8), never on a timer. */}
+            {error && (
+                <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>
+                    <span style={{ flex:1, minWidth:0 }}>{error}</span>
+                    <button onClick={() => setError(null)}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
 
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
                 <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>
-                        Keys {!loading && <span style={{ fontSize:12, fontWeight:400, color:T.inkMuted }}>({keys.length})</span>}
+                        Keys {!loading && <span style={{ fontSize:12, fontWeight:400, color:T.inkMuted }}>({loadFailed ? '—' : keys.length})</span>}
                     </div>
                     <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
                         {['Active','Revoked','All'].map(f => (
@@ -560,6 +576,8 @@ export const ApiKeysDetail = ({ onBack }) => {
 
                 {loading ? (
                     <div style={{ padding:40, textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading keys…</div>
+                ) : visible.length === 0 && loadFailed ? (
+                    <div style={{ padding:40, textAlign:'center', color:T.inkMuted, fontSize:13 }}>The keys could not be read. Reload the page to try again.</div>
                 ) : visible.length === 0 ? (
                     <div style={{ padding:'48px 32px', textAlign:'center', fontFamily:T.sans }}>
                         <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:6 }}>

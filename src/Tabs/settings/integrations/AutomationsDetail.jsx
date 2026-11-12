@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
 import { useApp } from '../../../AppContext';
@@ -185,7 +185,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
             if (onSaved) onSaved(data.automation);
             onClose();
         } catch(e) {
-            setError(e.message);
+            setError(failureWords(e));
         } finally {
             setSaving(false);
         }
@@ -355,39 +355,77 @@ export const AutomationsDetail = ({ onBack }) => {
     const [runsLoading,    setRunsLoading]    = React.useState(false);
     const [filter,         setFilter]         = React.useState('All');
 
+    // A list that could not be read is no "0 rules · 0 active" or "No automations yet" (state §0.247,
+    // docs/design/refusal-sweep Part 9): its counts read "—" until a load lands, after the banner's Close too.
+    const [loadFailed, setLoadFailed] = React.useState(false);
+    // The rule the page banner speaks of (§0.247 review fix): a landed retry clears the banner only when it is about THAT
+    // rule, by id — names are not unique, so two rules named alike never clear each other's words. A load's words and
+    // the banner's Close leave it null.
+    const errorRule = React.useRef(null);
     const load = React.useCallback(async () => {
         try {
             const res  = await dbFetch('/.netlify/functions/automations');
             if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
             const data = await res.json();
             setAutomationList(data.automations || []);
-        } catch(e) { setError(e.message); }
+            setLoadFailed(false);
+        } catch(e) { errorRule.current = null; setError(failureWords(e)); setLoadFailed(true); }
         finally { setLoading(false); }
     }, []);
 
     React.useEffect(() => { load(); }, []);
 
+    // A refused or unsent Pause / Resume or Delete puts back only its own row, by id, and says why — kept until its
+    // Close (§0.247, docs/design/refusal-sweep Part 8). It reloaded the list instead: a reload that failed replaced the
+    // refusal's words with its own and left the flipped or removed row standing. One request per rule at a time: a
+    // Pause pressed again from the menu while the first is out sends nothing, so a put-back never undoes a later one.
+    // The ref is the synchronous guard; busyIds draws it — the toggle and the menu's Pause / Resume and Delete wait,
+    // titled "Saving…", while their rule's request is out (§0.247 review fix).
+    const busyRules = React.useRef(new Set());
+    const [busyIds, setBusyIds] = React.useState([]);
     const handleToggle = async (rule) => {
-        setAutomationList(prev => prev.map(r => r.id===rule.id ? {...r, active:!r.active} : r));
+        // The menu closes on every press (§0.247 review fix) — a press while the rule's request is out sends nothing.
         setActiveMenu(null);
+        if (busyRules.current.has(rule.id)) return;
+        busyRules.current.add(rule.id);
+        setBusyIds([...busyRules.current]);
+        setAutomationList(prev => prev.map(r => r.id===rule.id ? {...r, active:!r.active} : r));
         try {
             const res = await dbFetch('/.netlify/functions/automations', {
                 method: 'PUT',
                 body: JSON.stringify({ id: rule.id, active: !rule.active }),
             });
             if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
-            setAutomationList(prev => prev.map(r => r.id===rule.id ? data.automation : r));
-        } catch(e) { setError(e.message); load(); }
+            // Landed is landed (§0.247 review fix): a 200 whose body is not JSON keeps the flipped flag, says nothing.
+            const data = await res.json().catch(() => null);
+            // The row as it is now, never the press's copy: an Edit saved while the toggle was out stands.
+            setAutomationList(prev => prev.map(r => r.id===rule.id ? ((data && data.automation) || { ...r, active: !rule.active }) : r));
+            // A banner about this rule is no longer true once its retry lands; one about another stands until closed.
+            if (errorRule.current === rule.id) { errorRule.current = null; setError(null); }
+        } catch(e) {
+            // Only the flag goes back, on the row as it is now (§0.247 review fix) — an Edit saved meanwhile survives.
+            setAutomationList(prev => prev.map(r => r.id===rule.id ? { ...r, active: rule.active } : r));
+            errorRule.current = rule.id;
+            setError(`"${rule.name}" was not ${rule.active ? 'paused' : 'resumed'} — ${failureWords(e)}`);
+        } finally { busyRules.current.delete(rule.id); setBusyIds([...busyRules.current]); }
     };
 
     const handleDelete = async (rule) => {
-        setAutomationList(prev => prev.filter(r => r.id !== rule.id));
         setActiveMenu(null);
+        if (busyRules.current.has(rule.id)) return;
+        busyRules.current.add(rule.id);
+        setBusyIds([...busyRules.current]);
+        const at = Math.max(0, automationList.findIndex(r => r.id === rule.id));
+        setAutomationList(prev => prev.filter(r => r.id !== rule.id));
         try {
             const res = await dbFetch(`/.netlify/functions/automations?id=${rule.id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error(await readRefusal(res));
-        } catch(e) { setError(e.message); load(); }
+            if (errorRule.current === rule.id) { errorRule.current = null; setError(null); }
+        } catch(e) {
+            setAutomationList(prev => (prev.some(r => r.id === rule.id) ? prev : [...prev.slice(0, at), rule, ...prev.slice(at)]));
+            errorRule.current = rule.id;
+            setError(`"${rule.name}" was not deleted — ${failureWords(e)}`);
+        } finally { busyRules.current.delete(rule.id); setBusyIds([...busyRules.current]); }
     };
 
     const handleViewRuns = async (rule) => {
@@ -400,7 +438,7 @@ export const AutomationsDetail = ({ onBack }) => {
             if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             setRunsFor({ rule, runs: data.runs || [] });
-        } catch(e) { setRunsFor({ rule, runs: [], error: e.message || 'No answer from the server.' }); }
+        } catch(e) { setRunsFor({ rule, runs: [], error: failureWords(e) }); }
         finally { setRunsLoading(false); }
     };
 
@@ -459,12 +497,21 @@ export const AutomationsDetail = ({ onBack }) => {
             <IntCrumb page="Automations" onBack={onBack}/>
             <IntTitle
                 title="Automations"
-                sub={loading ? 'Loading…' : `${automationList.length} rule${automationList.length!==1?'s':''} · ${activeCount} active`}
+                sub={loading ? 'Loading…' : loadFailed ? '— rules · — active' : `${automationList.length} rule${automationList.length!==1?'s':''} · ${activeCount} active`}
                 actions={[
                     <IntBtn key="new" label="+ New automation" primary onClick={() => setShowModal(true)}/>,
                 ]}/>
 
-            {error && <div style={{ padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
+            {/* Kept until its Close (§18b123 rule 4; §0.247 Part 8), never on a timer. */}
+            {error && (
+                <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>
+                    <span style={{ flex:1, minWidth:0 }}>{error}</span>
+                    <button onClick={() => { errorRule.current = null; setError(null); }}
+                        style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
 
             {/* Rules table */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
@@ -489,6 +536,8 @@ export const AutomationsDetail = ({ onBack }) => {
 
                 {loading ? (
                     <div style={{ padding:40, textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading automations…</div>
+                ) : visible.length === 0 && loadFailed ? (
+                    <div style={{ padding:40, textAlign:'center', color:T.inkMuted, fontSize:13 }}>The automations could not be read. Reload the page to try again.</div>
                 ) : visible.length === 0 ? (
                     <div style={{ padding:'48px 32px', textAlign:'center', fontFamily:T.sans }}>
                         <div style={{ fontSize:28, marginBottom:10, opacity:0.3 }}>⚡</div>
@@ -507,13 +556,14 @@ export const AutomationsDetail = ({ onBack }) => {
                     </div>
                 ) : visible.map((rule, i) => {
                     const isMenuOpen = activeMenu === rule.id;
+                    const isBusy = busyIds.includes(rule.id);   // its Pause / Resume or Delete is out (§0.247 review fix)
                     return (
                         <div key={rule.id} style={{ display:'grid', gridTemplateColumns:'50px 1fr 180px 100px 90px 80px 36px', gap:8,
                             padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none',
                             alignItems:'center', opacity:rule.active?1:0.65 }}>
                             {/* Active toggle */}
-                            <div onClick={() => handleToggle(rule)}
-                                style={{ width:30, height:18, borderRadius:9, background:rule.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms' }}>
+                            <div onClick={() => handleToggle(rule)} aria-disabled={isBusy} title={isBusy ? 'Saving…' : undefined}
+                                style={{ width:30, height:18, borderRadius:9, background:rule.active?T.ok:T.border, position:'relative', cursor:isBusy?'not-allowed':'pointer', opacity:isBusy?0.5:1, transition:'background 120ms' }}>
                                 <span style={{ position:'absolute', top:2, left:rule.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
                             </div>
                             {/* Name */}
@@ -550,16 +600,16 @@ export const AutomationsDetail = ({ onBack }) => {
                                         width:188, background:T.surface, border:`1px solid ${T.borderStrong}`,
                                         borderRadius:4, padding:4, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', fontFamily:T.sans }}>
                                         {[
-                                            { icon:rule.active?'⏸':'▶', label:rule.active?'Pause':'Resume', fn:() => handleToggle(rule) },
+                                            { icon:rule.active?'⏸':'▶', label:rule.active?'Pause':'Resume', fn:() => handleToggle(rule), busy:isBusy },
                                             { icon:'✏️', label:'Edit', fn:() => { setActiveMenu(null); setEditingRule(rule); setShowModal(true); } },
                                             { icon:'📋', label:'View run history', fn:() => handleViewRuns(rule) },
                                             null,
-                                            { icon:'🗑', label:'Delete', fn:() => handleDelete(rule), danger:true },
+                                            { icon:'🗑', label:'Delete', fn:() => handleDelete(rule), danger:true, busy:isBusy },
                                         ].map((item,idx) => item===null ? (
                                             <div key={idx} style={{ height:1, background:T.border, margin:'2px 6px' }}/>
                                         ) : (
-                                            <div key={idx} onClick={item.fn}
-                                                style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:3, cursor:'pointer', color:item.danger?T.danger:T.ink }}
+                                            <div key={idx} onClick={item.fn} aria-disabled={!!item.busy} title={item.busy ? 'Saving…' : undefined}
+                                                style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:3, cursor:item.busy?'not-allowed':'pointer', opacity:item.busy?0.5:1, color:item.danger?T.danger:T.ink }}
                                                 onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
                                                 onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                                                 <span style={{ fontSize:12, width:14, textAlign:'center' }}>{item.icon}</span>

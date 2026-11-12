@@ -53,7 +53,9 @@ async function openFile(deps, open, label, id, v) {
         await open(dbFetch, { id, v });
         return { ok: true };
     } catch (e) {
-        const error = (e && e.message) || 'Could not get a download link';
+        // Plain words (§0.247, docs/design/refusal-sweep Part 8): documentsStorage's own words pass through; a request
+        // that never left says so — it said "Download failed — Failed to fetch".
+        const error = failureWords(e);
         report(deps, askedOrg, `${label} failed — ${error}`);
         return { ok: false, error };
     }

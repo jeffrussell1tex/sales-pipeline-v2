@@ -107,7 +107,14 @@ test('Property types hands over its save, and a refused or failed save throws �
     const p = code(read('src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx'));
     assert.ok(p.includes('export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {'));
     assert.ok(p.includes("        if (!clean.length) { const e = new Error('Keep at least one property type.'); setError(e.message); throw e; }"));
-    assert.ok(/setError\(err\.message \|\| 'Save failed\.'\);\s*throw err;\s*\} finally \{\s*setSaving\(false\);/.test(p), 'rethrown, with the spinner cleared in finally');
+    // Moved pin (§0.247, docs/design/refusal-sweep Part 9): the catch says failureWords(err), never a raw err.message.
+    // Tightened (§0.247 review fix): only spaces and a line comment may sit between the words and the rethrow — `[^\n]*`
+    // let "setError(failureWords(err)); return;" through, a save that never throws and the guard moves on.
+    const RETHROW = /setError\(failureWords\(err\)\);[ \t]*(?:\/\/[^\n]*)?\s*throw err;\s*\} finally \{\s*setSaving\(false\);/;
+    assert.ok(RETHROW.test(p), 'rethrown, with the spinner cleared in finally');
+    assert.equal(p.split('setError(failureWords(err));').length - 1, 1, 'one catch says the words');
+    const returned = p.replace('setError(failureWords(err));', 'setError(failureWords(err)); return;');
+    assert.ok(!RETHROW.test(returned), 'review fix: a "return;" before the rethrow is refused by the pin');
     const av = code(read('src/Tabs/AdminView.jsx'));
     assert.ok(av.includes("if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;"));
 });

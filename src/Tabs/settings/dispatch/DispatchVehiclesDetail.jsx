@@ -21,7 +21,7 @@
 // decisions any more, but deleting live data to tidy up is not worth the risk.
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -282,7 +282,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             setEquipment(eJson.equipment  || []);
             setFleetLoaded(true);
         } catch (err) {
-            setLoadError(err.message || 'Failed to load fleet.');
+            setLoadError(failureWords(err));   // plain words — never "Failed to fetch" or a parse error's (§0.247)
             setFleetLoaded(false);
         }
         setLoading(false);
@@ -325,7 +325,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             await load();
             setVDraft(null);
         } catch (err) {
-            setVError(err.message);
+            setVError(failureWords(err));
         }
         setBusy(false);
     };
@@ -336,11 +336,13 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         setBusy(true); setVError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-vehicles?id=' + encodeURIComponent(vDraft.id), { method: 'DELETE' });
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete vehicles.' : 'HTTP ' + res.status);
+            // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status — never
+            // "HTTP N" (§0.247 Part 8).
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete vehicles.' : await readRefusal(res));
             await load();
             setVDraft(null);
         } catch (err) {
-            setVError(err.message);
+            setVError(failureWords(err));
         }
         setBusy(false);
     };
@@ -367,7 +369,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             await load();
             setEDraft(null);
         } catch (err) {
-            setEError(err.message);
+            setEError(failureWords(err));
         }
         setBusy(false);
     };
@@ -378,11 +380,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         setBusy(true); setEError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-equipment?id=' + encodeURIComponent(eDraft.id), { method: 'DELETE' });
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete equipment.' : 'HTTP ' + res.status);
+            // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status (§0.247).
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete equipment.' : await readRefusal(res));
             await load();
             setEDraft(null);
         } catch (err) {
-            setEError(err.message);
+            setEError(failureWords(err));
         }
         setBusy(false);
     };
@@ -400,7 +403,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             plan = planImport({ vehicles: legacyVehicles, equipment: legacyEquipment }, await readHeld());
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
-            setImportError(`The import didn't run: ${unstopped(err.message)}. Refresh, then try again.`);
+            setImportError(`The import didn't run: ${unstopped(failureWords(err))}. Refresh, then try again.`);
             setImporting(false);
             return;
         }

@@ -4,6 +4,7 @@ import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -100,6 +101,29 @@ const commitNumber = (raw, { min, max, fallback, integer = false }) => {
 const CREW_BOUNDS = { min: 1,   max: 10, fallback: 1, integer: true };
 const HRS_BOUNDS  = { min: 0.5, max: 24, fallback: 2 };
 
+// The equipment list could not be read (state §0.247, docs/design/refusal-sweep Part 9): a refused or failed read set
+// equipLoaded anyway, and the migration filed every legacy requirement as unmatched against no categories — saved for
+// good with the next save (the save sends every template, and a migrated template is never migrated again). Now nothing
+// is migrated, the requirements are left as they are, and Save is refused until a reload reads the list.
+const equipUnreadWords = (why) => `The equipment list couldn't be read (${String(why).replace(/[.\s]+$/, '')}) — requirements are left as they are. Reload the page to try again.`;
+// A Save refused while the equipment list is unread says its own words (§0.247 review fix) — the banner's read words
+// sat twice on the screen and never said the Save was refused.
+const EQUIP_SAVE_REFUSED = "Not saved — the equipment list couldn't be read, so these templates can't be saved. Reload the page to try again.";
+
+// The Required vehicle readiness row (§0.247 review fix): a fleet that could not be read is never "0 in fleet" — the
+// row says the list couldn't be read and is not ok over it, unless no vehicle is required.
+const vehicleCheckOf = (vehicleType, fleet, vehicleTypes, fleetError) => ({
+    ok: !vehicleType || (!fleetError && vehicleTypes.includes(String(vehicleType).toLowerCase())),
+    label: 'Required vehicle in fleet',
+    detail: !vehicleType
+        ? 'Any vehicle'
+        : fleetError ? "The vehicle list couldn't be read."
+        : `${labelise(vehicleType)} — ${fleet.filter(v => (v.type||'').toLowerCase() === String(vehicleType).toLowerCase()).length} in fleet`,
+});
+// The stored class the Required vehicle select keeps when it is not among the fleet's: over a fleet that could not be
+// read it is the class, never "Not in fleet" (§0.247 review fix). Either way the stored value stays selected and saved.
+const heldClassLabel = (vehicleType, fleetError) => (fleetError ? labelise(vehicleType) : `Not in fleet (${vehicleType})`);
+
 export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchJobTemplates || [];
     const skills   = settings?.dispatchSkills   || [];
@@ -116,32 +140,41 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const legacyEquipBlob = settings?.dispatchEquipment || [];
     const [equipUnits, setEquipUnits] = useState([]);
     const [equipLoaded, setEquipLoaded] = useState(false);
+    const [equipError, setEquipError] = useState('');
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-equipment');
-                if (!res.ok) { if (!cancelled) setEquipLoaded(true); return; }
+                if (!res.ok) { if (!cancelled) setEquipError(equipUnreadWords(await readRefusal(res))); return; }
                 const data = await res.json();
                 if (cancelled) return;
                 setEquipUnits(data.equipment || []);
-            } catch (e) { /* picker stays empty */ }
-            if (!cancelled) setEquipLoaded(true);
+                setEquipLoaded(true);
+            } catch (e) {
+                // Never loaded: no migration runs against an empty list (state §0.247).
+                if (!cancelled) setEquipError(equipUnreadWords(failureWords(e)));
+            }
         })();
         return () => { cancelled = true; };
     }, []);
     // Requirable vehicle classes, from dispatch_vehicles. A class nobody owns
-    // would only ever produce a job no technician can be crewed onto.
+    // would only ever produce a job no technician can be crewed onto. A read that failed is said under the picker
+    // (§0.247 review fix, as Crews says its vehicles) — it left the picker empty and the readiness row "0 in fleet".
     const [fleet, setFleet] = useState([]);
+    const [fleetError, setFleetError] = useState('');
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-vehicles');
-                if (!res.ok) return;
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
-                if (!cancelled) setFleet(data.vehicles || []);
-            } catch (e) { /* picker stays empty */ }
+                if (cancelled) return;
+                setFleet(data.vehicles || []);
+            } catch (e) {
+                if (!cancelled) setFleetError(`The vehicles could not be read — ${failureWords(e)}`);
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -180,6 +213,10 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const selected = templates.find(t => t.id === selectedId);
 
     const handleSave = once(async () => {
+        // Thrown, not returned (state §0.170): the leave guard's "Save and continue" runs this too, and only a throw keeps
+        // it from moving on. A save while the equipment list is unread could not carry the requirements' migration —
+        // refused until a reload reads the list (state §0.247).
+        if (equipError) { setSaveError(EQUIP_SAVE_REFUSED); throw new Error(EQUIP_SAVE_REFUSED); }
         setSaving(true);
         // A field still mid-edit ('' or '3.') must not reach the blob — the New
         // Job template picker and the preview panel both read these as numbers.
@@ -201,8 +238,8 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
             // Keep the panel dirty: the change was NOT saved, and clearing the
-            // flag here is what made a 403 look like success.
-            setSaveError(e.message);
+            // flag here is what made a 403 look like success. putSettings' words pass through failureWords (§0.247).
+            setSaveError(failureWords(e));
             // Clear the spinner BEFORE rethrowing — the `setSaving(false)` after
             // this try/catch is skipped by the throw, and the panel would sit on
             // "Saving…" for the rest of the session.
@@ -281,17 +318,13 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                         p ? `${p} property type${p===1?'':'s'}` : 'any property type'].join(' · ');
             })(),
         },
+        vehicleCheckOf(selected.vehicleType, fleet, vehicleTypes, fleetError),
         {
-            ok: !selected.vehicleType || vehicleTypes.includes(String(selected.vehicleType).toLowerCase()),
-            label: 'Required vehicle in fleet',
-            detail: !selected.vehicleType
-                ? 'Any vehicle'
-                : `${labelise(selected.vehicleType)} — ${fleet.filter(v => (v.type||'').toLowerCase() === String(selected.vehicleType).toLowerCase()).length} in fleet`,
-        },
-        {
-            ok: (selected.equipCategories||[]).every(c => equipCategories.includes(c)) && (selected.equipUnmatched||[]).length === 0,
+            // An unread list is no "0 units" (state §0.247).
+            ok: !equipError && (selected.equipCategories||[]).every(c => equipCategories.includes(c)) && (selected.equipUnmatched||[]).length === 0,
             label: 'All required equipment exists',
-            detail: (selected.equipCategories||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
+            detail: equipError ? "The equipment list couldn't be read."
+                : (selected.equipCategories||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
                 ? 'No equipment required'
                 : (selected.equipCategories||[]).map(c => `${c} (${unitsIn(c).length} unit${unitsIn(c).length===1?'':'s'})`).join(', ')
                   + ((selected.equipUnmatched||[]).length ? ` · ${(selected.equipUnmatched||[]).length} unmatched` : ''),
@@ -299,10 +332,10 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     ] : [];
 
     return (
-        <CategoryDetailChrome error={saveError} crumb="Job templates" category="Dispatch" title="Job templates"
+        <CategoryDetailChrome error={saveError || equipError} crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
-            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(migrateAxes).map(t => migrateEquipment(t, equipCategories, legacyEquipBlob))); setDirty(false); }}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(migrateAxes).map(t => (equipMigrated ? migrateEquipment(t, equipCategories, legacyEquipBlob) : t))); setDirty(false); }}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
@@ -427,13 +460,14 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         {/* A class that has left the fleet must not fall through to
                                             "Any": that silently drops the requirement on next save. */}
                                         {selected.vehicleType && !vehicleTypes.includes(String(selected.vehicleType).toLowerCase()) && (
-                                            <option value={selected.vehicleType}>Not in fleet ({selected.vehicleType})</option>
+                                            <option value={selected.vehicleType}>{heldClassLabel(selected.vehicleType, fleetError)}</option>
                                         )}
                                         {vehicleTypes.map(vt => {
                                             const n = fleet.filter(v => (v.type||'').toLowerCase() === vt).length;
                                             return <option key={vt} value={vt}>{labelise(vt)} ({n} in fleet)</option>;
                                         })}
                                     </select>
+                                    {fleetError && <div role="alert" style={{ marginTop:5, fontSize:11.5, color:T.danger, lineHeight:1.4, fontFamily:T.sans }}>{fleetError}</div>}
                                 </div>
                                 <div>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default priority</div>
@@ -461,7 +495,9 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 </div>
                                 <div style={{ gridColumn:'1 / -1' }}>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8, fontFamily:T.sans }}>Default equipment</div>
-                                    {!equipLoaded ? (
+                                    {equipError ? (
+                                        <div role="alert" style={{ fontSize:12, color:T.danger, lineHeight:1.45, fontFamily:T.sans }}>{equipError}</div>
+                                    ) : !equipLoaded ? (
                                         <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>Loading equipment&hellip;</div>
                                     ) : equipCategories.length === 0 ? (
                                         <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>

@@ -216,15 +216,20 @@ test('the schema, its apply script, and the test-schema guard all carry site_job
 
 test('the health tile counts the jobs check once the rows are read; Settings fetches them; the Slack card says when alerts last ran', () => {
     const cards = code(read('src/utils/settingsCards.js'));
-    assert.ok(cards.includes("import { jobsCheck } from './jobHealth.js';"));
+    // Moved pins (§0.247, docs/design/refusal-sweep Part 9): AdminView's count block moved to settingsCards.js
+    // liveCountsOf, every answer read ok-first by answerOf — the jobs' verdict is computed there, and a 403 or a 500
+    // still leaves the check out (RUN: tests/refusal-sweep.test.mjs Part 9).
+    assert.ok(cards.includes("import { jobHealth, jobsCheck } from './jobHealth.js';"));
     assert.ok(cards.includes("    if (liveCounts.jobs && !isHidden('jobs')) {"));
     assert.ok(cards.includes('        const c = jobsCheck(liveCounts.jobs);'));
     assert.ok(cards.includes('        if (c) checks.push(c);'));
     const av = code(read('src/Tabs/AdminView.jsx'));
-    assert.ok(av.includes("import { jobHealth } from '../utils/jobHealth.js';"));
+    // Moved pin (§0.247, Jeff 12 Nov: "Name the unread (Recommended)"): the import also names the unread checks' three.
+    assert.ok(av.includes("import { cardStateOf, healthChecksOf, healthSummaryOf, liveCountsOf, unreadChecksOf, unreadSentenceOf, allClearOf } from '../utils/settingsCards';"));
     assert.ok(av.includes("                    dbFetch('/.netlify/functions/job-status'),"));
-    assert.ok(av.includes("                if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {"), 'a 403 or a 500 leaves the check out of the denominator');
-    assert.ok(av.includes('counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });'), 'item 36: the tile hears whether this site runs its jobs');
+    assert.ok(av.includes('                const counts = await liveCountsOf(results);'));
+    assert.ok(cards.includes('    if (!res.ok) return null;') && cards.includes('    d = await answerOf(jobsRes);\n    if (d && Array.isArray(d.jobs)) counts.jobs = '), 'a 403 or a 500 leaves the check out of the denominator');
+    assert.ok(cards.includes('counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });'), 'item 36: the tile hears whether this site runs its jobs');
     const ca = code(read('src/Tabs/settings/integrations/ConnectedAppsDetail.jsx'));
     assert.ok(ca.includes("import { jobHealth, jobLine } from '../../../utils/jobHealth.js';"));
     assert.ok(ca.includes('setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now(), { enabled: data.enabled !== false }));'), 'item 36: so does the Slack card');

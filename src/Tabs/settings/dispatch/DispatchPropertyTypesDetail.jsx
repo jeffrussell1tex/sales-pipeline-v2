@@ -15,6 +15,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -60,9 +61,24 @@ const btnGhost = {
     borderRadius: T.r, fontSize: 12.5, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans,
 };
 
+// Usage that could not be read (state §0.247, docs/design/refusal-sweep Part 9): every count read 0 and every Remove
+// was offered — a type still on customer records could be removed. Now no count is claimed and no Remove is offered.
+const usageUnreadWords = (why) => `Usage couldn't be read (${String(why).replace(/[.\s]+$/, '')}) — reload before removing a type.`;
+// A type's Remove (§0.247 review fix): one only in this draft — not among the stored types the settings prop seeded — is
+// on no customer record by this list, so it stays removable whatever the usage read did; a stored type needs usage read
+// and none in use. The last type is never removable.
+const typeRemovable = (id, storedIds, customersRead, countOf, total) =>
+    total > 1 && (!storedIds.has(id) || (customersRead && countOf(id) === 0));
+// Why a Remove is not offered: usage still loading, usage that could not be read (the reload words, only once the read
+// failed), or the type in use. `unread` is null for a draft row, which never shows the usage words.
+const removeTitleOf = (canRemove, unread) => (canRemove ? 'Remove'
+    : unread === 'failed' ? 'Usage not read — reload before removing a type'
+    : unread === 'loading' ? 'Usage is still loading'
+    : 'In use by customers — reassign them first');
+
 // Module scope: a row component declared inside the panel would remount on every
-// keystroke and lose focus.
-const TypeRow = ({ type, count, onChange, onRemove, canRemove }) => (
+// keystroke and lose focus. `count` is null while usage is unread: "— in use", never 0.
+const TypeRow = ({ type, count, onChange, onRemove, canRemove, unread }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
         border: `1px solid ${T.border}`, borderRadius: T.r, marginBottom: 6, background: T.surface }}>
         <PIcon name={type.icon} size={16} color={T.inkMid}/>
@@ -74,14 +90,14 @@ const TypeRow = ({ type, count, onChange, onRemove, canRemove }) => (
         </select>
         <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace',
             minWidth: 70, textAlign: 'right' }}>
-            {count} in use
+            {count == null ? '—' : count} in use
         </span>
         <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace',
             minWidth: 90, textAlign: 'right' }} title="Stored on the customer record — cannot change">
             {type.id}
         </span>
         <button onClick={onRemove} disabled={!canRemove}
-            title={canRemove ? 'Remove' : 'In use by customers — reassign them first'}
+            title={removeTitleOf(canRemove, unread)}
             style={{ background: 'none', border: 'none', cursor: canRemove ? 'pointer' : 'default',
                 color: canRemove ? T.danger : T.borderStrong, fontSize: 15, fontWeight: 700, padding: '0 2px' }}>×</button>
     </div>
@@ -102,16 +118,23 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
     const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
 
     // Usage counts come from the customer records, so a type cannot be removed
-    // out from under rows that still reference it.
+    // out from under rows that still reference it. Until they are read no Remove is offered; a read that failed says
+    // so (state §0.247) — it left every count at 0 and every Remove offered.
+    const [customersRead, setCustomersRead] = useState(false);
+    const [usageError, setUsageError] = useState('');
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-customers');
-                if (!res.ok) return;
+                if (!res.ok) throw new Error(await readRefusal(res));
                 const data = await res.json();
-                if (!cancelled) setCustomers(data.customers || []);
-            } catch (e) { /* counts stay at zero; removal guard falls back to safe */ }
+                if (cancelled) return;
+                setCustomers(data.customers || []);
+                setCustomersRead(true);
+            } catch (e) {
+                if (!cancelled) setUsageError(usageUnreadWords(failureWords(e)));
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -119,6 +142,8 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
     useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty, setSettingsDirty]);
 
     const countOf = (id) => customers.filter(c => (c.customerType || 'commercial') === id).length;
+    // The stored types (§0.247 review fix): a type not among them is this draft's alone.
+    const storedIds = new Set(seeded.map(t => t.id));
 
     // Types written to customer records but missing from the list — a row that
     // would otherwise render as an unresolvable value in Dispatch.
@@ -160,7 +185,7 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (err.stale && await panelStale(err)) throw err;
-            setError(err.message || 'Save failed.');
+            setError(failureWords(err));   // putSettings' words pass through; never a raw e.message (§0.247)
             throw err;
         } finally {
             setSaving(false);
@@ -177,11 +202,16 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
 
             <CSectionCard title="Property types"
                 desc="Rename freely. The id is stored on every customer record, so it is fixed once created.">
+                {usageError && (
+                    <div role="alert" style={{ padding: '8px 11px', marginBottom: 8, borderRadius: T.r, background: 'rgba(156,58,46,0.08)',
+                        border: `1px solid ${T.danger}`, color: T.danger, fontSize: 12.5, fontFamily: T.sans }}>{usageError}</div>
+                )}
                 {types.map((t, i) => (
-                    <TypeRow key={t.id} type={t} count={countOf(t.id)}
+                    <TypeRow key={t.id} type={t} count={customersRead ? countOf(t.id) : null}
+                        unread={storedIds.has(t.id) && !customersRead ? (usageError ? 'failed' : 'loading') : null}
                         onChange={next => update(i, next)}
                         onRemove={() => remove(i)}
-                        canRemove={countOf(t.id) === 0 && types.length > 1}/>
+                        canRemove={typeRemovable(t.id, storedIds, customersRead, countOf, types.length)}/>
                 ))}
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>

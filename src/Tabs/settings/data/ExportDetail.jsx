@@ -1,7 +1,7 @@
 // settings/data/ExportDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
-import { dbFetch, dbWrite } from '../../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -101,6 +101,15 @@ export const ExportDetail = ({ onBack }) => {
     // A refused Pause / Enable or Mark complete (§0.243's second fix round), or Delete (§0.245 4a): what was not done and
     // why, kept until closed (§18b123 rule 4) — the row went back and nothing said why.
     const [actionError,  setActionError]  = React.useState('');
+    // The schedule the banner speaks of (§0.247 review fix): a landed retry or Delete clears the banner only when it is
+    // about THAT schedule, by id — names are not unique, so two schedules named alike never clear each other's words. A
+    // Mark complete's words and the banner's Close leave it null.
+    const errorSched = React.useRef(null);
+    // One request per schedule at a time (§0.247 review fix): a Pause / Enable or Delete pressed while its schedule's
+    // request is out sends nothing, so a put-back never undoes a later press. The ref is the synchronous guard; busyIds
+    // draws it — the row's Pause / Enable and Delete wait, titled "Saving…", while its request is out.
+    const busyScheds = React.useRef(new Set());
+    const [busyIds, setBusyIds] = React.useState([]);
 
     // ── load all three endpoints on mount ─────────────────────
     React.useEffect(() => {
@@ -125,7 +134,9 @@ export const ExportDetail = ({ onBack }) => {
                 setRuns(runData.runs || []);
                 setDsrItems(dsrData.dsrQueue || []);
             } catch (e) {
-                if (!cancelled) setError(e.message);
+                // Plain words (§0.247, docs/design/refusal-sweep Part 8): a refusal's as thrown above, never "Failed to
+                // fetch" or a parse error's "Unexpected token '<'".
+                if (!cancelled) setError(failureWords(e));
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -141,21 +152,28 @@ export const ExportDetail = ({ onBack }) => {
 
     // ── toggle schedule enabled/disabled ──────────────────────
     const handleToggle = async (sched) => {
-        const updated = { ...sched, enabled: !sched.enabled };
-        setSchedules(prev => prev.map(s => s.id === sched.id ? updated : s));
+        if (busyScheds.current.has(sched.id)) return;
+        busyScheds.current.add(sched.id);
+        setBusyIds([...busyScheds.current]);
+        setSchedules(prev => prev.map(s => s.id === sched.id ? { ...s, enabled: !sched.enabled } : s));
         try {
-            const res  = await dbFetch('/.netlify/functions/export-schedules', { method:'PUT', body: JSON.stringify(updated) });
+            // The flag alone (§0.247 review fix): the PUT merges what a save names over the stored row (export-schedules.mjs,
+            // §0.242). The whole screen copy it sent wrote back over an Edit saved while the toggle was out.
+            const res  = await dbFetch('/.netlify/functions/export-schedules', { method:'PUT', body: JSON.stringify({ id: sched.id, enabled: !sched.enabled }) });
             if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
-            const data = await res.json();
-            setSchedules(prev => prev.map(s => s.id === sched.id ? (data.schedule || updated) : s));
+            // Landed is landed (§0.247 review fix): a 200 whose body is not JSON keeps the change and says nothing.
+            const data = await res.json().catch(() => null);
+            // The row as it is now, never the press's copy: an Edit saved while the toggle was out stands.
+            setSchedules(prev => prev.map(s => s.id === sched.id ? ((data && data.schedule) || { ...s, enabled: !sched.enabled }) : s));
             // A banner about this schedule is no longer true once its retry lands (the re-check, 10 Nov); one about
-            // another row stands until closed.
-            setActionError(prev => (prev.startsWith(`"${sched.name}" was not `) ? '' : prev));
+            // another row stands until closed — by id, never by name (§0.247 review fix).
+            if (errorSched.current === sched.id) { errorSched.current = null; setActionError(''); }
         } catch (e) {
-            // Revert on error, and say why
-            setSchedules(prev => prev.map(s => s.id === sched.id ? sched : s));
+            // Only the flag goes back, on the row as it is now (§0.247 review fix) — an Edit saved meanwhile survives.
+            setSchedules(prev => prev.map(s => s.id === sched.id ? { ...s, enabled: sched.enabled } : s));
+            errorSched.current = sched.id;
             setActionError(`"${sched.name}" was not ${sched.enabled ? 'paused' : 'enabled'} — ${failureWords(e)}`);
-        }
+        } finally { busyScheds.current.delete(sched.id); setBusyIds([...busyScheds.current]); }
     };
 
     // ── delete schedule ───────────────────────────────────────
@@ -163,13 +181,21 @@ export const ExportDetail = ({ onBack }) => {
         // Optimistic removal, put back if the delete does not land (dbWrite never throws: a refusal in its words, a
         // request that never left in NETWORK_ERROR's). Said on the panel's banner, kept until closed (§0.245,
         // docs/design/refusal-sweep 4a) — never the load's `error`, which replaced the whole page with a red box. Only
-        // its own row is put back, where it stood: a Pause or a new schedule that landed meanwhile stands.
+        // its own row is put back, where it stood: a Pause or a new schedule that landed meanwhile stands. One request per
+        // schedule at a time, with its Pause / Enable (§0.247 review fix).
+        if (busyScheds.current.has(sched.id)) return;
+        busyScheds.current.add(sched.id);
+        setBusyIds([...busyScheds.current]);
         const at = Math.max(0, schedules.findIndex(s => s.id === sched.id));
         setSchedules(prev => prev.filter(s => s.id !== sched.id));
-        const r = await dbWrite(`/.netlify/functions/export-schedules?id=${encodeURIComponent(sched.id)}`, { method:'DELETE' });
-        if (r.ok) { setActionError(prev => (prev.startsWith(`"${sched.name}" was not `) ? '' : prev)); return; }
-        setSchedules(prev => (prev.some(s => s.id === sched.id) ? prev : [...prev.slice(0, at), sched, ...prev.slice(at)]));
-        setActionError(`"${sched.name}" was not deleted — ${r.error}`);
+        try {
+            const r = await dbWrite(`/.netlify/functions/export-schedules?id=${encodeURIComponent(sched.id)}`, { method:'DELETE' });
+            // A banner about this schedule goes once it is deleted — by id, never by name (§0.247 review fix).
+            if (r.ok) { if (errorSched.current === sched.id) { errorSched.current = null; setActionError(''); } return; }
+            setSchedules(prev => (prev.some(s => s.id === sched.id) ? prev : [...prev.slice(0, at), sched, ...prev.slice(at)]));
+            errorSched.current = sched.id;
+            setActionError(`"${sched.name}" was not deleted — ${r.error}`);
+        } finally { busyScheds.current.delete(sched.id); setBusyIds([...busyScheds.current]); }
     };
 
     // ── save a schedule / a GDPR request (the two windows' onSave) ──
@@ -204,6 +230,9 @@ export const ExportDetail = ({ onBack }) => {
 
     // ── ad-hoc export ─────────────────────────────────────────
     const handleAdHoc = async () => {
+        // After an org switch its answer saves no file and says nothing (state §0.175; §0.247 Part 8): the old org's
+        // export was saved to disk on the new org's screen.
+        const askedOrg = requestOrg();
         setAdhocLoading(true);
         setAdhocError(null);
         try {
@@ -214,6 +243,7 @@ export const ExportDetail = ({ onBack }) => {
             });
             if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first (§0.243): its words, else its status
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
 
             // Trigger browser download from base64 payload
             const dl  = data.download;
@@ -233,7 +263,7 @@ export const ExportDetail = ({ onBack }) => {
             // Add run to recent list
             if (data.run) setRuns(prev => [data.run, ...prev].slice(0, 20));
         } catch (e) {
-            setAdhocError(e.message);
+            if (stillOrg(askedOrg)) setAdhocError(failureWords(e));
         } finally {
             setAdhocLoading(false);
         }
@@ -251,6 +281,7 @@ export const ExportDetail = ({ onBack }) => {
             setActionError(prev => (prev.startsWith(`Request ${dsr.id} was not `) ? '' : prev));
         } catch (e) {
             setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
+            errorSched.current = null;   // these words speak of a request, no schedule (§0.247 review fix)
             setActionError(`Request ${dsr.id} was not ${newStatus === 'completed' ? 'marked complete' : 'updated'} — ${failureWords(e)}`);
         }
     };
@@ -289,7 +320,7 @@ export const ExportDetail = ({ onBack }) => {
     if (error) return (
         <div style={{ fontFamily:T.sans }}>
             <DataCrumb page="Export" onBack={onBack}/>
-            <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:13, color:T.danger }}>{error}</div>
+            <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:13, color:T.danger }}>⚠ Export couldn't be opened ({String(error).replace(/[.\s]+$/, '')}). Reload the page to try again.</div>
         </div>
     );
 
@@ -319,7 +350,7 @@ export const ExportDetail = ({ onBack }) => {
             {actionError && (
                 <div role="alert" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
                     <span style={{ flex:1, minWidth:0 }}>✕ {actionError}</span>
-                    <button onClick={() => setActionError('')}
+                    <button onClick={() => { errorSched.current = null; setActionError(''); }}
                         style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>
                         Close
                     </button>
@@ -377,6 +408,7 @@ export const ExportDetail = ({ onBack }) => {
                                 {schedules.map((s,i) => {
                                     const tone  = !s.enabled ? 'neutral' : s.status === 'failing' ? 'danger' : 'ok';
                                     const label = !s.enabled ? 'Paused' : s.status === 'failing' ? 'Failing' : 'Active';
+                                    const isBusy = busyIds.includes(s.id);   // its Pause / Enable or Delete is out (§0.247 review fix)
                                     return (
                                         <tr key={s.id} style={{ borderBottom: i < schedules.length-1 ? `1px solid ${T.border}` : 'none', opacity: s.enabled ? 1 : 0.62 }}>
                                             <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
@@ -388,11 +420,11 @@ export const ExportDetail = ({ onBack }) => {
                                             <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
                                             <td style={{ padding:'10px 12px' }}>
                                                 <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                                                    <span onClick={() => handleToggle(s)} style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>
+                                                    <span onClick={() => handleToggle(s)} style={{ fontSize:11, color:T.info, cursor:isBusy?'not-allowed':'pointer', opacity:isBusy?0.5:1, fontWeight:600 }} aria-disabled={isBusy} title={isBusy ? 'Saving…' : undefined}>
                                                         {s.enabled ? 'Pause' : 'Enable'}
                                                     </span>
                                                     <span onClick={() => { setEditingSched(s); setShowModal(true); }} style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
-                                                    <span onClick={() => handleDeleteSched(s)} style={{ fontSize:11, color:T.danger, cursor:'pointer', fontWeight:600 }}>Delete</span>
+                                                    <span onClick={() => handleDeleteSched(s)} style={{ fontSize:11, color:T.danger, cursor:isBusy?'not-allowed':'pointer', opacity:isBusy?0.5:1, fontWeight:600 }} aria-disabled={isBusy} title={isBusy ? 'Saving…' : undefined}>Delete</span>
                                                 </div>
                                             </td>
                                         </tr>

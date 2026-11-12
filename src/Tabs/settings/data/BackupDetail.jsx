@@ -23,13 +23,17 @@ const crashedWords = (said) => `${said} — the restore may have written records
 // was saved anyway — its error body written to disk as `<id>.json`, which reads as a backup — and the table's Download
 // and the run's own download said nothing at all. Answers '' once the file is saved, else why not: the server's words
 // (else its status), for the screen to say until it is closed.
-const saveSnapshotFile = async (id) => {
+// `askedOrg` is the org the press asked in (§0.247 review fix): after a switch away from it nothing is saved and nothing
+// said — null — so the old org's snapshot never lands on disk under the new org's screen.
+const saveSnapshotFile = async (id, askedOrg) => {
+    const switched = () => askedOrg !== undefined && !stillOrg(askedOrg);
     let res;
     try { res = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(id)}&download=1`); }
-    catch { return 'The server could not be reached.'; }
-    if (!res.ok) return readRefusal(res);
+    catch { return switched() ? null : 'The server could not be reached.'; }
+    if (!res.ok) { const why = await readRefusal(res); return switched() ? null : why; }
     let text;
-    try { text = await res.text(); } catch { return 'Its file could not be read.'; }
+    try { text = await res.text(); } catch { return switched() ? null : 'Its file could not be read.'; }
+    if (switched()) return null;
     // The answer as text, untouched, so the JSON reaches the Blob as the server wrote it.
     const blob = new Blob([text], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
@@ -278,7 +282,7 @@ const RestoreModal = ({ snap, onClose, onSaved }) => {
         setError('');
         try {
             // Refused: nothing saved, and the window stays open saying why (§0.243).
-            const why = await saveSnapshotFile(snap.id);
+            const why = await saveSnapshotFile(snap.id, askedOrg);
             if (!stillOrg(askedOrg)) return;
             if (why) { setError(`The snapshot was not downloaded (${unstopped(why)}). Please try again.`); return; }
             if (onSaved) onSaved(snap.id);   // its file is saved: a banner saying it was not goes
@@ -431,6 +435,9 @@ export const BackupDetail = ({ onBack }) => {
     // ── Run backup now
     const handleRunBackup = async () => {
         if (runningBackup) return;
+        // After an org switch the old org's snapshot is never saved to disk on the new org's screen (state §0.175;
+        // §0.247 Part 8): the org is checked before its file is fetched.
+        const askedOrg = requestOrg();
         setRunningBackup(true);
         setBackupError('');
         setBackupSuccess('');
@@ -460,10 +467,11 @@ export const BackupDetail = ({ onBack }) => {
 
             // The backup is made; its file is saved only when the server sends it, and a download refused is said —
             // kept until closed — while the backup stands in the table to download again (§0.243).
-            const why = await saveSnapshotFile(data.id);
+            if (!stillOrg(askedOrg)) return;
+            const why = await saveSnapshotFile(data.id, askedOrg);
             if (why) setDownloadError({ id: data.id, words: `The backup was made, but its file was not downloaded (${unstopped(why)}). Download it from the table below.` });
         } catch (e) {
-            setBackupError(e.message || 'Backup failed. Please try again.');
+            setBackupError(failureWords(e));   // plain words — never "Failed to fetch" or a parse error's (§0.247)
         } finally {
             setRunningBackup(false);
         }
@@ -715,7 +723,10 @@ export const BackupDetail = ({ onBack }) => {
                                                 </button>
                                                 <button onClick={async () => {
                                                     // Refused: nothing saved, said until closed (§0.243) — it was silent, and saved the refusal.
-                                                    const why = await saveSnapshotFile(s.id);
+                                                    // Asked in this org (§0.247 review fix): after a switch nothing is saved or said.
+                                                    const askedOrg = requestOrg();
+                                                    const why = await saveSnapshotFile(s.id, askedOrg);
+                                                    if (!stillOrg(askedOrg)) return;
                                                     if (why) setDownloadError({ id: s.id, words: `Backup ${s.id} was not downloaded (${unstopped(why)}). Please try again.` });
                                                     else fileSaved(s.id);
                                                 }} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>

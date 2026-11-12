@@ -20,7 +20,7 @@
 // status and attention from the same fetch; a health check that cannot be READ
 // is not in the denominator.
 import { mfaCardOf } from './fetchStatus.js';
-import { jobsCheck } from './jobHealth.js';
+import { jobHealth, jobsCheck } from './jobHealth.js';
 import { APP_ROLES } from './roles.js';
 import { painPointCount } from './painPoints.js';
 
@@ -220,6 +220,81 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     return { status, statusDetail, attention };
 }
 
+// ── The live counts (state §0.247, docs/design/refusal-sweep Part 9, Q18) ────────
+// AdminView read each answer's body with no ok check: a refused or failed read said "No active keys", "No endpoints",
+// "No rules yet" or "0 recent events", and healthChecksOf counted "Webhooks all healthy" as passing — a Workspace
+// Health score raised by a read that failed. One reader takes each settled answer, the ok check first, off a plain
+// name: an answer that was refused, never came, or was not JSON is null — no count, the card blank (as MFA and the
+// jobs always were), and no check in the denominator.
+
+/** The body of one Promise.allSettled answer — null when it was refused, never came, or was not JSON. */
+export const answerOf = async (settled) => {
+    if (!settled || settled.status !== 'fulfilled') return null;
+    const res = settled.value;
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+};
+
+/**
+ * The cards' and the Health tile's live counts from AdminView's seven settled answers, in its order: API keys,
+ * webhooks, automations, the audit log, backups, Clerk MFA, the scheduled jobs. A count whose answer did not come is
+ * left out (undefined), never 0.
+ */
+export async function liveCountsOf([keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes, jobsRes] = []) {
+    const counts = {};
+    let d = await answerOf(keysRes);
+    if (d) {
+        const keys = d.keys || [];
+        counts.apiKeysActive  = keys.filter(k => !k.revokedAt).length;
+        counts.apiKeysTotal   = keys.length;
+    }
+    d = await answerOf(webhooksRes);
+    // The server's answer (webhooks.mjs GET) is { webhooks: [...], supportedEvents }. It was read as `subscriptions` from
+    // 11 May 2026 (0940a34) to §0.247, so the card said "No endpoints" over every org's endpoints and "Webhooks all
+    // healthy" passed over a list never read (Jeff, 12 Nov: "Fix in this batch (Recommended)"). An answer without the
+    // list is a read that failed, never "No endpoints".
+    if (d && Array.isArray(d.webhooks)) {
+        const subs = d.webhooks;
+        counts.webhooksTotal   = subs.length;
+        counts.webhooksActive  = subs.filter(s => s.active).length;
+        counts.webhooksFailing = subs.filter(s => s.active && s.lastStatus && s.lastStatus >= 400).length;
+    }
+    d = await answerOf(autosRes);
+    if (d) {
+        const autos = d.automations || [];
+        counts.autosTotal  = autos.length;
+        counts.autosActive = autos.filter(a => a.active).length;
+    }
+    d = await answerOf(auditRes);
+    if (d) counts.auditEvents = (d.entries || []).length;
+    d = await answerOf(backupRes);
+    if (d) counts.backupChecked = true;   // an answer, even "no snapshots"
+    const last = d ? (d.snapshots || [])[0] : null;
+    if (last) {
+        const diffH = Math.round((Date.now() - new Date(last.createdAt)) / 3600000);
+        counts.backupLastLabel = diffH < 1 ? 'just now' : diffH < 24 ? diffH + 'h ago' : Math.round(diffH/24) + 'd ago';
+        counts.backupFreq = d.schedule?.frequency || 'Daily';
+        counts.backupLastHours = diffH;
+    }
+    // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank.
+    d = await answerOf(mfaRes);
+    if (d && typeof d.total === 'number') counts.mfa = { enrolled: d.enrolled, total: d.total };
+    // Admin-only, site-wide: the four scheduled jobs' heartbeats (§0.98). The verdict is computed here from the rows,
+    // against the server's clock; a 403 or a 500 leaves the check out of the denominator.
+    d = await answerOf(jobsRes);
+    if (d && Array.isArray(d.jobs)) counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });
+    // The Health checks a failed read left out, by check id (§0.247; Jeff, 12 Nov: "Name the unread (Recommended)"):
+    // each read whose answer did not give its check what healthChecksOf needs. Set only here, once every answer is in
+    // — while the reads are out there is no list, and nothing is said unread.
+    const unread = [];
+    if (!(counts.mfa && typeof counts.mfa.enrolled === 'number')) unread.push('mfa');
+    if (counts.webhooksTotal === undefined) unread.push('webhooks');
+    if (!counts.backupChecked) unread.push('backup');
+    if (!counts.jobs) unread.push('jobs');
+    counts.unread = unread;
+    return counts;
+}
+
 // ── Workspace Health ─────────────────────────────────────────────────────────
 
 /**
@@ -265,4 +340,48 @@ export function healthSummaryOf(checks) {
         : failing.length === 0 ? 'Every check that can be read is passing.'
         : `Not passing: ${failing.join(', ')}.`;
     return { ok, total, pct, failing, sentence };
+}
+
+// ── The checks that could not be read (§0.247; Jeff, 12 Nov: "Name the unread (Recommended)") ─────────────────────
+// A read that failed leaves its check out of the denominator, so the score went UP (Accelerep QA: 43% "3 of 7 checks
+// passing" to 67% "2 of 3") and Needs attention said "All checks passing ✓". The score still counts only the checks
+// that were read; the tile now says how many could not be read and names them, and never says every check passes while
+// one is unread. A check that does not apply is not unread: one snoozed or dismissed (hidden as healthChecksOf hides
+// it), or one whose reads are still out (no list yet).
+const UNREAD_CHECKS = [
+    // [check id, its label as healthChecksOf names it, hidden by isHidden as there]
+    ['mfa', 'MFA fully enrolled', true],
+    ['webhooks', 'Webhooks all healthy', true],
+    ['backup', 'Backups running', false],
+    ['jobs', 'Scheduled jobs', true],   // the jobs check's label names its verdict; unread there is none
+];
+
+/** The Health checks a failed read left out — [{ id, label }] in the tile's order; none while the reads are out. */
+export function unreadChecksOf(liveCounts = {}, isHidden = () => false) {
+    const unread = Array.isArray(liveCounts?.unread) ? liveCounts.unread : [];
+    return UNREAD_CHECKS
+        .filter(([id, , hideable]) => unread.includes(id) && !(hideable && isHidden(id)))
+        .map(([id, label]) => ({ id, label }));
+}
+
+/** "3 checks could not be read: MFA fully enrolled, Backups running, Scheduled jobs." — empty when every check was read. */
+export function unreadSentenceOf(unread) {
+    const list = Array.isArray(unread) ? unread : [];
+    if (!list.length) return '';
+    return `${list.length === 1 ? '1 check' : `${list.length} checks`} could not be read: ${list.map((c) => c.label).join(', ')}.`;
+}
+
+/**
+ * Needs attention's words when no visible item needs it — { words, ok }: ok draws them green. With every check read,
+ * today's words exactly; with any unread, never "All checks passing".
+ */
+export function allClearOf(hiddenCount = 0, unreadCount = 0) {
+    const unread = `${unreadCount === 1 ? '1 check' : `${unreadCount} checks`} could not be read`;
+    if (unreadCount > 0) {
+        return { ok: false, words: hiddenCount > 0
+            ? `No visible check that was read needs attention — ${hiddenCount} hidden, ${unread}.`
+            : `No check that was read needs attention — ${unread}.` };
+    }
+    if (hiddenCount > 0) return { ok: false, words: `All visible checks passing — ${hiddenCount} hidden.` };
+    return { ok: true, words: 'All checks passing ✓' };
 }

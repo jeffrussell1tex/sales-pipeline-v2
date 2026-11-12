@@ -20,6 +20,9 @@
 //   (iii) in the files the sweep owns (SWEPT: the four Settings panels, BackupDetail, the Documents library and its
 //        hook, Dispatch's Vehicles & equipment; since §0.245 each Part of docs/design/refusal-sweep its own), no body read (`res.json()`) before that response's ok check, unless
 //        NAMED below. Outside them the shape is the filed rest of the sweep, not scanned here.
+//   (iv) in the same files (and CompanyCalendarDetail.jsx; since §0.247, docs/design/refusal-sweep Part 8), no catch
+//        param's `.message` is read — a caught failure says failureWords(e) — unless NAMED below; an argument of a
+//        console.* call is exempt (a line no member sees).
 // A named one that is gone fails until its name goes (no stale names). Self-tests show each scan catches its shape.
 // KNOWN LIMITS (filed, not chased — §0.243's second fix round):
 //   - scan (i): a state handed out through an expression (`{ k: x || null }`, `{ k: x ? x : '' }`) is no handout — the
@@ -498,6 +501,12 @@ const SWEPT = [
     // calendar reads are gone with Quick Log's box (7c); their saves wait for Part 10. QuotesTab.jsx waits for Part 12
     // (its job and version reads); its PDF's RUN is tests/refusal-sweep.test.mjs Part 7a.
     'src/utils/quotePdfAnswer.js', 'src/hooks/useCoachingNotes.js', 'src/Tabs/HomeTab.jsx',
+    // Part 9 (§0.247): a read that failed is no none or zero — the Settings overview's counts through one ok-first
+    // reader (settingsCards.js answerOf / liveCountsOf) and its Recently changed feed, Approval tiers' "Last 90 days",
+    // the corporate calendars, Job templates' equipment, Property types' usage and Crews' pickers. None needs a name.
+    'src/Tabs/AdminView.jsx', 'src/utils/settingsCards.js', 'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+    'src/Tabs/settings/company/CompanyCalendarDetail.jsx', 'src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx', 'src/Tabs/settings/dispatch/DispatchCrewsDetail.jsx',
 ];
 // A body read before its ok check by design: { file, text (the trimmed line), why }.
 const BODY_FIRST = [
@@ -536,6 +545,87 @@ test('(iii) self-test: the scan catches a body read before the ok check, in each
     assert.deepEqual(at(`async function l() { const [a, b] = await Promise.all([f(), g()]); if (!a.ok) throw 1; if (!b.ok) throw 2; const [x, y] = await Promise.all([a.json(), b.json()]); }`), []);
     assert.deepEqual(at(`async function t(tRes) { if (!tRes.ok) { say(); } else { const j = await tRes.json().catch(() => null); } }`), [], 'the technicians\' read');
     assert.equal(bodyReadsBeforeOkOf('const s = `const data = await res.json();`;').reads, 0, 'code in a string is no read (ApiKeysDetail\'s sample)');
+});
+
+// ── (iv) ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A caught failure is said in plain words (§0.247, docs/design/refusal-sweep Part 8): failureWords(e) — a refusal thrown
+// in readRefusal's words passes through as said, a request that never left says "The server could not be reached.",
+// anything else "Its answer could not be read." A catch param's raw `.message` said "Failed to fetch", "Unexpected token
+// '<'" or a runtime error's own words. In the files the sweep owns (SWEPT — CompanyCalendarDetail.jsx, scanned here
+// since Part 8, joined SWEPT with its calendar read in Part 9; Part 9's other files say failureWords(e) in their
+// saves' catches), no catch param's `.message` is read unless NAMED below — but an argument of a console.* call is
+// exempt: a line no member sees (useOpportunities.js's mention-sms warning). Outside these files the 140-odd reads are
+// the filed rest of the sweep (OPEN_ITEMS §6).
+const MESSAGE_SCANNED = [...new Set([...SWEPT, 'src/Tabs/settings/company/CompanyCalendarDetail.jsx'])];
+// A catch param's `.message` read by design: { file, text (the trimmed line), why } — none today.
+const CAUGHT_MESSAGES = [];
+// Every read of a catch param's `.message` in its catch's body — `e.message`, `e?.message`, `(e && e.message)`, in a
+// template — and a param destructured for its `message` (`catch ({ message })`): { line, text }. A nested node that
+// binds the name again (a function's param, an inner catch, a block's declaration) hides it; an argument of a
+// `console.*` call is not scanned. Also answers how many catch clauses with a param it saw.
+function caughtMessagesOf(src) {
+    const out = [];
+    const lines = src.split('\n');
+    const at = (n) => out.push({ line: n.loc.start.line, text: lines[n.loc.start.line - 1].trim() });
+    const isConsoleCall = (n) => (n.type === 'CallExpression' || n.type === 'OptionalCallExpression')
+        && (n.callee.type === 'MemberExpression' || n.callee.type === 'OptionalMemberExpression') && !n.callee.computed
+        && n.callee.object.type === 'Identifier' && n.callee.object.name === 'console';
+    let catches = 0;
+    const walk = (n) => {
+        if (n.type === 'CatchClause' && n.param) {
+            catches++;
+            const names = new Set(patternNames(n.param));
+            if (n.param.type === 'ObjectPattern' && n.param.properties.some((q) => q.type !== 'RestElement' && keyName(q) === 'message')) at(n.param);
+            const look = (m, hidden) => {
+                if (isConsoleCall(m)) { look(m.callee, hidden); return; }   // its arguments: a line no member sees
+                const again = m === n.body ? [] : scopeBindings(m).map((b) => b.name).filter((x) => names.has(x));
+                const now = again.length ? new Set([...hidden, ...again]) : hidden;
+                if ((m.type === 'MemberExpression' || m.type === 'OptionalMemberExpression') && !m.computed && m.property.type === 'Identifier'
+                    && m.property.name === 'message' && m.object.type === 'Identifier' && names.has(m.object.name) && !now.has(m.object.name)) at(m);
+                for (const k of kids(m)) look(k, now);
+            };
+            look(n.body, new Set());
+        }
+        for (const k of kids(n)) walk(k);
+    };
+    walk(ast(src).program);
+    return { catches, found: out };
+}
+
+test('(iv) in the files the sweep owns, no catch says its raw `.message` — failureWords(e) — unless named; a console line is exempt', () => {
+    const found = [];
+    let catches = 0;
+    for (const f of MESSAGE_SCANNED) { const r = caughtMessagesOf(read(f)); catches += r.catches; for (const x of r.found) found.push({ file: f, ...x }); }
+    assert.ok(catches >= 35, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
+    const named = (x) => CAUGHT_MESSAGES.some((b) => b.file === x.file && b.text === x.text);
+    const unnamed = found.filter((x) => !named(x));
+    assert.deepEqual(unnamed, [], `a caught failure said in its raw words — "Failed to fetch", "Unexpected token '<'" — say failureWords(e) (src/utils/refusalWords.js), or name it in CAUGHT_MESSAGES:\n${unnamed.map((x) => `  ${x.file}:${x.line} ${x.text}`).join('\n')}`);
+    const stale = CAUGHT_MESSAGES.filter((b) => !found.some((x) => x.file === b.file && x.text === b.text));
+    assert.deepEqual(stale, [], 'a named read that is gone — take its name out');
+    for (const b of CAUGHT_MESSAGES) assert.ok(MESSAGE_SCANNED.includes(b.file) && b.why.length > 10, `${b.file}: a scanned file, with a reason`);
+});
+
+test('(iv) self-test: the scan catches each shape a catch said its raw words in, passes failureWords and a console line', () => {
+    const at = (s) => caughtMessagesOf(s).found.map((x) => x.text);
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { setError(e.message); } }`).length, 1, 'e.message (the panels\' shape)');
+    assert.equal(at(`async function a() { try { await f(); } catch (err) { setError(err?.message); } }`).length, 1, 'e?.message');
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { const error = (e && e.message) || 'Could not get a download link'; say(error); } }`).length, 1, '(e && e.message) — useDocuments\' shape');
+    assert.equal(at('async function a(label) { try { await f(); } catch (e) { setCalError(`${label} not saved — ${e.message}`); } }').length, 1, 'in a template — the calendar\'s shape');
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { setRunsFor({ runs: [], error: e.message || 'No answer from the server.' }); } }`).length, 1, 'with fallback words');
+    assert.equal(at(`async function a() { try { await f(); } catch ({ message }) { setError(message); } }`).length, 1, 'destructured for its message');
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { list.forEach(() => say(e.message)); } }`).length, 1, 'inside a nested function that does not bind the name');
+    // Passes: plain words, the console, another name, a name bound again.
+    assert.deepEqual(at(`async function a() { try { await f(); } catch (e) { setError(failureWords(e)); } }`), [], 'failureWords');
+    assert.deepEqual(at(`async function a() { try { await f(); } catch (err) { console.warn('mention-sms (non-blocking):', err.message); } }`), [], 'REGRESSION: a console line (useOpportunities.js) flagged — no member sees it');
+    assert.deepEqual(at(`async function a() { try { await f(); } catch (e) { console.error(\`load: \${e?.message}\`); } }`), [], 'a console template');
+    assert.deepEqual(at(`async function a() { try { await f(); } catch (e) { setError(data.message); } }`), [], 'another name\'s message');
+    assert.deepEqual(at(`async function a() { try { await f(); } catch (e) { list.forEach((e) => say(e.message)); } }`), [], 'a param that binds the name again');
+    assert.deepEqual(at(`async function a(e) { say(e.message); }`), [], 'no catch: not this scan\'s');
+    assert.deepEqual(at(`async function a() { try { await f(); } catch { setError('x'); } }`), [], 'a catch with no param');
+    // ...and a console call that says the words on screen as well is still caught on the screen's line.
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { console.warn(e.message); setError(e.message); } }`).length, 1, 'the screen\'s read, not the console\'s');
+    // An inner catch of the same name is its own: one read each, never counted twice.
+    assert.equal(at(`async function a() { try { await f(); } catch (e) { try { g(); } catch (e) { say(e.message); } } }`).length, 1, 'the inner catch\'s read once');
 });
 
 // ── The words (src/utils/refusalWords.js) — RUN ─────────────────────────────────────────────────────────────────
@@ -587,9 +677,11 @@ test('failureWords: a refusal\'s words pass through; a network or parse failure 
 test('the four settings panels throw the words, reading the body only after the ok check (5a)', () => {
     const S = 'src/Tabs/settings/';
     // ExportDetail 4 → 5: the ad-hoc export's refusal joined (§0.243's re-check). Moved pin (§0.243's second fix round):
-    // ExportDetail's import names failureWords too — its Pause / Enable and Mark complete say their refusals.
-    const ONE_HELPER = "import { readRefusal } from '../../../utils/refusalWords.js';";
-    for (const [file, n, helper] of [[S + 'data/ExportDetail.jsx', 5, "import { readRefusal, failureWords } from '../../../utils/refusalWords.js';"], [S + 'integrations/ApiKeysDetail.jsx', 2, ONE_HELPER], [S + 'integrations/AutomationsDetail.jsx', 4, ONE_HELPER], [S + 'integrations/WebhooksDetail.jsx', 3, ONE_HELPER]]) {
+    // ExportDetail's import names failureWords too — its Pause / Enable and Mark complete say their refusals. Moved pin
+    // (§0.247, docs/design/refusal-sweep Part 8): ONE_HELPER became the two names in every panel — each catch says
+    // failureWords(e), never a raw e.message (scan (iv) below).
+    const TWO_HELPERS = "import { readRefusal, failureWords } from '../../../utils/refusalWords.js';";
+    for (const [file, n, helper] of [[S + 'data/ExportDetail.jsx', 5, TWO_HELPERS], [S + 'integrations/ApiKeysDetail.jsx', 2, TWO_HELPERS], [S + 'integrations/AutomationsDetail.jsx', 4, TWO_HELPERS], [S + 'integrations/WebhooksDetail.jsx', 3, TWO_HELPERS]]) {
         const s = code(read(file));
         assert.ok(s.includes(helper), `${file}: the one helper`);
         assert.equal(s.split('throw new Error(await readRefusal(res));').length - 1, n, `${file}: ${n} refusals said in the server's words`);
@@ -601,7 +693,8 @@ test('the four settings panels throw the words, reading the body only after the 
         "const res  = await dbFetch(`/.netlify/functions/automations?runs=${rule.id}`);",
         'if (!res.ok) throw new Error(await readRefusal(res));',
         'const data = await res.json();',
-        "} catch(e) { setRunsFor({ rule, runs: [], error: e.message || 'No answer from the server.' }); }");
+        // Moved pin (§0.247 Part 8): `e.message || 'No answer from the server.'` → failureWords(e).
+        '} catch(e) { setRunsFor({ rule, runs: [], error: failureWords(e) }); }');
     order(a, ') : runsFor.error ? (', "The run history couldn't be opened", ') : runsFor.runs.length === 0 ? (');
     // The ad-hoc export and the panel's load: the ok checks first, each list's refusal named.
     const ex = code(read(S + 'data/ExportDetail.jsx'));
@@ -625,10 +718,13 @@ test('Export: a refused Pause / Enable or Mark complete puts the row back AND sa
     const run = async (answer) => {
         const state = { schedules: [{ id: 'sch_1', name: 'Weekly accounts', enabled: true }, { id: 'sch_2', name: 'Paused one', enabled: false }],
             dsr: [{ id: 'dsr_1', subject: 'a@x.test', status: 'open' }], said: [], banner: '' };
-        const make = new Function('setSchedules', 'setDsrItems', 'dbFetch', 'readRefusal', 'failureWords', 'setActionError',
+        // Moved (§0.247 review fix): the toggle holds its schedule (busyScheds, setBusyIds) and names its banner's schedule
+        // (errorSched), which a request's words let go.
+        const make = new Function('setSchedules', 'setDsrItems', 'dbFetch', 'readRefusal', 'failureWords', 'setActionError', 'busyScheds', 'setBusyIds', 'errorSched',
             `${fns}\nreturn { handleToggle, handleDsrStatus };`);
         const h = make((f) => { state.schedules = f(state.schedules); }, (f) => { state.dsr = f(state.dsr); },
-            async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, failureWords, bannerSetter(state));
+            async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, failureWords, bannerSetter(state),
+            { current: new Set() }, () => {}, { current: null });
         await h.handleToggle(state.schedules[0]);
         await h.handleToggle(state.schedules[1]);
         await h.handleDsrStatus(state.dsr[0], 'completed');
@@ -651,9 +747,12 @@ test('Export: a refused Pause / Enable or Mark complete puts the row back AND sa
     {
         const state = { schedules: [{ id: 'sch_1', name: 'Weekly accounts', enabled: true }], dsr: [{ id: 'dsr_1', status: 'open' }], said: [], banner: '' };
         const answers = [new TypeError('Failed to fetch'), { ok: true, status: 200, json: async () => ({ schedule: { id: 'sch_1', name: 'Weekly accounts', enabled: false } }) }];
-        const h = new Function('setSchedules', 'setDsrItems', 'dbFetch', 'readRefusal', 'failureWords', 'setActionError', `${fns}\nreturn { handleToggle, handleDsrStatus };`)(
+        const errorSched = { current: null };
+        const h = new Function('setSchedules', 'setDsrItems', 'dbFetch', 'readRefusal', 'failureWords', 'setActionError', 'busyScheds', 'setBusyIds', 'errorSched',
+            `${fns}\nreturn { handleToggle, handleDsrStatus };`)(
             (f) => { state.schedules = f(state.schedules); }, (f) => { state.dsr = f(state.dsr); },
-            async () => { const a = answers.shift(); if (a instanceof Error) throw a; return a; }, readRefusal, failureWords, bannerSetter(state));
+            async () => { const a = answers.shift(); if (a instanceof Error) throw a; return a; }, readRefusal, failureWords, bannerSetter(state),
+            { current: new Set() }, () => {}, errorSched);
         await h.handleToggle(state.schedules[0]);
         assert.equal(state.banner, '"Weekly accounts" was not paused — The server could not be reached.');
         await h.handleToggle(state.schedules[0]);
@@ -664,7 +763,8 @@ test('Export: a refused Pause / Enable or Mark complete puts the row back AND sa
         assert.equal(state.banner, 'Request dsr_9 was not marked complete — Admin only', 'another row\'s words stand until closed');
     }
     // Kept until closed (§18b123 rule 4): its own Close, never a timer; drawn on the panel.
-    order(between(ex, '{actionError && (', '\n            )}'), '<div role="alert"', '✕ {actionError}', "<button onClick={() => setActionError('')}", 'Close');
+    // Moved pin (§0.247 review fix): the Close also lets go of the schedule the banner spoke of.
+    order(between(ex, '{actionError && (', '\n            )}'), '<div role="alert"', '✕ {actionError}', "<button onClick={() => { errorSched.current = null; setActionError(''); }}", 'Close');
     assert.ok(!/setTimeout\([^)]*setActionError/.test(ex), 'REGRESSION: the words closed on a timer');
 });
 
@@ -676,18 +776,27 @@ const CREATE_LINES = [
     'if (!stillOrg(askedOrg)) return;',
     'if (why) throw new Error(why);',
 ];
+// Moved pin (§0.247, Jeff 12 Nov: "Fix in this batch (Recommended)"): a webhook's create that landed is an endpoint made
+// even when its answer cannot be read — its body is read with a catch (null), never thrown as "not created"; the
+// four lines otherwise as before, and RUN below with the same answers.
+const WEBHOOK_CREATE_LINES = CREATE_LINES.map((l) => (l === 'const data = res.ok ? await res.json() : null;' ? 'const data = res.ok ? await res.json().catch(() => null) : null;' : l));
 test('5a: a create refused says the server\'s words and parses no body; an org switched away from does nothing — RUN', async () => {
     const S = 'src/Tabs/settings/integrations/';
-    for (const [file, from, to] of [
+    for (const [file, from, to, wanted = CREATE_LINES] of [
         [S + 'ApiKeysDetail.jsx', '    const handleCreate = async () => {', 'setResult(data);'],
-        [S + 'WebhooksDetail.jsx', '    const handleCreate = async () => {', "setSecret(data.secret || '');"],
+        [S + 'WebhooksDetail.jsx', '    const handleCreate = async () => {', "setSecret(typeof data?.secret === 'string' ? data.secret : '');", WEBHOOK_CREATE_LINES],
         [S + 'AutomationsDetail.jsx', '    const handleSave = async () => {', 'if (onSaved) onSaved(data.automation);'],
     ]) {
         const fnText = between(code(read(file)), from, to);
-        order(fnText, 'const res  = await dbFetch(', ...CREATE_LINES);
+        order(fnText, 'const res  = await dbFetch(', ...wanted);
         assert.ok(!/const data = await res\.json\(\);\s*if \(!stillOrg/.test(fnText), `${file}: REGRESSION — the body read before the ok check`);
-        const lines = fnText.split('\n').map((l) => l.trim()).filter((l) => CREATE_LINES.includes(l));
-        assert.deepEqual(lines, CREATE_LINES, `${file}: the four lines, together, in order`);
+        const lines = fnText.split('\n').map((l) => l.trim()).filter((l) => wanted.includes(l));
+        assert.deepEqual(lines, wanted, `${file}: the four lines, together, in order`);
+        if (wanted === WEBHOOK_CREATE_LINES) {
+            const landed = new Function('readRefusal', 'stillOrg', `return async (res, askedOrg) => { ${lines.join('\n')}\nreturn data; };`)(readRefusal, (o) => o === 'org_a');
+            assert.equal(await landed({ ok: true, status: 201, json: async () => { throw new SyntaxError("Unexpected token '<'"); } }, 'org_a'), null,
+                'a webhook made whose answer cannot be read: landed, its body null — never thrown as not made');
+        }
         const run = new Function('readRefusal', 'stillOrg', `return async (res, askedOrg) => { ${lines.join('\n')}\nreturn data; };`)(readRefusal, (o) => o === 'org_a');
         let parsed = 0;
         const answer = (status, body, json = true) => ({ ok: status < 300, status, json: async () => { parsed++; if (!json) throw new SyntaxError("Unexpected token '<'"); return body; } });
@@ -704,7 +813,9 @@ test('5a: a create refused says the server\'s words and parses no body; an org s
 // ── 5b BackupDetail's downloads — RUN ───────────────────────────────────────────────────────────────────────────
 test('5b: a snapshot\'s file is saved only when the server sent it; a refusal saves nothing and says why', async () => {
     const bd = code(read('src/Tabs/settings/data/BackupDetail.jsx'));
-    const fnText = between(bd, 'const saveSnapshotFile = async (id) => {', '\n};') + '\n};';
+    // Moved pin (§0.247 review fix): it takes the org the press asked in — `askedOrg`, unpassed here, saves as before
+    // (tests/refusal-sweep.test.mjs Part 8 runs it across an org switch).
+    const fnText = between(bd, 'const saveSnapshotFile = async (id, askedOrg) => {', '\n};') + '\n};';
     const unstoppedText = bd.split('\n').find((l) => l.startsWith('const unstopped = '));
     assert.ok(unstoppedText, 'the words helper');
     const run = async (got) => {
@@ -716,7 +827,7 @@ test('5b: a snapshot\'s file is saved only when the server sent it; a refusal sa
         };
         const URL = { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} };
         class Blob { constructor(parts) { did.push(['blob', parts.join('')]); } }
-        const save = new Function('dbFetch', 'readRefusal', 'document', 'URL', 'Blob', `${fnText}\nreturn saveSnapshotFile;`)(dbFetch, readRefusal, document, URL, Blob);
+        const save = new Function('dbFetch', 'readRefusal', 'stillOrg', 'document', 'URL', 'Blob', `${fnText}\nreturn saveSnapshotFile;`)(dbFetch, readRefusal, () => false, document, URL, Blob);
         const why = await save('bk_1');
         return { why, did };
     };
@@ -763,7 +874,8 @@ test('5b: the download banner clears when the file it names is saved; an unrelat
     assert.ok(bd.includes('const fileSaved = (id) => setDownloadError((banner) => clearedBy(banner, id));'));
     assert.ok(!between(bd, 'const fileSaved = ', '\n').includes('setBackupError'), 'REGRESSION: a file saved clears a refused run\'s banner');
     // ...checked for the org first (§0.175, tests/late-answers.test.mjs): an answer after a switch clears nothing.
-    order(between(bd, '    const handleDownload = async () => {', '\n    };'), 'const askedOrg = requestOrg();', 'const why = await saveSnapshotFile(snap.id);',
+    // Moved pin (§0.247 review fix): the file is saved only in the org that asked — `saveSnapshotFile(snap.id)` gained it.
+    order(between(bd, '    const handleDownload = async () => {', '\n    };'), 'const askedOrg = requestOrg();', 'const why = await saveSnapshotFile(snap.id, askedOrg);',
         'if (!stillOrg(askedOrg)) return;', 'return; }', 'if (onSaved) onSaved(snap.id);', 'onClose();');
     assert.ok(bd.includes('<RestoreModal snap={restoreSnap} onSaved={fileSaved} onClose={()=>setRestoreSnap(null)}/>'));
     assert.ok(bd.includes('const RestoreModal = ({ snap, onClose, onSaved }) => {'));
@@ -779,12 +891,16 @@ test('5b: Run backup now — a refusal says the server\'s words, lists nothing, 
     const bd = code(read('src/Tabs/settings/data/BackupDetail.jsx'));
     const fnText = between(bd, '    const handleRunBackup = async () => {', '\n    };') + '\n    };';
     const unstopped = new Function(`${bd.split('\n').find((l) => l.startsWith('const unstopped = '))}\nreturn unstopped;`)();
-    const run = async (posted, saved = '') => {
+    // Moved (§0.247, docs/design/refusal-sweep Part 8): it asks the org first and says failureWords(e) — its scope gains
+    // requestOrg, stillOrg and failureWords; `switched` is an org switch while the POST is out.
+    const run = async (posted, saved = '', switched = false) => {
         const did = { backupError: [], downloadError: [], listed: 0, saves: [] };
+        let org = 'org_a';
         const make = new Function('runningBackup', 'setRunningBackup', 'setBackupError', 'setBackupSuccess', 'setSnapshots', 'setDownloadError',
-            'dbFetch', 'readRefusal', 'saveSnapshotFile', 'unstopped', `${fnText}\nreturn handleRunBackup;`);
+            'dbFetch', 'readRefusal', 'failureWords', 'requestOrg', 'stillOrg', 'saveSnapshotFile', 'unstopped', `${fnText}\nreturn handleRunBackup;`);
         const go = make(false, () => {}, (v) => did.backupError.push(v), () => {}, () => { did.listed++; }, (v) => did.downloadError.push(v),
-            async () => posted, readRefusal, async (id) => { did.saves.push(id); return saved; }, unstopped);
+            async () => { if (switched) org = 'org_b'; if (posted instanceof Error) throw posted; return posted; }, readRefusal, failureWords,
+            () => 'org_a', (o) => o === org, async (id) => { did.saves.push(id); return saved; }, unstopped);
         await go();
         return did;
     };
@@ -800,6 +916,15 @@ test('5b: Run backup now — a refusal says the server\'s words, lists nothing, 
     const r4 = await run(made, 'Admin only');
     assert.deepEqual(r4.backupError, [''], 'its download refused is not a refused run');
     assert.deepEqual(r4.downloadError, [{ id: 'bk_9', words: 'The backup was made, but its file was not downloaded (Admin only). Download it from the table below.' }]);
+    // Offline, and a 200 whose body is not JSON (§0.247 Part 8): plain words — never "Failed to fetch" or "Unexpected token".
+    const r5 = await run(new TypeError('Failed to fetch'));
+    assert.deepEqual([r5.backupError, r5.listed, r5.saves], [['', 'The server could not be reached.'], 0, []], 'REGRESSION: "Failed to fetch" said');
+    const r6 = await run({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token '<'"); } });
+    assert.deepEqual(r6.backupError, ['', 'Its answer could not be read.'], 'REGRESSION: a parse error\'s words said');
+    // An org switch while the POST was out: the old org's file is never fetched or saved (state §0.175).
+    const r7 = await run(made, '', true);
+    assert.deepEqual(r7.saves, [], 'REGRESSION: the old org\'s snapshot saved to disk on the new org\'s screen');
+    assert.deepEqual(r7.downloadError, []);
 });
 
 // The backups' load and the schedule's save (§0.243's re-check; scan (iii) holds the order): a failed read is no count.

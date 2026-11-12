@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import {
     planImport, importCardShows, plannedVehicleImports, plannedEquipmentImports, IMPORT_UNREAD,
 } from '../src/utils/legacyDispatchImport.js';
-import { readRefusal } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
@@ -180,9 +180,10 @@ const loadOf = (answers) => {
     const body = between(s, head, '}, []);').slice(head.length);
     const st = { loading: null, loadError: null, techsError: null, vehicles: null, equipment: null, techs: null, fleetLoaded: null };
     const set = (k) => (v) => { st[k] = v; };
-    const fn = new Function('dbFetch', 'readRefusal', 'setLoading', 'setLoadError', 'setTechsError', 'setVehicles', 'setEquipment', 'setTechs', 'setFleetLoaded',
+    // Moved (§0.247, docs/design/refusal-sweep Part 8): the load's catch says failureWords(err) — a parameter here.
+    const fn = new Function('dbFetch', 'readRefusal', 'failureWords', 'setLoading', 'setLoadError', 'setTechsError', 'setVehicles', 'setEquipment', 'setTechs', 'setFleetLoaded',
         `${unstoppedText}\nreturn async () => {${body}};`)(
-        async (url) => answers[url.split('/').pop()], readRefusal,
+        async (url) => { const a = answers[url.split('/').pop()]; if (a instanceof Error) throw a; return a; }, readRefusal, failureWords,
         set('loading'), set('loadError'), set('techsError'), set('vehicles'), set('equipment'), set('techs'), set('fleetLoaded'));
     return async () => { await fn(); return st; };
 };
@@ -219,12 +220,16 @@ test('RUN load: a vehicles or equipment refusal still fails the fleet, in the se
     assert.equal(e.fleetLoaded, false);
     assert.equal(e.loadError, "The equipment couldn't be read (The server returned 502).");
     assert.match(e.techsError, /The technicians couldn't be read \(The server returned 500\)/, 'both said');
+    // Never sent (§0.247 Part 8): plain words — never "Failed to fetch".
+    const offline = await loadOf({ ...fleet, 'dispatch-vehicles': new TypeError('Failed to fetch'), 'dispatch-technicians': answer(200, { technicians: [] }) })();
+    assert.deepEqual([offline.fleetLoaded, offline.loadError], [false, 'The server could not be reached.'], 'REGRESSION: "Failed to fetch" said');
 });
 
 test('WIRING: the screen plans with the lifted helper, from the tables as read now, and refuses with no answered read', () => {
     const s = code(read(SCREEN));
     assert.ok(s.includes("import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';"));
-    assert.ok(s.includes("import { readRefusal } from '../../../utils/refusalWords.js';"));
+    // Moved pin (§0.247 Part 8): the import names failureWords too — every catch says it, never a raw err.message.
+    assert.ok(s.includes("import { readRefusal, failureWords } from '../../../utils/refusalWords.js';"));
     // The old in-file planners are gone: one rule, the helper's.
     assert.equal(count(s, 'plannedVehicleImports'), 0);
     assert.equal(count(s, 'plannedEquipmentImports'), 0);
