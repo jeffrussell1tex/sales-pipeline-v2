@@ -414,7 +414,9 @@ test("the account picker draws pickerRows: the deal window's filter and its site
     assert.ok(!p.includes('filtered') && !/\.slice\(/.test(code(p)), 'one list, cut once, by pickerRows');
     // what older harness entries anchor on is where it was
     assert.ok(p.includes("import { T } from '../../tokens.js';"));
-    assert.ok(p.includes("            if (!stillOrg(askedOrg)) return;\n            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));"));
+    // Moved pin (§0.248, docs/design/refusal-sweep Part 10): the ok check first in readRefusal's words, never "HTTP N";
+    // the org check before the landed answer is written.
+    assert.ok(p.includes("            if (!res.ok) throw new Error(await readRefusal(res));\n            const data = await res.json().catch(() => ({}));\n            if (!stillOrg(askedOrg)) return;\n            const saved = data.account || newAccount;"));
 });
 
 test('the deal window: a site row fills Account with its parent and Site Name with itself; a site is still never the account', () => {

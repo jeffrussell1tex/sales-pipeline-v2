@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { T } from '../tokens.js';
 import { undoConfirmWords } from '../utils/mergeUndo.js';
+import { failureWords } from '../utils/refusalWords.js';
 
 // Past merges (state §0.207 — Jeff, 17 Oct: Q1 "Past merges on each page"). This org's merges of one kind, newest
 // first, each with its Undo while the server would take it — the toast after a merge goes in five seconds; this keeps
@@ -15,6 +16,7 @@ export default function PastMerges({ entityType, version }) {
     const [error, setError] = useState(null);
     const [busyId, setBusyId] = useState(null);   // the merge whose Undo is out
     const [said, setSaid] = useState({});         // { [merge id]: what its Undo answered }
+    const [lastSaid, setLastSaid] = useState(null);   // the last Undo's words — said in the banner when no list holds its row
 
     // findMerges is recreated each App render; held in a ref so the load stays stable (the scan views' way).
     const fmRef = useRef(findMerges);
@@ -26,8 +28,10 @@ export default function PastMerges({ entityType, version }) {
     const load = useCallback(async () => {
         const gen = ++loadGen.current;
         setError(null);
-        try { const d = await fmRef.current(entityType); if (gen === loadGen.current) setData(d); }
-        catch (e) { if (gen === loadGen.current) setError(`Past merges did not load — ${e?.message || 'No answer from the server.'}`); }
+        try { const d = await fmRef.current(entityType); if (gen === loadGen.current) { setData(d); setLastSaid(null); } }   // a landed list says the Undo's words on its row
+        // A read that failed leaves no list (§0.248, the review): never "No merges yet." over merges that exist, nor a
+        // merge just undone still offering its Undo, beside the error.
+        catch (e) { if (gen === loadGen.current) { setData(null); setError(`Past merges did not load — ${failureWords(e)}`); } }
         return gen === loadGen.current;   // its answer set: no later load overtook it (an Undo's busy mark waits on this)
     }, [entityType]);
 
@@ -41,7 +45,7 @@ export default function PastMerges({ entityType, version }) {
     const onUndo = (m) => showConfirm(undoConfirmWords(m), async () => {
         setBusyId(m.id);
         const r = await undoMerge(m.id, entityType, m.archivedName);
-        if (r?.words) setSaid((s) => ({ ...s, [m.id]: r.words }));
+        if (r?.words) { setSaid((s) => ({ ...s, [m.id]: r.words })); setLastSaid(r.words); }
         // Read again until a read after this Undo lands — one a later load overtook dropped its answer, and the row offered
         // its Undo again on the list from before it (the review of §0.218) — then released.
         for (let tries = 0; tries < 3 && !(await load()); tries += 1) { /* overtaken: read again */ }
@@ -53,7 +57,11 @@ export default function PastMerges({ entityType, version }) {
         <div style={{ marginTop: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8, fontFamily: T.sans }}>Past merges</div>
             {error && (
-                <div style={{ background: 'rgba(156,58,46,0.08)', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '10px 14px', color: T.danger, fontSize: 13, fontFamily: T.sans, marginBottom: 10 }}>{error}</div>
+                <div style={{ background: 'rgba(156,58,46,0.08)', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '10px 14px', color: T.danger, fontSize: 13, fontFamily: T.sans, marginBottom: 10 }}>
+                    {error}
+                    {/* A read after an Undo that failed leaves no row to say the Undo's answer on (§0.248, the review): said here. */}
+                    {!data && lastSaid && <div style={{ marginTop: 6, color: T.inkMid }}>{lastSaid}</div>}
+                </div>
             )}
             {data && merges.length === 0 && (
                 <div style={{ fontSize: 13, color: T.inkMid, fontFamily: T.sans }}>No merges yet.</div>

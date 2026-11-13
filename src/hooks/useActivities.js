@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
+import { refusalWords, failureWords } from '../utils/refusalWords.js';
 
 // A quiet save's Activity rail setters (state §0.199's fifth re-check): the task rail's completion notes leave the
 // Activity rail's banner and wait alone — they are that rail's own save's, and a notes save that ended first let go
@@ -111,15 +112,17 @@ export function useActivities(deps) {
             const payload = { ...activityData, id: editingActivity.id };
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
-                const data = await res.json();
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3); the
+                // refusal's body read once, for its words and the field a link refused names (saveDroppingRefused).
+                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }
+                const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update activity:', err);
-                setActivityModalError('Failed to save activity. Please check your connection and try again.');
+                setActivityModalError(failureWords(err));
                 return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         } else {
@@ -127,15 +130,15 @@ export function useActivities(deps) {
             const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
-                const data = await res.json();
+                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }   // as the edit's (§0.248)
+                const data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }
                 setActivities(prev => [...prev, data.activity || newActivity]);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save activity:', err);
-                setActivityModalError('Failed to save activity. Please check your connection and try again.');
+                setActivityModalError(failureWords(err));
                 return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         }

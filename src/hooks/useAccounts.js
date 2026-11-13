@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
 import { tierUnder, branchTiers, parentRefusal, withTiers, withRows, parentsFirst, undoOfDeletes } from '../utils/accountParent.js';
 import { isMergeArchived } from '../utils/pickLink.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 // The accounts by id, as the tier rule reads them.
 const byIdOf = (list) => new Map((list || []).map(a => [a.id, a]));
@@ -232,9 +233,11 @@ export function useAccounts(deps) {
                 auditName = formData.name || newId; auditDetail = formData.industry || '';
             }
             const res = await dbFetch('/.netlify/functions/accounts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await res.json();
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3): the server's
+            // words with their ref, else "The server returned N." — a 502's page was said as a lost connection.
+            if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setAccountModalError(why); setAccountModalSaving(false); return; }
+            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { setAccountModalError(data.error || 'Failed to save account. Please try again.'); setAccountModalSaving(false); return; }
             const saved = data.account || payload;
             if (method === 'PUT') {
                 setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));
@@ -258,7 +261,7 @@ export function useAccounts(deps) {
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
             console.error('Failed to save account:', err);
-            setAccountModalError('Failed to save account. Please check your connection and try again.');
+            setAccountModalError(failureWords(err));
         } finally {
             setAccountModalSaving(false);
         }

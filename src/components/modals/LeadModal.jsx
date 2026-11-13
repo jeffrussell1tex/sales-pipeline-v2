@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
+import { readRefusal, failureWords } from '../../utils/refusalWords.js';
 import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -399,11 +400,13 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                 method: 'POST',
                 body: JSON.stringify(payload),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to save lead');
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10): a 502's page said
+            // "Unexpected token '<'".
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent
             return data.lead || payload;
         } catch (err) {
-            setErrors({ _server: err.message });
+            setErrors({ _server: failureWords(err) });
             return null;
         } finally {
             setSaving(false);

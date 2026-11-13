@@ -315,8 +315,10 @@ test("THE GUARD: the Technicians screen picks a member by their app id and shows
         "a new technician's default week is not typed — an untouched '+ New' reads unsaved no more");
     assert.ok(d.includes("        setMassSaving(true);\n        setMassProg({ done: 0, total: massPlan.proposals.length, failed: 0, error: '' });"),
         "a second press counts afresh — the last run's count and words are not shown as this one's");
-    assert.ok(inOrder(d, "        let firstError = '';", "                    throw new Error(`${pr.job.title || pr.job.customer || 'A job'}: ${data.error || ('HTTP ' + res.status)}`);",
-        '                if (!firstError) firstError = e.message;', '            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });',
+    // Moved pin (state §0.248, docs/design/refusal-sweep Part 11): the refusal in the house words (readRefusal, with their
+    // ref), a failure in plain words (failureWords) — each with the job it is about.
+    assert.ok(inOrder(d, "        let firstError = '';", '                if (!res.ok) throw new Error(await readRefusal(res));',
+        "                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${failureWords(e)}`;", '            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });',
         '        if (!failed) setMassPlan(null);', '        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr)) });'),
         "the first refusal's words kept — the server's, with the job they are about — not 'HTTP 404'; what landed leaves the panel, so a second press sends only the rest");
     assert.ok(inOrder(d, '                {(saving || progress.failed > 0) && (',

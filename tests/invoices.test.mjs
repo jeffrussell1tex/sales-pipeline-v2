@@ -403,11 +403,11 @@ test('DispatchTab: the invoice panel and the Invoices view at module scope; the 
     assert.ok(s.includes("                    { id: 'invoices',  label: 'Invoices' },"));
     assert.ok(s.includes("view === 'invoices' ? 'Invoices' :"));
     assert.ok(s.includes("                ) : view === 'invoices' ? (\n                    <InvoicesView customers={customers} jobsRaw={jobsRaw} onOpenJob={openJobRecord}/>"));
-    assert.ok(s.includes('{selected && <JobInvoicePanel job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}'));
+    assert.ok(s.includes('{selected && <JobInvoicePanel key={selected.id} job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}'));
     assert.ok(s.includes('openJobRequest={openJobRequest} showConfirm={showConfirm}'));
     assert.ok(s.includes('                                    value: parseFloat(saved.invoiceAmount || 0),'), 'the board adopts the mirrored amount');
     assert.ok(s.includes('if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);'), 'the danger variant');
-    assert.ok(s.includes("if (!res.ok) { setErr(data.error || `${failText} (HTTP ${res.status}).`); return null; }"), 'a refusal is shown in the panel');
+    assert.ok(s.includes("if (!res.ok) { setErr(`The invoice was not ${done} — ${await readRefusal(res)}`); return null; }"), 'a refusal is shown in the panel, in the house words (state §0.248)');
     assert.ok(s.includes('if (data.job && onJobMirror) onJobMirror(data.job);'), 'the server’s job is adopted');
     assert.ok(s.includes("setInvoice(list.find(isLiveInvoice) || list[0] || null);"), 'the live invoice leads');
     assert.ok(s.includes("<InvoiceTotals lines={cleanInvoiceLines(draft.lineItems)} taxRate={draft.taxRate}/>"), 'the draft’s preview runs the same arithmetic');

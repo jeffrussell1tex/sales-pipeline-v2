@@ -5,7 +5,7 @@ import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords } from '../utils/refusalWords.js';
 import { notFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
@@ -1201,12 +1201,15 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     assignedEquipmentIds: reservedUnits,
                 }),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): the server's words with
+            // their ref, else "The server returned N." — a 403 the role's sentence (Q13); it said "HTTP N", the ref dropped.
             if (!res.ok) {
-                if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
-                throw new Error(data.error || ('HTTP ' + res.status));
+                const why = res.status === 403 ? 'Your role cannot schedule jobs.' : await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
             }
+            const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the job as sent
+            if (!stillOrg(askedOrg)) return;
 
             // Blockers ignored by an explicit override, named for the audit trail.
             const overridden = candidates
@@ -1235,7 +1238,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             setScheduleTime('');
             setScheduleDate('');
         } catch (e) {
-            setScheduleError(e.message);
+            setScheduleError(failureWords(e));
         } finally {
             setSaving(false);
         }
@@ -1261,12 +1264,12 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
-                throw new Error(data.error || ('HTTP ' + res.status));
+            if (!res.ok) {   // as the schedule's (§0.248): the ok check first, the house words, a 403 the role's sentence
+                const why = res.status === 403 ? 'Your role cannot schedule jobs.' : await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
             }
+            if (!stillOrg(askedOrg)) return;
             const crewNames = ids.map(id => techs.find(t => t.id === id)?.name || id);
             if (onHeld) onHeld({ jobId: selectedJob.id, jobName: selectedJob.title || selectedJob.customer, techIds: ids, crewNames });
             setAddedTechs(Object.fromEntries(ids.map(id => [id, true])));
@@ -1274,7 +1277,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 ? `Crew held — ${crewNames.join(', ')}. The job stays in Jobs to schedule; Mass-schedule next week will place them, or come back and Schedule now.`
                 : 'Held crew released. The job is back to needing a crew.');
         } catch (e) {
-            setScheduleError(e.message);
+            setScheduleError(failureWords(e));
         } finally {
             setSaving(false);
         }
@@ -2262,7 +2265,7 @@ const VISIT_TONE = {
     scheduled: { bg: 'ok',     label: 'Scheduled' },
 };
 
-const ServiceDueView = ({ rows, renewals, exceptions, today, onStart, onOpenJob, onOpenCustomer, onSkip, onDefer, onUndo, onRenew, actionError }) => {
+const ServiceDueView = ({ rows, renewals, exceptions, today, onStart, onOpenJob, onOpenCustomer, onSkip, onDefer, onUndo, onRenew, actionError, onCloseActionError }) => {
     const tone = (k) => ({ danger: T.danger, warn: T.warn, ok: T.ok }[k] || T.inkMuted);
     const outstanding = rows.filter(r => r.state === 'overdue' || r.state === 'due');
     const booked      = rows.filter(r => r.state === 'scheduled');
@@ -2308,10 +2311,16 @@ const ServiceDueView = ({ rows, renewals, exceptions, today, onStart, onOpenJob,
                 under Settings &rarr; Dispatch &rarr; Service plans. Skip an occurrence the customer declined; defer one to a new date.
             </div>
 
+            {/* Kept until its Close (state §0.248, docs/design/refusal-sweep Part 11): the next action clears it too. */}
             {actionError && (
-                <div style={{ padding: '10px 14px', marginBottom: 14, background: 'rgba(156,58,46,0.08)',
+                <div role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', marginBottom: 14, background: 'rgba(156,58,46,0.08)',
                     border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontFamily: T.sans }}>
-                    {actionError}
+                    <span style={{ flex: 1, minWidth: 0 }}>{actionError}</span>
+                    <button onClick={onCloseActionError}
+                        style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer',
+                            fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                        Close
+                    </button>
                 </div>
             )}
 
@@ -3131,9 +3140,14 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            const data = await res.json().catch(() => ({}));
+            // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
+            if (!res.ok) {
+                const why = res.status === 403 ? 'Your role cannot change customers.' : await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
+            }
+            const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the copy sent
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change customers.' : (data.error || 'HTTP ' + res.status));
             const saved = data.customer || body;
             onSaved(saved);
             // Clear the draft so `creating` goes false again — otherwise the
@@ -3143,7 +3157,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
             setEditing(false);
             setStatus({ kind: 'ok', msg: 'Saved.' });
         } catch (err) {
-            setStatus({ kind: 'err', msg: err.message });
+            setStatus({ kind: 'err', msg: failureWords(err) });
         }
         setSaving(false);
     };
@@ -3578,12 +3592,13 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
+            if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
+                const why = res.status === 403 ? 'Your role cannot change technicians.' : await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
+            }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('Your role cannot change technicians.');
-                throw new Error(data.error || ('HTTP ' + res.status));
-            }
             const saved = data.technician;
             // The form takes the server's answer (state §0.201): the login stored is the member's Clerk identity
             // (the pick sent their app id), the row's updatedAt moved, a create is new no more — the form read as
@@ -3592,7 +3607,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
             if (saved) { onSaved(saved); setDraft({ ...saved }); setSelectedId(saved.id); }
             setStatus({ kind: 'ok', msg: draft._isNew ? 'Technician created' : 'Saved' });
         } catch (e) {
-            setStatus({ kind: 'err', msg: e.message });
+            setStatus({ kind: 'err', msg: failureWords(e) });
         } finally {
             setSaving(false); savingRef.current = false;
         }
@@ -3915,23 +3930,28 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
     const [busy,    setBusy]    = React.useState(false);
     const [draft,   setDraft]   = React.useState(null);   // the editing copy of a draft invoice
     const [paying,  setPaying]  = React.useState(null);   // { paidAt, amountPaid } while marking paid
+    const [unread,  setUnread]  = React.useState(false);  // the job's invoices could not be read: never "No invoice … yet"
 
     React.useEffect(() => {
         let cancelled = false;
-        setInvoice(null); setHistory([]); setDraft(null); setPaying(null); setErr('');
+        setInvoice(null); setHistory([]); setDraft(null); setPaying(null); setErr(''); setUnread(false);
         if (!job?.id) return;
         setLoading(true);
         (async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/invoices?jobId=' + encodeURIComponent(job.id));
-                const data = await res.json().catch(() => ({}));
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): a refusal in the
+                // server's words; a landed answer that cannot be read is said — never taken as {} ("No invoice on this
+                // job yet" over a read that failed); a lost connection blamed when the server answered, no more.
+                if (!res.ok) { const why = await readRefusal(res); if (!cancelled) { setUnread(true); setErr(`Invoices did not load — ${why}`); } return; }
+                const data = await res.json().catch(() => null);
                 if (cancelled) return;
-                if (!res.ok) { setErr(data.error || `Invoices did not load (HTTP ${res.status}).`); return; }
-                const list = data.invoices || [];
+                if (!data || !Array.isArray(data.invoices)) { setUnread(true); setErr('Invoices did not load — Its answer could not be read. Reload to see it.'); return; }
+                const list = data.invoices;
                 setHistory(list);
                 setInvoice(list.find(isLiveInvoice) || list[0] || null);
             } catch (e) {
-                if (!cancelled) setErr('Invoices did not load — check your connection.');
+                if (!cancelled) { setUnread(true); setErr(`Invoices did not load — ${failureWords(e)}`); }
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -3946,16 +3966,23 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
         }
         if (data.job && onJobMirror) onJobMirror(data.job);
     };
-    const write = async (url, options, failText) => {
+    // `done` names the write ('created', 'issued', …): "The invoice was not created — why" on a refusal or a failure, in
+    // the house words (state §0.248, Part 11) — it said the bare status, the ref dropped, or blamed the connection when
+    // the server answered. A landed write whose answer cannot be read is said, never adopted as {}; it answers true, so an
+    // editor it closes on a landed write still closes.
+    const write = async (url, options, done) => {
         setBusy(true); setErr('');
         try {
             const res  = await dbFetch(url, options);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) { setErr(data.error || `${failText} (HTTP ${res.status}).`); return null; }
+            if (!res.ok) { setErr(`The invoice was not ${done} — ${await readRefusal(res)}`); return null; }
+            const data = await res.json().catch(() => null);
+            // Marked unread (the review of §0.248): never "No invoice on this job yet" and its Create under "The invoice was
+            // created — …"; every landed write's answer names its invoice (invoices.mjs), so one that names none is unread too.
+            if (!data || typeof data !== 'object' || !data.invoice) { setUnread(true); setErr(`The invoice was ${done} — Its answer could not be read. Reload to see it.`); return true; }
             adopt(data);
             return data;
         } catch (e) {
-            setErr(`${failText} — check your connection.`);
+            setErr(`The invoice was not ${done} — ${failureWords(e)}`);
             return null;
         } finally {
             setBusy(false);
@@ -3965,15 +3992,15 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
     const put  = (body) => ({ method: 'PUT',  headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const url  = (id) => '/.netlify/functions/invoices' + (id ? '?id=' + encodeURIComponent(id) : '');
 
-    const create = () => write(url(), post({ jobId: job.id, issueDate: invoiceToday() }), 'The invoice was not created');
-    const issue  = () => write(url(invoice.id), put({ status: 'issued' }), 'The invoice was not issued');
+    const create = () => write(url(), post({ jobId: job.id, issueDate: invoiceToday() }), 'created');
+    const issue  = () => write(url(invoice.id), put({ status: 'issued' }), 'issued');
     const voidIt = () => {
-        const go = () => write(url(invoice.id), put({ status: 'void' }), 'The invoice was not voided');
+        const go = () => write(url(invoice.id), put({ status: 'void' }), 'voided');
         if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);
         else go();
     };
     const markPaid = async () => {
-        const r = await write(url(invoice.id), put({ status: 'paid', paidAt: paying?.paidAt || invoiceToday(), amountPaid: paying?.amountPaid === '' ? undefined : paying?.amountPaid }), 'The invoice was not marked paid');
+        const r = await write(url(invoice.id), put({ status: 'paid', paidAt: paying?.paidAt || invoiceToday(), amountPaid: paying?.amountPaid === '' ? undefined : paying?.amountPaid }), 'marked paid');
         if (r) setPaying(null);
     };
     const startEdit = () => setDraft({
@@ -3986,7 +4013,7 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
             lineItems: draft.lineItems, taxRate: draft.taxRate === '' ? 0 : draft.taxRate,
             issueDate: draft.issueDate || null, dueDate: draft.dueDate || null,
             paymentTerms: draft.paymentTerms, customerPoNumber: draft.customerPoNumber, notes: draft.notes,
-        }), 'The invoice was not saved');
+        }), 'saved');
         if (r) setDraft(null);
     };
     const setD = (k, v) => setDraft(d => ({ ...d, [k]: v }));
@@ -4006,7 +4033,7 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
             {loading && <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Loading…</div>}
             {err && <div role="alert" style={{ fontSize: 12, color: T.danger, fontFamily: T.sans, marginBottom: 8 }}>{err}</div>}
 
-            {!loading && !invoice && (
+            {!loading && !invoice && !unread && (
                 <div>
                     <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, marginBottom: 8, lineHeight: 1.45 }}>
                         No invoice on this job yet. One is raised from the job's line items (a job made from a quote carries the quote's), as a draft you can edit before issuing.
@@ -4059,7 +4086,8 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
                         {invoice.status === 'paid' && <span style={{ fontSize: 12, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>Paid {invoice.paidAt} · {fmtMoney(invoice.amountPaid ?? invoice.total)}</span>}
                         {invoice.status === 'void' && <>
                             <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Voided.</span>
-                            <button onClick={create} disabled={busy} style={btn(true)}>Raise a new invoice</button>
+                            {/* Not under "The invoice was created — …" (§0.248, the review): a create landed unread raised one. */}
+                            {!unread && <button onClick={create} disabled={busy} style={btn(true)}>Raise a new invoice</button>}
                         </>}
                     </div>
                 </div>
@@ -4110,12 +4138,15 @@ const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
         (async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/invoices');
-                const data = await res.json().catch(() => ({}));
+                // As the job's panel (state §0.248, Part 11): the ok check first, the house words; a landed answer that
+                // cannot be read is said — never "No invoices yet" and $0.00 outstanding over a read that failed.
+                if (!res.ok) { const why = await readRefusal(res); if (!cancelled) setErr(`Invoices did not load — ${why}`); return; }
+                const data = await res.json().catch(() => null);
                 if (cancelled) return;
-                if (!res.ok) { setErr(data.error || `Invoices did not load (HTTP ${res.status}).`); return; }
-                setList(data.invoices || []);
+                if (!data || !Array.isArray(data.invoices)) { setErr('Invoices did not load — Its answer could not be read. Reload to see it.'); return; }
+                setList(data.invoices);
             } catch (e) {
-                if (!cancelled) setErr('Invoices did not load — check your connection.');
+                if (!cancelled) setErr(`Invoices did not load — ${failureWords(e)}`);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -4135,9 +4166,9 @@ const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
                     <option value="all">All statuses</option>
                     {INVOICE_STATUSES.map(s => <option key={s} value={s}>{invoiceStatusLabel(s)}</option>)}
                 </select>
-                <span style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
+                {!err && <span style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
                     <b style={{ color: T.ink }}>{fmtMoney(sum('issued'))}</b> outstanding · <b style={{ color: T.ink }}>{fmtMoney(sum('paid'))}</b> paid · {list.filter(i => i.status === 'draft').length} draft
-                </span>
+                </span>}
             </div>
             {loading && <div style={{ fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>Loading invoices…</div>}
             {err && <div role="alert" style={{ fontSize: 12.5, color: T.danger, fontFamily: T.sans }}>{err}</div>}
@@ -4187,6 +4218,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
     }, [openJobRequest]);
     const [draft,      setDraft]      = React.useState(null);
     const [loc,        setLoc]        = React.useState(null);   // { id, address, city, state, zip }
+    const [locUnread,  setLocUnread]  = React.useState(false);  // the job's address could not be read (Q20)
     const [saving,     setSaving]     = React.useState(false);
     const [status,     setStatus]     = React.useState(null);
 
@@ -4205,18 +4237,21 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
         setDraft(selected ? { ...selected } : null);
         setStatus(null);
         setLoc(null);
+        setLocUnread(false);
         if (!selected) return;
         let cancelled = false;
         (async () => {
             if (!selected.customerId) return;
+            // A read that failed is said in the address panel's place (state §0.248, Q20): it looked exactly like a job
+            // with no address, so a technician could be sent without one. A job with no customer still shows nothing.
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations&customerId=' + encodeURIComponent(selected.customerId));
-                if (!res.ok) return;
+                if (!res.ok) { if (!cancelled) setLocUnread(true); return; }
                 const data = await res.json();
                 if (cancelled) return;
                 const match = (data.locations || []).find(l => l.id === selected.locationId) || null;
                 setLoc(match ? { ...match } : { id: null, address: '', city: '', state: '', zip: '' });
-            } catch (e) { /* address panel stays hidden */ }
+            } catch (e) { if (!cancelled) setLocUnread(true); }
         })();
         return () => { cancelled = true; };
     }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -4252,8 +4287,14 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                         zip: (loc.zip || '').trim() || null,
                     }),
                 });
+                // The ok check first, the house words (state §0.248, Part 11): the server's with their ref, else "The
+                // server returned N." — the address named, since the job is not sent after it.
+                if (!lres.ok) {
+                    const why = await readRefusal(lres);
+                    if (!stillOrg(askedOrg)) return;
+                    throw new Error(`The address was not saved — ${why}`);
+                }
                 const ldata = await lres.json().catch(() => ({}));
-                if (!lres.ok) throw new Error(ldata.error || 'Could not save the address.');
                 locationId = ldata.location?.id || locId;
             }
 
@@ -4284,16 +4325,17 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                     locationId,
                 }),
             });
+            if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
+                const why = res.status === 403 ? 'Your role cannot edit jobs.' : await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
+            }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('Your role cannot edit jobs.');
-                throw new Error(data.error || ('HTTP ' + res.status));
-            }
             if (data.job) { onSaved(data.job); setSelectedId(data.job.id); }
             setStatus({ kind: 'ok', msg: 'Saved' });
         } catch (e) {
-            setStatus({ kind: 'err', msg: e.message });
+            setStatus({ kind: 'err', msg: failureWords(e) });
         } finally {
             setSaving(false);
         }
@@ -4536,8 +4578,12 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 
                         {/* The job's invoice (state §0.149). Its writes adopt the server's job
                             row through onSaved, so the mirrored value reaches the board. */}
-                        {selected && <JobInvoicePanel job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}
+                        {selected && <JobInvoicePanel key={selected.id} job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}
 
+                        {!loc && locUnread && (
+                            <div role="alert" style={{ border: `1px solid ${T.border}`, borderRadius: T.r, padding: 12, marginBottom: 14,
+                                fontSize: 12.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>The address couldn't be read.</div>
+                        )}
                         {loc && (
                             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, padding: 12, marginBottom: 14 }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase',
@@ -5259,7 +5305,7 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
                             cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
                         Cancel
                     </button>
-                    <button onClick={async () => { setBusy(true); setErr(''); try { await onSave(wh); } catch (e) { setErr(`Not saved — ${e?.message || 'the server did not answer'}`); } finally { setBusy(false); } }}
+                    <button onClick={async () => { setBusy(true); setErr(''); try { await onSave(wh); } catch (e) { setErr(`Not saved — ${failureWords(e)}`); } finally { setBusy(false); } }}
                         disabled={busy}
                         style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.ink, color: '#fbf8f3',
                             border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
@@ -5300,7 +5346,7 @@ const TechJobCard = ({ job, customerName, blocks, onUpdate, busyId }) => {
     const run = async (patch) => {
         setErr('');
         try { await onUpdate(job.id, patch); }
-        catch (e) { setErr(e.message); }
+        catch (e) { setErr(failureWords(e)); }   // the house words (state §0.248, Part 11) — never "Failed to fetch"
     };
 
     return (
@@ -5607,22 +5653,38 @@ export default function DispatchTab() {
     // Each writes first and adopts the server's row — an optimistic update that
     // survived a refused write is how "it didn't save" reports start. A refusal
     // is shown above the queue, not logged.
+    // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): the server's words with
+    // their ref, else "The server returned N." — it said "(HTTP N)", the ref dropped. A failure that never reached the
+    // server is said too (failureWords; it was an unhandled rejection, nothing said) and answers false, so the skip or
+    // defer editor stays open under the banner's words. A landed answer that cannot be read is said, never adopted.
     const recordVisit = async (row, action, { deferredTo, reason } = {}) => {
         setVisitActionError('');
-        const res = await dbFetch('/.netlify/functions/dispatch-plan-visits', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customerId: row.customer.id, planId: row.plan.id, dueDate: row.occurrence || row.due, action, deferredTo, reason }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.visit) {
-            setVisitActionError(data.error || `The visit was not ${action} (HTTP ${res.status}).`);
+        const askedOrg = requestOrg();   // an answer after an org switch says and writes nothing (state §0.175)
+        try {
+            const res = await dbFetch('/.netlify/functions/dispatch-plan-visits', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customerId: row.customer.id, planId: row.plan.id, dueDate: row.occurrence || row.due, action, deferredTo, reason }),
+            });
+            if (!res.ok) {
+                const why = await readRefusal(res);
+                if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${why}`);
+                return false;
+            }
+            const data = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return false;
+            if (!data || !data.visit) {
+                setVisitActionError(`The visit was ${action} — Its answer could not be read. Reload to see it.`);
+                return false;
+            }
+            setPlanVisits(prev => [
+                ...prev.filter(v => !(v.customerId === data.visit.customerId && v.planId === data.visit.planId && v.dueDate === data.visit.dueDate)),
+                data.visit,
+            ]);
+            return true;
+        } catch (e) {
+            if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${failureWords(e)}`);
             return false;
         }
-        setPlanVisits(prev => [
-            ...prev.filter(v => !(v.customerId === data.visit.customerId && v.planId === data.visit.planId && v.dueDate === data.visit.dueDate)),
-            data.visit,
-        ]);
-        return true;
     };
     const skipVisit  = (row, opts) => recordVisit(row, 'skipped', opts);
     const deferVisit = (row, opts) => recordVisit(row, 'deferred', opts);
@@ -5639,18 +5701,30 @@ export default function DispatchTab() {
     // through the customer PUT the edit form already uses.
     const renewAgreement = (row) => {
         const next = renewedExpiry(row.customer, todayYmd, 12);
+        // As recordVisit (state §0.248, Part 11): the ok check first, the house words, a failure said — never silent.
         const go = async () => {
             setVisitActionError('');
-            const res = await dbFetch(`/.netlify/functions/dispatch-customers?id=${encodeURIComponent(row.customer.id)}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ agreementExpiry: next }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data.customer) {
-                setVisitActionError(data.error || `The agreement was not renewed (HTTP ${res.status}).`);
-                return;
+            const askedOrg = requestOrg();
+            try {
+                const res = await dbFetch(`/.netlify/functions/dispatch-customers?id=${encodeURIComponent(row.customer.id)}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agreementExpiry: next }),
+                });
+                if (!res.ok) {
+                    const why = await readRefusal(res);
+                    if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${why}`);
+                    return;
+                }
+                const data = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                if (!data || !data.customer) {
+                    setVisitActionError('The agreement was renewed — Its answer could not be read. Reload to see it.');
+                    return;
+                }
+                setCustomers(prev => prev.map(c => c.id === data.customer.id ? data.customer : c));
+            } catch (e) {
+                if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${failureWords(e)}`);
             }
-            setCustomers(prev => prev.map(c => c.id === data.customer.id ? data.customer : c));
         };
         if (showConfirm) showConfirm(`Renew the maintenance agreement for ${row.customer.name} through ${next}?`, go, false);
         else go();
@@ -5783,9 +5857,11 @@ export default function DispatchTab() {
                     ['customers', custsRes],   ['jobs', jobsRes], ['schedule', blocksRes],
                     ['service plans', plansRes], ['plan visits', visitsRes],
                 ].filter(([, r]) => !r.ok);
+                // Each list's refusal in the server's words, with their ref (state §0.248, docs/design/refusal-sweep Part
+                // 11): "jobs: Forbidden …", else "jobs: The server returned 500." — it said the status alone.
                 if (failed.length) {
-                    const detail = failed.map(([n, r]) => `${n} (${r.status})`).join(', ');
-                    throw new Error(`Dispatch data failed to load: ${detail}`);
+                    const said = await Promise.all(failed.map(async ([n, r]) => `${n}: ${(await readRefusal(r)).replace(/[.\s]+$/, '')}`));
+                    throw new Error(`${said.join('; ')}.`);
                 }
 
                 const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData, plansData, visitsData] = await Promise.all([
@@ -5899,7 +5975,10 @@ export default function DispatchTab() {
                 setJobsRaw(dbJobs);
                 setBlocks(blocksData.blocks || []);
             } catch (err) {
-                if (!cancelled) setLoadError(err.message || 'Failed to load dispatch data. Please refresh.');
+                // In plain words (failureWords): the lists' refusals above pass through; a page that was no JSON says
+                // "Its answer could not be read." — it drew "Unexpected token '<'" as the whole tab; offline, "The
+                // server could not be reached." Nothing to show without the lists, so the words stand in the tab's place.
+                if (!cancelled) setLoadError(`Dispatch data failed to load — ${failureWords(err)} Reload the page to try again.`);
                 console.error('DispatchTab load error:', err);
             } finally {
                 if (!cancelled) setLoading(false);
@@ -5963,18 +6042,28 @@ export default function DispatchTab() {
                 // A won deal's account, copied onto its placeholder, is left off when the server says it names no live
                 // account — deleted since (state §0.214): the customer is made as before, unlinked. Only a 404 is
                 // dropped: the 409 for an account another customer stands for is said under the form.
-                let cdata = null;
-                const { answer: cans } = await saveDroppingRefused(async (body) => {
+                // The ok check first (state §0.248, docs/design/refusal-sweep Part 11): a refusal's body read once, for the
+                // link it names and its words (the server's, with their ref, else "The server returned N."); a landed
+                // answer that cannot be read keeps the id sent — the customer was made under it.
+                let cdata = null, cwhy = '';
+                const { answer: cans, sent: csent } = await saveDroppingRefused(async (body) => {
                     if (!stillOrg(askedOrg)) return undefined;
                     const r = await dbFetch('/.netlify/functions/dispatch-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                    cdata = await r.json();
-                    return { ok: r.ok, status: r.status, field: cdata?.field };
+                    if (!r.ok) {
+                        const refused = await r.json().catch(() => null);
+                        cwhy = refusalWords(r, refused);
+                        return { ok: false, status: r.status, field: refused?.field };
+                    }
+                    cdata = await r.json().catch(() => null);
+                    return { ok: true, status: r.status };
                 }, { id: newCustId, name: custLabel, accountId: custAccountId || null }, newJobForm.opportunityCopied ? ['accountId'] : []);
                 if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
-                if (!cans.ok) throw new Error(cdata?.error || 'Could not create the customer.');
-                createdCust = cdata.customer;
+                if (!cans.ok) throw new Error(`The customer was not created — ${cwhy}`);
+                // Landed with an answer that cannot be read: the row as sent (its refused account left off) — listed, and its
+                // first address its default (the review of §0.248).
+                createdCust = cdata?.customer || { id: newCustId, name: custLabel, accountId: csent.accountId || null };
                 customerId  = createdCust?.id || newCustId;
-                setCustomers(prev => [...prev, createdCust].filter(Boolean));
+                setCustomers(prev => [...prev, createdCust]);
                 // The made customer is the form's now (state §0.214; OPEN_ITEMS §4.4): a Save refused after this point
                 // and pressed again reuses it — it made a second customer of the same name.
                 if (stillOrg(askedOrg)) {
@@ -6000,9 +6089,10 @@ export default function DispatchTab() {
                         isDefault: !!createdCust || (newJobForm.madeCustomerId === customerId && !newJobForm.madeLocation),
                     }),
                 });
-                const ldata = await lres.json();
-                if (!lres.ok) throw new Error(ldata?.error || 'Could not save the job address.');
-                locationId = ldata.location?.id || locId;
+                // The ok check first, the house words (state §0.248, Part 11); a landed answer that cannot be read keeps the id sent.
+                if (!lres.ok) throw new Error(`The job address was not saved — ${await readRefusal(lres)}`);
+                const ldata = await lres.json().catch(() => null);
+                locationId = ldata?.location?.id || locId;
                 if (stillOrg(askedOrg)) setNewJobForm(f => ({ ...f, madeLocation: { id: locationId, key: locKey } }));
             }
 
@@ -6036,17 +6126,24 @@ export default function DispatchTab() {
             // theirs: its refusal, like anything else refused, is said under the form (a retry reuses the customer
             // and location this Save made — state §0.214). An org switch stops it: the next POST would carry the new
             // org's token.
-            let data = null;
+            // As the customer's (state §0.248, Part 11): the ok check first, a refusal's words and link from its body; a
+            // landed answer that cannot be read keeps the job as sent, under the id sent.
+            let data = null, why = '';
             const { answer, sent } = await saveDroppingRefused(async (body) => {
                 if (!stillOrg(askedOrg)) return undefined;
                 const r = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                data = await r.json();
-                return { ok: r.ok, status: r.status, field: data?.field };
+                if (!r.ok) {
+                    const refused = await r.json().catch(() => null);
+                    why = refusalWords(r, refused);
+                    return { ok: false, status: r.status, field: refused?.field };
+                }
+                data = await r.json().catch(() => null);
+                return { ok: true, status: r.status };
             }, payload, newJobForm.opportunityCopied ? ['accountId', 'opportunityId'] : ['accountId']);
             if (!stillOrg(askedOrg)) return;
-            if (!answer.ok) throw new Error(data?.error || 'Save failed');
+            if (!answer.ok) throw new Error(why);
             // Optimistically add to local state
-            const saved = data.job || data;
+            const saved = data?.job || data || {};
             const optimistic = {
                 id:              saved.id || jobId,
                 title,
@@ -6078,7 +6175,7 @@ export default function DispatchTab() {
             setAppliedTemplate(null);
             setShowNewJobForm(false);
         } catch (err) {
-            setNewJobError(err.message || 'Failed to save job.');
+            if (stillOrg(askedOrg)) setNewJobError(failureWords(err));   // in plain words (state §0.248) — never "Failed to fetch"
         } finally {
             setNewJobSaving(false);
         }
@@ -6188,17 +6285,16 @@ export default function DispatchTab() {
                         assignedEquipmentIds: pr.assignedEquipment,
                     }),
                 });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    // the job as the panel names it — its title, or its customer's (state §0.201: it read 'A job')
-                    throw new Error(`${pr.job.title || pr.job.customer || 'A job'}: ${data.error || ('HTTP ' + res.status)}`);
-                }
+                // The house words (state §0.248, Part 11): the server's with their ref, else "The server returned N."
+                if (!res.ok) throw new Error(await readRefusal(res));
                 applied.push(pr);
                 reservedThisRun.push(...pr.assignedEquipment);
                 done += 1;
             } catch (e) {
                 failed += 1;
-                if (!firstError) firstError = e.message;
+                // the job as the panel names it — its title, or its customer's (state §0.201: it read 'A job'); a failure
+                // in plain words (failureWords) — never "Failed to fetch"
+                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${failureWords(e)}`;
             }
             setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });
         }
@@ -6317,8 +6413,9 @@ export default function DispatchTab() {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: techId, workingHours }),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        // The ok check first, the house words (state §0.248, Part 11) — the shift pattern says them under its Save.
+        if (!res.ok) throw new Error(await readRefusal(res));
+        const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before
         if (data.technician) setTechsRaw(prev => prev.map(t => t.id === techId ? data.technician : t));
     };
 
@@ -6331,8 +6428,9 @@ export default function DispatchTab() {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: jobId, ...patch }),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+            // The ok check first, the house words (state §0.248, Part 11) — the job card says them.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before
             if (data.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? data.job : j));
         } finally {
             setTechBusyId(null);
@@ -6413,12 +6511,14 @@ export default function DispatchTab() {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                const data = await res.json().catch(() => ({}));
-                if (!stillOrg(askedOrg)) return;
+                // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
                 if (!res.ok) {
-                    if (res.status === 403) throw new Error('Your role cannot reschedule jobs.');
-                    throw new Error(data.error || ('HTTP ' + res.status));
+                    const why = res.status === 403 ? 'Your role cannot reschedule jobs.' : await readRefusal(res);
+                    if (!stillOrg(askedOrg)) return;
+                    throw new Error(why);
                 }
+                const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read moves the row as sent
+                if (!stillOrg(askedOrg)) return;
                 const saved = data.job || null;
                 setJobs(prev => prev.map(j => j.id === job.id
                     ? { ...j,
@@ -6442,7 +6542,8 @@ export default function DispatchTab() {
                 clearTimeout(weekMoveTimer.current);
                 weekMoveTimer.current = setTimeout(() => setWeekMove(st => ({ ...st, notice: '' })), 8000);
             } catch (e) {
-                setWeekMove({ busy: false, error: e.message, notice: '' });
+                if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
+                setWeekMove({ busy: false, error: failureWords(e), notice: '' });   // plain words (state §0.248)
             }
         };
 
@@ -6792,7 +6893,7 @@ export default function DispatchTab() {
                     <ServiceDueView rows={visitQueue} renewals={renewalQueue} exceptions={exceptionVisits} today={todayYmd}
                         onStart={startPlanVisit}
                         onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}
-                        actionError={visitActionError}
+                        actionError={visitActionError} onCloseActionError={() => setVisitActionError('')}
                         onOpenJob={openJobRecord}
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (

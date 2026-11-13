@@ -12,6 +12,7 @@
 // concurrent edit, and these rows are referenced live by customers.
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -271,13 +272,19 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             // dbFetch returns a Response and does not throw on 4xx/5xx. Reading
             // `.plans` off an error body falls through `|| []` and renders as
             // "no plans yet" — a failure indistinguishable from empty.
+            // Each refusal in the server's words, with their ref (state §0.248, docs/design/refusal-sweep Part 11) — it
+            // said the status alone; a page that was no JSON says "Its answer could not be read." (failureWords) — it
+            // said "Unexpected token '<'".
             const bad = [['plans', pRes], ['customers', cRes]].filter(([, r]) => !r.ok);
-            if (bad.length) throw new Error('Failed to load ' + bad.map(([n, r]) => `${n} (${r.status})`).join(', '));
+            if (bad.length) {
+                const said = await Promise.all(bad.map(async ([n, r]) => `${n}: ${(await readRefusal(r)).replace(/[.\s]+$/, '')}`));
+                throw new Error(`${said.join('; ')}.`);
+            }
             const [pJson, cJson] = await Promise.all([pRes.json(), cRes.json()]);
             setPlans(pJson.plans || []);
             setCustomers(cJson.customers || []);
         } catch (err) {
-            setLoadError(err.message || 'Failed to load service plans.');
+            setLoadError(`Service plans did not load — ${failureWords(err)}`);
         }
         setLoading(false);
     }, []);
@@ -314,11 +321,11 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change service plans.' : (data.error || 'HTTP ' + res.status));
+            // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change service plans.' : await readRefusal(res));
             await load();
             setDraft(null);
-        } catch (err) { setError(err.message); }
+        } catch (err) { setError(failureWords(err)); }
         setBusy(false);
     };
 
@@ -327,13 +334,13 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
         setBusy(true); setError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-service-plans?id=' + encodeURIComponent(draft.id), { method: 'DELETE' });
-            const data = await res.json().catch(() => ({}));
             // 409 carries the real reason (customers still on the plan) — surfacing
-            // "HTTP 409" instead would hide the one thing the admin needs to know.
-            if (!res.ok) throw new Error(data.error || (res.status === 403 ? 'Your role cannot delete service plans.' : 'HTTP ' + res.status));
+            // "HTTP 409" instead would hide the one thing the admin needs to know. The ok check first, the server's
+            // words with their ref (state §0.248, Part 11); a 403 the role's sentence (Q13).
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete service plans.' : await readRefusal(res));
             await load();
             setDraft(null);
-        } catch (err) { setError(err.message); }
+        } catch (err) { setError(failureWords(err)); }
         setBusy(false);
     };
 
@@ -348,13 +355,22 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
         let todo;
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-service-plans');
-            const data = await res.json().catch(() => ({}));
+            // The ok check first, the house words (state §0.248, Part 11): the server's with their ref — it said "HTTP N".
+            if (!res.ok) {
+                const why = await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
+                throw new Error(why);
+            }
+            const data = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;
             // Fails closed (the review, 2 Nov): an answer that is no list of plans is no "this org has none" — read so, every
             // label would get a second plan beside the one it has.
-            if (!res.ok || !Array.isArray(data.plans)) throw new Error(data.error || (res.ok ? 'the answer held no list of plans' : 'HTTP ' + res.status));
+            if (!data || !Array.isArray(data.plans)) throw new Error('the answer held no list of plans');
             todo = legacyPlansToCreate(legacyTiers, data.plans);
-        } catch (err) { setSeedMsg(`Nothing created — the plans could not be read: ${err.message}`); setSeeding(false); return; }
+        } catch (err) {
+            if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
+            setSeedMsg(`Nothing created — the plans could not be read: ${failureWords(err)}`); setSeeding(false); return;
+        }
         let ok = 0; const failed = [];
         for (const { tier, name } of todo.create) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
@@ -368,10 +384,9 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-service-plans', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+                if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first, the house words (state §0.248)
                 ok++;
-            } catch (err) { failed.push(`${tier}: ${err.message}`); }
+            } catch (err) { failed.push(`${tier}: ${failureWords(err)}`); }
         }
         if (!stillOrg(askedOrg)) return;
         await load();
@@ -440,7 +455,8 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                                  background: p.active === false ? `${T.inkMuted}14` : `${T.ok}14`,
                                  color: p.active === false ? T.inkMuted : T.ok }}>{p.active === false ? 'Inactive' : 'Active'}</span>,
                 }))}/>
-                {plans.length === 0 && !loading && (
+                {/* Only over a read that landed (§0.248, the pane check): never "none" under "Service plans did not load". */}
+                {plans.length === 0 && !loading && !loadError && (
                     <div style={{ padding: '14px 2px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
                         No service plans yet.
                     </div>

@@ -3,6 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { taskWriteAnswer } from '../utils/taskWrite.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -98,9 +99,10 @@ export function useTasks(deps) {
             const payload = { ...taskData, id: editingTask.id };
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
-                const data = await res.json();
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
+                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setTaskModalError(why); setTaskModalSaving(false); return; }
+                const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || shownRow(payload)) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
                 // SMS: task reassigned to a different person
@@ -111,7 +113,7 @@ export function useTasks(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update task:', err);
-                setTaskModalError('Failed to save task. Please check your connection and try again.');
+                setTaskModalError(failureWords(err));
             } finally { setTaskModalSaving(false); }
         } else {
             // Honor a client-provided id (TaskRail pre-generates one so documents can be
@@ -120,9 +122,9 @@ export function useTasks(deps) {
             const newTask = { ...taskData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
-                const data = await res.json();
+                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setTaskModalError(why); setTaskModalSaving(false); return; }   // as the edit's (§0.248)
+                const data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => [...prev, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
                 // SMS: task assigned to someone on creation
@@ -133,7 +135,7 @@ export function useTasks(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save task:', err);
-                setTaskModalError('Failed to save task. Please check your connection and try again.');
+                setTaskModalError(failureWords(err));
             } finally { setTaskModalSaving(false); }
         }
     };

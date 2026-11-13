@@ -61,7 +61,8 @@ test('handleSaveActivity: both catches leave — no follow-up, no QuickLog reset
     assert.equal(at.length, 2, 'the update and the create');
     for (const i of at) {
         const block = catches.slice(i, catches.indexOf('} finally { setActivityModalSaving(false); }', i) + 1);
-        assert.ok(block.includes("setActivityModalError('Failed to save activity. Please check your connection and try again.');"), 'the error is shown');
+        // Moved pin (§0.248, docs/design/refusal-sweep Part 10; Jeff's Q3): the house words, never "check your connection".
+        assert.ok(block.includes('setActivityModalError(failureWords(err));'), 'the error is shown');
         assert.ok(block.some((l) => l.startsWith('return;')), 'and the handler leaves');
     }
     assert.ok(fn.indexOf('setFollowUpPrompt({') > fn.lastIndexOf('} finally { setActivityModalSaving(false); }'), 'the follow-up is the success tail');

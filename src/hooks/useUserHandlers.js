@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 // A removal's answer (state §0.222): the member off the roster and the lists as the server wrote them.
 import { settingsAfterRemoval, removalNote } from '../utils/teamMembership.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal }) {
     const [userModalError, setUserModalError] = useState(null);
@@ -55,13 +56,16 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                const data = await res.json();
-                if (!stillOrg(askedOrg)) return;
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
                 if (!res.ok) {
-                    setUserModalError(data.error || 'Failed to save user. Please try again.');
+                    const why = await readRefusal(res);
+                    if (!stillOrg(askedOrg)) return;
+                    setUserModalError(why);
                     setUserModalSaving(false);
                     return;
                 }
+                const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the list as it was
+                if (!stillOrg(askedOrg)) return;
                 if (data.user) {
                     setSettings(prev => ({
                         ...prev,
@@ -74,7 +78,7 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update user:', err);
-                setUserModalError('Failed to save user. Please check your connection and try again.');
+                setUserModalError(failureWords(err));
             } finally {
                 setUserModalSaving(false);
             }
@@ -89,13 +93,17 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                const data = await res.json();
-                if (!stillOrg(askedOrg)) return;
-                if (!res.ok) {
-                    setUserModalError(data.error || 'Failed to save user. Please try again.');
+                if (!res.ok) {   // as the edit's (§0.248)
+                    const why = await readRefusal(res);
+                    if (!stillOrg(askedOrg)) return;
+                    setUserModalError(why);
                     setUserModalSaving(false);
                     return;
                 }
+                // The server mints the member's id: a landed answer that cannot be read is said (failureWords, below), never
+                // "not saved" — the member may be on the server, and is not shown until a reload.
+                const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 const savedUser = data.user;
                 if (!savedUser || !savedUser.id) {
                     setUserModalError('The member was not saved. Please try again.');
@@ -114,7 +122,7 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to create user:', err);
-                setUserModalError('Failed to save user. Please check your connection and try again.');
+                setUserModalError(failureWords(err));
             } finally {
                 setUserModalSaving(false);
             }

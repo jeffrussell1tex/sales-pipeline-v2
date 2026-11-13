@@ -494,7 +494,9 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
         'a prompt left by the last task never opens on this one (the fix review, screens F4)');
     assert.ok(t.includes('{completionError && ('), 'the error is shown in the prompt');
     const h = code(read('src/hooks/useActivities.js'));
-    assert.equal(count(h, "if (!res.ok) { const error = data.error || 'Failed to save activity. Please try again.'; setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: data.field }; }"), 2,
+    // Moved pin (§0.248, docs/design/refusal-sweep Part 10): the ok check first, the refusal's body read once — its words
+    // (refusalWords: the server's with their ref, else the status) and its field.
+    assert.equal(count(h, "if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }"), 2,
         "the save answers the server's refusal — its field too — on an update and a create");
     assert.ok(h.includes('        setQuickLogContactResults([]);\n        return { ok: true };\n'), 'and that it saved');
     const d = code(read('src/Tabs/DispatchTab.jsx'));
@@ -503,8 +505,11 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     assert.ok(d.includes('            opportunityId:  row.opportunityId,\n            opportunityCopied: true,'), "the placeholder's deal is copied");
     assert.ok(d.includes('onChange={e => setNewJobForm(f => ({ ...f, opportunityId: e.target.value, opportunityCopied: false }))}'), "a deal picked from the list is the dispatcher's");
     assert.ok(d.includes("                if (!stillOrg(askedOrg)) return undefined;\n                const r = await dbFetch('/.netlify/functions/dispatch-jobs',"), 'an org switch stops it before each send (the fix review, screens F2)');
-    assert.ok(d.includes('                return { ok: r.ok, status: r.status, field: data?.field };\n'), "the server's refusal handed to the drop, its status and field (the fix review, tests F2)");
-    assert.ok(d.includes("if (!answer.ok) throw new Error(data?.error || 'Save failed');"), 'anything else is said under the form');
+    // Moved pins (state §0.248, docs/design/refusal-sweep Part 11): the ok check first — a refusal's body read once, for
+    // its field and its words (refusalWords: the server's with their ref, else the status).
+    assert.ok(d.includes("                if (!r.ok) {\n                    const refused = await r.json().catch(() => null);\n                    why = refusalWords(r, refused);\n                    return { ok: false, status: r.status, field: refused?.field };\n"),
+        "the server's refusal handed to the drop, its status and field (the fix review, tests F2)");
+    assert.ok(d.includes('if (!answer.ok) throw new Error(why);'), 'anything else is said under the form');
     assert.ok(d.includes('opportunityId:   sent.opportunityId || null,'), 'the job on screen holds the deal it was saved with');
 });
 

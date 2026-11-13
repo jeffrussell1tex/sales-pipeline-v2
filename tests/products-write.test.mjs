@@ -149,17 +149,20 @@ test('products POST: the maker stamped by the server, a taken id a 409', () => {
 test('useQuotes.handleSaveProduct answers { ok, error | quiet }: the server\'s words, else its status; quiet for another org', () => {
     const s = code(read('src/hooks/useQuotes.js'));
     const save = between(s, 'const handleSaveProduct = useCallback(async (formData, editingProduct = null) => {', '}, []);');
+    // Moved pins (§0.248, docs/design/refusal-sweep Part 10): the ok check first — the server's words with their ref
+    // (readRefusal), else its status — and the catch in failureWords' plain words, never "check your connection" (Q3).
+    // RUN in tests/refusal-sweep.test.mjs Part 10.
     order(save,
         'const askedOrg = requestOrg();',
         "const res = await dbFetch('/.netlify/functions/products', {",
+        'if (!res.ok) { const error = await readRefusal(res); if (!stillOrg(askedOrg)) return { ok: false, quiet: true }; return { ok: false, error }; }',
         'const data = await res.json().catch(() => ({}));',
         'if (!stillOrg(askedOrg)) return { ok: false, quiet: true };',
-        'if (!res.ok) return { ok: false, error: data.error || `The server returned ${res.status}.` };',
         'setProducts(prev =>',
         'return { ok: true, product: saved };',
         '} catch (err) {',
         'if (!stillOrg(askedOrg)) return { ok: false, quiet: true };',
-        "return { ok: false, error: 'The product was not saved — check your connection.' };");
+        'return { ok: false, error: failureWords(err) };');
     assert.ok(!/return null/.test(save), 'REGRESSION: a refusal answered as null and said nowhere');
 });
 

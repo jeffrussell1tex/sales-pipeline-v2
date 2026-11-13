@@ -563,8 +563,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    Strike them once §0.246 ships. **Parts 8-9 built 12 Nov (state
    §0.247; guide §18b125 rules 5 and 9, since §0.247; Jeff, 12 Nov: "lets
    proceed in that order", Q13, Q18 and Q19 answered; then "Name the
-   unread (Recommended)" and "Fix in this batch (Recommended)") — NOT
-   committed; not yet shipped; harness deferred**, its Admin browser
+   unread (Recommended)" and "Fix in this batch (Recommended)") — committed
+   `6cd6bf1`; not yet shipped; harness deferred**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: a failure
    said in plain words in the swept files (`failureWords`; putSettings
    `refusalWords`, the ref kept; scan (iv)); a read that failed never a
@@ -576,9 +576,19 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    putting back only the flag, one request per row, a banner cleared by
    id; Webhooks reading its server's answers (wrong in prod since 11 May
    2026, `5772f63`) and the API page naming the same keys. Strike them
-   once §0.247 ships. What remains is Parts 10-12 of the
-   design — the next batches (its batches 4-5: Parts 10-11 and 12;
-   Q4, Q13 and Q20 answered for them):
+   once §0.247 ships. **Parts 10-11 built 12 Nov (state §0.248; guide
+   §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — NOT
+   committed; not yet shipped; harness deferred**, its Admin browser
+   check PASSED as Jeff, the rep-path check PASSED as Karen: the record
+   windows' saves (account, contact, task, activity, member, quote,
+   product), the lead window, the account picker's Create and the AI
+   score reading ok first, in the server's words and plain words; the
+   duplicate scans and Past merges never a count or "none" over a read
+   that failed; Dispatch's load, saves, invoice panel, address (Q20),
+   Service due and New Job, and Service plans, likewise — a 403 the
+   role's sentence (Q13); scan (iii) tightened. Strike them once §0.248
+   ships. What remains is Part 12 of the design — the next batch (its
+   batch 5; Q4 answered for it):
    - ~~the Kanban stage drag with no rollback; a task's complete and snooze
      un-ticking without a word (TasksTab); Reports' deal contact add,
      remove and persona~~ (DONE in §0.245, Parts 1-3; committed `b1b56e7`,
@@ -605,9 +615,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Part 8: every one says `failureWords`, scan (iv) holding the swept
      files to it; the fleet's Deletes say the server's words, a 403 "Your
      role cannot delete vehicles." or "… equipment." (Q13); not
-     committed, not yet shipped). Still so: useOpportunities.js:41's
-     deals load throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's
-     build; read in code) — Part 10's, with the record hooks.
+     committed, not yet shipped). useOpportunities.js:41's deals load
+     throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's build; read
+     in code): Part 10 (§0.248) left it and the four record loads' twins —
+     each reaches only a console catch, pinned by a WIRING test; that a
+     failed load draws an empty list is filed in §4.2 (§0.248).
    - outside the files the sweep owns, a body read before its response's
      ok check — the design's count over `f5f0139`, by the guard's own scan
      over src: 202 reads, 108 flagged (109 with the named BackupDetail
@@ -624,11 +636,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      with AdminView.jsx, settingsCards.js, ApprovalTiersDetail,
      CompanyCalendarDetail, DispatchJobTemplatesDetail,
      DispatchPropertyTypesDetail and DispatchCrewsDetail —
+     and since §0.248 with the thirteen Part 10 files, DispatchTab.jsx
+     and DispatchServicePlansDetail.jsx —
      ReportsTab.jsx waits for Part 12, though its Part 5 reads are
      ok-first now; QuotesTab.jsx for Part 12, its job and version reads).
-   - Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
+   - ~~Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
      `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
-     joining `SWEPT` (§0.246's build, 11 Nov; read in code).
+     joining `SWEPT` (§0.246's build, 11 Nov; read in code)~~ (DONE in
+     §0.248, Part 11: `failureWords(e)`, DispatchTab.jsx in `SWEPT`; not
+     committed, not yet shipped).
 
 ---
 
@@ -2346,6 +2362,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A report save made while no org is known never settles** (§0.246, 11 Nov — its build; read in code; not verified): since §0.246 Reports' `handleSaveReport` takes `requestOrg()` at the press and returns at `!stillOrg(askedOrg)` after the body read and at the head of its catch (Activity history's `handleSaveAsReport` already did), so a save made while `requestOrg()` is null returns on both paths and its button stays "Saving…". Not reachable from a shown tab as far as read — not verified. Recommended: settle whether a shown tab can press Save with no org before changing it. Low.
 - **A landed report save still closes the create flow after the member moved on** (§0.246, 11 Nov — its build; read in code; older): `handleSaveReport`'s success calls `setShowCreateReport(false)` and `setCreateMode('picker')` whatever screen is shown when the answer lands; what that does to each screen the member may have moved to was not traced. §0.246 ties only the refusal to the screen pressed. Low.
 - **The shared "✓ Saved" and "Saving…" show beside another screen's Save** (§0.246, 11 Nov — its build and review; read in code): the six report templates, the Duplicate list and the builder share one `saveState`; since §0.246 a refusal is tied to the screen pressed (`refusalHere`), but a success's "✓ Saved" (its 3 s) and a save's "Saving…" are not — another template's button reads them (the "Saving…" older). Recommended: the same place tag on both, if Jeff wants it. Low.
+- **A failed load of the record lists and the price book draws an empty list** (§0.248, 12 Nov — Part 10's builder and the review's rule lens; read in code; older): useAccounts', useActivities', useContacts' and useTasks' loads, and useOpportunities' deals load, throw `'HTTP ' + r.status` into a console-only catch — the member sees dbStatusOf's banner on a refusal, and nothing on a request that never left or a 200 that cannot be read, the list left empty; useQuotes' `loadProducts` returns silently on a refusal (`if (!res.ok || !stillOrg(askedOrg)) return;`), so a failed read of the price book draws "No products yet. Click "+ Add product" …" (QuotesTab.jsx) and the builder "No products in the price book yet.", and `loadQuotes`' catch is console-only too. Against the house rule that a read that failed is never "none" (§0.247). Outside Parts 10-11's design; a batch of its own — each load's error said where its list is drawn. Medium.
 
 ### 4.3 Settings
 
@@ -3196,6 +3213,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **`recordVisit` treats a 200 with no `visit` as a refusal** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): it says "(HTTP 200)" (DispatchTab.jsx:5612-5614); the sweep's Part 11 replaces the words; whether such an answer can happen was not read. Low.
 - **Property types: the last type's title, and an orphan type added back** (§0.247, 12 Nov — review fix 3's verifier; read in code; older or harmless): with one type left, its disabled × still reads "In use by customers — reassign them first" whatever its use; a type customer records use but the list does not hold, added back by "Add it back", is removable while in use ("3 in use" beside an active Remove) — removing it only undoes the draft's Add, but the comment saying a draft-only type is on no customer record is wrong for it; `DEFAULT_PROPERTY_TYPES` count as stored when nothing is saved (the cautious choice, as customer records carry those ids). Recommended: the last row's title says it is the last; the orphan's row keeps its usage words. Low.
 - **Crews' "+ Add member" stays pressable while the technicians are unread** (§0.247, 12 Nov — the review, refuted as a defect: the reason is said beside it; read in code): the picker is hidden under `showAddMember && !techsError`, so a press shows nothing while the Members card says "The technicians could not be read — <why>". Recommended: the button disabled with a title while `techsError` stands. Low.
+- **Service plans keeps its last list beside a failed Refresh** (§0.248, 12 Nov — the pane check; read in code; older): `load` sets its error and leaves `plans` and `customers` as they were, so a Refresh that fails draws the last read's rows under "Service plans did not load — …" (a first load that fails draws none; "No service plans yet." waits on the error since §0.248). The rows can still be opened and saved by id. Low.
+- **New Job's form keeps a dropped account after a customer create** (§0.248, 12 Nov — the review fixer's note; read in code; not verified): `setNewJobForm`'s `accountId: createdCust?.accountId || custAccountId || ''` falls back to the account typed when the server's answer names none, also when the create's 404 dropped it — the job itself carries the account as sent. Open question: whether the form's copy is ever sent again. Low.
 
 ### 4.5 Notifications, email and digests
 
@@ -4958,6 +4977,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `{modals,settings,tabs,shared}}`) and `src/components/{modals,settings,tabs,shared}`,
   dated 3 Mar 2026, with no files in any; git tracks none. Recommended:
   delete all three (Jeff's call).
+- **A member create that landed with an answer that cannot be read is titled "Failed to Save User"** (§0.248, 12 Nov — the Admin pane check; read in code; older): the member window (UserModal.jsx, opened from the deal window's Sales Rep "+ New Rep") draws its error under a fixed title, "Failed to Save User", so a 2xx page reads "Failed to Save User — Its answer could not be read." though the member may be on the server; a second Create would be refused for the name (409). At HEAD the same case said "Unexpected token …" under the same title. Also read: the window's edit path (`handleEditUser`) is opened by no screen. Low — Jeff's call on the words.
 
 ---
 
@@ -5301,3 +5321,5 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
 - **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run.
+- **Scan (iii) matches a response by name, not by binding** (§0.248, 12 Nov — the review's tests lens, refuted as a defect: no swept file has the shape; noted in the guard's KNOWN LIMITS): an outer `res.ok` check counts toward a nested block's or loop's own `const res`. A later tightening could resolve the binding (the readsIn / `nearest` tracker of scan (i) does similar work). Low.
+- **An older harness entry's anchor matches twice** (§0.248, 12 Nov — the Part 10 fixer's parse check): "deal window: an unnamed row on the deal is blank" (`{c.name || UNLISTED_CONTACT}`, OpportunityModal.jsx) matches twice, the same at HEAD; the harness mutates the first, and the stale check asks only that an anchor be present. A uniqueness check in the stale check would catch the class. Low.

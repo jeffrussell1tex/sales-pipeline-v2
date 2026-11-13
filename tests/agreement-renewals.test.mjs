@@ -76,8 +76,14 @@ test('DispatchTab: the queue reads the recorded exceptions, a deferred visit sta
     assert.ok(s.includes("{deferred ? 'Undo deferral' : 'Undo skip'}"), 'each can be undone from the list');
     assert.ok(s.includes('onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}'));
     // Each action writes first and adopts the server's row; a refusal is shown above the queue.
-    assert.ok(s.includes("setVisitActionError(data.error || `The visit was not ${action} (HTTP ${res.status}).`);"));
-    assert.ok(s.includes("setVisitActionError(data.error || `The agreement was not renewed (HTTP ${res.status}).`);"));
+    // Moved pins (state §0.248, docs/design/refusal-sweep Part 11): the ok check first, the server's words with their ref
+    // (readRefusal) — it said "(HTTP N)"; a failure that never reached the server said too (failureWords).
+    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${why}`);"));
+    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${why}`);"));
+    for (const [from, to] of [['    const recordVisit = async (', '    const skipVisit '], ['    const renewAgreement = (row) => {', '    const startBridgeJob = ']]) {
+        const fn = s.slice(s.indexOf(from), s.indexOf(to));
+        assert.ok(fn.length > 200 && fn.includes('const why = await readRefusal(res);') && fn.includes('failureWords(e)'), `${from.trim()}: the refusal's words, and a failure's`);
+    }
     assert.ok(s.includes('const next = renewedExpiry(row.customer, todayYmd, 12);'), 'renewal keeps the anniversary');
     assert.ok(s.includes('planVisits={planVisits}'), 'the customer list receives the exceptions');
 });

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, waitForToken, requestOrg, stillOrg } from '../utils/storage';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 /**
  * useQuotes — manages quotes and products (price book) state.
@@ -84,12 +85,15 @@ export function useQuotes() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return null;
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
             if (!res.ok) {
-                setQuoteModalError(data.error || 'Failed to save quote. Please try again.');
+                const why = await readRefusal(res);
+                if (!stillOrg(askedOrg)) return null;
+                setQuoteModalError(why);
                 return null;
             }
+            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
+            if (!stillOrg(askedOrg)) return null;
             const saved = data.quote || payload;
             setQuotes(prev =>
                 isEdit
@@ -100,7 +104,7 @@ export function useQuotes() {
             return saved;
         } catch (err) {
             if (!stillOrg(askedOrg)) return null;
-            setQuoteModalError('Failed to save quote. Check your connection and try again.');
+            setQuoteModalError(failureWords(err));
             return null;
         } finally {
             setQuoteModalSaving(false);
@@ -144,9 +148,10 @@ export function useQuotes() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            // The ok check first (state §0.248, docs/design/refusal-sweep Part 10): the server's words with their ref.
+            if (!res.ok) { const error = await readRefusal(res); if (!stillOrg(askedOrg)) return { ok: false, quiet: true }; return { ok: false, error }; }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
-            if (!res.ok) return { ok: false, error: data.error || `The server returned ${res.status}.` };
             const saved = data.product || payload;
             setProducts(prev =>
                 isEdit
@@ -156,7 +161,7 @@ export function useQuotes() {
             return { ok: true, product: saved };
         } catch (err) {
             if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
-            return { ok: false, error: 'The product was not saved — check your connection.' };
+            return { ok: false, error: failureWords(err) };
         }
     }, []);
 

@@ -3,6 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 export function useContacts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
@@ -134,32 +135,33 @@ export function useContacts(deps) {
             const payload = { ...contactData, id: editingContact.id };
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the Company nobody touched left out (§0.198)
-                const data = await res.json();
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
+                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setContactModalError(why); setContactModalSaving(false); return; }
+                const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
                 setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || shownRow(payload)) : c));
                 addAudit('update', 'contact', editingContact.id, fullName || editingContact.id, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update contact:', err);
-                setContactModalError('Failed to save contact. Please check your connection and try again.');
+                setContactModalError(failureWords(err));
             } finally { setContactModalSaving(false); }
         } else {
             const newId = 'id_' + crypto.randomUUID();
             const newContact = { ...contactData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
-                const data = await res.json();
+                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setContactModalError(why); setContactModalSaving(false); return; }   // as the edit's (§0.248)
+                const data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
                 setContacts(prev => [...prev, data.contact || newContact]);
                 addAudit('create', 'contact', newId, fullName || newId, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save contact:', err);
-                setContactModalError('Failed to save contact. Please check your connection and try again.');
+                setContactModalError(failureWords(err));
             } finally { setContactModalSaving(false); }
         }
     };

@@ -11,6 +11,7 @@
 // Create failures are reported via onError so the host can notify.
 import React, { useState, useMemo } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
+import { readRefusal, failureWords } from '../../utils/refusalWords.js';
 import { useApp } from '../../AppContext';
 import { pickerRows, searchKey } from '../../utils/searchMatch.js';
 import { unarchived, parentLabel, siteLine, linkRefusal, resolveLink } from '../../utils/pickLink.js';
@@ -74,15 +75,17 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onSele
             const res = await dbFetch('/.netlify/functions/accounts', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAccount),
             });
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10) — never "HTTP N". A
+            // refusal after an org switch is dropped by the catch's own check.
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
             const saved = data.account || newAccount;
             setAccounts && setAccounts(prev => [...prev, saved]);
             pick(saved);
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            onError && onError(`Couldn't create account "${name}". ${e.message || 'Please try again.'}`);
+            onError && onError(`Couldn't create account "${name}". ${failureWords(e)}`);
         } finally {
             setCreating(false);
         }

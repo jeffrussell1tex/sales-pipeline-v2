@@ -31,8 +31,13 @@
 //     state in its own function, so the state passes whether any screen reads it or not;
 //   - scan (i): scopes — `var` hoisted out of a nested block, and a class's name inside its own body, are not bound
 //     where the language binds them; a read in another file through a member (`hook.loadError`) is no read of the key;
-//   - scan (iii): okReadBefore takes ANY earlier `.ok` mention of the response in the function as its check (a
-//     `console.log(res.ok)`, or a check in a branch the body read is not under).
+//   - scan (iii): okReadBefore takes an `.ok` mention of the response that the read is under as its check — since
+//     §0.248 (docs/design/refusal-sweep Part 10) one in the condition of a statement enclosing the read, or in a
+//     statement before it in a block enclosing it, never one in a branch the read is not under — but it reads no
+//     meaning into the mention: a `console.log(res.ok);` before the read counts, and so does any condition that
+//     names it however combined (`if (!res.ok && …)`, `if (x || res.ok)`) — filed (OPEN_ITEMS §6); and it matches the
+//     response by name, not by binding, so an outer `res.ok` check counts toward a nested block's or loop's own
+//     `const res` (the review of §0.248).
 // RUN: the words (src/utils/refusalWords.js: refusalWords, readRefusal, failureWords), BackupDetail's saveSnapshotFile,
 // handleRunBackup, handleSaveSchedule and the download banner's clear (5b), the create paths' ok-first lines (5a),
 // ExportDetail's Pause / Enable and Mark complete refusals; WIRING for 5c and 5d.
@@ -262,17 +267,66 @@ function unreadStatesIn(sources) {
 
 // (iii) Every body read (`<res>.json()`) with no ok check of that response before it in the function that reads it:
 // { line, text, name }. An ok check is a read of `<res>.ok` earlier in that function (an `if (!res.ok)`, a
-// `res.ok ? … : …`); a body read off no named response cannot be checked and counts.
+// `res.ok ? … : …`) that the read is under (§0.248, docs/design/refusal-sweep Part 10): it sits in a statement that
+// ENCLOSES the read — the condition of an `if`, a `? :`, a loop or a `&&`/`||` whose branch holds the read — or in a
+// statement that comes BEFORE the read in a block that encloses it (`if (!res.ok) return;` then the read). A check in a
+// branch the read is not under is none: `if (a) { if (!res.ok) … } else { res.json() }`, or a check inside an earlier
+// statement's own block or branch (`if (a) { if (!res.ok) return; }` then the read) — the hidden shape, where the check
+// of the edit's save passed the create's read. A body read off no named response cannot be checked and counts.
+// The branches and bodies a check inside them does not reach out of: a block, a function, an `if`'s or a `? :`'s
+// branch, a loop's body, a switch's case, a try's block, catch or finally.
+const BRANCH_KEYS = { IfStatement: ['consequent', 'alternate'], ConditionalExpression: ['consequent', 'alternate'],
+    WhileStatement: ['body'], DoWhileStatement: ['body'], ForStatement: ['body'], ForInStatement: ['body'], ForOfStatement: ['body'],
+    LabeledStatement: ['body'], WithStatement: ['body'], TryStatement: ['block', 'handler', 'finalizer'] };
+// What of a node, holding a branch, a check in it may stand guard over: an `if`'s, a `? :`'s or a loop's condition, a
+// `&&`/`||`'s left. A node not named here (an expression, a declaration) guards with any part before the read's.
+const GUARD_KEYS = { IfStatement: ['test'], ConditionalExpression: ['test'], WhileStatement: ['test'], DoWhileStatement: ['test'],
+    ForStatement: ['init', 'test'], ForInStatement: ['right'], ForOfStatement: ['right'], LogicalExpression: ['left'],
+    SwitchStatement: ['discriminant'], TryStatement: [], LabeledStatement: [], WithStatement: ['object'] };
+const BLOCKS = new Set(['BlockStatement', 'Program', 'StaticBlock', 'SwitchCase', 'ClassBody']);
 function bodyReadsBeforeOkOf(src) {
     const out = [];
     const lines = src.split('\n');
     const program = ast(src).program;
     const isMember = (n) => n && (n.type === 'MemberExpression' || n.type === 'OptionalMemberExpression') && !n.computed && n.property.type === 'Identifier';
-    const okReadBefore = (scope, name, at) => {
+    // Each node's parent, the key it sits under and, in a list, its place.
+    const up = new Map();
+    const link = (n) => {
+        for (const k of Object.keys(n)) {
+            if (SKIP.has(k)) continue;
+            const v = n[k];
+            const list = Array.isArray(v) ? v : [v];
+            list.forEach((c, i) => { if (c && typeof c === 'object' && typeof c.type === 'string') { up.set(c, { parent: n, key: k, at: Array.isArray(v) ? i : -1 }); link(c); } });
+        }
+    };
+    link(program);
+    // The chain from `scope` down to `n`: [{ node, key, at }] — each node with the key and place it sits under.
+    const chainOf = (n, scope) => {
+        const chain = [];
+        for (let x = n; x && x !== scope; x = up.get(x)?.parent) chain.unshift({ node: x, ...(up.get(x) || {}) });
+        return chain;
+    };
+    // A check reached from `from` (a statement, or a part of one) through no block, function or branch of its own.
+    const plain = (chain, from) => chain.slice(from + 1).every((s) => !BLOCKS.has(s.parent.type) && !FUNCS.has(s.parent.type)
+        && !(BRANCH_KEYS[s.parent.type] || []).includes(s.key));
+    const guards = (check, read, scope) => {
+        if (check.start >= read.start) return false;
+        const c = chainOf(check, scope), r = chainOf(read, scope);
+        let i = 0;
+        while (i < c.length && i < r.length && c[i].node === r[i].node) i++;
+        if (i >= c.length || i >= r.length) return false;
+        const at = c[i].parent;   // the lowest node holding both: the check's part of it, and the read's
+        if (BLOCKS.has(at.type)) return c[i].key === r[i].key && c[i].at < r[i].at && plain(c, i);   // a statement before it
+        if (FUNCS.has(at.type)) return false;
+        const guard = GUARD_KEYS[at.type];
+        if (guard) return guard.includes(c[i].key) && plain(c, i);   // the condition the read's branch is under
+        return !(BRANCH_KEYS[at.type] || []).includes(c[i].key) && c[i].node.start < r[i].node.start && plain(c, i);
+    };
+    const okReadBefore = (scope, name, read) => {
         let seen = false;
         const look = (n) => {
             if (seen) return;
-            if (isMember(n) && n.property.name === 'ok' && n.object.type === 'Identifier' && n.object.name === name && n.start < at) { seen = true; return; }
+            if (isMember(n) && n.property.name === 'ok' && n.object.type === 'Identifier' && n.object.name === name && guards(n, read, scope)) { seen = true; return; }
             for (const k of kids(n)) look(k);
         };
         look(scope);
@@ -285,8 +339,9 @@ function bodyReadsBeforeOkOf(src) {
             reads++;
             const obj = n.callee.object;
             const scope = stack.length ? stack[stack.length - 1] : program;
-            if (!(obj.type === 'Identifier' && okReadBefore(scope, obj.name, n.start))) {
-                out.push({ line: n.loc.start.line, text: lines[n.loc.start.line - 1].trim(), name: obj.type === 'Identifier' ? obj.name : '' });
+            if (!(obj.type === 'Identifier' && okReadBefore(scope, obj.name, n))) {
+                // `at` the read's place in the source, `from` its function's start — for a named site's `check` (below).
+                out.push({ line: n.loc.start.line, text: lines[n.loc.start.line - 1].trim(), name: obj.type === 'Identifier' ? obj.name : '', at: n.start, from: scope.start });
             }
         }
         for (const k of kids(n)) walk(k, stack);
@@ -489,8 +544,8 @@ const SWEPT = [
     // The rest of the sweep (state §0.245, docs/design/refusal-sweep; each Part adds the files it cleans — RUN in
     // tests/refusal-sweep.test.mjs). Part 1: the Pipeline's stage drag, the deals hook, the press notice.
     'src/components/KanbanView.jsx', 'src/hooks/useOpportunities.js', 'src/utils/pressNotice.js',
-    // Part 2: the Tasks tab's ✓ and Snooze, and the task write's answer (useTasks.js waits for Part 10: its saves;
-    // its calendar reads left with Part 7).
+    // Part 2: the Tasks tab's ✓ and Snooze, and the task write's answer (useTasks.js joined with Part 10, below: its
+    // saves; its calendar reads left with Part 7).
     'src/Tabs/TasksTab.jsx', 'src/utils/taskWrite.js',
     // Part 4: Export's Delete and its two windows' saves — ExportDetail.jsx, swept since §0.243 (the first line above).
     // Part 5 (§0.246): the report saves and the holiday Sync read the ok check first now, but neither file joins yet —
@@ -507,19 +562,65 @@ const SWEPT = [
     'src/Tabs/AdminView.jsx', 'src/utils/settingsCards.js', 'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
     'src/Tabs/settings/company/CompanyCalendarDetail.jsx', 'src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx',
     'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx', 'src/Tabs/settings/dispatch/DispatchCrewsDetail.jsx',
+    // Part 10 (§0.248): the record hooks and their windows — each save reads the ok check first and says the house words
+    // (Q3); each catch failureWords; the duplicate scans and Past merges say failureWords. With them the scan's
+    // okReadBefore counts only a check the read is under (the hidden shape above). None needs a name. The hooks' loads
+    // still throw 'HTTP ' + status — to the console alone, never drawn (the banner is dbStatusOf's).
+    'src/hooks/useAccounts.js', 'src/hooks/useActivities.js', 'src/hooks/useContacts.js', 'src/hooks/useQuotes.js',
+    'src/hooks/useTasks.js', 'src/hooks/useUserHandlers.js', 'src/hooks/useMerge.js', 'src/components/modals/LeadModal.jsx',
+    'src/components/rails/AccountPicker.jsx', 'src/components/modals/OpportunityModal.jsx', 'src/Tabs/DuplicateScanView.jsx',
+    'src/Tabs/ContactDuplicateScanView.jsx', 'src/Tabs/PastMerges.jsx',
+    // Part 11 (§0.248): Dispatch's remaining reads and words — every save and read in DispatchTab.jsx reads the ok check
+    // first and says the house words (a 403 the role's sentence, Q13), every catch failureWords; the service plans panel
+    // likewise. Two loads read their bodies after an ok check made through a `.filter` the scan cannot see: each read is
+    // named below, with the `check` that must stand before it in its function.
+    'src/Tabs/DispatchTab.jsx', 'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx',
 ];
-// A body read before its ok check by design: { file, text (the trimmed line), why }.
+// A body read before its ok check by design: { file, text (the trimmed line), why, check? }. A read whose ok check the
+// scan cannot see — an ok read through a `.filter` (§0.248, docs/design/refusal-sweep Part 11) — names its `check`: the
+// words, in order, that must stand before the read in the function that reads it. Naming alone would let a change that
+// drops the real check pass (namedCheckMissing, below).
+const LOAD_ALL_CHECK = ['.filter(([, r]) => !r.ok);', 'if (failed.length) {', 'throw new Error('];
+const LOAD_ALL_WHY = 'DispatchTab\'s load: its eight lists checked first through `failed` (a `.filter` of the answers not ok), each refusal said in the server\'s words — the scan sees no plain `res.ok`';
+const PLANS_CHECK = ['.filter(([, r]) => !r.ok);', 'if (bad.length) {', 'throw new Error('];
 const BODY_FIRST = [
+    ...['techsRes', 'vehiclesRes', 'equipRes', 'custsRes', 'jobsRes', 'blocksRes', 'plansRes', 'visitsRes'].map((r) => (
+        { file: 'src/Tabs/DispatchTab.jsx', text: `${r}.json(),`, why: LOAD_ALL_WHY, check: LOAD_ALL_CHECK })),
+    { file: 'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx', text: 'const [pJson, cJson] = await Promise.all([pRes.json(), cRes.json()]);',
+        why: 'the service plans load: plans and customers checked first through `bad` (a `.filter` of the answers not ok), each refusal in the server\'s words', check: PLANS_CHECK },
     { file: 'src/Tabs/settings/data/BackupDetail.jsx', text: 'data = await res.json().catch(() => null);   // an answer that is no JSON is no answer (state §0.205)',
         why: 'the restore\'s answer is read at any status: a refused restore\'s errors and counts are its words, read before res.ok is (§0.205)' },
     { file: 'src/hooks/useOpportunities.js', text: 'try { body = await res.json(); } catch { body = null; }',
         why: 'saveDealNote: a refused note\'s answer carries the notes as stored (§0.236) — the list takes them on a refusal too; its words fall back to the status' },
 ];
 
+// A named read's `check` (§0.248): true when the words of `b.check` do not stand, in order, between the start of the
+// function that reads (x.from) and the read itself (x.at) — the real check dropped, moved after the read, or in
+// another function. A name with no `check` asks nothing here.
+const namedCheckMissing = (src, b, x) => {
+    if (!b.check) return false;
+    let at = x.from;
+    for (const w of b.check) {
+        const i = src.indexOf(w, at);
+        if (i < 0 || i + w.length > x.at) return true;
+        at = i + w.length;
+    }
+    return false;
+};
+// The named reads of one source whose `check` is missing: [{ line, text }].
+const uncheckedOf = (file, src) => bodyReadsBeforeOkOf(src).found
+    .map((x) => ({ x, b: BODY_FIRST.find((b) => b.file === file && b.text === x.text) }))
+    .filter(({ x, b }) => b && namedCheckMissing(src, b, x)).map(({ x }) => ({ line: x.line, text: x.text }));
+
 test('(iii) in the files the sweep owns, no body is read before its response\'s ok check, unless named', () => {
     const found = [];
     let reads = 0;
-    for (const f of SWEPT) { const r = bodyReadsBeforeOkOf(read(f)); reads += r.reads; for (const x of r.found) found.push({ file: f, ...x }); }
+    const unchecked = [];
+    for (const f of SWEPT) {
+        const src = read(f);
+        const r = bodyReadsBeforeOkOf(src); reads += r.reads; for (const x of r.found) found.push({ file: f, ...x });
+        for (const u of uncheckedOf(f, src)) unchecked.push(`  ${f}:${u.line} ${u.text}`);
+    }
     assert.ok(reads >= 20, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
     const named = (x) => BODY_FIRST.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
@@ -527,6 +628,38 @@ test('(iii) in the files the sweep owns, no body is read before its response\'s 
     const stale = BODY_FIRST.filter((b) => !found.some((x) => x.file === b.file && x.text === b.text));
     assert.deepEqual(stale, [], 'a named body read that is gone or now checked — take its name out');
     for (const b of BODY_FIRST) assert.ok(SWEPT.includes(b.file) && b.why.length > 10, `${b.file}: a swept file, with a reason`);
+    // A named read whose ok check the scan cannot see stands only while its `check` does (§0.248).
+    assert.deepEqual(unchecked, [], `a named body read whose check is gone — the read now takes a refusal's body as the list:\n${unchecked.join('\n')}`);
+    for (const b of BODY_FIRST) if (b.check) assert.ok(Array.isArray(b.check) && b.check.length >= 2 && b.check.every((w) => typeof w === 'string' && w.length > 5), `${b.file}: a check is words, in order`);
+    assert.equal(BODY_FIRST.filter((b) => b.check).length, 9, 'the load-all\'s eight reads and the service plans load carry a check');
+});
+
+test('(iii) self-test (§0.248): a named read stands only while its `check` stands before it in its function — gone, after, or elsewhere, it fails', () => {
+    const site = { file: 'x', text: 'const [x, y] = await Promise.all([a.json(), b.json()]);', why: 'a self-test', check: ['.filter(([, r]) => !r.ok);', 'if (bad.length) {', 'throw new Error('] };
+    const missing = (s) => bodyReadsBeforeOkOf(s).found.map((x) => namedCheckMissing(s, site, x));
+    const good = "async function l() { const [a, b] = await Promise.all([f(), g()]); const bad = [['a', a], ['b', b]].filter(([, r]) => !r.ok);\n"
+        + "if (bad.length) { throw new Error('x'); }\nconst [x, y] = await Promise.all([a.json(), b.json()]); }";
+    assert.deepEqual(missing(good), [false, false], 'the check before the read, in its function');
+    assert.deepEqual(missing(good.replace('.filter(([, r]) => !r.ok);', ';')), [true, true], 'REGRESSION: the filter gone, the named read passed');
+    assert.deepEqual(missing(good.replace('if (bad.length) {', 'if (false) {')), [true, true], 'REGRESSION: the refusal never thrown, the named read passed');
+    assert.deepEqual(missing(good.replace("throw new Error('x');", 'void 0;')), [true, true], 'REGRESSION: nothing thrown, the named read passed');
+    assert.deepEqual(missing("async function l(a, b) { const [x, y] = await Promise.all([a.json(), b.json()]); const bad = [['a', a]].filter(([, r]) => !r.ok); if (bad.length) { throw new Error('x'); } }"),
+        [true, true], 'a check after the read is none');
+    assert.deepEqual(missing("function c(a, b) { const bad = [['a', a]].filter(([, r]) => !r.ok); if (bad.length) { throw new Error('x'); } }\nasync function l(a, b) { const [x, y] = await Promise.all([a.json(), b.json()]); }"),
+        [true, true], 'a check in another function is none');
+    assert.equal(namedCheckMissing(good, { ...site, check: undefined }, bodyReadsBeforeOkOf(good).found[0]), false, 'a name with no check asks nothing');
+    // On the shipped files: each load's check taken out leaves every one of its named reads unchecked.
+    const d = read('src/Tabs/DispatchTab.jsx');
+    assert.deepEqual(uncheckedOf('src/Tabs/DispatchTab.jsx', d), [], 'the load-all, as shipped');
+    for (const [from, to] of [['].filter(([, r]) => !r.ok);\n                // Each list', '];\n                // Each list'], ['                if (failed.length) {\n', '                if (false) {\n']]) {
+        assert.equal(d.split(from).length, 2, from);
+        assert.equal(uncheckedOf('src/Tabs/DispatchTab.jsx', d.replace(from, to)).length, 8, `REGRESSION: the load-all's check gone (${to.trim()}), its eight reads passed`);
+    }
+    const p = read('src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx');
+    assert.deepEqual(uncheckedOf('src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx', p), [], 'the service plans load, as shipped');
+    assert.equal(p.split('            if (bad.length) {\n').length, 2);
+    assert.equal(uncheckedOf('src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx', p.replace('            if (bad.length) {\n', '            if (false) {\n')).length, 2,
+        'REGRESSION: the service plans load\'s check gone, its reads passed');
 });
 
 test('(iii) self-test: the scan catches a body read before the ok check, in each shape the sweep fixed, and passes the checked ones', () => {
@@ -545,6 +678,34 @@ test('(iii) self-test: the scan catches a body read before the ok check, in each
     assert.deepEqual(at(`async function l() { const [a, b] = await Promise.all([f(), g()]); if (!a.ok) throw 1; if (!b.ok) throw 2; const [x, y] = await Promise.all([a.json(), b.json()]); }`), []);
     assert.deepEqual(at(`async function t(tRes) { if (!tRes.ok) { say(); } else { const j = await tRes.json().catch(() => null); } }`), [], 'the technicians\' read');
     assert.equal(bodyReadsBeforeOkOf('const s = `const data = await res.json();`;').reads, 0, 'code in a string is no read (ApiKeysDetail\'s sample)');
+});
+
+test('(iii) self-test (§0.248): a check counts only where the read is under it — the hidden shape is caught, the enclosing shape passes', () => {
+    const at = (s) => bodyReadsBeforeOkOf(s).found.map((x) => x.name);
+    // The hidden shape: a check in a branch the read is not under.
+    assert.deepEqual(at(`async function s(a, res) { if (a) { if (!res.ok) return; } else { const d = await res.json(); } }`), ['res'],
+        'REGRESSION: a check in the other branch of an `if` taken as the read\'s');
+    assert.deepEqual(at(`async function s(a) { const res = await f(); if (a) { if (!res.ok) return; } const d = await res.json(); }`), ['res'],
+        'REGRESSION: a check inside an earlier statement\'s own block taken as the read\'s');
+    // The hooks' shape before Part 10: the edit's check hid the create's read.
+    assert.deepEqual(at(`async function s(e) { if (e) { const res = await f(); if (!res.ok) return; const d = await res.json(); } else { const res = await g(); const d = await res.json(); if (!res.ok) return; } }`), ['res'],
+        'REGRESSION: the edit\'s check passed the create\'s read');
+    assert.deepEqual(at(`async function s(res) { items.forEach(() => { if (!res.ok) return; }); const d = await res.json(); }`), ['res'], 'a check in a function of its own');
+    assert.deepEqual(at(`async function s(res, x) { const d = x ? (res.ok ? 1 : 2) : await res.json(); }`), ['res'], 'a check in the other branch of a `? :`');
+    assert.deepEqual(at(`async function s(res) { try { if (!res.ok) throw new Error('x'); } catch { return; } const d = await res.json(); }`), ['res'], 'a check inside a try\'s block');
+    assert.deepEqual(at(`async function s(res) { const d = await res.json(); if (!res.ok) return; }`), ['res'], 'a check after the read');
+    // The enclosing shape: the read under the check's condition, or after the check in a block that holds both.
+    assert.deepEqual(at(`async function s() { const res = await f(); if (!res.ok && x) { const d = await res.json(); } }`), [],
+        'REGRESSION: an enclosing check flagged (ReportsTab\'s pin retry reads `field` inside `if (!res.ok && …)`)');
+    assert.deepEqual(at(`async function s(res) { if (!res.ok) { const b = await res.json().catch(() => null); return b; } const d = await res.json(); }`), [],
+        'a refusal\'s body read inside the check, the landed body after it');
+    assert.deepEqual(at(`async function s(res) { if (res.ok) { return res.json(); } }`), [], 'under the check');
+    assert.deepEqual(at(`async function s(res) { if (!res.ok) { say(); } else { const j = await res.json(); } }`), [], 'in the check\'s else');
+    assert.deepEqual(at(`async function s(res) { if (x || !res.ok) return; const d = await res.json(); }`), [], 'a check combined in a condition, before');
+    assert.deepEqual(at(`async function s(res) { const d = res.ok && await res.json(); }`), [], 'a `&&`\'s left');
+    assert.deepEqual(at(`const l = (r) => r.ok ? r.json() : null;`), [], 'an arrow\'s `? :`');
+    assert.deepEqual(at(`async function s(e) { if (e) { const res = await f(); if (!res.ok) return; const d = await res.json(); } else { const res = await g(); if (!res.ok) return; const d = await res.json(); } }`), [],
+        'each branch checked first');
 });
 
 // ── (iv) ────────────────────────────────────────────────────────────────────────────────────────────────────────

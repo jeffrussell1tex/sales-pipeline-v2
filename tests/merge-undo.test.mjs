@@ -853,10 +853,10 @@ test("T15 — Past merges (Q1, Q2): each Undo confirmed in the app's confirm, ne
     // its Undo, run as written (the review, 17 Oct): each statement of the confirm's callback, its free names stubbed
     const runUndo = async (answer) => {
         const calls = [];
-        const fn = new Function('setBusyId', 'undoMerge', 'm', 'entityType', 'setSaid', 'load', `return (${src.slice(cb.start, cb.end)});`)(
+        const fn = new Function('setBusyId', 'undoMerge', 'm', 'entityType', 'setSaid', 'load', 'setLastSaid', `return (${src.slice(cb.start, cb.end)});`)(
             (v) => calls.push(['busy', v]), async (...a) => { calls.push(['undo', ...a]); return answer; },
             { id: 'mrg_1', archivedName: 'Resinall, Inc.', survivorName: 'Resinall' }, 'account',
-            (f) => calls.push(['said', f({ mrg_0: 'an earlier row' })]), async () => { calls.push(['load']); await tick(); calls.push(['loaded']); return lands.length ? lands.shift() : true; });
+            (f) => calls.push(['said', f({ mrg_0: 'an earlier row' })]), async () => { calls.push(['load']); await tick(); calls.push(['loaded']); return lands.length ? lands.shift() : true; }, () => {});   // the banner's copy of the words (§0.248) — pinned in refusal-sweep
         await fn();
         return calls;
     };
@@ -873,7 +873,9 @@ test("T15 — Past merges (Q1, Q2): each Undo confirmed in the app's confirm, ne
     assert.deepEqual((await runUndo({ ok: true, words: 'done' })).filter((c) => c[0] === 'load').length, 3, 'never more than three reads');
     lands = [];
     once(src, ind(4, "const { findMerges, undoMerge, showConfirm } = useApp();"));
-    once(src, ind(8, "catch (e) { if (gen === loadGen.current) setError(`Past merges did not load — ${e?.message || 'No answer from the server.'}`); }"), 'amend 63: never the browser\'s words');
+    // Moved pin (§0.248, docs/design/refusal-sweep Part 10): failureWords — findMerges' words pass through, never a raw message;
+    // since the review of Part 10 a failed read leaves no list beside its words (tests/refusal-sweep.test.mjs runs it).
+    once(src, ind(8, "catch (e) { if (gen === loadGen.current) { setData(null); setError(`Past merges did not load — ${failureWords(e)}`); } }"), 'amend 63: never the browser\'s words');
     once(src, ind(4, 'useEffect(() => { load(); }, [load, version]);'), 'read again on the scan\'s key');
     once(src, ind(16, '<PastMergeRow key={m.id} m={m} busy={busyId === m.id} anyBusy={!!busyId} said={said[m.id]} onUndo={onUndo} />'));
     once(src, ind(12, "{m.status === 'merged' && m.refusal && <div style={{ fontSize: 12, color: T.inkMid, marginTop: 6 }}>{m.refusal}</div>}"), 'why it has none');
@@ -1109,8 +1111,8 @@ test("T20 — Past merges' list and both scans drop an answer a later load overt
     // Past merges' load
     {
         const pending = [], sets = [], errors = [];
-        const load = new Function('loadGen', 'fmRef', 'entityType', 'setData', 'setError', `return (${callbackOf(read(PM), 'load')});`)(
-            { current: 0 }, { current: () => new Promise((res, rej) => pending.push({ res, rej })) }, 'account', (d) => sets.push(d), (e) => errors.push(e));
+        const load = new Function('loadGen', 'fmRef', 'entityType', 'setData', 'setError', 'setLastSaid', `return (${callbackOf(read(PM), 'load')});`)(
+            { current: 0 }, { current: () => new Promise((res, rej) => pending.push({ res, rej })) }, 'account', (d) => sets.push(d), (e) => errors.push(e), () => {});
         const said = [load(), load()];
         pending[1].res('second'); await settle();
         pending[0].res('first'); await settle();

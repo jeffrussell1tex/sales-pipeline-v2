@@ -103,21 +103,25 @@ test('P6 — the screen: the press reads the plans first, checks the org after t
     assert.ok(inOrder(seed,
         'const askedOrg = requestOrg();',
         "const res = await dbFetch('/.netlify/functions/dispatch-service-plans');",
-        'const data = await res.json().catch(() => ({}));',
+        // Moved pins (state §0.248, docs/design/refusal-sweep Part 11): the ok check first, the house words (readRefusal,
+        // failureWords) — it said "HTTP N" and a raw err.message.
+        'if (!res.ok) {', 'const why = await readRefusal(res);', 'if (!stillOrg(askedOrg)) return;', 'throw new Error(why);',
+        'const data = await res.json().catch(() => null);',
         'if (!stillOrg(askedOrg)) return;',
-        "if (!res.ok || !Array.isArray(data.plans)) throw new Error(data.error || (res.ok ? 'the answer held no list of plans' : 'HTTP ' + res.status));",
+        "if (!data || !Array.isArray(data.plans)) throw new Error('the answer held no list of plans');",
         'todo = legacyPlansToCreate(legacyTiers, data.plans);',
-        "} catch (err) { setSeedMsg(`Nothing created — the plans could not be read: ${err.message}`); setSeeding(false); return; }",
+        '} catch (err) {', 'if (!stillOrg(askedOrg)) return;',
+        "setSeedMsg(`Nothing created — the plans could not be read: ${failureWords(err)}`); setSeeding(false); return;",
         'for (const { tier, name } of todo.create) {',
         "id:      'plan_' + crypto.randomUUID(),",
         "method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });",
-        'const data = await res.json().catch(() => ({}));',
-        "if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);"),
+        'if (!res.ok) throw new Error(await readRefusal(res));',
+        "} catch (err) { failed.push(`${tier}: ${failureWords(err)}`); }"),
         'in this order — the read fails closed (REGRESSION: an answer with no plans read as none, every label made again), and a refusal reads its words');
     assert.ok(!seed.includes('data.plans || []'), 'REGRESSION: a read with no list of plans taken as "this org has none"');
     assert.ok(!seed.includes("'plan_legacy_'"), 'REGRESSION: an id made from the label — global, overwritten on a re-press, refused for a second org');
     assert.ok(seed.includes('already had one'), 'what it left is said');
-    assert.equal(count(seed, 'if (!stillOrg(askedOrg)) return;'), 3, 'after the read, before each POST, before the reload');
+    assert.equal(count(seed, 'if (!stillOrg(askedOrg)) return;'), 5, 'after a refusal\'s words, after the read, after a failure, before each POST, before the reload');
     assert.ok(s.includes('const legacyToCreate = legacyPlansToCreate(legacyTiers, plans).create.length;'));
     assert.ok(s.includes("{seeding ? 'Creating…' : legacyToCreate === 0 ? 'Each label has a plan' : `Create ${legacyToCreate} plan${legacyToCreate === 1 ? '' : 's'}`}"));
     assert.ok(!s.includes('cannot create duplicates'), 'the card no longer promises what the old ids did not keep');

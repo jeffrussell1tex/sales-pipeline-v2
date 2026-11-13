@@ -68,6 +68,13 @@
 // corporate calendar connected."; Job templates migrated every equipment requirement against no categories (saved for
 // good); Property types offered every Remove over unread usage; Crews' pickers were silently empty; and the integrations
 // panels counted 0 beside a failed load. Each reads ok-first and says the read that failed (Q18, Q19).
+//
+// Part 10 (state §0.248; Jeff, 12 Nov: "Start Parts 10-11"): the record hooks and their windows. The account, contact,
+// task, activity, member and quote saves, the product save, the lead window, the account picker's Create and the deal's
+// AI score read their body before the ok check — a 502's page said "Failed to save X. Please check your connection and
+// try again." though the server answered (Q3), "Unexpected token '<'" in the lead window and the merge scans, "HTTP N" in
+// the account picker. Each reads the ok check first and says the house words: the server's with their ref, else "The
+// server returned N.", or "The server could not be reached."; the duplicate scans and Past merges say failureWords.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -75,7 +82,7 @@ import { parse } from '@babel/parser';
 import { quotePdfOf } from '../src/utils/quotePdfAnswer.js';
 import { quoteTotals } from '../src/utils/quoteTotals.js';
 import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
-import { fmtMoney } from '../src/utils/invoices.js';
+import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
 import { esc } from '../src/utils/customerNotifications.js';
 import { T } from '../src/tokens.js';
 import { readRefusal, failureWords, refusalWords } from '../src/utils/refusalWords.js';
@@ -84,9 +91,12 @@ import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
 import { taskWriteAnswer } from '../src/utils/taskWrite.js';
 import { sentBody, shownRow } from '../src/utils/leaveOut.js';
+import { withTiers } from '../src/utils/accountParent.js';
 import { dealBody } from '../src/utils/dealNotes.js';
 import { contactNamesText } from '../src/utils/oppText.js';
 import { notFreedWords } from '../src/utils/dispatchUnassign.js';
+import { saveDroppingRefused } from '../src/utils/linkIds.js';
+import { legacyPlansToCreate } from '../src/utils/planLinks.js';
 import { answerOf as settledBody, liveCountsOf, healthChecksOf, cardStateOf, healthSummaryOf, unreadChecksOf, unreadSentenceOf, allClearOf } from '../src/utils/settingsCards.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -1552,7 +1562,8 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     const raw = read(DISPATCH);
     const d = dispatchSrc();
     assert.ok(!raw.includes('/* counted below by omission */'), 'REGRESSION: a failed unassign counted only by omission');
-    assert.ok(d.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    // Moved pin (§0.248, Part 11): New Job's saves read a refusal's body once, for its words and its field (refusalWords).
+    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords } from '../utils/refusalWords.js';"));
     assert.ok(d.includes("import { notFreedWords } from '../utils/dispatchUnassign.js';"));
     const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
     order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', 'if (!res.ok) throw new Error(', 'const data = await res.json()',
@@ -3336,4 +3347,1477 @@ test('Part 9g: WIRING — a secret not read is said, never a placeholder to save
     assert.ok(!wh.includes('whsec_••'), 'REGRESSION: a placeholder secret offered to save');
     assert.ok(wh.includes(`<IntBtn label={secret ? "I've saved it — close" : 'Close'} primary onClick={onClose}/>`));
     assert.ok(wh.includes('onCreated={wh => { if (wh && !loadFailed) setWebhooks(prev => [wh, ...prev]); else load(); }}'), 'the list read again for an endpoint the answer did not name, or over a list never read');
+});
+
+// ── Part 10 ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The record hooks and their windows (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3): each save reads the ok
+// check first and says the house words — the server's with their ref, else "The server returned N.", or "The server could
+// not be reached." — the list unchanged; a landed answer that cannot be read is saved, the copy sent shown; an answer
+// after an org switch writes and says nothing.
+
+// The five answers a member meets, and the words each window says.
+const P10_REFUSED = () => [
+    [answerOf(403, { error: 'Only the owner or a manager can change this record' }), 'Only the owner or a manager can change this record'],
+    [answerOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+    [answerOf(400, {}), 'The server returned 400.'],
+    [PAGE_502(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+// A hook's handler, extracted from the source and built over stubs.
+const p10Built = new Map();
+const p10Fn = (file, start, end, params, name, tail = end) => {
+    const key = `${file}|${start}`;
+    if (!p10Built.has(key)) {
+        const fn = between(code(read(file)), start, end) + tail;
+        p10Built.set(key, new Function(...params, `${fn}\nreturn ${name};`));
+    }
+    return p10Built.get(key);
+};
+// A dbFetch that answers `answer` (a thrown Error throws), switching the org first when asked.
+const p10Fetch = (did, answer, org, switchOrg) => async (url, opts = {}) => {
+    did.sent.push(opts.method || 'GET');
+    if (switchOrg) org.now = 'org_b';
+    if (answer instanceof Error) throw answer;
+    return answer;
+};
+
+const ACME = Object.freeze({ id: 'a1', name: 'Acme', industry: 'Steel', accountTier: 'account' });
+const saveAccount = async ({ answer, create = false, switchOrg = false }) => {
+    const list = [ACME];
+    const accts = stateOf(list);
+    const did = { errors: [], saving: [], audits: [], closed: [], sent: [] };
+    const org = { now: 'org_a' };
+    const handleSaveAccount = p10Fn('src/hooks/useAccounts.js', '    const handleSaveAccount = async (', '\n    };\n',
+        ['accounts', 'setAccounts', 'setAccountModalError', 'setAccountModalSaving', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords',
+            'addAudit', 'branchTiers', 'parentRefusal', 'tierUnder', 'byIdOf', 'withTiers', 'console'], 'handleSaveAccount', '\n    };')(
+        list, accts.set, (v) => did.errors.push(v), (v) => did.saving.push(v), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg),
+        readRefusal, failureWords, (...a) => did.audits.push(a), () => ({ tiers: new Map() }), () => 'refused', () => 'account',
+        (l) => new Map(l.map((a) => [a.id, a])), withTiers, quiet);
+    await handleSaveAccount({ name: 'Acme', industry: 'Glass' }, { editingAccount: create ? null : ACME, editingSubAccount: null, parentAccountForSub: null,
+        setShowAccountModal: (v) => did.closed.push(v), setOpportunities: () => {}, setContacts: () => {} });
+    return { ...did, list: accts.value, same: accts.value === list, said: did.errors[did.errors.length - 1] };
+};
+
+test('Part 10: handleSaveAccount — the five answers: each refusal in the house words, the list unchanged, the window open — RUN', async () => {
+    for (const create of [false, true]) {
+        for (const [answer, words] of P10_REFUSED()) {
+            const r = await saveAccount({ answer, create });
+            assert.deepEqual(r.sent, [create ? 'POST' : 'PUT']);
+            assert.equal(r.said, words, `${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+            assert.ok(r.same, 'the list unchanged');
+            assert.deepEqual([r.audits, r.closed], [[], []], 'no audit; the window stays open');
+            assert.equal(r.saving[r.saving.length - 1], false, 'the Save button back');
+            assert.ok(!/check your connection|Unexpected token|HTTP \d/.test(r.said), 'never the old words');
+        }
+    }
+});
+
+test('Part 10: handleSaveAccount — landed, the account as stored; a landed answer that cannot be read, the copy sent — RUN', async () => {
+    const landed = await saveAccount({ answer: answerOf(200, { account: { ...ACME, industry: 'Glass', updatedAt: 'x' } }) });
+    assert.deepEqual(landed.list, [{ ...ACME, industry: 'Glass', updatedAt: 'x' }], 'the account as stored');
+    assert.deepEqual([landed.said, landed.closed, landed.audits.length], [null, [false], 1]);
+    const unread = await saveAccount({ answer: answerOf(200, new SyntaxError('Unexpected end of JSON input')) });
+    assert.deepEqual(unread.list, [{ name: 'Acme', industry: 'Glass', id: 'a1' }], 'saved: the copy sent shown, never a parse error');
+    assert.deepEqual([unread.said, unread.closed], [null, [false]]);
+    const made = await saveAccount({ answer: answerOf(201, { account: { id: 'a9', name: 'Acme' } }), create: true });
+    assert.deepEqual(made.list.map((a) => a.id), ['a1', 'a9']);
+});
+
+test('Part 10: handleSaveAccount — an answer after an org switch, refused, landed or unsent, writes and says nothing — RUN', async () => {
+    for (const create of [false, true]) {
+        for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(200, { account: { ...ACME, industry: 'Elsewhere' } })]) {
+            const r = await saveAccount({ answer, create, switchOrg: true });
+            assert.deepEqual(r.errors, [null], 'REGRESSION: the last org\'s answer said on the window of the org switched to');
+            assert.ok(r.same, 'REGRESSION: the last org\'s account written into the list on screen');
+            assert.deepEqual([r.audits, r.closed], [[], []]);
+        }
+    }
+});
+
+// The other record windows: contacts, tasks and activities — the pattern held per hook.
+const P10_HOOKS = {
+    contact: {
+        file: 'src/hooks/useContacts.js', start: '    const handleSaveContact = async (', name: 'handleSaveContact',
+        call: (h, did, create) => h({ firstName: 'Lee', lastName: 'Ng' }, { editingContact: create ? null : { id: 'c1' }, setShowContactModal: (v) => did.closed.push(v) }),
+        landed: { contact: { id: 'c1', firstName: 'Lee', lastName: 'Ng', stored: true } },
+    },
+    task: {
+        file: 'src/hooks/useTasks.js', start: '    const handleSaveTask = async (', name: 'handleSaveTask',
+        call: (h, did, create) => h({ title: 'Call back' }, { editingTask: create ? null : { id: 'c1' }, setShowTaskModal: (v) => did.closed.push(v) }),
+        landed: { task: { id: 'c1', title: 'Call back', stored: true } },
+    },
+    activity: {
+        file: 'src/hooks/useActivities.js', start: '    const saveActivity = async (', name: 'saveActivity',
+        call: (h, did, create, sayer) => h({ type: 'Call', notes: 'n' }, { editingActivity: create ? null : { id: 'c1' }, currentUser: 'Karen Rep', opportunities: [],
+            setShowActivityModal: (v) => did.closed.push(v), setFollowUpPrompt: () => {}, setQuickLogOpen: () => {}, setQuickLogForm: () => {}, setQuickLogContactResults: () => {} }, sayer),
+        landed: { activity: { id: 'c1', type: 'Call', stored: true } },
+    },
+};
+const P10_HOOK_PARAMS = ['setRows', 'setContactModalError', 'setContactModalSaving', 'setTaskModalError', 'setTaskModalSaving', 'requestOrg', 'stillOrg', 'dbFetch',
+    'sentBody', 'shownRow', 'readRefusal', 'refusalWords', 'failureWords', 'addAudit', 'console', 'fireMentionSms'];
+const ROW_C1 = Object.freeze({ id: 'c1', name: 'as loaded' });
+const saveRecord = async (kind, { answer, create = false, switchOrg = false }) => {
+    const k = P10_HOOKS[kind];
+    const list = [ROW_C1];
+    const rows = stateOf(list);
+    const did = { errors: [], saving: [], audits: [], closed: [], sent: [] };
+    const org = { now: 'org_a' };
+    const setError = (v) => did.errors.push(v), setSaving = (v) => did.saving.push(v);
+    const setter = { contact: 'setContacts', task: 'setTasks', activity: 'setActivities' }[kind];
+    const params = P10_HOOK_PARAMS.map((p) => (p === 'setRows' ? setter : p));
+    const h = p10Fn(k.file, k.start, '\n    };\n', params, k.name, '\n    };')(rows.set, setError, setSaving, setError, setSaving, () => 'org_a', (o) => o === org.now,
+        p10Fetch(did, answer, org, switchOrg), sentBody, shownRow, readRefusal, refusalWords, failureWords, (...a) => did.audits.push(a), quiet, () => {});
+    const answered = await k.call(h, did, create, { setActivityModalError: setError, setActivityModalSaving: setSaving });
+    return { ...did, answered, list: rows.value, same: rows.value === list, said: did.errors[did.errors.length - 1] };
+};
+
+test('Part 10: the contact, task and activity windows — each refusal in the house words, the list unchanged; landed, the row as stored — RUN', async () => {
+    for (const kind of Object.keys(P10_HOOKS)) {
+        for (const create of [false, true]) {
+            for (const [answer, words] of P10_REFUSED()) {
+                const r = await saveRecord(kind, { answer, create });
+                assert.equal(r.said, words, `${kind} ${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+                assert.ok(r.same, `${kind}: the list unchanged`);
+                assert.deepEqual([r.audits, r.closed], [[], []], `${kind}: no audit; the window stays open`);
+                assert.equal(r.saving[r.saving.length - 1], false, `${kind}: the Save button back`);
+            }
+            const landed = await saveRecord(kind, { answer: answerOf(200, P10_HOOKS[kind].landed), create });
+            assert.deepEqual([landed.said, landed.closed], [null, [false]], `${kind}: landed`);
+            assert.ok(landed.list.some((x) => x.stored), `${kind}: the row as stored`);
+            const unread = await saveRecord(kind, { answer: answerOf(200, new SyntaxError('Unexpected end of JSON input')), create });
+            assert.deepEqual([unread.said, unread.closed], [null, [false]], `${kind}: a landed answer that cannot be read is saved, never a parse error`);
+            assert.ok(!unread.same, `${kind}: the copy sent shown`);
+        }
+    }
+});
+
+test('Part 10: the contact, task and activity windows — an answer after an org switch writes and says nothing — RUN', async () => {
+    for (const kind of Object.keys(P10_HOOKS)) {
+        for (const create of [false, true]) {
+            for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(200, P10_HOOKS[kind].landed)]) {
+                const r = await saveRecord(kind, { answer, create, switchOrg: true });
+                assert.deepEqual(r.errors, [null], `${kind}: REGRESSION — the last org's answer said on the window of the org switched to`);
+                assert.ok(r.same, `${kind}: REGRESSION — the last org's row written into the list on screen`);
+                assert.deepEqual(r.closed, []);
+            }
+        }
+    }
+});
+
+test('Part 10: the activity save answers a refusal with its words and the field it names — the task rail\'s notes drop a refused link (saveDroppingRefused) — RUN', async () => {
+    for (const create of [false, true]) {
+        const r = await saveRecord('activity', { answer: answerOf(404, { error: 'That contact no longer exists', field: 'contactId', requestId: 'r4' }), create });
+        assert.deepEqual(r.answered, { ok: false, status: 404, error: 'That contact no longer exists (ref r4)', field: 'contactId' },
+            `${create ? 'create' : 'edit'}: REGRESSION — the refusal's field lost, or its words`);
+        const page = await saveRecord('activity', { answer: PAGE_502(), create });
+        assert.deepEqual(page.answered, { ok: false, status: 502, error: 'The server returned 502.', field: undefined });
+        assert.equal((await saveRecord('activity', { answer: UNSENT(), create })).answered, undefined, 'unsent: no answer, the error shown');
+        assert.deepEqual((await saveRecord('activity', { answer: answerOf(200, P10_HOOKS.activity.landed), create })).answered, { ok: true });
+    }
+});
+
+// The member window (Settings → Users' Add / Edit): the server mints a new member's id.
+const saveMember = async ({ answer, create = false, switchOrg = false }) => {
+    const settings = stateOf({ users: [{ id: 'usr_1', name: 'Karen Rep' }] });
+    const before = settings.value;
+    const did = { errors: [], saving: [], closed: [], sent: [], created: [] };
+    const org = { now: 'org_a' };
+    const h = p10Fn('src/hooks/useUserHandlers.js', '    const handleSaveUser = async (userData) => {', '\n    };\n',
+        ['editingUser', 'setUserModalError', 'setUserModalSaving', 'setSettings', 'setShowUserModal', 'setEditingUser', 'showModal', 'setLastCreatedRepName',
+            'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'console'], 'handleSaveUser', '\n    };')(
+        create ? null : { id: 'usr_1', email: 'k@x.test' }, (v) => did.errors.push(v), (v) => did.saving.push(v), settings.set, (v) => did.closed.push(v), () => {},
+        true, (n) => did.created.push(n), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, quiet);
+    await h({ name: 'Karen Rep', email: 'k@x.test', role: 'User' });
+    return { ...did, same: settings.value === before, users: settings.value.users, said: did.errors[did.errors.length - 1] };
+};
+
+test('Part 10: the member window — each refusal in the house words, nothing listed; landed, the member as stored; after a switch nothing — RUN', async () => {
+    for (const create of [false, true]) {
+        for (const [answer, words] of P10_REFUSED()) {
+            const r = await saveMember({ answer, create });
+            assert.equal(r.said, words, `${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+            assert.ok(r.same, 'nothing listed');
+            assert.deepEqual(r.closed, [], 'the window stays open');
+            assert.equal(r.saving[r.saving.length - 1], false);
+        }
+        const landed = await saveMember({ answer: answerOf(create ? 201 : 200, { user: { id: create ? 'usr_9' : 'usr_1', name: 'Karen Rep', stored: true } }), create });
+        assert.deepEqual([landed.said, landed.closed], [null, [false]]);
+        assert.ok(landed.users.some((u) => u.stored), 'the member as stored');
+        for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(200, { user: { id: 'usr_1', name: 'Elsewhere' } })]) {
+            const r = await saveMember({ answer, create, switchOrg: true });
+            assert.deepEqual([r.errors, r.closed], [[null], []], 'an answer after an org switch says nothing');
+            assert.ok(r.same, 'and writes nothing');
+        }
+    }
+    // A new member whose landed answer cannot be read: the server minted the id — said, never "not saved", nothing listed.
+    const unread = await saveMember({ answer: answerOf(201, new SyntaxError("Unexpected token '<'")), create: true });
+    assert.equal(unread.said, 'Its answer could not be read.');
+    assert.ok(unread.same);
+    // An edit's: saved, the window closed, the list as it was.
+    const edited = await saveMember({ answer: answerOf(200, new SyntaxError("Unexpected token '<'")) });
+    assert.deepEqual([edited.said, edited.closed], [null, [false]]);
+});
+
+// The quote window's save and the Price Book's product save (useQuotes: useCallback-wrapped).
+const quotesFn = (start, name) => p10Fn('src/hooks/useQuotes.js', start, '\n    }, []);', ['useCallback', 'setQuotes', 'setProducts', 'setQuoteModalError', 'setQuoteModalSaving',
+    'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords'], name);
+const saveQuoteOrProduct = async (which, { answer, create = false, switchOrg = false }) => {
+    const quotes = stateOf([{ id: 'qt_1', title: 'as loaded' }]);
+    const products = stateOf([{ id: 'prod_1', name: 'as loaded' }]);
+    const before = [quotes.value, products.value];
+    const did = { errors: [], saving: [], sent: [] };
+    const org = { now: 'org_a' };
+    const h = (which === 'quote'
+        ? quotesFn('    const handleSaveQuote = useCallback(', 'handleSaveQuote')
+        : quotesFn('    const handleSaveProduct = useCallback(', 'handleSaveProduct'))(
+        (f) => f, quotes.set, products.set, (v) => did.errors.push(v), (v) => did.saving.push(v), () => 'org_a', (o) => o === org.now,
+        p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords);
+    const answered = await h({ title: 'T', name: 'P' }, create ? null : (which === 'quote' ? { id: 'qt_1' } : { id: 'prod_1' }));
+    return { ...did, answered, same: quotes.value === before[0] && products.value === before[1], quotes: quotes.value, products: products.value,
+        said: which === 'quote' ? did.errors[did.errors.length - 1] : answered?.error };
+};
+
+test('Part 10: the quote window and the Price Book — each refusal in the house words, never "check your connection"; landed, as stored; after a switch nothing — RUN', async () => {
+    for (const which of ['quote', 'product']) {
+        for (const create of [false, true]) {
+            for (const [answer, words] of P10_REFUSED()) {
+                const r = await saveQuoteOrProduct(which, { answer, create });
+                assert.equal(r.said, words, `${which} ${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+                assert.ok(r.same, `${which}: nothing listed`);
+                if (which === 'quote') assert.equal(r.answered, null, 'the quote save answers null');
+                else assert.deepEqual(r.answered, { ok: false, error: words }, 'the product save answers { ok: false, error }');
+            }
+            const stored = which === 'quote' ? { quote: { id: 'qt_1', title: 'T', stored: true } } : { product: { id: 'prod_1', name: 'P', stored: true } };
+            const landed = await saveQuoteOrProduct(which, { answer: answerOf(200, stored), create });
+            assert.ok((which === 'quote' ? landed.quotes : landed.products).some((x) => x.stored), `${which}: as stored`);
+            for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(200, stored)]) {
+                const r = await saveQuoteOrProduct(which, { answer, create, switchOrg: true });
+                assert.ok(r.same, `${which}: REGRESSION — the last org's answer written after a switch`);
+                if (which === 'quote') assert.deepEqual([r.errors, r.answered], [[null], null], 'the quote window says nothing');
+                else assert.deepEqual(r.answered, { ok: false, quiet: true }, 'the product save answers quiet');
+            }
+        }
+    }
+});
+
+// The lead window's save (LeadModal doSave): its words on the form's server line.
+const saveLead = async ({ answer }) => {
+    const did = { errors: [], saving: [], sent: [] };
+    const doSave = p10Fn('src/components/modals/LeadModal.jsx', '    const doSave = async () => {', '\n    };', ['validate', 'setSaving', 'buildPayload', 'dbFetch',
+        'readRefusal', 'failureWords', 'setErrors'], 'doSave')(() => true, (v) => did.saving.push(v), () => ({ id: 'id_l1', name: 'Lee Ng' }),
+        p10Fetch(did, answer, { now: 'org_a' }, false), readRefusal, failureWords, (v) => did.errors.push(v));
+    return { ...did, saved: await doSave() };
+};
+
+test('Part 10: the lead window — a refusal in the house words, never "Unexpected token \'<\'"; landed, the lead as stored — RUN', async () => {
+    for (const [answer, words] of P10_REFUSED()) {
+        const r = await saveLead({ answer });
+        assert.equal(r.saved, null, 'nothing saved');
+        assert.deepEqual(r.errors, [{ _server: words }], `REGRESSION: ${words}`);
+        assert.equal(r.saving[r.saving.length - 1], false);
+    }
+    assert.deepEqual((await saveLead({ answer: answerOf(201, { lead: { id: 'id_l1', stored: true } }) })).saved, { id: 'id_l1', stored: true });
+    const unread = await saveLead({ answer: answerOf(201, new SyntaxError("Unexpected token '<'")) });
+    assert.deepEqual([unread.saved, unread.errors], [{ id: 'id_l1', name: 'Lee Ng' }, []], 'a landed answer that cannot be read: saved, the copy sent');
+});
+
+// The account picker's Create (a deal's, a contact's Company): its words on the screen's onError, the name named.
+const createPicked = async ({ answer, switchOrg = false }) => {
+    const accounts = stateOf([ACME]);
+    const did = { said: [], sent: [], picked: [], creating: [] };
+    const org = { now: 'org_a' };
+    const createAccount = p10Fn('src/components/rails/AccountPicker.jsx', '    const createAccount = async () => {', '\n    };', ['value', 'creating', 'setCreating',
+        'onError', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setAccounts', 'pick'], 'createAccount')(
+        'Beta Corp', false, (v) => did.creating.push(v), (v) => did.said.push(v), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg),
+        readRefusal, failureWords, accounts.set, (a) => did.picked.push(a));
+    await createAccount();
+    return { ...did, list: accounts.value };
+};
+
+test('Part 10: the account picker\'s Create — a refusal in the house words, never "HTTP N"; landed, picked; after a switch nothing — RUN', async () => {
+    for (const [answer, words] of P10_REFUSED()) {
+        const r = await createPicked({ answer });
+        assert.deepEqual(r.said, [null, `Couldn't create account "Beta Corp". ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual([r.picked, r.list.length], [[], 1], 'nothing made, nothing picked');
+        assert.equal(r.creating[r.creating.length - 1], false);
+    }
+    const landed = await createPicked({ answer: answerOf(201, { account: { id: 'a9', name: 'Beta Corp', stored: true } }) });
+    assert.deepEqual([landed.said, landed.picked.map((a) => a.id), landed.list.length], [[null], ['a9'], 2]);
+    for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(201, { account: { id: 'a9', name: 'Beta Corp' } })]) {
+        const r = await createPicked({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.picked, r.list.length], [[null], [], 1], 'REGRESSION: the last org\'s answer said, picked or listed after a switch');
+    }
+});
+
+// The deal window's AI score (AiScoreTab fetchScore).
+const scoreDeal = async ({ answer, switchOrg = false }) => {
+    const opps = stateOf([{ id: 'd1', opportunityName: 'Acme renewal' }]);
+    const before = opps.value;
+    const did = { errors: [], sent: [], scored: [], off: [], loading: [] };
+    const org = { now: 'org_a' };
+    const fetchScore = p10Fn('src/components/modals/OpportunityModal.jsx', '    const fetchScore = async (forceRefresh = false) => {', '\n    };', ['opportunity', 'requestOrg',
+        'stillOrg', 'setLoading', 'setError', 'dbFetch', 'readRefusal', 'failureWords', 'setOff', 'storedScore', 'setOpportunities', 'onScored'], 'fetchScore')(
+        { id: 'd1' }, () => 'org_a', (o) => o === org.now, (v) => did.loading.push(v), (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg),
+        readRefusal, failureWords, (v) => did.off.push(v), (d) => (d && d.score && typeof d.score === 'object' ? d.score : null), opps.set, (s) => did.scored.push(s));
+    await fetchScore(false);
+    return { ...did, same: opps.value === before, said: did.errors[did.errors.length - 1] };
+};
+
+test('Part 10: the deal\'s AI score — a refusal in the house words, never "Scoring failed" or a raw message; landed, the score; after a switch nothing — RUN', async () => {
+    for (const [answer, words] of P10_REFUSED()) {
+        const r = await scoreDeal({ answer });
+        assert.equal(r.said, words, `REGRESSION: ${words}`);
+        assert.deepEqual([r.scored, r.same], [[], true]);
+        assert.equal(r.loading[r.loading.length - 1], false);
+    }
+    const landed = await scoreDeal({ answer: answerOf(200, { score: { score: 72, verdict: 'On Track' } }) });
+    assert.deepEqual([landed.said, landed.scored], [null, [{ score: 72, verdict: 'On Track' }]]);
+    assert.deepEqual((await scoreDeal({ answer: answerOf(200, { disabled: true }) })).off, [true], 'the org\'s switch off: said as off');
+    assert.equal((await scoreDeal({ answer: answerOf(200, new SyntaxError("Unexpected token '<'")) })).said, 'The answer carried no score.', 'a landed answer that cannot be read carries no score');
+    for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT(), answerOf(200, { score: { score: 72 } })]) {
+        const r = await scoreDeal({ answer, switchOrg: true });
+        assert.deepEqual([r.errors, r.scored, r.same], [[null], [], true], 'REGRESSION: the last org\'s answer said or written after a switch');
+    }
+});
+
+// The duplicate scans and Past merges (useMerge): a refusal thrown in the server's words, said by failureWords.
+const mergeReader = (start, name, answer) => p10Fn('src/hooks/useMerge.js', start, '\n    };', ['dbFetch', 'readRefusal'], name)(
+    () => (answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)), readRefusal);
+const thrownWords = async (run) => { try { await run(); return null; } catch (e) { return failureWords(e); } };
+
+test('Part 10: the duplicate scans and Past merges — a refusal in the server\'s words, a page or a lost answer in plain words, never "Unexpected token \'<\'" — RUN', async () => {
+    const readers = [
+        ["    const findDuplicates = async (tier = 'duplicate') => {", 'findDuplicates'],
+        ["    const findContactDuplicates = async (tier = 'duplicate') => {", 'findContactDuplicates'],
+        ['    const findMerges = async (entityType) => {', 'findMerges'],
+    ];
+    for (const [start, name] of readers) {
+        const expected = [
+            [answerOf(403, { error: 'Only admins and managers can merge records.' }), 'Only admins and managers can merge records.'],
+            [answerOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+            [PAGE_502(), 'The server returned 502.'],
+            [UNSENT(), name === 'findMerges' ? 'No answer from the server.' : 'The server could not be reached.'],
+            [answerOf(200, new SyntaxError("Unexpected token '<'")), name === 'findMerges' ? 'No answer from the server.' : 'Its answer could not be read.'],
+        ];
+        for (const [answer, words] of expected) {
+            assert.equal(await thrownWords(() => mergeReader(start, name, answer)('account')), words, `${name}: REGRESSION — ${words}`);
+        }
+        const landed = name === 'findMerges' ? { merges: [], more: false } : { tier: 'duplicate', pairs: [] };
+        assert.deepEqual(await mergeReader(start, name, answerOf(200, landed))('account'), landed, `${name}: landed`);
+    }
+});
+
+// The scan views' runScan and Past merges' load, extracted and run: each says failureWords; an overtaken answer nothing.
+const scanRun = (file) => async ({ fail, overtaken = false }) => {
+    const did = { errors: [], data: [], loading: [] };
+    const scanGen = { current: 0 };
+    const fdRef = { current: async () => { if (overtaken) scanGen.current++; if (fail) throw fail; return { pairs: [] }; } };
+    const runScan = p10Fn(file, '    const runScan = useCallback(async (t) => {', '\n    }, []);', ['useCallback', 'scanGen', 'fdRef', 'setLoading', 'setError', 'setData', 'failureWords'], 'runScan')(
+        (f) => f, scanGen, fdRef, (v) => did.loading.push(v), (v) => did.errors.push(v), (v) => did.data.push(v), failureWords);
+    await runScan('duplicate');
+    return did;
+};
+const pastMergesLoad = async ({ fail }) => {
+    const did = { errors: [], data: [] };
+    const load = p10Fn('src/Tabs/PastMerges.jsx', '    const load = useCallback(async () => {', '\n    }, [entityType]);', ['useCallback', 'loadGen', 'fmRef', 'entityType', 'setError', 'setData', 'failureWords', 'setLastSaid'], 'load')(
+        (f) => f, { current: 0 }, { current: async () => { if (fail) throw fail; return { merges: [] }; } }, 'account', (v) => did.errors.push(v), (v) => did.data.push(v), failureWords, () => {});
+    await load();
+    return did;
+};
+
+test('Part 10: the duplicate scan views and Past merges say failureWords — the server\'s words pass, never "Failed to fetch"; an overtaken scan says nothing — RUN', async () => {
+    for (const file of ['src/Tabs/DuplicateScanView.jsx', 'src/Tabs/ContactDuplicateScanView.jsx']) {
+        const run = scanRun(file);
+        assert.deepEqual((await run({ fail: new Error('Only admins and managers can merge records.') })).errors, [null, 'Only admins and managers can merge records.'], file);
+        assert.deepEqual((await run({ fail: UNSENT() })).errors, [null, 'The server could not be reached.'], `${file}: REGRESSION — "Failed to fetch"`);
+        assert.deepEqual((await run({ fail: new SyntaxError("Unexpected token '<'") })).errors, [null, 'Its answer could not be read.'], `${file}: REGRESSION — a parse error's words`);
+        assert.deepEqual((await run({ fail: UNSENT(), overtaken: true })).errors, [null], `${file}: an overtaken scan says nothing`);
+        assert.deepEqual((await run({})).data, [{ pairs: [] }]);
+    }
+    assert.deepEqual((await pastMergesLoad({ fail: new Error('No answer from the server.') })).errors, [null, 'Past merges did not load — No answer from the server.']);
+    assert.deepEqual((await pastMergesLoad({ fail: new SyntaxError("Unexpected token '<'") })).errors, [null, 'Past merges did not load — Its answer could not be read.'],
+        'REGRESSION: a runtime error\'s own words');
+    assert.deepEqual((await pastMergesLoad({})).data, [{ merges: [] }]);
+});
+
+test('Part 10: WIRING — every window reads the ok check first and says the house words; no old sentence left; the loads\' "HTTP N" reaches the console alone', () => {
+    const FILES = ['src/hooks/useAccounts.js', 'src/hooks/useActivities.js', 'src/hooks/useContacts.js', 'src/hooks/useTasks.js', 'src/hooks/useQuotes.js',
+        'src/hooks/useUserHandlers.js', 'src/hooks/useMerge.js', 'src/components/modals/LeadModal.jsx', 'src/components/rails/AccountPicker.jsx',
+        'src/components/modals/OpportunityModal.jsx', 'src/Tabs/DuplicateScanView.jsx', 'src/Tabs/ContactDuplicateScanView.jsx', 'src/Tabs/PastMerges.jsx'];
+    for (const f of FILES) {
+        const s = code(read(f));
+        assert.ok(!/check your connection/i.test(s), `${f}: REGRESSION — "check your connection" when the server answered`);
+        assert.ok(!/Failed to save (account|contact|task|activity|user|quote)\. Please try again/.test(s), `${f}: REGRESSION — a refusal with no words said as a fallback`);
+        assert.ok(!s.includes("'Scan failed. Please try again.'") && !s.includes("'Scoring failed'") && !s.includes("'Failed to save lead'"), `${f}: an old fallback`);
+        assert.ok(/import \{[^}]*\b(readRefusal|refusalWords|failureWords)\b[^}]*\} from '(\.\.\/)+utils\/refusalWords\.js';/.test(s), `${f}: the house words imported`);
+    }
+    // The hooks' loads throw 'HTTP ' + status into a catch that only logs — no member sees those words (the banner is
+    // dbStatusOf's); none other is left.
+    for (const [f, list] of [['src/hooks/useAccounts.js', 'accounts'], ['src/hooks/useActivities.js', 'activities'], ['src/hooks/useContacts.js', 'contacts'], ['src/hooks/useTasks.js', 'tasks']]) {
+        const s = code(read(f));
+        assert.equal(count(s, "'HTTP '"), 1, `${f}: only the load's`);
+        order(s, "if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })", `.catch(err => console.error('Failed to load ${list}:', err));`);
+    }
+    for (const f of FILES.slice(4)) assert.ok(!code(read(f)).includes("'HTTP '"), `${f}: REGRESSION — "HTTP N" said`);
+    assert.ok(code(read('src/components/rails/AccountPicker.jsx')).includes('onError && onError(`Couldn\'t create account "${name}". ${failureWords(e)}`);'));
+    assert.ok(code(read('src/Tabs/PastMerges.jsx')).includes('setError(`Past merges did not load — ${failureWords(e)}`)'));
+});
+
+// The review of Part 10 (§0.248): a read that failed is never a count or "none". A scan view draws only a landed scan of
+// the tier showing — a failed one, or one still out after a toggle, shows no pairs, no count ("—") and no "none"; a failed
+// re-scan clears the last; Past merges' failed read leaves no list.
+const SCAN_VIEW_FILES = [['src/Tabs/DuplicateScanView.jsx', 'accounts'], ['src/Tabs/ContactDuplicateScanView.jsx', 'contacts']];
+// The view's shown / counts / pairs lines, extracted and run over a held scan and the tier showing.
+const scanShownOf = (file) => new Function('data', 'tier',
+    `${between(code(read(file)), '    const shown  = ', '\n\n    const openMerge')}\nreturn { shown, counts, pairs };`);
+// runScan run twice on one generation counter: the first answer, then the second (an Error throws; overtaken when asked).
+const scanTwice = (file) => async (first, second, { overtaken = false } = {}) => {
+    const did = { errors: [], data: [] };
+    const scanGen = { current: 0 };
+    const answers = [first, second];
+    const fdRef = { current: async () => { const a = answers.shift(); if (overtaken && !answers.length) scanGen.current++; if (a instanceof Error) throw a; return a; } };
+    const runScan = p10Fn(file, '    const runScan = useCallback(async (t) => {', '\n    }, []);', ['useCallback', 'scanGen', 'fdRef', 'setLoading', 'setError', 'setData', 'failureWords'], 'runScan')(
+        (f) => f, scanGen, fdRef, () => {}, (v) => did.errors.push(v), (v) => did.data.push(v), failureWords);
+    await runScan('duplicate');
+    await runScan('duplicate');
+    return did;
+};
+// Past merges' load run over a sequence of answers on one generation counter.
+const pastMergesReload = async (answers, { overtakenAt = -1 } = {}) => {
+    const did = { errors: [], data: [], lastSaid: [] };
+    const loadGen = { current: 0 };
+    let i = 0;
+    const fmRef = { current: async () => { const at = i++; const a = answers[at]; if (at === overtakenAt) loadGen.current++; if (a instanceof Error) throw a; return a; } };
+    const load = p10Fn('src/Tabs/PastMerges.jsx', '    const load = useCallback(async () => {', '\n    }, [entityType]);', ['useCallback', 'loadGen', 'fmRef', 'entityType', 'setError', 'setData', 'failureWords', 'setLastSaid'], 'load')(
+        (f) => f, loadGen, fmRef, 'account', (v) => did.errors.push(v), (v) => did.data.push(v), failureWords, (v) => did.lastSaid.push(v));
+    for (let n = 0; n < answers.length; n++) await load();
+    return did;
+};
+
+test('Part 10 review fix: a scan view draws only a landed scan of the tier showing — no other tier\'s pairs, no count for a scan never read — RUN', () => {
+    const PAIR = { a: { id: 'a1' }, b: { id: 'a2' } };
+    const DUP = { tier: 'duplicate', pairs: [PAIR], counts: { duplicate: 1, related: 4 }, scanned: 9, truncated: false };
+    for (const [file] of SCAN_VIEW_FILES) {
+        const of = scanShownOf(file);
+        assert.deepEqual(of(null, 'duplicate'), { shown: null, counts: undefined, pairs: [] }, `${file}: REGRESSION — a scan never read counted as 0`);
+        assert.deepEqual(of(DUP, 'related'), { shown: null, counts: undefined, pairs: [] },
+            `${file}: REGRESSION — the duplicate tier's pairs or counts drawn under "Possibly related" while its own scan is out or failed`);
+        assert.deepEqual(of(DUP, 'duplicate'), { shown: DUP, counts: DUP.counts, pairs: [PAIR] }, `${file}: a landed scan of the tier showing`);
+        assert.deepEqual(of({ ...DUP, pairs: undefined }, 'duplicate').pairs, []);
+    }
+});
+
+test('Part 10 review fix: a failed re-scan clears the last scan\'s pairs and counts beside its error; one a later scan overtook clears nothing — RUN', async () => {
+    const LANDED = { tier: 'duplicate', pairs: [{ a: { id: 'a1' }, b: { id: 'a2' } }], counts: { duplicate: 1, related: 0 }, scanned: 2 };
+    for (const [file] of SCAN_VIEW_FILES) {
+        const run = scanTwice(file);
+        for (const [fail, words] of [[new Error('Internal server error (ref r1)'), 'Internal server error (ref r1)'], [UNSENT(), 'The server could not be reached.'],
+            [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.']]) {
+            const r = await run(LANDED, fail);
+            assert.deepEqual(r.data, [LANDED, null], `${file}: REGRESSION — the last scan's pairs and counts kept beside "${words}"`);
+            assert.deepEqual(r.errors, [null, null, words]);
+        }
+        const overtaken = await run(LANDED, UNSENT(), { overtaken: true });
+        assert.deepEqual([overtaken.data, overtaken.errors], [[LANDED], [null, null]], `${file}: REGRESSION — an overtaken failure cleared the latest scan`);
+        assert.deepEqual((await run(LANDED, LANDED)).data, [LANDED, LANDED]);
+    }
+});
+
+test('Part 10 review fix: WIRING — the scan views\' pills, "N scanned", truncated line, Scanning… and empty state read the scan of the tier showing; "—" for a count never read', () => {
+    for (const [file, noun] of SCAN_VIEW_FILES) {
+        const s = code(read(file));
+        for (const pin of ["{count ?? '—'}", "pill('duplicate', 'Likely duplicates', counts?.duplicate)", "pill('related', 'Possibly related', counts?.related)",
+            `{shown ? \`\${shown.scanned} ${noun} scanned\` : ''}`, '{shown?.truncated && (', '{loading && !shown && (', '{!loading && shown && pairs.length === 0 && (']) {
+            assert.equal(count(s, pin), 1, `${file}: REGRESSION — ${pin}`);
+        }
+        assert.ok(!s.includes('{ duplicate: 0, related: 0 }'), `${file}: REGRESSION — a scan that failed counted as 0`);
+        assert.ok(!/\bdata(\?\.|\.)(pairs|counts|scanned|truncated)\b/.test(s), `${file}: REGRESSION — a field read off a scan of either tier`);
+        assert.ok(!/[{(]\s*!?loading && !?data\b/.test(s), `${file}: REGRESSION — Scanning… or "none" read off a scan of either tier`);
+        order(s, '        } catch (e) {', '            if (gen === scanGen.current) setData(null);', '            if (gen === scanGen.current) setError(failureWords(e));');
+    }
+});
+
+test('Part 10 review fix: Past merges — a failing load after a landed one leaves no list (never "No merges yet." or a stale Undo beside the error); an overtaken one clears nothing — RUN', async () => {
+    const LIST = { merges: [{ id: 'mg_1', status: 'merged' }], more: false };
+    for (const [fail, words] of [[new Error('Internal server error (ref r1)'), 'Internal server error (ref r1)'], [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.']]) {
+        const r = await pastMergesReload([LIST, fail]);
+        assert.deepEqual(r.data, [LIST, null], `REGRESSION: the last list kept beside "Past merges did not load — ${words}"`);
+        assert.deepEqual(r.errors, [null, null, `Past merges did not load — ${words}`]);
+        assert.deepEqual(r.lastSaid, [null], 'REGRESSION: a landed list kept an old Undo\'s words for the banner (the review\'s verify)');
+    }
+    const overtaken = await pastMergesReload([LIST, new Error('x')], { overtakenAt: 1 });
+    assert.deepEqual([overtaken.data, overtaken.errors], [[LIST], [null, null]], 'an overtaken failure clears nothing and says nothing');
+    assert.ok(code(read('src/Tabs/PastMerges.jsx')).includes('catch (e) { if (gen === loadGen.current) { setData(null); setError(`Past merges did not load — ${failureWords(e)}`); } }'));
+});
+
+test('Part 10 review\'s verify: Past merges — an Undo whose re-read failed is said in the banner, where no row holds it — WIRING', () => {
+    const s = code(read('src/Tabs/PastMerges.jsx'));
+    assert.equal(count(s, 'if (r?.words) { setSaid((s) => ({ ...s, [m.id]: r.words })); setLastSaid(r.words); }'), 1, 'REGRESSION: the Undo\'s words never reach the banner');
+    assert.equal(count(s, '{!data && lastSaid && <div style={{ marginTop: 6, color: T.inkMid }}>{lastSaid}</div>}'), 1, 'REGRESSION: an Undo whose re-read failed is said nowhere');
+    order(s, '{error && (', '{error}', '{!data && lastSaid && <div', '{data && merges.length === 0 && (');
+});
+
+// ── Part 11 ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// Dispatch's remaining reads and words (state §0.248, docs/design/refusal-sweep Part 11; Jeff, 12 Nov: "Start Parts
+// 10-11" — Q13, Q20 "Recommended"). The sites above recordVisit: the schedule and held-crew saves, the customer and
+// technician saves, the job's invoice panel (its read and its writes), the Invoices list, the job record's address read
+// and its save, the shift pattern's Save and a technician's job card. Each read its body before the ok check and said
+// "HTTP N" (the ref dropped), "check your connection" though the server answered, or a raw e.message ("Failed to
+// fetch", "Unexpected token '<'"). Each reads the ok check first and says the house words — a 403 the role's sentence
+// (Q13) — each catch failureWords; an answer after an org switch says nothing. A landed invoice answer that cannot be
+// read is said ("… — Its answer could not be read. Reload to see it."), never adopted as {} nor shown as no invoices
+// and $0.00; an address that could not be read is said in its panel's place (Q20), never shown as a job with none.
+
+// An answer whose body reads once, as a real Response's does: a body read before the ok check leaves readRefusal
+// nothing to read, and the server's words are lost.
+const onceOf = (status, body) => {
+    let used = false;
+    return { ok: status >= 200 && status < 300, status, json: async () => {
+        if (used) throw new TypeError('Body is unusable: Body has already been read');
+        used = true;
+        if (body instanceof Error) throw body;
+        return body;
+    } };
+};
+const P11_PAGE = () => onceOf(502, new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"));
+const P11_UNREADABLE = () => onceOf(200, new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"));
+// The refusals a save meets, and its words: a 403 is the role's sentence where the screen has one (Q13).
+const p11Refusals = (role = 'Forbidden: dispatch role required') => [
+    [onceOf(403, { error: 'Forbidden: dispatch role required' }), role],
+    [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+    [onceOf(409, {}), 'The server returned 409.'],
+    [P11_PAGE(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+// A dbFetch over stubs: each request recorded; the org switched as request `switchAt` goes out; `answers` one answer
+// or a function of the URL; a thrown Error throws; `gate` holds the answer until released.
+const p11Fetch = (did, answers, org, { switchAt = -1, gate = null } = {}) => async (url, opts = {}) => {
+    did.sent.push([url, opts.method || 'GET', opts.body ? JSON.parse(opts.body) : undefined]);
+    if (did.sent.length - 1 === switchAt) org.now = 'org_b';
+    if (gate) await gate.held;
+    const a = typeof answers === 'function' ? answers(url) : answers;
+    if (a instanceof Error) throw a;
+    return a;
+};
+const p11Gate = () => { const g = {}; g.held = new Promise((r) => { g.release = r; }); return g; };
+// A useEffect's callback, extracted from DispatchTab.jsx and built over stubs: returns the effect (which returns its cleanup).
+const p11Effects = new Map();
+const p11Effect = (start, end, params) => {
+    if (!p11Effects.has(start)) p11Effects.set(start, new Function(...params, `return ${between(dispatchSrc(), start, end)}\n    };`));
+    return p11Effects.get(start);
+};
+
+// handleSchedule and writeHeldCrew (CrewBuilderView), extracted and run.
+const SJOB = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, scheduledDate: '2026-11-16', equipCategories: [] });
+const STORED_JOB = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'scheduled', scheduledStart: '09:00' });
+const crewSave = async ({ answer, held = null, switchAt = -1 }) => {
+    const did = { sent: [], errors: [], notices: [], saving: [], scheduled: [], heldSaid: [], added: [] };
+    const org = { now: 'org_a' };
+    const fetch = p11Fetch(did, answer, org, { switchAt });
+    const stillOrg = (o) => o === org.now;
+    const techs = [{ id: 'tech_1', name: 'Ann Lee' }];
+    if (held) {
+        const writeHeldCrew = p10Fn(DISPATCH, '    const writeHeldCrew = async (ids) => {', '\n    };',
+            ['selectedJob', 'setScheduleError', 'setScheduleNotice', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'techs', 'onHeld',
+                'setAddedTechs', 'showNotice', 'failureWords'], 'writeHeldCrew')(
+            SJOB, (v) => did.errors.push(v), () => {}, (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, techs,
+            (h) => did.heldSaid.push(h), (v) => did.added.push(v), (v) => did.notices.push(v), failureWords);
+        await writeHeldCrew(held);
+    } else {
+        const handleSchedule = p10Fn(DISPATCH, '    const handleSchedule = async () => {', '\n    };',
+            ['addedTechs', 'selectedJob', 'scheduleDate', 'scheduleTime', 'setScheduleError', 'techs', 'shiftForDate', 'hhToNum', 'blocksOnDate', 'blocks',
+                'blockTypes', 'equipmentConflicts', 'jobs', 'equipUnits', 'describeConflict', 'pickEquipmentFor', 'overlappingRivals', 'setScheduleNotice',
+                'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'candidates', 'onScheduled', 'showNotice', 'to12h', 'unitLabel',
+                'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'failureWords'], 'handleSchedule')(
+            { tech_1: true }, SJOB, '2026-11-16', '09:00', (v) => did.errors.push(v), techs, () => null, (s) => Number(String(s).split(':')[0]), () => [], [],
+            [], () => [], [SJOB], [], String, () => ({ picked: [] }), () => [], () => {},
+            (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, [{ tech: techs[0], blockers: [] }], (s) => did.scheduled.push(s),
+            (v) => did.notices.push(v), (t) => t, (id) => id, (v) => did.added.push(v), () => {}, () => {}, failureWords);
+        await handleSchedule();
+    }
+    return did;
+};
+
+test('Part 11: the schedule and the held crew — each refusal in the house words, a 403 the role\'s sentence; nothing scheduled — RUN', async () => {
+    for (const held of [null, ['tech_1']]) {
+        for (const [answer, words] of p11Refusals('Your role cannot schedule jobs.')) {
+            const did = await crewSave({ answer, held });
+            assert.deepEqual(did.errors, ['', words], `${held ? 'held' : 'schedule'}: REGRESSION — "HTTP N", the ref dropped, or "Failed to fetch": ${words}`);
+            assert.deepEqual([did.scheduled, did.heldSaid, did.notices, did.added], [[], [], [], []], 'nothing scheduled, held or said as done');
+            assert.equal(did.sent.length, 1);
+            assert.equal(did.saving[did.saving.length - 1], false, 'the Save is free again');
+        }
+    }
+    // The schedule's PUT as before: the job, the crew and the time.
+    const did = await crewSave({ answer: onceOf(500, { error: 'x' }) });
+    assert.deepEqual([did.sent[0][0], did.sent[0][1]], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']);
+    assert.equal(did.sent[0][2].status, 'scheduled');
+});
+
+test('Part 11: the schedule and the held crew — landed, as before; a landed answer that cannot be read keeps the job as sent — RUN', async () => {
+    const landed = await crewSave({ answer: onceOf(200, { job: STORED_JOB }) });
+    assert.deepEqual(landed.errors, ['']);
+    assert.equal(landed.scheduled.length, 1);
+    assert.equal(landed.scheduled[0].serverJob, STORED_JOB, 'the job as stored');
+    assert.match(landed.notices[0], /^Scheduled — Ann Lee on 2026-11-16 at 09:00\./);
+    const unreadable = await crewSave({ answer: P11_UNREADABLE() });
+    assert.deepEqual(unreadable.errors, ['']);
+    assert.equal(unreadable.scheduled[0].serverJob, null, 'landed: the board keeps the job as sent, as before');
+    const held = await crewSave({ answer: onceOf(200, { job: STORED_JOB }), held: ['tech_1'] });
+    assert.deepEqual([held.errors, held.heldSaid.map((h) => h.crewNames)], [[''], [['Ann Lee']]]);
+    assert.match(held.notices[0], /^Crew held — Ann Lee\./);
+});
+
+test('Part 11: the schedule and the held crew — an answer after an org switch, refused, landed or unsent, says and writes nothing — RUN', async () => {
+    for (const held of [null, ['tech_1']]) {
+        for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), onceOf(200, { job: STORED_JOB })]) {
+            const did = await crewSave({ answer, held, switchAt: 0 });
+            assert.deepEqual([did.errors, did.scheduled, did.heldSaid, did.notices], [[''], [], [], []], `${held ? 'held' : 'schedule'}: REGRESSION — an answer from the org left said or written`);
+        }
+    }
+});
+
+// The customer and technician saves (CustomersView, TechniciansView), extracted and run.
+const custSave = async ({ answer, switchAt = -1, isNew = false }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [], editing: [] };
+    const org = { now: 'org_a' };
+    const draft = { ...(isNew ? { _isNew: true } : {}), id: 'cust_1', name: ' Acme ', accountId: '', preferredTechId: '', servicePlanId: '', planStartDate: '' };
+    const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.name || '').trim())", '\n    };',
+        ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords'], 'save')(
+        draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
+        (c) => did.saved.push(c), (v) => did.drafts.push(v), (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords);
+    await save();
+    return did;
+};
+const techSave = async ({ answer, switchAt = -1 }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [] };
+    const org = { now: 'org_a' };
+    const savingRef = { current: false };
+    const draft = { id: 'dtech_1', firstName: 'Ann ', lastName: 'Lee', userId: '', assignedVehicleId: '', laborRate: '', overtimeRate: '' };
+    const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.firstName || '').trim()", '\n    };',
+        ['draft', 'setStatus', 'setSaving', 'savingRef', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'failureWords'], 'save')(
+        draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), savingRef, () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
+        (t) => did.saved.push(t), (v) => did.drafts.push(v), (v) => did.selected.push(v), failureWords);
+    await save();
+    return { ...did, held: savingRef.current };
+};
+
+test('Part 11: the customer and technician saves — each refusal in the house words, a 403 the role\'s sentence; nothing saved — RUN', async () => {
+    for (const isNew of [false, true]) {
+        for (const [answer, words] of p11Refusals('Your role cannot change customers.')) {
+            const did = await custSave({ answer, isNew });
+            assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `customer: REGRESSION — ${words}`);
+            assert.deepEqual([did.saved, did.editing], [[], []], 'the form stays open, nothing listed');
+            assert.equal(did.sent[0][1], isNew ? 'POST' : 'PUT');
+        }
+    }
+    for (const [answer, words] of p11Refusals('Your role cannot change technicians.')) {
+        const did = await techSave({ answer });
+        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `technician: REGRESSION — ${words}`);
+        assert.deepEqual([did.saved, did.drafts, did.held], [[], [], false]);
+    }
+});
+
+test('Part 11: the customer and technician saves — landed, as stored; an unreadable landed answer as before; after an org switch nothing — RUN', async () => {
+    const stored = { id: 'cust_1', name: 'Acme', accountId: null };
+    const c = await custSave({ answer: onceOf(200, { customer: stored }) });
+    assert.deepEqual([c.saved, c.selected, c.editing, c.statuses], [[stored], ['cust_1'], [false], [null, { kind: 'ok', msg: 'Saved.' }]]);
+    const cu = await custSave({ answer: P11_UNREADABLE() });
+    assert.equal(cu.saved[0].name, 'Acme', 'landed: the copy sent, as before');
+    assert.deepEqual(cu.statuses[1], { kind: 'ok', msg: 'Saved.' });
+    const t = await techSave({ answer: onceOf(201, { technician: { id: 'dtech_1', firstName: 'Ann', lastName: 'Lee', memberId: 'usr_1' } }) });
+    assert.deepEqual([t.saved.length, t.selected, t.statuses[1]], [1, ['dtech_1'], { kind: 'ok', msg: 'Saved' }]);
+    const tu = await techSave({ answer: P11_UNREADABLE() });
+    assert.deepEqual([tu.saved, tu.statuses[1]], [[], { kind: 'ok', msg: 'Saved' }], 'landed with no technician read: as before');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), onceOf(200, { customer: stored })]) {
+        const cs = await custSave({ answer, switchAt: 0 });
+        assert.deepEqual([cs.statuses, cs.saved], [[null], []], 'customer: REGRESSION — an answer from the org left said or written');
+    }
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(),
+        onceOf(200, { technician: { id: 'dtech_1', firstName: 'Ann', lastName: 'Lee' } })]) {
+        const ts = await techSave({ answer, switchAt: 0 });
+        assert.deepEqual([ts.statuses, ts.saved, ts.drafts], [[null], [], []], 'technician: REGRESSION — an answer from the org left said or written');
+    }
+});
+
+// The job's invoice panel (JobInvoicePanel): its read of the job's invoices (the effect) and its writes (write).
+const INV_LIVE = Object.freeze({ id: 'inv_2', invoiceNumber: 'INV-0002', status: 'issued' });
+const INV_VOID = Object.freeze({ id: 'inv_1', invoiceNumber: 'INV-0001', status: 'void' });
+const invoiceRead = async ({ answer, cancelFirst = false }) => {
+    const did = { sent: [], errs: [], unread: [], history: [], invoice: [], loading: [] };
+    const gate = p11Gate();
+    const effect = p11Effect("() => {\n        let cancelled = false;\n        setInvoice(null);", '\n    }, [job?.id]);',
+        ['job', 'setInvoice', 'setHistory', 'setDraft', 'setPaying', 'setErr', 'setUnread', 'setLoading', 'dbFetch', 'readRefusal', 'failureWords', 'isLiveInvoice'])(
+        { id: 'job_1' }, (v) => did.invoice.push(v), (v) => did.history.push(v), () => {}, () => {}, (v) => did.errs.push(v), (v) => did.unread.push(v),
+        (v) => did.loading.push(v), p11Fetch(did, answer, { now: 'org_a' }, { gate }), readRefusal, failureWords, isLiveInvoice);
+    const cleanup = effect();
+    if (cancelFirst) cleanup();
+    gate.release();
+    await settle();
+    return did;
+};
+
+test('Part 11: the invoice panel\'s read — a refusal in the house words, the panel never "No invoice on this job yet" over it — RUN', async () => {
+    for (const [answer, words] of [...p11Refusals(), [P11_UNREADABLE(), 'Its answer could not be read. Reload to see it.'],
+        [onceOf(200, {}), 'Its answer could not be read. Reload to see it.'], [onceOf(200, null), 'Its answer could not be read. Reload to see it.']]) {
+        const did = await invoiceRead({ answer });
+        assert.deepEqual(did.errs, ['', `Invoices did not load — ${words}`], `REGRESSION — "HTTP N", "check your connection", or {} taken as no invoices: ${words}`);
+        assert.deepEqual(did.unread, [false, true], 'marked unread: the panel offers no "Create invoice" over a read that failed');
+        assert.deepEqual([did.history, did.invoice], [[[]], [null]], 'nothing adopted');
+        assert.deepEqual(did.loading, [true, false]);
+        assert.deepEqual(did.sent.map(([u]) => u), ['/.netlify/functions/invoices?jobId=job_1']);
+    }
+});
+
+test('Part 11: the invoice panel\'s read — landed, the invoices and the live one; a job switched away from says nothing — RUN', async () => {
+    const did = await invoiceRead({ answer: onceOf(200, { invoices: [INV_VOID, INV_LIVE] }) });
+    assert.deepEqual([did.errs, did.unread], [[''], [false]]);
+    assert.deepEqual(did.history, [[], [INV_VOID, INV_LIVE]]);
+    assert.equal(did.invoice[1], INV_LIVE, 'the live invoice leads');
+    assert.deepEqual(did.sent.map(([u]) => u), ['/.netlify/functions/invoices?jobId=job_1']);
+    const none = await invoiceRead({ answer: onceOf(200, { invoices: [] }) });
+    assert.deepEqual([none.errs, none.unread, none.invoice], [[''], [false], [null, null]], 'a job with none: "No invoice on this job yet", as before');
+    for (const answer of [onceOf(500, { error: 'Internal server error' }), P11_PAGE(), UNSENT(), P11_UNREADABLE()]) {
+        const late = await invoiceRead({ answer, cancelFirst: true });
+        assert.deepEqual([late.errs, late.unread, late.history], [[''], [false], [[]]], 'REGRESSION: a job switched away from said its words on the next');
+    }
+});
+
+const invoiceWrite = async ({ answer, done = 'created' }) => {
+    const did = { sent: [], errs: [], busy: [], adopted: [], unread: [] };
+    const write = p10Fn(DISPATCH, '    const write = async (url, options, done) => {', '\n    };',
+        ['setBusy', 'setErr', 'setUnread', 'dbFetch', 'readRefusal', 'failureWords', 'adopt'], 'write')(
+        (v) => did.busy.push(v), (v) => did.errs.push(v), (v) => did.unread.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, failureWords,
+        (d) => did.adopted.push(d));
+    const r = await write('/.netlify/functions/invoices', { method: 'POST', body: '{"jobId":"job_1"}' }, done);
+    return { ...did, r };
+};
+
+test('Part 11: the invoice panel\'s writes — a refusal says what was not done and why; a landed answer that cannot be read is said, never adopted — RUN', async () => {
+    for (const done of ['created', 'issued', 'voided', 'marked paid', 'saved']) {
+        for (const [answer, words] of p11Refusals()) {
+            const did = await invoiceWrite({ answer, done });
+            assert.deepEqual(did.errs, ['', `The invoice was not ${done} — ${words}`], `REGRESSION — "(HTTP N)" or "check your connection": ${words}`);
+            assert.deepEqual([did.r, did.adopted, did.busy], [null, [], [true, false]]);
+        }
+        for (const answer of [P11_UNREADABLE(), onceOf(200, null)]) {
+            const did = await invoiceWrite({ answer, done });
+            assert.deepEqual(did.errs, ['', `The invoice was ${done} — Its answer could not be read. Reload to see it.`], 'REGRESSION: a landed answer that cannot be read adopted as {}');
+            assert.equal(did.r, true, 'landed: an editor it closes still closes — a second press re-sends the write');
+            assert.deepEqual(did.adopted, [], 'nothing adopted');
+        }
+    }
+    const stored = { invoice: { id: 'inv_3', invoiceNumber: 'INV-0003', status: 'draft' }, job: { id: 'job_1' } };
+    const landed = await invoiceWrite({ answer: onceOf(201, stored) });
+    assert.deepEqual([landed.errs, landed.adopted, landed.r], [[''], [stored], stored], 'landed: the invoice and the job as stored');
+});
+
+test('Part 11 review fix: the invoice panel\'s writes — landed with an answer that cannot be read, or one naming no invoice, the panel is marked unread: never "No invoice on this job yet" and its Create under "The invoice was created" — RUN', async () => {
+    for (const done of ['created', 'issued', 'voided', 'marked paid', 'saved']) {
+        for (const answer of [P11_UNREADABLE(), onceOf(200, null), onceOf(200, 'ok'), onceOf(201, {}), onceOf(201, { job: { id: 'job_1' } })]) {
+            const did = await invoiceWrite({ answer, done });
+            assert.deepEqual(did.errs, ['', `The invoice was ${done} — Its answer could not be read. Reload to see it.`], `REGRESSION: a landed ${done} whose answer names no invoice said nothing`);
+            assert.deepEqual(did.unread, [true], `REGRESSION: a landed ${done} unread not marked — "No invoice on this job yet" and Create drawn under its words`);
+            assert.deepEqual([did.adopted, did.r], [[], true], 'nothing adopted; landed, its editor closes');
+        }
+        for (const [answer] of p11Refusals()) {
+            const did = await invoiceWrite({ answer, done });
+            assert.deepEqual(did.unread, [], 'a refusal: nothing written, the panel as it was');
+        }
+    }
+    const stored = { invoice: { id: 'inv_4', invoiceNumber: 'INV-0004', status: 'draft' }, job: { id: 'job_1' } };
+    const landed = await invoiceWrite({ answer: onceOf(201, stored) });
+    assert.deepEqual([landed.errs, landed.unread, landed.adopted], [[''], [], [stored]], 'landed and read: adopted, nothing marked');
+});
+
+// The Invoices list (InvoicesView): its read.
+const invoicesList = async ({ answer, cancelFirst = false }) => {
+    const did = { sent: [], errs: [], lists: [], loading: [] };
+    const gate = p11Gate();
+    const effect = p11Effect("() => {\n        let cancelled = false;\n        (async () => {\n            try {\n                const res  = await dbFetch('/.netlify/functions/invoices');",
+        '\n    }, []);', ['setErr', 'setList', 'setLoading', 'dbFetch', 'readRefusal', 'failureWords'])(
+        (v) => did.errs.push(v), (v) => did.lists.push(v), (v) => did.loading.push(v), p11Fetch(did, answer, { now: 'org_a' }, { gate }), readRefusal, failureWords);
+    const cleanup = effect();
+    if (cancelFirst) cleanup();
+    gate.release();
+    await settle();
+    return did;
+};
+
+test('Part 11: the Invoices list — a refusal or an unreadable answer is said, never "No invoices yet" and $0.00; landed, the list — RUN', async () => {
+    for (const [answer, words] of [...p11Refusals(), [P11_UNREADABLE(), 'Its answer could not be read. Reload to see it.'], [onceOf(200, { invoices: 'x' }), 'Its answer could not be read. Reload to see it.']]) {
+        const did = await invoicesList({ answer });
+        assert.deepEqual([did.errs, did.lists], [[`Invoices did not load — ${words}`], []], `REGRESSION — ${words}`);
+        assert.deepEqual(did.loading, [false]);
+    }
+    const landed = await invoicesList({ answer: onceOf(200, { invoices: [INV_LIVE, INV_VOID] }) });
+    assert.deepEqual([landed.errs, landed.lists], [[], [[INV_LIVE, INV_VOID]]]);
+    const late = await invoicesList({ answer: onceOf(500, { error: 'Internal server error' }), cancelFirst: true });
+    assert.deepEqual([late.errs, late.lists, late.loading], [[], [], []], 'a view left says nothing');
+});
+
+// The job record (JobsView): the address read (the effect) and the save.
+const SEL = Object.freeze({ id: 'job_1', title: 'Boiler service', customerId: 'cust_1', locationId: 'dloc_1' });
+const LOC = Object.freeze({ id: 'dloc_1', address: '1 Main St', city: 'Austin', state: 'TX', zip: '78701' });
+const addressRead = async ({ answer, selected = SEL, cancelFirst = false }) => {
+    const did = { sent: [], drafts: [], statuses: [], locs: [], unread: [] };
+    const gate = p11Gate();
+    const effect = p11Effect("() => {\n        setDraft(selected ? { ...selected } : null);", '\n    }, [selectedId]);',
+        ['selected', 'setDraft', 'setStatus', 'setLoc', 'setLocUnread', 'dbFetch'])(
+        selected, (v) => did.drafts.push(v), (v) => did.statuses.push(v), (v) => did.locs.push(v), (v) => did.unread.push(v),
+        p11Fetch(did, answer, { now: 'org_a' }, { gate }));
+    const cleanup = effect();
+    if (cancelFirst && cleanup) cleanup();
+    gate.release();
+    await settle();
+    return did;
+};
+
+test('Part 11 (Q20): the job\'s address — a read that failed says so in the panel\'s place, never a job with no address — RUN', async () => {
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error' }), P11_PAGE(), UNSENT(), P11_UNREADABLE(), onceOf(200, null)]) {
+        const did = await addressRead({ answer });
+        assert.deepEqual(did.unread, [false, true], 'REGRESSION: a failed read looked exactly like a job with no address');
+        assert.deepEqual(did.locs, [null], 'no address panel to fill in over a read that failed');
+        assert.deepEqual(did.sent.map(([u]) => u), ['/.netlify/functions/dispatch-customers?resource=locations&customerId=cust_1']);
+    }
+    // Landed: the job's location, or an empty panel where the customer has none — as before.
+    const landed = await addressRead({ answer: onceOf(200, { locations: [{ id: 'dloc_0', address: 'x' }, LOC] }) });
+    assert.deepEqual([landed.unread, landed.locs], [[false], [null, { ...LOC }]]);
+    const none = await addressRead({ answer: onceOf(200, { locations: [] }) });
+    assert.deepEqual([none.unread, none.locs], [[false], [null, { id: null, address: '', city: '', state: '', zip: '' }]]);
+    // A job with no customer reads nothing and shows nothing; no job, nothing.
+    const noCust = await addressRead({ answer: onceOf(500, {}), selected: { ...SEL, customerId: null } });
+    assert.deepEqual([noCust.sent, noCust.unread, noCust.locs], [[], [false], [null]]);
+    const noJob = await addressRead({ answer: onceOf(500, {}), selected: null });
+    assert.deepEqual([noJob.sent, noJob.unread, noJob.drafts], [[], [false], [null]]);
+    // Another job picked before the answer: nothing said on it.
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) {
+        const late = await addressRead({ answer, cancelFirst: true });
+        assert.deepEqual([late.unread, late.locs], [[false], [null]], 'REGRESSION: a job switched away from said its address unread on the next');
+    }
+});
+
+const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer = onceOf(200, { location: LOC }), loc = null, switchAt = -1 }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], selected: [] };
+    const org = { now: 'org_a' };
+    const draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'unscheduled' };
+    const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft) return;\n        if (!(draft.title || '').trim())", '\n    };',
+        ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'addHoursHHMM', 'onSaved', 'setSelectedId', 'failureWords'], 'save')(
+        draft, loc, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a',
+        p11Fetch(did, (url) => (url.includes('resource=locations') ? locAnswer : jobAnswer), org, { switchAt }), readRefusal, (o) => o === org.now,
+        (h) => h, (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords);
+    await save();
+    return did;
+};
+
+test('Part 11: the job record\'s save — the job\'s refusal in the house words (a 403 the role\'s), the address\'s named; nothing saved — RUN', async () => {
+    for (const [answer, words] of p11Refusals('Your role cannot edit jobs.')) {
+        const did = await jobSave({ jobAnswer: answer });
+        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `the job: REGRESSION — ${words}`);
+        assert.deepEqual([did.saved, did.sent.map(([, m]) => m)], [[], ['PUT']]);
+    }
+    for (const [answer, words] of p11Refusals()) {
+        const did = await jobSave({ loc: LOC, locAnswer: answer });
+        const said = answer instanceof Error ? words : `The address was not saved — ${words}`;
+        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `the address: REGRESSION — ${said}`);
+        assert.deepEqual([did.saved, did.sent.length], [[], 1], 'the job is not sent after a refused address');
+    }
+});
+
+test('Part 11: the job record\'s save — landed, as stored and the address\'s id; after an org switch nothing said, no job sent — RUN', async () => {
+    const landed = await jobSave({ loc: LOC });
+    assert.deepEqual(landed.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']]);
+    assert.equal(landed.sent[1][2].locationId, 'dloc_1');
+    assert.deepEqual([landed.saved, landed.selected, landed.statuses], [[STORED_JOB], ['job_1'], [null, { kind: 'ok', msg: 'Saved' }]]);
+    const unreadable = await jobSave({ jobAnswer: P11_UNREADABLE() });
+    assert.deepEqual([unreadable.saved, unreadable.statuses[1]], [[], { kind: 'ok', msg: 'Saved' }], 'landed with no job read: as before');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error' }), P11_PAGE(), onceOf(200, { job: STORED_JOB })]) {
+        const did = await jobSave({ jobAnswer: answer, switchAt: 0 });
+        assert.deepEqual([did.statuses, did.saved], [[null], []], 'the job: REGRESSION — an answer from the org left said or written');
+    }
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error' }), onceOf(200, { location: LOC })]) {
+        const did = await jobSave({ loc: LOC, locAnswer: answer, switchAt: 0 });
+        assert.deepEqual([did.statuses, did.sent.length], [[null], 1], 'the address: REGRESSION — said in the new org, or the job sent with its token');
+    }
+});
+
+// The shift pattern's Save and a technician's job card: a failure in the house words, never a raw e.message.
+test('Part 11: the shift pattern\'s Save and a technician\'s job card say failureWords — the server\'s words pass, never "Failed to fetch" — RUN', async () => {
+    const src = dispatchSrc();
+    const press = new Function('setBusy', 'setErr', 'onSave', 'wh', 'failureWords',
+        `return ${between(src, "async () => { setBusy(true); setErr(''); try { await onSave(wh); }", ' finally { setBusy(false); } }')} finally { setBusy(false); } };`);
+    const run = p10Fn(DISPATCH, "    const run = async (patch) => {\n        setErr('');\n        try { await onUpdate(job.id, patch); }", '\n    };',
+        ['setErr', 'onUpdate', 'job', 'failureWords'], 'run');
+    const cases = [[new Error('Forbidden: read-only role'), 'Forbidden: read-only role'], [UNSENT(), 'The server could not be reached.'],
+        [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.'], [null, null]];
+    for (const [fail, words] of cases) {
+        const errs = [], busy = [];
+        await press((v) => busy.push(v), (v) => errs.push(v), async () => { if (fail) throw fail; }, { mon: null }, failureWords)();
+        assert.deepEqual(errs, words ? ['', `Not saved — ${words}`] : [''], `the shift pattern: REGRESSION — ${words}`);
+        assert.deepEqual(busy, [true, false]);
+        const cardErrs = [];
+        await run((v) => cardErrs.push(v), async () => { if (fail) throw fail; }, { id: 'job_1' }, failureWords)({ status: 'en_route' });
+        assert.deepEqual(cardErrs, words ? ['', words] : [''], `the job card: REGRESSION — ${words}`);
+    }
+});
+
+test('Part 11: WIRING — above recordVisit no "HTTP N", "check your connection" or raw .message; the unread drawn, never none', () => {
+    const src = dispatchSrc();
+    const above = src.slice(0, src.indexOf('    const recordVisit = async ('));
+    assert.ok(above.length > 100000, 'recordVisit found');
+    assert.ok(!/'HTTP '|HTTP \$\{/.test(above), 'REGRESSION: "HTTP N" said above recordVisit');
+    assert.ok(!/check your connection/i.test(above), 'REGRESSION: "check your connection" when the server answered');
+    assert.ok(!/\b(e|err)\??\.message\b/.test(above), 'REGRESSION: a raw e.message said above recordVisit');
+    // The invoice panel offers no "Create invoice" over a read that failed; the list draws no totals over one.
+    const panel = between(src, 'const JobInvoicePanel = (', 'const InvoicesView = (');
+    assert.ok(panel.includes('{!loading && !invoice && !unread && ('), 'REGRESSION: "No invoice on this job yet" over a read that failed');
+    assert.ok(panel.includes("setInvoice(null); setHistory([]); setDraft(null); setPaying(null); setErr(''); setUnread(false);"), 'a new job clears the mark');
+    assert.ok(panel.includes('{err && <div role="alert"'), 'the words drawn');
+    // A void invoice's "Raise a new invoice" waits too (the review's verify): a create landed unread raised one.
+    assert.equal(count(panel, '{!unread && <button onClick={create} disabled={busy} style={btn(true)}>Raise a new invoice</button>}'), 1,
+        'REGRESSION: "Raise a new invoice" under "The invoice was created — …"');
+    // One panel per job: a write landing after the job changed speaks on its own panel, gone — never on the next job's.
+    assert.equal(count(src, '{selected && <JobInvoicePanel key={selected.id} job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}'), 1,
+        'REGRESSION: the invoice panel not keyed by job');
+    // Each write names what it does, for "The invoice was not <done> — why".
+    for (const call of ["const create = () => write(url(), post({ jobId: job.id, issueDate: invoiceToday() }), 'created');",
+        "const issue  = () => write(url(invoice.id), put({ status: 'issued' }), 'issued');",
+        "const go = () => write(url(invoice.id), put({ status: 'void' }), 'voided');",
+        "amountPaid: paying?.amountPaid === '' ? undefined : paying?.amountPaid }), 'marked paid');",
+        "paymentTerms: draft.paymentTerms, customerPoNumber: draft.customerPoNumber, notes: draft.notes,\n        }), 'saved');"]) {
+        assert.ok(panel.includes(call), call);
+    }
+    const list = between(src, 'const InvoicesView = (', 'const JobsView = (');
+    assert.ok(list.includes("{!err && <span style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>"), 'REGRESSION: $0.00 outstanding over a read that failed');
+    assert.ok(list.includes('{!loading && !err && rows.length === 0 && ('), '"No invoices yet" only over a landed read');
+    // Q20: the address's words in its panel's place; the panel itself only over a landed read.
+    const jobs = between(src, 'const JobsView = (', 'const planWeek = (');
+    order(jobs, '{!loc && locUnread && (', '<div role="alert"', "The address couldn't be read.</div>", '{loc && (');
+});
+
+// ── Part 11 (second half): recordVisit to the end of DispatchTab.jsx, and the service plans panel ─────────────────────
+// The skip, defer and renew on Service due: no catch (offline an unhandled rejection, the skip/defer editor left open,
+// nothing said) and "(HTTP N)" words; now the ok check first, the server's words with their ref, a failure said on the
+// banner (kept until its Close), and recordVisit answers false so the editor stays open under it. The main load says each
+// list's refusal in the server's words and a page that was no JSON in plain words — it drew "Unexpected token '<'" as
+// the whole tab; New Job's three creates read a refusal's body once, for its words and the link it names; the mass
+// schedule, the shift pattern's save, a technician's job card and the week board's move say the house words (a 403 the
+// role's sentence, Q13). The service plans panel likewise (its 403 sentences kept). An answer after an org switch says
+// and writes nothing.
+
+const PV_ROW = Object.freeze({ customer: { id: 'cust_1', name: 'Acme' }, plan: { id: 'plan_1' }, occurrence: '2026-11-20', due: '2026-11-20' });
+const PV_OLD = Object.freeze({ id: 'pv_0', customerId: 'cust_1', planId: 'plan_1', dueDate: '2026-11-20', action: 'deferred' });
+const PV_OTHER = Object.freeze({ id: 'pv_9', customerId: 'cust_2', planId: 'plan_1', dueDate: '2026-11-20', action: 'skipped' });
+const PV_NEW = Object.freeze({ id: 'pv_1', customerId: 'cust_1', planId: 'plan_1', dueDate: '2026-11-20', action: 'skipped' });
+const p11bRecordVisit = (did, answer, org, switchAt, visits) => p10Fn(DISPATCH, '    const recordVisit = async (', '\n    };',
+    ['setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setPlanVisits'], 'recordVisit')(
+    (v) => did.errors.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), readRefusal, (o) => o === org.now, failureWords, visits.set);
+const visitAct = async ({ answer, action = 'skipped', switchAt = -1 }) => {
+    const did = { sent: [], errors: [] };
+    const org = { now: 'org_a' };
+    const start = [PV_OLD, PV_OTHER];
+    const visits = stateOf(start);
+    const r = await p11bRecordVisit(did, answer, org, switchAt, visits)(PV_ROW, action, { reason: 'Declined' });
+    return { ...did, r, visits: visits.value, same: visits.value === start };
+};
+
+test('Part 11: Service due\'s skip and defer — each refusal and a failure said on the banner in the house words; false, nothing adopted — RUN', async () => {
+    for (const action of ['skipped', 'deferred']) {
+        for (const [answer, words] of p11Refusals()) {
+            const did = await visitAct({ answer, action });
+            assert.deepEqual(did.errors, ['', `The visit was not ${action} — ${words}`], `REGRESSION — "(HTTP N)", the ref dropped, or offline an unhandled rejection said nowhere: ${words}`);
+            assert.deepEqual([did.r, did.same], [false, true], 'false — the editor stays open; the exceptions as they were');
+            assert.deepEqual(did.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-plan-visits', 'POST']]);
+            assert.deepEqual(did.sent[0][2], { customerId: 'cust_1', planId: 'plan_1', dueDate: '2026-11-20', action, reason: 'Declined' });
+        }
+        // A landed answer that cannot be read is said — it was "(HTTP 200)" — and nothing is adopted.
+        for (const answer of [P11_UNREADABLE(), onceOf(201, {}), onceOf(201, null)]) {
+            const did = await visitAct({ answer, action });
+            assert.deepEqual(did.errors, ['', `The visit was ${action} — Its answer could not be read. Reload to see it.`], 'REGRESSION: a landed answer said as "(HTTP 200)"');
+            assert.deepEqual([did.r, did.same], [false, true]);
+        }
+    }
+    // Landed: the server's row replaces the one for the same occurrence, as before.
+    const landed = await visitAct({ answer: onceOf(201, { visit: PV_NEW }) });
+    assert.deepEqual([landed.errors, landed.r, landed.visits], [[''], true, [PV_OTHER, PV_NEW]]);
+});
+
+test('Part 11: Service due\'s skip and defer — an answer after an org switch says and adopts nothing — RUN', async () => {
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), UNSENT(),
+        P11_UNREADABLE(), onceOf(201, { visit: PV_NEW })]) {
+        const did = await visitAct({ answer, switchAt: 0 });
+        assert.deepEqual([did.errors, did.r, did.same], [[''], false, true], 'REGRESSION: an answer from the org left said or adopted');
+    }
+});
+
+test('Part 11: submitPending keeps the skip/defer editor open under the banner\'s words when the visit was not recorded — RUN', async () => {
+    const press = async (answer, mode) => {
+        const did = { sent: [], errors: [], pending: [] };
+        const visits = stateOf([]);
+        const recordVisit = p11bRecordVisit(did, answer, { now: 'org_a' }, -1, visits);
+        const rowKey = (r) => `${r.customer.id}:${r.plan.id}:${r.occurrence || r.due}`;
+        const submitPending = p10Fn(DISPATCH, '    const submitPending = async () => {', '\n    };', ['pending', 'rows', 'rowKey', 'setPending', 'onSkip', 'onDefer'], 'submitPending')(
+            { key: rowKey(PV_ROW), mode, date: '2026-12-01', reason: 'Away' }, [PV_ROW], rowKey, (v) => did.pending.push(v),
+            (row, opts) => recordVisit(row, 'skipped', opts), (row, opts) => recordVisit(row, 'deferred', opts));
+        await submitPending();
+        return did;
+    };
+    for (const mode of ['skip', 'defer']) {
+        const action = mode === 'skip' ? 'skipped' : 'deferred';
+        for (const [answer, words] of [[UNSENT(), 'The server could not be reached.'], [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)']]) {
+            const did = await press(answer, mode);
+            assert.deepEqual(did.pending, [], `${mode}: REGRESSION — the editor closed over a visit not recorded`);
+            assert.deepEqual(did.errors, ['', `The visit was not ${action} — ${words}`]);
+        }
+        const landed = await press(onceOf(201, { visit: { ...PV_NEW, action } }), mode);
+        assert.deepEqual([landed.pending, landed.errors], [[null], ['']], 'landed: the editor closes, as before');
+    }
+});
+
+const PV_CUST = Object.freeze({ id: 'cust_1', name: 'Acme', agreementExpiry: '2026-12-01' });
+const PV_CUST_2 = Object.freeze({ id: 'cust_2', name: 'Beta Co' });
+const renewIt = async ({ answer, switchAt = -1 }) => {
+    const did = { sent: [], errors: [], asked: [] };
+    const org = { now: 'org_a' };
+    const start = [PV_CUST, PV_CUST_2];
+    const custs = stateOf(start);
+    let go = null;
+    const renewAgreement = p10Fn(DISPATCH, '    const renewAgreement = (row) => {', '\n    };',
+        ['renewedExpiry', 'todayYmd', 'setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setCustomers', 'showConfirm'], 'renewAgreement')(
+        () => '2027-12-01', '2026-11-12', (v) => did.errors.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), readRefusal, (o) => o === org.now, failureWords,
+        custs.set, (msg, g) => { did.asked.push(msg); go = g; });
+    renewAgreement({ customer: PV_CUST });
+    await go();
+    return { ...did, custs: custs.value, same: custs.value === start };
+};
+
+test('Part 11: Renew — each refusal and a failure said in the house words on the banner, nothing adopted; landed as before; after an org switch nothing — RUN', async () => {
+    for (const [answer, words] of p11Refusals()) {
+        const did = await renewIt({ answer });
+        assert.deepEqual(did.errors, ['', `The agreement was not renewed — ${words}`], `REGRESSION — "(HTTP N)" or offline silent: ${words}`);
+        assert.equal(did.same, true);
+        assert.deepEqual(did.sent.map(([u, m, b]) => [u, m, b]), [['/.netlify/functions/dispatch-customers?id=cust_1', 'PUT', { agreementExpiry: '2027-12-01' }]]);
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {})]) {
+        const did = await renewIt({ answer });
+        assert.deepEqual([did.errors, did.same], [['', 'The agreement was renewed — Its answer could not be read. Reload to see it.'], true], 'REGRESSION: a landed answer said as "(HTTP 200)"');
+    }
+    const stored = { ...PV_CUST, agreementExpiry: '2027-12-01' };
+    const landed = await renewIt({ answer: onceOf(200, { customer: stored }) });
+    assert.deepEqual([landed.errors, landed.custs], [[''], [stored, PV_CUST_2]]);
+    assert.deepEqual(landed.asked, ['Renew the maintenance agreement for Acme through 2027-12-01?']);
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x' }), P11_PAGE(), UNSENT(), onceOf(200, { customer: stored })]) {
+        const did = await renewIt({ answer, switchAt: 0 });
+        assert.deepEqual([did.errors, did.same], [[''], true], 'REGRESSION: an answer from the org left said or adopted');
+    }
+});
+
+// The main load (the effect on mount), extracted and run over eight answers by URL.
+const LOAD_LANDED = () => ({
+    'dispatch-technicians': { technicians: [{ id: 'dtech_1', firstName: 'Ann' }] }, 'dispatch-vehicles': { vehicles: [{ id: 'veh_1' }] },
+    'dispatch-equipment': { equipment: [{ id: 'eq_1' }] }, 'dispatch-customers': { customers: [{ id: 'cust_1', name: 'Acme' }] },
+    'dispatch-jobs': { jobs: [{ id: 'job_1', title: 'Boiler service', customerId: 'cust_1', status: 'unscheduled' }] }, 'dispatch-schedule-blocks': { blocks: [{ id: 'blk_1' }] },
+    'dispatch-service-plans': { plans: [{ id: 'plan_1' }] }, 'dispatch-plan-visits': { visits: [{ id: 'pv_1' }] },
+});
+const loadAll = async ({ answers = {}, cancelFirst = false } = {}) => {
+    const did = { sent: [], loading: [], errors: [], set: {} };
+    const gate = p11Gate();
+    const landed = LOAD_LANDED();
+    const answerFor = (url) => { const k = url.split('/').pop(); return k in answers ? answers[k]() : onceOf(200, landed[k]); };
+    const setter = (k) => (v) => { did.set[k] = v; };
+    const effect = p11Effect("() => {\n        let cancelled = false;\n        (async () => {\n            setLoading(true);\n            setLoadError('');", '\n    }, []);',
+        ['setLoading', 'setLoadError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords', 'normaliseTech', 'fromYmd', 'normalisePriority', 'queueWindow',
+            'setTechs', 'setTechsRaw', 'setVehicles', 'setEquipment', 'setServicePlans', 'setPlanVisits', 'setCustomers', 'setJobs', 'setJobsRaw', 'setBlocks', 'console'])(
+        (v) => did.loading.push(v), (v) => did.errors.push(v), async () => {}, p11Fetch(did, answerFor, { now: 'org_a' }, { gate }), readRefusal, failureWords,
+        (t) => ({ ...t }), (s) => new Date(`${s}T00:00:00`), (p) => p, () => 'TBD',
+        setter('techs'), setter('techsRaw'), setter('vehicles'), setter('equipment'), setter('plans'), setter('visits'), setter('customers'), setter('jobs'), setter('jobsRaw'), setter('blocks'), quiet);
+    const cleanup = effect();
+    if (cancelFirst) cleanup();
+    gate.release();
+    await settle();
+    await settle();
+    return did;
+};
+const TAIL = ' Reload the page to try again.';
+
+test('Part 11: the main load — each list\'s refusal in the server\'s words, a page that was no JSON in plain words; nothing shown as none — RUN', async () => {
+    const cases = [
+        [{ 'dispatch-jobs': () => onceOf(403, { error: 'Forbidden: dispatch role required', requestId: 'r1' }) }, 'jobs: Forbidden: dispatch role required (ref r1).'],
+        [{ 'dispatch-jobs': () => onceOf(500, {}), 'dispatch-customers': () => P11_PAGE() }, 'customers: The server returned 502; jobs: The server returned 500.'],
+        [{ 'dispatch-plan-visits': () => onceOf(409, { error: 'Dispatch is not enabled for this workspace.' }) }, 'plan visits: Dispatch is not enabled for this workspace.'],
+        [{ 'dispatch-service-plans': () => P11_UNREADABLE() }, 'Its answer could not be read.'],
+        [{ 'dispatch-vehicles': () => UNSENT() }, 'The server could not be reached.'],
+    ];
+    for (const [answers, words] of cases) {
+        const did = await loadAll({ answers });
+        assert.deepEqual(did.errors, ['', `Dispatch data failed to load — ${words}${TAIL}`], `REGRESSION — the status alone, or "Unexpected token '<'" drawn as the tab: ${words}`);
+        assert.deepEqual(did.set, {}, 'nothing adopted — a failed read is never an empty list');
+        assert.deepEqual(did.loading, [true, false]);
+        assert.equal(did.sent.length, 8, 'the eight lists asked');
+    }
+    // Each of the eight refused alone (the review of §0.248): its own name said, nothing adopted — a list left out of the
+    // check reads its refusal's body as an empty list.
+    for (const [key, name] of [['dispatch-technicians', 'technicians'], ['dispatch-vehicles', 'vehicles'], ['dispatch-equipment', 'equipment'],
+        ['dispatch-customers', 'customers'], ['dispatch-jobs', 'jobs'], ['dispatch-schedule-blocks', 'schedule'],
+        ['dispatch-service-plans', 'service plans'], ['dispatch-plan-visits', 'plan visits']]) {
+        const did = await loadAll({ answers: { [key]: () => onceOf(500, { error: 'x' }) } });
+        assert.deepEqual(did.errors, ['', `Dispatch data failed to load — ${name}: x.${TAIL}`], `REGRESSION: ${name}'s refusal read as an empty list`);
+        assert.deepEqual(did.set, {}, `${name}: nothing adopted`);
+        assert.deepEqual(did.loading, [true, false]);
+    }
+});
+
+test('Part 11: the main load — landed, every list as before; a tab left before the answer says nothing — RUN', async () => {
+    const did = await loadAll();
+    assert.deepEqual(did.errors, ['']);
+    assert.deepEqual(Object.keys(did.set).sort(), ['blocks', 'customers', 'equipment', 'jobs', 'jobsRaw', 'plans', 'techs', 'techsRaw', 'vehicles', 'visits']);
+    const landed = LOAD_LANDED();
+    assert.deepEqual([did.set.vehicles, did.set.plans, did.set.visits, did.set.blocks, did.set.customers], [landed['dispatch-vehicles'].vehicles,
+        landed['dispatch-service-plans'].plans, landed['dispatch-plan-visits'].visits, landed['dispatch-schedule-blocks'].blocks, landed['dispatch-customers'].customers]);
+    assert.deepEqual([did.set.jobs.length, did.set.jobs[0].id, did.set.jobs[0].customer, did.set.techs[0].hoursThisWeek], [1, 'job_1', 'Acme', 0]);
+    for (const answers of [{ 'dispatch-jobs': () => onceOf(500, { error: 'x' }) }, { 'dispatch-vehicles': () => UNSENT() }, {}]) {
+        const late = await loadAll({ answers, cancelFirst: true });
+        assert.deepEqual([late.errors, late.set, late.loading], [[''], {}, [true]], 'REGRESSION: a tab left said or set its answer');
+    }
+});
+
+// New Job's Save (handleSaveNewJob): the customer, the job address and the job — each create's refusal read once.
+const NJ_FORM = Object.freeze({ customer: 'Acme', customerId: 'cust_1', accountId: '', title: 'Boiler service', trade: '', jobType: '', address: '', city: '', state: '',
+    zip: '', window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman', opportunityId: '', opportunityCopied: false, needSkills: [],
+    equipCategories: [], requiredVehicleType: '', servicePlanId: '', planDueDate: '', customerRefusal: '', customerRefusalLeads: null, madeCustomerId: '',
+    madeLocation: null, refusedDeal: '' });
+const NJ_JOB0 = Object.freeze({ id: 'job_0' });
+const NJ_CUST = Object.freeze({ id: 'cust_1', name: 'Acme' });
+const newJob = async ({ form = {}, answers, switchAt = -1 }) => {
+    const did = { sent: [], errors: [], saving: [], shown: [], selected: [], forms: [] };
+    const org = { now: 'org_a' };
+    const queue = [...answers];
+    const jobsStart = [NJ_JOB0], custsStart = [NJ_CUST];
+    const jobs = stateOf(jobsStart), custs = stateOf(custsStart);
+    const f = { ...NJ_FORM, ...form };
+    const handle = p10Fn(DISPATCH, '    const handleSaveNewJob = async () => {', '\n    };',
+        ['newJobForm', 'setNewJobError', 'placeholderOn', 'customerForText', 'customers', 'accounts', 'dealHolds', 'DEAL_NEEDS_PICK', 'typedCustomerRefusal',
+            'setNewJobSaving', 'requestOrg', 'saveDroppingRefused', 'stillOrg', 'dbFetch', 'refusalWords', 'readRefusal', 'failureWords', 'setCustomers', 'setNewJobForm',
+            'setJobs', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm'], 'handleSaveNewJob')(
+        f, (v) => did.errors.push(v), () => false, () => ({}), custsStart, [], () => false, 'Pick a customer.', () => 'refused',
+        (v) => did.saving.push(v), () => 'org_a', saveDroppingRefused, (o) => o === org.now, p11Fetch(did, () => queue.shift(), org, { switchAt }),
+        refusalWords, readRefusal, failureWords, custs.set, (u) => did.forms.push(typeof u === 'function' ? u(f) : u), jobs.set, (v) => did.selected.push(v),
+        NJ_FORM, () => {}, (v) => did.shown.push(v));
+    await handle();
+    return { ...did, jobs: jobs.value, jobsSame: jobs.value === jobsStart, custs: custs.value, custsSame: custs.value === custsStart };
+};
+
+test('Part 11: New Job — the job\'s refusal in the server\'s words with their ref, the form open, nothing listed; a refused copied link still dropped — RUN', async () => {
+    for (const [answer, words] of p11Refusals()) {
+        const did = await newJob({ answers: [answer] });
+        assert.deepEqual(did.errors, ['', words], `REGRESSION — "Save failed", the ref dropped, or "Failed to fetch": ${words}`);
+        assert.deepEqual([did.jobsSame, did.shown, did.sent.length], [true, [], 1], 'the form stays open, nothing listed');
+        assert.deepEqual(did.saving, [true, false]);
+    }
+    // The drop still reads the refusal's field from its body: a copied account that names nothing is left off, once.
+    const dropped = await newJob({ form: { accountId: 'acc_gone' }, answers: [onceOf(404, { error: 'That account is not in this organization.', field: 'accountId' }), onceOf(201, { job: { id: 'djob_s' } })] });
+    assert.deepEqual([dropped.sent.length, dropped.sent[0][2].accountId, dropped.sent[1][2].accountId, dropped.errors], [2, 'acc_gone', null, ['']], 'REGRESSION: the refused link\'s field lost — the job not saved without it');
+    assert.equal(dropped.jobs[0].id, 'djob_s');
+    // Landed, as before.
+    const landed = await newJob({ answers: [onceOf(201, { job: { id: 'djob_1' } })] });
+    assert.deepEqual([landed.errors, landed.jobs.map((j) => j.id), landed.selected, landed.shown], [[''], ['djob_1', 'job_0'], ['djob_1'], [false]]);
+    const unreadable = await newJob({ answers: [P11_UNREADABLE()] });
+    assert.deepEqual([unreadable.errors, unreadable.jobs[0].id, unreadable.shown], [[''], unreadable.sent[0][2].id, [false]], 'landed with no job read: listed under the id sent');
+});
+
+test('Part 11: New Job — the customer\'s and the job address\'s refusals named, the job not sent after them; landed unreadable keeps the ids sent — RUN', async () => {
+    const typed = { customerId: '', customer: 'New Co' };
+    for (const [answer, words] of p11Refusals()) {
+        const did = await newJob({ form: typed, answers: [answer] });
+        const said = answer instanceof Error ? words : `The customer was not created — ${words}`;
+        assert.deepEqual(did.errors, ['', said], `the customer: REGRESSION — ${said}`);
+        assert.deepEqual([did.sent.length, did.sent[0][0], did.custsSame, did.jobsSame], [1, '/.netlify/functions/dispatch-customers', true, true]);
+    }
+    const madeUnread = await newJob({ form: typed, answers: [P11_UNREADABLE(), onceOf(201, { job: { id: 'djob_2' } })] });
+    // The review of §0.248: the customer made is listed as sent — it was never listed till a reload, so the next New Job
+    // typing its name made a second.
+    assert.deepEqual([madeUnread.errors, madeUnread.custs], [[''], [NJ_CUST, { id: madeUnread.sent[0][2].id, name: 'New Co', accountId: null }]],
+        'REGRESSION: the customer made under an unread answer not listed — the next New Job makes a second of its name');
+    assert.equal(madeUnread.sent[1][2].customerId, madeUnread.sent[0][2].id, 'the job is the customer\'s, under the id sent');
+    assert.ok(madeUnread.forms.some((x) => x.madeCustomerId === madeUnread.sent[0][2].id), 'a retry reuses the customer made');
+    // A won deal's account the server says names nothing is left off the customer, once (state §0.214): the field read
+    // from the refusal's body, after the ok check.
+    const dropC = await newJob({ form: { ...typed, accountId: 'acc_gone', opportunityCopied: true },
+        answers: [onceOf(404, { error: 'That account is not in this organization.', field: 'accountId' }), onceOf(201, { customer: { id: 'dcust_k', name: 'New Co' } }), onceOf(201, { job: { id: 'djob_k' } })] });
+    assert.deepEqual([dropC.errors, dropC.sent.length, dropC.sent[0][2].accountId, dropC.sent[1][2].accountId, dropC.sent[2][2].customerId], [[''], 3, 'acc_gone', null, 'dcust_k'],
+        'REGRESSION: the refused account\'s field lost — the customer not made without it');
+    const addressed = { address: '1 Main St', city: 'Austin' };
+    for (const [answer, words] of p11Refusals()) {
+        const did = await newJob({ form: addressed, answers: [answer] });
+        const said = answer instanceof Error ? words : `The job address was not saved — ${words}`;
+        assert.deepEqual(did.errors, ['', said], `the address: REGRESSION — ${said}`);
+        assert.deepEqual([did.sent.length, did.sent[0][0], did.jobsSame], [1, '/.netlify/functions/dispatch-customers?resource=locations', true]);
+    }
+    const locUnread = await newJob({ form: addressed, answers: [P11_UNREADABLE(), onceOf(201, { job: { id: 'djob_3' } })] });
+    assert.deepEqual([locUnread.errors, locUnread.sent[1][2].locationId], [[''], locUnread.sent[0][2].id], 'the job at the address made, under the id sent');
+});
+
+test('Part 11 review fix: New Job — a customer made under an answer that cannot be read is kept as sent: listed, its first address its default, its dropped account off — RUN', async () => {
+    const typed = { customerId: '', customer: 'New Co', address: '1 Main St', city: 'Austin' };
+    const made = await newJob({ form: typed, answers: [P11_UNREADABLE(), onceOf(201, { location: LOC }), onceOf(201, { job: { id: 'djob_5' } })] });
+    const custId = made.sent[0][2].id;
+    assert.deepEqual(made.errors, ['']);
+    assert.deepEqual(made.sent.map(([u]) => u), ['/.netlify/functions/dispatch-customers', '/.netlify/functions/dispatch-customers?resource=locations', '/.netlify/functions/dispatch-jobs']);
+    assert.deepEqual(made.custs, [NJ_CUST, { id: custId, name: 'New Co', accountId: null }], 'REGRESSION: the customer made not listed — no row kept from what was sent');
+    assert.deepEqual([made.sent[1][2].customerId, made.sent[1][2].isDefault], [custId, true], 'REGRESSION: the made customer\'s first address stored as no default');
+    assert.deepEqual([made.sent[2][2].customerId, made.jobs[0].id], [custId, 'djob_5']);
+    // Linked: the account sent is the row's and the job's.
+    const linked = await newJob({ form: { ...typed, accountId: 'acc_1' }, answers: [P11_UNREADABLE(), onceOf(201, { location: LOC }), onceOf(201, { job: { id: 'djob_6' } })] });
+    assert.deepEqual([linked.custs[1].accountId, linked.sent[2][2].accountId], ['acc_1', 'acc_1'], 'the account sent kept on the row and the job');
+    // A won deal's account the server said names nothing, dropped (state §0.214): the row as it was last sent — no account —
+    // and the job saved without it.
+    const dropped = await newJob({ form: { ...typed, accountId: 'acc_gone', opportunityCopied: true },
+        answers: [onceOf(404, { error: 'That account is not in this organization.', field: 'accountId' }), P11_UNREADABLE(), onceOf(201, { location: LOC }), onceOf(201, { job: { id: 'djob_7' } })] });
+    assert.deepEqual([dropped.errors, dropped.sent[0][2].accountId, dropped.sent[1][2].accountId], [[''], 'acc_gone', null]);
+    assert.deepEqual([dropped.custs[1], dropped.sent[2][2].isDefault], [{ id: dropped.sent[1][2].id, name: 'New Co', accountId: null }, true],
+        'REGRESSION: the dropped account put back on the row kept — the customer listed as linked to an account the server refused');
+    assert.equal(dropped.sent[3][2].accountId, null, 'REGRESSION: the job sent with the account the customer\'s create dropped');
+});
+
+test('Part 11: New Job — an answer after an org switch says and lists nothing — RUN', async () => {
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x', requestId: 'r1' }), P11_PAGE(), UNSENT(), onceOf(201, { job: { id: 'djob_1' } })]) {
+        const did = await newJob({ answers: [answer], switchAt: 0 });
+        assert.deepEqual([did.errors, did.jobsSame, did.shown], [[''], true, []], 'REGRESSION: an answer from the org left said or listed');
+    }
+    const loc = await newJob({ form: { address: '1 Main St', city: 'Austin' }, answers: [UNSENT()], switchAt: 0 });
+    assert.deepEqual([loc.errors, loc.sent.length], [[''], 1]);
+});
+
+// The mass schedule: the first refusal's words, with the job they are about.
+const MJ_1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, equipCategories: [], status: 'unscheduled' });
+const MJ_2 = Object.freeze({ id: 'job_2', title: '', customer: 'Beta Co', durationHrs: 1, equipCategories: [], status: 'unscheduled' });
+const massRun = async (answers) => {
+    const did = { sent: [], prog: [], saving: [], plans: [], audits: [] };
+    const queue = [...answers];
+    const jobs = stateOf([MJ_1, MJ_2]);
+    const plan = { proposals: [MJ_1, MJ_2].map((job) => ({ job, tech: { id: 'tech_1' }, crew: [{ id: 'tech_1' }], dateStr: '2026-11-16', startHr: 9 })),
+        skipped: [], fromStr: '2026-11-16', toStr: '2026-11-22' };
+    const confirm = p10Fn(DISPATCH, '    const confirmMassSchedule = async () => {', '\n    };',
+        ['massPlan', 'setMassSaving', 'setMassProg', 'requestOrg', 'stillOrg', 'pickEquipmentFor', 'equipment', 'overlappingRivals', 'jobs', 'hhmm', 'dbFetch',
+            'readRefusal', 'failureWords', 'setJobs', 'addAudit', 'setMassPlan'], 'confirmMassSchedule')(
+        plan, (v) => did.saving.push(v), (v) => did.prog.push(v), () => 'org_a', () => true, () => ({ picked: [] }), [], () => [], jobs.value,
+        (h) => `${String(h).padStart(2, '0')}:00`, p11Fetch(did, () => queue.shift(), { now: 'org_a' }), readRefusal, failureWords, jobs.set,
+        (...a) => did.audits.push(a), (u) => did.plans.push(typeof u === 'function' ? u(plan) : u));
+    await confirm();
+    return { ...did, last: did.prog[did.prog.length - 1], jobs: jobs.value };
+};
+
+test('Part 11: the mass schedule — the first refusal or failure said with its job, in the house words; what landed leaves the panel — RUN', async () => {
+    for (const [answer, words] of p11Refusals()) {
+        const did = await massRun([answer, onceOf(200, { job: {} })]);
+        assert.deepEqual(did.last, { done: 1, total: 2, failed: 1, error: `Boiler service: ${words}` }, `REGRESSION — "HTTP N" or "Failed to fetch": ${words}`);
+        assert.deepEqual(did.jobs.map((j) => j.status), ['unscheduled', 'scheduled'], 'only the job that landed moves');
+        assert.deepEqual(did.plans[did.plans.length - 1].proposals.map((p) => p.job.id), ['job_1'], 'a second press sends only the job refused');
+    }
+    const second = await massRun([onceOf(200, {}), onceOf(409, { error: 'The job was changed since.' })]);
+    assert.equal(second.last.error, 'Beta Co: The job was changed since.', 'a job with no title named by its customer');
+    const both = await massRun([onceOf(500, { error: 'first' }), onceOf(500, { error: 'second' })]);
+    assert.deepEqual([both.last.failed, both.last.error], [2, 'Boiler service: first'], 'the first refusal\'s words kept');
+    const landed = await massRun([onceOf(200, {}), onceOf(200, {})]);
+    assert.deepEqual([landed.last, landed.plans], [{ done: 2, total: 2, failed: 0, error: '' }, [null]]);
+});
+
+// The shift pattern's save (saveWorkingHours) and a technician's job card (updateMyJob): their throws are the house words.
+test('Part 11: the shift pattern\'s save and the job card\'s update throw the house words — said by their callers\' failureWords; landed as before — RUN', async () => {
+    const hours = async (answer) => {
+        const did = { sent: [] };
+        const start = [{ id: 'dtech_1', workingHours: null }, { id: 'dtech_2' }];
+        const raw = stateOf(start);
+        const fn = p10Fn(DISPATCH, '    const saveWorkingHours = async (techId, workingHours) => {', '\n    };', ['dbFetch', 'readRefusal', 'setTechsRaw'], 'saveWorkingHours')(
+            p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set);
+        let thrown = null;
+        try { await fn('dtech_1', { mon: null }); } catch (e) { thrown = e; }
+        return { ...did, said: thrown ? failureWords(thrown) : null, raw: raw.value, same: raw.value === start };
+    };
+    const card = async (answer) => {
+        const did = { sent: [], busy: [] };
+        const start = [{ id: 'job_1', status: 'scheduled' }, { id: 'job_2' }];
+        const raw = stateOf(start);
+        const fn = p10Fn(DISPATCH, '    const updateMyJob = async (jobId, patch) => {', '\n    };', ['setTechBusyId', 'dbFetch', 'readRefusal', 'setJobsRaw'], 'updateMyJob')(
+            (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set);
+        let thrown = null;
+        try { await fn('job_1', { status: 'en_route' }); } catch (e) { thrown = e; }
+        return { ...did, said: thrown ? failureWords(thrown) : null, raw: raw.value, same: raw.value === start };
+    };
+    for (const [answer, words] of p11Refusals()) {
+        const h = await hours(answer);
+        assert.deepEqual([h.said, h.same], [words, true], `the shift pattern: REGRESSION — "HTTP N", the ref dropped: ${words}`);
+    }
+    for (const [answer, words] of p11Refusals()) {
+        const c = await card(answer);
+        assert.deepEqual([c.said, c.same, c.busy], [words, true, ['job_1', null]], `the job card: REGRESSION — ${words}`);
+    }
+    const hl = await hours(onceOf(200, { technician: { id: 'dtech_1', workingHours: { mon: null } } }));
+    assert.deepEqual([hl.said, hl.raw[0].workingHours, hl.sent[0][2]], [null, { mon: null }, { id: 'dtech_1', workingHours: { mon: null } }]);
+    const hu = await hours(P11_UNREADABLE());
+    assert.deepEqual([hu.said, hu.same], [null, true], 'landed with no answer read: nothing changes, as before');
+    const cl = await card(onceOf(200, { job: { id: 'job_1', status: 'en_route' } }));
+    assert.deepEqual([cl.said, cl.raw[0].status], [null, 'en_route']);
+    const cu = await card(P11_UNREADABLE());
+    assert.deepEqual([cu.said, cu.same], [null, true]);
+});
+
+// The week board's move (handleWeekMove's commit).
+const WM_JOB = Object.freeze({ id: 'job_1', title: 'Boiler service', scheduledDate: '2026-11-16', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [] });
+const weekCommit = async ({ answer, switchAt = -1 }) => {
+    const did = { sent: [], states: [], audits: [], raw: [] };
+    const org = { now: 'org_a' };
+    const start = [WM_JOB, { id: 'job_2' }];
+    const jobs = stateOf(start);
+    const commit = p10Fn(DISPATCH, '        const commit = async (overridden) => {', '\n        };',
+        ['setWeekMove', 'requestOrg', 'dbFetch', 'job', 'payload', 'stillOrg', 'readRefusal', 'failureWords', 'setJobs', 'plan', 'toDate', 'reserved', 'queueWindow',
+            'setJobsRaw', 'addAudit', 'name', 'fromTech', 'where', 'unitLabel', 'equipment', 'weekMoveTimer', 'clearTimeout', 'setTimeout'], 'commit')(
+        (v) => did.states.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), WM_JOB, { scheduledDate: '2026-11-17' }, (o) => o === org.now, readRefusal,
+        failureWords, jobs.set, { crew: ['tech_1'] }, '2026-11-17', null, () => '10:00', (u) => did.raw.push(u), (...a) => did.audits.push(a), 'Boiler service', null,
+        '2026-11-17', (id) => id, [], { current: null }, () => {}, () => 1);
+    await commit([]);
+    return { ...did, jobs: jobs.value, same: jobs.value === start };
+};
+
+test('Part 11: the week board\'s move — a refusal in the house words, a 403 the role\'s sentence; nothing moved; after an org switch nothing said — RUN', async () => {
+    const BUSY = { busy: true, error: '', notice: '' };
+    for (const [answer, words] of p11Refusals('Your role cannot reschedule jobs.')) {
+        const did = await weekCommit({ answer });
+        assert.deepEqual(did.states, [BUSY, { busy: false, error: words, notice: '' }], `REGRESSION — "HTTP N" or "Failed to fetch": ${words}`);
+        assert.deepEqual([did.same, did.audits, did.raw], [true, [], []]);
+    }
+    const landed = await weekCommit({ answer: onceOf(200, { job: { id: 'job_1', scheduledDate: '2026-11-17', status: 'scheduled' } }) });
+    assert.deepEqual([landed.states[1].error, landed.states[1].notice, landed.jobs[0].scheduledDate, landed.jobs[0].window, landed.audits.length], ['', 'Moved Boiler service to 2026-11-17.', '2026-11-17', '10:00', 1]);
+    const unreadable = await weekCommit({ answer: P11_UNREADABLE() });
+    assert.deepEqual([unreadable.states[1].notice, unreadable.jobs[0].scheduledDate, unreadable.raw], ['Moved Boiler service to 2026-11-17.', '2026-11-17', []], 'landed: the row moves as sent, as before');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x' }), P11_PAGE(), UNSENT(), onceOf(200, { job: { id: 'job_1' } })]) {
+        const did = await weekCommit({ answer, switchAt: 0 });
+        assert.deepEqual([did.states, did.same, did.audits], [[BUSY], true, []], 'REGRESSION: an answer from the org left said or written');
+    }
+});
+
+test('Part 11: WIRING — recordVisit to the end of DispatchTab: no "HTTP N", "check your connection" or raw .message; the visit banner has its Close', () => {
+    const src = dispatchSrc();
+    const below = src.slice(src.indexOf('    const recordVisit = async ('));
+    assert.ok(below.length > 20000, 'recordVisit found');
+    assert.ok(!/'HTTP '|HTTP \$\{/.test(below), 'REGRESSION: "HTTP N" said below recordVisit');
+    assert.ok(!/check your connection/i.test(below), 'REGRESSION: "check your connection" when the server answered');
+    assert.ok(!/\b(e|err)\??\.message\b/.test(below), 'REGRESSION: a raw e.message said below recordVisit');
+    // The banner over Service due: kept until its Close, cleared by the next action.
+    const due = between(src, 'const ServiceDueView = (', 'const submitPending = async () => {');
+    assert.ok(due.includes('actionError, onCloseActionError }) => {'));
+    const banner = between(src, '{actionError && (', '            )}');
+    order(banner, 'role="alert"', '{actionError}', '<button onClick={onCloseActionError}', 'Close');
+    assert.ok(src.includes("actionError={visitActionError} onCloseActionError={() => setVisitActionError('')}"), 'REGRESSION: the banner\'s Close wired to nothing');
+    // The main load: the whole-tab words stay, the eight lists read only after their check.
+    const load = between(src, "        (async () => {\n            setLoading(true);", '\n    }, []);');
+    order(load, '].filter(([, r]) => !r.ok);', 'if (failed.length) {', 'await readRefusal(r)', 'throw new Error(', 'techsRes.json(),', 'setLoadError(`Dispatch data failed to load — ${failureWords(err)} Reload the page to try again.`);');
+});
+
+// The service plans panel (DispatchServicePlansDetail.jsx): its load, save, delete and the legacy seed.
+const SP = 'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx';
+const spSrc = () => code(read(SP));
+const spLoad = async (answers = {}) => {
+    const did = { sent: [], errors: [], loading: [], plans: [], custs: [] };
+    const landed = { 'dispatch-service-plans': { plans: [{ id: 'plan_1', name: 'Gold' }] }, 'dispatch-customers': { customers: [{ id: 'cust_1' }] } };
+    const load = new Function('setLoading', 'setLoadError', 'dbFetch', 'readRefusal', 'failureWords', 'setPlans', 'setCustomers',
+        `const load = ${between(spSrc(), "async () => {\n        setLoading(true); setLoadError('');", '\n    }, []);')}\n    };\nreturn load;`)(
+        (v) => did.loading.push(v), (v) => did.errors.push(v),
+        p11Fetch(did, (url) => { const k = url.split('/').pop(); return k in answers ? answers[k]() : onceOf(200, landed[k]); }, { now: 'org_a' }), readRefusal, failureWords,
+        (v) => did.plans.push(v), (v) => did.custs.push(v));
+    await load();
+    return { ...did, landed };
+};
+
+test('Part 11: the service plans load — each refusal in the server\'s words, a page that was no JSON in plain words; never "No service plans yet" over it — RUN', async () => {
+    const cases = [
+        [{ 'dispatch-service-plans': () => onceOf(403, { error: 'Forbidden: dispatch role required' }) }, 'plans: Forbidden: dispatch role required.'],
+        [{ 'dispatch-customers': () => onceOf(500, { error: 'Internal server error', requestId: 'r1' }) }, 'customers: Internal server error (ref r1).'],
+        [{ 'dispatch-service-plans': () => P11_PAGE(), 'dispatch-customers': () => onceOf(409, {}) }, 'plans: The server returned 502; customers: The server returned 409.'],
+        [{ 'dispatch-customers': () => P11_UNREADABLE() }, 'Its answer could not be read.'],
+        [{ 'dispatch-service-plans': () => UNSENT() }, 'The server could not be reached.'],
+    ];
+    for (const [answers, words] of cases) {
+        const did = await spLoad(answers);
+        assert.deepEqual(did.errors, ['', `Service plans did not load — ${words}`], `REGRESSION — the status alone or "Unexpected token '<'": ${words}`);
+        assert.deepEqual([did.plans, did.custs, did.loading], [[], [], [true, false]], 'nothing adopted');
+    }
+    const ok = await spLoad();
+    assert.deepEqual([ok.errors, ok.plans, ok.custs], [[''], [ok.landed['dispatch-service-plans'].plans], [ok.landed['dispatch-customers'].customers]]);
+});
+
+const spPress = async (name, answer, draft = { id: 'plan_1', name: ' Gold ', cadence: 'annual' }) => {
+    const did = { sent: [], errors: [], busy: [], loads: 0, drafts: [] };
+    const fn = p10Fn(SP, `    const ${name} = async () => {`, '\n    };', ['draft', 'setError', 'setBusy', 'dbFetch', 'readRefusal', 'failureWords', 'load', 'setDraft'], name)(
+        draft, (v) => did.errors.push(v), (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, failureWords,
+        async () => { did.loads++; }, (v) => did.drafts.push(v));
+    await fn();
+    return did;
+};
+
+test('Part 11: the service plans save and delete — a refusal in the house words, a 403 the role\'s sentence (Q13); the draft open; landed as before — RUN', async () => {
+    for (const [name, role, method] of [['save', 'Your role cannot change service plans.', 'PUT'], ['remove', 'Your role cannot delete service plans.', 'DELETE']]) {
+        for (const [answer, words] of [...p11Refusals(role), [onceOf(409, { error: 'Customers are still on this plan.' }), 'Customers are still on this plan.']]) {
+            const did = await spPress(name, answer);
+            assert.deepEqual(did.errors, ['', words], `${name}: REGRESSION — "HTTP N", the ref dropped or "Failed to fetch": ${words}`);
+            assert.deepEqual([did.loads, did.drafts, did.busy], [0, [], [true, false]], 'nothing read again, the draft open');
+            assert.equal(did.sent[0][1], method);
+        }
+        const landed = await spPress(name, onceOf(200, { plan: { id: 'plan_1' } }));
+        assert.deepEqual([landed.errors, landed.loads, landed.drafts], [[''], 1, [null]]);
+        const unreadable = await spPress(name, P11_UNREADABLE());
+        assert.deepEqual([unreadable.errors, unreadable.loads, unreadable.drafts], [[''], 1, [null]], 'landed: no body read, as before');
+    }
+});
+
+const spSeed = async ({ answers, switchAt = -1, tiers = ['gold'] }) => {
+    const did = { sent: [], msgs: [], seeding: [], loads: 0 };
+    const org = { now: 'org_a' };
+    const queue = [...answers];
+    const seed = p10Fn(SP, '    const seedFromLegacy = async () => {', '\n    };',
+        ['setSeeding', 'setSeedMsg', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'legacyPlansToCreate', 'legacyTiers', 'failureWords', 'load'], 'seedFromLegacy')(
+        (v) => did.seeding.push(v), (v) => did.msgs.push(v), () => 'org_a', p11Fetch(did, () => queue.shift(), org, { switchAt }), readRefusal, (o) => o === org.now,
+        legacyPlansToCreate, tiers, failureWords, async () => { did.loads++; });
+    await seed();
+    return did;
+};
+
+test('Part 11: the legacy seed — the read\'s and each create\'s refusal in the house words; nothing created over a read that failed — RUN', async () => {
+    for (const [answer, words] of p11Refusals()) {
+        const did = await spSeed({ answers: [answer] });
+        assert.deepEqual(did.msgs, ['', `Nothing created — the plans could not be read: ${words}`], `the read: REGRESSION — "HTTP N" or "Failed to fetch": ${words}`);
+        assert.deepEqual([did.sent.length, did.seeding, did.loads], [1, [true, false], 0], 'no plan made');
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { plans: 'x' })]) {
+        const did = await spSeed({ answers: [answer] });
+        assert.deepEqual([did.msgs, did.sent.length], [['', 'Nothing created — the plans could not be read: the answer held no list of plans'], 1], 'REGRESSION: an answer with no list read as none — every label made again');
+    }
+    for (const [answer, words] of p11Refusals()) {
+        const did = await spSeed({ answers: [onceOf(200, { plans: [] }), answer] });
+        assert.deepEqual(did.msgs, ['', `Created 0. 1 failed — gold: ${words}`], `a create: REGRESSION — ${words}`);
+        assert.deepEqual([did.sent[1][1], did.loads], ['POST', 1]);
+    }
+    const landed = await spSeed({ answers: [onceOf(200, { plans: [] }), onceOf(201, { plan: {} })] });
+    assert.deepEqual(landed.msgs, ['', 'Created 1 plan. Assign customers to them from Dispatch → Customers.']);
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x' }), P11_PAGE(), UNSENT(), onceOf(200, { plans: [] })]) {
+        const did = await spSeed({ answers: [answer], switchAt: 0 });
+        assert.deepEqual([did.msgs, did.sent.length, did.loads], [[''], 1, 0], 'REGRESSION: a read from the org left said, or plans made in the new one');
+    }
+});
+
+test('Part 11: WIRING — the service plans panel: no "HTTP N" or raw .message; its 403 sentences kept (Q13)', () => {
+    const s = spSrc();
+    assert.ok(!/'HTTP '|HTTP \$\{/.test(s), 'REGRESSION: "HTTP N" said');
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s), 'REGRESSION: a raw err.message said');
+    assert.ok(s.includes("import { readRefusal, failureWords } from '../../../utils/refusalWords.js';"));
+    assert.ok(s.includes("if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change service plans.' : await readRefusal(res));"));
+    assert.ok(s.includes("if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete service plans.' : await readRefusal(res));"));
+    assert.equal(count(s, 'failureWords(err)'), 5, 'the load, save, delete, seed read and each create say failureWords');
+});
+
+test('Part 11 pane check: Service plans says "No service plans yet." only over a read that landed — never under "Service plans did not load" — WIRING', () => {
+    const s = code(read('src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx'));
+    assert.equal(count(s, '{plans.length === 0 && !loading && !loadError && ('), 1, 'REGRESSION: "No service plans yet." under a load that failed');
+    assert.equal(count(s, 'No service plans yet.'), 1);
+    order(s, '{plans.length === 0 && !loading && !loadError && (', 'No service plans yet.');
 });

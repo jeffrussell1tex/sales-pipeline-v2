@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { T } from '../tokens.js';
 import { isMergeArchived } from '../utils/pickLink.js';
 import PastMerges from './PastMerges';
+import { failureWords } from '../utils/refusalWords.js';
 
 // ── Theme (mirrors SettingsTab T) ──────────────────────────────────────────
 
@@ -108,7 +109,9 @@ export default function ContactDuplicateScanView({ onBack }) {
             const d = await fdRef.current(t);
             if (gen === scanGen.current) setData(d);
         } catch (e) {
-            if (gen === scanGen.current) setError(e?.message || 'Scan failed. Please try again.');
+            // A failed scan leaves no pairs or counts beside its error (§0.248, the review): a read that failed is never "none".
+            if (gen === scanGen.current) setData(null);
+            if (gen === scanGen.current) setError(failureWords(e));   // the server's words pass through; never "Failed to fetch" (§0.248)
         } finally {
             if (gen === scanGen.current) setLoading(false);
         }
@@ -127,8 +130,11 @@ export default function ContactDuplicateScanView({ onBack }) {
         if (scanKey !== countRef.current) { countRef.current = scanKey; runScan(tier); }
     }, [scanKey, tier, runScan]);
 
-    const counts = data?.counts || { duplicate: 0, related: 0 };
-    const pairs  = data?.pairs || [];
+    // Only a landed scan of the tier showing is drawn (§0.248, the review): one that failed, or one still out after a
+    // toggle, shows no other tier's pairs and no count — "—", never 0 — and never "No likely duplicates found".
+    const shown  = data && data.tier === tier ? data : null;
+    const counts = shown?.counts;
+    const pairs  = shown?.pairs || [];
 
     const openMerge = (pair) => setContactMergeModal?.({ aId: pair.a.id, bId: pair.b.id });
 
@@ -143,7 +149,7 @@ export default function ContactDuplicateScanView({ onBack }) {
                     background: active ? T.ink : T.surface,
                     color: active ? '#f5f1eb' : T.inkMid,
                 }}>
-                {label} <span style={{ opacity: 0.7, fontWeight: 700 }}>{count}</span>
+                {label} <span style={{ opacity: 0.7, fontWeight: 700 }}>{count ?? '—'}</span>
             </button>
         );
     };
@@ -165,11 +171,11 @@ export default function ContactDuplicateScanView({ onBack }) {
 
             {/* Controls */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-                {pill('duplicate', 'Likely duplicates', counts.duplicate)}
-                {pill('related', 'Possibly related', counts.related)}
+                {pill('duplicate', 'Likely duplicates', counts?.duplicate)}
+                {pill('related', 'Possibly related', counts?.related)}
                 <div style={{ flex: 1 }} />
                 <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>
-                    {data ? `${data.scanned} contacts scanned` : ''}
+                    {shown ? `${shown.scanned} contacts scanned` : ''}
                 </span>
                 <button onClick={() => runScan(tier)} disabled={loading}
                     style={{ padding: '6px 14px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.6 : 1, fontFamily: T.sans }}>
@@ -191,17 +197,17 @@ export default function ContactDuplicateScanView({ onBack }) {
                 </div>
             )}
 
-            {data?.truncated && (
+            {shown?.truncated && (
                 <div style={{ background: 'rgba(184,115,51,0.08)', border: `1px solid ${T.warn}`, borderRadius: T.r, padding: '10px 14px', color: T.warn, fontSize: 12.5, fontFamily: T.sans, marginBottom: 14 }}>
                     Showing the first {pairs.length} pairs. Merge these and re-scan to see more.
                 </div>
             )}
 
-            {loading && !data && (
+            {loading && !shown && (
                 <div style={{ color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans, padding: '20px 0' }}>Scanning contacts…</div>
             )}
 
-            {!loading && data && pairs.length === 0 && (
+            {!loading && shown && pairs.length === 0 && (
                 <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, padding: 24, textAlign: 'center', color: T.inkMid, fontSize: 13, fontFamily: T.sans }}>
                     {tier === 'duplicate'
                         ? 'No likely duplicates found — your contacts look clean.'

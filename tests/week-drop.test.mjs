@@ -168,6 +168,7 @@ test('the parent’s handler: the planner’s refusal is shown, the equipment ga
     assert.ok(s.includes(".filter(b => !/^(Not rostered|Off ·|Double-booked)/.test(b))"), 'the soft blockers are the ones the builder overrides; the hard gates ran already');
     assert.ok(s.includes("showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), false);"), 'the app-wide confirm, like the builder’s Override — the INFO variant: its button reads Confirm; the danger variant’s reads Delete (seen in the pane, 14 Sep)');
     assert.ok(s.includes("addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,"));
-    assert.ok(s.includes("if (res.status === 403) throw new Error('Your role cannot reschedule jobs.');"));
+    // Moved pin (state §0.248, docs/design/refusal-sweep Part 11): the ok check first; a 403 still the role's sentence (Q13).
+    assert.ok(s.includes("const why = res.status === 403 ? 'Your role cannot reschedule jobs.' : await readRefusal(res);"));
     assert.ok(s.includes('onMove={handleWeekMove} moveState={weekMove}'), 'wired into the week range of the board');
 });

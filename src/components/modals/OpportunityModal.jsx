@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { parseLocalDate, daysSince } from '../../utils/dateLocal';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
+import { readRefusal, failureWords } from '../../utils/refusalWords.js';
 import { useApp } from '../../AppContext';
 import AccountPicker from '../rails/AccountPicker';
 import RecordDocuments from '../documents/RecordDocuments';
@@ -696,16 +697,19 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ opportunityId: dealId, forceRefresh }),
             });
-            const data = await res.json().catch(() => ({}));
+            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10): the server's words
+            // with their ref, else "The server returned N." — never a raw message.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read carries no score, said below
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || 'Scoring failed');
             if (data.disabled) { setOff(true); return; }
             const score = storedScore(data);
             if (!score) throw new Error('The answer carried no score.');
             setOpportunities(prev => prev.map(o => (o.id === dealId ? { ...o, aiScore: score } : o)));
             onScored(score);
         } catch (err) {
-            setError(err.message);
+            if (!stillOrg(askedOrg)) return;   // after an org switch it says nothing
+            setError(failureWords(err));
         } finally {
             setLoading(false);
         }

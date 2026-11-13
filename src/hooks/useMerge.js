@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage.js';
 import { mergeWords, undoWords, mergedNoticeWords } from '../utils/mergeUndo.js';
+import { readRefusal } from '../utils/refusalWords.js';
 
 // Client side of the duplicate merge. Talks to /duplicates (the scans) and /merge (a merge, its Undo, and the
 // org's past merges — state §0.207). Keeps the app's lists in step. storage.js is named with its extension: the
@@ -102,8 +103,11 @@ export function useMerge(deps) {
     // Org-wide scan. tier: 'duplicate' (default) | 'related'
     const findDuplicates = async (tier = 'duplicate') => {
         const res = await dbFetch('/.netlify/functions/duplicates?tier=' + encodeURIComponent(tier));
+        // The ok check first (state §0.248, docs/design/refusal-sweep Part 10): a refusal thrown in the server's words
+        // with their ref; a landed answer that is no JSON throws, and the scan view says failureWords' "Its answer could
+        // not be read." — never "Unexpected token '<'".
+        if (!res.ok) throw new Error(await readRefusal(res));
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to scan for duplicates.');
         return data; // { tier, pairs, counts, scanned, truncated }
     };
 
@@ -148,8 +152,8 @@ export function useMerge(deps) {
 
     const findContactDuplicates = async (tier = 'duplicate') => {
         const res = await dbFetch('/.netlify/functions/duplicates?entityType=contact&tier=' + encodeURIComponent(tier));
+        if (!res.ok) throw new Error(await readRefusal(res));   // as the account scan's (§0.248)
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to scan for duplicate contacts.');
         return data; // { tier, pairs, counts, scanned, truncated }
     };
 
@@ -191,8 +195,8 @@ export function useMerge(deps) {
     const findMerges = async (entityType) => {
         const res = await dbFetch('/.netlify/functions/merge?entityType=' + encodeURIComponent(entityType)).catch(() => null);
         if (!res) throw new Error('No answer from the server.');
+        if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first, the same words (§0.248)
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ? `${data.error}${data.requestId ? ` (ref ${data.requestId})` : ''}` : `The server returned ${res.status}.`);
         // An answer whose list could not be read is no list (the review, 17 Oct): never "No merges yet." over a list
         // Past merges never read.
         if (!Array.isArray(data.merges)) throw new Error('No answer from the server.');
