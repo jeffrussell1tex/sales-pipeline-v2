@@ -4,6 +4,9 @@ import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+// The house words (docs/design/refusal-sweep Part 12): a refusal the server's words with their ref, else "The server
+// returned N."; a thrown failure in plain words — never "HTTP N" or a raw e.message ("Failed to fetch").
+import { readRefusal, refusalWords, failureWords } from '../../../utils/refusalWords.js';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 // A teams save names the token of the list it read (state §0.225): one sender, the latest taken on a refusal.
@@ -30,12 +33,19 @@ import { popoverPlacement } from '../../../utils/popoverPlacement.js';
 // which auth.mjs did not recognise, and used to wave through as a rep anyway.
 import { ROLE_OPTIONS } from '../../../utils/roles.js';
 import { todayLocal } from '../../../utils/dateLocal';
+// One rule for clerk-mfa-status's answer, with the MFA page and the overview's tile (the §0.249 review, round 3).
+import { mfaAnswerRead } from '../../../utils/settingsCards.js';
 const ROLE_LABEL = ROLE_OPTIONS.reduce((m, o) => { m[o.value] = o.label; return m; }, {});
 // A role we do not know is rendered AS ITSELF, never translated and never hidden.
 // Legacy rows still hold `member`, `admin` and `Sales Rep`; showing the raw string
 // is what makes them findable.
 const roleLabel = (role) => ROLE_LABEL[role] || role || '\u2014';
 const isKnownRole = (role) => Object.prototype.hasOwnProperty.call(ROLE_LABEL, role);
+
+// A removal that landed with an answer that cannot be read (docs/design/refusal-sweep Part 12): it is taken as landed,
+// but the row it took off and the lists the server wrote are the server's, so the page says to reload for them.
+const REVOKED_UNREAD = 'The invitation was revoked. Its answer could not be read, so the list here may still show their row — reload the page to see it.';
+const REMOVED_UNREAD = 'Removed. Its answer could not be read, so the team and territory lists here may still name them — reload the page to see them.';
 
 // A <select> whose value matches none of its options does not render empty — the
 // browser falls back to the FIRST option, so a user stored as `member` displayed
@@ -91,13 +101,16 @@ const PeopleCrumb = ({ onBack, onUsers, leaf }) => (
     </div>
 );
 
-const PeoplePageHeader = ({ title, subtitle, statusDetail, rightActions }) => (
+// The green ✓ stands only over a status that was read (`statusState` 'read'); a read that failed or sent no count
+// ('unread') draws a warning mark, and one still loading no mark — never a passing check over a read that failed
+// (state §0.247; the §0.249 review, round 2).
+const PeoplePageHeader = ({ title, subtitle, statusDetail, statusState, rightActions }) => (
     <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
         <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
             <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>{title}</div>
             <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
                 <span>{subtitle}</span>
-                {statusDetail && <><span style={{ color:T.inkMuted }}>•</span><span style={{ color:T.ok, fontWeight:600 }}>✓</span><span>{statusDetail}</span></>}
+                {statusDetail && <><span style={{ color:T.inkMuted }}>•</span>{statusState === 'read' ? <span style={{ color:T.ok, fontWeight:600 }}>✓</span> : statusState === 'unread' ? <span title="Not read" style={{ color:T.warn, fontWeight:700 }}>!</span> : null}<span>{statusDetail}</span></>}
             </div>
         </div>
         {rightActions && <div style={{ display:'flex', gap:8 }}>{rightActions}</div>}
@@ -148,6 +161,11 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
+    // What a send that landed has to say (the §0.249 review): kept until the next Send, never the red box of a failure.
+    const [notice, setNotice] = useState('');
+    // A notice whose words include a roster read that failed is drawn in the warning tint, never the success green
+    // (the §0.249 review, round 3); a clean landed-unread notice keeps the green.
+    const [noticeWarn, setNoticeWarn] = useState(false);
 
     const allTeams  = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
     const allReps   = [...new Set((settings.users || []).map(u => u.name).filter(Boolean))].sort();
@@ -174,6 +192,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const pendingToday = (settings.users || []).filter(u => u.name && memberStatus(u) === 'Invited').length;
 
     const handleSend = async () => {
+        setNotice('');
         const validated = validateRows();
         setRows(validated);
         const invalid = validated.filter(r => !r.valid);
@@ -185,6 +204,31 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             const resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) });
             const d = await resp.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;   // and the last org's team list is never PUT into the new org
+            // A landed answer always holds its `invited` list (users.mjs): one without it could not be read — the
+            // invitations went out, and who they are is the server's (docs/design/refusal-sweep Part 12). Taken as landed
+            // (the §0.249 review): the batch is emptied, so Send is never left armed over the same rows — a second press
+            // would email each person again — the roster is read again for who they are, and it is said as a notice.
+            if (resp.ok && !Array.isArray(d.invited)) {
+                setRows([{ id: Date.now(), email:'', role: defaultRole, team:'', manager:'', territory:'', valid:true, error:'' }]);
+                // A roster read again that fails is said in the house words, with the server's ref — as runClerkSync says
+                // its own (the §0.249 review, round 2): never dropped for a bare "reload".
+                let reread = false, why = '';
+                try {
+                    const rosterRes = await dbFetch('/.netlify/functions/users');
+                    if (!rosterRes.ok) throw new Error(await readRefusal(rosterRes));
+                    const ud = await rosterRes.json();
+                    if (!stillOrg(askedOrg)) return;   // switched away: the last org's roster never reaches the new org's settings
+                    if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');
+                    setSettings(prev => ({ ...prev, users: ud.users })); reread = true;
+                } catch (e) { why = failureWords(e); }
+                if (!stillOrg(askedOrg)) return;   // a roster read that failed after an org switch says nothing here
+                const teamed = invites.some(i => i.team) ? " They were not added to their teams' lists — add them on the Teams page." : '';
+                setNoticeWarn(!reread);
+                setNotice(reread
+                    ? `The invitations were sent. Its answer could not be read — the list of users was read again to show them.${teamed}`
+                    : `The invitations were sent. Its answer could not be read.${teamed} The roster could not be read again — reload the page to see it: ${why}`);
+                return;
+            }
             // The new rows join the roster on screen — the list showed none of
             // them until a reload (state §0.165).
             const sent = Array.isArray(d.invited) ? d.invited : [];
@@ -206,12 +250,13 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             // out. They were dropped, and the screen said "Sent!".
             const failed = Array.isArray(d.errors) ? d.errors : [];
             if (failed.length) throw new Error(`${sent.length} sent; not sent — ${failed.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')}.${teamNote}`);
-            if (!resp.ok) throw new Error(d.error || 'Invite failed');
+            if (!resp.ok) throw new Error(refusalWords(resp, d));
             if (teamNote) throw new Error(`${sent.length} sent.${teamNote}`);
             setSaved(true);
             setTimeout(() => { if (!stillOrg(askedOrg)) return; setSaved(false); onUsers(); }, 1500);
         } catch(err) {
-            setError(err.message || 'Failed to send invites. Please try again.');
+            if (!stillOrg(askedOrg)) return;   // a send that failed after an org switch says nothing here
+            setError(failureWords(err));
         } finally { setSaving(false); }
     };
 
@@ -225,6 +270,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                 title="Invite users"
                 subtitle={`Send invitations to join the workspace. Clerk emails each invitee a link that lasts ${expiry} days.`}
                 statusDetail={readyCount > 0 ? `${readyCount} ready to send` : null}
+                statusState="read"
                 rightActions={<>
                     <PeopleSecBtn onClick={onUsers}>Cancel</PeopleSecBtn>
                     <PeoplePriBtn onClick={handleSend} disabled={saving || readyCount === 0}>
@@ -234,6 +280,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             />
 
             {error && <div style={{ marginBottom:14, padding:'10px 14px', background:'rgba(156,58,46,0.10)', border:`1px solid rgba(156,58,46,0.25)`, borderRadius:T.r, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>{error}</div>}
+            {notice && <div style={{ marginBottom:14, padding:'10px 14px', background:`${noticeWarn ? T.warn : T.ok}12`, border:`1px solid ${noticeWarn ? T.warn : T.ok}55`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans }}>{notice}</div>}
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:18, alignItems:'start' }}>
                 <div>
@@ -379,6 +426,7 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
                 title="Export users"
                 subtitle="One-time export of your workspace user list."
                 statusDetail={`${filteredUsers.length} rows · ${checkedFields.length} fields`}
+                statusState="read"
                 rightActions={<>
                     <PeopleSecBtn onClick={onUsers}>Cancel</PeopleSecBtn>
                     <PeoplePriBtn onClick={handleExport} disabled={exporting}>
@@ -454,7 +502,10 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
 // "in 7d") beside buttons that did nothing: Revoke only hid the row on screen.
 const UsersPendingPage = ({ settings, onBack, onUsers }) => {
     const { showConfirm, setSettings } = useApp();
-    const [clerkInvites, setClerkInvites] = useState(null);   // null while reading
+    // null while reading; false when the read failed — never "read, and empty" (the §0.249 review): a row's link and the
+    // invitations made only in Clerk are then unknown, never "No live link" nor "No invitations pending."; else Clerk's list.
+    const [clerkInvites, setClerkInvites] = useState(null);
+    const invitesUnread = clerkInvites === false;
     const [loadError, setLoadError] = useState('');
     const [actionError, setActionError] = useState('');
     const [busyEmail, setBusyEmail] = useState(null);
@@ -463,12 +514,14 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         setLoadError('');
         try {
             const res = await dbFetch('/.netlify/functions/users?invitations=pending');
-            const d = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
-            setClerkInvites(Array.isArray(d.invitations) ? d.invitations : []);
+            // The ok check before the body (docs/design/refusal-sweep Part 12): it said "HTTP N", the ref dropped.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const pending = await res.json();
+            if (!Array.isArray(pending?.invitations)) throw new Error('Its answer could not be read.');
+            setClerkInvites(pending.invitations);
         } catch (e) {
-            setClerkInvites([]);
-            setLoadError(`Clerk's invitations could not be read (${e.message}), so the dates are missing.`);
+            setClerkInvites(false);   // unread — the roster's invited rows still draw, their links unknown
+            setLoadError(`Clerk's invitations could not be read, so the dates are missing — ${failureWords(e)}`);
         }
     }, []);
     useEffect(() => { loadInvites(); }, [loadInvites]);
@@ -482,22 +535,28 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         if (busyEmail) return;
         setBusyEmail(e.email); setActionError('');
         try { await resendInvite(e.row); await loadInvites(); }
-        catch (err) { setActionError(`Could not resend to ${e.email}: ${err.message}`); }
+        catch (err) { setActionError(`Could not resend to ${e.email}: ${failureWords(err)}`); }
         finally { setBusyEmail(null); }
     };
     const doRevoke = (e) => {
         if (busyEmail) return;
         showConfirm(`Revoke the invitation to ${e.email}? Its link stops working${e.row ? ' and their row is removed' : ''}. You can invite them again later.`, async () => {
             setBusyEmail(e.email); setActionError('');
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
             try {
-                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                 const r = await revokeInvite(e.email);
                 if (!stillOrg(askedOrg)) return;
+                // Only a list that was read loses the row: an unread one (false) stays unread, never "read, and empty".
+                setClerkInvites(prev => Array.isArray(prev) ? prev.filter(inv => inv.email !== e.email) : prev);
+                // A revoke that landed with an answer that cannot be read: its row and lists are the server's.
+                if (!r) { setActionError(REVOKED_UNREAD); return; }
                 setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the Pending page's revoke
-                setClerkInvites(prev => (prev || []).filter(inv => inv.email !== e.email));
                 const note = removalNote(r);
                 if (note) setActionError(note);
-            } catch (err) { setActionError(`Could not revoke the invitation to ${e.email}: ${err.message}`); }
+            } catch (err) {
+                if (!stillOrg(askedOrg)) return;
+                setActionError(`Could not revoke the invitation to ${e.email}: ${failureWords(err)}`);
+            }
             finally { setBusyEmail(null); }
         }, false);
     };
@@ -508,7 +567,8 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
             <PeoplePageHeader
                 title="Pending invites"
                 subtitle="Invited, not joined yet. Revoke withdraws the invitation in Clerk; Resend sends a fresh link."
-                statusDetail={clerkInvites === null ? 'Reading invitations…' : `${entries.length} pending · ${liveCount} with a live link`}
+                statusDetail={clerkInvites === null ? 'Reading invitations…' : invitesUnread ? `${entries.length} invited in the roster · Clerk's list not read` : `${entries.length} pending · ${liveCount} with a live link`}
+                statusState={clerkInvites === null ? 'loading' : invitesUnread ? 'unread' : 'read'}
                 rightActions={<PeoplePriBtn onClick={onUsers}>← Back to users</PeoplePriBtn>}
             />
             {loadError && (
@@ -520,7 +580,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
             <SectionCard title="Invitations" description="Sent and expiry dates are Clerk's.">
                 {entries.length === 0 ? (
                     <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
-                        {clerkInvites === null ? 'Reading invitations…' : 'No invitations pending.'}
+                        {clerkInvites === null ? 'Reading invitations…' : invitesUnread ? "No invited member in the roster. Clerk's invitations could not be read, so any made there are not listed." : 'No invitations pending.'}
                     </div>
                 ) : entries.map((e, i) => {
                     const expired = isExpired(e.invite);
@@ -533,8 +593,8 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
                             </div>
                             {e.row ? <RolePill role={e.row.role || 'User'}/> : <span style={{ fontSize:11, color:T.inkMuted }}>Not in the roster</span>}
                             <div style={{ fontSize:11, color:T.inkMuted, minWidth:90 }}>Sent {fmtDate(e.invite?.createdAt)}</div>
-                            <div style={{ fontSize:11, fontWeight:600, minWidth:110, color: !e.invite || expired ? T.warn : T.inkMid }}>
-                                {!e.invite ? (clerkInvites === null ? '…' : 'No live link') : expired ? `Expired ${fmtDate(e.invite.expiresAt)}` : `Expires ${fmtDate(e.invite.expiresAt)}`}
+                            <div style={{ fontSize:11, fontWeight:600, minWidth:110, color: !e.invite && invitesUnread ? T.inkMuted : !e.invite || expired ? T.warn : T.inkMid }}>
+                                {!e.invite ? (clerkInvites === null ? '…' : invitesUnread ? 'Link not read' : 'No live link') : expired ? `Expired ${fmtDate(e.invite.expiresAt)}` : `Expires ${fmtDate(e.invite.expiresAt)}`}
                             </div>
                             <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                                 {e.row && <PeopleSecBtn onClick={() => doResend(e)}>{busyEmail === e.email ? 'Working…' : 'Resend'}</PeopleSecBtn>}
@@ -593,6 +653,8 @@ const UsersSeatPage = ({ settings, onBack, onUsers, seats, seatsFailed }) => {
         : capped ? `${inClerk} of ${limit} members (${Math.round(pct * 100)}%)`
         : limit === 0 ? `${inClerk} members · no limit`
         : `${inClerk} members`;
+    // Read only when Clerk's count is in hand: a failed read and an answer with no count are not (the ✓ is a read's).
+    const statusState = !seats ? (seatsFailed ? 'unread' : 'loading') : inClerk === null ? 'unread' : 'read';
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -601,6 +663,7 @@ const UsersSeatPage = ({ settings, onBack, onUsers, seats, seatsFailed }) => {
                 title="Seat usage"
                 subtitle="Members of this organization against Clerk's membership limit — the one limit there is."
                 statusDetail={status}
+                statusState={statusState}
                 rightActions={
                     <PeopleSecBtn onClick={() => window.open('https://dashboard.clerk.com', '_blank', 'noopener')}>
                         Membership limit — set in Clerk ↗
@@ -712,18 +775,22 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData, mfaFailed }) =>
     // Real security-relevant audit entries — the same trail AuditDetail
     // renders, narrowed to identity/config actions.
     const [events, setEvents] = React.useState(null);
+    // A read that failed is said, never "Loading…" for good nor "No … events" (docs/design/refusal-sweep Part 12).
+    const [eventsError, setEventsError] = React.useState('');
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/audit-log');
-                if (!res.ok) return;               // section shows its empty state
-                const d = await res.json();
                 if (cancelled) return;
-                setEvents((d.entries || [])
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const trail = await res.json();
+                if (cancelled) return;
+                if (!Array.isArray(trail?.entries)) throw new Error('Its answer could not be read.');
+                setEvents(trail.entries
                     .filter(e => /^user\.|^settings\.|apikey/.test(e.action || ''))
                     .slice(0, 8));
-            } catch (e) { /* empty state */ }
+            } catch (e) { if (!cancelled) setEventsError(failureWords(e)); }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -742,6 +809,7 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData, mfaFailed }) =>
                 title="Security health"
                 subtitle="MFA enrollment live from Clerk · events from the audit log."
                 statusDetail={loading ? 'Loading…' : failed ? 'MFA unknown — could not read Clerk' : `MFA ${enrolled}/${total} enrolled${score !== null ? ` · ${score}%` : ''}`}
+                statusState={loading ? 'loading' : failed ? 'unread' : 'read'}
                 rightActions={
                     <PeopleSecBtn onClick={() => window.open('https://dashboard.clerk.com', '_blank', 'noopener')}>
                         MFA policy — managed in Clerk ↗
@@ -826,7 +894,7 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData, mfaFailed }) =>
                 ))}
                 {(!events || events.length === 0) && (
                     <div style={{ padding:'18px', textAlign:'center', color:T.inkMuted, fontSize:12.5, fontStyle:'italic' }}>
-                        {events === null ? 'Loading…' : 'No identity or configuration events in the last 500 audit entries.'}
+                        {events === null ? (eventsError ? `The audit log could not be read — ${eventsError}` : 'Loading…') : 'No identity or configuration events in the last 500 audit entries.'}
                     </div>
                 )}
             </SectionCard>
@@ -839,14 +907,17 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData, mfaFailed }) =>
 // the server refuses anyone else, and anyone deactivating themselves. Only
 // `active` is sent; the server merges it into the stored row and sets the
 // status, and its answer is the row as it now stands.
+// The ok check before the body (docs/design/refusal-sweep Part 12): a refusal is thrown in the server's words with
+// their ref, else "The server returned N." — it said "HTTP N". A landed answer that cannot be read is taken as landed:
+// the row as sent.
 const setMemberActive = async (id, active) => {
     const res = await dbFetch('/.netlify/functions/users', {
         method:'PUT', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ id, active }),
     });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
-    return d.user || { id, active };
+    if (!res.ok) throw new Error(await readRefusal(res));
+    const stored = await res.json().catch(() => null);
+    return stored?.user || { id, active };
 };
 
 // Invitations (state §0.165). Revoke withdraws THIS org's Clerk invitation for
@@ -858,9 +929,9 @@ const revokeInvite = async (email) => {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ action:'revoke-invite', email }),
     });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
-    return d;
+    if (!res.ok) throw new Error(await readRefusal(res));
+    // Landed: its answer (the row taken off, the lists as written), or null when it cannot be read — said by the caller.
+    return res.json().catch(() => null);
 };
 // A revoked invitation's row is gone (state §0.165), and since §0.222 the server takes its id off the org's team and
 // territory lists in the same request and answers them (users.mjs); each screen applies the answer
@@ -873,7 +944,7 @@ const resendInvite = async (row) => {
     const d = await res.json().catch(() => ({}));
     const refused = Array.isArray(d.errors) && d.errors[0];
     if (refused) throw new Error(refused.error || 'Clerk refused the invitation');
-    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    if (!res.ok) throw new Error(refusalWords(res, d));
     return d;
 };
 const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString() : '—');
@@ -977,7 +1048,29 @@ const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeh
     );
 };
 
-const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail }) => {
+// Why a member's MFA is unknown while no answer was kept (§0.249, the review's fixes, round 4): the read still out, or
+// the words of one that failed (`mfaFailed`, the load's) — never "loading" over a read that failed, never a count over
+// either. '' once an answer was read: a member it does not name is then not linked in Clerk.
+const mfaUnreadWords = (mfaByEmail, mfaFailed) => mfaByEmail ? ''
+    : mfaFailed ? `The MFA status could not be read — ${mfaFailed}` : 'The MFA status is still loading…';
+
+// The roster's empty line names what emptied it (§0.249, the review's fixes, last pass): under MFA off a read still out
+// or one that failed (`mfaUnread`, mfaUnreadWords' words); else a search the list is narrowed by — never "none" while
+// the search alone hides a member the chip counts; else the filter. "No users yet" only for a roster with no one in it.
+const USERS_EMPTY = {
+    'All':         ['member', 'No users yet — use "Invite users" to add your team.'],
+    'Active':      ['active member', 'No active members.'],
+    'Invited':     ['pending invitation', 'No invited member in the roster.'],
+    'Deactivated': ['deactivated member', 'No deactivated members.'],
+    'MFA off':     ['active member with MFA off', 'No active member has MFA off.'],
+};
+const usersEmptyWords = (filter, search, mfaUnread) => {
+    if (filter === 'MFA off' && mfaUnread) return mfaUnread;
+    const [who, none] = USERS_EMPTY[filter] || USERS_EMPTY.All;
+    return search ? `No ${who} matches the search.` : none;
+};
+
+const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail, mfaFailed }) => {
     const { setSettings, showConfirm, setMyProfile } = useApp();
     // The member as this page holds them (state §0.211): the roster's row it opened on, then the row as stored after
     // each save — what the title band, the crumb and "Save changes" read (OPEN_ITEMS §4.3, "after a save").
@@ -1027,11 +1120,15 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
             if (Object.keys(changes).length) {
                 const toSave = { id: user.id, ...changes };
                 const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
-                const d = await resp.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                if (!resp.ok) throw new Error(d.error || 'Save failed');
+                // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
+                // their ref, else "The server returned N." — never "Save failed" over a 502's page.
+                if (!resp.ok) { const why = await readRefusal(resp); if (!stillOrg(askedOrg)) return; throw new Error(why); }
+                const stored = await resp.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
                 // The row as stored (state §0.196): the name trimmed or rebuilt, every key this save left out as kept.
-                row = d.user || { ...user, ...toSave };
+                // A landed answer that cannot be read is taken as landed: the row as sent.
+                row = stored?.user || { ...user, ...toSave };
                 if ('teamId' in changes) move = { teamId: row.teamId || null };
             }
             // The teams' lists follow the member's team, by id, straight after the member's row (state §0.211): they
@@ -1067,20 +1164,21 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ targetUserId: user.id, role: form.role }),
                 });
-                const rd = await rr.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
+                // A landed role change reads no body; a refusal reads its words once, after the ok check (Part 12).
                 if (rr.ok) {
                     roleLanded = true;
                     row = { ...(row || user), role: form.role, userType: form.role };
                     setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
-                } else if (!row && !teamsNow) {
-                    throw new Error(rd.error || 'Could not change the role.');
                 } else {
-                    missed.push(`Saved, but the role was not changed \u2014 ${rd.error || 'try again.'}`);
+                    const why = await readRefusal(rr);
+                    if (!stillOrg(askedOrg)) return;
+                    if (!row && !teamsNow) throw new Error(why);
+                    missed.push(`Saved, but the role was not changed \u2014 ${why}`);
                 }
             }
         } catch (err) {
-            missed.push(row || teamsNow ? `Saved, but not everything \u2014 ${clause(err.message) || 'no answer'}. ${owedNext ? 'Save changes tries again.' : 'Reload to see what was saved.'}` : (err.message || 'Failed to save. Please try again.'));
+            missed.push(row || teamsNow ? `Saved, but not everything \u2014 ${clause(failureWords(err))}. ${owedNext ? 'Save changes tries again.' : 'Reload to see what was saved.'}` : failureWords(err));
         } finally { setSaving(false); }
         if (!stillOrg(askedOrg)) return;   // a request that failed after an org switch changes nothing here
         // What landed, set once (state §0.211): the page holds the member as stored, the roster on screen takes the
@@ -1113,42 +1211,43 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
     // whole profile form, so it also saved any unsaved edit; it sends `active`.
     const handleDeactivate = () => {
         showConfirm(`Deactivate ${user.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             try {
-                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                 const row = await setMemberActive(user.id, false);
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
-            } catch(err) { setError('Could not deactivate: ' + err.message); }
+            } catch(err) { if (stillOrg(askedOrg)) setError('Could not deactivate: ' + failureWords(err)); }
         }, false);
     };
 
     const handleReactivate = () => {
         showConfirm(`Reactivate ${user.name}? They get their access to this organization back, with the role they had.`, async () => {
+            const askedOrg = requestOrg();
             try {
-                const askedOrg = requestOrg();
                 const row = await setMemberActive(user.id, true);
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
-            } catch(err) { setError('Could not reactivate: ' + err.message); }
+            } catch(err) { if (stillOrg(askedOrg)) setError('Could not reactivate: ' + failureWords(err)); }
         }, false);
     };
 
     const handleDeleteUser = () => {
         showConfirm(`Permanently delete ${user.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
+            // users.mjs DELETE reads id from the query string, not the body.
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             try {
-                // users.mjs DELETE reads id from the query string, not the body.
-                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                 const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                // Off the roster, and the lists as the server wrote them with their ids off (state §0.222).
-                const deleted = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(await readRefusal(res));
+                // Off the roster, and the lists as the server wrote them with their ids off (state §0.222). A landed
+                // answer that cannot be read is a delete that landed, its lists unknown (Part 12): said, never "not deleted".
+                const deleted = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => settingsAfterRemoval(prev, user.id, deleted));   // the profile page's delete
-                onRemoved(removalNote(deleted));   // back to the list — the member is gone — saying so if the lists were left
-            } catch(err) { setError('Could not delete: ' + err.message); }
+                onRemoved(deleted ? removalNote(deleted) : REMOVED_UNREAD);   // back to the list — the member is gone — saying so if the lists were left
+            } catch(err) { if (stillOrg(askedOrg)) setError('Could not delete: ' + failureWords(err)); }
         });
     };
 
@@ -1156,13 +1255,14 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
     // deleting the row left the Clerk invitation live.
     const handleRevokeInvite = () => {
         showConfirm(`Revoke the invitation to ${user.email || user.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             try {
-                const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
                 const r = await revokeInvite(user.email);
                 if (!stillOrg(askedOrg)) return;
+                if (!r) { onRemoved(REVOKED_UNREAD); return; }   // landed, its answer unread: back to the list, said
                 setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the profile page's revoke
                 onRemoved(removalNote(r));   // back to the list — the row is gone — saying so if the lists were left
-            } catch(err) { setError('Could not revoke the invitation: ' + err.message); }
+            } catch(err) { if (stillOrg(askedOrg)) setError('Could not revoke the invitation: ' + failureWords(err)); }
         }, false);
     };
 
@@ -1332,7 +1432,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
                                         <div>
                                             <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>MFA</div>
-                                            <div style={{ fontSize:11, color:T.inkMuted }}>{v === null ? 'Not linked in Clerk, or still loading' : 'Second factor'}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted }}>{v !== null ? 'Second factor' : mfaUnreadWords(mfaByEmail, mfaFailed) || 'Not linked in Clerk'}</div>
                                         </div>
                                         {v === true  ? <span style={{ fontSize:11, fontWeight:700, color:T.ok }}>● On</span>
                                         : v === false ? <span style={{ fontSize:11, fontWeight:700, color:T.warn }}>○ Off</span>
@@ -1464,18 +1564,26 @@ export const UsersDetail = ({ settings, onBack }) => {
     // renders as unknown — never guessed in either direction. `mfaFailed` says
     // which: the Security health card read "Clerk not reachable" while the fetch
     // was still on its way, and the Security page "Loading…" after it had failed
-    // (state §0.167).
+    // (state §0.167). It holds the failure's words ('' while none failed): the
+    // refusal's (readRefusal), a thrown failure's (failureWords) or an answer the
+    // rule refuses — said on the profile card, the list's dots and its MFA off
+    // chip (§0.249, the review's fixes, round 4).
     const [mfaData, setMfaData] = useState(null);
-    const [mfaFailed, setMfaFailed] = useState(false);
+    const [mfaFailed, setMfaFailed] = useState('');
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/clerk-mfa-status');
-                if (!res.ok) { if (!cancelled) setMfaFailed(true); return; }   // stays unknown
+                if (!res.ok) { const why = await readRefusal(res); if (!cancelled) setMfaFailed(why); return; }   // stays unknown
                 const d = await res.json();
-                if (!cancelled) setMfaData(d);
-            } catch (e) { if (!cancelled) setMfaFailed(true); }               // stays unknown
+                if (cancelled) return;
+                // Kept only through the one rule the MFA page and the overview's tile read (settingsCards.js mfaAnswerRead;
+                // the §0.249 review, round 3): an answer it refuses is unknown — never a ✓ "MFA 0/0 enrolled", "no
+                // Clerk-linked members" or a crash in mfaByEmail over it, and a 200 `null` never "Loading…" for good.
+                if (!mfaAnswerRead(d)) { setMfaFailed('Its answer could not be read.'); return; }   // stays unknown
+                setMfaData(d);
+            } catch (e) { if (!cancelled) setMfaFailed(failureWords(e)); }               // stays unknown
         })();
         return () => { cancelled = true; };
     }, []);
@@ -1532,22 +1640,46 @@ export const UsersDetail = ({ settings, onBack }) => {
     const runClerkSync = async () => {
         if (syncing) return;
         setSyncing(true); setSyncMsg(null);
+        // After an org switch its answers change nothing (state §0.175; the §0.249 review): the roster read again is
+        // written to the app's settings, which outlive the switch — no other org's members ever reach this one's.
+        const askedOrg = requestOrg();
         try {
             const res = await dbFetch('/.netlify/functions/users-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Sync failed');
-            const c = data.counts || {};
-            let msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
-            if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
+            // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
+            // their ref; a landed sync whose answer cannot be read is a sync that ran — said, its counts unknown.
+            // A refusal or a failure is said only in the org that asked: each catch checks it.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const synced = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return;   // switched away: nothing said, and no roster read in the new org
+            let msg;
+            if (!synced) msg = 'Synced. Its answer could not be read, so the counts are not shown';
+            else {
+                const c = synced.counts || {};
+                msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
+                if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
+            }
             // No role report: the sync no longer reads or writes a role — the role is
             // the row's, per org, and an Admin sets it (state §0.163).
             setSyncMsg(msg);
             setDrift(null);   // reconciled
-            // Refresh the roster from the DB so new/updated rows appear immediately.
-            const r = await dbFetch('/.netlify/functions/users');
-            if (r.ok) { const ud = await r.json(); if (ud && ud.users) _setSettings(prev => ({ ...prev, users: ud.users })); }
+            // Refresh the roster from the DB so new/updated rows appear immediately. A read again that fails is said
+            // beside the sync's words — never "Sync failed" over a sync that ran.
+            try {
+                const r = await dbFetch('/.netlify/functions/users');
+                if (!r.ok) throw new Error(await readRefusal(r));   // said only in the org that asked: the catch checks
+                const ud = await r.json();
+                if (!stillOrg(askedOrg)) return;   // the org switched away from: its roster never reaches this org's settings
+                // As strict as the invite's read again (the §0.249 review, round 3): a 200 with no list is said, never a
+                // stale roster passed over in silence.
+                if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');
+                _setSettings(prev => ({ ...prev, users: ud.users }));
+            } catch (e) {
+                if (!stillOrg(askedOrg)) return;
+                setSyncMsg(`${msg}. The roster could not be read again — reload the page to see it: ${failureWords(e)}`);
+            }
         } catch (err) {
-            setSyncMsg('Sync failed: ' + (err.message || 'unknown error'));
+            if (!stillOrg(askedOrg)) return;
+            setSyncMsg('Sync failed: ' + failureWords(err));
         } finally {
             setSyncing(false);
         }
@@ -1560,7 +1692,7 @@ export const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers} seats={seats} seatsFailed={seatsFailed}/>;
     if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData} mfaFailed={mfaFailed}/>;
     // A removal leaves the member's page for the list, with what it has to say there (state §0.222: the lists left).
-    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} onRemoved={(note) => { setUserActionError(note || ''); onUsers(); }} mfaByEmail={mfaByEmail}/>;
+    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} onRemoved={(note) => { setUserActionError(note || ''); onUsers(); }} mfaByEmail={mfaByEmail} mfaFailed={mfaFailed}/>;
 
     // Map settings.users into the table display format
     const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
@@ -1601,13 +1733,16 @@ export const UsersDetail = ({ settings, onBack }) => {
         { key:'Active',     label:`Active · ${displayUsers.filter(u=>u.status==='Active').length}` },
         { key:'Invited',    label:`Pending · ${displayUsers.filter(u=>u.status==='Invited').length}` },
         { key:'Deactivated',label:`Deactivated · ${displayUsers.filter(u=>u.status==='Deactivated').length}` },
-        { key:'MFA off',    label:`MFA off · ${displayUsers.filter(u=>u.mfa === false && u.status==='Active').length}` },
+        // No count over an MFA read still out or one that failed — every member is unknown, and "· 0" said none is off;
+        // titled with why (§0.249, the review's fixes, round 4).
+        { key:'MFA off',    label: mfaByEmail ? `MFA off · ${displayUsers.filter(u=>u.mfa === false && u.status==='Active').length}` : 'MFA off · —',
+          title: mfaUnreadWords(mfaByEmail, mfaFailed) || undefined },
     ];
 
     const visible = displayUsers.filter(u => {
         if (filter === 'Active'     && u.status !== 'Active')  return false;
         if (filter === 'Invited'    && u.status !== 'Invited') return false;
-        if (filter === 'MFA off'    && u.mfa !== false)        return false;   // unknown is not "off"
+        if (filter === 'MFA off'    && (u.mfa !== false || u.status !== 'Active')) return false;   // unknown is not "off"; the chip's count, no invite
         if (filter === 'Deactivated'&& u.status !== 'Deactivated') return false;
         const q = search.toLowerCase();
         return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.team||'').toLowerCase().includes(q);
@@ -1696,7 +1831,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
                         <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:3, overflow:'hidden' }}>
                             {filterTabs.map(ft => (
-                                <button key={ft.key} onClick={() => setFilter(ft.key)}
+                                <button key={ft.key} title={ft.title} onClick={() => setFilter(ft.key)}
                                     style={{ padding:'5px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans,
                                         background: filter===ft.key ? T.ink : 'transparent',
                                         color: filter===ft.key ? '#fbf8f3' : T.inkMid,
@@ -1723,7 +1858,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                         </div>
                         {visible.length === 0 && (
                             <div style={{ padding:'36px 16px', textAlign:'center', fontSize:13, color:T.inkMuted, fontFamily:T.sans }}>
-                                No users yet — use "Invite users" to add your team.
+                                {usersEmptyWords(filter, search, mfaUnreadWords(mfaByEmail, mfaFailed))}
                             </div>
                         )}
                         {visible.map((u, i) => (
@@ -1756,7 +1891,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                     {u.status === 'Active'
                                         ? u.mfa === true  ? <span title="MFA enrolled" style={{ color:T.ok, fontSize:14 }}>●</span>
                                         : u.mfa === false ? <span title="MFA not enrolled" style={{ color:T.warn, fontSize:14 }}>○</span>
-                                        : <span title="Unknown — loading, or not linked in Clerk" style={{ color:T.border, fontSize:12 }}>—</span>
+                                        : <span title={mfaUnreadWords(mfaByEmail, mfaFailed) || 'Not linked in Clerk'} style={{ color:T.border, fontSize:12 }}>—</span>
                                         : <span style={{ color:T.border, fontSize:12 }}>—</span>}
                                 </div>
                                 {/* Status */}
@@ -1799,20 +1934,24 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 (u._raw || u).active !== false && { label:'Deactivate', action: () => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Deactivate ${u.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {
+                                                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing
                                                         try {
                                                             const row = await setMemberActive(u.id, false);
+                                                            if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
-                                                        } catch(err) { setUserActionError(`Could not deactivate ${u.name}: ${err.message}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not deactivate ${u.name}: ${failureWords(err)}`); }
                                                     }, false);
                                                 }},
                                                 // Reactivate = the way back (state §0.164): the row kept its role.
                                                 u.status === 'Deactivated' && { label:'Reactivate', action: () => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Reactivate ${u.name}? They get their access to this organization back, with the role they had.`, async () => {
+                                                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing
                                                         try {
                                                             const row = await setMemberActive(u.id, true);
+                                                            if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
-                                                        } catch(err) { setUserActionError(`Could not reactivate ${u.name}: ${err.message}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not reactivate ${u.name}: ${failureWords(err)}`); }
                                                     }, false);
                                                 }},
                                                 // An invitation not yet accepted is revoked, not deleted (state
@@ -1820,14 +1959,15 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 u.status === 'Invited' && { label:'Revoke invite', action: () => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Revoke the invitation to ${u.email || u.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
+                                                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                         try {
-                                                            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                             const r = await revokeInvite(u.email);
                                                             if (!stillOrg(askedOrg)) return;
+                                                            if (!r) { setUserActionError(REVOKED_UNREAD); return; }   // landed, its answer unread
                                                             _setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the row menu's revoke
                                                             const note = removalNote(r);
                                                             if (note) setUserActionError(note);
-                                                        } catch(err) { setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${err.message}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${failureWords(err)}`); }
                                                     }, false);
                                                 }},
                                                 // Delete = permanent. This previously sent the id in the BODY while
@@ -1836,17 +1976,17 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 u.status !== 'Invited' && { label:'Delete user', danger: true, action: () => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Permanently delete ${u.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
+                                                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                         try {
-                                                            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)
                                                             const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(u.id)}`, { method:'DELETE' });
                                                             if (!stillOrg(askedOrg)) return;
-                                                            if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                                                            const gone = await res.json().catch(() => ({}));
+                                                            if (!res.ok) throw new Error(await readRefusal(res));
+                                                            const gone = await res.json().catch(() => null);   // null: landed, its answer unread (Part 12)
                                                             if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => settingsAfterRemoval(prev, u.id, gone));   // the row menu's delete
-                                                            const left = removalNote(gone);
+                                                            const left = gone ? removalNote(gone) : REMOVED_UNREAD;
                                                             if (left) setUserActionError(left);
-                                                        } catch(err) { setUserActionError(`Could not delete ${u.name}: ${err.message}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not delete ${u.name}: ${failureWords(err)}`); }
                                                     });
                                                 }},
                                             ].filter(Boolean).map((item, mi) => (

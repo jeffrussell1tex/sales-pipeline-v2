@@ -173,9 +173,14 @@ test('the member profile page (Settings → Users) sends what it edits — never
 test('the Sales Manager tab: no Annual / Quarterly switch saves every member any more (state §0.203), and a refused save shows the server\'s words, naming the member', () => {
     const m = code(read('src/Tabs/SalesManagerTab.jsx'));
     assert.ok(!m.includes('setAllQuotaMode') && !m.includes('quotaMode'), 'the per-member mode and its switch are gone: a plan per fiscal year, one checked save');
+    // Moved in §0.249 (review fixes, round 2 — S2): the server's words through refusalWords, with their ref, after the
+    // org check; still naming the member.
     order(between(m, '    const saveUser = async (user, label, who = user.name) => {', '    };'),
         '            if (!res.ok) {',
-        '                const d = await res.json().catch(() => ({}));',
-        "                setSaveState({ status: 'error', msg: d.error",
-        "                    ? `Not saved \\u2014 ${who || 'a member'}: ${d.error}`");
+        '                const d = await res.json().catch(() => null);',
+        '                if (!stillOrg(askedOrg)) return false;',
+        // Moved in §0.249 (review fixes, last pass, F4): the server's own refusal (ownRefusal) "Not saved", naming the member; any other answer may have saved.
+        "                setSaveState({ status: 'error', msg: res.status === 403 && !ownRefusal(res.status, d)",
+        "                    ? `Not saved — ${who || 'a member'}: ${refusalWords(res, d)}`",
+        "                    : `${who || 'A member'}'s ${label} may have been saved — reload the page to see whether it was: ${refusalWords(res, d)}` });");
 });

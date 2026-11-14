@@ -247,7 +247,9 @@ test('Sales Manager: the drafts are the page\'s — kept across sub-tabs, droppe
     const all = between(page, 'const saveAdminDrafts = async () => {', '};');
     assert.ok(all.includes('await saveQuotas();') && all.includes('await saveCommission();') && all.includes('await saveSpiffBoard();'));
     assert.ok(/if \(!await saveExtra\(\{ quotaData \}, 'commission tiers'\)\) throw new Error/.test(page), 'a refused save throws');
-    assert.ok(page.includes("        if (!res.ok) throw res.status < 500 && answer.error ? refuse(answer.error) : unsure(`The server returned ${res.status} — reload the page to see whether the quotas were saved.`);"), 'a refused quota save throws');
+    // Moved in §0.249 (the refusal sweep, Part 12): the refusal read inside the ok check, its words with their ref.
+    // Moved in §0.249 (review fixes, last pass, F4): the server's own refusal (ownRefusal) refused, any other answer "may have been saved".
+    assert.ok(page.includes("            throw ownRefusal(res.status, refused) ? refuse(refusalWords(res, refused)) : unsure(`The quotas may have been saved — reload the page to see whether they were: ${refusalWords(res, refused)}`);"), 'a refused quota save throws');
 });
 
 test('Sales Manager: a rep is read from state, not out of a state updater — the save was skipped when React ran it later', () => {

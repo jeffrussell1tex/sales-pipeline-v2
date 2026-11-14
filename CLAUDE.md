@@ -410,7 +410,17 @@ One commit per verified batch; doc patch in the same commit.
   pressed, on the screen it was pressed on, never on a timer — a
   success's timer clears only its own success (§0.246); a read that failed
   is never a count, "none" or a passing check, and a screen reads its
-  server's answer shape, pinned to the function file (§0.247); a message names who acted
+  server's answer shape, pinned to the function file (§0.247); on the quota
+  board, the Audit log's destination writes, the document record step and
+  the Sales Manager's saves a write is "Not saved" only on a 4xx in the
+  server's own words — any other answer says it may have been saved and to
+  reload and see, the screen marking it not known (§0.249: `destRefusedOwn`
+  AuditDetail.jsx, `recordRefusal` documentsStorage.js, `ownRefusal`
+  SalesManagerTab.jsx — a 403 there keeps its role sentence, and a thrown
+  forecast call, commission or SPIFF save or coaching-note Delete says
+  "Not"); every other save still says "Not saved" and readRefusal's words
+  for any refused answer, a thrown one "The server could not be reached."
+  — one rule is Jeff's call, OPEN_ITEMS §2.4; a message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the

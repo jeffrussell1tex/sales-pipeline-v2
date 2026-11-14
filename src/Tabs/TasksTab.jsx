@@ -343,7 +343,7 @@ function applyFilters(feed, { source, type, range, account, scope, search, curre
 
 // ── Calendar view (unchanged from original) ─────────────────────
 // Defined at module scope to avoid remount
-function CalendarView({ calDay, calDayStr, todayStr, today, weekStart, dayNames, monthNames, calendarConnected, calTodayTasks, unscheduled, calEvts, weekSummary, setCalDayOffset }) {
+function CalendarView({ calDay, calDayStr, todayStr, today, weekStart, dayNames, monthNames, calendarConnected, calendarError, calendarLoading, calendarRead, calTodayTasks, unscheduled, calEvts, weekSummary, setCalDayOffset }) {
     const hours    = Array.from({ length: 11 }, (_, i) => i + 8);
     const nowMins  = new Date().getHours() * 60 + new Date().getMinutes();
     const isToday  = calDayStr === todayStr;
@@ -420,10 +420,15 @@ function CalendarView({ calDay, calDayStr, todayStr, today, weekStart, dayNames,
             {/* Week summary rail */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ background: 'rgba(58,90,122,0.07)', border: '1px solid rgba(58,90,122,0.18)', borderRadius: T.rMd, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: calendarConnected ? T.ok : T.inkMuted, flexShrink: 0 }}/>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: calendarError ? T.danger : calendarConnected ? T.ok : T.inkMuted, flexShrink: 0 }}/>
                     <div style={{ flex: 1 }}>
-                        {calendarConnected
+                        {/* A read that failed says so — never "Synced", never "not connected" (state §0.249, review fixes). */}
+                        {calendarError
+                            ? (<div role="alert" style={{ fontSize: 11, fontWeight: 600, color: T.danger, fontFamily: T.sans }}>{calendarError}</div>)
+                            : calendarConnected
                             ? (<><div style={{ fontSize: 11, fontWeight: 600, color: T.ok, fontFamily: T.sans }}>Synced</div><div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>Google · 2m ago</div></>)
+                            : calendarLoading || !calendarRead
+                            ? (<div role="status" style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>Checking the calendar…</div>)
                             : (<div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>Calendar not connected</div>)
                         }
                     </div>
@@ -478,7 +483,8 @@ export default function TasksTab() {
         getStageColor,
         visibleTasks,
         handleCompleteTask, setTasks,
-        calendarEvents, calendarConnected, calendarLoading,
+        calendarEvents, calendarConnected, calendarLoading, calendarError,
+        calendarRead, fetchCalendarEvents,
         allPipelines, activePipeline,
         setEditingTask,
         taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
@@ -498,6 +504,12 @@ export default function TasksTab() {
 
     // ── Calendar state ─────────────────────────────────────────
     const [calDayOffset, setCalDayOffset] = useState(0);
+    // A calendar never read in this org (state §0.249, review fixes, round 3): the calendar view starts a read when none
+    // has landed and none is in flight — App reads it only on Home — and says it is checking until one lands. A failed
+    // one keeps its words.
+    useEffect(() => {
+        if (view === 'calendar' && !calendarRead && !calendarLoading && !calendarError && fetchCalendarEvents) fetchCalendarEvents();
+    }, [view, calendarRead, calendarLoading, calendarError]);
 
     // ── V4 filter state ────────────────────────────────────────
     // Persisted PREFERENCE only — never data (the localStorage hazards in §18
@@ -890,6 +902,9 @@ export default function TasksTab() {
                         dayNames={dayNames}
                         monthNames={monthNames}
                         calendarConnected={calendarConnected}
+                        calendarError={calendarError}
+                        calendarLoading={calendarLoading}
+                        calendarRead={calendarRead}
                         calTodayTasks={calTodayTasks}
                         unscheduled={unscheduled}
                         calEvts={calEvts}

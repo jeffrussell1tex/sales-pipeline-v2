@@ -2,7 +2,8 @@
 // closed, in the house words (state §0.245, guide §18b125 rule 5, §18b123 rule 4; docs/design/refusal-sweep, Jeff's answers
 // of 11 Nov: "Parts 1-4 now (Recommended)", Q1-Q20 "All Recommended").
 //
-// tests/refusals-said.test.mjs stays THE GUARD (its three scans; each Part adds the files it cleans to SWEPT). This suite
+// tests/refusals-said.test.mjs stays THE GUARD (its three scans; each Part added the files it cleaned to its list — since
+// §0.249, Part 12, scan (iii) reads every source under src/ and the list, CLEANED, is scan (iv)'s alone). This suite
 // RUNS each Part's handlers — extracted from the source with between()/code(), built with new Function over stubs, and
 // run against the answers a member meets: a refusal with the server's words and a ref, a 403, a 502's HTML page, a
 // request that never left, an answer that lands after an org switch — and holds the WIRING the RUN cannot reach.
@@ -97,7 +98,7 @@ import { contactNamesText } from '../src/utils/oppText.js';
 import { notFreedWords } from '../src/utils/dispatchUnassign.js';
 import { saveDroppingRefused } from '../src/utils/linkIds.js';
 import { legacyPlansToCreate } from '../src/utils/planLinks.js';
-import { answerOf as settledBody, liveCountsOf, healthChecksOf, cardStateOf, healthSummaryOf, unreadChecksOf, unreadSentenceOf, allClearOf } from '../src/utils/settingsCards.js';
+import { answerOf as settledBody, liveCountsOf, healthChecksOf, cardStateOf, healthSummaryOf, unreadChecksOf, unreadSentenceOf, allClearOf, mfaAnswerRead } from '../src/utils/settingsCards.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -1310,7 +1311,8 @@ test('Part 5a: WIRING — no refusal on a timer; SaveRefusalNote at module scope
     assert.ok(!/setTimeout\(\(\) => set(SaveState|SaveReportState)\('idle'\)/.test(r), 'REGRESSION (Q10): a success\'s timer resets whatever is shown');
     assert.ok(!r.includes('Failed to save. Check your connection and try again.'), 'the old sentence, whatever the cause');
     assert.ok(!r.includes("throw new Error('HTTP ' + res.status)"), 'REGRESSION: "HTTP N" — the server\'s words dropped');
-    assert.ok(r.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    // Moved in §0.249 (Part 12b): refusalWords joins, for the pin's words.
+    assert.ok(r.includes("import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';"));
     // Module scope: declared at column 0, never inside a component (guide §16).
     assert.ok(raw.includes('\nfunction SaveRefusalNote({ words, onClose }) {'), 'SaveRefusalNote at module scope');
     const note = between(r, 'function SaveRefusalNote({ words, onClose }) {', '\n}\n');
@@ -1761,11 +1763,13 @@ const coaching = async ({ answers = [], orgId = 'org_a', switchOrg = null, initi
     if (initial && !switchOrg) notes.set(initial);
     return { hook, notes, error, sent, setOrg: (o) => { org = o; } };
 };
+// Moved in §0.249 (review fixes, last pass, F4): a refusal answers its status beside its words (the Sales Manager tells the server's own refusal by
+// it, noteNotDeleted); a request that never left has none.
 const COACH_REFUSALS = () => [
-    [answerOf(403, { error: 'Forbidden: only the author or an Admin may change this note' }), 'Forbidden: only the author or an Admin may change this note'],
-    [answerOf(500, { error: 'Database error', requestId: 'r9' }), 'Database error (ref r9)'],
-    [PAGE_502(), 'The server returned 502.'],
-    [UNSENT(), 'The server could not be reached.'],
+    [answerOf(403, { error: 'Forbidden: only the author or an Admin may change this note' }), 'Forbidden: only the author or an Admin may change this note', 403],
+    [answerOf(500, { error: 'Database error', requestId: 'r9' }), 'Database error (ref r9)', 500],
+    [PAGE_502(), 'The server returned 502.', 502],
+    [UNSENT(), 'The server could not be reached.', null],
 ];
 const LOAD_OK = () => answerOf(200, { coachingNotes: [NOTE] });
 
@@ -1795,12 +1799,12 @@ test('Part 7b: add, mark read and delete never reject — each refusal answers {
         ['delete', (h) => h.deleteCoachingNote('cn_1'), 'DELETE'],
     ];
     for (const [what, run, method] of WRITES) {
-        for (const [answer, words] of COACH_REFUSALS()) {
+        for (const [answer, words, status] of COACH_REFUSALS()) {
             const st = await coaching({ answers: [LOAD_OK(), answer] });
             let r, threw = null;
             try { r = await run(st.hook); } catch (e) { threw = e; }
             assert.equal(threw, null, `REGRESSION: ${what} rejected — the dialog stayed "Saving…" for good (${words})`);
-            assert.deepEqual(r, { ok: false, error: words }, `${what}: ${words}`);
+            assert.deepEqual(r, status === null ? { ok: false, error: words } : { ok: false, status, error: words }, `${what}: ${words}`);
             assert.equal(st.sent[1][1], method);
             assert.deepEqual(st.notes.value, [NOTE], `${what}: the list unchanged`);
         }
@@ -1866,7 +1870,8 @@ test('Part 7b: WIRING — the hook reads ok first and never rejects; App hands o
     assert.ok(hook.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
     assert.ok(!hook.includes('errorOf'), 'REGRESSION: the old reader — the ref dropped, the body read before the ok check');
     const answered = between(hook, 'const answered = async (send, { body = true } = {}) => {', '\n};');
-    order(answered, 'const res = await send();', 'if (!res.ok) return { ok: false, error: await readRefusal(res) };', 'await res.json()', '} catch (e) { return { ok: false, error: failureWords(e) }; }');
+    // Moved in §0.249 (review fixes, last pass, F4): the refusal's status beside its words.
+    order(answered, 'const res = await send();', 'if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };', 'await res.json()', '} catch (e) { return { ok: false, error: failureWords(e) }; }');
     assert.equal(count(hook, 'await answered('), 3, 'each write through the one reader');
     assert.equal(count(hook, 'await dbFetch('), 1, 'the load alone sends by itself');
     const effect = between(hook, '    useEffect(() => {', '    }, [enabled, orgId, waitForToken, reload]);');
@@ -1886,7 +1891,10 @@ test('Part 7b: WIRING — the hook reads ok first and never rejects; App hands o
     order(sm, '{coachingNotesError && (', 'Recent coaching', said, '{!coachingNotesError && recentNotes.length > 0 && (');
     const banner = between(sm, "{saveState.status === 'error' && (\n                <div role=\"alert\"", '{coachingNotesError && (');
     order(banner, '{saveState.msg}', "<button onClick={() => setSaveState({ status:'idle', msg:'' })}", '×</button>');
-    assert.ok(sm.includes('if (!r.ok) setSaveState({ status: \'error\', msg: `Not deleted — ${r.error}` });'), 'the delete\'s refusal on that banner');
+    // Moved in §0.249 (review fixes, last pass, F4): the delete's words are noteNotDeleted's — "Not deleted" and the hook's words for the server's own
+    // refusal or a request that never left, else "may have been deleted" (run in the F4 section at the end).
+    assert.ok(sm.includes('if (!r.ok) setSaveState({ status: \'error\', msg: noteNotDeleted(r) });'), 'the delete\'s refusal on that banner');
+    assert.ok(sm.includes('\n    ? `Not deleted — ${r.error}`\n'), 'its words: the hook\'s, after "Not deleted"');
 });
 
 // 7c: Quick Log's calendar box and the adds nothing reached are gone (Q16).
@@ -2634,7 +2642,10 @@ const SEVEN_LANDED = () => [
     answerOf(200, { automations: [{ active: true }, { active: false }] }),
     answerOf(200, { entries: [{}, {}, {}] }),
     answerOf(200, { snapshots: [{ createdAt: new Date(Date.now() - 3 * 3600000).toISOString() }], schedule: { frequency: 'Weekly' } }),
-    answerOf(200, { enrolled: 2, total: 3 }),
+    // Moved (§0.249, review fixes round 2 — M2): the server's whole answer (clerk-mfa-status.mjs), its two lists too —
+    // the tile reads the MFA page's rule (settingsCards.js mfaAnswerRead), and an answer of the numbers alone is unread.
+    answerOf(200, { enrolled: 2, total: 3, notEnrolled: [{ userId: 'u3', email: 'c@x.co', name: 'C', role: 'User' }],
+        enrolledUsers: [], byRole: [{ role: 'Admin', enrolled: 2, total: 2 }, { role: 'User', enrolled: 0, total: 1 }] }),
     answerOf(200, { jobs: [], now: new Date().toISOString(), enabled: true }),
 ];
 
@@ -4820,4 +4831,5930 @@ test('Part 11 pane check: Service plans says "No service plans yet." only over a
     assert.equal(count(s, '{plans.length === 0 && !loading && !loadError && ('), 1, 'REGRESSION: "No service plans yet." under a load that failed');
     assert.equal(count(s, 'No service plans yet.'), 1);
     order(s, '{plans.length === 0 && !loading && !loadError && (', 'No service plans yet.');
+});
+
+// ── Part 12 ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// The rest of src/ (state §0.249, docs/design/refusal-sweep Part 12; Jeff, 13 Nov: "Start Part 12" — Q4 "Recommended").
+//
+// Part 12a — Settings: Users (the invite, Resend, Revoke, Deactivate / Reactivate / Delete, the member save and the
+// Clerk sync), Connected apps, the Audit log, MFA and Lead scoring. Each read its body before the ok check — a refusal's
+// words lost their ref, said "HTTP N", or a 502's page said "Unexpected token '<'" — and a catch said its raw e.message
+// ("Failed to fetch"). Each reads the ok check first and says the house words: the server's with their ref, else "The
+// server returned N.", or "The server could not be reached."; a landed answer that cannot be read is taken as landed,
+// and said where the server made what the screen cannot show; an answer after an org switch says nothing where the
+// screen tracks the org; a read that failed draws no count and no "none". Connected apps' calendar Disconnect clears
+// its busy mark in a finally; the Audit log's Send test event says a failure (it had no catch).
+
+// The answers a Settings screen meets, and the words for each (a 403 keeps the server's words: no role sentence here).
+const P12A_REFUSED = () => [
+    [onceOf(403, { error: 'Forbidden' }), 'Forbidden'],
+    [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+    [onceOf(409, {}), 'The server returned 409.'],
+    [P11_PAGE(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+const P12A_OLD = /HTTP \d|check your connection|Unexpected token|Failed to fetch|Body is unusable/;
+// A piece of a file, built over stubs: `pre` before it (a `let cancelled` its handle can flip), `ret` what it hands back.
+const p12aBuilt = new Map();
+const p12aFn = (file, start, end, tail, params, ret, pre = '') => {
+    const key = `${file}|${start}|${ret}`;
+    if (!p12aBuilt.has(key)) p12aBuilt.set(key, new Function(...params, `${pre}\n${between(code(read(file)), start, end)}${tail}\nreturn ${ret};`));
+    return p12aBuilt.get(key);
+};
+const P12A_CANCEL = '{ cancel: () => { cancelled = true; } }';
+
+// ── MFA ──
+const P12A_MFA = 'src/Tabs/settings/security/MfaDetail.jsx';
+const mfaLoad = async ({ answer, cancel = false }) => {
+    const did = { data: [], errors: [], loading: [] };
+    let h = null;
+    const fetch = async () => { if (cancel) h.cancel(); if (answer instanceof Error) throw answer; return answer; };
+    // Moved (§0.249, review fixes round 2 — M2): the load reads the shared rule, settingsCards.js mfaAnswerRead — the real one.
+    h = p12aFn(P12A_MFA, '        const load = async () => {', '\n        };', '\n        };',
+        ['dbFetch', 'readRefusal', 'failureWords', 'mfaAnswerRead', 'setMfaData', 'setError', 'setLoading'], `{ load, ...${P12A_CANCEL} }`, 'let cancelled = false;')(
+        fetch, readRefusal, failureWords, mfaAnswerRead, (v) => did.data.push(v), (v) => did.errors.push(v), (v) => did.loading.push(v));
+    await h.load();
+    return did;
+};
+
+test('Part 12a: MFA — a refused or failed read in the house words, nothing drawn as read; landed, the enrollment; unmounted, nothing — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await mfaLoad({ answer });
+        assert.deepEqual(did.errors, [`MFA enrollment could not be read — ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual([did.data, did.loading], [[], [false]], 'no enrollment set over a refusal');
+    }
+    assert.deepEqual((await mfaLoad({ answer: P11_UNREADABLE() })).errors, ['MFA enrollment could not be read — Its answer could not be read.']);
+    // Moved (§0.249, review fixes round 3 — U3): the server's whole entry and its enrolledUsers list, as the one rule reads them.
+    const ENROLLED = { enrolled: 2, total: 3, notEnrolled: [{ userId: 'u3', email: 'c@x.co', name: 'C', role: 'User' }], enrolledUsers: [], byRole: [] };
+    const landed = await mfaLoad({ answer: onceOf(200, ENROLLED) });
+    assert.deepEqual([landed.data, landed.errors, landed.loading], [[ENROLLED], [], [false]]);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, ENROLLED)]) {
+        const gone = await mfaLoad({ answer, cancel: true });
+        assert.deepEqual([gone.data, gone.errors, gone.loading], [[], [], []], 'unmounted: nothing set');
+    }
+});
+
+test('Part 12a: WIRING — MFA draws no count, no "No users found" and no "All users have MFA enrolled" over a read that failed', () => {
+    const s = code(read(P12A_MFA));
+    assert.ok(s.includes("badge={loading ? 'Loading…' : error ? undefined : `${enrolled}/${total} enrolled · ${enrollPct}%`}"), 'REGRESSION: "0/0 enrolled · 0%" over a read that failed');
+    assert.ok(s.includes("<SecCard title={loading || error ? 'Enrollment by role' : `Enrollment by role (${enrolled}/${total} · ${enrollPct}%)`}>"));
+    assert.ok(s.includes(') : error ? null : byRole.length === 0 ? ('), 'REGRESSION: "No users found in this organization." under the error');
+    assert.ok(s.includes("<SecCard title={error ? 'Not yet enrolled' : `Not yet enrolled (${notEnrolledCount})`}"), 'REGRESSION: "Not yet enrolled (0)" over a read that failed');
+    assert.ok(s.includes(') : error ? null : notEnrolled.length === 0 ? ('), 'REGRESSION: "All users have MFA enrolled." under the error');
+    assert.ok(s.includes("import { readRefusal, failureWords } from '../../../utils/refusalWords.js';"));
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s) && !P12A_OLD.test(s), 'REGRESSION: a raw e.message or the old words');
+});
+
+// ── Lead scoring: Train now ──
+const P12A_LEAD = 'src/Tabs/settings/salesProcess/LeadScoringDetail.jsx';
+const trainNow = async ({ answer, switchAt = -1 }) => {
+    const { revsAfter } = await import('../src/utils/settingsRevs.js');
+    const { trainNowMessage } = await import('../src/utils/leadScoringDefaults.js');
+    const did = { sent: [], training: [], msgs: [], sets: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12A_LEAD, '    const handleTrainNow = async () => {', '\n    };', '\n    };',
+        ['setTraining', 'setTrainMsg', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setSettings', 'revsAfter', 'trainNowMessage'], 'handleTrainNow')(
+        (v) => did.training.push(v), (v) => did.msgs.push(v), () => 'org_a', (o) => o === org.now, p11Fetch(did, answer, org, { switchAt }),
+        readRefusal, failureWords, (f) => did.sets.push(f({ revs: { leadScoring: 'L1', teams: 'T1' } })), revsAfter, trainNowMessage);
+    await h();
+    return { ...did, said: did.msgs[did.msgs.length - 1] };
+};
+
+test('Part 12a: Lead scoring\'s Train now — a refusal in the server\'s words, never "Training refused (N)"; landed, the model adopted; unread, said; after a switch nothing — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await trainNow({ answer });
+        assert.deepEqual(did.said, { ok: false, text: `Not trained — ${words}` }, `REGRESSION: ${words}`);
+        assert.deepEqual([did.sets, did.training], [[], [true, false]], 'nothing adopted; the button back');
+        assert.ok(!P12A_OLD.test(did.said.text) && !/Training refused/.test(did.said.text));
+    }
+    const MODEL = { predictive: { model: { n: 40, accuracy: 81 } } };
+    const landed = await trainNow({ answer: onceOf(200, { ok: true, decided: 40, leadScoring: MODEL, revs: { leadScoring: 'L2' } }) });
+    assert.deepEqual(landed.sets, [{ revs: { leadScoring: 'L2', teams: 'T1' }, leadScoring: MODEL }], 'the server\'s config and its token adopted, the other tokens kept');
+    assert.deepEqual(landed.said, { ok: true, text: 'Model trained on 40 decided leads · 81% training accuracy.' });
+    const notYet = await trainNow({ answer: onceOf(200, { ok: false, reason: 'predictive-off' }) });
+    assert.deepEqual([notYet.sets, notYet.said.text], [[], 'Turn predictive scoring on and save, then train.']);
+    const unread = await trainNow({ answer: P11_UNREADABLE() });
+    assert.deepEqual([unread.sets, unread.said], [[], { ok: false, text: 'Its answer could not be read. Reload the page to see whether a model was trained.' }],
+        'REGRESSION: a landed answer that cannot be read said as a refusal, or a parse error');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), P11_PAGE(), UNSENT(), onceOf(200, { ok: true, leadScoring: MODEL })]) {
+        const late = await trainNow({ answer, switchAt: 0 });
+        assert.deepEqual([late.msgs, late.sets, late.training], [[null], [], [true, false]], 'REGRESSION: an answer after an org switch said or adopted in the org switched to');
+    }
+});
+
+test('Part 12a: WIRING — Lead scoring\'s save says failureWords; no raw e.message', () => {
+    const s = code(read(P12A_LEAD));
+    assert.ok(s.includes('setSaveError(`Lead scoring not saved — ${failureWords(e)}`);'));
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s), 'REGRESSION: a raw e.message');
+});
+
+// ── The Audit log ──
+const P12A_AUDIT = 'src/Tabs/settings/audit/AuditDetail.jsx';
+const P12A_DEST = Object.freeze({ id: 'dst_1', name: 'Datadog', status: 'Active' });
+const auditActions = (did, answer) => {
+    const fetch = async (url, opts = {}) => { did.sent.push([url, opts.method || 'GET']); if (answer instanceof Error) throw answer; return answer; };
+    const dests = stateOf([P12A_DEST]);
+    did.dests = dests;
+    // Moved pin (§0.249, the review's fixes): errorOf is gone (its ref dropped) — every destination refusal reads readRefusal;
+    // a create whose answer cannot be read marks the list unread (setDestsRead, setDestsUnread).
+    const unread = stateOf(did.unreadBefore ?? '');
+    did.unread = unread;
+    // Moved pin (§0.249, the review's fixes, round 2): a Pause / Resume or Send test that lands unread marks its row's status
+    // unknown (setStatusUnread); a readable answer marks it known again.
+    const statusUnread = stateOf(did.statusBefore ?? []);
+    did.statusUnread = statusUnread;
+    // Moved pin (§0.249, the review's fixes, round 3): a PUT's or a test's refusal is read once (refusalWords) and judged by
+    // the module's destRefusedOwn — the server's own 4xx says "not saved", any other answer "may have been".
+    const params = ['setDestError', 'setBusyId', 'setTestResult', 'dbFetch', 'STREAM_URL', 'readRefusal', 'failureWords', 'setDestsRead', 'setDestsUnread', 'setDests', 'setShowAddDest', 'setReveal', 'setStatusUnread',
+        'refusalWords', 'destRefusedOwn'];
+    const destRefusedOwn = new Function(`return ${between(code(read(P12A_AUDIT)), 'const destRefusedOwn = ', ';\n').slice('const destRefusedOwn = '.length)};`)();
+    const args = [(v) => did.errors.push(v), (v) => did.busy.push(v), (v) => did.tests.push(v), fetch, '/.netlify/functions/audit-stream', readRefusal, failureWords,
+        (v) => did.read.push(v), unread.set, dests.set, (v) => did.modal.push(v), (v) => did.reveal.push(v), statusUnread.set, refusalWords, destRefusedOwn];
+    const fn = (start, name) => p12aFn(P12A_AUDIT, start, '\n    };', '\n    };', params, name)(...args);
+    return {
+        sendTest: fn('    const sendTest = async (dest) => {', 'sendTest'),
+        putDest: fn('    const putDest = async (body, label) => {', 'putDest'),
+        createDest: fn('    const createDest = async (input) => {', 'createDest'),
+    };
+};
+const auditPress = async (which, answer, ...args) => {
+    const did = { sent: [], errors: [], busy: [], tests: [], modal: [], reveal: [], read: [] };
+    did.answered = await auditActions(did, answer)[which](...args);
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12a: the Audit log\'s Send test event — the ok check first, "Test not sent — <the house words>", a failure said (it had no catch); landed, the result; unread, said as sent — RUN', async () => {
+    // Moved pin (§0.249, the review's fixes, round 3): only the server's own refusal (the 403) says "not sent"; a 5xx, a
+    // 4xx without its words, a gateway's page or a request that threw says the test may have been sent — the words kept.
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await auditPress('sendTest', answer, P12A_DEST);
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual(did.said, [own ? `Test not sent — ${words}` : `The test may have been sent — reload the page to see whether it was: ${words}`], `REGRESSION: ${words} — the ref dropped, or offline nothing said`);
+        assert.deepEqual([did.tests, did.busy], [[null], ['dst_1', null]], 'no result; the row freed');
+    }
+    const landed = await auditPress('sendTest', onceOf(200, { ok: false, status: 502, error: 'Bad gateway at the receiver', destination: { ...P12A_DEST, status: 'Failing' } }), P12A_DEST);
+    assert.deepEqual([landed.said, landed.tests.at(-1)], [[], { id: 'dst_1', ok: false, status: 502, error: 'Bad gateway at the receiver' }]);
+    assert.equal(landed.dests.value[0].status, 'Failing', 'the row as the server answered it');
+    const unread = await auditPress('sendTest', P11_UNREADABLE(), P12A_DEST);
+    assert.deepEqual(unread.said, ['Test sent — Its answer could not be read, so whether it was delivered is not known.'], 'REGRESSION: a test that went out said as not sent');
+    assert.deepEqual(unread.busy, ['dst_1', null]);
+});
+
+test('Part 12a: the Audit log\'s Pause / Rotate and Add — offline said in plain words (each rejected unsaid); landed, the server\'s row; unread, said as saved — RUN', async () => {
+    const off = await auditPress('putDest', UNSENT(), { id: 'dst_1', paused: true }, 'Pause');
+    // Moved pin (§0.249, the review's fixes, round 3): a request that threw may have reached the server — maybe saved.
+    assert.deepEqual([off.said, off.answered, off.busy], [['Pause may have been saved — reload the page to see whether it was: The server could not be reached.'], null, ['dst_1', null]], 'REGRESSION: offline, the row busy and nothing said');
+    const landed = await auditPress('putDest', onceOf(200, { destination: { ...P12A_DEST, status: 'Paused' } }), { id: 'dst_1', paused: true }, 'Pause');
+    assert.deepEqual([landed.said, landed.dests.value[0].status], [[], 'Paused']);
+    const rotated = await auditPress('putDest', P11_UNREADABLE(), { id: 'dst_1', rotateSecret: true }, 'Rotate secret');
+    assert.deepEqual([rotated.said, rotated.answered], [['Rotate secret saved — Its answer could not be read, so the new secret cannot be shown; rotate again to see one. Reload the page to see the destination.'], null]);
+    const paused = await auditPress('putDest', P11_UNREADABLE(), { id: 'dst_1', paused: true }, 'Pause');
+    assert.deepEqual(paused.said, ['Pause saved — Its answer could not be read. Reload the page to see the destination.']);
+
+    const addOff = await auditPress('createDest', UNSENT(), { name: 'X', url: 'https://x.test', fmt: 'JSON' });
+    // Moved pin (§0.249, the review's fixes, round 4): a request that threw may have reached the server — the destination may
+    // have been added: the window closes (a second press could make a second one) and the banner says so.
+    assert.deepEqual([addOff.answered, addOff.modal, addOff.said],
+        [{ ok: true }, [false], ['The destination may have been added — reload the page to see whether it was: The server could not be reached.']],
+        'REGRESSION: offline, the Add window stays "Adding…" — nothing said');
+    const added = await auditPress('createDest', onceOf(201, { destination: { id: 'dst_2', name: 'X' }, secret: 's3cret' }), { name: 'X' });
+    assert.deepEqual([added.answered, added.modal, added.reveal, added.dests.value.map((d) => d.id)],
+        [{ ok: true }, [false], [{ dest: { id: 'dst_2', name: 'X' }, secret: 's3cret', rotated: false }], ['dst_1', 'dst_2']]);
+    const addUnread = await auditPress('createDest', P11_UNREADABLE(), { name: 'X' });
+    assert.deepEqual([addUnread.answered, addUnread.modal, addUnread.reveal],
+        [{ ok: true }, [false], []], 'landed: the window closes — never "not saved" over a destination the server made');
+    assert.deepEqual(addUnread.said, ['Destination added — Its answer could not be read, so its secret cannot be shown. Reload the page, then rotate its secret to see a new one.']);
+});
+
+// The page's reads: the audit log (in the effect) and the destinations (loadDests).
+const auditLoad = async ({ answer, dests = async () => {} }) => {
+    const did = { events: [], errors: [], loading: [], destErrors: [], destsLoading: [], loads: 0 };
+    const h = p12aFn(P12A_AUDIT, "        (async () => {\n            try {\n                const auditRes", '\n        })();', '\n        });',
+        ['dbFetch', 'readRefusal', 'failureWords', 'setEvents', 'setEventsError', 'setEventsLoading', 'loadDests', 'setDestsUnread', 'setDestsLoading',
+            'fmtEventAge', 'mapEntityTypeToCat', 'mapActionToSev'], `{ run, ...${P12A_CANCEL} }`, 'let cancelled = false;\nconst run =')(
+        async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, failureWords, (v) => did.events.push(v), (v) => did.errors.push(v),
+        (v) => did.loading.push(v), async () => { did.loads++; await dests(); }, (v) => did.destErrors.push(v), (v) => did.destsLoading.push(v),
+        () => 'now', () => 'admin', () => 'info');
+    await h.run();
+    return did;
+};
+
+test('Part 12a: the Audit log\'s read — a refusal or failure in the house words, never "No audit events yet"; the destinations still read; their failure said — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await auditLoad({ answer });
+        assert.deepEqual([did.errors, did.events, did.loading], [[words], [], [false]], `REGRESSION: ${words}`);
+        // Moved pin (§0.249, the review's fixes, round 3): the destinations are read in their own effect, at once — the
+        // log's read, failed or not, reads none (p12fxA3DestsLoad runs theirs).
+        assert.deepEqual([did.loads, did.destsLoading], [0, []], 'the log\'s read waits on no destinations read');
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { entries: 'x' })]) {
+        assert.deepEqual((await auditLoad({ answer })).errors, ['Its answer could not be read.'], 'REGRESSION: a landed answer with no list drawn as no events');
+    }
+    const landed = await auditLoad({ answer: onceOf(200, { entries: [{ id: 'e1', action: 'user.invited', userName: 'Ann' }] }) });
+    assert.deepEqual([landed.errors, landed.events.length, landed.events[0][0].actor], [[], 1, 'Ann']);
+    // Moved pin (§0.249, the review's fixes, round 3): the destinations' own effect says their failure.
+    const offline = await p12fxA3DestsLoad(async () => { throw UNSENT(); });
+    assert.deepEqual([offline.destErrors, offline.destsLoading], [['Destinations did not load — The server could not be reached.'], [false]], 'REGRESSION: the destinations\' failure said as "Failed to fetch"');
+    const read = await p12fxA3DestsLoad(async () => {});
+    assert.deepEqual([read.loads, read.destErrors, read.destsLoading], [1, [], [false]], 'the destinations are read still');
+});
+// The destinations' own effect (§0.249, the review's fixes, round 3): read at once, beside the log's read.
+const p12fxA3DestsLoad = async (dests, cancelAt = null) => {
+    const did = { destErrors: [], destsLoading: [], loads: 0 };
+    let h = null;
+    h = p12aFn(P12A_AUDIT, "        (async () => {\n            try { await loadDests(); }", '\n        })();', '\n        });',
+        ['loadDests', 'setDestsUnread', 'setDestsLoading', 'failureWords'], `{ run, ...${P12A_CANCEL} }`, 'let cancelled = false;\nconst run =')(
+        async () => { did.loads++; if (cancelAt === 'load') h.cancel(); await dests(); }, (v) => did.destErrors.push(v), (v) => did.destsLoading.push(v), failureWords);
+    await h.run();
+    return did;
+};
+
+const loadDestsRun = async (answer) => {
+    const did = { errors: [], dests: [], read: [] };
+    const h = p12aFn(P12A_AUDIT, '    const loadDests = React.useCallback(async () => {', '\n    }, []);', '\n    }, []);',
+        ['React', 'dbFetch', 'STREAM_URL', 'setDestsUnread', 'readRefusal', 'setDests', 'setDestsRead'], 'loadDests')(
+        { useCallback: (f) => f }, async () => answer, '/x', (v) => did.errors.push(v), readRefusal, (v) => did.dests.push(v), (v) => did.read.push(v));
+    did.thrown = await thrownWords(h);
+    return did;
+};
+
+test('Part 12a: the Audit log\'s destinations — "No destinations." only over a list that was read; an answer with no list is no answer — RUN, and WIRING', async () => {
+    const landed = await loadDestsRun(onceOf(200, { destinations: [P12A_DEST] }));
+    assert.deepEqual([landed.dests, landed.read, landed.thrown], [[[P12A_DEST]], [true], null]);
+    for (const answer of [onceOf(200, {}), P11_UNREADABLE()]) {
+        const r = await loadDestsRun(answer);
+        assert.deepEqual([r.dests, r.read, r.thrown], [[], [], 'Its answer could not be read.'], 'REGRESSION: a landed answer with no list read as none');
+    }
+    const refused = await loadDestsRun(onceOf(500, { error: 'Internal server error', requestId: 'r1' }));
+    // Moved pin (§0.249, the review's fixes): the refusal in readRefusal's words, its ref kept (errorOf dropped it), on the
+    // unread line no action clears.
+    assert.deepEqual([refused.dests, refused.read, refused.errors], [[], [], ['Destinations did not load — Internal server error (ref r1)']], 'a refusal said with its ref, the list never read');
+    const s = code(read(P12A_AUDIT));
+    assert.ok(s.includes('{!destsLoading && destsRead && dests.length === 0 && ('), 'REGRESSION: "No destinations." under a load that failed');
+    // Moved pin (§0.249, the review's fixes, round 2): the loading words sit between the error and the count.
+    assert.ok(s.includes("sub={eventsError ? 'The audit log did not load' : eventsLoading ? 'The audit log is still loading…' : `${visible.length} of ${events.length} events"), 'REGRESSION: "0 of 0 events" over a read that failed');
+    // Moved pin (§0.249, the review's fixes, round 3): no count while the log loads — "Loading…", never "Showing 0 of 0".
+    assert.ok(s.includes("{eventsError ? 'Not loaded' : eventsLoading ? 'Loading…' : <>Showing {visible.length} of {events.length}</>}"));
+    // Moved pin (§0.249, the review's fixes, round 4): a Remove that threw may have reached the server — said as maybe.
+    assert.ok(between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);').includes('        } catch (e) {\n            maybeRemoved(failureWords(e));\n        } finally'),
+        'REGRESSION: Remove offline rejects unsaid');
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s) && !P12A_OLD.test(s), 'REGRESSION: a raw e.message or the old words');
+});
+
+// ── Connected apps ──
+const P12A_CA = 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx';
+const slackTest = async (answer) => {
+    const did = { testing: [], msgs: [] };
+    const h = p12aFn(P12A_CA, '    const handleTest = async () => {', '\n    };', '\n    };', ['webhookUrl', 'setTesting', 'setMsg', 'dbFetch', 'readRefusal', 'failureWords'], 'handleTest')(
+        'https://hooks.slack.com/services/T/B/x', (v) => did.testing.push(v), (v) => did.msgs.push(v), async () => { if (answer instanceof Error) throw answer; return answer; },
+        readRefusal, failureWords);
+    await h();
+    return { ...did, said: did.msgs.at(-1) };
+};
+
+test('Part 12a: Connected apps\' Slack test — a refusal in the server\'s words, never "Unexpected token \'<\'"; landed, sent, no body read — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await slackTest(answer);
+        assert.deepEqual(did.said, { ok: false, text: `Test not sent — ${words}` }, `REGRESSION: ${words}`);
+        assert.deepEqual(did.testing, [true, false]);
+    }
+    for (const answer of [onceOf(200, { success: true }), P11_UNREADABLE()]) {
+        assert.deepEqual((await slackTest(answer)).said, { ok: true, text: 'Message sent — check your Slack channel.' }, 'REGRESSION: a sent test said as failed over its answer');
+    }
+});
+
+const caLoads = async ({ answer, cancel = false }) => {
+    const { jobHealth } = await import('../src/utils/jobHealth.js');
+    const did = { cal: [], bcc: [], jobs: [] };
+    let h = null;
+    const fetch = async () => { if (cancel) h.cancel(); if (answer instanceof Error) throw answer; return answer; };
+    h = p12aFn(P12A_CA, '        const loadCal = async () => {', '        loadCal(); loadBcc(); loadJobs();', '',
+        ['dbFetch', 'readRefusal', 'failureWords', 'setCal', 'setBcc', 'setJobs', 'jobHealth'], `{ loadCal, loadBcc, loadJobs, ...${P12A_CANCEL} }`, 'let cancelled = false;')(
+        fetch, readRefusal, failureWords, (v) => did.cal.push(v), (v) => did.bcc.push(v), (v) => did.jobs.push(v), jobHealth);
+    return { h, did };
+};
+
+test('Part 12a: Connected apps\' reads — the calendars and the BCC address say a refused or failed read in the house words on their cards; the job line stays silent — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const cal = await caLoads({ answer });
+        await cal.h.loadCal();
+        assert.deepEqual(cal.did.cal, [{ userConnections: [], orgConnections: [], providers: null, error: words }], `calendars: REGRESSION — ${words}`);
+    }
+    for (const [answer, words] of P12A_REFUSED()) {
+        const bcc = await caLoads({ answer });
+        await bcc.h.loadBcc();
+        assert.deepEqual(bcc.did.bcc, [{ address: null, configured: false, error: words }], `BCC: REGRESSION — ${words}`);
+    }
+    const cal = await caLoads({ answer: onceOf(200, { userConnections: [{ id: 'c1', provider: 'google' }], providers: { google: true } }) });
+    await cal.h.loadCal();
+    assert.deepEqual(cal.did.cal, [{ userConnections: [{ id: 'c1', provider: 'google' }], orgConnections: [], providers: { google: true } }]);
+    const unread = await caLoads({ answer: P11_UNREADABLE() });
+    await unread.h.loadBcc();
+    assert.deepEqual(unread.did.bcc, [{ address: null, configured: false, error: 'Its answer could not be read.' }]);
+    const bcc = await caLoads({ answer: onceOf(200, { address: 'org@in.example.test', configured: true }) });
+    await bcc.h.loadBcc();
+    assert.deepEqual(bcc.did.bcc, [{ address: 'org@in.example.test', configured: true }]);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, { userConnections: [] })]) {
+        const gone = await caLoads({ answer, cancel: true });
+        await gone.h.loadCal(); await gone.h.loadBcc();
+        assert.deepEqual([gone.did.cal, gone.did.bcc], [[], []], 'unmounted: nothing set');
+    }
+    for (const [answer] of P12A_REFUSED()) {
+        const jobs = await caLoads({ answer });
+        await jobs.h.loadJobs();
+        assert.deepEqual(jobs.did.jobs, [], 'the job line claims nothing it could not read');
+    }
+});
+
+const calDisconnect = async ({ write, reload }) => {
+    const did = { cal: [], busy: [], notes: [] };
+    const reloadCal = p12aFn(P12A_CA, '    const reloadCal = async () => {', '\n    };', '\n    };', ['dbFetch', 'readRefusal', 'setCal'], 'reloadCal')(
+        async () => { if (reload instanceof Error) throw reload; return reload; }, readRefusal, (v) => did.cal.push(v));
+    const disconnect = p12aFn(P12A_CA, '    const disconnectCalendar = async (id, scope, provider) => {', '\n    };', '\n    };',
+        ['setBusy', 'note', 'dbWrite', 'reloadCal', 'failureWords'], 'disconnectCalendar')(
+        (v) => did.busy.push(v), (k, t) => did.notes.push([k, t]), async () => write, reloadCal, failureWords);
+    did.thrown = await thrownWords(() => disconnect('cc_1', 'user', 'google'));
+    return { ...did, said: did.notes.filter(([, t]) => t) };
+};
+
+test('Part 12a: Connected apps\' calendar Disconnect — busy cleared in a finally (it stayed busy for good offline); a read again that fails after a landed Disconnect is said — RUN', async () => {
+    const CONNS = onceOf(200, { userConnections: [], orgConnections: [], providers: { google: true } });
+    const ok = await calDisconnect({ write: { ok: true, status: 200 }, reload: CONNS });
+    assert.deepEqual([ok.said, ok.busy, ok.cal.length, ok.thrown], [[], ['cal', null], 1, null]);
+    for (const [reload, words] of P12A_REFUSED()) {
+        const r = await calDisconnect({ write: { ok: true, status: 200 }, reload });
+        assert.deepEqual(r.said, [['cal:google', `Disconnected — the connections could not be read again: ${words} Reload the page to see them.`]], `REGRESSION: ${words}`);
+        assert.deepEqual([r.busy, r.cal, r.thrown], [['cal', null], [], null], 'REGRESSION: the row left busy, or the failure thrown unsaid');
+    }
+    const refused = await calDisconnect({ write: { ok: false, status: 403, error: 'You do not have permission to make this change.' }, reload: UNSENT() });
+    assert.deepEqual([refused.said, refused.busy], [[['cal:google', 'Not disconnected — You do not have permission to make this change.']], ['cal', null]], 'the refusal\'s words stand');
+});
+
+const caRequest = async ({ answer, switchAt = -1 }) => {
+    const did = { sent: [], busy: [], notes: [], sets: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12A_CA, '    const requestApp = async (app) => {', '\n    };', '\n    };',
+        ['setBusy', 'note', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setSettings'], 'requestApp')(
+        (v) => did.busy.push(v), (k, t) => did.notes.push([k, t]), () => 'org_a', (o) => o === org.now, p11Fetch(did, answer, org, { switchAt }),
+        readRefusal, failureWords, (f) => did.sets.push(f({ integrationRequests: {} })));
+    await h({ id: 'hubspot' });
+    return { ...did, said: did.notes.filter(([, t]) => t) };
+};
+
+test('Part 12a: Connected apps\' Request — a refusal in the house words; landed unread, said as requested; after a switch nothing — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await caRequest({ answer });
+        assert.deepEqual([did.said, did.sets], [[['hubspot', `Not requested — ${words}`]], []], `REGRESSION: ${words}`);
+    }
+    const unread = await caRequest({ answer: P11_UNREADABLE() });
+    assert.deepEqual([unread.said, unread.sets], [[['hubspot', 'Requested — Its answer could not be read. Reload the page to see the request.']], []],
+        'REGRESSION: a request the server recorded said as refused, or a parse error');
+    const landed = await caRequest({ answer: onceOf(200, { request: { requestedAt: 'R' } }) });
+    assert.deepEqual([landed.said, landed.sets], [[], [{ integrationRequests: { hubspot: { requestedAt: 'R' } } }]]);
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), P11_PAGE(), UNSENT(), P11_UNREADABLE()]) {
+        const late = await caRequest({ answer, switchAt: 0 });
+        assert.deepEqual([late.said, late.sets], [[], []], 'after a switch: nothing said, nothing set');
+    }
+});
+
+test('Part 12a: WIRING — Connected apps: no raw e.message, no old words; the count yields to a failed read; the job read is the one body read before its check', () => {
+    const s = code(read(P12A_CA));
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s) && !P12A_OLD.test(s), 'REGRESSION: a raw e.message or the old words');
+    assert.ok(s.includes("sub={`${cal?.error || bcc?.error ? 'Some connections could not be read — the cards say which' : `${liveCount} live`}"), 'REGRESSION: "0 live" over a read that failed');
+    assert.ok(s.includes("note('slack', `Not disconnected — ${failureWords(e)}`);") && s.includes("note('webform', `Not saved — ${failureWords(e)}`);"));
+    // The job line's read stays silent by design (Part 12): named for the guard by its own text, which no other read shares.
+    assert.equal(count(s, 'const data = await res.json();'), 1);
+});
+
+// ── Users ──
+const P12A_USERS = 'src/Tabs/settings/people/UsersDetail.jsx';
+const usersHelper = (start, name) => p12aFn(P12A_USERS, start, '\n};', '\n};', ['dbFetch', 'readRefusal', 'refusalWords'], name);
+const usersCall = async (start, name, answer, ...args) => {
+    const sent = [];
+    const h = usersHelper(start, name)(async (url, opts) => { sent.push([url, opts.method, JSON.parse(opts.body)]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, refusalWords);
+    let value, thrown = null;
+    try { value = await h(...args); } catch (e) { thrown = failureWords(e); }
+    return { sent, value, thrown };
+};
+
+test('Part 12a: Users\' Deactivate / Reactivate, Revoke and Resend helpers — each refusal thrown in the house words, never "HTTP N"; landed unread, landed — RUN', async () => {
+    const ACTIVE = ['const setMemberActive = async (id, active) => {', 'setMemberActive'];
+    const REVOKE = ['const revokeInvite = async (email) => {', 'revokeInvite'];
+    const RESEND = ['const resendInvite = async (row) => {', 'resendInvite'];
+    for (const [which, args] of [[ACTIVE, ['usr_1', false]], [REVOKE, ['a@x.test']], [RESEND, [{ email: 'a@x.test', role: 'User' }]]]) {
+        for (const [answer, words] of P12A_REFUSED()) {   // a fresh answer each: a body reads once
+            const r = await usersCall(...which, answer, ...args);
+            assert.equal(r.thrown, words, `${which[1]}: REGRESSION — ${words}`);
+        }
+    }
+    const stored = await usersCall(...ACTIVE, onceOf(200, { user: { id: 'usr_1', active: false, status: 'Deactivated' } }), 'usr_1', false);
+    assert.deepEqual([stored.value, stored.sent[0][2]], [{ id: 'usr_1', active: false, status: 'Deactivated' }, { id: 'usr_1', active: false }]);
+    const unread = await usersCall(...ACTIVE, P11_UNREADABLE(), 'usr_1', true);
+    assert.deepEqual([unread.value, unread.thrown], [{ id: 'usr_1', active: true }, null], 'landed: the row as sent, never "not saved"');
+    const revoked = await usersCall(...REVOKE, onceOf(200, { revoked: 1, removedRowId: 'usr_9', lists: {} }), 'a@x.test');
+    assert.deepEqual(revoked.value, { revoked: 1, removedRowId: 'usr_9', lists: {} });
+    assert.deepEqual((await usersCall(...REVOKE, P11_UNREADABLE(), 'a@x.test')).value, null, 'landed, its answer unread: null — the caller says so');
+    const perInvite = await usersCall(...RESEND, onceOf(400, { invited: [], errors: [{ email: 'a@x.test', error: 'Clerk refused it' }] }), { email: 'a@x.test' });
+    assert.equal(perInvite.thrown, 'Clerk refused it', 'the per-invite refusal\'s words');
+    assert.deepEqual((await usersCall(...RESEND, onceOf(201, { invited: [{ id: 'usr_9' }], errors: [] }), { email: 'a@x.test' })).thrown, null);
+});
+
+const P12A_SETTINGS = () => ({ users: [{ id: 'usr_1', name: 'Ann', email: 'ann@x.test' }, { id: 'usr_2', name: 'Bo' }], teams: [], revs: { teams: 'T1' } });
+// `answer` one answer, or (since the §0.249 review's fixes, U) a list taken in order — the invite, then the roster read again.
+const inviteSend = async ({ answer, switchAt = -1, team = '' }) => {
+    const { teamsWithMembers } = await import('../src/utils/teamMembership.js');
+    const did = { sent: [], errors: [], saving: [], saved: [], added: [], timers: [], rows: [], notices: [], warn: [] };
+    const org = { now: 'org_a' };
+    const settings = stateOf(P12A_SETTINGS());
+    const queue = Array.isArray(answer) ? [...answer] : null;
+    // Moved (§0.249, review fixes round 3 — U3): the notice's tint is set beside its words (setNoticeWarn), recorded in `warn`.
+    const h = p12aFn(P12A_USERS, '    const handleSend = async () => {', '\n    };', '\n    };',
+        ['validateRows', 'setRows', 'setError', 'setSaving', 'requestOrg', 'stillOrg', 'defaultRole', 'settings', 'expiry', 'teamIdNamed', 'dbFetch', 'setSettings',
+            'addToSettingsList', 'teamsWithMembers', 'TEAMS_CHANGED_TWICE', 'refusalWords', 'failureWords', 'setSaved', 'setTimeout', 'onUsers', 'setNotice', 'readRefusal',
+            'setNoticeWarn'], 'handleSend')(
+        () => [{ id: 1, email: 'new@x.test', role: 'User', team, valid: true }], (v) => did.rows.push(v), (v) => did.errors.push(v), (v) => did.saving.push(v),
+        () => 'org_a', (o) => o === org.now, 'User', settings.value, 7, () => null, p11Fetch(did, queue ? () => queue.shift() : answer, org, { switchAt }), settings.set,
+        async (key, apply) => { did.added.push(key); return { ok: true }; }, teamsWithMembers, 'twice', refusalWords, failureWords, (v) => did.saved.push(v),
+        (f, ms) => did.timers.push(ms), () => {}, (v) => did.notices.push(v), readRefusal, (v) => did.warn.push(v));
+    await h();
+    return { ...did, users: settings.value.users, said: did.errors.filter(Boolean), told: did.notices.filter(Boolean) };
+};
+
+test('Part 12a: Users\' invite — a refusal in the server\'s words with its ref, never "Invite failed"; per-invite refusals kept; landed unread, said as sent; after a switch nothing — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await inviteSend({ answer });
+        assert.deepEqual(did.said, [words], `REGRESSION: ${words}`);
+        assert.deepEqual([did.saved, did.users.length, did.saving.at(-1)], [[], 2, false], 'nothing sent said; the roster unchanged; the button back');
+    }
+    const some = await inviteSend({ answer: onceOf(201, { invited: [{ id: 'usr_9', name: 'New', email: 'new@x.test' }], errors: [{ email: 'b@x.test', error: 'Already a member' }] }) });
+    assert.deepEqual(some.said, ['1 sent; not sent — b@x.test: Already a member.'], 'the per-invite refusals, read at any status by design');
+    assert.deepEqual(some.users.map((u) => u.id), ['usr_1', 'usr_2', 'usr_9']);
+    const allRefused = await inviteSend({ answer: onceOf(400, { invited: [], errors: [{ email: 'new@x.test', error: 'Not a valid role' }] }) });
+    assert.deepEqual(allRefused.said, ['0 sent; not sent — new@x.test: Not a valid role.']);
+    const landed = await inviteSend({ answer: onceOf(201, { invited: [{ id: 'usr_9', name: 'New' }], errors: [] }) });
+    assert.deepEqual([landed.said, landed.saved, landed.added], [[], [true], ['teams']]);
+    // Moved in the §0.249 review's fixes (U): said as a notice, never the red box of a failure (the roster read again refused here).
+    // Moved again in round 2 (U2): the roster's refusal said in the house words, with the ref — never dropped for a bare "reload".
+    const unread = await inviteSend({ answer: [P11_UNREADABLE(), onceOf(500, { error: 'x', requestId: 'r1' })] });
+    assert.deepEqual([unread.said, unread.told, unread.saved, unread.added], [[], ['The invitations were sent. Its answer could not be read. The roster could not be read again — reload the page to see it: x (ref r1)'], [], []],
+        'REGRESSION: a landed invite whose answer cannot be read said "Sent!" with nobody on screen, or as a refusal');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), P11_PAGE(), UNSENT(), onceOf(201, { invited: [{ id: 'usr_9' }], errors: [] })]) {
+        const late = await inviteSend({ answer, switchAt: 0 });
+        assert.deepEqual([late.said, late.saved, late.users.length], [[], [], 2], 'REGRESSION: an answer after an org switch said on the new org\'s screen');
+    }
+});
+
+const pendingLoad = async (answer) => {
+    const did = { errors: [], invites: [] };
+    const h = p12aFn(P12A_USERS, '    const loadInvites = React.useCallback(async () => {', '\n    }, []);', '\n    }, []);',
+        ['React', 'setLoadError', 'dbFetch', 'readRefusal', 'failureWords', 'setClerkInvites'], 'loadInvites')(
+        { useCallback: (f) => f }, (v) => did.errors.push(v), async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, failureWords, (v) => did.invites.push(v));
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12a: Users\' Pending invites read — a refusal in the house words, never "HTTP N"; an answer with no list is no answer; the count says the links were not read — RUN, and WIRING', async () => {
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await pendingLoad(answer);
+        assert.deepEqual(did.said, [`Clerk's invitations could not be read, so the dates are missing — ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual(did.invites, [false], 'unread, never "read, and empty" (moved in the §0.249 review\'s fixes, U: it was [])');
+    }
+    for (const answer of [onceOf(200, {}), P11_UNREADABLE()]) {
+        assert.deepEqual((await pendingLoad(answer)).said, ["Clerk's invitations could not be read, so the dates are missing — Its answer could not be read."]);
+    }
+    const INV = [{ id: 'inv_1', email: 'a@x.test', expiresAt: 1 }];
+    const landed = await pendingLoad(onceOf(200, { invitations: INV }));
+    assert.deepEqual([landed.said, landed.invites], [[], [INV]]);
+    const s = code(read(P12A_USERS));
+    // Moved in the §0.249 review's fixes (U): the unread list is its own state (clerkInvites false), the count the roster's.
+    assert.ok(s.includes("statusDetail={clerkInvites === null ? 'Reading invitations…' : invitesUnread ? `${entries.length} invited in the roster · Clerk's list not read` : `${entries.length} pending · ${liveCount} with a live link`}"),
+        'REGRESSION: "0 with a live link" over a read that failed');
+});
+
+// The profile page's Delete and Revoke: each inside its confirm.
+const profileRemoval = async (which, { answer, switchAt = -1 }) => {
+    const { settingsAfterRemoval, removalNote } = await import('../src/utils/teamMembership.js');
+    const src = code(read(P12A_USERS));
+    const REMOVED_UNREAD = between(src, "const REMOVED_UNREAD = '", "';").slice("const REMOVED_UNREAD = '".length);
+    const REVOKED_UNREAD = between(src, "const REVOKED_UNREAD = '", "';").slice("const REVOKED_UNREAD = '".length);
+    const did = { sent: [], errors: [], removed: [] };
+    const org = { now: 'org_a' };
+    const settings = stateOf(P12A_SETTINGS());
+    const fetch = p11Fetch(did, answer, org, { switchAt });
+    const revokeInvite = usersHelper('const revokeInvite = async (email) => {', 'revokeInvite')(fetch, readRefusal, refusalWords);
+    const start = which === 'delete'
+        ? 'Permanently delete ${user.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, '
+        : 'Revoke the invitation to ${user.email || user.name}? Its link stops working and their row is removed. You can invite them again later.`, ';
+    // The confirm's callback: the source after the confirm's words, to the confirm's close.
+    const callback = between(src, start, which === 'delete' ? '\n        });' : '\n        }, false);').slice(start.length);
+    const h = new Function('requestOrg', 'stillOrg', 'dbFetch', 'revokeInvite', 'user', 'readRefusal', 'failureWords', 'setSettings', 'settingsAfterRemoval', 'removalNote',
+        'onRemoved', 'setError', 'REMOVED_UNREAD', 'REVOKED_UNREAD', `return (${callback}\n        });`)(
+        () => 'org_a', (o) => o === org.now, fetch, revokeInvite, { id: 'usr_2', name: 'Bo', email: 'bo@x.test' }, readRefusal, failureWords, settings.set,
+        settingsAfterRemoval, removalNote, (n) => did.removed.push(n), (v) => did.errors.push(v), REMOVED_UNREAD, REVOKED_UNREAD);
+    await h();
+    return { ...did, users: settings.value.users.map((u) => u.id), REMOVED_UNREAD, REVOKED_UNREAD };
+};
+
+test('Part 12a: Users\' profile Delete and Revoke — a refusal in the house words, never "HTTP N"; landed unread, back to the list saying so; after a switch nothing — RUN', async () => {
+    for (const which of ['delete', 'revoke']) {
+        const label = which === 'delete' ? 'Could not delete: ' : 'Could not revoke the invitation: ';
+        for (const [answer, words] of P12A_REFUSED()) {
+            const r = await profileRemoval(which, { answer });
+            assert.deepEqual(r.errors, [label + words], `${which}: REGRESSION — ${words}`);
+            assert.deepEqual([r.removed, r.users], [[], ['usr_1', 'usr_2']], `${which}: nothing removed`);
+        }
+        const landed = await profileRemoval(which, { answer: onceOf(200, which === 'delete' ? { success: true, lists: {} } : { revoked: 1, removedRowId: 'usr_2', lists: {} }) });
+        assert.deepEqual([landed.errors, landed.removed, landed.users], [[], [null], ['usr_1']], `${which}: landed, the row off the roster`);
+        const unread = await profileRemoval(which, { answer: P11_UNREADABLE() });
+        assert.deepEqual(unread.errors, [], `${which}: REGRESSION — a landed removal said as refused`);
+        assert.deepEqual(unread.removed, [which === 'delete' ? unread.REMOVED_UNREAD : unread.REVOKED_UNREAD], `${which}: said, back on the list`);
+        assert.deepEqual(unread.users, which === 'delete' ? ['usr_1'] : ['usr_1', 'usr_2'], 'a delete takes its own row off; a revoke whose row is unknown takes none');
+        for (const answer of [onceOf(403, { error: 'Forbidden' }), P11_PAGE(), UNSENT(), onceOf(200, { lists: {}, removedRowId: 'usr_2' })]) {
+            const late = await profileRemoval(which, { answer, switchAt: 0 });
+            assert.deepEqual([late.errors, late.removed, late.users], [[], [], ['usr_1', 'usr_2']], `${which}: after a switch nothing said or removed`);
+        }
+    }
+});
+
+// The org switched as request `switchAt` goes out (since the §0.249 review's fixes, U: the sync takes requestOrg / stillOrg).
+const clerkSync = async (answers, { switchAt = -1 } = {}) => {
+    const did = { sent: [], syncing: [], msgs: [], drift: [], roster: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12A_USERS, '    const runClerkSync = async () => {', '\n    };', '\n    };',
+        ['syncing', 'setSyncing', 'setSyncMsg', 'dbFetch', 'readRefusal', 'failureWords', 'setDrift', '_setSettings', 'requestOrg', 'stillOrg'], 'runClerkSync')(
+        false, (v) => did.syncing.push(v), (v) => did.msgs.push(v), p11Fetch(did, (url) => (url.includes('users-sync') ? answers.sync : answers.roster), org, { switchAt }),
+        readRefusal, failureWords, (v) => did.drift.push(v), (f) => did.roster.push(f({ users: [] })), () => 'org_a', (o) => o === org.now);
+    await h();
+    return { ...did, said: did.msgs.at(-1) };
+};
+
+test('Part 12a: Users\' Clerk sync — a refusal in the house words; landed unread, said as synced; a roster read again that fails never says "Sync failed" — RUN', async () => {
+    const ROSTER = () => onceOf(200, { users: [{ id: 'usr_1' }] });
+    for (const [sync, words] of P12A_REFUSED()) {
+        const did = await clerkSync({ sync, roster: ROSTER() });
+        assert.equal(did.said, `Sync failed: ${words}`, `REGRESSION: ${words}`);
+        assert.deepEqual([did.sent.length, did.drift, did.syncing], [1, [], [true, false]], 'no roster read over a refusal');
+    }
+    const landed = await clerkSync({ sync: onceOf(200, { counts: { created: 1, updated: 0, unchanged: 3, dbOnly: 0 } }), roster: ROSTER() });
+    assert.deepEqual([landed.said, landed.roster, landed.drift], ['Synced: 1 added, 0 updated, 3 unchanged', [{ users: [{ id: 'usr_1' }] }], [null]]);
+    const unread = await clerkSync({ sync: P11_UNREADABLE(), roster: ROSTER() });
+    assert.deepEqual([unread.said, unread.roster.length], ['Synced. Its answer could not be read, so the counts are not shown', 1], 'REGRESSION: a sync that ran said as failed');
+    for (const [roster, words] of P12A_REFUSED()) {
+        const r = await clerkSync({ sync: onceOf(200, { counts: { created: 0, updated: 0, unchanged: 2 } }), roster });
+        assert.equal(r.said, `Synced: 0 added, 0 updated, 2 unchanged. The roster could not be read again — reload the page to see it: ${words}`, `REGRESSION: ${words}`);
+        assert.ok(!/Sync failed/.test(r.said));
+    }
+});
+
+test('Part 12a: WIRING — Users: no "HTTP N", no raw e.message; each removal and save says the house words; the Security page says a failed audit read', () => {
+    const s = code(read(P12A_USERS));
+    assert.ok(!/'HTTP '|HTTP \$\{/.test(s), 'REGRESSION: "HTTP N" said');
+    assert.ok(!/\b(e|err)\??\.message\b/.test(s), 'REGRESSION: a raw e.message said');
+    assert.ok(s.includes("import { readRefusal, refusalWords, failureWords } from '../../../utils/refusalWords.js';"));
+    // The two per-invite reads stay before the ok check by design (named for the guard): their refusal words through refusalWords.
+    assert.equal(count(s, 'const d = await resp.json().catch(() => ({}));'), 1);
+    assert.equal(count(s, 'const d = await res.json().catch(() => ({}));'), 1);
+    assert.ok(s.includes('if (!resp.ok) throw new Error(refusalWords(resp, d));') && s.includes('if (!res.ok) throw new Error(refusalWords(res, d));'));
+    // The member save: the ok check first, the role refusal read once after its check, every catch failureWords.
+    const save = between(s, 'const UserProfilePage = ', '    const handleDeactivate = ');
+    order(save, 'body:JSON.stringify(toSave) });', 'if (!resp.ok) { const why = await readRefusal(resp); if (!stillOrg(askedOrg)) return; throw new Error(why); }',
+        'const stored = await resp.json().catch(() => null);', 'row = stored?.user || { ...user, ...toSave };');
+    order(save, 'if (rr.ok) {', '} else {', 'const why = await readRefusal(rr);', 'if (!row && !teamsNow) throw new Error(why);');
+    assert.ok(save.includes('${clause(failureWords(err))}') && save.includes(': failureWords(err));'), 'REGRESSION: the save\'s catch says a raw e.message');
+    // The row menu: each action's org checked, its words the house words.
+    for (const words of ['`Could not deactivate ${u.name}: ${failureWords(err)}`', '`Could not reactivate ${u.name}: ${failureWords(err)}`',
+        '`Could not revoke the invitation to ${u.email || u.name}: ${failureWords(err)}`', '`Could not delete ${u.name}: ${failureWords(err)}`']) {
+        assert.ok(s.includes(`} catch(err) { if (stillOrg(askedOrg)) setUserActionError(${words}); }`), words);
+    }
+    assert.ok(s.includes('const left = gone ? removalNote(gone) : REMOVED_UNREAD;') && s.includes('if (!r) { setUserActionError(REVOKED_UNREAD); return; }'));
+    // The Pending page: its Revoke's failure after an org switch says nothing; its Resend says failureWords.
+    assert.ok(s.includes('            } catch (err) {\n                if (!stillOrg(askedOrg)) return;\n                setActionError(`Could not revoke the invitation to ${e.email}: ${failureWords(err)}`);'),
+        'REGRESSION: a revoke that failed after an org switch said on the new org\'s screen');
+    assert.ok(s.includes('catch (err) { setActionError(`Could not resend to ${e.email}: ${failureWords(err)}`); }'));
+    assert.ok(s.includes("{events === null ? (eventsError ? `The audit log could not be read — ${eventsError}` : 'Loading…') :"), 'REGRESSION: "Loading…" for good over a failed read');
+});
+
+// ── Part 12b — the tabs and layout ──
+// Part 12b (state §0.249, docs/design/refusal-sweep Part 12; Jeff, 13 Nov: "Start Part 12" — Q4 "Recommended"): the Quotes
+// tab (the job lookup, the approval record, a quote's history, Create dispatch job, and the catches that said a raw
+// e.message), Reports (the prompt's fallback, the library's Share, Pin, schedule and Send now, the Actions report), the
+// Sales Manager (a claim's Approve / Reject and Delete, the quota board's save), Score all deals, the profile panel (its
+// save, the email-logging address, the calendar Disconnect), the invitation import's words and the SPIFF claim, and App's
+// two calendar reads. Each read its body before the ok check — a refusal's ref lost, a 502's page said "Scoring failed."
+// or "check your connection", "HTTP N" — or said a raw e.message. Each reads the ok check first and says the house words;
+// a read that failed draws no "none": the job card offers no Create and says no "No job yet" over a lookup that failed.
+
+// The refusals a tab meets, and their words: `role` what a 403 says where the screen has its own sentence.
+const p12bRefused = (role = 'Forbidden') => [
+    [onceOf(403, { error: 'Forbidden' }), role],
+    [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+    [onceOf(409, {}), 'The server returned 409.'],
+    [P11_PAGE(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+// An answer whose body read switches the org first — an answer that lands while the member switches.
+const p12bSwitchOnRead = (org, status, body) => {
+    const a = onceOf(status, body);
+    const json = a.json;
+    a.json = async () => { org.now = 'org_b'; return json(); };
+    return a;
+};
+// A piece of a file run as an async function: `pre` before it, `ret` what it hands back.
+const p12bBuilt = new Map();
+const p12bAsync = (file, start, end, params, pre, ret) => {
+    const key = `${file}|${start}`;
+    if (!p12bBuilt.has(key)) p12bBuilt.set(key, new Function(...params, `return (async () => {\n${pre}\n${between(code(read(file)), start, end)}\nreturn ${ret};\n})();`));
+    return p12bBuilt.get(key);
+};
+const P12B_NO_RAW = /\b(e|err)\??\.message\b/;
+
+// ── Quotes ──
+const P12B_QUOTES = 'src/Tabs/QuotesTab.jsx';
+const P12B_JOB = Object.freeze({ id: 'job_1', jobNumber: 'J-0001', status: 'unscheduled', invoice: null });
+// The job lookup (an effect): its read awaited, `cancelFirst` its cleanup run before the answer lands.
+const p12bJobLookup = async ({ answer, cancelFirst = false }) => {
+    const did = { job: [], errors: [], unread: [], loading: [] };
+    let cleanup = null;
+    const fetch = async () => { await null; if (cancelFirst) cleanup(); if (answer instanceof Error) throw answer; return answer; };
+    cleanup = p12aFn(P12B_QUOTES, '        let cancelled = false;\n        setLinkedJob(null);', '\n    }, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);', '',
+        ['activeQuote', 'quoteCanBecomeJob', 'settings', 'dbFetch', 'readRefusal', 'failureWords', 'setLinkedJob', 'setJobError', 'setJobUnread', 'setJobLoading'], 'undefined')(
+        { id: 'q_1', status: 'Accepted' }, () => true, { dispatchEnabled: true }, fetch, readRefusal, failureWords,
+        (v) => did.job.push(v), (v) => did.errors.push(v), (v) => did.unread.push(v), (v) => did.loading.push(v));
+    await settle();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12b: Quotes\' job lookup — a refusal in the house words, never "HTTP N" or "check your connection"; a read that failed is no "none" (Create not offered); landed, the job or none; cleaned up, nothing — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bJobLookup({ answer });
+        assert.deepEqual(r.said, [`Could not look up the job — ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual([r.job, r.unread, r.loading], [[null], [false, true], [true, false]], 'no job, and the card told the read failed');
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, null)]) {
+        const r = await p12bJobLookup({ answer });
+        assert.deepEqual([r.said, r.job, r.unread], [['Could not look up the job — Its answer could not be read.'], [null], [false, true]], 'REGRESSION: an answer with no `job` read as none — Create offered over it');
+    }
+    const found = await p12bJobLookup({ answer: onceOf(200, { job: P12B_JOB }) });
+    assert.deepEqual([found.said, found.job, found.unread], [[], [null, P12B_JOB], [false]]);
+    const none = await p12bJobLookup({ answer: onceOf(200, { job: null }) });
+    assert.deepEqual([none.said, none.job, none.unread], [[], [null, null], [false]], 'none, as the server said');
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, { job: P12B_JOB })]) {
+        const gone = await p12bJobLookup({ answer, cancelFirst: true });
+        assert.deepEqual([gone.said, gone.job, gone.unread, gone.loading], [[], [null], [false], [true]], 'another quote shown since: nothing set');
+    }
+});
+
+const p12bApprovalRead = async ({ answer, cancelFirst = false }) => {
+    const did = { events: [], errors: [] };
+    let cleanup = null;
+    const fetch = async () => { await null; if (cancelFirst) cleanup(); if (answer instanceof Error) throw answer; return answer; };
+    cleanup = p12aFn(P12B_QUOTES, '        let cancelled = false;\n        setApprovalEvents(null);', '\n    }, [subTab, quotes]);', '',
+        ['subTab', 'dbFetch', 'readRefusal', 'failureWords', 'setApprovalEvents', 'setApprovalEventsError'], 'undefined')(
+        'approvals', fetch, readRefusal, failureWords, (v) => did.events.push(v), (v) => did.errors.push(v));
+    await settle();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+const p12bHistoryRead = async ({ answer, cancelFirst = false }) => {
+    const did = { history: [] };
+    let cleanup = null;
+    const fetch = async () => { await null; if (cancelFirst) cleanup(); if (answer instanceof Error) throw answer; return answer; };
+    cleanup = p12aFn(P12B_QUOTES, '        let cancelled = false;\n        setQuoteHistory(', '\n    }, [activeQuote?.id, activeQuote?.updatedAt, subTab]);', '',
+        ['activeQuote', 'subTab', 'dbFetch', 'readRefusal', 'failureWords', 'setQuoteHistory'], 'undefined')(
+        { id: 'q_1' }, 'configurator', fetch, readRefusal, failureWords, (v) => did.history.push(v));
+    await settle();
+    return did;
+};
+
+test('Part 12b: Quotes\' approval record and a quote\'s history — a refusal in the house words; an answer with no list is no answer, never "No decisions" or "No recorded activity yet"; cleaned up, nothing — RUN', async () => {
+    const EV = { id: 'ev_1', action: 'quote.submitted', quoteId: 'q_1' };
+    const CLEARED = { events: null, error: '' };
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bApprovalRead({ answer });
+        assert.deepEqual([r.said, r.events], [[`Could not read the approval record — ${words}`], [null]], `REGRESSION: ${words}`);
+    }
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bHistoryRead({ answer });
+        assert.deepEqual(r.history, [CLEARED, { events: null, error: `Could not read this quote's history — ${words}` }], `REGRESSION: ${words}`);
+    }
+    for (const make of [() => P11_UNREADABLE(), () => onceOf(200, {}), () => onceOf(200, { events: 'x' })]) {
+        assert.deepEqual((await p12bApprovalRead({ answer: make() })).said, ['Could not read the approval record — Its answer could not be read.'], 'REGRESSION: an answer with no list drawn as no decisions');
+        assert.deepEqual((await p12bHistoryRead({ answer: make() })).history.at(-1), { events: null, error: 'Could not read this quote\'s history — Its answer could not be read.' },
+            'REGRESSION: an answer with no list drawn as no activity');
+    }
+    assert.deepEqual((await p12bApprovalRead({ answer: onceOf(200, { events: [EV], days: 30 }) })).events, [null, [EV]]);
+    assert.deepEqual((await p12bHistoryRead({ answer: onceOf(200, { events: [EV] }) })).history, [CLEARED, { events: [EV], error: '' }]);
+    for (const make of [() => onceOf(500, { error: 'x' }), () => UNSENT(), () => onceOf(200, { events: [EV] })]) {
+        assert.deepEqual((await p12bApprovalRead({ answer: make(), cancelFirst: true })).events, [null], 'cleaned up: nothing set');
+        assert.deepEqual((await p12bHistoryRead({ answer: make(), cancelFirst: true })).history, [CLEARED], 'cleaned up: nothing set');
+    }
+});
+
+const p12bCreateJob = async ({ answer, switchOrg = false }) => {
+    const did = { sent: [], job: [], errors: [], unread: [], busy: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12B_QUOTES, '    const handleCreateJob = async () => {', '\n    };', '\n    };',
+        ['activeQuote', 'requestOrg', 'stillOrg', 'setJobBusy', 'setJobError', 'dbFetch', 'setLinkedJob', 'setJobUnread', 'refusalWords', 'failureWords'], 'handleCreateJob')(
+        { id: 'q_1' }, () => 'org_a', (o) => o === org.now, (v) => did.busy.push(v), (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg),
+        (v) => did.job.push(v), (v) => did.unread.push(v), refusalWords, failureWords);
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12b: Quotes\' Create dispatch job — a refusal read once, in the house words with its ref; a 409 naming the job adopts it; a job made whose answer cannot be read is said as made, Create not offered again; after an org switch nothing — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bCreateJob({ answer });
+        assert.deepEqual([r.said, r.job, r.unread, r.busy, r.sent], [[`The job was not created — ${words}`], [], [], [true, false], ['POST']], `REGRESSION: ${words}`);
+    }
+    const twoCustomers = await p12bCreateJob({ answer: onceOf(409, { error: 'Two customers stand for this deal: Acme and Acme Co.', requestId: 'r9' }) });
+    assert.deepEqual(twoCustomers.said, ['The job was not created — Two customers stand for this deal: Acme and Acme Co. (ref r9)']);
+    const exists = await p12bCreateJob({ answer: onceOf(409, { error: 'J-0001 already exists for this quote.', job: P12B_JOB }) });
+    assert.deepEqual([exists.said, exists.job, exists.unread], [[], [P12B_JOB], [false]], 'the job that exists is adopted');
+    const made = await p12bCreateJob({ answer: onceOf(201, { job: P12B_JOB, customerCreated: false }) });
+    assert.deepEqual([made.said, made.job, made.unread], [[], [P12B_JOB], [false]]);
+    for (const answer of [P11_UNREADABLE(), onceOf(201, {})]) {
+        const r = await p12bCreateJob({ answer });
+        assert.deepEqual([r.said, r.job, r.unread], [['The job was created. Its answer could not be read — reload the page to see it.'], [], [true]],
+            'REGRESSION: a job made said as not made, and Create offered again');
+    }
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(201, { job: P12B_JOB }), onceOf(409, { error: 'exists', job: P12B_JOB }), P11_UNREADABLE()]) {
+        const r = await p12bCreateJob({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.job, r.unread, r.busy], [[], [], [], [true, false]], 'REGRESSION: the last org\'s answer said or adopted after a switch');
+    }
+});
+
+test('Part 12b: WIRING — Quotes: the job card draws neither "No job yet" nor Create over a lookup that failed; every catch in the house words; no "HTTP N", no "check your connection", no raw e.message', () => {
+    const s = code(read(P12B_QUOTES));
+    assert.ok(s.includes("import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';"));
+    const card = between(s, '{quoteCanBecomeJob(quote) && (', '{jobError && <div role="alert"');
+    order(card, ') : jobLoading ? (', ') : job ? (', ') : jobUnread ? null : onCreateJob ? (', 'No job yet — whoever runs Dispatch creates it from here.');
+    assert.ok(s.includes('jobError={jobError} jobUnread={jobUnread} onCreateJob={canCreateJob ? handleCreateJob : null} />}'), 'REGRESSION: the card never told the lookup failed');
+    assert.ok(s.includes('onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, jobUnread, onCreateJob,'));
+    assert.ok(s.includes("setLinkedJob(null); setJobError(''); setJobUnread(false);"), 'cleared with the job, on any other quote');
+    for (const w of ["} catch (err) { setError(`The quote was not created — ${failureWords(err)}`); }", "} catch (err) { setError(`The version was not created — ${failureWords(err)}`); }",
+        'catch (err) { setError(failureWords(err)); return null; }']) assert.ok(s.includes(w), w);
+    assert.equal(count(s, 'catch (err) { setError(failureWords(err)); }'), 3, 'the line editor, the Price Book and Save draft');
+    assert.ok(!/HTTP \$\{|'HTTP '|check your connection/.test(s), 'REGRESSION: "HTTP N" or "check your connection" said');
+    assert.ok(!P12B_NO_RAW.test(s), 'REGRESSION: a raw e.message said');
+});
+
+// ── Reports ──
+const P12B_REPORTS = 'src/Tabs/ReportsTab.jsx';
+const p12bPrompt = async (answer) => {
+    const did = { busy: [] };
+    const out = await p12bAsync(P12B_REPORTS, '            setPromptBusy(true);\n            try {', '            finally { setPromptBusy(false); }',
+        ['prompt', 'dbFetch', 'readRefusal', 'isoLocal', 'aiAccessWords', 'settings', 'PROMPT_AI_AVAILABLE_NOTE', 'setPromptBusy'],
+        "let reading = null, readBy = 'local';\nconst extraNotes = [];", '{ reading, readBy, extraNotes }')(
+        'deals in Proposal', async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, () => '2026-11-13', () => 'Ask AI is for Admins.', {}, 'AI is available.',
+        (v) => did.busy.push(v));
+    return { ...out, busy: did.busy };
+};
+
+test('Part 12b: Reports\' prompt — a refusal says why in the server\'s words, then the built-in reader; Claude\'s reading only from a landed answer — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bPrompt(answer);
+        const said = answer instanceof Error ? 'Claude could not be reached — read by the built-in interpreter instead.' : `Claude could not read this one (${words}) — read by the built-in interpreter instead.`;
+        assert.deepEqual([r.readBy, r.reading, r.extraNotes], ['local', null, [said]], `REGRESSION: ${words}`);
+    }
+    const DEF = { source: 'Opportunities', dims: [], metrics: [] };
+    const read1 = await p12bPrompt(onceOf(200, { readBy: 'claude', definition: DEF, name: 'Proposal deals', notes: ['n1'] }));
+    assert.deepEqual([read1.readBy, read1.reading, read1.extraNotes], ['claude', { name: 'Proposal deals', definition: DEF, notes: ['n1'] }, []]);
+    assert.ok((await p12bPrompt(onceOf(200, { unavailable: true, reason: 'no_key' }))).extraNotes[0].includes('no Anthropic key is installed'));
+    for (const answer of [onceOf(200, { unavailable: true, reason: 'refused' }), P11_UNREADABLE()]) {
+        assert.deepEqual((await p12bPrompt(answer)).extraNotes, ['Claude could not read this one — read by the built-in interpreter instead.']);
+    }
+});
+
+const P12B_R1 = Object.freeze({ id: 'rpt_1', name: 'Pipeline by rep', isShared: false });
+const P12B_R2 = Object.freeze({ id: 'rpt_2', name: 'Won deals', isShared: true });
+const P12B_OWNER = 'Only the report’s owner or an Admin can change it.';
+// The library's writes: patchReport, toggleShare, saveDelivery and sendNow, as written. `answers`: { put, deliver }.
+const p12bLibrary = (answers, { switchAt = -1 } = {}) => {
+    const s = code(read(P12B_REPORTS));
+    const list = stateOf([P12B_R1, P12B_R2]);
+    const did = { sent: [], lib: [], notes: [], busy: [], deliveryFor: [] };
+    const org = { now: 'org_a' };
+    const h = new Function('setLibError', 'dbFetch', 'readRefusal', 'refusalWords', 'failureWords', 'setSavedReportsList', 'setDeliveryBusy', 'setDeliveryNote', 'deliveryFor',
+        'setDeliveryFor', 'deliverySummary', 'requestOrg', 'stillOrg',
+        `${between(s, '    const patchReport = async (id, patch) => {', '    const pinnedIds = ')}\n${between(s, '    const saveDelivery = async (delivery) => {', '    const openCard = ')}\nreturn { toggleShare, saveDelivery, sendNow };`)(
+        (v) => did.lib.push(v), p11Fetch(did, (url) => (url.includes('action=deliver') ? answers.deliver : answers.put), org, { switchAt }), readRefusal, refusalWords, failureWords,
+        list.set, (v) => did.busy.push(v), (v) => did.notes.push(v), P12B_R1, (v) => did.deliveryFor.push(v), (d) => `summary of ${d.cadence}`, () => 'org_a', (o) => o === org.now);
+    return { ...h, did, list };
+};
+
+test('Part 12b: Reports\' library — Share and the schedule say a refusal in the house words (a 403 the owner\'s sentence), never "HTTP N" or a raw message; landed with an answer that cannot be read, said as landed — RUN', async () => {
+    for (const [answer, words] of p12bRefused(P12B_OWNER)) {
+        const lib = p12bLibrary({ put: answer });
+        await lib.toggleShare(P12B_R1);
+        assert.deepEqual([lib.did.lib.filter(Boolean), lib.list.value], [[`Sharing not changed — ${words}`], [P12B_R1, P12B_R2]], `REGRESSION: ${words}`);
+    }
+    const shared = p12bLibrary({ put: onceOf(200, { report: { ...P12B_R1, isShared: true } }) });
+    await shared.toggleShare(P12B_R1);
+    assert.deepEqual([shared.did.lib.filter(Boolean), shared.list.value[0].isShared, shared.did.sent[0][2]], [[], true, { id: 'rpt_1', isShared: true }]);
+    const unread = p12bLibrary({ put: P11_UNREADABLE() });
+    await unread.toggleShare(P12B_R1);
+    assert.deepEqual(unread.did.lib.filter(Boolean), ['Shared — Its answer could not be read. Reload the page to see the report as stored.'], 'REGRESSION: a share that landed said nothing, the card unshared');
+    for (const [answer, words] of p12bRefused(P12B_OWNER)) {
+        const lib = p12bLibrary({ put: answer });
+        assert.equal(await lib.saveDelivery({ enabled: false }), null);
+        assert.deepEqual(lib.did.notes, [null, { ok: false, text: `Schedule not saved — ${words}` }], `REGRESSION: ${words}`);
+        assert.deepEqual(lib.did.busy, [true, false]);
+    }
+    const saved = p12bLibrary({ put: onceOf(200, { report: { ...P12B_R1, config: { delivery: { enabled: false } } } }) });
+    await saved.saveDelivery({ enabled: false });
+    assert.deepEqual(saved.did.notes.at(-1), { ok: true, text: 'Schedule saved, delivery off.' });
+    const savedUnread = p12bLibrary({ put: P11_UNREADABLE() });
+    await savedUnread.saveDelivery({ enabled: true, cadence: 'weekly' });
+    assert.deepEqual(savedUnread.did.notes.at(-1), { ok: true, text: 'Schedule saved — summary of weekly. Its answer could not be read — reload the page to see the schedule as stored.' });
+});
+
+test('Part 12b: Reports\' Send now — the ok check first: a run that reached no channel says its own errors, any other refusal the server\'s words with their ref; sent with an answer that cannot be read, said; after an org switch nothing — RUN', async () => {
+    const PUT_OK = () => onceOf(200, { report: { ...P12B_R1, config: { delivery: { enabled: true } } } });
+    for (const [answer, words] of p12bRefused('Forbidden')) {
+        const lib = p12bLibrary({ put: PUT_OK(), deliver: answer });
+        await lib.sendNow({ enabled: true, cadence: 'weekly' });
+        assert.deepEqual(lib.did.notes.at(-1), { ok: false, text: `Not sent — ${words}` }, `REGRESSION: ${words}`);
+        assert.deepEqual(lib.did.busy, [true, false]);
+    }
+    const noChannel = p12bLibrary({ put: PUT_OK(), deliver: onceOf(400, { ok: false, sent: { email: [], slack: false }, errors: ['The schedule has no recipients.'], rows: 0 }) });
+    await noChannel.sendNow({ enabled: true });
+    assert.deepEqual(noChannel.did.notes.at(-1), { ok: false, text: 'Nothing was sent. The schedule has no recipients.' }, 'a run\'s own errors, as before');
+    const sent = p12bLibrary({ put: PUT_OK(), deliver: onceOf(200, { ok: true, sent: { email: ['ann@x.test'], slack: true }, errors: [], rows: 3, delivery: { lastSentAt: 't1' } }) });
+    await sent.sendNow({ enabled: true });
+    assert.deepEqual(sent.did.notes.at(-1), { ok: true, text: 'Sent to ann@x.test, Slack — 3 rows in the period.' });
+    assert.equal(sent.list.value[0].config.delivery.lastSentAt, 't1', 'the run\'s stamp adopted');
+    const sentUnread = p12bLibrary({ put: PUT_OK(), deliver: P11_UNREADABLE() });
+    await sentUnread.sendNow({ enabled: true });
+    assert.deepEqual(sentUnread.did.notes.at(-1), { ok: true, text: 'Sent — Its answer could not be read, so where it went is not shown.' }, 'REGRESSION: a run that landed said "Nothing was sent."');
+    const putRefused = p12bLibrary({ put: onceOf(403, { error: 'Forbidden' }) });
+    await putRefused.sendNow({ enabled: true });
+    assert.deepEqual([putRefused.did.notes.at(-1), putRefused.did.sent.length], [{ ok: false, text: `Not sent — ${P12B_OWNER}` }, 1], 'the schedule refused: nothing run');
+    for (const deliver of [onceOf(500, { error: 'x' }), UNSENT(), P11_UNREADABLE(), onceOf(200, { ok: true, sent: { email: ['a@x.test'] }, errors: [], rows: 1, delivery: { lastSentAt: 't2' } })]) {
+        const late = p12bLibrary({ put: PUT_OK(), deliver }, { switchAt: 1 });
+        await late.sendNow({ enabled: true });
+        assert.deepEqual([late.did.notes, late.list.value[0].config.delivery, late.did.deliveryFor.length], [[null], { enabled: true }, 0],
+            'REGRESSION: the last org\'s run said or stamped after a switch');
+    }
+});
+
+const p12bActions = async (answer) => {
+    const did = { data: [], errors: [], loading: [] };
+    const h = p12aFn(P12B_REPORTS, '    const fetchData = React.useCallback(async () => {', '\n    }, [selectedRep, days, currentUser, canSeeAll]);', '\n    }, []);',
+        ['React', 'setLoading', 'setError', 'canSeeAll', 'selectedRep', 'currentUser', 'days', 'dbFetch', 'readRefusal', 'failureWords', 'setData'], 'fetchData')(
+        { useCallback: (f) => f }, (v) => did.loading.push(v), (v) => did.errors.push(v), true, '', 'Jeff', 30, async () => { if (answer instanceof Error) throw answer; return answer; },
+        readRefusal, failureWords, (v) => did.data.push(v));
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12b: Reports\' Actions report — a refusal in the house words, never "HTTP N"; an answer with no summary is no answer, never "No actions logged yet" — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bActions(answer);
+        assert.deepEqual([r.said, r.data, r.loading], [[words], [], [true, false]], `REGRESSION: ${words}`);
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { logs: [] })]) {
+        assert.deepEqual((await p12bActions(answer)).said, ['Its answer could not be read.'], 'REGRESSION: an answer with no summary drawn as no actions');
+    }
+    const BODY = { logs: [], summary: { total: 0, resolved: 0, byType: {} } };
+    assert.deepEqual((await p12bActions(onceOf(200, BODY))).data, [BODY]);
+});
+
+test('Part 12b: WIRING — Reports: the pin keeps its first read (it reads `field`) and says a refusal in refusalWords\' words; no "HTTP N", no raw e.message in the library, the prompt or the Actions report', () => {
+    const s = code(read(P12B_REPORTS));
+    const pin = between(s, '    const togglePin = async (r) => {', '\n    };');
+    order(pin, 'let data = await res.json().catch(() => ({}));', "if (!res.ok && data.field === 'pinnedReports' && stillOrg(askedOrg)) {", 'if (!stillOrg(askedOrg)) return;',
+        'if (!res.ok) { setLibError(`Pin not saved — ${refusalWords(res, data)}`); return; }');
+    const lib = between(s, '    const patchReport = async (id, patch) => {', '    const openCard = ');
+    const actions = between(s, '    const fetchData = React.useCallback(async () => {', '\n    }, [selectedRep, days, currentUser, canSeeAll]);');
+    const prompt = between(s, '    const applyPrompt = async (text) => {', '\n    };');
+    for (const [name, part] of [['the library', lib], ['the Actions report', actions], ['the prompt', prompt]]) {
+        assert.ok(!/HTTP \$\{|'HTTP '/.test(part), `REGRESSION: "HTTP N" in ${name}`);
+        assert.ok(!P12B_NO_RAW.test(part), `REGRESSION: a raw e.message in ${name}`);
+    }
+    order(prompt, 'if (!res.ok) extraNotes.push(`Claude could not read this one (${await readRefusal(res)}) — read by the built-in interpreter instead.`);', 'else {',
+        'const data = await res.json().catch(() => ({}));', "if (data.readBy === 'claude' && data.definition) {");
+});
+
+// ── Sales Manager ──
+const P12B_SMT = 'src/Tabs/SalesManagerTab.jsx';
+const P12B_CLAIM = Object.freeze({ id: 'claim_1', repName: 'Karen', spiffName: 'Q4 push', status: 'pending' });
+const P12B_CLAIM_2 = Object.freeze({ id: 'claim_2', repName: 'Ben', spiffName: 'Q4 push', status: 'pending' });
+const p12bClaimWords = () => {
+    const s = code(read(P12B_SMT));
+    // Moved in §0.249 (review fixes, round 3, S3): claimRefused says refusalWords' words, handed in as the module imports it.
+    // Moved in §0.249 (review fixes, last pass, F4): claimRefused reads the tab's one ownRefusal; saidOf and noteNotDeleted (the coaching note's
+    // Delete) beside it, each as written.
+    const line = (start) => s.split('\n').find((l) => l.startsWith(start));
+    return new Function('refusalWords', 'NETWORK_ERROR', `${line('const ownRefusal = ')}\n${line('const saidOf = ')}\n${between(s, 'const claimRefused = (done, d, status) => (', '\nconst claimUnanswered')}\n${line('const claimUnanswered = ')}\n${between(s, 'const noteNotDeleted = (r) => (', ');\n')});\nreturn { claimRefused, claimUnanswered, ownRefusal, saidOf, noteNotDeleted };`)(refusalWords, NETWORK_ERROR);
+};
+const p12bClaimPress = async (which, { answer, switchOrg = false }) => {
+    const { claimRefused, claimUnanswered, ownRefusal } = p12bClaimWords();
+    const claims = stateOf([P12B_CLAIM, P12B_CLAIM_2]);
+    const did = { sent: [], states: [] };
+    const org = { now: 'org_a' };
+    const fetch = p10Fetch(did, answer, org, switchOrg);
+    if (which === 'status') {
+        const h = p12aFn(P12B_SMT, '    const updateClaimStatus = async (claim, status) => {', '\n    };', '\n    };',
+            ['currentUser', 'requestOrg', 'stillOrg', 'dbFetch', 'setSpiffClaims', 'setSaveState', 'claimRefused', 'claimUnanswered', 'console', 'ownRefusal'], 'updateClaimStatus')(
+            'Jeff', () => 'org_a', (o) => o === org.now, fetch, claims.set, (v) => did.states.push(v), claimRefused, claimUnanswered, quiet, ownRefusal);
+        await h(P12B_CLAIM, 'approved');
+    } else {
+        let ids = new Set();
+        const h = p12aFn(P12B_SMT, '    const deleteClaim = (claim) => showConfirm(', '\n    }, true);', '\n    }, true);',
+            ['showConfirm', 'requestOrg', 'setDeletingIds', 'dbFetch', 'stillOrg', 'setSaveState', 'claimRefused', 'setSpiffClaims', 'claimUnanswered', 'console'], 'deleteClaim')(
+            async (msg, run) => run(), () => 'org_a', (f) => { ids = f(ids); }, fetch, (o) => o === org.now, (v) => did.states.push(v), claimRefused, claims.set, claimUnanswered, quiet);
+        await h(P12B_CLAIM);
+        assert.equal(ids.size, 0, 'the row released however the Delete ends');
+    }
+    return { ...did, claims: claims.value, words: { claimRefused, claimUnanswered } };
+};
+
+test('Part 12b: Sales Manager\'s claim Approve and Delete — the ok check first, a refusal\'s body read only for its words (its ref kept); a landed change reads no body; after an org switch nothing — RUN', async () => {
+    for (const [which, done] of [['status', 'saved'], ['delete', 'deleted']]) {
+        const { claimRefused } = p12bClaimWords();
+        // Moved in §0.249 (review fixes, round 3, S3): the literal sentences, never claimRefused's own echo — a pin built
+        // from the words it checks held "Not saved — the server returned 409" as well as the house words.
+        const cases = [
+            [onceOf(403, { error: 'Forbidden' }), `Not ${done} — Forbidden`],
+            // Moved in §0.249 (review fixes, round 4, S4): only a 4xx with the server's words is "Not saved"; a 5xx, a
+            // gateway's page and a wordless 4xx say the claim may have been, in refusalWords' words.
+            [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), `The claim may have been ${done} — reload the page to see whether it was: Internal server error (ref r1)`],
+            [onceOf(409, {}), `The claim may have been ${done} — reload the page to see whether it was: The server returned 409.`],
+            [P11_PAGE(), `The claim may have been ${done} — reload the page to see whether it was: The server returned 502.`],
+            [UNSENT(), `No answer from the server — reload the page to see whether the claim was ${done}.`],
+        ];
+        for (const [answer, msg] of cases) {
+            const r = await p12bClaimPress(which, { answer });
+            assert.deepEqual([r.states, r.claims], [[{ status: 'error', msg }], [P12B_CLAIM, P12B_CLAIM_2]], `REGRESSION (${which}): ${msg}`);
+        }
+        assert.ok(claimRefused(done, { error: 'Internal server error', requestId: 'r1' }, 500).includes('(ref r1)'), 'the ref kept');
+        for (const answer of [onceOf(200, { claim: { id: 'claim_1' } }), P11_UNREADABLE()]) {
+            const r = await p12bClaimPress(which, { answer });
+            assert.deepEqual(r.states, [{ status: 'saved', msg: '' }], `${which}: landed`);
+            assert.deepEqual(r.claims.map((c) => [c.id, c.status]), which === 'status' ? [['claim_1', 'approved'], ['claim_2', 'pending']] : [['claim_2', 'pending']]);
+        }
+        for (const answer of [onceOf(403, { error: 'Forbidden' }), UNSENT(), onceOf(200, {})]) {
+            const r = await p12bClaimPress(which, { answer, switchOrg: true });
+            assert.deepEqual([r.states, r.claims], [[], [P12B_CLAIM, P12B_CLAIM_2]], `REGRESSION (${which}): the last org's answer said or applied after a switch`);
+        }
+    }
+    const gone = await p12bClaimPress('status', { answer: onceOf(404, { error: 'Not found' }) });
+    assert.deepEqual(gone.claims, [P12B_CLAIM_2], 'a claim deleted since: its row goes');
+});
+
+// The quota board's save, as written, over one drafted rep. `onRead`: the org switches while the answer's body is read.
+const p12bQuotaSave = async ({ answer, onRead = null, switchOrg = false }) => {
+    const did = { sent: [], states: [], drafts: [], thrown: null };
+    const settings = stateOf({ users: [{ id: 'usr_1', name: 'Ann' }, { id: 'usr_2', name: 'Bo' }] });
+    const org = { now: 'org_a' };
+    const s = code(read(P12B_SMT));
+    const line = (start) => s.split('\n').find((l) => l.startsWith(start));
+    const h = new Function('settingsLoaded', 'quotaDrafts', 'settings', 'quotaDraftRow', 'planYear', 'quotaBreakdown', 'checkQuotaSave', 'quotaRefusal', 'setQuotaDrafts',
+        'setSaveState', 'requestOrg', 'stillOrg', 'dbFetch', 'console', 'setSettings', 'refusalWords', 'ownRefusal',
+        `${line('    const refuse = (msg) => ')}\n${line('    const unsure = (msg) => ')}\n${between(s, '    const sendQuotas = async () => {', '\n    };')}\n    };\nreturn sendQuotas;`)(
+        true, { usr_1: { annual: 400 } }, settings.value, () => ({ annual: 400, periods: [100, 100, 100, 100] }), 2026, 'quarters', () => null, () => '',
+        (v) => did.drafts.push(v), (v) => did.states.push(v), () => 'org_a', (o) => o === org.now,
+        p10Fetch(did, onRead ? p12bSwitchOnRead(org, ...onRead) : answer, org, switchOrg), quiet, settings.set, refusalWords, p12bClaimWords().ownRefusal);
+    try { await h(); } catch (e) { did.thrown = e.message; }
+    return { ...did, users: settings.value.users, said: did.states.slice(1) };
+};
+
+test('Part 12b: the quota board\'s save — the ok check first: the server\'s own refusal in its words with its ref ("Not saved"), any other answer "reload and see"; saved with an answer that cannot be read, said and never shown as stored; after an org switch nothing — RUN', async () => {
+    const SAVING = { status: 'saving', msg: '' };
+    // Moved in §0.249 (review fixes, last pass, F4): any answer but the server's own refusal says the quotas may have been saved, in refusalWords'
+    // words with their ref — a 5xx's words kept (it said "The server returned 500 —" and dropped them).
+    const UNSURE = (words) => `The quotas may have been saved — reload the page to see whether they were: ${words}`;
+    const cases = [
+        [onceOf(403, { error: 'Forbidden' }), 'Forbidden', 'Not saved — Forbidden'],
+        [onceOf(400, { error: 'Name the fiscal year these quotas are for.', requestId: 'r2' }), 'Name the fiscal year these quotas are for. (ref r2)', 'Not saved — Name the fiscal year these quotas are for. (ref r2)'],
+        [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), UNSURE('Internal server error (ref r1)'), UNSURE('Internal server error (ref r1)')],
+        [onceOf(409, {}), UNSURE('The server returned 409.'), UNSURE('The server returned 409.')],
+        [P11_PAGE(), UNSURE('The server returned 502.'), UNSURE('The server returned 502.')],
+        [UNSENT(), 'No answer from the server — reload the page to see whether the quotas were saved.', 'No answer from the server — reload the page to see whether the quotas were saved.'],
+    ];
+    for (const [answer, thrown, msg] of cases) {
+        const r = await p12bQuotaSave({ answer });
+        assert.deepEqual([r.thrown, r.states, r.drafts], [thrown, [SAVING, { status: 'error', msg }], []], `REGRESSION: ${msg}`);
+    }
+    const STORED = { id: 'usr_1', name: 'Ann', quotaPlans: { 2026: { annual: 400, quarters: [100, 100, 100, 100], months: null } } };
+    const landed = await p12bQuotaSave({ answer: onceOf(200, { users: [STORED], removed: [] }) });
+    assert.deepEqual([landed.thrown, landed.states, landed.drafts, landed.users[0]], [null, [SAVING, { status: 'saved', msg: '' }], [{}], STORED]);
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {})]) {
+        const r = await p12bQuotaSave({ answer });
+        assert.deepEqual([r.thrown, r.said, r.drafts, r.users[0]], [null, [{ status: 'error', msg: 'Saved — Its answer could not be read. Reload the page to see the quotas as stored.' }], [{}], { id: 'usr_1', name: 'Ann' }],
+            'REGRESSION: a save whose answer could not be read said "saved" over the old figures');
+    }
+    for (const onRead of [[403, { error: 'Forbidden' }], [500, { error: 'x' }], [200, { users: [STORED], removed: [] }]]) {
+        const r = await p12bQuotaSave({ onRead });
+        assert.deepEqual([r.thrown, r.said, r.drafts, r.users[0]], [null, [], [], { id: 'usr_1', name: 'Ann' }], `REGRESSION: an answer read after a switch said or applied (${onRead[0]})`);
+    }
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), UNSENT()]) {
+        const r = await p12bQuotaSave({ answer, switchOrg: true });
+        assert.deepEqual([r.thrown, r.said], [null, []], 'switched during the request: nothing');
+    }
+});
+
+test('Part 12b: WIRING — Sales Manager: each claim write and the quota save read a body only under the ok check', () => {
+    const s = code(read(P12B_SMT));
+    // Moved in §0.249 (review fixes, S): failureWords joined the import for saveUser's catch.
+    assert.ok(s.includes("import { refusalWords, failureWords } from '../utils/refusalWords.js';"));
+    assert.equal(count(s, 'answer = await res.json().catch(() => ({}));'), 0, 'REGRESSION: the quota answer read before its ok check');
+    order(between(s, '    const sendQuotas = async () => {', '\n    };'), 'if (!res.ok) {', 'const refused = await res.json().catch(() => ({}));', 'const answer = await res.json().catch(() => null);');
+    for (const start of ['    const updateClaimStatus = async (claim, status) => {', '    const deleteClaim = (claim) => showConfirm(']) {
+        order(between(s, start, '} catch (err) {'), 'if (!res.ok) {', 'const d = await res.json().catch(() => ({}));', 'if (!stillOrg(askedOrg)) return;', 'msg: claimRefused(',
+            '                return;\n            }\n            if (!stillOrg(askedOrg)) return;\n            setSpiffClaims(');
+    }
+});
+
+// ── Score all deals ──
+const p12bBulkScore = async ({ answers, switchAt = -1 }) => {
+    const { storedScore } = await import('../src/utils/aiScore.js');
+    const opps = stateOf([{ id: 'd1', stage: 'Proposal' }, { id: 'd2', stage: 'Proposal' }]);
+    const did = { sent: [], notes: [], scoring: [] };
+    const org = { now: 'org_a' };
+    const queue = [...answers];
+    const h = p12aFn('src/Tabs/PipelineTab.jsx', '    const handleBulkScore = async () => {', '\n    };', '\n    };',
+        ['bulkScoring', 'visibleOpportunities', 'setBulkScoring', 'setBulkScoreNote', 'setBulkScoreProgress', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords',
+            'storedScore', 'setOpportunities', 'console'], 'handleBulkScore')(
+        false, opps.value, (v) => did.scoring.push(v), (v) => did.notes.push(v), () => {}, () => 'org_a', (o) => o === org.now,
+        p11Fetch(did, () => queue.shift(), org, { switchAt }), readRefusal, failureWords, storedScore, opps.set, quiet);
+    await h();
+    return { ...did, said: did.notes.filter(Boolean), scores: opps.value.map((o) => o.aiScore ?? null) };
+};
+
+test('Part 12b: Score all deals — a refusal in the server\'s words with its ref, never "Scoring failed." over a 502\'s page or "Claude could not be reached" for the server; the score kept as the window keeps it; after an org switch nothing — RUN', async () => {
+    const SCORED = () => onceOf(200, { score: 72, verdict: 'On Track', fromCache: true, usingOrgKey: false });
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bBulkScore({ answers: [answer, SCORED()] });
+        assert.deepEqual([r.said, r.scores], [[`Scored 1 of 2 deals. ${words}`], [null, { score: 72, verdict: 'On Track' }]], `REGRESSION: ${words}`);
+    }
+    assert.deepEqual((await p12bBulkScore({ answers: [onceOf(200, { disabled: true }), onceOf(200, { disabled: true })] })).said, ['Scored 0 of 2 deals. AI scoring is off for this workspace.']);
+    assert.deepEqual((await p12bBulkScore({ answers: [P11_UNREADABLE(), SCORED()] })).said, ['Scored 1 of 2 deals. Its answer could not be read.']);
+    const all = await p12bBulkScore({ answers: [SCORED(), SCORED()] });
+    assert.deepEqual([all.said, all.scoring], [[], [true, false]]);
+    for (const answer of [onceOf(500, { error: 'x' }), SCORED(), UNSENT()]) {
+        const r = await p12bBulkScore({ answers: [answer, SCORED()], switchAt: 0 });
+        assert.deepEqual([r.said, r.scores, r.sent.length, r.scoring], [[], [null, null], 1, [true, false]], 'REGRESSION: the last org\'s answer said or kept after a switch');
+    }
+});
+
+// ── The profile panel (AppHeader) ──
+const P12B_HEADER = 'src/components/layout/AppHeader.jsx';
+const p12bProfileSave = async ({ answer, switchOrg = false }) => {
+    const me = stateOf({ id: 'usr_1', name: 'Karen', timezone: 'America/Chicago' });
+    const settings = stateOf({ users: [{ id: 'usr_1', name: 'Karen' }] });
+    const did = { sent: [], errors: [], saving: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12B_HEADER, '    const saveProfile = async (updates) => {', '\n    };', '\n    };',
+        ['myProfile', 'setProfileError', 'requestOrg', 'setProfileSaving', 'setMyProfile', 'dbFetch', 'readRefusal', 'failureWords', 'stillOrg', 'setSettings'], 'saveProfile')(
+        me.value, (v) => did.errors.push(v), () => 'org_a', (v) => did.saving.push(v), me.set, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, (o) => o === org.now, settings.set);
+    await h({ timezone: 'Europe/London' });
+    return { ...did, said: did.errors.filter(Boolean), tz: me.value.timezone, roster: settings.value.users.map((u) => u.name) };
+};
+
+test('Part 12b: the profile panel\'s save — a refusal in the house words, the change put back; landed, the stored row; an answer that cannot be read keeps the change; after an org switch nothing — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bProfileSave({ answer });
+        assert.deepEqual([r.said, r.tz, r.saving], [[`Not saved — ${words}`], 'America/Chicago', [true, false]], `REGRESSION: ${words}`);
+    }
+    const landed = await p12bProfileSave({ answer: onceOf(200, { user: { id: 'usr_1', name: 'Karen Lee', timezone: 'Europe/London' } }) });
+    assert.deepEqual([landed.said, landed.tz, landed.roster], [[], 'Europe/London', ['Karen Lee']]);
+    const unread = await p12bProfileSave({ answer: P11_UNREADABLE() });
+    assert.deepEqual([unread.said, unread.tz], [[], 'Europe/London'], 'saved: the change as sent');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), UNSENT(), onceOf(200, { user: { id: 'usr_1', name: 'Other org row' } })]) {
+        const r = await p12bProfileSave({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.tz, r.roster], [[], 'Europe/London', ['Karen']], 'REGRESSION: the last org\'s answer said or applied after a switch');
+    }
+});
+
+const p12bBcc = async ({ answer, switchOrg = false }) => {
+    const did = { sent: [], bcc: [], loaded: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12B_HEADER, '    const loadMyBcc = React.useCallback(async () => {', '\n    }, []);', '\n    }, []);',
+        ['React', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setMyBcc', 'setMyBccLoaded'], 'loadMyBcc')(
+        { useCallback: (f) => f }, () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, (v) => did.bcc.push(v), (v) => did.loaded.push(v));
+    await h();
+    return did;
+};
+// Moved in §0.249 (review fixes, round 2): a landed Disconnect also sets calendarConnected, the events and calDisconnected
+// before its re-read — the helper hands those setters in and logs each step in `steps`; every assertion below is unchanged.
+// Moved in §0.249 (review fixes, round 3): the handler also reads dropCalendarReads (each call logged in `dropAt`, the
+// steps taken before it) and calendarLoading (`loading`, false unless named) — every assertion below is unchanged.
+const p12bHeaderDisconnect = async ({ answer, switchOrg = false, refetch = null, loading = false }) => {
+    const did = { sent: [], errors: [], busy: [], conn: [], refetched: 0, connected: [], events: [], disconnected: [], steps: [], dropAt: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
+        ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'], 'disconnectCalendar')(
+        { id: 'cc_1' }, () => 'org_a', (o) => o === org.now, (v) => did.busy.push(v), (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
+        (v) => did.conn.push(v), async () => { did.refetched++; did.steps.push('refetch'); if (refetch) await refetch(); },
+        (v) => { did.connected.push(v); did.steps.push(`connected:${v}`); }, (v) => { did.events.push(v); did.steps.push('events'); },
+        (v) => { did.disconnected.push(v); did.steps.push(`disconnected:${v}`); }, () => { did.dropAt.push(did.steps.length); }, loading);
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12b: the profile panel\'s email-logging address and calendar Disconnect — a refusal in the house words, never "HTTP N" or a raw message; an answer that cannot be read is said, never "not available on this site"; the busy mark cleared however it ends — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        assert.deepEqual((await p12bBcc({ answer })).bcc, [{ configured: false, myAddress: null, error: words }], `REGRESSION: ${words}`);
+    }
+    for (const answer of [P11_UNREADABLE(), onceOf(200, null)]) {
+        assert.deepEqual((await p12bBcc({ answer })).bcc, [{ configured: false, myAddress: null, error: 'Its answer could not be read.' }], 'REGRESSION: an answer that cannot be read drawn as "not available on this site"');
+    }
+    const ADDR = { configured: true, myAddress: 'u_1@in.example.test', address: 'in@example.test' };
+    assert.deepEqual((await p12bBcc({ answer: onceOf(200, ADDR) })).bcc, [ADDR]);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, ADDR)]) {
+        const r = await p12bBcc({ answer, switchOrg: true });
+        assert.deepEqual([r.bcc, r.loaded], [[], []], 'REGRESSION: the last org\'s address shown after a switch');
+    }
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bHeaderDisconnect({ answer });
+        assert.deepEqual([r.said, r.conn, r.refetched, r.busy], [[`Not disconnected — ${words}`], [], 0, [true, false]], `REGRESSION: ${words}`);
+    }
+    for (const answer of [onceOf(200, { ok: true }), P11_UNREADABLE()]) {
+        const r = await p12bHeaderDisconnect({ answer });
+        assert.deepEqual([r.said, r.conn, r.refetched, r.busy], [[], [null], 1, [true, false]], 'disconnected: the calendar read again');
+    }
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, {})]) {
+        const r = await p12bHeaderDisconnect({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.conn, r.refetched, r.busy], [[], [], 0, [true, false]], 'REGRESSION: after a switch something said or cleared, or the row left busy');
+    }
+});
+
+// ── The invitation import and the SPIFF claim (ModalLayer) ──
+const P12B_LAYER = 'src/components/layout/ModalLayer.jsx';
+const p12bInvite = async (answer) => {
+    const { emptyReceipt } = await import('../src/utils/importReceipt.js');
+    const s = code(read(P12B_LAYER));
+    const START = '                    onImportUsers={async (invites) => {';
+    const fn = between(s, START, '\n                    }}\n                />').slice(START.length);
+    const did = { sent: [] };
+    const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'setSettings', 'onProgress', 'addToSettingsList',
+        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', `return async (invites) => {${fn}\n};`)(
+        () => 'org_a', () => true, () => 'stopped', emptyReceipt, p10Fetch(did, answer, { now: 'org_a' }, false), failureWords, refusalWords, () => {}, () => {},
+        async () => ({ ok: true }), (l) => l, { teams: [], revs: {} }, 'twice');
+    return run([{ email: 'a@x.test' }, { email: 'b@x.test' }]);
+};
+
+test('Part 12b: the invitation import — a request that stops the run is said in the house words (its ref kept), never "HTTP N" or a raw message; the per-invite refusals still read — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const { receipt } = await p12bInvite(answer);
+        assert.deepEqual([receipt.error, receipt.failed, receipt.created], [`Sending stopped: ${words}`, 2, 0], `REGRESSION: ${words}`);
+    }
+    const part = await p12bInvite(onceOf(201, { invited: [{ id: 'usr_9', email: 'a@x.test' }], errors: [{ email: 'b@x.test', error: 'Already a member.' }] }));
+    assert.deepEqual([part.receipt.error, part.receipt.created, part.receipt.failed, part.refusals], [null, 1, 1, [{ email: 'b@x.test', error: 'Already a member.' }]]);
+    const none = await p12bInvite(onceOf(400, { invited: [], errors: [{ email: 'a@x.test', error: 'x' }, { email: 'b@x.test', error: 'y' }] }));
+    assert.deepEqual([none.receipt.error, none.receipt.failed], [null, 2], 'every address refused: the receipt names them, the run not stopped');
+});
+
+const P12B_NEW_CLAIM = Object.freeze({ id: 'claim_new', spiffId: 'sp_1', status: 'pending' });
+const p12bClaimSubmit = async ({ answer, switchOrg = false }) => {
+    const s = code(read(P12B_LAYER));
+    const body = between(s, '                                                    setSpiffClaimBusy(spiff.id);\n', '\n                                                }}');
+    const claims = stateOf([]);
+    const did = { sent: [], errors: [], busy: [] };
+    const org = { now: 'org_a' };
+    const run = new Function('setSpiffClaimBusy', 'spiff', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setSpiffClaimError', 'setSpiffClaims', 'newClaim', 'console',
+        `return async () => {\n${body}\n};`)(
+        (v) => did.busy.push(v), { id: 'sp_1' }, () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
+        (v) => did.errors.push(v), claims.set, P12B_NEW_CLAIM, quiet);
+    await run();
+    return { ...did, said: did.errors.filter(Boolean), claims: claims.value };
+};
+
+test('Part 12b: the SPIFF claim — a refusal in the house words with its ref, never "network error. Nothing was saved."; filed with an answer that cannot be read, the claim as sent; after an org switch nothing — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bClaimSubmit({ answer });
+        assert.deepEqual([r.said, r.claims, r.busy], [[`Claim not submitted — ${words}`], [], ['sp_1', null]], `REGRESSION: ${words}`);
+    }
+    const FILED = { ...P12B_NEW_CLAIM, id: 'claim_srv' };
+    assert.deepEqual((await p12bClaimSubmit({ answer: onceOf(201, { spiffClaim: FILED }) })).claims, [FILED]);
+    assert.deepEqual((await p12bClaimSubmit({ answer: P11_UNREADABLE() })).claims, [P12B_NEW_CLAIM], 'filed: the claim as sent');
+    for (const answer of [onceOf(403, { error: 'Forbidden' }), UNSENT(), onceOf(201, { spiffClaim: FILED })]) {
+        const r = await p12bClaimSubmit({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.claims], [[], []], 'REGRESSION: the last org\'s answer said or filed after a switch');
+    }
+});
+
+test('Part 12b: WIRING — the profile panel and the layer: no "HTTP N", no raw e.message; the per-invite read kept (named for the guard), its stop in refusalWords\' words', () => {
+    const h = code(read(P12B_HEADER));
+    assert.ok(h.includes("import { readRefusal, failureWords } from '../../utils/refusalWords.js';"));
+    assert.ok(!/HTTP \$\{|'HTTP '/.test(h) && !P12B_NO_RAW.test(h), 'REGRESSION: "HTTP N" or a raw e.message in the profile panel');
+    assert.ok(!h.includes('the change did not reach the server'), 'the old offline words');
+    const m = code(read(P12B_LAYER));
+    assert.ok(m.includes("import { readRefusal, refusalWords, failureWords } from '../../utils/refusalWords.js';"));
+    assert.equal(count(m, 'd = await res.json().catch(() => ({}));'), 1, 'the per-invite read, by design (each address\'s refusal)');
+    assert.ok(m.includes('receipt.error = `Sending stopped: ${res ? refusalWords(res, d) : d.error}`;') && m.includes('d = { error: failureWords(e) };'));
+    assert.ok(!/HTTP \$\{|'HTTP '/.test(m) && !P12B_NO_RAW.test(m), 'REGRESSION: "HTTP N" or a raw e.message in the layer');
+    assert.ok(!m.includes('network error. Nothing was saved.'));
+});
+
+// ── App's calendar reads ──
+const p12bCalendar = async ({ answer, switchOrg = false }) => {
+    const did = { sent: [], errors: [], connected: [], events: [], loading: [], read: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn('src/App.jsx', '    const fetchCalendarEvents = async () => {', '\n    };', '\n    };',
+        ['requestOrg', 'stillOrg', 'setCalendarLoading', 'setCalendarError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords', 'setCalendarConnected', 'setCalendarEvents',
+            'calendarReadGen', 'setCalendarRead'], 'fetchCalendarEvents')(   // moved in §0.249 (review fixes, round 3): its sequence and the read flag
+        () => 'org_a', (o) => o === org.now, (v) => did.loading.push(v), (v) => did.errors.push(v), async () => {}, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
+        (v) => did.connected.push(v), (v) => did.events.push(v), { current: 0 }, (v) => did.read.push(v));
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+const p12bLogFromCal = async ({ answer, switchOrg = false }) => {
+    const did = { sent: [], errors: [], events: [], open: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn('src/App.jsx', '    const fetchLogFromCalEvents = async () => {', '\n    };', '\n    };',
+        ['requestOrg', 'stillOrg', 'setLogFromCalLoading', 'setLogFromCalError', 'dbFetch', 'logFromCalDateFrom', 'logFromCalDateTo', 'readRefusal', 'failureWords',
+            'setLogFromCalEvents', 'setLogFromCalOpen'], 'fetchLogFromCalEvents')(
+        () => 'org_a', (o) => o === org.now, () => {}, (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg), '2026-11-01', '2026-11-13', readRefusal, failureWords,
+        (v) => did.events.push(v), (v) => did.open.push(v));
+    await h();
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12b: App\'s calendar reads — a refusal in the house words, never "Failed to load calendar", "Failed to fetch" or "Unexpected token \'<\'"; landed, the events; after an org switch nothing — RUN', async () => {
+    const EV = { id: 'ev_1', summary: 'Acme call' };
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bCalendar({ answer });
+        assert.deepEqual([r.said, r.connected, r.events, r.loading], [[`The calendar could not be read — ${words}`], [], [], [true, false]], `REGRESSION: ${words}`);   // moved in §0.249 (review fixes): a failed read leaves calendarConnected as last read
+    }
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bLogFromCal({ answer });
+        assert.deepEqual([r.said, r.events, r.open], [[`The calendar could not be read — ${words}`], [], []], `REGRESSION: ${words}`);
+    }
+    assert.deepEqual((await p12bCalendar({ answer: P11_UNREADABLE() })).said, ['The calendar could not be read — Its answer could not be read.']);
+    const off = await p12bCalendar({ answer: onceOf(200, { connected: false }) });
+    assert.deepEqual([off.said, off.connected, off.events], [[], [false], [[]]]);
+    const on = await p12bCalendar({ answer: onceOf(200, { connected: true, events: [EV] }) });
+    assert.deepEqual([on.said, on.connected, on.events], [[], [true], [[EV]]]);
+    const log = await p12bLogFromCal({ answer: onceOf(200, { events: [EV] }) });
+    assert.deepEqual([log.said, log.events, log.open], [[], [[EV]], [true]]);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(200, { connected: true, events: [EV] })]) {
+        const r = await p12bCalendar({ answer, switchOrg: true });
+        assert.deepEqual([r.said, r.connected, r.events, r.loading], [[], [], [], [true]], 'REGRESSION: the last org\'s calendar said or shown after a switch');
+    }
+});
+
+// ── Part 12c — the utils, Q4 and THE GUARD ──
+// Part 12c (state §0.249, docs/design/refusal-sweep Part 12; Jeff, 13 Nov: "Start Part 12" — Q4 "Recommended"): the
+// documents uploads and links (src/utils/documentsStorage.js) read their bodies with no ok check through asJson — a
+// refusal's words were whatever `error` the body held, a 502's page threw "Unexpected token '<'", the R2 upload said
+// "Upload failed (HTTP N)" or "check your connection", and a record made whose answer could not be read said "File
+// uploaded but the record failed to save". Each request now checks res.ok first and throws the house words; asJson is
+// gone (dbFetch always answers a Response). The bulk importer (bulkClient.js) let a chunk whose request threw out of its
+// loop — the earlier chunks' rows, written, never reached the screen (18b15) — and now ends the run in the house words.
+// Q4: NETWORK_ERROR (storage.js) is "The server could not be reached." — one sentence for a request that never left —
+// and the task rail's fallback says it too. THE GUARD (tests/refusals-said.test.mjs) reads every source under src/.
+
+const p12cDocs = await import('../src/utils/documentsStorage.js');
+const { setRequestOrg: p12cSetOrg, dbWrite: p12cDbWrite } = await import('../src/utils/storage.js');
+const { makeBulkClient: p12cBulk } = await import('../src/utils/bulkClient.js');
+const P12C_PENDING = Symbol('pending');
+const p12cOutcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), new Promise((r) => setTimeout(() => r(P12C_PENDING), 60))]);
+const P12C_FILE = { name: 'contract.pdf', size: 2048, type: 'application/pdf' };
+// An answer whose body read switches the request org first (storage.js setRequestOrg — the uploads ask stillOrg).
+const p12cSwitchOnRead = (status, body) => {
+    const a = onceOf(status, body);
+    const json = a.json;
+    a.json = async () => { p12cSetOrg('org_b'); return json(); };
+    return a;
+};
+// R2's side: a fake XMLHttpRequest — `r2` says how the PUT ends: { status, responseText } or { offline: true }; `switch`
+// switches the org while it is out.
+const p12cXhr = (r2, puts) => class {
+    constructor() { this.upload = {}; this.status = 0; this.responseText = ''; }
+    open(method, url) { this.url = url; }
+    setRequestHeader() {}
+    send() {
+        puts.push(this.url);
+        setTimeout(() => {
+            if (r2.switch) p12cSetOrg('org_b');
+            if (r2.offline) { this.onerror(); return; }
+            this.status = r2.status; this.responseText = r2.responseText || '';
+            this.onload();
+        }, 0);
+    }
+};
+// One upload over stubs: `presign`, `record` the documents function's answers (an Error throws); `r2` the PUT's end;
+// `switchOn` the request during which the org switches ('presign' or 'record').
+const p12cUpload = async ({ kind = 'new', presign = onceOf(200, { storageKey: 'org_a/doc_x/v1/contract.pdf', uploadUrl: 'https://r2.test/put', version: kind === 'new' ? 1 : 3 }),
+    record, r2 = { status: 200 }, switchOn = '', seen = {} }) => {
+    const sent = [], puts = [];
+    Object.assign(seen, { sent, puts });   // what went out, for an upload that never settles
+    const had = globalThis.XMLHttpRequest;
+    globalThis.XMLHttpRequest = p12cXhr(r2, puts);
+    p12cSetOrg('org_a');
+    const dbFetch = async (url, opts = {}) => {
+        const step = url.includes('action=upload-url') ? 'presign' : 'record';
+        sent.push([step, opts.method]);
+        if (switchOn === step) p12cSetOrg('org_b');
+        const a = step === 'presign' ? presign : record;
+        if (a instanceof Error) throw a;
+        return a;
+    };
+    try {
+        const run = kind === 'new'
+            ? p12cDocs.uploadNewDocument(dbFetch, { file: P12C_FILE, name: 'Contract' })
+            : p12cDocs.uploadNewVersion(dbFetch, { file: P12C_FILE, documentId: 'doc_1' });
+        const out = await p12cOutcome(run);
+        return out === P12C_PENDING ? out : { ...out, sent, puts };
+    } finally {
+        if (had === undefined) delete globalThis.XMLHttpRequest; else globalThis.XMLHttpRequest = had;
+        p12cSetOrg(null);
+    }
+};
+
+test('Part 12c: a document upload\'s presign and record — a refusal in the house words, the body read only after the ok check; nothing sent past a refusal — RUN', async () => {
+    for (const kind of ['new', 'version']) {
+        // The presign refused: its words, nothing put to R2, no record asked. Moved in §0.249 (review fixes, D): the step
+        // named before the words — a bare "The server returned 403." read the same as R2's.
+        for (const [answer, words] of p12bRefused()) {
+            const r = await p12cUpload({ kind, presign: answer });
+            assert.deepEqual([r.e, r.puts.length, r.sent.length], [`The upload could not start — ${words}`, 0, 1], `${kind}: REGRESSION — the presign's refusal said as "${r.e}"`);
+        }
+        // A presign that landed with no link to put the file to: said, nothing sent.
+        for (const body of [{}, null, { error: 'x' }]) {
+            const r = await p12cUpload({ kind, presign: onceOf(200, body) });
+            assert.deepEqual([r.e, r.puts.length], ['The upload could not start — Its answer could not be read.', 0], `${kind}: ${JSON.stringify(body)}`);
+        }
+        assert.equal((await p12cUpload({ kind, presign: P11_UNREADABLE() })).e, 'The upload could not start — Its answer could not be read.', 'REGRESSION: "Unexpected token \'<\'"');
+        // The record refused, after the bytes went up: its words. Moved in §0.249 (review fixes, D): a file put to R2 with
+        // no record is no document — said as the document (or the new version) not saved. Moved in §0.249 (review fixes,
+        // round 2, D2): "not saved" only for the server's own refusal (a 4xx with its words, here the 403); a 5xx, a page,
+        // a 4xx without words or a request that threw may have come after a write — "may have been saved".
+        for (const [answer, words] of p12bRefused()) {
+            const r = await p12cUpload({ kind, record: answer });
+            const step = kind === 'new' ? 'The document was not saved' : 'The new version was not saved';
+            const maybe = kind === 'new' ? 'The document may have been saved' : 'The new version may have been saved';
+            const said = answer.status === 403 ? `${step} — ${words}` : `${maybe} — reload the page to see whether it was: ${words}`;
+            assert.deepEqual([r.e, r.puts.length, r.sent.length], [said, 1, 2], `${kind}: REGRESSION — the record's refusal said as "${r.e}"`);
+        }
+        // A refusal that lands after an org switch, or a request that threw: never settles, never said under the new
+        // org's name (§0.175) — the presign's as the record's.
+        for (const [answer] of p12bRefused()) {
+            assert.equal(await p12cUpload({ kind, record: answer, switchOn: 'record' }), P12C_PENDING, `${kind}: a refusal for an org switched away from`);
+            assert.equal(await p12cUpload({ kind, presign: answer, switchOn: 'presign' }), P12C_PENDING, `${kind}: a presign refused for an org switched away from`);
+        }
+        // ...and one whose refusal's words are read while the org switches: never said.
+        for (const step of ['presign', 'record']) {
+            const answer = p12cSwitchOnRead(500, { error: 'Internal server error', requestId: 'r1' });
+            assert.equal(await p12cUpload({ kind, [step]: answer }), P12C_PENDING, `${kind}: REGRESSION — the ${step}'s refusal, read during a switch, said under the new org's name`);
+        }
+        // A presign that landed while the org switched: the bytes are never put, the record never asked.
+        {
+            const seen = {};
+            const presign = p12cSwitchOnRead(200, { storageKey: 'org_a/doc_x/v1/contract.pdf', uploadUrl: 'https://r2.test/put', version: 3 });
+            assert.equal(await p12cUpload({ kind, presign, seen }), P12C_PENDING);
+            assert.deepEqual([seen.puts.length, seen.sent.length], [0, 1], `${kind}: REGRESSION — the last org's file put to R2 after a switch`);
+        }
+        // The R2 PUT failing while the org switched: never said.
+        for (const r2 of [{ offline: true, switch: true }, { status: 403, switch: true }]) {
+            assert.equal(await p12cUpload({ kind, r2 }), P12C_PENDING, `${kind}: REGRESSION — R2's failure said after a switch`);
+        }
+    }
+});
+
+test('Part 12c: a document made whose answer cannot be read is said as made, a new version taken as landed — never "failed to save" — RUN', async () => {
+    const DOC = { id: 'doc_x', name: 'Contract', links: [{ id: 'dlk_1', type: 'account', recordId: 'acc_1' }] };
+    assert.deepEqual((await p12cUpload({ record: onceOf(201, { document: DOC }) })).v, DOC, 'landed: the server\'s row');
+    for (const record of [P11_UNREADABLE(), onceOf(201, {}), onceOf(201, null), onceOf(201, { document: 'x' })]) {
+        assert.equal((await p12cUpload({ record })).e, 'The file was uploaded. Its answer could not be read — reload the page to see it.',
+            'REGRESSION: a record made said "File uploaded but the record failed to save"');
+    }
+    // A new version: the server's number, else the one presigned (stored only under the key presigned for it).
+    assert.equal((await p12cUpload({ kind: 'version', record: onceOf(200, { ok: true, version: 4 }) })).v, 4, 'the server\'s number first');
+    for (const record of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { ok: true, version: '3' })]) {
+        assert.equal((await p12cUpload({ kind: 'version', record })).v, 3, 'REGRESSION: a version that landed said "New version failed to save"');
+    }
+    assert.equal((await p12cUpload({ kind: 'version', presign: onceOf(200, { storageKey: 'k', uploadUrl: 'https://r2.test/put' }), record: P11_UNREADABLE() })).e,
+        'The new version was uploaded. Its answer could not be read — reload the page to see it.', 'no number presigned: said as made');
+    // After an org switch, nothing — a landed answer as a refused one, at the send or at the body read.
+    assert.equal(await p12cUpload({ record: onceOf(201, { document: DOC }), switchOn: 'record' }), P12C_PENDING);
+    assert.equal(await p12cUpload({ record: p12cSwitchOnRead(201, { document: DOC }) }), P12C_PENDING, 'REGRESSION: the last org\'s document handed to the new org\'s screen');
+    assert.equal(await p12cUpload({ kind: 'version', record: p12cSwitchOnRead(200, { ok: true, version: 3 }) }), P12C_PENDING);
+});
+
+test('Part 12c: the R2 upload says the house words — the server\'s words where its body holds them, else "The server returned N.", offline "The server could not be reached." — never "HTTP N" — RUN', async () => {
+    const xml = '<?xml version="1.0"?><Error><Code>SignatureDoesNotMatch</Code></Error>';
+    for (const kind of ['new', 'version']) {
+        for (const [r2, words] of [
+            [{ status: 403, responseText: xml }, 'The server returned 403.'],
+            [{ status: 500, responseText: JSON.stringify({ error: 'Bucket unavailable', requestId: 'r9' }) }, 'Bucket unavailable (ref r9)'],
+            [{ status: 413, responseText: '' }, 'The server returned 413.'],
+            [{ offline: true }, 'The server could not be reached.'],
+        ]) {
+            const r = await p12cUpload({ kind, r2 });
+            // Moved in §0.249 (review fixes, D): R2's step named before its words.
+            assert.deepEqual([r.e, r.sent.length], [`The file was not stored — ${words}`, 1], `${kind}: REGRESSION — "Upload failed (HTTP N)" or "check your connection": ${r.e}`);
+        }
+    }
+});
+
+test('Part 12c: a download or preview link — the ok check first, a refusal in the house words; a link that cannot be read is said — RUN', async () => {
+    const link = async (answer) => {
+        const dbFetch = async () => { if (answer instanceof Error) throw answer; return answer; };
+        try { return { v: await p12cDocs.getSignedUrlFor(dbFetch, { id: 'doc_1', inline: true }) }; } catch (e) { return { e: e.message }; }
+    };
+    for (const [answer, words] of p12bRefused()) assert.deepEqual(await link(answer), { e: words }, `REGRESSION: ${words}`);
+    assert.deepEqual(await link(onceOf(200, { url: 'https://files.test/doc_1' })), { v: 'https://files.test/doc_1' });
+    for (const answer of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { error: 'x' }), onceOf(200, { url: 42 })]) {
+        assert.deepEqual(await link(answer), { e: 'Its answer could not be read.' }, 'REGRESSION: a link that could not be read, said in its parse error or a 200\'s words');
+    }
+});
+
+test('Part 12c: WIRING — documentsStorage: no asJson, every request ok-first through `reached`; no "HTTP N", "check your connection" or old words', () => {
+    const s = code(read('src/utils/documentsStorage.js'));
+    assert.ok(!/asJson/.test(s), 'REGRESSION: a read that takes a refusal\'s body as the answer');
+    assert.equal(count(s, 'await reached(dbFetch('), 4, 'the presign, the record, the new version, the link');
+    assert.equal(count(s, 'if (!res.ok) throw new Error(await readRefusal(res));'), 1, 'the link (its screen checks the org: useDocuments openFile)');
+    // Moved in §0.249 (review fixes, round 2, D2): the record and the new version read their refusal's body in the ok
+    // check and say it through recordRefusal — the three still checking the org before it is said.
+    assert.equal(count(s, 'const why = await readRefusal(res);'), 1, 'the presign, the org checked before it is said');
+    assert.equal(count(s, 'const body = await res.json().catch(() => null);\n    if (!stillOrg(askedOrg)) return stopped();\n    throw recordRefusal(res, body, '), 2,
+        'the record and the new version, the org checked before it is said');
+    // Moved in §0.249 (review fixes, D): each of the three names its step too. Moved in §0.249 (review fixes, round 2,
+    // D2): the record's two name their "may have been saved" words instead.
+    assert.equal(count(s, '}), askedOrg, STEP_') + count(s, '}), askedOrg, MAYBE_'), 3, 'an upload\'s three requests name the org that asked: one that threw after a switch never settles');
+    assert.equal(count(s, ".catch((e) => { if (!stillOrg(askedOrg)) return stopped(); throw e; });"), 2, 'the R2 PUT likewise');
+    // Moved in §0.249 (review fixes, round 2, D2): 4 -> 6, the two refusal bodies read in their ok checks.
+    assert.equal(count(s, 'await res.json().catch(() => null);'), 6);
+    assert.ok(!/HTTP \$\{|'HTTP '|check your connection|failed to save|Could not start the upload|Could not get a download link/.test(s), 'REGRESSION: the old words');
+    order(s, 'xhr.onload = ', ': reject(new Error(stepped(STEP_STORE, r2Refusal(xhr))));', "xhr.onerror = () => reject(new Error(stepped(STEP_STORE, 'The server could not be reached.')));");
+});
+
+test('Part 12c: the bulk importer — a chunk whose request threw ends the run in the house words and keeps what landed before it; it never throws — RUN', async () => {
+    const rows = Array.from({ length: 900 }, (_, i) => ({ id: `r${i}` }));
+    for (const thrown of [new TypeError('Failed to fetch'), new TypeError('NetworkError when attempting to fetch resource.')]) {
+        let n = 0;
+        const fetchFn = async (url, opts) => {
+            n++;
+            if (n === 2) throw thrown;
+            const chunk = JSON.parse(opts.body);
+            return onceOf(200, opts.method === 'POST' ? { insertedIds: chunk.map((r) => r.id) } : { updated: chunk.length, notFound: [], forbidden: [] });
+        };
+        const posted = await p12cBulk(fetchFn).postNew('/x', rows);
+        assert.deepEqual([posted.landed.length, posted.error, posted.attempted], [400, 'The server could not be reached.', 900],
+            'REGRESSION: the throw left the loop — chunk 1\'s rows, written, never reached the screen');
+        n = 0;
+        const put = await p12cBulk(fetchFn).putBulk('/x', rows);
+        assert.deepEqual([put.appliedIds.length, put.updated, put.error], [400, 400, 'The server could not be reached.']);
+    }
+    // A refused chunk keeps its words (errorFrom), the ref with them.
+    const refused = await p12cBulk(async () => onceOf(500, { error: 'Internal server error', requestId: 'r1' })).postNew('/x', rows.slice(0, 3));
+    assert.deepEqual([refused.landed.length, refused.error], [0, 'Internal server error (ref r1)']);
+});
+
+test('Part 12c: Q4 — one sentence for a request that never left: NETWORK_ERROR is failureWords\' own, dbWrite says it, the task rail\'s fallback says it — RUN', async () => {
+    assert.equal(NETWORK_ERROR, 'The server could not be reached.', 'REGRESSION: "Network error — the change was not saved."');
+    assert.equal(NETWORK_ERROR, failureWords(new TypeError('Failed to fetch')), 'one sentence, the thrown fetch\'s too');
+    assert.equal(failureWords(new Error(NETWORK_ERROR)), NETWORK_ERROR, 'thrown in its words (putSettings), it passes as said');
+    const hadFetch = globalThis.fetch, hadWindow = globalThis.window;
+    globalThis.window = {};
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+    try {
+        assert.deepEqual(await p12cDbWrite('/x', { method: 'PUT' }), { ok: false, status: 0, error: 'The server could not be reached.' });
+    } finally {
+        globalThis.fetch = hadFetch;
+        if (hadWindow === undefined) delete globalThis.window; else globalThis.window = hadWindow;
+    }
+    // Wrapped in a sentence it still reads as one (the Kanban's press notice, a document edit's toast).
+    assert.equal(`Not moved to Proposal: ${NETWORK_ERROR}`, 'Not moved to Proposal: The server could not be reached.');
+    // The task rail: nothing answered (the activity save's catch, quiet) ends a sentence in the house words.
+    const t = code(read('src/components/rails/TaskRail.jsx'));
+    const said = new Function(`${t.split('\n').find((l) => l.startsWith('const said = '))}\nreturn said;`)();
+    assert.equal(`The task is completed — its notes were not saved: ${said(undefined)}.`, 'The task is completed — its notes were not saved: The server could not be reached.',
+        'REGRESSION: "check your connection and try again"');
+    assert.equal(said(''), 'The server could not be reached');
+    assert.equal(said('Internal server error (ref r1)'), 'Internal server error (ref r1)');
+    assert.equal(said('The server returned 502.'), 'The server returned 502', 'the full stop the sentence\'s');
+});
+
+test('Part 12c: WIRING — no source under src/ says "check your connection" or "Network error — the change was not saved."', () => {
+    const files = [];
+    const walk = (rel) => {
+        for (const name of readdirSync(new URL(rel, ROOT))) {
+            const p = `${rel}${name}`;
+            if (statSync(new URL(p, ROOT)).isDirectory()) walk(`${p}/`); else if (/\.(js|jsx)$/.test(name)) files.push(p);
+        }
+    };
+    walk('src/');
+    // Moved floor (§0.249, the review's fixes, round 4: G4): 242, the .js and .jsx sources measured under src/ (it was 240
+    // — two sources could drop out of the walk and go unsearched with nothing said). Fewer: say the new count, and why.
+    assert.ok(files.length >= 242, `every .js and .jsx source (${files.length})`);
+    // No file named since the review's fixes L (§0.249): the app's outage banner (fetchStatus.js bannerCopyOf) said
+    // "Check your connection and refresh." over a server that answered — it says the server's failure now.
+    const said = files.filter((f) => /check your connection|Network error — the change was not saved/i.test(code(read(f))));
+    assert.deepEqual(said, [], 'REGRESSION: the old words for a request that never left');
+});
+
+// ── Part 12 — the review's fixes (A — Audit log) ──
+// The review of §0.249 (findings 0, 10, 14, 3 and 13): the Audit log's export offered "CSV · 0 events" and saved a file
+// of none over a read that failed or had not landed; an Add that landed with an answer that could not be read left "No
+// destinations." under "Destination added"; a failed destinations load was wiped by the next Add, and "Streaming to 1
+// destination" counted a list never read; errorOf (the load, Add, Pause / Rotate, Remove) dropped the ref. The export is
+// off, saying why, until the log is read; the list's unknown state is its own line, kept until a read lands; the badge
+// counts only a list that was read; every destination refusal says readRefusal's words, the ref kept.
+const p12fxAPress = async (which, answer, args, unreadBefore = '') => {
+    const did = { sent: [], errors: [], busy: [], tests: [], modal: [], reveal: [], read: [], unreadBefore };
+    did.answered = await auditActions(did, answer)[which](...args);
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+const P12FXA_LOAD = 'Destinations did not load — Internal server error (ref r1)';
+
+test('Part 12 fixes (A): the Audit log\'s Add — a refusal in readRefusal\'s words, the ref kept; landed unread, the list unknown and a load\'s failure kept; landed, nothing of the list marked read — RUN', async () => {
+    // Moved pin (§0.249, the review's fixes, round 4): only the server's own refusal (the 403) leaves the window open with
+    // its words; any other answer may have made the destination — the window closes, the list not known, the words kept.
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await p12fxAPress('createDest', answer, [{ name: 'X' }]);
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual([did.answered, did.modal, did.read, did.unread.value, did.said], own
+            ? [{ ok: false, error: words }, [], [], '', []]
+            : [{ ok: true }, [false], [false], 'A destination may be missing from the list — reload the page to see every destination.',
+                [`The destination may have been added — reload the page to see whether it was: ${words}`]], `REGRESSION: ${words} — the ref dropped (errorOf)`);
+    }
+    const unread = await p12fxAPress('createDest', P11_UNREADABLE(), [{ name: 'X' }]);
+    assert.deepEqual([unread.answered, unread.modal, unread.read, unread.dests.value.map((d) => d.id)], [{ ok: true }, [false], [false], ['dst_1']],
+        'REGRESSION: "No destinations." drawn under "Destination added" — the list still read as known');
+    assert.equal(unread.unread.value, 'The list may be missing the destination just added — reload the page to see every destination.');
+    const kept = await p12fxAPress('createDest', P11_UNREADABLE(), [{ name: 'X' }], P12FXA_LOAD);
+    assert.equal(kept.unread.value, P12FXA_LOAD, 'REGRESSION: the load\'s failure replaced by the Add');
+    const landed = await p12fxAPress('createDest', onceOf(201, { destination: { id: 'dst_2', name: 'X' }, secret: 's3cret' }), [{ name: 'X' }], P12FXA_LOAD);
+    assert.deepEqual([landed.read, landed.unread.value, landed.dests.value.map((d) => d.id)], [[], P12FXA_LOAD, ['dst_1', 'dst_2']],
+        'REGRESSION: an Add over a list that did not load wipes its failure, or takes the list as read');
+});
+
+test('Part 12 fixes (A): the Audit log\'s Pause / Rotate — a refusal in readRefusal\'s words, the ref kept, never "the server returned N" — RUN', async () => {
+    // Moved pin (§0.249, the review's fixes, round 3): only the server's own refusal (the 403) says "not saved"; any other
+    // answer says the Pause may have been saved, the words and ref kept.
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await p12fxAPress('putDest', answer, [{ id: 'dst_1', paused: true }, 'Pause']);
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual([did.said, did.answered, did.busy, did.dests.value[0].status],
+            [[own ? `Pause not saved — ${words}` : `Pause may have been saved — reload the page to see whether it was: ${words}`], null, ['dst_1', null], 'Active'], `REGRESSION: ${words}`);
+    }
+    const rot = await p12fxAPress('putDest', onceOf(500, { error: 'Internal server error', requestId: 'r9' }), [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret']);
+    assert.deepEqual(rot.said, ['The secret may have been rotated — reload the page to see whether it was, and rotate again to see a new one: Internal server error (ref r9)']);
+    const rotOwn = await p12fxAPress('putDest', onceOf(404, { error: 'Destination not found.' }), [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret']);
+    assert.deepEqual(rotOwn.said, ['Rotate secret not saved — Destination not found.']);
+});
+
+// Moved pin (§0.249, the review's fixes, round 4): a Remove's refusal is read once (refusalWords) and judged by the
+// module's destRefusedOwn; an answer that proves nothing marks the row's status not known (setStatusUnread).
+const p12fxARemove = async (answer, statusBefore = []) => {
+    const did = { errors: [], busy: [], sent: [] };
+    const dests = stateOf([P12A_DEST, { id: 'dst_2', name: 'Splunk', status: 'Active' }]);
+    const statusUnread = stateOf(statusBefore);
+    const destRefusedOwn = new Function(`return ${between(code(read(P12A_AUDIT)), 'const destRefusedOwn = ', ';\n').slice('const destRefusedOwn = '.length)};`)();
+    // Moved pin (§0.249, the review's fixes, last pass — F1): a delete's 404 in the server's words is judged by the
+    // module's destGone, built from the source line over the real destRefusedOwn.
+    const destGone = new Function('destRefusedOwn', `return ${between(code(read(P12A_AUDIT)), 'const destGone = ', ';\n').slice('const destGone = '.length)};`)(destRefusedOwn);
+    let confirmed = null;
+    const remove = p12aFn(P12A_AUDIT, '    const remove = (dest) => showConfirm(', '\n    }, true);', '\n    }, true);',
+        ['showConfirm', 'setDestError', 'setBusyId', 'dbFetch', 'STREAM_URL', 'readRefusal', 'failureWords', 'setDests', 'setStatusUnread', 'refusalWords', 'destRefusedOwn', 'destGone'], 'remove')(
+        (msg, run) => { confirmed = run; }, (v) => did.errors.push(v), (v) => did.busy.push(v),
+        async (url, opts = {}) => { did.sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; },
+        '/.netlify/functions/audit-stream', readRefusal, failureWords, dests.set, statusUnread.set, refusalWords, destRefusedOwn, destGone);
+    remove(P12A_DEST);
+    await confirmed();
+    return { ...did, said: did.errors.filter(Boolean), ids: dests.value.map((d) => d.id), dests: dests.value, statusUnread: statusUnread.value };
+};
+
+test('Part 12 fixes (A): the Audit log\'s Remove — a refusal in readRefusal\'s words, the ref kept, the row kept; landed, only its row gone — RUN', async () => {
+    // Moved pin (§0.249, the review's fixes, round 4): only the server's own refusal (the 403) says "failed", the row known;
+    // any other answer says the destination may have been removed, the row kept, its status not known.
+    for (const [answer, words] of P12A_REFUSED()) {
+        const did = await p12fxARemove(answer);
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual([did.said, did.ids, did.busy, did.statusUnread],
+            [[own ? `Remove destination failed — ${words}` : `The destination may have been removed — reload the page to see whether it was: ${words}`],
+                ['dst_1', 'dst_2'], ['dst_1', null], own ? [] : ['dst_1']], `REGRESSION: ${words}`);
+    }
+    const landed = await p12fxARemove(onceOf(200, { ok: true }));
+    assert.deepEqual([landed.said, landed.ids, landed.sent], [[], ['dst_2'], [['/.netlify/functions/audit-stream?id=dst_1', 'DELETE']]]);
+});
+
+test('Part 12 fixes (A): the Audit log\'s destinations load — a refusal in readRefusal\'s words on the unread line; a read that lands clears it — RUN', async () => {
+    for (const [answer, words] of P12A_REFUSED().filter(([a]) => !(a instanceof Error))) {
+        const r = await loadDestsRun(answer);
+        assert.deepEqual([r.errors, r.read, r.dests, r.thrown], [[`Destinations did not load — ${words}`], [], [], null], `REGRESSION: ${words} — the ref dropped, or the old "(N)"`);
+    }
+    const landed = await loadDestsRun(onceOf(200, { destinations: [] }));
+    assert.deepEqual([landed.read, landed.dests, landed.errors], [[true], [[]], ['']], 'REGRESSION: a read that landed keeps the unread line');
+    // Offline the load throws; the effect says it on the same line (the moved pin in Part 12a's read test runs it).
+    // Moved pin (§0.249, the review's fixes, round 3): the destinations' own effect.
+    const offline = await p12fxA3DestsLoad(async () => { throw UNSENT(); });
+    assert.deepEqual(offline.destErrors, ['Destinations did not load — The server could not be reached.']);
+});
+
+// Moved pin (§0.249, the review's fixes, round 2): the badge's piece starts at unknownCount and reads statusUnread.
+const p12fxABadge = (dests, destsRead, statusUnread = []) => new Function('dests', 'destsRead', 'statusUnread',
+    `${between(code(read(P12A_AUDIT)), '    const unknownCount = ', '\n    const catStyle')}\nreturn streamingBadge;`)(dests, destsRead, statusUnread);
+
+test('Part 12 fixes (A): the Audit log\'s "Streaming to N destinations" — drawn only over a list that was read — RUN', () => {
+    assert.equal(p12fxABadge([P12A_DEST], false), undefined, 'REGRESSION: "Streaming to 1 destination" over a list never read');
+    assert.equal(p12fxABadge([P12A_DEST], true), 'Streaming to 1 destination');
+    assert.equal(p12fxABadge([P12A_DEST, { id: 'dst_2', status: 'Paused' }], true), 'Streaming to 2 destinations · 1 not delivering');
+    assert.equal(p12fxABadge([], true), undefined);
+});
+
+const p12fxAExport = (eventsLoading, eventsError) => new Function('eventsLoading', 'eventsError',
+    `${between(code(read(P12A_AUDIT)), '    const eventsRead = ', '\n\n')}\nreturn { eventsRead, exportWhy };`)(eventsLoading, eventsError);
+
+test('Part 12 fixes (A): the Audit log\'s export — off, saying why, while the log loads or after its read failed; never "0 events" or a file of none — RUN, and WIRING', () => {
+    assert.deepEqual(p12fxAExport(true, null), { eventsRead: false, exportWhy: 'The audit log is still loading' }, 'REGRESSION: an export of none before the read lands');
+    assert.deepEqual(p12fxAExport(false, 'Internal server error (ref r1)'), { eventsRead: false, exportWhy: 'The audit log did not load — there is nothing to export' },
+        'REGRESSION: an export of none over a read that failed');
+    assert.deepEqual(p12fxAExport(false, null), { eventsRead: true, exportWhy: undefined });
+    const s = code(read(P12A_AUDIT));
+    assert.ok(s.includes("<button disabled={!eventsRead} title={exportWhy} onClick={() => { if (eventsRead) downloadEvents(visible, 'CSV'); }}"),
+        'REGRESSION: Export CSV saves a file of none over a read that failed');
+    assert.ok(s.includes('<button ref={exportBtnRef} disabled={!eventsRead} title={exportWhy} onClick={() => { if (eventsRead) setExportOpen(o => !o); }}'),
+        'REGRESSION: ▾ opens "CSV · 0 events" over a read that failed');
+    assert.ok(between(s, '{exportOpen && eventsRead && (', '\n                        )}').includes('<AuditExportDropdown events={visible}'),
+        'REGRESSION: the export menu drawn over a log that was not read');
+    assert.equal(count(s, '<AuditExportDropdown '), 1, 'one export menu');
+    assert.equal(count(s, 'downloadEvents(visible,'), 1, 'one press outside the menu saves the view — behind the gate');
+});
+
+test('Part 12 fixes (A): WIRING — the Audit log\'s unknown destinations list is its own line, kept until a read lands; errorOf gone', () => {
+    const s = code(read(P12A_AUDIT));
+    const line = between(s, '{!destsLoading && !destsRead && (', '{destError && (');
+    assert.ok(line.includes("{destsUnread || 'The destinations could not be read — reload the page to see every destination.'}"),
+        'REGRESSION: a failed load said only on the banner an action clears');
+    assert.equal(count(s, "setDestsUnread('')"), 1, 'cleared only by a read that lands');
+    order(between(s, '    const loadDests = ', '\n    }, []);'), 'setDests(listed.destinations);', 'setDestsRead(true);', "setDestsUnread('');");
+    assert.ok(!/setDestError\(`Destinations did not load/.test(s), 'REGRESSION: the load\'s failure on the banner an Add clears');
+    assert.equal(count(s, 'errorOf'), 0, 'REGRESSION: errorOf — the ref dropped');
+    // Moved pin (§0.249, the review's fixes, round 3): Pause / Rotate and Send test read the refusal once, judge it
+    // (destRefusedOwn), and say refusalWords' words — "not saved" / "not sent" or "may have been".
+    // Moved pin (§0.249, the review's fixes, round 4): the Add and Remove read the refusal once too, judged by destRefusedOwn.
+    assert.equal(count(s, 'await readRefusal(res)'), 1, 'the load says readRefusal\'s words');
+    assert.equal(count(s, 'refusalWords(res, refused)'), 8, 'the Add, Pause / Rotate, Send test and Remove say refusalWords\' words, either way');
+});
+
+// ── Part 12 — the review's fixes (U — Users) ──
+// The review of §0.249 (findings 6, 9, 12 and 19): the Clerk sync took no org — a roster read again that landed after an
+// org switch put the org switched away from's members into the new org's settings (useApp's setSettings outlives the
+// switch); the Pending invites page drew a failed Clerk read as none — every invited row "No live link" in warning
+// colour, "No invitations pending." over an unread list — since its failure set the list to [], "read, and empty"; and
+// an invite that landed with an answer that could not be read said so in the red box of a failure and left Send armed
+// over the same rows, a second press emailing each person again. The sync checks its org after each answer and in both
+// catches; the unread list is its own state (false), its rows "Link not read" in muted colour, its empty state and count
+// line the roster's; the landed-unread invite empties the batch, reads the roster again and says it as a notice.
+const p12fxUSync = (answers, switchAt = -1) => clerkSync(answers, { switchAt });
+
+test('Part 12 fixes (U): the Clerk sync after an org switch — no word, no roster read, and no other org\'s roster in this org\'s settings — RUN', async () => {
+    const ROSTER = () => onceOf(200, { users: [{ id: 'usr_b' }] });
+    // The switch while the sync is out: whatever it answers, nothing said, nothing read again, nothing written.
+    for (const sync of [onceOf(200, { counts: { created: 1, updated: 0, unchanged: 3 } }), P11_UNREADABLE(), onceOf(403, { error: 'Forbidden' }), P11_PAGE(), UNSENT()]) {
+        const did = await p12fxUSync({ sync, roster: ROSTER() }, 0);
+        assert.deepEqual([did.msgs.filter(Boolean), did.sent.length, did.roster, did.drift, did.syncing], [[], 1, [], [], [true, false]],
+            'REGRESSION: a sync answered after an org switch said on the new org\'s screen, or read the roster there');
+    }
+    // The switch while the roster read is out: the sync's own words stand (said before the switch); the roster never lands.
+    const leak = await p12fxUSync({ sync: onceOf(200, { counts: { created: 1, updated: 0, unchanged: 3 } }), roster: ROSTER() }, 1);
+    assert.deepEqual(leak.roster, [], 'REGRESSION: the org switched away from\'s roster written into the new org\'s settings');
+    assert.equal(leak.said, 'Synced: 1 added, 0 updated, 3 unchanged');
+    for (const roster of [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), UNSENT(), P11_UNREADABLE()]) {
+        const late = await p12fxUSync({ sync: onceOf(200, { counts: { created: 0, updated: 0, unchanged: 2 } }), roster }, 1);
+        assert.deepEqual([late.said, late.roster], ['Synced: 0 added, 0 updated, 2 unchanged', []], 'REGRESSION: a roster read that failed after a switch said there');
+    }
+    // In the org that asked, it lands as before.
+    const landed = await p12fxUSync({ sync: onceOf(200, { counts: { created: 1, updated: 0, unchanged: 3 } }), roster: ROSTER() });
+    assert.deepEqual(landed.roster, [{ users: [{ id: 'usr_b' }] }]);
+});
+
+test('Part 12 fixes (U): WIRING — the Clerk sync takes its org first and checks it before each word and the roster write', () => {
+    const sync = between(code(read(P12A_USERS)), '    const runClerkSync = async () => {', '\n    };');
+    order(sync, 'const askedOrg = requestOrg();', "await dbFetch('/.netlify/functions/users-sync'", 'const synced = await res.json().catch(() => null);',
+        'if (!stillOrg(askedOrg)) return;', 'setSyncMsg(msg);', "await dbFetch('/.netlify/functions/users')", 'const ud = await r.json();',
+        'if (!stillOrg(askedOrg)) return;', '_setSettings(prev => ({ ...prev, users: ud.users }))');
+    assert.equal(count(sync, 'if (!stillOrg(askedOrg)) return;'), 4, 'after the sync\'s answer, after the roster\'s, and in both catches');
+    assert.equal(count(sync, '_setSettings('), 1, 'one write of the roster, behind the check');
+});
+
+// The Pending page's revoke updater, extracted and run: only a list that was read loses the row.
+const p12fxUDrop = (prev, email) => new Function('e',
+    `return ${between(code(read(P12A_USERS)), 'setClerkInvites(prev => ', ');\n').slice('setClerkInvites('.length)};`)({ email })(prev);
+
+test('Part 12 fixes (U): Pending invites over a failed Clerk read — unread is its own state, never "read, and empty"; a revoke keeps it unread — RUN', async () => {
+    for (const [answer] of P12A_REFUSED()) assert.deepEqual((await pendingLoad(answer)).invites, [false], 'REGRESSION: a failed read set as [] — "read, and empty"');
+    assert.deepEqual((await pendingLoad(P11_UNREADABLE())).invites, [false]);
+    const INV = [{ email: 'a@x.test' }, { email: 'b@x.test' }];
+    assert.equal(p12fxUDrop(false, 'a@x.test'), false, 'REGRESSION: a revoke turned an unread list into "read, and empty"');
+    assert.equal(p12fxUDrop(null, 'a@x.test'), null, 'a list still reading stays reading');
+    assert.deepEqual(p12fxUDrop(INV, 'a@x.test'), [{ email: 'b@x.test' }]);
+});
+
+test('Part 12 fixes (U): WIRING — Pending invites over a failed Clerk read: "Link not read" in muted colour, never "No live link" nor "No invitations pending."', () => {
+    const page = between(code(read(P12A_USERS)), 'const UsersPendingPage = ', '\nconst UsersSeatPage = ');
+    assert.ok(page.includes('const invitesUnread = clerkInvites === false;'));
+    assert.ok(page.includes('            setClerkInvites(false);   // unread'), 'REGRESSION: a failed read set as [] — every row "No live link"');
+    assert.equal(count(page, 'setClerkInvites([])'), 0);
+    assert.ok(page.includes("{!e.invite ? (clerkInvites === null ? '…' : invitesUnread ? 'Link not read' : 'No live link') :"),
+        'REGRESSION: "No live link" on a row whose link was never read');
+    assert.ok(page.includes('color: !e.invite && invitesUnread ? T.inkMuted : !e.invite || expired ? T.warn : T.inkMid'),
+        'REGRESSION: an unread link coloured as a dead one');
+    assert.ok(page.includes(`{clerkInvites === null ? 'Reading invitations…' : invitesUnread ? "No invited member in the roster. Clerk's invitations could not be read, so any made there are not listed." : 'No invitations pending.'}`),
+        'REGRESSION: "No invitations pending." over a Clerk list never read');
+    assert.equal(count(page, 'loadError ?'), 0, 'the unread state is the list\'s own, not the banner\'s words (cleared as a read again starts)');
+});
+
+const p12fxUInvite = (answer, team = '', switchAt = -1) => inviteSend({ answer, team, switchAt });
+
+test('Part 12 fixes (U): the invite that landed with an answer that cannot be read — the batch emptied, the roster read again, said as a notice, never the red box; after a switch nothing — RUN', async () => {
+    const REREAD = 'The invitations were sent. Its answer could not be read — the list of users was read again to show them.';
+    // Moved in round 2 (U2): a roster not read again says why, in the house words — never a bare "reload".
+    const RELOAD = (words) => `The invitations were sent. Its answer could not be read. The roster could not be read again — reload the page to see it: ${words}`;
+    const ROSTER = () => onceOf(200, { users: [...P12A_SETTINGS().users, { id: 'usr_9', name: 'New', email: 'new@x.test', status: 'Invited' }] });
+    const landed = await p12fxUInvite([P11_UNREADABLE(), ROSTER()]);
+    assert.deepEqual([landed.said, landed.told, landed.saved, landed.added], [[], [REREAD], [], []], 'REGRESSION: said in the red box of a failure');
+    assert.deepEqual(landed.users.map((u) => u.id), ['usr_1', 'usr_2', 'usr_9'], 'the roster read again');
+    assert.deepEqual(landed.sent.map(([url, method]) => [url, method]), [['/.netlify/functions/users', 'POST'], ['/.netlify/functions/users', 'GET']], 'one invite, one read, nothing more');
+    assert.equal(landed.notices[0], '', 'the last notice cleared as Send is pressed');
+    const { id, ...blank } = landed.rows.at(-1)[0];
+    assert.deepEqual([landed.rows.at(-1).length, blank], [1, { email: '', role: 'User', team: '', manager: '', territory: '', valid: true, error: '' }],
+        'REGRESSION: Send left armed over the same rows — a second press emails each person again');
+    for (const [roster, words] of [[onceOf(500, { error: 'x' }), 'x'], [P11_PAGE(), 'The server returned 502.'], [UNSENT(), 'The server could not be reached.'],
+        [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, {}), 'Its answer could not be read.']]) {
+        const did = await p12fxUInvite([P11_UNREADABLE(), roster]);
+        assert.deepEqual([did.said, did.told, did.users.length, did.rows.at(-1)[0].email], [[], [RELOAD(words)], 2, ''], 'a roster not read again: said to reload, saying why');
+    }
+    const teamed = await p12fxUInvite([P11_UNREADABLE(), ROSTER()], 'East');
+    assert.deepEqual(teamed.told, [`${REREAD} They were not added to their teams' lists — add them on the Teams page.`], 'a team named: its list was not updated, said');
+    // The org switched while the roster read was out: no other org's roster in this org's settings, and nothing said.
+    for (const roster of [ROSTER(), UNSENT(), onceOf(500, { error: 'x' })]) {
+        const late = await p12fxUInvite([P11_UNREADABLE(), roster], '', 1);
+        assert.deepEqual([late.said, late.told, late.users.length], [[], [], 2], 'REGRESSION: the roster read after an org switch written or said in the new org');
+    }
+});
+
+test('Part 12 fixes (U): WIRING — the invite page draws its notice apart from its error, not in the red box', () => {
+    const page = between(code(read(P12A_USERS)), 'const UsersInvitePage = ', '\nconst UsersExportPage = ');
+    assert.ok(page.includes("const [notice, setNotice] = useState('');"));
+    // Moved (§0.249, review fixes round 3 — U3): the tint is the warning one over a failed roster read (noticeWarn), else green.
+    assert.ok(page.includes("{notice && <div style={{ marginBottom:14, padding:'10px 14px', background:`${noticeWarn ? T.warn : T.ok}12`, border:`1px solid ${noticeWarn ? T.warn : T.ok}55`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans }}>{notice}</div>}"),
+        'REGRESSION: the notice not drawn, or drawn as an error');
+    // Moved in round 2 (U2): the notice's two branches (read again, or not and why) — both inside the one setNotice.
+    assert.equal(count(page, 'The invitations were sent.'), 2);
+    assert.equal(count(between(page, '                setNotice(reread\n', '                return;\n'), 'The invitations were sent.'), 2);
+    assert.ok(!/throw new Error\('The invitations were sent/.test(page), 'REGRESSION: a landed invite thrown as a failure');
+});
+
+// ── Part 12 — the review's fixes (M: MFA) ──
+// A landed answer without the shape the cards draw from (total and enrolled numbers, byRole and notEnrolled lists) is a
+// read that failed, as the overview's MFA tile reads it (settingsCards.js liveCountsOf): never "0/0 enrolled", "No users
+// found in this organization." or "✓ All users have MFA enrolled." over it.
+const P12FXM_UNREAD = 'MFA enrollment could not be read — Its answer could not be read.';
+// Moved (§0.249, review fixes round 3 — U3): the rule reads enrolledUsers too (Settings → Users draws it), so each case
+// below that held the other lists holds `enrolledUsers: []` as well — each still short of exactly what it was short of.
+const P12FXM_SHORT = () => [
+    null, {}, { total: 3 }, { enrolled: 2 }, { total: '3', enrolled: 2 }, { total: 3, enrolled: '2' },
+    { total: 3, enrolled: 2 }, { total: 3, enrolled: 2, notEnrolled: [], enrolledUsers: [] }, { total: 3, enrolled: 2, byRole: [], enrolledUsers: [] },
+    { total: 3, enrolled: 2, byRole: {}, notEnrolled: [], enrolledUsers: [] }, { total: 3, enrolled: 2, byRole: [], notEnrolled: null, enrolledUsers: [] },
+    // Each list there, one number short: the tile's own rule, one clause at a time.
+    { enrolled: 2, byRole: [], notEnrolled: [], enrolledUsers: [] }, { total: '3', enrolled: 2, byRole: [], notEnrolled: [], enrolledUsers: [] },
+    { total: 3, byRole: [], notEnrolled: [], enrolledUsers: [] }, { total: 3, enrolled: null, byRole: [], notEnrolled: [], enrolledUsers: [] },
+    [], 'enrolled',
+];
+const p12fxmTile = async (body) => {
+    const answers = SEVEN_LANDED();
+    answers[HEALTH_READS.mfa] = answerOf(200, body);
+    return liveCountsOf(answers.map(settledOf));
+};
+
+test('Part 12 fixes (M): MFA — a landed answer short of its shape is "Its answer could not be read.", nothing drawn as read; the full shape still drawn — RUN', async () => {
+    for (const body of P12FXM_SHORT()) {
+        const did = await mfaLoad({ answer: onceOf(200, body) });
+        assert.deepEqual([did.errors, did.data, did.loading], [[P12FXM_UNREAD], [], [false]],
+            `REGRESSION: ${JSON.stringify(body)} drawn as an enrollment (0/0, "No users found", "All users have MFA enrolled")`);
+    }
+    // Moved (§0.249, review fixes round 3 — U3): the whole shape the one rule reads — enrolledUsers, and each entry's fields.
+    const FULL = { enrolled: 0, total: 0, byRole: [], notEnrolled: [], enrolledUsers: [] };   // an org with no members: read, and said as none
+    const empty = await mfaLoad({ answer: onceOf(200, FULL) });
+    assert.deepEqual([empty.data, empty.errors, empty.loading], [[FULL], [], [false]], 'a full answer, even of none, is read');
+    const ENROLLED = { enrolled: 2, total: 3, notEnrolled: [{ userId: 'u3', email: 'c@x.co', name: 'C', role: 'User' }], enrolledUsers: [], byRole: [{ role: 'Admin', enrolled: 2, total: 3 }] };
+    const landed = await mfaLoad({ answer: onceOf(200, ENROLLED) });
+    assert.deepEqual([landed.data, landed.errors], [[ENROLLED], []]);
+    const gone = await mfaLoad({ answer: onceOf(200, {}), cancel: true });
+    assert.deepEqual([gone.data, gone.errors, gone.loading], [[], [], []], 'unmounted: nothing set');
+});
+
+test('Part 12 fixes (M): MFA — the page and the overview tile agree: every answer the tile names unread, the page says unread — RUN', async () => {
+    for (const body of P12FXM_SHORT()) {
+        const page = await mfaLoad({ answer: onceOf(200, body) });
+        const tile = await p12fxmTile(body);
+        assert.deepEqual(page.errors, [P12FXM_UNREAD], `${JSON.stringify(body)}: the page`);
+        // Moved (§0.249, review fixes round 2 — M2; residual M1): the tile reads the page's one rule (mfaAnswerRead), so
+        // every short answer — the numbers alone too, which it once scored as 2/3 — is unread on the tile as on the page.
+        assert.equal(tile.unread.includes('mfa'), true, `REGRESSION: ${JSON.stringify(body)} scored on the tile while the page says it could not be read`);
+        assert.equal(tile.mfa, undefined, `${JSON.stringify(body)}: no MFA count on the card`);
+    }
+    const full = { enrolled: 2, total: 3, byRole: [], notEnrolled: [], enrolledUsers: [] };   // Moved (§0.249, round 3 — U3): enrolledUsers too
+    assert.deepEqual([(await mfaLoad({ answer: onceOf(200, full) })).errors, (await p12fxmTile(full)).unread.includes('mfa')], [[], false]);
+});
+
+test('Part 12 fixes (M): WIRING — MFA checks the answer\'s shape after its body and before it is kept', () => {
+    const load = between(code(read(P12A_MFA)), '        const load = async () => {', '\n        };');
+    // Moved (§0.249, review fixes round 2 — M2): the shape check is the shared rule, settingsCards.js mfaAnswerRead.
+    order(load, 'if (!res.ok) throw new Error(await readRefusal(res));', 'const enrollment = await res.json();',
+        "if (!mfaAnswerRead(enrollment)) throw new Error('Its answer could not be read.');",
+        'setMfaData(enrollment);');
+    assert.equal(count(load, 'setMfaData('), 1, 'one place the enrollment is kept');
+});
+
+// ── Part 12 — the review's fixes (D — Document uploads) ──
+// The review of §0.249 (findings 4 and 20, and 12c's left-open item 4): a new document whose record landed with an
+// answer that could not be read was said in the red box of a failure, and the upload rail left the file chosen with
+// Upload armed — a second press minted a new doc id and wrote the file twice (a record's dropped files likewise: the
+// batch stopped there and asked for the drop again). The util marks that throw `landed`; the rail says it as a notice and
+// lets the file go, and a record's Documents goes on to the next file and says it as made. And an upload's refusal was a
+// bare "The server returned 403." — a presign refused and R2's PUT refused read the same: each now names its step
+// ("The upload could not start — …", "The file was not stored — …", "The document was not saved — …", "The new version
+// was not saved — …"). Both screens say a thrown failure through failureWords, never a raw e.message.
+const P12FXD_RAIL = 'src/components/documents/DocumentUploadRail.jsx';
+const P12FXD_RECORD = 'src/components/documents/RecordDocuments.jsx';
+const P12FXD_MADE = 'The file was uploaded. Its answer could not be read — reload the page to see it.';
+const P12FXD_VERSION_MADE = 'The new version was uploaded. Its answer could not be read — reload the page to see it.';
+const p12fxdPresign = (version) => onceOf(200, { storageKey: 'org_a/doc_x/v1/contract.pdf', uploadUrl: 'https://r2.test/put', ...(version ? { version } : {}) });
+// One upload over stubs, as p12cUpload — handing back the thrown error itself, its `landed` mark with its words.
+const p12fxdThrown = async ({ kind = 'new', presign = p12fxdPresign(kind === 'new' ? 1 : 3), record = onceOf(201, { document: { id: 'doc_x' } }), r2 = { status: 200 } }) => {
+    const had = globalThis.XMLHttpRequest;
+    globalThis.XMLHttpRequest = p12cXhr(r2, []);
+    p12cSetOrg('org_a');
+    const dbFetch = async (url) => {
+        const a = url.includes('action=upload-url') ? presign : record;
+        if (a instanceof Error) throw a;
+        return a;
+    };
+    try {
+        const run = kind === 'new'
+            ? p12cDocs.uploadNewDocument(dbFetch, { file: P12C_FILE, name: 'Contract' })
+            : p12cDocs.uploadNewVersion(dbFetch, { file: P12C_FILE, documentId: 'doc_1' });
+        try { return { v: await run }; } catch (e) { return { e }; }
+    } finally {
+        if (had === undefined) delete globalThis.XMLHttpRequest; else globalThis.XMLHttpRequest = had;
+        p12cSetOrg(null);
+    }
+};
+
+test('Part 12 fixes (D): a record that landed with an answer that cannot be read is thrown marked `landed`, in words failureWords passes; no failure is — RUN', async () => {
+    for (const record of [P11_UNREADABLE(), onceOf(201, {}), onceOf(201, null), onceOf(201, { document: 'x' })]) {
+        const { e } = await p12fxdThrown({ record });
+        assert.deepEqual([e.message, e.landed, failureWords(e)], [P12FXD_MADE, true, P12FXD_MADE],
+            'REGRESSION: a document made, thrown as a failure — the rail kept Upload armed and a second press wrote the file twice');
+    }
+    // A new version with no number presigned, landed unread: marked too (a second press would add a version again).
+    const v = await p12fxdThrown({ kind: 'version', presign: p12fxdPresign(), record: P11_UNREADABLE() });
+    assert.deepEqual([v.e.message, v.e.landed, failureWords(v.e)], [P12FXD_VERSION_MADE, true, P12FXD_VERSION_MADE]);
+    // Nothing that failed is marked: a refusal or a failure at any step, and a presign that cannot be read.
+    for (const kind of ['new', 'version']) {
+        for (const [answer] of p12bRefused()) assert.equal((await p12fxdThrown({ kind, presign: answer })).e.landed, undefined, `${kind}: the presign's refusal`);
+        // Moved in §0.249 (review fixes, round 2, D2): the record's own refusal (the 403 with its words) unmarked; the rest
+        // may have come after a write — marked landed.
+        for (const [answer] of p12bRefused()) assert.equal((await p12fxdThrown({ kind, record: answer })).e.landed, answer.status === 403 ? undefined : true, `${kind}: the record's refusal`);
+        for (const r2 of [{ status: 403 }, { offline: true }]) assert.equal((await p12fxdThrown({ kind, r2 })).e.landed, undefined, `${kind}: R2`);
+        assert.equal((await p12fxdThrown({ kind, presign: P11_UNREADABLE() })).e.landed, undefined, `${kind}: a presign stores nothing`);
+    }
+    // What landed and was read is handed back, as before.
+    assert.deepEqual((await p12fxdThrown({})).v, { id: 'doc_x' });
+    assert.equal((await p12fxdThrown({ kind: 'version', record: P11_UNREADABLE() })).v, 3, 'the number presigned');
+});
+
+test('Part 12 fixes (D): each step of an upload names itself — a presign, R2 and the record refused alike read apart — RUN', async () => {
+    const said = async (kind, step) => {
+        const forbidden = onceOf(403, {});
+        // Moved in §0.249 (review fixes, round 2, D2): the record refused in the server's own words ("not saved" is said
+        // only over those); a 403 with none may have come after a write.
+        const r = await p12fxdThrown(step === 'presign' ? { kind, presign: forbidden } : step === 'r2' ? { kind, r2: { status: 403 } } : { kind, record: onceOf(403, { error: 'Forbidden' }) });
+        return r.e.message;
+    };
+    assert.deepEqual([await said('new', 'presign'), await said('new', 'r2'), await said('new', 'record'), await said('version', 'record')], [
+        'The upload could not start — The server returned 403.',
+        'The file was not stored — The server returned 403.',
+        'The document was not saved — Forbidden',
+        'The new version was not saved — Forbidden',
+    ], 'REGRESSION: a bare "The server returned 403." — the step that refused not named');
+    // A request that never left names its step too (Q4's sentence after it).
+    assert.equal((await p12fxdThrown({ presign: UNSENT() })).e.message, 'The upload could not start — The server could not be reached.');
+    // Moved in §0.249 (review fixes, round 2, D2): a record's request that threw may have reached the server first.
+    assert.equal((await p12fxdThrown({ record: UNSENT() })).e.message, 'The document may have been saved — reload the page to see whether it was: The server could not be reached.');
+    assert.equal((await p12fxdThrown({ kind: 'version', record: UNSENT() })).e.message, 'The new version may have been saved — reload the page to see whether it was: The server could not be reached.');
+    assert.equal((await p12fxdThrown({ r2: { offline: true } })).e.message, 'The file was not stored — The server could not be reached.');
+});
+
+// The upload rail's submit, extracted and run: `create` / `version` are what the hook's createDocument and
+// addDocumentVersion do (throw the util's error, or resolve).
+// Moved in §0.249 (review fixes, round 2, D2): the rail's `opened` (its fields back to the rail as it opened) runs with
+// the submit — its setters recorded in `fields`; `ctx` the rail's context.
+const p12fxdRail = async ({ create = async () => ({ id: 'doc_x' }), version = async () => 3, isVersion = false, ctx = { documentId: 'doc_1' } }) => {
+    const did = { errors: [], notices: [], files: [], uploading: [], progress: [], closed: 0, sent: 0, fields: [] };
+    const field = (k) => (v) => did.fields.push([k, v]);
+    const submit = p12aFn(P12FXD_RAIL, '    const submit = async () => {', '\n    };', '\n    };',
+        ['blocked', 'isVersion', 'ctx', 'file', 'note', 'name', 'category', 'visibility', 'sharedWith', 'links', 'baseName',
+            'addDocumentVersion', 'createDocument', 'setUploading', 'setError', 'setNotice', 'setProgress', 'setFile', 'close', 'failureWords',
+            'setName', 'setNote', 'setVisibility', 'setSharedWith', 'setLinks', 'setCategory'],
+        'submit', `${between(code(read(P12FXD_RAIL)), '    const opened = () => {', '\n    };')}\n    };`)(false, isVersion, ctx, P12C_FILE, '', 'Contract', 'Contract', 'team', [], [], (n) => n.replace(/\.[^.]+$/, ''),
+        async (...a) => { did.sent++; return version(...a); }, async (...a) => { did.sent++; return create(...a); },
+        (v) => did.uploading.push(v), (v) => did.errors.push(v), (v) => did.notices.push(v), (v) => did.progress.push(v),
+        (v) => did.files.push(v), () => { did.closed++; }, failureWords,
+        field('name'), field('note'), field('visibility'), field('sharedWith'), field('links'), field('category'));
+    await submit();
+    return did;
+};
+
+test('Part 12 fixes (D): the upload rail — a document made whose answer cannot be read is a notice and the file let go (Upload not offered over it again); a failure keeps the file, in the house words — RUN', async () => {
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const landed = await p12fxdRail({ create: async () => { throw made; } });
+    assert.deepEqual([landed.notices, landed.errors, landed.files, landed.closed, landed.sent], [[null, P12FXD_MADE], [null], [null], 0, 1],
+        'REGRESSION: said in the red box of a failure with the file still chosen — a second press wrote the file twice');
+    assert.deepEqual([landed.uploading, landed.progress], [[true, false], [0, null]]);
+    // A new version made unread: likewise.
+    const vMade = (await p12fxdThrown({ kind: 'version', presign: p12fxdPresign(), record: P11_UNREADABLE() })).e;
+    const vLanded = await p12fxdRail({ isVersion: true, version: async () => { throw vMade; } });
+    assert.deepEqual([vLanded.notices, vLanded.errors, vLanded.files, vLanded.closed], [[null, P12FXD_VERSION_MADE], [null], [null], 0]);
+    // A failure: the red box, the file kept for another press — each step's words, a thrown runtime error never raw.
+    const refused = (await p12fxdThrown({ record: onceOf(403, { error: 'Forbidden' }) })).e;
+    for (const [thrown, words] of [
+        [refused, 'The document was not saved — Forbidden'],
+        [(await p12fxdThrown({ r2: { status: 403 } })).e, 'The file was not stored — The server returned 403.'],
+        [new TypeError('Failed to fetch'), 'The server could not be reached.'],
+        [new TypeError("Cannot read properties of undefined (reading 'id')"), 'Its answer could not be read.'],
+    ]) {
+        const did = await p12fxdRail({ create: async () => { throw thrown; } });
+        assert.deepEqual([did.errors, did.notices, did.files, did.closed], [[null, words], [null], [], 0], `REGRESSION: ${words} said as "${did.errors[1]}"`);
+    }
+    // Landed and read: the rail closes, nothing said.
+    const ok = await p12fxdRail({});
+    assert.deepEqual([ok.closed, ok.errors, ok.notices, ok.files], [1, [null], [null], []]);
+});
+
+// A record's attach (a drop or Attach file), extracted and run: `answers` each file's outcome by name.
+const p12fxdAttach = async (answers) => {
+    const did = { errors: [], notices: [], busy: [], sent: [] };
+    const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        // Moved in §0.249 (review fixes, round 2, D2): setError applies an updater to the last error, as React's does.
+        () => null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
+        async (f) => { did.sent.push(f.name); const a = answers[f.name]; if (a instanceof Error) throw a; return a; },
+        // Moved in §0.249 (review fixes, round 4, D4): the batch's sending mark and the held drop's names.
+        (n) => n.replace(/\.[^.]+$/, ''), { type: 'account', recordId: 'acc_1' }, failureWords, { current: false }, () => {});
+    await attach(Object.keys(answers).map((name) => ({ name, size: 10, type: 'application/pdf' })));
+    return did;
+};
+
+test('Part 12 fixes (D): a record\'s Documents — a file made whose answer cannot be read goes on to the next file and is said as made; a failure stops the batch in the house words — RUN', async () => {
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const DOC = { id: 'doc_y' };
+    const one = await p12fxdAttach({ 'a.pdf': made, 'b.pdf': DOC });
+    assert.deepEqual([one.sent, one.errors, one.notices, one.busy], [['a.pdf', 'b.pdf'], [null], [null, `a.pdf: ${P12FXD_MADE}`], [true, false]],
+        'REGRESSION: the batch stopped at a file that was made, or said it as a failure — the drop asked again wrote it twice');
+    const two = await p12fxdAttach({ 'a.pdf': made, 'b.pdf': made, 'c.pdf': DOC });
+    assert.deepEqual([two.sent.length, two.errors, two.notices.at(-1)], [3, [null],
+        'a.pdf, b.pdf: The files were uploaded. Their answers could not be read — reload the page to see them.']);
+    // A failure stops the batch, in the house words; a file made before it is still said as made.
+    // Moved in §0.249 (review fixes, round 2, D2): the server's own refusal (a 4xx with its words, ref kept) stops the
+    // batch; a 500 may have come after a write — round 2's own test.
+    const refused = (await p12fxdThrown({ record: onceOf(400, { error: 'id and name required', requestId: 'r1' }) })).e;
+    const stop = await p12fxdAttach({ 'a.pdf': refused, 'b.pdf': DOC });
+    // Moved in §0.249 (review fixes, round 3, D3): the stop names the file it stopped at, and the files never sent.
+    assert.deepEqual([stop.sent, stop.errors, stop.notices], [['a.pdf'], [null, 'a.pdf: The document was not saved — id and name required (ref r1)\nNot sent: b.pdf — drop them again'], [null]]);
+    const both = await p12fxdAttach({ 'a.pdf': made, 'b.pdf': new TypeError('Failed to fetch'), 'c.pdf': DOC });
+    assert.deepEqual([both.sent, both.errors, both.notices], [['a.pdf', 'b.pdf'], [null, 'b.pdf: The server could not be reached.\nNot sent: c.pdf — drop them again'], [null, `a.pdf: ${P12FXD_MADE}`]],
+        'REGRESSION: "Failed to fetch" said raw');
+    assert.deepEqual((await p12fxdAttach({ 'a.pdf': new TypeError('x is not a function') })).errors, [null, 'a.pdf: Its answer could not be read.']);
+    // All landed and read: nothing said.
+    const ok = await p12fxdAttach({ 'a.pdf': DOC, 'b.pdf': DOC });
+    assert.deepEqual([ok.sent.length, ok.errors, ok.notices], [2, [null], [null]]);
+});
+
+test('Part 12 fixes (D): WIRING — the rail and a record\'s Documents draw the notice apart from the red box; the rail clears it on close and on each Upload', () => {
+    const rail = code(read(P12FXD_RAIL));
+    assert.ok(rail.includes('    const [notice, setNotice] = useState(null);'));
+    const close = between(rail, '    const close = () => {', '\n    };');
+    assert.ok(close.includes('setError(null); setNotice(null);'), 'REGRESSION: a notice kept over the next opening of the rail');
+    order(between(rail, '    const submit = async () => {', '\n    };'), 'setUploading(true); setError(null); setNotice(null);', 'close();',
+        // Moved in §0.249 (review fixes, round 2, D2): one that may have been made in the red box; the rail back as it opened.
+        'if (e && e.landed) { (e.maybe ? setError : setNotice)(failureWords(e)); opened(); }', 'else setError(failureWords(e));');
+    assert.ok(rail.includes("{notice && (\n                        <div style={{ background: `${T.ok}12`, border: `1px solid ${T.ok}55`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.ink }}>{notice}</div>"),
+        'REGRESSION: the notice not drawn, or drawn as an error');
+    assert.ok(rail.includes("const blocked = !file || uploading"), 'the file let go blocks Upload');
+    assert.ok(!/e\.message/.test(rail), 'REGRESSION: a raw e.message');
+    const record = code(read(P12FXD_RECORD));
+    assert.ok(record.includes('    const [notice, setNotice] = useState(null);'));
+    assert.ok(record.includes("{notice && (\n                <div style={{ background: `${T.ok}12`, border: `1px solid ${T.ok}55`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.ink }}>{notice}</div>"),
+        'REGRESSION: the notice not drawn, or drawn as an error');
+    assert.ok(!/e\.message/.test(record), 'REGRESSION: a raw e.message');
+});
+
+// ── Part 12 — the review's fixes (I — Invitation import) ──
+// Review finding #5: a 201 whose answer cannot be read was counted as "not sent" — every person of that request a
+// failure though users.mjs invited them and Clerk sent the emails, so a re-run sent each a second email. They are
+// now counted apart (`unread`): sent, never failed, never clean; the receipt says so and names the team lists they
+// are not on; the run goes on.
+const P12FXI_LAYER = 'src/components/layout/ModalLayer.jsx';
+const P12FXI_MODAL = 'src/components/modals/CsvImportModal.jsx';
+const P12FXI_TEAMS = Object.freeze([{ id: 't1', name: 'East', repIds: [] }]);
+const p12fxIUnreadable = (status = 201) => onceOf(status, new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"));
+// The handler from source, run over one answer per request (each request a chunk of ten), the teams save stubbed.
+// A GET (the roster read again after a request answered unread — round 2, I2) answers `roster`.
+// Moved in round 3 (I3): the roster read again holds every one sent by default — a roster that lands says who was invited.
+const p12fxIImport = async ({ invites, answers, teamsSave = { ok: true },
+    roster = onceOf(200, { users: [{ id: 'usr_srv', email: 'srv@x.test' }, ...invites.map((v, i) => ({ id: `usr_r${i}`, email: v.email }))] }) }) => {
+    const { emptyReceipt, unreadOnRoster } = await import('../src/utils/importReceipt.js');
+    const { teamsWithMembers } = await import('../src/utils/teamMembership.js');
+    const s = code(read(P12FXI_LAYER));
+    const START = '                    onImportUsers={async (invites) => {';
+    const fn = between(s, START, '\n                    }}\n                />').slice(START.length);
+    const did = { sent: [], progress: [], teams: null, reads: [] };
+    const settingsState = stateOf({ users: [] });
+    let n = 0;
+    const dbFetch = async (url, opts = {}) => {
+        if (!opts.method) { did.reads.push(url); if (roster instanceof Error) throw roster; return roster; }
+        did.sent.push(JSON.parse(opts.body).invites.map(v => v.email));
+        const a = answers[n++];
+        if (a instanceof Error) throw a;
+        return a;
+    };
+    const addToSettingsList = async (key, update) => { did.teams = update(P12FXI_TEAMS).teams; return teamsSave; };
+    const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'readRefusal', 'setSettings', 'onProgress', 'addToSettingsList',
+        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', `return async (invites) => {${fn}\n};`)(
+        () => 'org_a', () => true, () => 'stopped', emptyReceipt, dbFetch, failureWords, refusalWords, readRefusal, settingsState.set, (a, b) => did.progress.push([a, b]),
+        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster);
+    const out = await run(invites);
+    return { ...out, ...did, users: settingsState.value.users };
+};
+const p12fxIPeople = (n, teamEvery = 0) => Array.from({ length: n }, (_, i) => ({ email: `p${i}@x.test`, ...(teamEvery && i % teamEvery === 0 ? { team: 'East', teamId: 't1' } : {}) }));
+const p12fxIInvariant = (r) => assert.equal(r.attempted, r.created + r.updated + r.failed + r.unread, 'attempted === created + updated + failed + unread');
+
+test('Part 12 fix I: the invitation import — a 201 whose answer cannot be read is counted as sent unread, never as not sent; the run goes on; the next request still counted — RUN', async () => {
+    const people = p12fxIPeople(12, 4);   // p0, p4, p8 name East (the first request)
+    const r = await p12fxIImport({ invites: people, answers: [
+        p12fxIUnreadable(),
+        onceOf(201, { invited: [{ id: 'usr_10', email: 'p10@x.test', teamId: 't1' }], errors: [{ email: 'p11@x.test', error: 'Already a member.' }] }),
+    ] });
+    // Moved in round 3 (I3): the roster read again shows the ten, so they are counted sent — exact, none left unread.
+    // Moved in round 4 (I4): the ten are on the roster read again, which proves no who or when — invited by this import or
+    // before it (onRoster, still unread) — never not sent.
+    assert.deepEqual([r.receipt.unread, r.receipt.onRoster, r.receipt.created, r.receipt.failed, r.receipt.error], [10, 10, 1, 1, null],
+        'REGRESSION: the ten the server invited counted as not sent (failed 10)');
+    p12fxIInvariant(r.receipt);
+    assert.equal(r.sent.length, 2, 'the run goes on to the next request');
+    assert.deepEqual(r.progress, [[10, 12], [12, 12]]);
+    assert.deepEqual(r.refusals, [{ email: 'p11@x.test', error: 'Already a member.' }]);
+    assert.deepEqual(r.users.map(u => u.id), ['usr_srv', ...people.map((_, i) => `usr_r${i}`)], 'the roster as the server reads it again (round 2, I2) — never a row the client made up');
+    assert.deepEqual(r.reads, ['/.netlify/functions/users'], 'the roster read again once, after the last request');
+    assert.deepEqual(r.teams, [{ id: 't1', name: 'East', repIds: ['usr_10'] }], 'only the named rows join the team list');
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.equal(r.warning, "3 whose answers could not be read named a team — check on the Teams page that they are on their teams' lists.",
+        'REGRESSION: the unread ones that named a team left off its list in silence');
+    // A 201 whose body reads but names no list is the same: landed, unread.
+    const empty = await p12fxIImport({ invites: p12fxIPeople(2, 2), answers: [onceOf(201, {})] });
+    // Moved in round 4 (I4): both of the one request on the roster read again — on it, not proven sent by this import.
+    assert.deepEqual([empty.receipt.unread, empty.receipt.onRoster, empty.receipt.failed, empty.receipt.created, empty.receipt.error], [2, 2, 0, 0, null]);
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.equal(empty.warning, "1 whose answer could not be read named a team — check on the Teams page that they are on its list.");
+    // None named a team: no team sentence. A failed teams save keeps its words, the team sentence after it.
+    assert.equal((await p12fxIImport({ invites: p12fxIPeople(3), answers: [p12fxIUnreadable()] })).warning, null);
+    const both = await p12fxIImport({ invites: p12fxIPeople(2, 1), answers: [p12fxIUnreadable()], teamsSave: { ok: false, error: 'Forbidden' } });
+    assert.equal(both.warning, 'The invitations went out, but the team list was not updated — Forbidden '
+        // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+        + "2 whose answers could not be read named a team — check on the Teams page that they are on their teams' lists.");
+    // A request that never landed still stops the run, the rest counted as not sent — never as unread.
+    for (const [answer, words] of p12bRefused()) {
+        const stop = await p12fxIImport({ invites: p12fxIPeople(2), answers: [answer] });
+        assert.deepEqual([stop.receipt.failed, stop.receipt.unread, stop.receipt.error], [2, 0, `Sending stopped: ${words}`], `REGRESSION: ${words}`);
+    }
+});
+
+test('Part 12 fix I: the receipt — sent unread is never failed, never clean, something that landed; the Results say it in the invitation words — RUN', async () => {
+    const { emptyReceipt, mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt } = await import('../src/utils/importReceipt.js');
+    assert.equal(emptyReceipt().unread, 0);
+    const m = code(read(P12FXI_MODAL));
+    const lit = m.match(/describeReceipt\(r, 'invitation', (\{[^}]*\})\)/);
+    assert.ok(lit, 'the Results\' invitation words');
+    const words = new Function(`return ${lit[1]};`)();
+    const all = mergeReceipts(receiptFromPreflight({ skipped: 1 }), { ...emptyReceipt(), attempted: 10, unread: 10 });
+    p12fxIInvariant(all);
+    assert.deepEqual([all.unread, isClean(all), isPartial(all)], [10, false, true], 'REGRESSION: an import sent unread drawn as clean, or as nothing sent');
+    assert.equal(describeReceipt(all, 'invitation', words), 'Up to 10 invitations sent — the answer could not be read; some may have been refused. 1 skipped.');
+    const some = { ...emptyReceipt(), attempted: 12, created: 1, failed: 1, unread: 10 };
+    assert.equal(describeReceipt(some, 'invitation', words), '1 invitation sent, up to 10 more sent — the answer could not be read; some may have been refused. 1 not sent.');
+    assert.equal(describeReceipt({ ...emptyReceipt(), attempted: 1, unread: 1 }, 'invitation', words), '1 invitation sent — the answer could not be read.');
+    // The Results' heading reads isClean / isPartial: "Some Invitations Sent", never "No Invitations Sent" over ones sent.
+    assert.ok(m.includes("(clean ? 'Invitations Sent' : partial ? 'Some Invitations Sent' : 'No Invitations Sent')"));
+    assert.ok(m.includes('const partial = isPartial(r);') && m.includes('const clean = isClean(r);'));
+});
+
+test('Part 12 fix I: WIRING — the unread branch stands after the stop and before the count, and goes on to the next request', () => {
+    const h = between(code(read(P12FXI_LAYER)), 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
+    order(h, 'if (!answered) {', 'if (res.status === 201 && !Array.isArray(d.invited)) {', 'receipt.unread += chunk.length;', 'continue;',
+        'const sent = Array.isArray(d.invited) ? d.invited : [];', 'receipt.failed += chunk.length - sent.length;');
+    assert.equal(count(h, 'receipt.unread += '), 1);
+    assert.ok(!/receipt\.failed \+= chunk\.length;/.test(h), 'REGRESSION: a landed request counted whole as not sent');
+});
+
+// ── Part 12 — the review's fixes (C — Calendar) ──
+// Review findings #7 and #15 (state §0.249). A failed calendar read set calendarConnected(false): the profile panel's
+// Calendar tab said "Not connected", OFF and "Connect Google Calendar" under "The calendar could not be read — …", Home
+// offered "Connect your calendar…" and Tasks said "Calendar not connected" — a failed read drawn as none. It now leaves
+// calendarConnected as last read (a 200 { connected: false } still says not connected and offers Connect); while
+// calendarError stands, Home and Tasks say it and the panel says "Could not be read", "—" and offers Refresh, no count.
+// And the header's Disconnect refusal (calActionError) is cleared on an org switch, as profileError is: one org's
+// words never stand on another's Calendar tab nor hide its calendarError.
+const P12FXC_HOME = 'src/Tabs/HomeTab.jsx';
+const P12FXC_TASKS = 'src/Tabs/TasksTab.jsx';
+
+test('Part 12 fix C: App\'s calendar read — a refusal, a failure or an unreadable answer leaves calendarConnected as last read; a 200 { connected: false } still says not connected — RUN', async () => {
+    for (const [answer, words] of [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.']]) {
+        const r = await p12bCalendar({ answer });
+        assert.deepEqual([r.said, r.connected, r.events], [[`The calendar could not be read — ${words}`], [], []],
+            `REGRESSION: a failed read drawn as "not connected" — ${words}`);
+    }
+    const off = await p12bCalendar({ answer: onceOf(200, { events: [], connected: false }) });
+    assert.deepEqual([off.said, off.connected], [[], [false]], 'a calendar not connected still offers Connect');
+});
+
+// The profile panel's Calendar tab, run from its own expressions: the status line, the pill, and which of Connect,
+// Refresh and the events count it draws. Moved in §0.249 (review fixes, round 2): the tab reads calDisconnected too, handed
+// in as `disconnected` — every state below unchanged but the known connection's failed read (round 2's fix, C2).
+const p12fxCPanel = (() => {
+    let built = null;
+    return (state) => {
+        if (!built) {
+            const s = code(read(P12B_HEADER));
+            const unread = between(s, '    const calUnread = ', ';\n').slice('    const calUnread = '.length);
+            const status = between(s, '{calendarLoading\n', '}\n').slice(1);
+            const pill = between(s, "{calendarConnected ? 'ON'", '}\n').slice(1);
+            const gate = (re, what) => { const m = s.match(re); assert.ok(m, what); return m[1]; };
+            const connect = gate(/\{([^{}]*) && \(\s*<button onClick=\{connectCalendar\}/, 'the Connect gate');
+            const refresh = gate(/\{([^{}]*) && \(\s*<button onClick=\{\(\) => fetchCalendarEvents && fetchCalendarEvents\(\)\}/, 'the Refresh gate');
+            const countGate = gate(/\{([^{}]*) && \(\s*<div[^>]*>\s*\{\(calendarEvents \|\| \[\]\)\.length > 0/, 'the count gate');
+            built = new Function('calendarLoading', 'calendarError', 'calendarConnected', 'calConn', 'calDisconnected', 'calendarRead',
+                `const calUnread = ${unread};\nreturn { status: ${status}, pill: ${pill}, connect: !!(${connect}), refresh: !!(${refresh}), count: !!(${countGate}) };`);
+        }
+        // Moved in §0.249 (review fixes, round 3): the tab reads calendarRead too — every state above is one a read landed in
+        // (`read` true unless named), so each assertion stands as it was; round 3's tests name `read: false`.
+        return built(state.loading || false, state.error || null, state.connected || false, state.conn || null, state.disconnected || false, state.read ?? true);
+    };
+})();
+
+test('Part 12 fix C: the profile panel\'s Calendar tab — a failed read with no connection known says "Could not be read", never "Not connected", OFF or Connect; a known connection keeps Reconnect, no count — RUN', () => {
+    const ERR = 'The calendar could not be read — The server returned 500.';
+    assert.deepEqual(p12fxCPanel({ error: ERR, connected: false }),
+        { status: 'Could not be read', pill: '—', connect: false, refresh: true, count: false },
+        'REGRESSION: a failed read drawn as "Not connected", OFF and "Connect Google Calendar"');
+    assert.deepEqual(p12fxCPanel({ error: ERR, connected: true }),
+        { status: 'Connected — the latest read failed', pill: 'ON', connect: true, refresh: true, count: false },   // moved in §0.249 (review fixes, round 2): never "syncing" over a read that failed
+        'REGRESSION: a count drawn over a read that failed');
+    assert.deepEqual(p12fxCPanel({ connected: false }),
+        { status: 'Not connected', pill: 'OFF', connect: true, refresh: false, count: false }, 'a calendar not connected offers Connect');
+    assert.deepEqual(p12fxCPanel({ connected: true, conn: { calendarEmail: 'karen@x.test' } }),
+        { status: 'karen@x.test', pill: 'ON', connect: true, refresh: true, count: true });
+    assert.equal(p12fxCPanel({ loading: true, connected: false }).status, 'Checking…');
+});
+
+test('Part 12 fix C: the header clears the Disconnect refusal on an org switch and with its panel, as profileError — RUN', () => {
+    const s = code(read(P12B_HEADER));
+    const line = between(s, "    useEffect(() => { setCalActionError(''); }", ';\n') + ';';
+    const ran = [];
+    let deps = null;
+    new Function('useEffect', 'setCalActionError', 'showProfilePanel', 'activeOrgId', line)(
+        (fn, d) => { deps = d; fn(); }, (v) => ran.push(v), true, 'org_b');
+    assert.deepEqual([ran, deps], [[''], [true, 'org_b']], 'REGRESSION: org A\'s "Not disconnected — …" stands on org B\'s Calendar tab');
+    // Its words go out only through this tab's one line, which this reset now clears.
+    assert.ok(s.includes('{calActionError || calendarError}'));
+});
+
+test('Part 12 fix C: WIRING — Home and Tasks say a failed calendar read, never "Connect your calendar…" or "Calendar not connected", while calendarError stands', () => {
+    const home = code(read(P12FXC_HOME));
+    assert.ok(home.includes('calendarEvents, calendarConnected, calendarLoading, calendarError, fetchCalendarEvents,'), 'Home reads calendarError');
+    // Moved in §0.249 (review fixes, round 2): the error branch now ends at the checking branch that follows it.
+    // Moved in §0.249 (review fixes, round 3): that branch's condition reads calendarRead too.
+    const failed = between(home, '{calendarError ? (', ') : !calendarConnected && (calendarLoading || !calendarRead) ? (');
+    assert.ok(failed.includes('{calendarError}') && failed.includes('Try again'), 'Home says the read that failed');
+    assert.ok(failed.includes('onClick={() => fetchCalendarEvents()}'), 'REGRESSION: Home\'s Try again reads nothing again');
+    assert.ok(!/Connect|connectMyCalendar|meeting/.test(failed), 'REGRESSION: Home offers Connect or a count over a read that failed');
+    order(home, '{calendarError ? (', ') : !calendarConnected ? (', 'Connect your calendar to see your meetings on Home.');
+
+    const tasks = code(read(P12FXC_TASKS));
+    assert.ok(/function CalendarView\(\{[^}]*\bcalendarError\b[^}]*\}\)/.test(tasks), 'CalendarView takes calendarError (module scope)');
+    assert.ok(tasks.includes('calendarEvents, calendarConnected, calendarLoading, calendarError,'), 'Tasks reads calendarError');
+    assert.ok(tasks.includes('calendarError={calendarError}'), 'REGRESSION: CalendarView never told the read failed');
+    order(tasks, '{calendarError\n', '{calendarError}</div>)', ': calendarConnected\n', 'Synced', 'Calendar not connected');
+    assert.ok(tasks.includes("background: calendarError ? T.danger : calendarConnected ? T.ok : T.inkMuted"));
+});
+
+// ── Part 12 — the review's fixes (S — Sales Manager Q4 words) ──
+// Review findings #8 and #17 (state §0.249). Q4 (Jeff: "All Recommended") is one sentence for a request that never left,
+// "The server could not be reached.", everywhere. The Sales Manager kept a second wording: saveExtra's status-0 branch
+// (the commission tiers, the SPIFF board) and saveUser's catch (a forecast call) said "Not saved — network error while
+// saving <label>." They say "Not saved — " and NETWORK_ERROR (saveExtra) or failureWords (saveUser). And the 12c scan
+// looked only for the old constant's text: a WIRING scan now holds that no source under src/ draws "network error" to
+// a member — only refusalWords.js's NETWORK_WORDS (it reads a thrown fetch's message) and console lines say it.
+const P12FXS_SMT = 'src/Tabs/SalesManagerTab.jsx';
+// Moved in §0.249 (review fixes, round 2 — S2): saveUser takes its org (requestOrg / stillOrg) and says refusalWords'
+// words, so it is built over them too; `switchOrg` switches the org as the PUT goes out.
+const p12fxSSaveUser = async (answer, switchOrg = false) => {
+    const did = { sent: [], states: [] };
+    const org = { now: 'org_a' };
+    const h = p12aFn(P12FXS_SMT, '    const saveUser = async (user, label, who = user.name) => {', '\n    };', '\n    };',
+        ['requestOrg', 'stillOrg', 'dbFetch', 'setSaveState', 'refusalWords', 'failureWords', 'console', 'ownRefusal'], 'saveUser')(
+        () => org.now, (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), (v) => did.states.push(v), refusalWords, failureWords, quiet, p12bClaimWords().ownRefusal);
+    did.out = await h({ id: 'usr_1', forecastCalls: {} }, 'forecast call', 'Ann');
+    return did;
+};
+const p12fxSSaveExtra = async (answer) => {
+    const did = { sends: [], states: [], drafts: [] };
+    const h = p12aFn(P12FXS_SMT, '    const saveExtra = async (patch, label) => {', '\n    };', '\n    };',
+        ['settingsLoaded', 'setSaveState', 'writeSettings', 'opened', 'setSettings', 'revsAfter', 'takeLatestSettings', 'setTiersDraft', 'setSpiffsDraft',
+            'listChanged', 'NETWORK_ERROR', 'ownRefusal', 'saidOf', 'refusalWords'], 'saveExtra')(
+        true, (v) => did.states.push(v), async (...a) => { did.sends.push(a); return answer; }, {}, () => {}, () => ({}), async () => null,
+        (v) => did.drafts.push(v), (v) => did.drafts.push(v), () => 'changed', NETWORK_ERROR, p12bClaimWords().ownRefusal, p12bClaimWords().saidOf, refusalWords);
+    did.out = await h({ spiffs: [] }, 'SPIFFs');
+    return did;
+};
+
+test('Part 12 fixes (S): the Sales Manager\'s forecast-call save — a request that never left says Q4\'s one sentence, in every browser\'s words for it; never "network error while saving" — RUN', async () => {
+    for (const thrown of [UNSENT(), new TypeError('NetworkError when attempting to fetch resource.'), new TypeError('Load failed')]) {
+        const r = await p12fxSSaveUser(thrown);
+        assert.deepEqual([r.out, r.states], [false, [{ status: 'error', msg: 'Not saved — The server could not be reached.' }]],
+            `REGRESSION: a second wording for a request that never left (${thrown.message})`);
+    }
+    const landed = await p12fxSSaveUser(onceOf(200, {}));
+    assert.deepEqual([landed.out, landed.states], [true, []], 'a landed save says nothing here');
+    // Moved in §0.249 (review fixes, last pass, F4): a 5xx may have saved; its words still name the member.
+    const refused = await p12fxSSaveUser(onceOf(500, { error: 'Internal server error' }));
+    assert.deepEqual([refused.out, refused.states], [false, [{ status: 'error', msg: 'Ann\'s forecast call may have been saved — reload the page to see whether it was: Internal server error' }]], 'a refusal still names the member');
+});
+
+test('Part 12 fixes (S): the Sales Manager\'s commission tiers and SPIFF board — a save that never left says "Not saved — The server could not be reached.", whatever the answer\'s error holds; a 403 and a refusal keep their words — RUN', async () => {
+    for (const error of [NETWORK_ERROR, 'x']) {
+        const r = await p12fxSSaveExtra({ ok: false, status: 0, error });
+        assert.deepEqual([r.out, r.states.at(-1), r.drafts], [false, { status: 'error', msg: 'Not saved — The server could not be reached.' }, []],
+            'REGRESSION: "Not saved — network error while saving SPIFFs."');
+    }
+    assert.deepEqual((await p12fxSSaveExtra({ ok: false, status: 403, error: 'x' })).states.at(-1), { status: 'error', msg: 'Not saved — only Admins can change SPIFFs.' });
+    // Moved in §0.249 (review fixes, last pass, F4): a 5xx may have saved — its words with their ref; a 4xx in the server's words is "Not saved".
+    assert.deepEqual((await p12fxSSaveExtra({ ok: false, status: 500, error: 'Internal server error (ref r1)' })).states.at(-1),
+        { status: 'error', msg: 'The SPIFFs may have been saved — reload the page to see whether they were: Internal server error (ref r1)' }, 'the server\'s words with their ref');
+    assert.deepEqual((await p12fxSSaveExtra({ ok: false, status: 400, error: 'Quota periods are quarters or months. (ref r2)' })).states.at(-1),
+        { status: 'error', msg: 'Not saved — Quota periods are quarters or months. (ref r2)' }, 'the server\'s own refusal with its ref');
+});
+
+test('Part 12 fixes (S): WIRING — the Sales Manager takes NETWORK_ERROR and failureWords; saveUser\'s catch and saveExtra\'s status-0 branch say them', () => {
+    const s = code(read(P12FXS_SMT));
+    assert.ok(s.includes("import { dbFetch, requestOrg, stillOrg, NETWORK_ERROR } from '../utils/storage';"));
+    assert.ok(s.includes("import { refusalWords, failureWords } from '../utils/refusalWords.js';"));
+    order(between(s, '    const saveUser = async (user, label, who = user.name) => {', '\n    };'), '} catch (err) {',
+        "console.error('[SalesManagerTab] save ' + label, err);", "setSaveState({ status: 'error', msg: `Not saved — ${failureWords(err)}` });", 'return false;');
+    assert.ok(between(s, '    const saveExtra = async (patch, label) => {', '\n    };').includes(': w.status === 0\n            ? `Not saved — ${NETWORK_ERROR}`\n'),
+        'REGRESSION: the status-0 branch says its own words');
+    assert.ok(!/network error/i.test(s), 'REGRESSION: the Sales Manager says "network error"');
+});
+
+test('Part 12 fixes (S): WIRING — no source under src/ draws "network error" to a member; only NETWORK_WORDS and console lines say it, named', () => {
+    const files = [];
+    const walk = (rel) => {
+        for (const name of readdirSync(new URL(rel, ROOT))) {
+            const p = `${rel}${name}`;
+            if (statSync(new URL(p, ROOT)).isDirectory()) walk(`${p}/`); else if (/\.(js|jsx|mjs)$/.test(name)) files.push(p);
+        }
+    };
+    walk('src/');
+    // Moved floor (§0.249, the review's fixes, round 4: G4): 242, the .js, .jsx and .mjs sources measured under src/ (none
+    // is .mjs; it was 240 — two sources could drop out of the walk and go unsearched). Fewer: say the new count, and why.
+    assert.ok(files.length >= 242, `every .js, .jsx and .mjs source (${files.length})`);
+    // Named: failureWords reads a thrown fetch's own message with this regex (it is never drawn); a console line is a
+    // developer's, never a member's.
+    const NAMED_LINE = 'const NETWORK_WORDS = /failed to fetch|networkerror|network error|load failed/i;';
+    const CONSOLE = /\bconsole\.(error|warn|log|info|debug)\(/;
+    const hits = [];
+    for (const f of files) {
+        for (const line of code(read(f)).split('\n')) if (/network error/i.test(line)) hits.push([f, line.trim()]);
+    }
+    const named = hits.filter(([f, l]) => (f === 'src/utils/refusalWords.js' && l === NAMED_LINE) || CONSOLE.test(l));
+    assert.deepEqual(hits.filter((h) => !named.includes(h)), [], 'REGRESSION: a member is told "network error" — Q4 says "The server could not be reached."');
+    assert.ok(named.some(([f, l]) => f === 'src/utils/refusalWords.js' && l === NAMED_LINE), 'NETWORK_WORDS read (named): take it out of the list if it moved');
+    assert.ok(named.some(([f, l]) => f === 'src/utils/storage.js' && CONSOLE.test(l)), 'dbFetch\'s console line read (named)');
+});
+
+// ── Part 12 — the review's fixes (L — Left-open class items) ──
+// The class items Part 12's builders left open (state §0.249): the app's outage banner said "Database connection lost —
+// … Check your connection and refresh." when the server ANSWERED with an error (dbStatusOf's `true` is reached only by a
+// non-ok answer — a load that never left throws first); the Settings load said "HTTP 500" or "Failed to fetch" through
+// setLoadError; the bulk importer said "Bulk import failed (502)."; Leads' claim-requests read drew a failed read as
+// nothing pending (the panel hidden), and its refusals said the server's words without the ref, "Request not sent." over
+// a refusal with none, and nothing for a request that never left or a landed answer that could not be read — on the
+// one-slot toast a later toast replaces. The banner says the server's failure; the load, the importer and the claim
+// requests say the house words; the panel says a failed read; the claim requests' refusals are press notices (Q1).
+const { bannerCopyOf: p12fxLBanner, dbStatusOf: p12fxLStatus } = await import('../src/utils/fetchStatus.js');
+const P12FXL_SETTINGS = 'src/hooks/useSettings.js';
+const P12FXL_BULK = 'src/utils/bulkClient.js';
+const P12FXL_LEADS = 'src/Tabs/LeadsTab.jsx';
+const P12FXL_OUTAGE = 'The server returned an error loading your data — changes may not be saving. Refresh the page to try again.';
+
+test('Part 12 fixes (L): the outage banner — a load the server answered with an error says the server\'s failure, never "Check your connection"; the sign-in banner unchanged — RUN', () => {
+    for (const status of [500, 502, 503, 404]) {
+        const state = p12fxLStatus({ ok: false, status });
+        assert.equal(state, true, `${status}: the outage state`);
+        assert.deepEqual(p12fxLBanner(state), { tone: 'outage', text: P12FXL_OUTAGE },
+            'REGRESSION: "Database connection lost — … Check your connection and refresh." over a server that answered');
+    }
+    assert.doesNotMatch(p12fxLBanner(true).text, /check your connection|Database connection lost/i);
+    assert.deepEqual(p12fxLBanner(p12fxLStatus({ ok: false, status: 401 })), {
+        tone: 'auth', text: 'Your sign-in is no longer valid — refresh the page and sign in again. Changes are not being saved.' });
+    assert.equal(p12fxLStatus({ ok: true, status: 200 }), false, 'no banner over a load that landed');
+});
+
+// useSettings' load chain, extracted and run: the first load of an org, a reload of the org in state, a newer load.
+const p12fxLSettingsLoad = (() => {
+    let built = null;
+    return async ({ answer, held = false, newer = false }) => {
+        if (!built) {
+            const s = code(read(P12FXL_SETTINGS));
+            const chain = between(s, "        dbFetch('/.netlify/functions/settings')", '\n\n        waitForToken()');
+            built = new Function('dbFetch', 'readRefusal', 'failureWords', 'loadGenRef', 'gen', 'settingsAsLoaded', 'setSettings', 'settingsOrgRef',
+                'orgId', 'setSettingsOrgId', 'setLoadError', 'console', `return ${chain.trim()}`);
+        }
+        const did = { errors: [], orgIds: [], settings: [] };
+        const loadGenRef = { current: 1 };
+        const settingsOrgRef = { current: held ? 'org_a' : null };
+        const fetch = async () => { if (newer) loadGenRef.current = 2; if (answer instanceof Error) throw answer; return answer; };
+        await built(fetch, readRefusal, failureWords, loadGenRef, 1, (prev, stored) => ({ ...prev, ...stored }), (u) => did.settings.push(u({})),
+            settingsOrgRef, 'org_a', (v) => did.orgIds.push(v), (v) => did.errors.push(v), quiet);
+        return did;
+    };
+})();
+
+test('Part 12 fixes (L): the Settings load — a refusal in readRefusal\'s words, a failure in failureWords\', never "HTTP N" or "Failed to fetch"; the generation and the org in state kept — RUN', async () => {
+    for (const [answer, words] of [...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, null), 'Its answer could not be read.']]) {
+        const did = await p12fxLSettingsLoad({ answer });
+        assert.deepEqual([did.errors, did.orgIds, did.settings], [[words], [], []], `REGRESSION: ${words} — said "HTTP N" or a raw message`);
+        assert.doesNotMatch(did.errors[0], P12A_OLD);
+    }
+    // A reload of the org already in state keeps that copy and says nothing (§0.162); a newer load owns the state.
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) assert.deepEqual((await p12fxLSettingsLoad({ answer, held: true })).errors, []);
+    assert.deepEqual((await p12fxLSettingsLoad({ answer: onceOf(500, { error: 'x' }), newer: true })).errors, [], 'a newer load owns the state');
+    const landed = await p12fxLSettingsLoad({ answer: onceOf(200, { settings: { pipelines: [] } }) });
+    assert.deepEqual([landed.errors, landed.orgIds, landed.settings], [[''], ['org_a'], [{ pipelines: [] }]]);
+});
+
+test('Part 12 fixes (L): the bulk importer — a refused chunk says refusalWords\' words, the ref kept, else "The server returned N."; never "Bulk import failed (N)." — RUN', async () => {
+    const rows = Array.from({ length: 3 }, (_, i) => ({ id: `r${i}` }));
+    for (const [answer, words] of [
+        [() => onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+        [() => onceOf(403, { error: 'Forbidden' }), 'Forbidden'],
+        [() => onceOf(409, {}), 'The server returned 409.'],
+        [() => P11_PAGE(), 'The server returned 502.'],
+    ]) {
+        const posted = await p12cBulk(async () => answer()).postNew('/x', rows);
+        assert.deepEqual([posted.landed.length, posted.error], [0, words], 'REGRESSION: "Bulk import failed (N)." — the status alone, in the importer\'s words');
+        const put = await p12cBulk(async () => answer()).putBulk('/x', rows);
+        assert.deepEqual([put.appliedIds.length, put.error], [0, words], 'REGRESSION: "Bulk update failed (N)."');
+    }
+});
+
+test('Part 12 fixes (L): WIRING — the Settings load and the bulk importer say the house words', () => {
+    const st = code(read(P12FXL_SETTINGS));
+    assert.ok(st.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    assert.ok(st.includes('.then(async r => { if (!r.ok) throw new Error(await readRefusal(r)); return r.json(); })'), 'ok first, the refusal\'s words');
+    assert.ok(st.includes('if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));'));
+    assert.ok(!/'HTTP '|err\?\.message|the request failed/.test(st), 'REGRESSION: "HTTP N" or a raw message');
+    const bk = code(read(P12FXL_BULK));
+    assert.ok(bk.includes("import { failureWords, refusalWords } from './refusalWords.js';"));
+    assert.equal(count(bk, 'if (!r.ok) { error = refusalWords(r, body); break; }'), 2, 'the POST and the PUT');
+    assert.ok(!/errorFrom|Bulk (import|update) failed/.test(bk), 'REGRESSION: the importer\'s own words');
+});
+
+// Leads' claim requests: the load's effect, and each press, extracted and run.
+let p12fxLLeadsSrc = null;
+const p12fxLLeads = () => (p12fxLLeadsSrc ??= code(read(P12FXL_LEADS)));
+const p12fxLLoad = async ({ answer, switchAt = false, cancel = false }) => {
+    // `landed`: setRequestsLanded's calls (the review's round 3 — moved here when the load gained it; asserted in L3).
+    const did = { lists: [], errors: [], landed: [] };
+    const org = { now: 'org_a' };
+    let cleanup = null;
+    const fetch = async () => { await null; if (switchAt) org.now = 'org_b'; if (cancel) cleanup(); const a = typeof answer === 'function' ? answer(org) : answer; if (a instanceof Error) throw a; return a; };
+    const body = between(p12fxLLeads(), '        let cancelled = false;\n        const askedOrg = requestOrg();', '\n    }, []);');
+    cleanup = new Function('dbFetch', 'requestOrg', 'stillOrg', 'readRefusal', 'failureWords', 'setLeadRequests', 'setRequestsError', 'setRequestsLanded', body)(
+        fetch, () => org.now, (o) => o === org.now, readRefusal, failureWords, (v) => did.lists.push(v), (v) => did.errors.push(v), (v) => did.landed.push(v));
+    await settle();
+    return { ...did, org };
+};
+
+test('Part 12 fixes (L): Leads\' claim-requests read — a failed read is said, never drawn as nothing pending; landed, the list; after a switch or an unmount, nothing — RUN', async () => {
+    for (const [answer, words] of [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, { other: 1 }), 'Its answer could not be read.']]) {
+        const did = await p12fxLLoad({ answer });
+        assert.deepEqual([did.errors, did.lists], [[words], []], `REGRESSION: a failed read left as an empty panel — ${words}`);
+    }
+    const LIST = [{ id: 'lcr_1', leadId: 'l1', status: 'pending' }];
+    const landed = await p12fxLLoad({ answer: onceOf(200, { leadRequests: LIST }) });
+    assert.deepEqual([landed.lists, landed.errors], [[LIST], ['']]);
+    for (const answer of [onceOf(200, { leadRequests: LIST }), onceOf(500, { error: 'x' }), UNSENT()]) {
+        const switched = await p12fxLLoad({ answer, switchAt: true });
+        assert.deepEqual([switched.lists, switched.errors], [[], []], 'REGRESSION: an answer after an org switch landed in the new org');
+        const gone = await p12fxLLoad({ answer, cancel: true });
+        assert.deepEqual([gone.lists, gone.errors], [[], []], 'unmounted: nothing');
+    }
+    const midRead = await p12fxLLoad({ answer: (org) => p12bSwitchOnRead(org, 500, { error: 'x' }) });
+    assert.deepEqual(midRead.errors, [], 'REGRESSION: a refusal read while the org switched is said in the new org');
+});
+
+// requestLead, cancelRequest and resolveRequest, extracted: `said` is each press notice's [leadId, words].
+const p12fxLPress = async (name, deps, args, { answer, switchAt = false, leadRequests = [] }) => {
+    const s = p12fxLLeads();
+    const head = `    const ${name} = useCallback(`;
+    const fnSrc = `${between(s, head, `\n    }, [${deps}]);`).slice(head.length)}\n    }`;
+    const did = { sent: [], said: [], lists: stateOf(leadRequests), leads: stateOf([{ id: 'l1', ownerId: null, assignedTo: '' }]) };
+    const org = { now: 'org_a' };
+    const fetch = async (url, opts = {}) => {
+        did.sent.push([url, opts.method || 'GET']);
+        if (switchAt) org.now = 'org_b';
+        if (answer instanceof Error) throw answer;
+        return answer;
+    };
+    const fn = new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'sayClaim', 'setLeadRequests', 'leadRequests', 'reps', 'setLeads',
+        `return ${fnSrc};`)(() => org.now, (o) => o === org.now, fetch, readRefusal, failureWords, (id, w) => did.said.push([id, w]),
+        did.lists.set, leadRequests, [{ id: 'usr_2', name: 'Karen' }], did.leads.set);
+    await fn(...args);
+    return did;
+};
+const P12FXL_REQ = [{ id: 'lcr_1', leadId: 'l1', requesterId: 'usr_2', status: 'pending' }];
+
+test('Part 12 fixes (L): Leads\' Request — a refusal and a failure in a press notice, the server\'s words with their ref; landed unread, said as requested; after a switch, nothing — RUN', async () => {
+    for (const [answer, words] of p12bRefused()) {
+        const did = await p12fxLPress('requestLead', 'sayClaim', ['l1'], { answer });
+        assert.deepEqual([did.said, did.lists.value], [[['l1', `Request not sent: ${words}`]], []], `REGRESSION: ${words} — the ref dropped, or nothing said`);
+    }
+    const unread = await p12fxLPress('requestLead', 'sayClaim', ['l1'], { answer: P11_UNREADABLE() });
+    assert.deepEqual(unread.said, [['l1', 'Requested — Its answer could not be read. Reload the page to see the request.']],
+        'REGRESSION: a request filed, its answer unread, said as nothing (or thrown)');
+    const made = { id: 'lcr_9', leadId: 'l1', status: 'pending' };
+    const landed = await p12fxLPress('requestLead', 'sayClaim', ['l1'], { answer: onceOf(201, { leadRequest: made }) });
+    assert.deepEqual([landed.said, landed.lists.value], [[], [made]]);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT(), onceOf(201, { leadRequest: made })]) {
+        const switched = await p12fxLPress('requestLead', 'sayClaim', ['l1'], { answer, switchAt: true });
+        assert.deepEqual([switched.said, switched.lists.value], [[], []], 'REGRESSION: said or listed in the org switched to');
+    }
+    const org = { now: 'org_a' };
+    const s = p12fxLLeads();
+    const head = '    const requestLead = useCallback(';
+    const mid = await new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'sayClaim', 'setLeadRequests',
+        `return ${between(s, head, '\n    }, [sayClaim]);').slice(head.length)}\n    };`)(() => org.now, (o) => o === org.now,
+        async () => p12bSwitchOnRead(org, 500, { error: 'x' }), readRefusal, failureWords, (...a) => { throw new Error(`said after a switch: ${a}`); }, () => {});
+    await mid('l1');
+});
+
+test('Part 12 fixes (L): Leads\' Cancel request and Approve / Deny — refusals and failures in a press notice titled by the lead; a landed Approve unread, said as landed — RUN', async () => {
+    // A fresh answer per press: an answer's body is read once.
+    for (let i = 0; i < p12bRefused().length; i++) {
+        const words = p12bRefused()[i][1];
+        const c = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer: p12bRefused()[i][0], leadRequests: P12FXL_REQ });
+        assert.deepEqual([c.said, c.lists.value], [[['l1', `Request not cancelled: ${words}`]], P12FXL_REQ], `REGRESSION: ${words}`);
+        for (const [action, verb] of [['approve', 'approved'], ['deny', 'denied']]) {
+            const r = await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim', ['lcr_1', action], { answer: p12bRefused()[i][0], leadRequests: P12FXL_REQ });
+            assert.deepEqual([r.said, r.lists.value, r.leads.value[0].ownerId], [[['l1', `Request not ${verb}: ${words}`]], P12FXL_REQ, null], `REGRESSION: ${verb} — ${words}`);
+        }
+    }
+    const cancelled = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer: onceOf(200, {}), leadRequests: P12FXL_REQ });
+    assert.deepEqual([cancelled.said, cancelled.lists.value], [[], []]);
+    const unread = await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim', ['lcr_1', 'approve'], { answer: P11_UNREADABLE(), leadRequests: P12FXL_REQ });
+    assert.deepEqual(unread.said, [['l1', 'Request approved — Its answer could not be read. Reload the page to see the lead and its requests.']],
+        'REGRESSION: a landed Approve, its answer unread, said as nothing (or thrown)');
+    const approved = await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim', ['lcr_1', 'approve'],
+        { answer: onceOf(200, { leadRequest: { ...P12FXL_REQ[0], status: 'approved' } }), leadRequests: P12FXL_REQ });
+    assert.deepEqual([approved.said, approved.leads.value[0].ownerId, approved.leads.value[0].assignedTo, approved.lists.value[0].status], [[], 'usr_2', 'Karen', 'approved']);
+    for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) {
+        assert.deepEqual((await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer, switchAt: true, leadRequests: P12FXL_REQ })).said, []);
+        assert.deepEqual((await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim', ['lcr_1', 'deny'], { answer, switchAt: true, leadRequests: P12FXL_REQ })).said, []);
+    }
+    // The press notice's title: the lead as the panel names it.
+    const titleOf = new Function(`${between(p12fxLLeads(), 'const claimTitleOf = ', '\n};')}\n}; return claimTitleOf;`)();
+    assert.equal(titleOf([{ id: 'l1', first: 'Ann', last: 'Lee', company: 'Acme' }], 'l1'), 'Ann Lee');
+    assert.equal(titleOf([{ id: 'l1', first: '', last: '', company: 'Acme' }], 'l1'), 'Acme', 'REGRESSION: a company-only lead titled "A lead"');
+    assert.equal(titleOf([], 'l1'), 'A lead');
+});
+
+test('Part 12 fixes (L): WIRING — Leads\' claim requests: the panel says a failed read; every refusal a press notice, never the one-slot toast', () => {
+    const s = p12fxLLeads();
+    assert.ok(s.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    assert.ok(s.includes("import { pressNoticeOf } from '../utils/pressNotice.js';"));
+    const panel = between(s, 'const RequestsPanel = (', '\nconst LeadSourcesPanel');
+    assert.ok(panel.includes('const RequestsPanel = ({ requests, leads, reps, onResolve, onReview, readError }) => {'));
+    assert.ok(panel.includes('if (pending.length === 0 && !readError) return null;'), 'REGRESSION: a failed read hides the panel — read as nothing pending');
+    assert.ok(panel.includes("{readError ? '—' : `${pending.length} pending`}"), 'REGRESSION: "0 pending" over a read that failed');
+    assert.ok(panel.includes('{readError && <div style={{ fontSize:11, color:T.danger, fontFamily:T.sans, overflowWrap:\'anywhere\' }}>The requests could not be read — {readError}</div>}'));
+    assert.ok(s.includes('onReview={onOpenLead} readError={requestsError}/>}'), 'the Triage view hands the panel the read\'s failure');
+    assert.ok(s.includes('                        leadRequests={leadRequests}\n                        requestsError={requestsError}\n'), 'LeadsTab hands it to the Triage view');
+    assert.ok(between(s, 'const TriageView = (', '=> {').includes('leadRequests, requestsError, requestLead'));
+    assert.ok(s.includes("    const [requestsError, setRequestsError] = useState('');"));
+    assert.ok(s.includes('        setPressNotices(list => [...list, pressNoticeOf(claimTitleOf(allLeads, leadId), words)]);'), 'a press notice, titled by the lead');
+    const presses = between(s, '    const sayClaim = useCallback(', '    const convertLead = useCallback(');
+    assert.ok(!presses.includes('setUndoToast'), 'REGRESSION: a claim refusal on the one-slot toast a later toast replaces');
+    assert.ok(!/Request not (sent|cancelled|resolved)\.'|b\?\.error|\.message\b/.test(presses), 'REGRESSION: the old words, or a raw message');
+    assert.equal(count(presses, 'await readRefusal(res);'), 3, 'each refusal in readRefusal\'s words');
+    assert.equal(count(presses, '${failureWords(e)}'), 3, 'each failure in failureWords\'');
+});
+
+// ── Part 12 — the review's fixes (G — THE GUARD floors) ──
+// The review of §0.249 (finding 11): scan (iv)'s floor stayed "catches >= 35" when Part 12 added 16 files to the list it
+// reads — the scan could lose four-fifths of its catch clauses (the catches inside JSX handlers, an exported function's)
+// and stay green — and nothing held the list's length. Its WIRING (the floors, the list's length, CLEANED named once)
+// is merged into the one floors test at the end of this file (round 4, G4; round 3's G3 before it), at the counts
+// measured after round 4, so no test keeps a floor looser than the measured one.
+
+// ── Part 12 — the review's fixes, round 2 (A2 — Audit log) ──
+// The review of the first fixes (residuals A0-A2): while the audit-log read loaded, the subtitle drew "0 of 0 events";
+// "+ Add destination" was live while the destinations list loaded, so a landed Add could race its first read (an unread
+// Add marked read again, "No destinations." under "Destination added"; a read Add's row overwritten); and a Pause /
+// Resume or Send test that landed unread left the row's old status drawn, counted in "· N not delivering" and offered as
+// its old Pause / Resume. The subtitle says the log is loading; both Adds are off, saying why, while the list loads; a row
+// whose status a landed answer could not show is "Not known", counted as such, its Pause / Resume off until a reload.
+const p12fxA2Press = async (which, answer, args, statusBefore = []) => {
+    const did = { sent: [], errors: [], busy: [], tests: [], modal: [], reveal: [], read: [], statusBefore };
+    did.answered = await auditActions(did, answer)[which](...args);
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+
+test('Part 12 fixes (A2): the Audit log\'s Pause / Resume — landed unread, its row\'s status not known; a Rotate unread leaves it known; landed, known again — RUN', async () => {
+    const paused = await p12fxA2Press('putDest', P11_UNREADABLE(), [{ id: 'dst_1', paused: true }, 'Pause']);
+    assert.deepEqual([paused.statusUnread.value, paused.dests.value[0].status], [['dst_1'], 'Active'], 'REGRESSION: a Pause that landed unread left the row drawn as its old status');
+    assert.deepEqual(paused.said, ['Pause saved — Its answer could not be read. Reload the page to see the destination.']);
+    const resumed = await p12fxA2Press('putDest', P11_UNREADABLE(), [{ id: 'dst_1', paused: false }, 'Resume']);
+    assert.deepEqual(resumed.statusUnread.value, ['dst_1'], 'REGRESSION: a Resume that landed unread left the row drawn as its old status');
+    const rotated = await p12fxA2Press('putDest', P11_UNREADABLE(), [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret']);
+    assert.deepEqual(rotated.statusUnread.value, [], 'a Rotate moves no status: the row stays known');
+    // Moved pin (§0.249, the review's fixes, round 3): only the server's own refusal (the 403) leaves the row known; an
+    // answer that proves nothing may have paused it — its status not known.
+    for (const [answer] of P12A_REFUSED()) {
+        const did = await p12fxA2Press('putDest', answer, [{ id: 'dst_1', paused: true }, 'Pause']);
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual(did.statusUnread.value, own ? [] : ['dst_1'], 'a refusal changed nothing: the row stays known; a maybe, not known');
+    }
+    const landed = await p12fxA2Press('putDest', onceOf(200, { destination: { ...P12A_DEST, status: 'Paused', paused: true } }), [{ id: 'dst_1', paused: true }, 'Pause'], ['dst_1', 'dst_2']);
+    assert.deepEqual([landed.statusUnread.value, landed.dests.value[0].status], [['dst_2'], 'Paused'], 'REGRESSION: a readable answer leaves its row "Not known"');
+    const rotLanded = await p12fxA2Press('putDest', onceOf(200, { destination: { ...P12A_DEST }, newSecret: 'n' }), [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret'], ['dst_1']);
+    assert.deepEqual(rotLanded.statusUnread.value, [], 'a readable Rotate shows the row as the server answered it');
+});
+
+test('Part 12 fixes (A2): the Audit log\'s Send test event — landed unread, its row\'s status not known; landed with the row, known again — RUN', async () => {
+    const unread = await p12fxA2Press('sendTest', P11_UNREADABLE(), [P12A_DEST]);
+    assert.deepEqual([unread.statusUnread.value, unread.said], [['dst_1'], ['Test sent — Its answer could not be read, so whether it was delivered is not known.']],
+        'REGRESSION: a test that landed unread left the row drawn as its old status');
+    // Moved pin (§0.249, the review's fixes, round 3): only the server's own refusal (the 403) leaves the row known.
+    for (const [answer] of P12A_REFUSED()) {
+        const own = !(answer instanceof Error) && answer.status === 403;
+        assert.deepEqual((await p12fxA2Press('sendTest', answer, [P12A_DEST])).statusUnread.value, own ? [] : ['dst_1'], 'a refusal changed nothing; a maybe, not known');
+    }
+    const landed = await p12fxA2Press('sendTest', onceOf(200, { ok: true, status: 202, destination: { ...P12A_DEST, status: 'Active' } }), [P12A_DEST], ['dst_1']);
+    assert.deepEqual([landed.statusUnread.value, landed.tests.at(-1)], [[], { id: 'dst_1', ok: true, status: 202, error: undefined }], 'REGRESSION: a readable test leaves its row "Not known"');
+});
+
+test('Part 12 fixes (A2): the Audit log\'s "Streaming to N destinations" — a row whose status is not known is counted as such, never as delivering or not — RUN', () => {
+    const PAUSED = { id: 'dst_2', status: 'Paused' };
+    assert.equal(p12fxABadge([P12A_DEST], true, ['dst_1']), 'Streaming to 1 destination · 1 status not known', 'REGRESSION: an Active row whose Pause landed unread counted as delivering');
+    assert.equal(p12fxABadge([{ ...PAUSED, id: 'dst_1' }], true, ['dst_1']), 'Streaming to 1 destination · 1 status not known', 'REGRESSION: a Paused row whose Resume landed unread counted as not delivering');
+    assert.equal(p12fxABadge([P12A_DEST, PAUSED], true, ['dst_1']), 'Streaming to 2 destinations · 1 not delivering · 1 status not known');
+    assert.equal(p12fxABadge([P12A_DEST, PAUSED], true, ['dst_9']), 'Streaming to 2 destinations · 1 not delivering', 'an id no row holds (a removed row) counts nothing');
+    assert.equal(p12fxABadge([P12A_DEST], false, ['dst_1']), undefined, 'a list never read: no badge');
+});
+
+test('Part 12 fixes (A2): the Audit log\'s subtitle — "still loading" while the read is out, never "0 of 0 events" — RUN', () => {
+    const piece = between(code(read(P12A_AUDIT)), 'sub={eventsError', '\n                badge=');
+    const sub = (eventsError, eventsLoading, visible = [], events = []) =>
+        new Function('eventsError', 'eventsLoading', 'visible', 'events', 'timeFilter', `return (${piece.slice(5, -1)});`)(eventsError, eventsLoading, visible, events, 'Last 7 days');
+    assert.equal(sub(null, true), 'The audit log is still loading…', 'REGRESSION: "0 of 0 events" over a read that has not landed');
+    assert.equal(sub('Internal server error (ref r1)', false), 'The audit log did not load', 'REGRESSION: a count over a read that failed');
+    assert.equal(sub(null, false, [1], [1, 2]), '1 of 2 events · Last 7 days · the last 500 events are loaded');
+});
+
+test('Part 12 fixes (A2): the Audit log\'s "+ Add destination" — off, saying why, while the destinations load: no Add can race the list\'s first read — RUN, and WIRING', () => {
+    const s = code(read(P12A_AUDIT));
+    const why = (destsLoading) => new Function('destsLoading', `${between(s, '    const addWhy = ', '\n')}\nreturn addWhy;`)(destsLoading);
+    assert.equal(why(true), 'The destinations are still loading', 'REGRESSION: an Add offered over a list still loading says nothing');
+    assert.equal(why(false), undefined);
+    assert.ok(s.includes(`<span key="add" title={addWhy} style={{ display:'inline-flex' }}><SecBtn label="+ Add destination" primary disabled={destsLoading} onClick={() => { if (!destsLoading) setShowAddDest(true); }}/></span>,`),
+        'REGRESSION: the header\'s Add offered while the list loads');
+    assert.ok(s.includes(`<span title={addWhy} style={{ display:'inline-flex' }}><SecBtn label="+ Add destination" disabled={destsLoading} onClick={() => { if (!destsLoading) setShowAddDest(true); }}/></span>`),
+        'REGRESSION: the section\'s Add offered while the list loads');
+    assert.equal(count(s, 'setShowAddDest(true)'), 2, 'two Adds, each behind the gate');
+    assert.equal(count(s, 'if (!destsLoading) setShowAddDest(true);'), 2);
+});
+
+test('Part 12 fixes (A2): WIRING — a row whose status is not known says so: "Not known", reload to see it, no old error, no Pause / Resume', () => {
+    const s = code(read(P12A_AUDIT));
+    const row = between(s, '                            const unknown = statusUnread.includes(s.id);', '</tr>');
+    assert.ok(row.includes('const st = destStatusStyle(unknown ? null : s.status);'), 'REGRESSION: the old status\'s colour on a row whose status is not known');
+    assert.ok(row.includes("{unknown ? 'Not known' : s.status}</span>"), 'REGRESSION: the old status drawn after a landed answer that could not be read');
+    assert.ok(row.includes('{unknown && <div style={{ fontSize:10.5, color:T.danger, marginTop:4, maxWidth:220, lineHeight:1.4 }}>Its status could not be read — reload the page to see it.</div>}'),
+        'REGRESSION: a status not known, not said');
+    assert.ok(row.includes('{!unknown && s.lastError && '), 'REGRESSION: the old error drawn on a row whose status is not known');
+    assert.ok(row.includes("<SecBtn label={unknown ? 'Pause / Resume' : s.paused ? 'Resume' : 'Pause'} disabled={busy || unknown} "),
+        'REGRESSION: the old Pause / Resume offered on a row whose status is not known');
+    assert.equal(count(s, 'statusUnread.includes('), 3, 'the badge\'s two counts and the row read it');
+});
+
+// ── Part 12 — the review's fixes, round 2 (U2 — Users) ──
+// The review of the first fixes (residuals U0-U1): the landed-unreadable invite's roster read again threw its refusal
+// away — `rosterRes.ok ? … : null` and an empty catch — so its notice said only "reload the page to see them", the
+// server's words and their ref nowhere (runClerkSync's read again says them); and PeoplePageHeader drew its green ✓
+// before every status — "Clerk's list not read", "MFA unknown — could not read Clerk", "Unknown — could not read
+// Clerk" each beside a passing check (§0.247). The read again says its refusal or failure in the house words, as
+// runClerkSync does; the header's ✓ stands only over a status its caller read ('read'), a failed read or one with no
+// count a warning mark ('unread'), one still loading no mark.
+const P12FXU2_REREAD = 'The invitations were sent. Its answer could not be read — the list of users was read again to show them.';
+const p12fxU2Reload = (words, teamed = '') => `The invitations were sent. Its answer could not be read.${teamed} The roster could not be read again — reload the page to see it: ${words}`;
+const P12FXU2_TEAMED = " They were not added to their teams' lists — add them on the Teams page.";
+
+test('Part 12 fixes (U2): the landed-unread invite\'s roster read again — its refusal or failure said in the house words with the ref, never a bare "reload" — RUN', async () => {
+    for (const [roster, words] of P12A_REFUSED()) {
+        const did = await p12fxUInvite([P11_UNREADABLE(), roster]);
+        assert.deepEqual([did.said, did.told, did.users.length], [[], [p12fxU2Reload(words)], 2], `REGRESSION: the roster's refusal dropped — ${words}`);
+    }
+    const ref = await p12fxUInvite([P11_UNREADABLE(), onceOf(500, { error: 'Internal server error', requestId: 'r7' })]);
+    assert.ok(ref.told[0].endsWith('reload the page to see it: Internal server error (ref r7)'), 'REGRESSION: the ref support traces lost');
+    for (const roster of [P11_UNREADABLE(), onceOf(200, {}), onceOf(200, { users: 'x' })]) {
+        const did = await p12fxUInvite([P11_UNREADABLE(), roster]);
+        assert.deepEqual([did.told, did.users.length], [[p12fxU2Reload('Its answer could not be read.')], 2], 'a landed roster with no list: said, never written');
+    }
+    const teamed = await p12fxUInvite([P11_UNREADABLE(), P11_PAGE()], 'East');
+    assert.deepEqual(teamed.told, [p12fxU2Reload('The server returned 502.', P12FXU2_TEAMED)], 'the team lists said too, the roster\'s words last');
+    const landed = await p12fxUInvite([P11_UNREADABLE(), onceOf(200, { users: [{ id: 'usr_1' }, { id: 'usr_9' }] })]);
+    assert.deepEqual([landed.told, landed.users.map((u) => u.id)], [[P12FXU2_REREAD], ['usr_1', 'usr_9']], 'read again: no words of a failure');
+    // Two requests only: the invite, then one read — no second invite over a failed read.
+    assert.deepEqual(ref.sent.map(([, method]) => method), ['POST', 'GET']);
+});
+
+test('Part 12 fixes (U2): WIRING — the invite\'s roster read again reads its ok first and says why it was not read; no empty catch', () => {
+    const page = between(code(read(P12A_USERS)), 'const UsersInvitePage = ', '\nconst UsersExportPage = ');
+    const piece = between(page, 'if (resp.ok && !Array.isArray(d.invited)) {', '                return;\n');
+    order(piece, "const rosterRes = await dbFetch('/.netlify/functions/users');", 'if (!rosterRes.ok) throw new Error(await readRefusal(rosterRes));',
+        'const ud = await rosterRes.json();', 'if (!stillOrg(askedOrg)) return;', "if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');",
+        'setSettings(prev => ({ ...prev, users: ud.users })); reread = true;', '} catch (e) { why = failureWords(e); }', 'if (!stillOrg(askedOrg)) return;',
+        'reload the page to see it: ${why}`');
+    assert.equal(count(piece, '.catch(() => null)'), 0, 'REGRESSION: the roster\'s unreadable answer swallowed');
+    assert.ok(!/catch \(e\) \{\s*(\/\*[^*]*\*\/\s*)?\}/.test(piece), 'REGRESSION: an empty catch drops the roster read\'s failure');
+});
+
+// The header's mark, decided by each caller: the expressions, extracted and run.
+const p12fxU2Attr = (start) => {
+    const line = between(code(read(P12A_USERS)), start, '\n');
+    return line.slice(line.indexOf('{') + 1, line.lastIndexOf('}'));
+};
+const p12fxU2Run = (expr, params, ...args) => new Function(...params, `return (${expr});`)(...args);
+
+test('Part 12 fixes (U2): the people pages\' header marks — "read" only over a status that was read; a failed read or no count "unread"; loading none — RUN', () => {
+    const pending = p12fxU2Attr('                statusState={clerkInvites === null');
+    const P = ['clerkInvites', 'invitesUnread'];
+    assert.equal(p12fxU2Run(pending, P, null, false), 'loading', 'REGRESSION: a ✓ beside "Reading invitations…"');
+    assert.equal(p12fxU2Run(pending, P, false, true), 'unread', 'REGRESSION: a ✓ beside "Clerk\'s list not read"');
+    assert.equal(p12fxU2Run(pending, P, [], false), 'read');
+    const seat = between(code(read(P12A_USERS)), '    const statusState = ', ';\n').slice('    const statusState = '.length);
+    const S = ['seats', 'seatsFailed', 'inClerk'];
+    assert.equal(p12fxU2Run(seat, S, null, true, null), 'unread', 'REGRESSION: a ✓ beside "Unknown — could not read Clerk"');
+    assert.equal(p12fxU2Run(seat, S, null, false, null), 'loading', 'REGRESSION: a ✓ beside "Loading…"');
+    assert.equal(p12fxU2Run(seat, S, {}, false, null), 'unread', 'REGRESSION: a ✓ beside "Unknown — Clerk sent no count"');
+    assert.equal(p12fxU2Run(seat, S, { members: 3 }, false, 3), 'read');
+    const mfa = p12fxU2Attr("                statusState={loading ? 'loading'");
+    const M = ['loading', 'failed'];
+    assert.equal(p12fxU2Run(mfa, M, true, false), 'loading');
+    assert.equal(p12fxU2Run(mfa, M, false, true), 'unread', 'REGRESSION: a ✓ beside "MFA unknown — could not read Clerk"');
+    assert.equal(p12fxU2Run(mfa, M, false, false), 'read');
+});
+
+test('Part 12 fixes (U2): WIRING — PeoplePageHeader draws its ✓ only over "read", a warning mark over "unread"; every caller names its state', () => {
+    const s = code(read(P12A_USERS));
+    const header = between(s, 'const PeoplePageHeader = ', '\nconst PeopleSecBtn = ');
+    assert.ok(header.includes('({ title, subtitle, statusDetail, statusState, rightActions })'));
+    assert.ok(header.includes(`{statusDetail && <><span style={{ color:T.inkMuted }}>•</span>{statusState === 'read' ? <span style={{ color:T.ok, fontWeight:600 }}>✓</span> : statusState === 'unread' ? <span title="Not read" style={{ color:T.warn, fontWeight:700 }}>!</span> : null}<span>{statusDetail}</span></>}`),
+        'REGRESSION: a green ✓ beside a status that was not read');
+    assert.equal(count(header, '✓'), 1, 'REGRESSION: a second ✓ drawn');
+    assert.equal(count(header, 'T.ok'), 1, 'one green mark, the read one\'s');
+    // Each of the five headers names its state; the Invite and Export pages' counts are their own (read by construction).
+    assert.equal(count(s, '<PeoplePageHeader'), 5);
+    assert.equal(count(s, 'statusState='), 5, 'REGRESSION: a header drawn with no state');
+    assert.ok(s.includes('                statusDetail={readyCount > 0 ? `${readyCount} ready to send` : null}\n                statusState="read"\n'));
+    assert.ok(s.includes('                statusDetail={`${filteredUsers.length} rows · ${checkedFields.length} fields`}\n                statusState="read"\n'));
+    assert.ok(s.includes('                statusDetail={status}\n                statusState={statusState}\n'), 'REGRESSION: the Seat usage header drawn with no state');
+    assert.ok(s.includes("statusDetail={clerkInvites === null ? 'Reading invitations…'") && s.includes("                statusState={loading ? 'loading' : failed ? 'unread' : 'read'}\n"));
+});
+
+// ── Part 12 — the review's fixes, round 2 (M2 — MFA) ──
+// The review of the first fixes (residuals M0-M1): the MFA page's shape check stopped at the top level — a byRole or
+// notEnrolled entry that is not a record (null, a string) passed, and the render read r.total / u.userId on it and
+// crashed with no error said; and the page and the overview's tile were two rules that agreed one way only — an answer
+// of the numbers alone scored 2/3 on the tile and counted MFA as read in Health while the page said "Its answer could not
+// be read.". One rule now, settingsCards.js mfaAnswerRead: the two numbers, the two lists, each entry a record; the page
+// (MfaDetail.jsx) and the tile (liveCountsOf) both read it, so an answer one cannot read the other cannot either.
+const P12FXM2_ENTRY = { role: 'Admin', enrolled: 1, total: 1 };
+const P12FXM2_USER = { userId: 'u3', email: 'c@x.co', name: 'C', role: 'User' };
+// Both numbers and both lists, an entry that is not a record: each a read that failed.
+// Moved (§0.249, review fixes round 3 — U3): each holds `enrolledUsers: []`, which the rule now reads — bad only by its entry.
+const P12FXM2_BAD_ENTRIES = () => [
+    { total: 1, enrolled: 0, byRole: [null], notEnrolled: [], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [P12FXM2_ENTRY, null], notEnrolled: [P12FXM2_USER], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: ['Admin'], notEnrolled: [], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [3], notEnrolled: [], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [true], notEnrolled: [], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [P12FXM2_ENTRY], notEnrolled: [null], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [P12FXM2_ENTRY], notEnrolled: [P12FXM2_USER, null], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [P12FXM2_ENTRY], notEnrolled: ['c@x.co'], enrolledUsers: [] },
+    { total: 1, enrolled: 0, byRole: [P12FXM2_ENTRY], notEnrolled: [7], enrolledUsers: [] },
+];
+// Whole answers, each read on the page and the tile alike.
+const P12FXM2_READ = () => [
+    // Moved (§0.249, review fixes round 3 — U3): enrolledUsers on each, the second's member in it.
+    { total: 0, enrolled: 0, byRole: [], notEnrolled: [], enrolledUsers: [] },
+    { total: 1, enrolled: 1, byRole: [P12FXM2_ENTRY], notEnrolled: [], enrolledUsers: [{ ...P12FXM2_USER, userId: 'u1', email: 'a@x.co' }] },
+    { total: 3, enrolled: 2, byRole: [P12FXM2_ENTRY, { role: 'User', enrolled: 1, total: 2 }], notEnrolled: [P12FXM2_USER], enrolledUsers: [] },
+];
+
+test('Part 12 fixes (M2): MFA — a byRole or notEnrolled entry that is not a record is "Its answer could not be read." on the page and unread on the tile, never drawn — RUN', async () => {
+    for (const body of P12FXM2_BAD_ENTRIES()) {
+        const page = await mfaLoad({ answer: onceOf(200, body) });
+        assert.deepEqual([page.errors, page.data, page.loading], [[P12FXM_UNREAD], [], [false]],
+            `REGRESSION: ${JSON.stringify(body)} kept as the enrollment — the render reads r.total / u.userId on it`);
+        const tile = await p12fxmTile(body);
+        assert.deepEqual([tile.mfa, tile.unread.includes('mfa')], [undefined, true], `REGRESSION: ${JSON.stringify(body)} counted on the tile`);
+        assert.equal(mfaAnswerRead(body), false, JSON.stringify(body));
+    }
+    for (const body of P12FXM2_READ()) {
+        const page = await mfaLoad({ answer: onceOf(200, body) });
+        assert.deepEqual([page.data, page.errors, page.loading], [[body], [], [false]], `${JSON.stringify(body)}: read on the page`);
+        const tile = await p12fxmTile(body);
+        assert.deepEqual([tile.mfa, tile.unread.includes('mfa')], [{ enrolled: body.enrolled, total: body.total }, false], `${JSON.stringify(body)}: read on the tile`);
+        assert.equal(mfaAnswerRead(body), true, JSON.stringify(body));
+    }
+});
+
+test('Part 12 fixes (M2): MFA — the page and the overview tile are one rule (mfaAnswerRead): each answer read on both or unread on both; the tile never throws on a body that is not an object — RUN', async () => {
+    const bodies = [...P12FXM_SHORT(), ...P12FXM2_BAD_ENTRIES(), ...P12FXM2_READ(), undefined, 0, 3, true];
+    for (const body of bodies) {
+        const rule = mfaAnswerRead(body);
+        const page = await mfaLoad({ answer: onceOf(200, body) });
+        const tile = await p12fxmTile(body);   // rejects (and fails here) if the rule reads a field of a null body
+        const pageRead = page.errors.length === 0 && page.data.length === 1;
+        const tileRead = tile.mfa !== undefined && !tile.unread.includes('mfa');
+        assert.deepEqual([pageRead, tileRead], [rule, rule], `REGRESSION: ${JSON.stringify(body)} — the page and the tile read it apart`);
+        if (!rule) assert.deepEqual(page.errors, [P12FXM_UNREAD], `${JSON.stringify(body)}: said as unread`);
+        // Health scores the MFA check only over an answer the page can read.
+        const scored = healthChecksOf({ pipelines: [{}], users: [] }, tile).some((c) => c.id === 'mfa');
+        assert.equal(scored, rule, `REGRESSION: ${JSON.stringify(body)} scored in Health apart from the page`);
+    }
+    // The answer's two numbers and three lists, one at a time, each needed by the rule. Moved (§0.249, review fixes
+    // round 3 — U3): enrolledUsers joins them (Settings → Users draws it).
+    const whole = { total: 3, enrolled: 2, byRole: [P12FXM2_ENTRY], notEnrolled: [P12FXM2_USER], enrolledUsers: [{ ...P12FXM2_USER, userId: 'u1' }] };
+    for (const key of ['total', 'enrolled', 'byRole', 'notEnrolled', 'enrolledUsers']) {
+        const { [key]: _gone, ...short } = whole;
+        assert.equal(mfaAnswerRead(short), false, `${key} left out`);
+    }
+    assert.equal(mfaAnswerRead(whole), true);
+    assert.equal(mfaAnswerRead(null), false);
+});
+
+test('Part 12 fixes (M2): WIRING — the MFA page and the overview tile read one rule, settingsCards.js mfaAnswerRead, and neither keeps a copy of its own', () => {
+    const cards = code(read('src/utils/settingsCards.js'));
+    // Moved (§0.249, review fixes round 3 — U3): each entry's fields typed, and enrolledUsers read (pinned at the same
+    // strength or stronger in round 3's own WIRING test, below).
+    const rule = between(cards, 'const isMfaRole = ', '\n\n');
+    assert.ok(rule.includes("const isMfaRole = (v) => !!v && typeof v.role === 'string'"), 'REGRESSION: an entry that is not a record read');
+    assert.ok(rule.includes("export const mfaAnswerRead = (d) => !!d && typeof d.total === 'number' && typeof d.enrolled === 'number'"));
+    assert.ok(rule.includes('&& Array.isArray(d.byRole) && d.byRole.every(isMfaRole)'), 'REGRESSION: byRole\'s entries not checked');
+    assert.ok(rule.includes('&& Array.isArray(d.notEnrolled) && d.notEnrolled.every(isMfaMember)'), 'REGRESSION: notEnrolled\'s entries not checked');
+    const live = between(cards, 'export async function liveCountsOf(', '\n}\n');
+    assert.ok(live.includes('    if (mfaAnswerRead(d)) counts.mfa = { enrolled: d.enrolled, total: d.total };'), 'REGRESSION: the tile reads an MFA answer by a rule of its own');
+    assert.equal(count(live, 'counts.mfa = '), 1, 'one place the tile keeps the MFA count');
+    assert.equal(count(live, 'd.total'), 1, 'REGRESSION: a second rule on the MFA answer in the tile');
+    const page = code(read(P12A_MFA));
+    assert.ok(page.includes("import { mfaAnswerRead } from '../../../utils/settingsCards.js';"));
+    const load = between(page, '        const load = async () => {', '\n        };');
+    assert.equal(count(load, 'mfaAnswerRead(enrollment)'), 1);
+    assert.ok(!/typeof enrollment\.|Array\.isArray\(enrollment/.test(load), 'REGRESSION: the page keeps a copy of the rule beside the shared one');
+});
+
+// ── Part 12 — the review's fixes, round 2 (D2 — Document uploads) ──
+// The review of round 1 (residuals D0 and D1): the record step said "The document was not saved — …" over every answer
+// that was not ok and every request that threw — but the create writes the document, its first version and its links one
+// after another with no transaction (documents.mjs), so a 500 after the first insert, a gateway's page after the commit,
+// or a connection dropped after the request reached the server proves nothing: Upload stayed armed and a second press
+// minted a new id and wrote a second document. As the quota board's save says it (SalesManagerTab sendQuotas, Part 12b):
+// "not saved" only for the server's own refusal — a 4xx with its words, every one of which documents.mjs returns before
+// it writes — and any other answer "may have been saved — reload the page to see whether it was: <words>", marked landed
+// (and `maybe`: said in the red box) so the rail and a record's Documents let the file go. A presign's or R2's failure
+// wrote no document and stays a retry. And a document made unread left the rail holding its name, links, category,
+// visibility and note — the next file picked took them (pickFile fills the name only when there is none) under the old
+// notice: the rail now goes back to its opening seed, and picking a file clears the notice.
+const P12FXD2_MAYBE = 'The document may have been saved — reload the page to see whether it was';
+const P12FXD2_VMAYBE = 'The new version may have been saved — reload the page to see whether it was';
+const P12FXD2_LINK = { type: 'account', recordId: 'acc_1', name: 'Acme' };
+
+test('Part 12 fixes, round 2 (D2): the record step — "not saved" only over the server\'s own refusal (a 4xx with its words); a 5xx, a page, a 4xx with none or a request that threw "may have been saved", marked landed — RUN', async () => {
+    for (const [kind, step, maybe] of [['new', 'The document was not saved', P12FXD2_MAYBE], ['version', 'The new version was not saved', P12FXD2_VMAYBE]]) {
+        // The server's own refusals — every 4xx documents.mjs sends with its words returns before it writes anything.
+        for (const [answer, words] of [
+            [onceOf(403, { error: 'Forbidden' }), 'Forbidden'],
+            [onceOf(400, { error: 'storageKey/org mismatch', requestId: 'r2' }), 'storageKey/org mismatch (ref r2)'],
+            [onceOf(404, { error: 'Not found' }), 'Not found'],
+            [onceOf(409, { error: 'That document id is already in use.' }), 'That document id is already in use.'],
+            [onceOf(415, { error: 'Unsupported file type' }), 'Unsupported file type'],
+        ]) {
+            const { e } = await p12fxdThrown({ kind, record: answer });
+            assert.deepEqual([e.message, e.landed, e.maybe, failureWords(e)], [`${step} — ${words}`, undefined, undefined, `${step} — ${words}`],
+                `${kind}: REGRESSION — the server's own refusal said as "${e.message}"`);
+        }
+        // Any other answer may have come after a write: said so, with its words (the ref kept), marked landed and maybe.
+        for (const [answer, words] of [
+            [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+            [onceOf(503, { error: 'Service unavailable' }), 'Service unavailable'],
+            [P11_PAGE(), 'The server returned 502.'],
+            [onceOf(504, new SyntaxError('Unexpected end of JSON input')), 'The server returned 504.'],
+            [onceOf(409, {}), 'The server returned 409.'],
+            [onceOf(400, { error: '   ' }), 'The server returned 400.'],
+            [UNSENT(), 'The server could not be reached.'],
+            [new TypeError('NetworkError when attempting to fetch resource.'), 'The server could not be reached.'],
+        ]) {
+            const { e } = await p12fxdThrown({ kind, record: answer });
+            assert.deepEqual([e.message, e.landed, e.maybe, failureWords(e)], [`${maybe}: ${words}`, true, true, `${maybe}: ${words}`],
+                `${kind}: REGRESSION — "not saved" said over an answer that may have come after a write ("${e.message}"): Upload armed again, a second document written`);
+        }
+        // A presign's and R2's failures wrote no document: unmarked, a retry.
+        for (const answer of [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), UNSENT()]) {
+            const { e } = await p12fxdThrown({ kind, presign: answer });
+            assert.deepEqual([e.landed, e.maybe], [undefined, undefined], `${kind}: a presign stores nothing`);
+        }
+        for (const r2 of [{ status: 500 }, { offline: true }]) assert.equal((await p12fxdThrown({ kind, r2 })).e.landed, undefined, `${kind}: R2 makes no document`);
+    }
+    // The unread case is landed and not maybe — a notice, not the red box.
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    assert.deepEqual([made.landed, made.maybe], [true, undefined]);
+    // After an org switch, the maybe answers never settle (§0.175): at the send and at the body read.
+    for (const kind of ['new', 'version']) {
+        for (const record of [onceOf(500, { error: 'x' }), UNSENT()]) assert.equal(await p12cUpload({ kind, record, switchOn: 'record' }), P12C_PENDING, `${kind}: said after a switch`);
+        assert.equal(await p12cUpload({ kind, record: p12cSwitchOnRead(502, {}) }), P12C_PENDING, `${kind}: REGRESSION — read during a switch, said under the new org's name`);
+    }
+});
+
+test('Part 12 fixes, round 2 (D2): the upload rail — a document that may have been made is said in the red box and the file let go; a document made goes back to the rail as it opened (its own name, links, category, visibility and note cleared) — RUN', async () => {
+    const OPENED = (links, category) => [['name', ''], ['note', ''], ['visibility', 'team'], ['sharedWith', []], ['links', links], ['category', category]];
+    const maybe = (await p12fxdThrown({ record: onceOf(500, { error: 'Internal server error', requestId: 'r1' }) })).e;
+    const r = await p12fxdRail({ create: async () => { throw maybe; } });
+    assert.deepEqual([r.errors, r.notices, r.files, r.closed, r.sent], [[null, `${P12FXD2_MAYBE}: Internal server error (ref r1)`], [null], [null], 0, 1],
+        'REGRESSION: "may have been saved" said as a notice, or the file kept with Upload armed — a second press wrote a second document');
+    assert.deepEqual(r.fields, OPENED([], 'Contract'), 'REGRESSION: the made document\'s fields kept for the next file');
+    // A thrown request likewise (it may have reached the server).
+    const thrown = (await p12fxdThrown({ record: UNSENT() })).e;
+    const t = await p12fxdRail({ create: async () => { throw thrown; } });
+    assert.deepEqual([t.errors, t.notices, t.files], [[null, `${P12FXD2_MAYBE}: The server could not be reached.`], [null], [null]]);
+    // Opened from a record's Documents (its link and category the seed): back to that seed, not empty.
+    const seeded = await p12fxdRail({ create: async () => { throw maybe; }, ctx: { links: [P12FXD2_LINK], category: 'Proposal' } });
+    assert.deepEqual(seeded.fields, OPENED([P12FXD2_LINK], 'Proposal'), 'REGRESSION: the rail\'s own seed lost — the next file goes unlinked');
+    // Made, read unreadable: a notice, and the fields back too (residual D1: the next file took the last one's name and links).
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const m = await p12fxdRail({ create: async () => { throw made; }, ctx: { links: [P12FXD2_LINK] } });
+    assert.deepEqual([m.notices, m.errors, m.files, m.fields], [[null, P12FXD_MADE], [null], [null], OPENED([P12FXD2_LINK], 'Contract')],
+        'REGRESSION: a document made unread left its name and links for the next file');
+    // A new version that may have been made: the red box, the file and note let go.
+    const vMaybe = (await p12fxdThrown({ kind: 'version', record: P11_PAGE() })).e;
+    const v = await p12fxdRail({ isVersion: true, version: async () => { throw vMaybe; }, ctx: { mode: 'version', documentId: 'doc_1', links: [P12FXD2_LINK], category: 'Proposal' } });
+    assert.deepEqual([v.errors, v.notices, v.files, v.fields], [[null, `${P12FXD2_VMAYBE}: The server returned 502.`], [null], [null], OPENED([], 'Contract')]);
+    // The server's own refusal: the red box, the file and every field kept for another press.
+    const own = (await p12fxdThrown({ record: onceOf(403, { error: 'Forbidden' }) })).e;
+    const o = await p12fxdRail({ create: async () => { throw own; } });
+    assert.deepEqual([o.errors, o.files, o.fields], [[null, 'The document was not saved — Forbidden'], [], []]);
+});
+
+// The rail's pickFile, extracted and run.
+const p12fxd2Pick = (picked, { name = '', invalid = null } = {}) => {
+    const did = { errors: [], notices: [], files: [], names: [] };
+    p12aFn(P12FXD_RAIL, '    const pickFile = (f) => {', '\n    };', '\n    };',
+        ['validateFile', 'setError', 'setNotice', 'setFile', 'isVersion', 'name', 'setName', 'baseName'], 'pickFile')(
+        () => invalid, (v) => did.errors.push(v), (v) => did.notices.push(v), (v) => did.files.push(v), false, name, (v) => did.names.push(v),
+        (n) => n.replace(/\.[^.]+$/, ''))(picked);
+    return did;
+};
+
+test('Part 12 fixes, round 2 (D2): the upload rail — picking a file clears the last notice; the name the rail went back to is filled from the new file — RUN', () => {
+    const FILE = { name: 'Invoice 17.pdf', size: 10 };
+    const p = p12fxd2Pick(FILE);
+    assert.deepEqual([p.errors, p.notices, p.files, p.names], [[null], [null], [FILE], ['Invoice 17']],
+        'REGRESSION: the last upload\'s notice kept above the next file');
+    // An invalid file: its words, nothing chosen.
+    const bad = p12fxd2Pick({ name: 'x.exe', size: 10 }, { invalid: 'Unsupported file type: .exe' });
+    assert.deepEqual([bad.errors, bad.files], [['Unsupported file type: .exe'], []]);
+});
+
+test('Part 12 fixes, round 2 (D2): a record\'s Documents — a file that may have been made goes on to the next and is said in the red box by its name, before a failure that stopped the batch; the made notice names only the files made — RUN', async () => {
+    const DOC = { id: 'doc_y' };
+    const maybe = (await p12fxdThrown({ record: onceOf(500, { error: 'Internal server error', requestId: 'r1' }) })).e;
+    const page = (await p12fxdThrown({ record: P11_PAGE() })).e;
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const own = (await p12fxdThrown({ record: onceOf(403, { error: 'Forbidden' }) })).e;
+    const one = await p12fxdAttach({ 'a.pdf': maybe, 'b.pdf': DOC });
+    assert.deepEqual([one.sent, one.errors.at(-1), one.notices], [['a.pdf', 'b.pdf'], `a.pdf: ${P12FXD2_MAYBE}: Internal server error (ref r1)`, [null]],
+        'REGRESSION: the batch stopped at a file that may have been made, or said it "not saved" — the drop asked again wrote it twice');
+    // Two that may have been made: each on its own line.
+    const two = await p12fxdAttach({ 'a.pdf': maybe, 'b.pdf': page, 'c.pdf': DOC });
+    assert.deepEqual([two.sent.length, two.errors.at(-1)], [3, `a.pdf: ${P12FXD2_MAYBE}: Internal server error (ref r1)\nb.pdf: ${P12FXD2_MAYBE}: The server returned 502.`]);
+    // Made, maybe and a stop: the made notice names only the file made; the maybe line before the stop's words.
+    const mixed = await p12fxdAttach({ 'a.pdf': maybe, 'b.pdf': made, 'c.pdf': own, 'd.pdf': DOC });
+    // Moved in §0.249 (review fixes, round 3, D3): the stop names the file it stopped at, and the files never sent.
+    assert.deepEqual([mixed.sent, mixed.notices.at(-1), mixed.errors.at(-1)], [['a.pdf', 'b.pdf', 'c.pdf'], `b.pdf: ${P12FXD_MADE}`,
+        `a.pdf: ${P12FXD2_MAYBE}: Internal server error (ref r1)\nc.pdf: The document was not saved — Forbidden\nNot sent: d.pdf — drop them again`],
+        'REGRESSION: the stop\'s words lost under the maybe line, or a file that may have been made said as made');
+    const many = await p12fxdAttach({ 'a.pdf': made, 'b.pdf': maybe, 'c.pdf': made });
+    assert.equal(many.notices.at(-1), 'a.pdf, c.pdf: The files were uploaded. Their answers could not be read — reload the page to see them.');
+    // None that may have been made: the red box untouched past its clear.
+    const ok = await p12fxdAttach({ 'a.pdf': made, 'b.pdf': DOC });
+    assert.deepEqual(ok.errors, [null]);
+});
+
+test('Part 12 fixes, round 2 (D2): WIRING — the record\'s refusal read in its ok check and judged by recordRefusal; the rail goes back to its seed; the red box keeps its lines', () => {
+    const s = code(read('src/utils/documentsStorage.js'));
+    assert.ok(s.includes("const own = res.status >= 400 && res.status < 500 && !!body && typeof body.error === 'string' && !!body.error.trim();"));
+    assert.ok(s.includes('return own ? new Error(stepped(step, why)) : landedMaybe(maybe, why);'));
+    assert.equal(count(s, 'throw recordRefusal(res, body, STEP_RECORD, MAYBE_RECORD);') + count(s, 'throw recordRefusal(res, body, STEP_VERSION, MAYBE_VERSION);'), 2);
+    assert.ok(s.includes('  }), askedOrg, MAYBE_RECORD, true);') && s.includes('  }), askedOrg, MAYBE_VERSION, true);'), 'REGRESSION: a record\'s request that threw said "not saved"');
+    const rail = code(read(P12FXD_RAIL));
+    const opened = between(rail, '    const opened = () => {', '\n    };');
+    order(opened, "setFile(null); setName(''); setNote(''); setVisibility('team'); setSharedWith([]);",
+        'setLinks(!isVersion && Array.isArray(ctx.links) ? ctx.links : []);', "setCategory(!isVersion && ctx.category ? ctx.category : 'Contract');");
+    // The seed it goes back to is the one the rail opens with.
+    order(between(rail, '    useEffect(() => {', '}, [showUploadRail]);'), 'setLinks(Array.isArray(ctx.links) ? ctx.links : []);', 'if (ctx.category) setCategory(ctx.category);');
+    assert.ok(between(rail, '    const pickFile = (f) => {', '\n    };').includes('setError(null); setNotice(null);'), 'REGRESSION: a pick keeps the last notice');
+    const record = code(read(P12FXD_RECORD));
+    assert.ok(record.includes("fontSize: 12, color: T.danger, whiteSpace: 'pre-line' }}>{error}</div>"), 'REGRESSION: the maybe lines run together');
+});
+
+// ── Part 12 — the review's fixes, round 2 (I2 — Invitation import) ──
+// Residuals I0-I4. A request answered 201 with an answer that cannot be read left the import's own duplicate check
+// (CsvImportModal's userConflicts over settings.users) blind to who was sent — a second import of the same file sent each
+// a second email. The roster is now read again after the last request (ok-first, org-checked after each await) and set,
+// as the Invite page's send does; only a read that fails says to reload, in the house words with the server's ref. The
+// receipt claims only what a 201 says (users.mjs answers 201 when any address was invited): "up to N … some may have
+// been refused", one alone sent; the Results draw a tile for them, so the tiles add up to everyone attempted; the
+// `attempted` field's comment holds the invariant.
+const P12FXI2_ROSTER = Object.freeze([{ id: 'usr_a', email: 'p0@x.test', name: 'p0' }, { id: 'usr_b', email: 'p1@x.test', name: 'p1' }]);
+const P12FXI2_HELD = Object.freeze([{ id: 'usr_old', email: 'old@x.test', name: 'old' }]);
+// The handler from source: `posts` one answer per request, `roster` the GET's answer (a thrown Error throws); `switchAt`
+// 'get' switches the org as the roster read goes out, 'json' as its body is read.
+const p12fxI2Import = async ({ invites, posts, roster, switchAt = null, teamsSave = { ok: true } }) => {
+    const { emptyReceipt, unreadOnRoster } = await import('../src/utils/importReceipt.js');
+    const { teamsWithMembers } = await import('../src/utils/teamMembership.js');
+    const s = code(read(P12FXI_LAYER));
+    const START = '                    onImportUsers={async (invites) => {';
+    const fn = between(s, START, '\n                    }}\n                />').slice(START.length);
+    const org = { now: 'org_a' };
+    const did = { posts: 0, reads: [], teams: null };
+    const settingsState = stateOf({ users: P12FXI2_HELD });
+    let n = 0;
+    const dbFetch = async (url, opts = {}) => {
+        if (opts.method === 'POST') { did.posts++; const a = posts[n++]; if (a instanceof Error) throw a; return a; }
+        did.reads.push([url, opts.method || 'GET']);
+        if (switchAt === 'get') org.now = 'org_b';
+        if (roster instanceof Error) throw roster;
+        if (switchAt === 'json') { const json = roster.json; roster.json = async () => { org.now = 'org_b'; return json(); }; }
+        return roster;
+    };
+    const addToSettingsList = async (key, update) => { did.teams = update(P12FXI_TEAMS).teams; return teamsSave; };
+    const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'readRefusal', 'setSettings', 'onProgress',
+        'addToSettingsList', 'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', `return async (invites) => {${fn}\n};`)(
+        () => 'org_a', (o) => o === org.now, () => 'stopped', emptyReceipt, dbFetch, failureWords, refusalWords, readRefusal, settingsState.set, () => {},
+        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster);
+    const out = await run(invites);
+    return { out, ...did, users: settingsState.value.users };
+};
+// Moved in round 3 (I3): of the three that named a team, only p0 is on the roster read again — one person, "they".
+// Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+const P12FXI2_TEAM_READ = "1 whose answer could not be read named a team — check on the Teams page that they are on its list.";
+
+test('Part 12 fix I2: the invitation import — after a request answered unread the roster is read again and set, so the import\'s duplicate check knows who was sent; no "reload" — RUN', async () => {
+    const { userConflicts } = await import('../src/utils/userImport.js');
+    const r = await p12fxI2Import({ invites: p12fxIPeople(12, 4), roster: onceOf(200, { users: P12FXI2_ROSTER }), posts: [
+        p12fxIUnreadable(), onceOf(201, { invited: [{ id: 'usr_10', email: 'p10@x.test', teamId: 't1' }], errors: [{ email: 'p11@x.test', error: 'x' }] }),
+    ] });
+    assert.deepEqual(r.reads, [['/.netlify/functions/users', 'GET']], 'REGRESSION: the roster not read again after a request answered unread');
+    assert.deepEqual(r.users, P12FXI2_ROSTER, 'REGRESSION: the duplicate check left blind to who was sent');
+    // Moved in round 3 (I3): p0 and p1 on the roster read again are sent, p2-p9 not on it not sent — exact counts.
+    // Moved in round 4 (I4): p0 and p1 are on the roster — invited by this import or before it (two of one request: not
+    // proven); p2-p9 not on it, not sent.
+    assert.deepEqual([r.out.receipt.unread, r.out.receipt.onRoster, r.out.receipt.created, r.out.receipt.failed, r.out.receipt.error], [2, 2, 1, 9, null]);
+    assert.equal(r.out.warning, P12FXI2_TEAM_READ, 'REGRESSION: "reload" said over a roster read again');
+    // The import's own duplicate check, over the roster set here: the same file a second time skips the ones sent.
+    const again = [{ email: 'p0@x.test' }, { email: 'p1@x.test' }, { email: 'p2@x.test' }];
+    assert.deepEqual(userConflicts(again, { roster: r.users }).map(c => c.incomingIndex), [0, 1], 'a second import sends them no second email');
+    assert.deepEqual(userConflicts(again, { roster: P12FXI2_HELD }), [], 'over the roster as held, every one would be sent again');
+    // A run stopped by a later request still reads the roster again for the ones sent unread before it.
+    const stop = await p12fxI2Import({ invites: p12fxIPeople(12), roster: onceOf(200, { users: P12FXI2_ROSTER }),
+        posts: [p12fxIUnreadable(), onceOf(500, { error: 'Internal server error', requestId: 'r2' })] });
+    // Moved in round 3 (I3): the roster read again counts the first request exactly — 2 sent, 8 not, then the 2 never sent.
+    // Moved in round 4 (I4): the 2 on the roster are on it — invited by this import or before it — not proven sent.
+    assert.deepEqual([stop.out.receipt.unread, stop.out.receipt.onRoster, stop.out.receipt.created, stop.out.receipt.failed, stop.out.receipt.error, stop.reads.length, stop.users],
+        [2, 2, 0, 10, 'Sending stopped: Internal server error (ref r2)', 1, P12FXI2_ROSTER]);
+    // No request answered unread: no roster read; the rows the server named join the roster as before.
+    const read2 = await p12fxI2Import({ invites: p12fxIPeople(2), roster: onceOf(200, { users: [] }),
+        posts: [onceOf(201, { invited: [{ id: 'usr_x', email: 'p0@x.test' }, { id: 'usr_y', email: 'p1@x.test' }], errors: [] })] });
+    assert.deepEqual([read2.reads, read2.users.map(u => u.id), read2.out.warning], [[], ['usr_old', 'usr_x', 'usr_y'], null]);
+});
+
+test('Part 12 fix I2: a roster read again that fails says to reload, in the house words with the server\'s ref — the roster as held, the ones sent never failed — RUN', async () => {
+    const cases = [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, {}), 'Its answer could not be read.'],
+        [onceOf(200, { users: 'x' }), 'Its answer could not be read.']];
+    for (const [roster, words] of cases) {
+        const r = await p12fxI2Import({ invites: p12fxIPeople(10, 4), posts: [p12fxIUnreadable()], roster });
+        assert.equal(r.out.warning, `The roster could not be read again — reload the page to see the invitations sent: ${words} `
+            // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+            + "3 whose answers could not be read named a team — reload the page, then check on the Teams page that they are on their teams' lists.", `REGRESSION: ${words}`);
+        assert.deepEqual(r.users, P12FXI2_HELD, 'REGRESSION: a failed read drawn as the roster');
+        assert.deepEqual([r.out.receipt.unread, r.out.receipt.failed, r.out.receipt.error], [10, 0, null], 'a failed roster read fails no invitation');
+    }
+    // One alone, its team save refused too: each sentence said, in the singular, after the save's own.
+    const one = await p12fxI2Import({ invites: p12fxIPeople(1, 1), posts: [p12fxIUnreadable()],
+        roster: onceOf(500, { error: 'Internal server error', requestId: 'r1' }), teamsSave: { ok: false, error: 'Forbidden' } });
+    assert.equal(one.out.warning, 'The invitations went out, but the team list was not updated — Forbidden '
+        + 'The roster could not be read again — reload the page to see the invitation sent: Internal server error (ref r1) '
+        // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+        + "1 whose answer could not be read named a team — reload the page, then check on the Teams page that they are on its list.");
+    // None named a team: the roster sentence alone.
+    const none = await p12fxI2Import({ invites: p12fxIPeople(3), posts: [p12fxIUnreadable()], roster: UNSENT() });
+    assert.equal(none.out.warning, 'The roster could not be read again — reload the page to see the invitations sent: The server could not be reached.');
+});
+
+test('Part 12 fix I2: the roster read again after an org switch — nothing set, no team list saved, the run stopped — RUN', async () => {
+    for (const [switchAt, roster] of [['get', onceOf(200, { users: P12FXI2_ROSTER })], ['get', onceOf(500, { error: 'x', requestId: 'r1' })], ['get', UNSENT()],
+        ['json', onceOf(200, { users: P12FXI2_ROSTER })]]) {
+        const r = await p12fxI2Import({ invites: p12fxIPeople(10, 4), posts: [p12fxIUnreadable()], roster, switchAt });
+        assert.deepEqual([r.out, r.users, r.teams], ['stopped', P12FXI2_HELD, null], `REGRESSION: the last org's roster set, or a team list saved, after a switch (${switchAt})`);
+    }
+});
+
+test('Part 12 fix I2: the receipt claims only what a 201 says — "up to N … some may have been refused", one alone sent; never "reload" — RUN', async () => {
+    const { emptyReceipt, describeReceipt } = await import('../src/utils/importReceipt.js');
+    const lit = code(read(P12FXI_MODAL)).match(/describeReceipt\(r, 'invitation', (\{[^}]*\})\)/);
+    assert.ok(lit, 'the Results\' invitation words');
+    const words = new Function(`return ${lit[1]};`)();
+    const say = (o) => describeReceipt({ ...emptyReceipt(), ...o }, 'invitation', words);
+    assert.equal(say({ attempted: 10, unread: 10 }), 'Up to 10 invitations sent — the answer could not be read; some may have been refused.',
+        'REGRESSION: every one of an unread request claimed as sent');
+    assert.equal(say({ attempted: 12, created: 1, failed: 1, unread: 10 }), '1 invitation sent, up to 10 more sent — the answer could not be read; some may have been refused. 1 not sent.');
+    assert.equal(say({ attempted: 1, unread: 1 }), '1 invitation sent — the answer could not be read.', 'one alone: a 201 says it was sent');
+    assert.equal(say({ attempted: 2, created: 1, unread: 1 }), '1 invitation sent, 1 more sent — the answer could not be read.');
+    assert.equal(describeReceipt({ ...emptyReceipt(), attempted: 3, unread: 3 }, 'record'), 'Up to 3 records sent — the answer could not be read; some may have been refused.');
+    for (const o of [{ unread: 1 }, { unread: 10 }, { created: 1, unread: 10 }]) assert.ok(!/reload|them\b/.test(say(o)), 'the import reads the roster again itself');
+});
+
+// The Results' tiles, taken from CsvImportModal.jsx and built over a receipt.
+const p12fxI2Tiles = async (r) => {
+    const { isClean } = await import('../src/utils/importReceipt.js');
+    const START = '                    const tiles = [';
+    const body = between(code(read(P12FXI_MODAL)), START, '].filter(t => t.show);').slice(START.length);
+    return new Function('r', 'isUsers', 'clean', 'T', `return [${body}].filter(t => t.show);`)(r, true, isClean(r), T);
+};
+
+test('Part 12 fix I2: the Results draw a tile for the ones sent unread — the tiles account for everyone attempted — RUN', async () => {
+    const { emptyReceipt } = await import('../src/utils/importReceipt.js');
+    const r = { ...emptyReceipt(), attempted: 12, created: 1, failed: 1, unread: 10 };
+    const tiles = await p12fxI2Tiles(r);
+    // Moved in round 3 (I3): the tile says what a 201 proves — sent or refused, "up to" (its upTo flag).
+    assert.deepEqual(tiles.map(t => [t.label, t.n]), [['invited', 1], ['failed', 1], ['sent or refused — answer unread', 10]], 'REGRESSION: 2 of 12 accounted for');
+    assert.equal(tiles.reduce((a, t) => a + t.n, 0), r.attempted);
+    assert.equal(tiles[2].color, T.warn);
+    assert.deepEqual((await p12fxI2Tiles({ ...emptyReceipt(), attempted: 3, unread: 3 })).map(t => [t.label, t.n]), [['sent or refused — answer unread', 3]]);
+    assert.ok(!(await p12fxI2Tiles({ ...emptyReceipt(), attempted: 2, created: 2 })).some(t => t.label.includes('answer unread')), 'no tile with none unread');
+});
+
+test('Part 12 fix I2: WIRING — the roster read again after the last request, ok-first, org-checked after each await, before the team save; the duplicate check reads settings.users; the field comment holds unread', () => {
+    const l = code(read(P12FXI_LAYER));
+    const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
+    order(h, 'for (let i = 0; i < invites.length; i += INVITES_PER_REQUEST) {', 'if (receipt.unread) {', "const rosterRes = await dbFetch('/.netlify/functions/users');",
+        'if (!rosterRes.ok) throw new Error(await readRefusal(rosterRes));', 'const ud = await rosterRes.json();', 'if (!stillOrg(askedOrg)) return stopped();',
+        "if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');", 'setSettings(prev => ({ ...prev, users: ud.users }));',
+        '} catch (e) { rosterWhy = failureWords(e); }', 'if (!stillOrg(askedOrg)) return stopped();', "const added = await addToSettingsList('teams'");
+    assert.equal(count(h, "dbFetch('/.netlify/functions/users')"), 1, 'one roster read');
+    assert.ok(l.includes('users={settings.users || []}'), 'the duplicate check reads the roster set here');
+    const rc = read('src/utils/importReceipt.js');
+    assert.ok(rc.includes('    attempted:   0,      // created + updated + failed + unread\n'), 'REGRESSION: the field comment leaves out unread');
+    assert.ok(rc.includes('//     attempted === created + updated + failed + unread'));
+});
+
+// ── Part 12 — the review's fixes, round 2 (C2 — Calendar) ──
+// The review's residuals C0-C2 (state §0.249). C0: a Disconnect that landed and whose re-read then failed was drawn
+// "Connected · syncing", ON and Reconnect — the failed read no longer writes calendarConnected, so the connection just
+// deleted stood. A landed Disconnect now sets calendarConnected false, clears its events and marks calDisconnected
+// before the re-read: the tab says "Disconnected" and the read's words. C1: a read in flight with no connection known —
+// the first, or a Try again after one that failed — drew "Connect your calendar…", "Calendar not connected", OFF and
+// Connect; Home, Tasks and the panel now say they are checking. C2: a known connection whose latest read failed said
+// "Connected · syncing" in green; it says "Connected — the latest read failed", not in green.
+const p12fxC2Ev = { id: 'ev_1', summary: 'Acme call' };
+// The whole Disconnect, run from the source: the header's disconnectCalendar over App's own fetchCalendarEvents, one
+// shared state, then the panel drawn from it — the same builds (and parameter lists) as Part 12b's helpers.
+const p12fxC2Flow = async ({ deleteAnswer, readAnswer, switchOrg = false }) => {
+    // Moved in §0.249 (review fixes, round 3): App's read takes its sequence and the read flag, the header's handler
+    // dropCalendarReads and calendarLoading — one sequence shared, as App's is; every assertion below is unchanged.
+    const st = { connected: true, events: [p12fxC2Ev], error: null, loading: false, disconnected: false, conn: { id: 'cc_1' }, said: [], sent: [], read: true };
+    const org = { now: 'org_a' };
+    const gen = { current: 0 };
+    const fetchCal = p12aFn('src/App.jsx', '    const fetchCalendarEvents = async () => {', '\n    };', '\n    };',
+        ['requestOrg', 'stillOrg', 'setCalendarLoading', 'setCalendarError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords', 'setCalendarConnected', 'setCalendarEvents',
+            'calendarReadGen', 'setCalendarRead'], 'fetchCalendarEvents')(
+        () => 'org_a', (o) => o === org.now, (v) => { st.loading = v; }, (v) => { st.error = v; }, async () => {}, p10Fetch(st, readAnswer, org, false), readRefusal, failureWords,
+        (v) => { st.connected = v; }, (v) => { st.events = v; }, gen, (v) => { st.read = v; });
+    const disconnect = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
+        ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'], 'disconnectCalendar')(
+        st.conn, () => 'org_a', (o) => o === org.now, () => {}, (v) => { if (v) st.said.push(v); }, p10Fetch(st, deleteAnswer, org, switchOrg), readRefusal, failureWords,
+        (v) => { st.conn = v; }, fetchCal, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; }, () => { gen.current += 1; }, false);
+    await disconnect();
+    const panel = p12fxCPanel({ loading: st.loading, error: st.error, connected: st.connected, conn: st.conn, disconnected: st.disconnected, read: st.read });
+    return { ...st, panel };
+};
+
+test('Part 12 fix C2: a Disconnect that landed sets calendarConnected false, its events and calDisconnected before the re-read; refused or after an org switch, none of them — RUN', async () => {
+    const landed = await p12bHeaderDisconnect({ answer: onceOf(200, { ok: true }) });
+    assert.deepEqual([landed.connected, landed.events, landed.disconnected], [[false], [[]], [true]],
+        'REGRESSION: a landed Disconnect left calendarConnected to the re-read — a failed one kept "Connected · syncing"');
+    assert.deepEqual(landed.steps, ['connected:false', 'events', 'disconnected:true', 'refetch'], 'known at once, before the re-read');
+    for (const [answer, words] of p12bRefused()) {
+        const r = await p12bHeaderDisconnect({ answer });
+        assert.deepEqual([r.said, r.connected, r.events, r.disconnected], [[`Not disconnected — ${words}`], [], [], []], `REGRESSION: a refused Disconnect taken as landed — ${words}`);
+    }
+    for (const answer of [onceOf(200, { ok: true }), UNSENT()]) {
+        const r = await p12bHeaderDisconnect({ answer, switchOrg: true });
+        assert.deepEqual([r.connected, r.events, r.disconnected], [[], [], []], 'REGRESSION: the last org\'s Disconnect written over the new org\'s calendar');
+    }
+});
+
+test('Part 12 fix C2: a landed Disconnect whose re-read fails says "Disconnected" and the read\'s words — never "Connected · syncing", ON or Reconnect — RUN', async () => {
+    for (const [readAnswer, words] of [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.']]) {
+        const r = await p12fxC2Flow({ deleteAnswer: onceOf(200, { ok: true }), readAnswer });
+        assert.deepEqual([r.said, r.connected, r.events, r.disconnected, r.error], [[], false, [], true, `The calendar could not be read — ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual(r.panel, { status: 'Disconnected', pill: 'OFF', connect: true, refresh: false, count: false },
+            `REGRESSION: the connection just deleted drawn as connected, or as "Could not be read" — ${words}`);
+    }
+    const reread = await p12fxC2Flow({ deleteAnswer: onceOf(200, { ok: true }), readAnswer: onceOf(200, { events: [], connected: false }) });
+    assert.deepEqual([reread.connected, reread.error, reread.panel.status, reread.panel.pill], [false, null, 'Disconnected', 'OFF']);
+    for (const [deleteAnswer, words] of p12bRefused()) {
+        const r = await p12fxC2Flow({ deleteAnswer, readAnswer: onceOf(200, { events: [p12fxC2Ev], connected: true }) });
+        assert.deepEqual([r.said, r.connected, r.events, r.disconnected, r.sent], [[`Not disconnected — ${words}`], true, [p12fxC2Ev], false, ['DELETE']], `REGRESSION: ${words}`);
+    }
+});
+
+test('Part 12 fix C2: the profile panel — a read in flight with no connection known is "Checking…", "—", no Connect; a known connection whose read failed is never "syncing" nor green; "Disconnected" once one landed — RUN', () => {
+    const ERR = 'The calendar could not be read — The server returned 502.';
+    assert.deepEqual(p12fxCPanel({ loading: true, connected: false }),
+        { status: 'Checking…', pill: '—', connect: false, refresh: true, count: false },
+        'REGRESSION: OFF and "Connect Google Calendar" over a read in flight with no connection known');
+    assert.deepEqual(p12fxCPanel({ loading: true, connected: true }),
+        { status: 'Checking…', pill: 'ON', connect: true, refresh: true, count: true });
+    const failed = p12fxCPanel({ error: ERR, connected: true, conn: { calendarEmail: 'karen@x.test' } });
+    assert.deepEqual(failed, { status: 'Connected — the latest read failed', pill: 'ON', connect: true, refresh: true, count: false },
+        'REGRESSION: a sync claimed over a read that just failed');
+    assert.deepEqual(p12fxCPanel({ connected: false, disconnected: true }),
+        { status: 'Disconnected', pill: 'OFF', connect: true, refresh: false, count: false });
+    assert.deepEqual(p12fxCPanel({ loading: true, connected: false, disconnected: true }),
+        { status: 'Checking…', pill: 'OFF', connect: true, refresh: false, count: false }, 'a known disconnection is not unknown');
+    assert.equal(p12fxCPanel({ connected: true, disconnected: true }).status, 'Connected · syncing', 'a read that found a connection wins');
+
+    const s = code(read(P12B_HEADER));
+    const colour = new Function('calendarLoading', 'calendarError', 'calendarConnected', 'T',
+        `return ${between(s, 'color: calendarLoading ? ', ' }}>').slice('color: '.length)};`);
+    const TT = { inkMid: 'mid', ok: 'green', inkMuted: 'muted' };
+    assert.equal(colour(false, ERR, true, TT), 'muted', 'REGRESSION: the status line green over a read that failed');
+    assert.equal(colour(false, null, true, TT), 'green');
+    assert.equal(colour(true, null, false, TT), 'mid');
+});
+
+test('Part 12 fix C2: the header forgets a landed Disconnect on an org switch, never with its panel — RUN', () => {
+    const s = code(read(P12B_HEADER));
+    const line = between(s, '    useEffect(() => { setCalDisconnected(false); }', ';\n') + ';';
+    const ran = [];
+    let deps = null;
+    new Function('useEffect', 'setCalDisconnected', 'activeOrgId', line)((fn, d) => { deps = d; fn(); }, (v) => ran.push(v), 'org_b');
+    assert.deepEqual([ran, deps], [[false], ['org_b']], 'REGRESSION: org A\'s "Disconnected" stands on org B\'s Calendar tab');
+    assert.equal(count(s, 'setCalDisconnected('), 2, 'the landed Disconnect and the switch — nothing else writes it');
+    // Moved in §0.249 (review fixes, round 4): the state is kept as calDisconnectedKept, drawn only for the org it was kept for.
+    assert.ok(s.includes('const [calDisconnectedKept, setCalDisconnected] = useState(false);'));
+    assert.ok(s.includes('const calDisconnected = calTabHere && calDisconnectedKept;'));
+    assert.ok(/calendarError, fetchCalendarEvents,\s*setCalendarConnected, setCalendarEvents,/.test(s), 'the header takes App\'s setters');
+});
+
+// A strip's chain of conditions, run from the source: each branch named by its words, the first true condition wins.
+const p12fxC2Chain = (region, re, labels, params) => {
+    const heads = [...region.matchAll(re)];
+    const named = heads.map((m, i) => {
+        const text = region.slice(m.index + m[0].length, i + 1 < heads.length ? heads[i + 1].index : region.length);
+        const hit = Object.entries(labels).find(([, words]) => text.includes(words));
+        assert.ok(hit, `a branch with none of the known words: ${text.slice(0, 80)}`);
+        return [m[1] || 'true', hit[0]];
+    });
+    const f = new Function(...params, `return [${named.map(([c]) => `!!(${c})`).join(', ')}];`);
+    return (state) => named[f(...params.map((k) => state[k])).indexOf(true)]?.[1];
+};
+
+test('Part 12 fix C2: Home\'s calendar strip — a read in flight with no connection known is "Checking your calendar…", never "Connect your calendar…" — RUN', () => {
+    const home = code(read(P12FXC_HOME));
+    // Moved in §0.249 (review fixes, round 3): the chain reads calendarRead too — each state below is one a read landed in
+    // (calendarRead: true), so each answer stands as it was; the checking branch's text reads it.
+    const strip = p12fxC2Chain(between(home, '{calendarError ? (', 'Refreshing…</span>'), /(?:^\{|\n\s*\) : )(?:([^\n?]+?) \? )?\(\n/g,
+        { error: '{calendarError}', checking: 'Checking your calendar…', connect: 'Connect your calendar to see', connected: 'Calendar connected — no meetings today' },
+        ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']);
+    const E = 'The calendar could not be read — The server returned 500.';
+    assert.equal(strip({ calendarLoading: true, calendarConnected: false, calendarRead: true }), 'checking', 'REGRESSION: "Connect your calendar…" over a read not yet answered');
+    assert.equal(strip({ calendarLoading: true, calendarConnected: true, calendarRead: true }), 'connected', 'a refresh of a known connection keeps its strip');
+    assert.equal(strip({ calendarError: E, calendarConnected: false, calendarRead: true }), 'error');
+    assert.equal(strip({ calendarError: E, calendarConnected: true, calendarRead: true }), 'error');
+    assert.equal(strip({ calendarConnected: false, calendarRead: true }), 'connect');
+    assert.equal(strip({ calendarConnected: true, calendarRead: true }), 'connected');
+    const checking = between(home, ') : !calendarConnected && (calendarLoading || !calendarRead) ? (', ') : !calendarConnected ? (');
+    assert.ok(!/connectMyCalendar|Connect calendar|meeting/.test(checking), 'REGRESSION: the checking strip offers Connect or a count');
+});
+
+test('Part 12 fix C2: Tasks\' calendar rail — a read in flight with no connection known says it is checking, never "Calendar not connected" — RUN and WIRING', () => {
+    const tasks = code(read(P12FXC_TASKS));
+    assert.ok(/function CalendarView\(\{[^}]*\bcalendarLoading\b[^}]*\}\)/.test(tasks), 'REGRESSION: CalendarView never takes calendarLoading (module scope)');
+    assert.ok(tasks.includes('calendarLoading={calendarLoading}'), 'REGRESSION: CalendarView never told a read is in flight');
+    // Moved in §0.249 (review fixes, round 3): a branch's condition may be an expression (the checking one reads
+    // calendarRead too), and the chain takes calendarRead — each state below one a read landed in, its answer as it was.
+    const rail = p12fxC2Chain(between(tasks, '{calendarError\n', 'Calendar not connected</div>)') + 'Calendar not connected', /(?:^\{|\n\s*: )(?:([^\n?]+?)\n\s*\? )?\(/g,
+        { error: '{calendarError}', synced: 'Synced', checking: 'Checking the calendar…', notConnected: 'Calendar not connected' },
+        ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']);
+    assert.equal(rail({ calendarLoading: true, calendarConnected: false, calendarRead: true }), 'checking', 'REGRESSION: "Calendar not connected" over a read not yet answered');
+    assert.equal(rail({ calendarLoading: true, calendarConnected: true, calendarRead: true }), 'synced');
+    assert.equal(rail({ calendarError: 'x', calendarLoading: false, calendarRead: true }), 'error');
+    assert.equal(rail({ calendarConnected: false, calendarRead: true }), 'notConnected');
+});
+
+// ── Part 12 — the review's fixes, round 2 (S2 — Sales Manager) ──
+// The residual the first S round left open (state §0.249): saveUser's refusal (a forecast call) said the server's words
+// without their ref ("Not saved — Ann: Internal server error") and, over a page or a body with no words, its own
+// lowercase "Not saved — the server returned 502. Your forecast call changes are not stored." It says the house words —
+// "Not saved — <who>: " and refusalWords(res, d), the ref kept, "The server returned N." over a page — the body read
+// only under the ok check, once; a 403 with no words keeps its role sentence; and an answer after an org switch says
+// nothing (requestOrg before the PUT, stillOrg after the refusal's read and in the catch).
+const P12FXS2_SAVE_USER = '    const saveUser = async (user, label, who = user.name) => {';
+const P12FXS2_ROLE = 'Not saved — only Admins can change forecast call.';
+
+test('Part 12 fixes, round 2 (S2): the Sales Manager\'s forecast-call save — a refusal in the house words with its ref, "The server returned N." over a page, naming the member; a 403 with no words its role sentence — RUN', async () => {
+    for (const [answer, msg] of [
+        // Moved in §0.249 (review fixes, last pass, F4): only the server's own refusal (a 4xx in its words) is "Not saved"; a 5xx, a page or a wordless
+        // 4xx says the rep's call may have been saved, in refusalWords' words with their ref.
+        [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Ann\'s forecast call may have been saved — reload the page to see whether it was: Internal server error (ref r1)'],
+        [onceOf(404, { error: 'User not found' }), 'Not saved — Ann: User not found'],
+        [onceOf(403, { error: 'Only an Admin can change a member who is not a Sales Rep.', requestId: 'r2' }),
+            'Not saved — Ann: Only an Admin can change a member who is not a Sales Rep. (ref r2)'],
+        [onceOf(409, {}), 'Ann\'s forecast call may have been saved — reload the page to see whether it was: The server returned 409.'],
+        [P11_PAGE(), 'Ann\'s forecast call may have been saved — reload the page to see whether it was: The server returned 502.'],
+        [onceOf(500, { error: '   ' }), 'Ann\'s forecast call may have been saved — reload the page to see whether it was: The server returned 500.'],
+        [onceOf(403, {}), P12FXS2_ROLE],
+        [onceOf(403, { error: ' ' }), P12FXS2_ROLE],
+        [onceOf(403, new SyntaxError("Unexpected token '<'")), P12FXS2_ROLE],
+    ]) {
+        const r = await p12fxSSaveUser(answer);
+        assert.deepEqual([r.out, r.sent, r.states], [false, ['PUT'], [{ status: 'error', msg }]],
+            `REGRESSION: ${msg} — the ref dropped, or "the server returned N. Your forecast call changes are not stored."`);
+        assert.doesNotMatch(r.states[0].msg, /changes are not stored|Body is unusable|Unexpected token|undefined/);
+    }
+    // Landed is landed: the body is never read, an unreadable one included — never a failure that invites a second save.
+    for (const answer of [onceOf(200, {}), P11_UNREADABLE()]) {
+        const r = await p12fxSSaveUser(answer);
+        assert.deepEqual([r.out, r.states], [true, []], 'a landed save says nothing here');
+    }
+});
+
+test('Part 12 fixes, round 2 (S2): the Sales Manager\'s forecast-call save — an answer after an org switch says nothing, a refusal and a request that never left alike — RUN', async () => {
+    for (const answer of [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), P11_PAGE(), onceOf(403, {}), UNSENT()]) {
+        const r = await p12fxSSaveUser(answer, true);
+        assert.deepEqual([r.out, r.sent, r.states], [false, ['PUT'], []], 'REGRESSION: the other org\'s refusal said on this org\'s screen');
+    }
+    // A landed save hands true back: updateRepField's own org check stops the copy (pinned in member-links T6).
+    const landed = await p12fxSSaveUser(onceOf(200, {}), true);
+    assert.deepEqual([landed.out, landed.states], [true, []]);
+});
+
+test('Part 12 fixes, round 2 (S2): WIRING — saveUser takes its org, reads a refusal\'s body once under the ok check, says refusalWords\' words; no escaped dash, no "changes are not stored"', () => {
+    const fn = between(code(read(P12FXS_SMT)), P12FXS2_SAVE_USER, '\n    };');
+    order(fn, 'const askedOrg = requestOrg();', "await dbFetch('/.netlify/functions/users', {", 'if (!res.ok) {',
+        'const d = await res.json().catch(() => null);', 'if (!stillOrg(askedOrg)) return false;',
+        // Moved in §0.249 (review fixes, last pass, F4): the 403's role sentence, the server's own refusal, then the maybe.
+        "setSaveState({ status: 'error', msg: res.status === 403 && !ownRefusal(res.status, d)",
+        '? `Not saved — only Admins can change ${label}.`', ': ownRefusal(res.status, d)', "? `Not saved — ${who || 'a member'}: ${refusalWords(res, d)}`",
+        ": `${who || 'A member'}'s ${label} may have been saved — reload the page to see whether it was: ${refusalWords(res, d)}` });",
+        'return false;', 'return true;', '} catch (err) {', "console.error('[SalesManagerTab] save ' + label, err);",
+        'if (!stillOrg(askedOrg)) return false;', "setSaveState({ status: 'error', msg: `Not saved — ${failureWords(err)}` });");
+    assert.equal(count(fn, 'res.json('), 1, 'one read of the body, the refusal\'s');
+    assert.equal(count(fn, 'if (!stillOrg(askedOrg)) return false;'), 2, 'after the refusal\'s read and in the catch');
+    assert.ok(!/changes are not stored|the server returned \$\{res\.status\}|d\.error\}/.test(fn), 'REGRESSION: saveUser\'s own words for a refusal');
+    // The dash is the character, never its escape (a backslash and "u2014" \u2014 built here so no escape is typed).
+    assert.ok(!fn.includes(`${String.fromCharCode(92)}u2014`), 'an escaped dash in saveUser');
+});
+
+// ── Part 12 — the review's fixes, round 2 (L2 — Leads and Settings load) ──
+// The residuals the first L round left open (state §0.249). [L0] A failed claim-requests read was still drawn as "no
+// request" on a Sales Rep's path: requestsError reached only the managers' Assignment Requests panel, so Triage's row
+// and the Cockpit read the empty list as none — "Request", "Request this lead", "Not yet assigned", "Request assignment"
+// — over a request already filed, nothing said. myRequestOf reads the list with its failure: over an unread list a rep is
+// offered neither Request nor Cancel, and Triage's rail and the Cockpit say the read's words. [L2] The Settings load's
+// words reached the member only through the one-slot toast ("Settings did not load (Internal server error (ref r1)) —
+// …"); the Settings screen said "did not load" alone. It says the words, kept until a load lands, and the toast says
+// "Settings did not load — <words>." [L3] The lead import threw the words alone after earlier chunks landed: the modal
+// said "Import failed: …", stayed on Preview, and a second Import re-sent the leads that had landed. It ends on the
+// receipt the other three importers do: the Results say how many were saved, in describeReceipt's words, with no Import.
+const P12FXL2_LEADS = 'src/Tabs/LeadsTab.jsx';
+const P12FXL2_LAYER = 'src/components/layout/ModalLayer.jsx';
+const P12FXL2_MODAL = 'src/components/modals/LeadImportModal.jsx';
+const { receiptFromInsert: p12fxL2Insert, isClean: p12fxL2Clean, ImportError: P12FXL2_IMPORT_ERROR, receiptFromError: p12fxL2FromError,
+    describeReceipt: p12fxL2Describe, describeOwners: p12fxL2Owners } = await import('../src/utils/importReceipt.js');
+const P12FXL2_PENDING_REQ = Object.freeze([{ id: 'lcr_1', leadId: 'l1', status: 'pending' }]);
+const P12FXL2_UNREAD_NEXT = 'Your requests could not be read — reload the page to request this lead';
+const p12fxL2MyRequestOf = () => new Function(`${between(code(read(P12FXL2_LEADS)), 'const myRequestOf = ', '\n\n')}\nreturn myRequestOf;`)();
+// CockpitDetail's request state and next action, extracted and run over a rep's, a manager's and a reader's views.
+const p12fxL2Cockpit = ({ lead = { id: 'l1', status: 'New', assignee: null }, canAssign = false, canEdit = true, leadRequests = [], requestsError = '', requestsLanded = true } = {}) => {
+    const block = between(between(code(read(P12FXL2_LEADS)), 'const CockpitDetail = (', 'const CockpitView'), '    const mine = canAssign ? ', '\n\n    const timeline');
+    return new Function('lead', 'canAssign', 'canEdit', 'leadRequests', 'requestsError', 'requestsLanded', 'myRequestOf',
+        `${block}\nreturn { mine, myPending, requestsUnread, requestsChecking, nextAction };`)(lead, canAssign, canEdit, leadRequests, requestsError, requestsLanded, p12fxL2MyRequestOf());
+};
+
+test('Part 12 fixes, round 2 (L2): a rep\'s request on a lead — over a list that did not load it is unread, never "no request", whatever the empty list holds; read, the pending request or none — RUN', () => {
+    const myRequestOf = p12fxL2MyRequestOf();
+    for (const words of ['Internal server error (ref r1)', 'The server returned 502.', 'The server could not be reached.', 'Its answer could not be read.']) {
+        for (const landed of [false, true]) {   // moved in round 3 (L3): the landed flag; a failed read is unread either way
+            assert.deepEqual(myRequestOf([], words, landed, 'l1'), { unread: true, loading: false, pending: null }, `REGRESSION: ${words} — a failed read drawn as no request`);
+            assert.deepEqual(myRequestOf(P12FXL2_PENDING_REQ, words, landed, 'l1'), { unread: true, loading: false, pending: null }, 'a list held from before is not read as this one');
+        }
+    }
+    assert.deepEqual(myRequestOf(P12FXL2_PENDING_REQ, '', true, 'l1'), { unread: false, loading: false, pending: P12FXL2_PENDING_REQ[0] });
+    assert.deepEqual(myRequestOf(P12FXL2_PENDING_REQ, '', true, 'l2'), { unread: false, loading: false, pending: null });
+    assert.deepEqual(myRequestOf([{ id: 'lcr_2', leadId: 'l1', status: 'denied' }], '', true, 'l1'), { unread: false, loading: false, pending: null });
+    assert.deepEqual(myRequestOf(null, '', true, 'l1'), { unread: false, loading: false, pending: null });
+});
+
+test('Part 12 fixes, round 2 (L2): the Cockpit over a requests list that did not load — a rep is told, offered neither Request nor Cancel; a manager and a reader as before — RUN', () => {
+    const err = 'Internal server error (ref r1)';
+    const rep = p12fxL2Cockpit({ requestsError: err, leadRequests: P12FXL2_PENDING_REQ });
+    assert.deepEqual([rep.requestsUnread, rep.myPending, rep.nextAction], [true, null, P12FXL2_UNREAD_NEXT],
+        'REGRESSION: "Request this lead" (or "Requested") over a list that did not load');
+    const repRead = p12fxL2Cockpit({ leadRequests: P12FXL2_PENDING_REQ });
+    assert.deepEqual([repRead.requestsUnread, repRead.myPending, repRead.nextAction], [false, P12FXL2_PENDING_REQ[0], 'Requested — awaiting approval']);
+    assert.equal(p12fxL2Cockpit().nextAction, 'Request this lead', 'read and empty: no request');
+    const mgr = p12fxL2Cockpit({ canAssign: true, requestsError: err });
+    assert.deepEqual([mgr.requestsUnread, mgr.myPending, mgr.nextAction], [false, null, 'Assign to a rep'], 'a manager assigns; the panel says the read');
+    const reader = p12fxL2Cockpit({ canEdit: false, requestsError: err });
+    assert.deepEqual([reader.requestsUnread, reader.nextAction], [false, 'Waiting to be assigned'], 'a reader is offered no request either way');
+    const owned = p12fxL2Cockpit({ lead: { id: 'l1', status: 'Working', assignee: 'Karen' }, requestsError: err });
+    assert.equal(owned.nextAction, 'Check in — keep the ball moving', 'an owned lead\'s next action is not a request');
+});
+
+test('Part 12 fixes, round 2 (L2): WIRING — a rep\'s Triage and Cockpit say a failed requests read and offer no Request or Cancel over it', () => {
+    const s = code(read(P12FXL2_LEADS));
+    const unread = between(s, 'const RequestsUnread = ({ words }) => (', '\n);');
+    assert.ok(unread.includes('Your requests could not be read — {words}</div>'), 'REGRESSION: the rail drops the read\'s words');
+    assert.ok(unread.includes('Request and Cancel are off until they load. Reload the page to try again.'));
+    const triage = between(s, 'const TriageView = (', 'const CockpitListRow');
+    assert.ok(triage.includes('{!canDistribute && canEdit && requestsError && <RequestsUnread words={requestsError}/>}'),
+        'REGRESSION: a rep\'s rail never says the read failed (the panel is the managers\')');
+    const row = between(triage, ') : (() => {\n                                            const mine = ', '})()}');
+    order(row, 'myRequestOf(leadRequests, requestsError, requestsLanded, l.id);', 'if (mine.unread) return l.assignee ? <LeadAssignee name={l.assignee}/>',
+        ': <span title={`Your requests could not be read — ${requestsError}`}', 'Requests not read</span>;', 'const myPending = mine.pending;',
+        "label={myPending ? '✓ Requested' : 'Request'}");
+    const detail = between(s, 'const CockpitDetail = (', 'const CockpitView');
+    assert.ok(detail.includes('canEdit, canAssign, leadRequests, requestsError, requestLead, cancelRequest }) => {'));
+    assert.ok(detail.includes("{canEdit && !((requestsUnread || requestsChecking) && lead.status === 'New' && !lead.assignee) && <button onClick={e => {"),
+        'REGRESSION: the next action\'s Request / Cancel offered over a list that did not load');
+    assert.ok(detail.includes("color: requestsUnread ? T.danger : T.inkMid, fontFamily:T.sans, overflowWrap:'anywhere' }}>"));
+    assert.ok(detail.includes("{canAssign ? 'Not yet assigned' : requestsUnread ? `Your requests could not be read — ${requestsError}` : requestsChecking ? 'Checking requests…' : myPending ?"),
+        'REGRESSION: "Not yet assigned" over a list that did not load, the read\'s words unsaid');
+    order(detail, ') : !canEdit ? null : myPending ? (', 'Cancel request</button>', ') : (requestsUnread || requestsChecking) ? null : (', 'Request assignment</button>');
+    assert.ok(between(s, 'const CockpitView = (', '=> {').includes('leadRequests, requestsError, requestLead'));
+    assert.ok(s.includes('leadRequests={leadRequests} requestsError={requestsError} requestLead={requestLead} cancelRequest={cancelRequest}/>'), 'CockpitView hands it on');
+    const main = between(s, 'export default function LeadsTab() {', '\n}\n');
+    assert.equal(count(main, 'requestsError={requestsError}'), 2, 'LeadsTab hands the read\'s failure to both views');
+    assert.ok(between(main, '<CockpitView', '/>').includes('requestsError={requestsError}'), 'REGRESSION: the Cockpit never told the read failed');
+});
+
+test('Part 12 fixes, round 2 (L2): the Settings load\'s words — the toast says "Settings did not load — <words>." with no nested parentheses; the Settings screen says them too, kept until a load lands — RUN', () => {
+    const effect = new Function('settingsLoadError', 'setUndoToast',
+        between(code(read('src/App.jsx')), '        if (!settingsLoadError) return;', '\n    }, [settingsLoadError]);'));
+    const toastOf = (words) => { const out = []; effect(words, (t) => out.push(t)); return out; };
+    const tail = ' Nothing in Settings can be saved until they do. Reload the page to try again.';
+    assert.deepEqual(toastOf('Internal server error (ref r1)'), [{ error: `Settings did not load — Internal server error (ref r1).${tail}` }],
+        'REGRESSION: "Settings did not load (Internal server error (ref r1)) — …"');
+    assert.deepEqual(toastOf('The server returned 500.'), [{ error: `Settings did not load — The server returned 500.${tail}` }], 'one full stop');
+    assert.deepEqual(toastOf('The server could not be reached.'), [{ error: `Settings did not load — The server could not be reached.${tail}` }]);
+    assert.deepEqual(toastOf(''), [], 'a load that landed says nothing');
+    assert.doesNotMatch(toastOf('Internal server error (ref r1)')[0].error, /did not load \(|\)\)/);
+    // The screen: the load's words in its title, from the error it is handed.
+    const t = code(read('src/Tabs/SettingsTab.jsx'));
+    const tpl = between(t, '                {error ? ', ' : "Loading this').slice('                {error ? '.length);
+    const title = new Function('error', `return ${tpl};`);
+    assert.equal(title('Internal server error (ref r1)'), "This organization's settings did not load — Internal server error (ref r1)",
+        'REGRESSION: "did not load" alone, the words and their ref lost with the toast');
+    assert.equal(title('The server could not be reached.'), "This organization's settings did not load — The server could not be reached.");
+    assert.ok(t.includes('function SettingsNotLoaded({ error }) {'));
+    assert.ok(t.includes(': <SettingsNotLoaded error={settingsLoadError}/>}'), 'REGRESSION: the screen handed a flag, not the words');
+    assert.ok(t.includes('            {error && (\n                <div style={{ fontSize:12, color:T.inkMuted, marginTop:4 }}>\n                    Nothing here can be changed until they load.'));
+});
+
+// The lead import: ModalLayer's handler and settle, and the modal's doImport, extracted and run over the real bulk client.
+const p12fxL2Settle = () => new Function('isClean', 'ImportError',
+    `${between(code(read(P12FXL2_LAYER)), 'const settle = (receipt, noun) => {', '\n};')}\n};\nreturn settle;`)(p12fxL2Clean, P12FXL2_IMPORT_ERROR);
+const p12fxL2Leads = (n) => Array.from({ length: n }, (_, i) => ({ id: `lead_${i}`, firstName: `F${i}`, lastName: 'L' }));
+// `answers[i]` answers request i: 'ok' lands the chunk, else the answer itself (or a thrown Error). `switchAt`: the org
+// switches as request `switchAt` goes out.
+const p12fxL2Handler = ({ answers, switchAt = -1 }) => {
+    const head = '                    onImport={async (newLeads) => {';
+    const body = between(code(read(P12FXL2_LAYER)), head, '\n                    }}\n                />').slice(head.length);
+    const did = { sent: [], leads: stateOf([]) };
+    const org = { now: 'org_a' };
+    const fetch = async (url, opts) => {
+        const rows = JSON.parse(opts.body);
+        did.sent.push([url, opts.method, rows.length]);
+        const i = did.sent.length - 1;
+        if (i === switchAt) org.now = 'org_b';
+        const a = answers[i];
+        if (a instanceof Error) throw a;
+        return a === 'ok' ? onceOf(200, { insertedIds: rows.map((r) => r.id) }) : a;
+    };
+    const onImport = new Function('requestOrg', 'stillOrg', 'stopped', 'bulk', 'setLeads', 'settle', 'receiptFromInsert',
+        `return async (newLeads) => {${body}\n};`)(() => org.now, (o) => o === org.now, () => new Promise(() => {}), p12cBulk(fetch),
+        did.leads.set, p12fxL2Settle(), p12fxL2Insert);
+    return { onImport, did };
+};
+const p12fxL2DoImport = async (onImport, leads = p12fxL2Leads(3)) => {
+    const did = { errors: [], importing: [], stats: [], steps: [] };
+    const preview = { leads, added: leads.length, skipped: 1, errors: ['Row 5: missing first and last name'] };
+    const doImport = new Function('preview', 'setParseError', 'setImporting', 'onImport', 'setImportStats', 'setStep', 'receiptFromError',
+        'describeReceipt', 'failureWords', 'describeOwners', `${between(code(read(P12FXL2_MODAL)), '    const doImport = async () => {', '\n    };')}\n    };\nreturn doImport;`)(
+        preview, (v) => did.errors.push(v), (v) => did.importing.push(v), onImport, (v) => did.stats.push(v), (v) => did.steps.push(v),
+        p12fxL2FromError, p12fxL2Describe, failureWords, p12fxL2Owners);
+    await doImport();
+    return did;
+};
+const P12FXL2_PARTIAL = '400 leads created. 500 did not save. The server returned 502.';
+
+test('Part 12 fixes, round 2 (L2): the lead import — a chunk refused after earlier ones landed ends on the receipt: the landed leads listed, how many saved in the house words; clean, the receipt — RUN', async () => {
+    const partial = p12fxL2Handler({ answers: ['ok', P11_PAGE()] });
+    const thrown = await partial.onImport(p12fxL2Leads(900)).then(() => null, (e) => e);
+    assert.ok(thrown instanceof P12FXL2_IMPORT_ERROR, 'REGRESSION: the words alone thrown — no count of the leads that landed');
+    assert.deepEqual([thrown.receipt.created, thrown.receipt.failed, thrown.receipt.attempted, thrown.receipt.error], [400, 500, 900, 'The server returned 502.']);
+    assert.equal(p12fxL2Describe(thrown.receipt, 'lead'), P12FXL2_PARTIAL);
+    assert.deepEqual(partial.did.sent.map((x) => x[2]), [400, 400], 'the third chunk is never sent');
+    assert.equal(partial.did.leads.value.length, 400, 'the leads that landed reach the list before the failure is said');
+    for (const [answer, words] of [[onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'], [UNSENT(), 'The server could not be reached.']]) {
+        const e = await p12fxL2Handler({ answers: ['ok', answer] }).onImport(p12fxL2Leads(900)).then(() => null, (x) => x);
+        assert.deepEqual([e?.receipt?.created, e?.receipt?.error], [400, words]);
+    }
+    const first = await p12fxL2Handler({ answers: [onceOf(500, { error: 'Internal server error', requestId: 'r1' })] }).onImport(p12fxL2Leads(3)).then(() => null, (x) => x);
+    assert.deepEqual([first?.receipt?.created, first?.receipt?.failed], [0, 3], 'nothing landed: a receipt of none');
+    const clean = p12fxL2Handler({ answers: ['ok', 'ok', 'ok'] });
+    const receipt = await clean.onImport(p12fxL2Leads(900));
+    assert.deepEqual([receipt.created, receipt.failed, receipt.error, clean.did.leads.value.length], [900, 0, null, 900], 'clean: the receipt is the answer');
+    // An answer after an org switch: nothing listed, nothing said (stopped).
+    const switched = p12fxL2Handler({ answers: ['ok'], switchAt: 0 });
+    assert.equal(await p12cOutcome(switched.onImport(p12fxL2Leads(3))), P12C_PENDING);
+    assert.deepEqual(switched.did.leads.value, []);
+});
+
+test('Part 12 fixes, round 2 (L2): the lead import modal — once any lead landed the Results say how many, and no second Import re-sends them; nothing landed, Preview says why; a failure in plain words — RUN', async () => {
+    const run = await p12fxL2DoImport(p12fxL2Handler({ answers: ['ok', P11_PAGE()] }).onImport, p12fxL2Leads(900));
+    assert.deepEqual(run.steps, ['results'], 'REGRESSION: stayed on Preview — its Import re-sends the 400 leads that landed');
+    assert.deepEqual(run.stats, [{ added: 400, failed: 500, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: null }]);
+    assert.deepEqual([run.errors, run.importing], [[''], [true, false]]);
+    const none = await p12fxL2DoImport(p12fxL2Handler({ answers: [P11_PAGE()] }).onImport);
+    assert.deepEqual([none.steps, none.stats, none.errors], [[], [], ['', 'Import failed — Nothing was saved. 3 did not save. The server returned 502.']],
+        'nothing landed: Preview says it, and Import may try again');
+    for (const [thrown, words] of [[UNSENT(), 'The server could not be reached.'], [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.'],
+        [new Error('Internal server error (ref r1)'), 'Internal server error (ref r1)']]) {
+        const r = await p12fxL2DoImport(async () => { throw thrown; });
+        assert.deepEqual([r.steps, r.errors], [[], ['', `Import failed — ${words}`]], `REGRESSION: a raw message — ${thrown.message}`);
+    }
+    const clean = await p12fxL2DoImport(async () => ({ created: 3, failed: 0 }));
+    assert.deepEqual([clean.steps, clean.stats], [['results'], [{ added: 3, skipped: 1, errors: ['Row 5: missing first and last name'], owners: null }]]);
+});
+
+test('Part 12 fixes, round 2 (L2): WIRING — the lead import ends on its receipt; the Results say a partial import and offer no Import', () => {
+    const layer = code(read(P12FXL2_LAYER));
+    const handler = between(layer, '                    onImport={async (newLeads) => {', '\n                    }}\n                />');
+    order(handler, 'if (!stillOrg(askedOrg)) return stopped();', 'if (res.landed.length > 0) setLeads(prev => [...(prev || []), ...res.landed]);',
+        "return settle(receiptFromInsert(res), 'lead');");
+    assert.ok(!handler.includes('throw new Error'), 'REGRESSION: the words thrown alone');
+    const m = code(read(P12FXL2_MODAL));
+    assert.ok(m.includes("import { receiptFromError, describeReceipt, describeOwners } from '../../utils/importReceipt';"));
+    assert.ok(m.includes("import { failureWords } from '../../utils/refusalWords.js';"));
+    assert.ok(!/err\.message|'Import failed: '/.test(m), 'REGRESSION: "Import failed: " and a raw message');
+    const results = between(m, "{step === 'results' && importStats && (", '<ResizeHandles');
+    assert.ok(!results.includes('doImport'), 'REGRESSION: an Import on the Results');
+    assert.ok(results.includes("{importStats.said ? 'Partially Imported' : 'Import Complete'}"));
+    assert.ok(results.includes("{importStats.said && <p style={{ color:T.inkMid, fontSize:'0.8125rem', margin:'0 auto', maxWidth:480, overflowWrap:'anywhere' }}>{importStats.said}</p>}"),
+        'REGRESSION: the Results never say how many leads were saved');
+    order(results, '{importStats.failed > 0 && (', '{importStats.failed}</div>', 'Did Not Save</div>');
+});
+
+// ── Part 12 — the review's fixes, round 2 (G2 — THE GUARD floors) ──
+// Re-measured after every round 2 fix (§0.249): (iii) 188 body reads over the 242 sources under src/ (the D2 record and
+// new version's refusal bodies read in their ok checks, the I2 roster read again — three checked reads), (iv) 188 catch
+// clauses over its 54 files (the I2 roster read's catch), (i) 126 error states (it was 100 since §0.243). Its WIRING is
+// merged, with the first round's (G), into the one floors test at the end of this file (round 4, G4; round 3's G3 before
+// it).
+
+// ── Part 12 — the review's fixes, round 3 (A3 — Audit log) ──
+// The review of round 2 (residuals A2's four): the Filters line drew "Showing 0 of 0 (loading…)" — a count over a read
+// that had not landed; " · 1 status not known" sat in SecTitle's badge beside its green ✓, a passing check over a status
+// not known; a Pause / Resume, Rotate or Send test answered by a 5xx, a gateway's page or nothing said "not saved" / "not
+// sent" and kept the row's old status, though audit-stream.mjs answers a 5xx after its update or its delivery (the audit
+// write, the caller's name, the row read again) and a request that threw may have reached it; and the destinations' read
+// waited for the log's, so a slow log held both Adds off, "still loading", with no request out. The Filters line says
+// "Loading…"; SecTitle takes a badgeTone ('ok', the default — every other caller as before — or 'warn', a "!" in the
+// warning colour) and the badge is 'warn' while any row's status is not known; only the server's own refusal (a 4xx with
+// its words: 400, 403, 404) says "not saved" / "not sent", any other answer says it may have been — a Pause / Resume and a
+// Send test marking the row's status not known, a Rotate saying its secret may have been rotated; the destinations are
+// read in their own effect, at once.
+const p12fxA3Press = async (which, answer, args, statusBefore = []) => {
+    const did = { sent: [], errors: [], busy: [], tests: [], modal: [], reveal: [], read: [], statusBefore };
+    did.answered = await auditActions(did, answer)[which](...args);
+    return { ...did, said: did.errors.filter(Boolean) };
+};
+const p12fxA3Own = () => [
+    [onceOf(400, { error: 'id is required.' }), 'id is required.'],
+    [onceOf(403, { error: 'Forbidden: insufficient role' }), 'Forbidden: insufficient role'],
+    [onceOf(404, { error: 'Destination not found.', requestId: 'r4' }), 'Destination not found. (ref r4)'],
+];
+const p12fxA3Maybe = () => [
+    [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+    [onceOf(503, { error: 'Key encryption is not available. Contact your administrator.' }), 'Key encryption is not available. Contact your administrator.'],
+    [onceOf(409, {}), 'The server returned 409.'],
+    [onceOf(404, new SyntaxError("Unexpected token '<'")), 'The server returned 404.'],
+    [onceOf(429, { error: '   ' }), 'The server returned 429.'],
+    [P11_PAGE(), 'The server returned 502.'],
+    [UNSENT(), 'The server could not be reached.'],
+];
+const P12FXA3_MAYBE_PUT = (label, words) => `${label} may have been saved — reload the page to see whether it was: ${words}`;
+const P12FXA3_MAYBE_ROTATE = (words) => `The secret may have been rotated — reload the page to see whether it was, and rotate again to see a new one: ${words}`;
+const P12FXA3_MAYBE_TEST = (words) => `The test may have been sent — reload the page to see whether it was: ${words}`;
+
+test('Part 12 fixes (A3): destRefusedOwn — only a 4xx with the server\'s words proves nothing was written — RUN', () => {
+    const own = new Function(`return ${between(code(read(P12A_AUDIT)), 'const destRefusedOwn = ', ';\n').slice('const destRefusedOwn = '.length)};`)();
+    assert.equal(own({ status: 400 }, { error: 'id is required.' }), true);
+    assert.equal(own({ status: 403 }, { error: 'Forbidden: insufficient role' }), true);
+    assert.equal(own({ status: 404 }, { error: 'Destination not found.' }), true);
+    assert.equal(own({ status: 499 }, { error: 'x' }), true);
+    assert.equal(own({ status: 500 }, { error: 'Internal server error', requestId: 'r1' }), false, 'REGRESSION: a 5xx (it may come after the update) said as not saved');
+    assert.equal(own({ status: 503 }, { error: 'Key encryption is not available.' }), false);
+    assert.equal(own({ status: 409 }, {}), false, 'REGRESSION: a 4xx without the server\'s words said as not saved');
+    assert.equal(own({ status: 404 }, null), false, 'REGRESSION: a gateway\'s 404 page said as not saved');
+    assert.equal(own({ status: 400 }, { error: '  ' }), false);
+    assert.equal(own({ status: 400 }, { error: 7 }), false);
+    assert.equal(own({ status: 399 }, { error: 'x' }), false);
+});
+
+test('Part 12 fixes (A3): the Audit log\'s Pause / Resume — the server\'s own refusal "not saved", the row known; any other answer "may have been saved", its status not known — RUN', async () => {
+    for (const [answer, words] of p12fxA3Own()) {
+        const did = await p12fxA3Press('putDest', answer, [{ id: 'dst_1', paused: true }, 'Pause']);
+        assert.deepEqual([did.said, did.answered, did.statusUnread.value, did.dests.value[0].status, did.busy], [[`Pause not saved — ${words}`], null, [], 'Active', ['dst_1', null]], `the server's own refusal: ${words}`);
+    }
+    for (const [answer, words] of p12fxA3Maybe()) {
+        const did = await p12fxA3Press('putDest', answer, [{ id: 'dst_1', paused: true }, 'Pause']);
+        assert.deepEqual([did.said, did.answered, did.statusUnread.value, did.busy], [[P12FXA3_MAYBE_PUT('Pause', words)], null, ['dst_1'], ['dst_1', null]],
+            `REGRESSION: "Pause not saved" and the old status over an answer that proves nothing — ${words}`);
+        assert.ok(!did.said[0].includes('not saved'), 'never "not saved" over a Pause the server may have made');
+        const [again] = p12fxA3Maybe().find(([, w]) => w === words);   // a fresh answer: a body is read once
+        const resumed = await p12fxA3Press('putDest', again, [{ id: 'dst_1', paused: false }, 'Resume']);
+        assert.deepEqual([resumed.said, resumed.statusUnread.value], [[P12FXA3_MAYBE_PUT('Resume', words)], ['dst_1']], `a Resume likewise — ${words}`);
+    }
+});
+
+test('Part 12 fixes (A3): the Audit log\'s Rotate secret — the server\'s own refusal "not saved"; any other answer says the secret may have been rotated, no status moved — RUN', async () => {
+    for (const [answer, words] of p12fxA3Own()) {
+        const did = await p12fxA3Press('putDest', answer, [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret']);
+        assert.deepEqual([did.said, did.answered, did.statusUnread.value], [[`Rotate secret not saved — ${words}`], null, []], `the server's own refusal: ${words}`);
+    }
+    for (const [answer, words] of p12fxA3Maybe()) {
+        const did = await p12fxA3Press('putDest', answer, [{ id: 'dst_1', rotateSecret: true }, 'Rotate secret']);
+        assert.deepEqual([did.said, did.answered], [[P12FXA3_MAYBE_ROTATE(words)], null], `REGRESSION: "Rotate secret not saved" over a secret the server may have rotated — ${words}`);
+        assert.deepEqual(did.statusUnread.value, [], 'a Rotate moves no status: the row stays known');
+    }
+});
+
+test('Part 12 fixes (A3): the Audit log\'s Send test event — the server\'s own refusal "not sent", the row known; any other answer "may have been sent", its status not known — RUN', async () => {
+    for (const [answer, words] of p12fxA3Own()) {
+        const did = await p12fxA3Press('sendTest', answer, [P12A_DEST]);
+        assert.deepEqual([did.said, did.statusUnread.value, did.tests, did.busy], [[`Test not sent — ${words}`], [], [null], ['dst_1', null]], `the server's own refusal: ${words}`);
+    }
+    for (const [answer, words] of p12fxA3Maybe()) {
+        const did = await p12fxA3Press('sendTest', answer, [P12A_DEST]);
+        assert.deepEqual([did.said, did.statusUnread.value, did.tests, did.busy], [[P12FXA3_MAYBE_TEST(words)], ['dst_1'], [null], ['dst_1', null]],
+            `REGRESSION: "Test not sent" and the old status over a test that may have gone out — ${words}`);
+    }
+});
+
+test('Part 12 fixes (A3): the Audit log\'s Filters line — "Loading…" while the read is out, never "Showing 0 of 0"; "Not loaded" over a failed read — RUN', () => {
+    const piece = between(code(read(P12A_AUDIT)), "whiteSpace:'nowrap', marginLeft:'auto' }}>{", '}</span>').slice("whiteSpace:'nowrap', marginLeft:'auto' }}>{".length);
+    const asText = piece.replace(/<>([\s\S]*?)<\/>/, (m, inner) => '`' + inner.replace(/\{/g, '${') + '`');
+    const line = (eventsError, eventsLoading, visible = [], events = []) =>
+        new Function('eventsError', 'eventsLoading', 'visible', 'events', `return (${asText});`)(eventsError, eventsLoading, visible, events);
+    assert.equal(line(null, true), 'Loading…', 'REGRESSION: "Showing 0 of 0 (loading…)" — a count over a read that has not landed');
+    assert.equal(line('Internal server error (ref r1)', false), 'Not loaded');
+    assert.equal(line(null, false, [1], [1, 2]), 'Showing 1 of 2');
+    assert.ok(!piece.includes('(loading…)'), 'REGRESSION: the count drawn beside "(loading…)"');
+});
+
+test('Part 12 fixes (A3): the Audit log\'s badge tone — a warning mark while any row\'s status is not known, never the green ✓ — RUN, and WIRING', () => {
+    const tone = (dests, statusUnread) => new Function('dests', 'destsRead', 'statusUnread',
+        `${between(code(read(P12A_AUDIT)), '    const unknownCount = ', '\n    const catStyle')}\nreturn streamingTone;`)(dests, true, statusUnread);
+    assert.equal(tone([P12A_DEST], ['dst_1']), 'warn', 'REGRESSION: the green ✓ beside "1 status not known"');
+    assert.equal(tone([P12A_DEST, { id: 'dst_2', status: 'Paused' }], ['dst_2']), 'warn');
+    assert.equal(tone([P12A_DEST], []), 'ok');
+    assert.equal(tone([P12A_DEST], ['dst_9']), 'ok', 'an id no row holds (a removed row) is no status not known');
+    const s = code(read(P12A_AUDIT));
+    assert.ok(between(s, '            <SecTitle\n', '                actions={[').includes('                badgeTone={streamingTone}\n'), 'REGRESSION: the badge drawn with SecTitle\'s ✓ whatever its tone');
+});
+
+const p12fxA3Walk = (dir) => readdirSync(new URL(dir, ROOT)).flatMap((n) => {
+    const p = `${dir}/${n}`;
+    return statSync(new URL(p, ROOT)).isDirectory() ? p12fxA3Walk(p) : /\.(jsx?|mjs)$/.test(n) ? [p] : [];
+});
+
+test('Part 12 fixes (A3): SecTitle\'s badge — a green ✓ only for the \'ok\' tone (the default); \'warn\' a "!" in the warning colour; every other caller unchanged — WIRING', () => {
+    const decl = between(code(read('src/Tabs/settings/security/shared.jsx')), 'export const SecTitle = ', '\n);');
+    assert.ok(decl.startsWith("export const SecTitle = ({ title, sub, badge, badgeTone = 'ok', updatedAt, actions, dirty }) => ("), 'REGRESSION: the tone\'s default is not the ✓ every caller drew');
+    assert.ok(decl.includes("<span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12.5, color: badgeTone === 'warn' ? T.warn : T.ok, fontWeight:600 }}>"),
+        'REGRESSION: a badge naming something not known drawn in the passing colour');
+    assert.ok(decl.includes(`{badgeTone === 'warn' ? <span title="Not known" style={{ fontWeight:700 }}>!</span> : <span>✓</span>}<span>{badge}</span>`),
+        'REGRESSION: the ✓ drawn beside a badge whose tone is a warning');
+    assert.equal(count(decl, '✓'), 1, 'one ✓, the \'ok\' branch\'s');
+    const callers = p12fxA3Walk('src').filter((f) => code(read(f)).includes('<SecTitle'));
+    assert.ok(callers.length >= 6, `the callers: ${callers.join(', ')}`);
+    const toned = callers.filter((f) => code(read(f)).includes('badgeTone='));
+    assert.deepEqual(toned, [P12A_AUDIT], 'only the Audit log names a tone: every other SecTitle draws as it did');
+    assert.equal(count(code(read(P12A_AUDIT)), 'badgeTone='), 1);
+});
+
+test('Part 12 fixes (A3): the Audit log\'s destinations are read at once, in their own effect — never held behind the log\'s read — RUN, and WIRING', async () => {
+    const read1 = await p12fxA3DestsLoad(async () => {});
+    assert.deepEqual([read1.loads, read1.destErrors, read1.destsLoading], [1, [], [false]], 'the destinations read with no log answer at all');
+    const gone = await p12fxA3DestsLoad(async () => { throw UNSENT(); }, 'load');
+    assert.deepEqual([gone.loads, gone.destErrors, gone.destsLoading], [1, [], []], 'an answer after the page closed sets nothing');
+    const s = code(read(P12A_AUDIT));
+    const logRead = between(s, "        (async () => {\n            try {\n                const auditRes", '\n    }, [');
+    assert.ok(!logRead.includes('loadDests'), 'REGRESSION: the destinations read only after the log\'s read settles — both Adds held off with no request out');
+    assert.ok(s.includes('\n        })();\n        return () => { cancelled = true; };\n    }, []);\n'), 'the log\'s read depends on nothing');
+    const destsRead = between(s, "        (async () => {\n            try { await loadDests(); }", '\n    }, [loadDests]);');
+    assert.ok(!destsRead.includes('auditRes'), 'the destinations\' read waits on no log answer');
+    assert.equal(count(s, 'await loadDests()'), 1, 'one read of the destinations');
+    assert.equal(count(between(s, 'export const AuditDetail = ', '\n};\n'), 'React.useEffect(() => {'), 2, 'the log\'s read and the destinations\', each its own effect');
+});
+
+// ── Part 12 — the review's fixes, round 3 (U3 — Users + MFA) ──
+// The review of round 2 (residuals U2 and M2): Settings → Users read clerk-mfa-status's answer by no rule — any 200 body
+// was kept as mfaData, so `{}` drew "✓ MFA 0/0 enrolled" on the Security page's header, the rail's "MFA on" read "0/N"
+// and "no Clerk-linked members", a notEnrolled entry that was null threw in mfaByEmail during render (no error said), and
+// a 200 `null` left the Security page on "Loading…" for good. It keeps an answer only through the one rule the MFA page
+// and the overview's tile read (settingsCards.js mfaAnswerRead) — and that rule now reads each entry's fields as
+// clerk-mfa-status.mjs always sends them (a role's name and two counts; a member's userId, email, name and role, each a
+// string) and the enrolledUsers list Settings → Users draws: an object as a React child or an email that is not a
+// string is a read that failed, never a render crash. runClerkSync's roster read again says a 200 with no list, as the
+// invite's does; and the invite page's notice is drawn in the warning tint when its words hold a roster read that failed.
+const P12FXU3_UNKNOWN = 'MFA unknown — could not read Clerk';
+// The server's whole answer (clerk-mfa-status.mjs): two numbers, three lists, every field it always sends.
+const P12FXU3_WHOLE = () => ({
+    enrolled: 1, total: 2,
+    notEnrolled: [{ userId: 'user_c', email: 'c@x.co', name: 'C', role: 'User' }],
+    enrolledUsers: [{ userId: 'user_a', email: 'A@x.co', name: 'A', role: 'Admin' }],
+    byRole: [{ role: 'Admin', enrolled: 1, total: 1 }, { role: 'User', enrolled: 0, total: 1 }],
+});
+// One entry of one list changed (`patch` returns the new entry), the rest whole.
+const p12fxU3With = (key, patch) => { const w = P12FXU3_WHOLE(); w[key] = [patch(w[key][0]), ...w[key].slice(1)]; return w; };
+const p12fxU3Without = (key, field) => p12fxU3With(key, (e) => { const { [field]: _gone, ...rest } = e; return rest; });
+// Each a field the server always sends, missing or not of its type, or a list missing: every one a read that failed.
+const P12FXU3_BAD_FIELDS = () => [
+    p12fxU3With('byRole', (e) => ({ ...e, role: {} })), p12fxU3With('byRole', (e) => ({ ...e, role: 3 })), p12fxU3Without('byRole', 'role'),
+    p12fxU3With('byRole', (e) => ({ ...e, enrolled: '1' })), p12fxU3Without('byRole', 'enrolled'),
+    p12fxU3With('byRole', (e) => ({ ...e, total: null })), p12fxU3Without('byRole', 'total'), p12fxU3With('byRole', () => []),
+    ...['notEnrolled', 'enrolledUsers'].flatMap((key) => [
+        p12fxU3Without(key, 'userId'), p12fxU3With(key, (e) => ({ ...e, userId: 3 })),
+        p12fxU3Without(key, 'email'), p12fxU3With(key, (e) => ({ ...e, email: {} })), p12fxU3With(key, (e) => ({ ...e, email: null })),
+        p12fxU3Without(key, 'name'), p12fxU3With(key, (e) => ({ ...e, name: {} })),
+        p12fxU3Without(key, 'role'), p12fxU3With(key, (e) => ({ ...e, role: {} })),
+        p12fxU3With(key, () => []), p12fxU3With(key, () => null), p12fxU3With(key, () => 'c@x.co'),
+    ]),
+    ...[undefined, null, {}, 'x'].map((v) => ({ ...P12FXU3_WHOLE(), enrolledUsers: v })),
+];
+// Read: the whole answer, one of none, and an email the server sent as '' (it sends '' for a member with none).
+const P12FXU3_READ = () => [
+    P12FXU3_WHOLE(),
+    { enrolled: 0, total: 0, notEnrolled: [], enrolledUsers: [], byRole: [] },
+    p12fxU3With('notEnrolled', (e) => ({ ...e, email: '', name: '' })),
+];
+
+// Settings → Users' MFA load (the effect's body), extracted and run over stubs.
+const p12fxU3Load = async (answer, { cancel = false } = {}) => {
+    const did = { data: [], failed: [] };
+    const piece = between(code(read(P12A_USERS)), "        (async () => {\n            try {\n                const res = await dbFetch('/.netlify/functions/clerk-mfa-status');", '\n        })();');
+    let h = null;
+    const fetch = async () => { if (cancel) h.cancel(); if (answer instanceof Error) throw answer; return answer; };
+    // Moved (§0.249, review fixes round 4 — U4): the load says the failure's words (readRefusal, failureWords) into mfaFailed.
+    h = new Function('dbFetch', 'mfaAnswerRead', 'setMfaData', 'setMfaFailed', 'readRefusal', 'failureWords',
+        `let cancelled = false;\nconst run = ${piece.trim()}\n        });\nreturn { run, cancel: () => { cancelled = true; } };`)(
+        fetch, mfaAnswerRead, (v) => did.data.push(v), (v) => did.failed.push(v), readRefusal, failureWords);
+    await h.run();
+    return did;
+};
+// What Settings → Users draws from (mfaData, mfaFailed): the Security page's header, ring and tile, mfaByEmail, and the
+// rail's "MFA on" card over a roster of two active members — each expression extracted from the source and run.
+const p12fxU3Drawn = (mfaData, mfaFailed) => {
+    const s = code(read(P12A_USERS));
+    const lines = between(s, '    const loading     = mfaData === null && !mfaFailed;', '\n\n');
+    const detail = p12fxU2Attr("                statusDetail={loading ? 'Loading…'");
+    const state = p12fxU2Attr("                statusState={loading ? 'loading'");
+    const ring = between(s, "{score === null ? (loading ? ", '}</span>').slice(1);
+    const tile = between(s, "{ label:'MFA enrolled',     value: ", ', sub: failed ?').slice("{ label:'MFA enrolled',     value: ".length);
+    const page = new Function('mfaData', 'mfaFailed', 'T',
+        `${lines}\nreturn { statusDetail: (${detail}), statusState: (${state}), ring: (${ring}), tile: (${tile}), sections: !loading && (notEnrolled.length > 0 || total > 0) };`)(mfaData, mfaFailed, T);
+    const memo = between(s, '    const mfaByEmail = React.useMemo(() => {', '    }, [mfaData]);');
+    const mfaByEmail = new Function('React', 'mfaData', `${memo}    }, [mfaData]);\nreturn mfaByEmail;`)({ useMemo: (f) => f() }, mfaData);
+    const roster = [{ email: 'a@x.co', status: 'Active' }, { email: 'c@x.co', status: 'Active' }]
+        .map((u) => ({ ...u, mfa: mfaByEmail ? (mfaByEmail.get((u.email || '').toLowerCase()) ?? null) : null }));
+    const mfaOn = roster.filter((u) => u.mfa === true).length;
+    const mfaOff = roster.filter((u) => u.mfa === false).length;
+    const rail = between(s, "                                        label: 'MFA on',\n", "\n                                    },\n                                    {\n                                        label: 'SSO',");
+    const card = new Function('mfaByEmail', 'mfaOn', 'activeCount', 'mfaOff', 'mfaFailed', 'T', `return ({ ${rail} });`)(mfaByEmail, mfaOn, roster.length, mfaOff, mfaFailed, T);
+    return { ...page, mfaByEmail, card };
+};
+// The state the load leaves: the data it kept (or null) and whether it said the read failed.
+// Moved (§0.249, review fixes round 4 — U4): mfaFailed holds the failure's words, '' while none failed.
+const p12fxU3After = (did) => [did.data.at(-1) ?? null, did.failed.at(-1) ?? ''];
+
+test('Part 12 fixes (U3): Settings → Users keeps an MFA answer only through the one rule — one it refuses is unknown: no ✓ and no "0/0" on Security health, the ring UNKNOWN, no count and no "no Clerk-linked members" on the rail, never a render crash — RUN', async () => {
+    // Moved (§0.249, review fixes round 4 — U4): each answer with the words mfaFailed now holds (was `[true]`) — stronger.
+    const refused = [
+        ...[null, {}, { total: 0, enrolled: 0 }, { total: 2, enrolled: 1, byRole: [], notEnrolled: [null], enrolledUsers: [] }].map((b) => [onceOf(200, b), 'Its answer could not be read.']),
+        ...P12FXU3_BAD_FIELDS().map((b) => [onceOf(200, b), 'Its answer could not be read.']),
+        ...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.'],
+    ];
+    for (const [answer, words] of refused) {
+        const did = await p12fxU3Load(answer);
+        assert.deepEqual([did.data, did.failed], [[], [words]], 'REGRESSION: an answer the rule refuses kept as mfaData, or left "Loading…" for good');
+        const drawn = p12fxU3Drawn(...p12fxU3After(did));
+        assert.deepEqual([drawn.statusState, drawn.statusDetail, drawn.ring, drawn.tile, drawn.sections], ['unread', P12FXU3_UNKNOWN, 'UNKNOWN', '—', false],
+            'REGRESSION: a ✓ or "MFA 0/0 enrolled" over a read that failed');
+        assert.equal(drawn.mfaByEmail, null, 'no member drawn on or off');
+        assert.deepEqual([drawn.card.value, drawn.card.sub, drawn.card.color], ['—', 'unknown — could not read Clerk', T.inkMuted],
+            'REGRESSION: the rail\'s "MFA on" counted, or "no Clerk-linked members", over a read that failed');
+    }
+    // A 200 `null` once left the page on "Loading…" for good: it is said as unknown now.
+    const nul = await p12fxU3Load(onceOf(200, null));
+    assert.notEqual(p12fxU3Drawn(...p12fxU3After(nul)).statusDetail, 'Loading…', 'REGRESSION: a 200 null left Security health loading for good');
+    // The server's whole answer: kept, drawn as read.
+    const whole = await p12fxU3Load(onceOf(200, P12FXU3_WHOLE()));
+    assert.deepEqual([whole.data, whole.failed], [[P12FXU3_WHOLE()], []]);
+    const drawn = p12fxU3Drawn(...p12fxU3After(whole));
+    assert.deepEqual([drawn.statusState, drawn.statusDetail, drawn.ring, drawn.tile], ['read', 'MFA 1/2 enrolled · 50%', 'ENROLLED', '1/2']);
+    assert.deepEqual([...drawn.mfaByEmail], [['a@x.co', true], ['c@x.co', false]], 'each email lower-cased, on or off');
+    assert.deepEqual([drawn.card.value, drawn.card.sub], ['1/2', '1 off']);
+    // One with an email of '' (the server's for a member with none): read, the member left unknown.
+    const blank = await p12fxU3Load(onceOf(200, P12FXU3_READ()[2]));
+    assert.deepEqual([...p12fxU3Drawn(...p12fxU3After(blank)).mfaByEmail], [['a@x.co', true]]);
+    // Still loading: no mark, no count.
+    const loading = p12fxU3Drawn(null, false);
+    assert.deepEqual([loading.statusState, loading.statusDetail, loading.ring, loading.card.sub], ['loading', 'Loading…', 'LOADING', 'loading…']);
+    // An answer after the page closed sets nothing — kept or refused.
+    for (const answer of [onceOf(200, P12FXU3_WHOLE()), onceOf(200, {}), onceOf(500, { error: 'x' }), UNSENT()]) {
+        const gone = await p12fxU3Load(answer, { cancel: true });
+        assert.deepEqual([gone.data, gone.failed], [[], []], 'REGRESSION: an answer after the page closed set its state');
+    }
+});
+
+test('Part 12 fixes (U3): the one rule reads every field clerk-mfa-status sends — a field missing or not of its type, or enrolledUsers missing, is unread on the MFA page, the overview tile and Settings → Users alike — RUN', async () => {
+    const bodies = [...P12FXU3_BAD_FIELDS(), ...P12FXU3_READ(), ...P12FXM_SHORT(), ...P12FXM2_BAD_ENTRIES(), ...P12FXM2_READ()];
+    for (const body of P12FXU3_BAD_FIELDS()) assert.equal(mfaAnswerRead(body), false, `REGRESSION: ${JSON.stringify(body)} read — an object drawn as a React child, an email lower-cased that is not a string`);
+    for (const body of P12FXU3_READ()) assert.equal(mfaAnswerRead(body), true, JSON.stringify(body));
+    for (const body of bodies) {
+        const rule = mfaAnswerRead(body);
+        const page = await mfaLoad({ answer: onceOf(200, body) });
+        const tile = await p12fxmTile(body);
+        const users = await p12fxU3Load(onceOf(200, body));
+        const reads = [page.errors.length === 0 && page.data.length === 1, tile.mfa !== undefined && !tile.unread.includes('mfa'), users.data.length === 1 && users.failed.length === 0];
+        assert.deepEqual(reads, [rule, rule, rule], `REGRESSION: ${JSON.stringify(body)} — the MFA page, the tile and Settings → Users read it apart`);
+        if (!rule) assert.deepEqual(page.errors, [P12FXM_UNREAD], `${JSON.stringify(body)}: "Its answer could not be read." on the MFA page`);
+    }
+});
+
+test('Part 12 fixes (U3): WIRING — Settings → Users reads clerk-mfa-status through mfaAnswerRead, after its ok and its body, before mfaData is kept; the rule reads each field the server always sends', () => {
+    const s = code(read(P12A_USERS));
+    assert.ok(s.includes("import { mfaAnswerRead } from '../../../utils/settingsCards.js';"));
+    const load = between(s, "                const res = await dbFetch('/.netlify/functions/clerk-mfa-status');", '\n        })();');
+    // Moved (§0.249, review fixes round 4 — U4): each failure sets its words, not `true`.
+    order(load, 'if (!res.ok) { const why = await readRefusal(res); if (!cancelled) setMfaFailed(why); return; }', 'const d = await res.json();', 'if (cancelled) return;',
+        "if (!mfaAnswerRead(d)) { setMfaFailed('Its answer could not be read.'); return; }", 'setMfaData(d);');
+    assert.equal(count(s, 'setMfaData('), 1, 'one place mfaData is kept, behind the rule');
+    assert.ok(!/typeof d\.|Array\.isArray\(d\./.test(load), 'REGRESSION: a copy of the rule beside the shared one');
+    const rule = between(code(read('src/utils/settingsCards.js')), 'const isMfaRole = ', '\n\n');
+    assert.ok(rule.includes("const isMfaRole = (v) => !!v && typeof v.role === 'string' && typeof v.enrolled === 'number' && typeof v.total === 'number';"),
+        'REGRESSION: a byRole entry\'s role or counts not read');
+    assert.ok(rule.includes("const isMfaMember = (v) => !!v && typeof v.userId === 'string' && typeof v.email === 'string' && typeof v.name === 'string' && typeof v.role === 'string';"),
+        'REGRESSION: a member entry\'s fields not read');
+    order(rule, "export const mfaAnswerRead = (d) => !!d && typeof d.total === 'number' && typeof d.enrolled === 'number'",
+        '&& Array.isArray(d.byRole) && d.byRole.every(isMfaRole)', '&& Array.isArray(d.notEnrolled) && d.notEnrolled.every(isMfaMember)',
+        '&& Array.isArray(d.enrolledUsers) && d.enrolledUsers.every(isMfaMember);');
+    // The server: every field the rule asks for, always sent, each a string or a number (a parity pin on the function file).
+    const fn = code(read('netlify/functions/clerk-mfa-status.mjs'));
+    for (const line of ["const email   = user.emailAddresses?.[0]?.emailAddress || '';", "const role    = roleIn.get(user.id) || 'User';",
+        'const userId  = user.id;', "const name    = [user.firstName, user.lastName].filter(Boolean).join(' ') || email;",
+        'if (!roleMap[u.role]) roleMap[u.role] = { role: u.role, enrolled: 0, total: 0 };',
+        'enrolled:     enrolledCount,', 'notEnrolled:  notEnrolled.map(u => ({ userId: u.userId, email: u.email, name: u.name, role: u.role })),',
+        'enrolledUsers: enrolled.map(u => ({ userId: u.userId, email: u.email, name: u.name, role: u.role })),', 'byRole,']) {
+        assert.ok(fn.includes(line), `REGRESSION: the server's answer changed shape — the rule reads what it no longer sends: ${line}`);
+    }
+});
+
+test('Part 12 fixes (U3): Sync from Clerk\'s roster read again — a 200 with no users list said in the banner, never a stale roster passed over in silence — RUN, and WIRING', async () => {
+    const SYNCED = 'Synced: 0 added, 0 updated, 2 unchanged';
+    for (const roster of [onceOf(200, {}), onceOf(200, { users: 'x' }), onceOf(200, null), onceOf(200, { users: { id: 'usr_1' } }), P11_UNREADABLE()]) {
+        const r = await clerkSync({ sync: onceOf(200, { counts: { created: 0, updated: 0, unchanged: 2 } }), roster });
+        assert.equal(r.said, `${SYNCED}. The roster could not be read again — reload the page to see it: Its answer could not be read.`,
+            'REGRESSION: a roster answer with no list passed over in silence');
+        assert.deepEqual(r.roster, [], 'REGRESSION: a roster answer with no list written');
+    }
+    const late = await clerkSync({ sync: onceOf(200, { counts: { created: 0, updated: 0, unchanged: 2 } }), roster: onceOf(200, {}) }, { switchAt: 1 });
+    assert.deepEqual([late.said, late.roster], [SYNCED, []], 'after an org switch nothing more said');
+    const landed = await clerkSync({ sync: onceOf(200, { counts: { created: 0, updated: 0, unchanged: 2 } }), roster: onceOf(200, { users: [{ id: 'usr_1' }] }) });
+    assert.deepEqual([landed.said, landed.roster], [SYNCED, [{ users: [{ id: 'usr_1' }] }]]);
+    const sync = between(code(read(P12A_USERS)), '    const runClerkSync = async () => {', '\n    };');
+    order(sync, "await dbFetch('/.netlify/functions/users')", 'if (!r.ok) throw new Error(await readRefusal(r));', 'const ud = await r.json();', 'if (!stillOrg(askedOrg)) return;',
+        "if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');", '_setSettings(prev => ({ ...prev, users: ud.users }));');
+    assert.ok(!sync.includes('ud && ud.users'), 'REGRESSION: the looser read again is back');
+});
+
+test('Part 12 fixes (U3): the invite page\'s notice — the warning tint when its words hold a roster read that failed; green for a clean landed-unread notice — RUN, and WIRING', async () => {
+    const ROSTER = () => onceOf(200, { users: [...P12A_SETTINGS().users, { id: 'usr_9', name: 'New', email: 'new@x.test' }] });
+    const clean = await inviteSend({ answer: [P11_UNREADABLE(), ROSTER()] });
+    assert.deepEqual([clean.warn, clean.told.length], [[false], 1], 'REGRESSION: a clean landed-unread notice drawn as a warning');
+    for (const roster of [...P12A_REFUSED().map(([a]) => a), P11_UNREADABLE(), onceOf(200, {})]) {
+        const did = await inviteSend({ answer: [P11_UNREADABLE(), roster] });
+        assert.deepEqual([did.warn, did.told.length], [[true], 1], 'REGRESSION: a roster read that failed said in the success green');
+        assert.ok(did.told[0].includes('The roster could not be read again'));
+    }
+    const sent = await inviteSend({ answer: onceOf(201, { invited: [{ id: 'usr_9', name: 'New' }], errors: [] }) });
+    assert.deepEqual([sent.warn, sent.told], [[], []], 'a send that was read sets no notice');
+    const late = await inviteSend({ answer: [P11_UNREADABLE(), UNSENT()], switchAt: 1 });
+    assert.deepEqual([late.warn, late.told], [[], []], 'after an org switch nothing said');
+    // The box's tint, extracted and run.
+    const page = between(code(read(P12A_USERS)), 'const UsersInvitePage = ', '\nconst UsersExportPage = ');
+    const style = between(page, '{notice && <div style={{', '}}>{notice}</div>}').slice('{notice && <div style={{'.length);
+    const tint = (noticeWarn) => { const st = new Function('noticeWarn', 'T', `return ({${style}});`)(noticeWarn, T); return [st.background, st.border]; };
+    assert.deepEqual(tint(true), [`${T.warn}12`, `1px solid ${T.warn}55`], 'REGRESSION: a failed roster read drawn in the success tint');
+    assert.deepEqual(tint(false), [`${T.ok}12`, `1px solid ${T.ok}55`]);
+    assert.ok(page.includes('const [noticeWarn, setNoticeWarn] = useState(false);'));
+    assert.equal(count(page, 'setNoticeWarn('), 1, 'set once, with its words');
+    order(page, 'if (!stillOrg(askedOrg)) return;   // a roster read that failed after an org switch says nothing here', 'setNoticeWarn(!reread);', 'setNotice(reread');
+});
+
+// ── Part 12 — the review's fixes, round 3 (D3 — Document batch stop) ──
+// The review of round 2 (residual D2-1): a record's dropped batch that stopped said only the stop's words — "The
+// document was not saved — Forbidden" — naming neither the file refused nor the files after it, never sent. A member who
+// dropped the whole batch again wrote every file made before the stop a second time (and a file that may have been made
+// too). The stop now says the file it stopped at by its name and its words, and "Not sent: <names> — drop them again";
+// a file made, or one that may have been, is never among them (they are said by name above it). A file refused before
+// anything is sent (validateFile) is said the same way: nothing was sent, every other file named. The upload rail takes
+// one file at a time (a drop's first file, an input without `multiple`) and lets it go once made or maybe made (D2).
+// A record's attach with its own validateFile: `invalid` maps a file's name to its words.
+const p12fxd3Attach = async (answers, invalid = {}) => {
+    const did = { errors: [], notices: [], busy: [], sent: [] };
+    const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        (f) => invalid[f.name] || null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
+        async (f) => { did.sent.push(f.name); const a = answers[f.name]; if (a instanceof Error) throw a; return a; },
+        // Moved in §0.249 (review fixes, round 4, D4): the batch's sending mark and the held drop's names.
+        (n) => n.replace(/\.[^.]+$/, ''), { type: 'account', recordId: 'acc_1' }, failureWords, { current: false }, () => {});
+    await attach(Object.keys(answers).map((name) => ({ name, size: 10, type: 'application/pdf' })));
+    return did;
+};
+// The names a red box's "Not sent:" line gives, or [] when it has none.
+const p12fxd3Unsent = (words) => {
+    const line = String(words || '').split('\n').find((l) => l.startsWith('Not sent: '));
+    return line ? line.slice('Not sent: '.length, -' — drop them again'.length).split(', ') : [];
+};
+
+test('Part 12 fixes, round 3 (D3): a record\'s Documents — a batch that stops names the file it stopped at with its words, and the files never sent by theirs; no file made, or that may have been, is among them — RUN', async () => {
+    const DOC = { id: 'doc_y' };
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const maybe = (await p12fxdThrown({ record: onceOf(500, { error: 'Internal server error', requestId: 'r1' }) })).e;
+    const own = (await p12fxdThrown({ record: onceOf(403, { error: 'Forbidden' }) })).e;
+    const presign = (await p12fxdThrown({ presign: onceOf(500, { error: 'Internal server error', requestId: 'r2' }) })).e;
+    const r2 = (await p12fxdThrown({ r2: { status: 403 } })).e;
+    // Made, maybe, then the refusal, then two never sent: each said by its name and its outcome.
+    const mid = await p12fxd3Attach({ 'a.pdf': made, 'b.pdf': maybe, 'c.pdf': own, 'd.pdf': DOC, 'e.pdf': DOC });
+    assert.deepEqual([mid.sent, mid.notices.at(-1), mid.errors.at(-1)], [['a.pdf', 'b.pdf', 'c.pdf'], `a.pdf: ${P12FXD_MADE}`,
+        `b.pdf: ${P12FXD2_MAYBE}: Internal server error (ref r1)\nc.pdf: The document was not saved — Forbidden\nNot sent: d.pdf, e.pdf — drop them again`],
+        'REGRESSION: the stop names neither the file refused nor the files never sent — the batch dropped again writes the made files twice');
+    assert.deepEqual(p12fxd3Unsent(mid.errors.at(-1)), ['d.pdf', 'e.pdf'], 'REGRESSION: a file made, maybe made or refused named as never sent');
+    // Saved before the stop (read): not named as never sent either — it is in the list.
+    const saved = await p12fxd3Attach({ 'a.pdf': DOC, 'b.pdf': r2, 'c.pdf': DOC });
+    assert.deepEqual([saved.sent, saved.errors, saved.notices], [['a.pdf', 'b.pdf'], [null, 'b.pdf: The file was not stored — The server returned 403.\nNot sent: c.pdf — drop them again'], [null]]);
+    // Stopped at the first file: every other file never sent, in the order dropped.
+    const first = await p12fxd3Attach({ 'a.pdf': presign, 'b.pdf': DOC, 'c.pdf': DOC });
+    assert.deepEqual([first.sent, first.errors], [['a.pdf'], [null, 'a.pdf: The upload could not start — Internal server error (ref r2)\nNot sent: b.pdf, c.pdf — drop them again']]);
+    // Stopped at the last file: nothing never sent, no "Not sent" line.
+    const last = await p12fxd3Attach({ 'a.pdf': DOC, 'b.pdf': made, 'c.pdf': own });
+    assert.deepEqual([last.sent, last.errors, last.notices], [['a.pdf', 'b.pdf', 'c.pdf'], [null, 'c.pdf: The document was not saved — Forbidden'], [null, `b.pdf: ${P12FXD_MADE}`]],
+        'REGRESSION: an empty "Not sent" line');
+    // A thrown runtime failure: its plain words, still by name.
+    const thrown = await p12fxd3Attach({ 'a.pdf': new TypeError('Failed to fetch'), 'b.pdf': DOC });
+    assert.deepEqual(thrown.errors, [null, 'a.pdf: The server could not be reached.\nNot sent: b.pdf — drop them again']);
+    // No stop: no file named as refused or never sent.
+    const ok = await p12fxd3Attach({ 'a.pdf': DOC, 'b.pdf': made });
+    assert.deepEqual([ok.errors, ok.notices.at(-1)], [[null], `b.pdf: ${P12FXD_MADE}`]);
+});
+
+test('Part 12 fixes, round 3 (D3): a record\'s Documents — a file refused before anything is sent is named, and every other file named as never sent — RUN', async () => {
+    const DOC = { id: 'doc_y' };
+    const bad = await p12fxd3Attach({ 'a.pdf': DOC, 'x.exe': DOC, 'b.pdf': DOC }, { 'x.exe': 'Unsupported file type: .exe' });
+    // Moved in §0.249 (review fixes, round 4, D4): a refused drop clears the last batch's notice, as a batch that sends does.
+    assert.deepEqual([bad.sent, bad.errors, bad.busy, bad.notices], [[], ['x.exe: Unsupported file type: .exe\nNot sent: a.pdf, b.pdf — drop them again'], [], [null]],
+        'REGRESSION: the refused file not named, or the files never sent not said — the member thinks the others went');
+    const one = await p12fxd3Attach({ 'big.pdf': DOC }, { 'big.pdf': 'File exceeds the 50 MB limit' });
+    assert.deepEqual([one.sent, one.errors], [[], ['big.pdf: File exceeds the 50 MB limit']]);
+});
+
+test('Part 12 fixes, round 3 (D3): WIRING — the stop names its file and the files after it; the upload rail takes one file at a time', () => {
+    const record = code(read(P12FXD_RECORD));
+    const attach = between(record, '    const attachFiles = async (fileList) => {', '\n    };');
+    order(attach, "const stopWords = (f, words, unsent) => [`${f.name}: ${words}`, ...(unsent.length ? [`Not sent: ${unsent.map((u) => u.name).join(', ')} — drop them again`] : [])].join('\\n');",
+        // Moved in §0.249 (review fixes, round 4, D4): every file checked, each refused by its name, only the fine named unsent.
+        'const said = refused.map(([f, words], i) => stopWords(f, words, i === refused.length - 1 ? fine : [])).join(\'\\n\');',
+        'setNotice(null); setHeld(null); setError(said);',
+        'let at = 0;', 'for (; at < files.length; at += 1) {', 'const f = files[at];',
+        'setError(stopWords(files[at], failureWords(e), files.slice(at + 1)));', '} finally {');
+    assert.equal(count(attach, 'setError('), 4, 'the stop, the refusal before sending, the clear and the maybe lines');
+    // The rail: a drop's first file and an input without `multiple` — no batch to stop.
+    const rail = code(read(P12FXD_RAIL));
+    assert.ok(rail.includes('pickFile(e.dataTransfer.files?.[0]);') && rail.includes('onChange={(e) => pickFile(e.target.files?.[0])}'));
+    assert.ok(!/\bmultiple\b/.test(rail), 'REGRESSION: the rail takes many files — a batch with no stop words');
+});
+
+// ── Part 12 — the review's fixes, round 3 (I3 — Invitation import) ──
+// The verifier's three residuals of I2. (1) A roster read again that LANDS says who of a request answered unread was
+// invited: each address of it on the roster (trimmed, any case — as userConflicts compares) is counted sent, each not
+// on it a "Not invited" row — "The answer could not be read, and they are not on the roster — not invited." — so the
+// receipt says exact counts, never "up to"; only a roster read that fails leaves them unread ("up to N … some may have
+// been refused", with the reload words). The rule is importReceipt.js unreadOnRoster, pure. (2) The Results' tile for
+// the ones left unread says what a 201 proves: "up to N" over "sent or refused — answer unread" (one alone was sent:
+// "sent — answer unread"), never a bare N "sent". (3) A person is "they" / "them", never "it".
+const P12FXI3_ROSTER = Object.freeze([{ id: 'usr_a', email: ' P0@X.Test ', name: 'p0' }, { id: 'usr_b', email: 'p1@x.test', name: 'p1' }]);
+
+test('Part 12 fix I3: unreadOnRoster — each sent unread on the roster read again (by address, trimmed, any case) was invited; each not on it a "Not invited" row in plain words — RUN', async () => {
+    const { unreadOnRoster, NOT_ON_ROSTER } = await import('../src/utils/importReceipt.js');
+    assert.equal(NOT_ON_ROSTER, 'The answer could not be read, and they are not on the roster — not invited.');
+    assert.ok(!/\bit\b/.test(NOT_ON_ROSTER), 'a person is "they", never "it"');
+    const sent = [{ email: 'p0@x.test', teamId: 't1' }, { email: 'p1@x.test' }, { email: 'p2@x.test' }];
+    const roster = [...P12FXI3_ROSTER, { id: 'usr_old', email: 'old@x.test' }, { id: 'usr_z' }];
+    // Moved in round 4 (I4): the rule takes each request apart; two of one request on the roster are onRoster (not proven).
+    const out = unreadOnRoster([sent], roster);
+    assert.deepEqual(out.onRoster, [sent[0], sent[1]], 'REGRESSION: an address on the roster in another case or spacing read as not invited');
+    assert.deepEqual(out.notInvited, [{ email: 'p2@x.test', error: NOT_ON_ROSTER }], 'REGRESSION: one not on the roster counted as invited');
+    assert.equal(out.invited.length + out.onRoster.length + out.notInvited.length, sent.length, 'each sent unread counted once');
+    // A roster row with no address is no invitation's match, nor one with none.
+    assert.deepEqual(unreadOnRoster([[{ email: '' }]], [{ id: 'usr_z' }]), { invited: [], onRoster: [], notInvited: [{ email: '', error: NOT_ON_ROSTER }] },
+        'REGRESSION: a roster row with no address taken as an invitation sent');
+    // Nothing read: none invited, never a throw.
+    assert.deepEqual(unreadOnRoster([[{ email: 'a@x.test' }]], null), { invited: [], onRoster: [], notInvited: [{ email: 'a@x.test', error: NOT_ON_ROSTER }] });
+    assert.deepEqual(unreadOnRoster(null, roster), { invited: [], onRoster: [], notInvited: [] });
+});
+
+test('Part 12 fix I3: the invitation import — a roster read again that lands counts the ones sent unread exactly: on it sent, not on it a "Not invited" row; the receipt says no "up to" — RUN', async () => {
+    const { describeReceipt, isClean, isPartial, NOT_ON_ROSTER } = await import('../src/utils/importReceipt.js');
+    const lit = code(read(P12FXI_MODAL)).match(/describeReceipt\(r, 'invitation', (\{[^}]*\})\)/);
+    const words = new Function(`return ${lit[1]};`)();
+    // p0..p9 the first request (answered unread; p0, p4, p8 name East), p10 sent and p11 refused by the second.
+    const r = await p12fxI2Import({ invites: p12fxIPeople(12, 4), roster: onceOf(200, { users: P12FXI3_ROSTER }), posts: [
+        p12fxIUnreadable(), onceOf(201, { invited: [{ id: 'usr_10', email: 'p10@x.test', teamId: 't1' }], errors: [{ email: 'p11@x.test', error: 'x' }] }),
+    ] });
+    const rc = r.out.receipt;
+    // Moved in round 4 (I4): p0 and p1 (two of one request) are on the roster — invited by this import or before it.
+    assert.deepEqual([rc.unread, rc.onRoster, rc.created, rc.failed, rc.error, rc.attempted], [2, 2, 1, 9, null, 12],
+        'REGRESSION: a roster that landed left the ones sent unread at "up to" — or counted the ones not on it as sent');
+    p12fxIInvariant(rc);
+    assert.deepEqual(r.out.refusals, [{ email: 'p11@x.test', error: 'x' },
+        ...['p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'].map(p => ({ email: `${p}@x.test`, error: NOT_ON_ROSTER }))],
+        'REGRESSION: the ones not on the roster named nowhere — the Admin cannot tell which to fix');
+    assert.equal(describeReceipt(rc, 'invitation', words), '1 invitation sent, 2 on the roster — invited by this import or before it. 9 not sent.');
+    assert.ok(!/up to|some may have been refused|reload/.test(describeReceipt(rc, 'invitation', words) + (r.out.warning || '')), 'exact counts, nothing to reload');
+    assert.deepEqual([isClean(rc), isPartial(rc)], [false, true]);
+    // Of the three that named a team only p0 was invited: one person on no team's list, "they".
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.equal(r.out.warning, "1 whose answer could not be read named a team — check on the Teams page that they are on its list.",
+        'REGRESSION: the ones not invited counted as on no team\'s list');
+    assert.deepEqual(r.teams, [{ id: 't1', name: 'East', repIds: ['usr_10'] }], 'only the rows the server named join the team list');
+    // Every one on the roster: all sent, none unread, nothing not invited by this rule.
+    const all = await p12fxI2Import({ invites: p12fxIPeople(3), posts: [p12fxIUnreadable()],
+        roster: onceOf(200, { users: p12fxIPeople(3).map((v, i) => ({ id: `usr_${i}`, email: v.email.toUpperCase() })) }) });
+    // Moved in round 4 (I4): every one on the roster, three of one request — on it, invited by this import or before it;
+    // the 201 proves one was, so some sent, never clean.
+    assert.deepEqual([all.out.receipt.unread, all.out.receipt.onRoster, all.out.receipt.created, all.out.receipt.failed, all.out.refusals, all.out.warning], [3, 3, 0, 0, [], null]);
+    assert.deepEqual([isClean(all.out.receipt), isPartial(all.out.receipt)], [false, true], 'on the roster, not proven: Some Invitations Sent');
+    // None on the roster: none sent, each named.
+    const none = await p12fxI2Import({ invites: p12fxIPeople(2), posts: [p12fxIUnreadable()], roster: onceOf(200, { users: P12FXI2_HELD }) });
+    assert.deepEqual([none.out.receipt.unread, none.out.receipt.created, none.out.receipt.failed, none.out.refusals.map(f => f.email)], [0, 0, 2, ['p0@x.test', 'p1@x.test']]);
+    // The roster read fails: they stay unread — "up to", some may have been refused — and none is named "Not invited".
+    for (const [roster, why] of [[onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'], [UNSENT(), 'The server could not be reached.'],
+        [P11_UNREADABLE(), 'Its answer could not be read.']]) {
+        const f = await p12fxI2Import({ invites: p12fxIPeople(10), posts: [p12fxIUnreadable()], roster });
+        assert.deepEqual([f.out.receipt.unread, f.out.receipt.created, f.out.receipt.failed, f.out.refusals], [10, 0, 0, []], `REGRESSION: ${why}`);
+        assert.equal(describeReceipt(f.out.receipt, 'invitation', words), 'Up to 10 invitations sent — the answer could not be read; some may have been refused.');
+        assert.equal(f.out.warning, `The roster could not be read again — reload the page to see the invitations sent: ${why}`);
+    }
+});
+
+test('Part 12 fix I3: the team sentence names a person "they" / "them", never "it" — over a roster that landed and one that failed — RUN', async () => {
+    const landed = await p12fxI2Import({ invites: p12fxIPeople(1, 1), posts: [p12fxIUnreadable()], roster: onceOf(200, { users: P12FXI3_ROSTER }) });
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.equal(landed.out.warning, "1 whose answer could not be read named a team — check on the Teams page that they are on its list.");
+    const failed = await p12fxI2Import({ invites: p12fxIPeople(1, 1), posts: [p12fxIUnreadable()], roster: UNSENT() });
+    assert.equal(failed.out.warning, 'The roster could not be read again — reload the page to see the invitation sent: The server could not be reached. '
+        // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+        + "1 whose answer could not be read named a team — reload the page, then check on the Teams page that they are on its list.");
+    const many = await p12fxI2Import({ invites: p12fxIPeople(10, 4), posts: [p12fxIUnreadable()], roster: UNSENT() });
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.ok(many.out.warning.endsWith("3 whose answers could not be read named a team — reload the page, then check on the Teams page that they are on their teams' lists."));
+    for (const w of [landed.out.warning, failed.out.warning, many.out.warning]) assert.ok(!/\bit\b/.test(w), `REGRESSION: a person named "it" — ${w}`);
+});
+
+test('Part 12 fix I3: the Results\' tile for the ones left unread says "up to N" over "sent or refused — answer unread"; one alone sent; none over a roster that landed — RUN', async () => {
+    const { emptyReceipt } = await import('../src/utils/importReceipt.js');
+    const ten = (await p12fxI2Tiles({ ...emptyReceipt(), attempted: 12, created: 1, failed: 1, unread: 10 })).find(t => t.label.includes('answer unread'));
+    assert.deepEqual([ten.n, ten.upTo, ten.label, ten.color], [10, true, 'sent or refused — answer unread', T.warn], 'REGRESSION: a bare 10 "sent" beside "up to 10 … some may have been refused"');
+    const one = (await p12fxI2Tiles({ ...emptyReceipt(), attempted: 1, unread: 1 })).find(t => t.label.includes('answer unread'));
+    assert.deepEqual([one.n, one.upTo, one.label], [1, false, 'sent — answer unread'], 'one alone: a 201 says it was sent');
+    // The tiles still add up to everyone attempted, by their counts.
+    const tiles = await p12fxI2Tiles({ ...emptyReceipt(), attempted: 12, created: 1, failed: 1, unread: 10 });
+    assert.equal(tiles.reduce((a, t) => a + t.n, 0), 12);
+    assert.equal(new Set(tiles.map(t => t.label)).size, tiles.length, 'each tile its own key');
+    // A roster that landed leaves none unread: no such tile.
+    assert.ok(!(await p12fxI2Tiles({ ...emptyReceipt(), attempted: 12, created: 3, failed: 9 })).some(t => t.label.includes('answer unread')));
+    // The count drawn: "up to N" where the tile says so, else the count.
+    const m = code(read(P12FXI_MODAL));
+    const DRAW = "<div style={{ fontSize: '22px', fontWeight: '700', color: t.color }}>{t.upTo ? `up to ${t.n}` : t.n}</div>";
+    assert.ok(m.includes(DRAW), 'REGRESSION: the tile draws a bare N');
+    const shown = (t) => new Function('t', 'return t.upTo ? `up to ${t.n}` : t.n;')(t);
+    assert.deepEqual([shown(ten), shown(one)], ['up to 10', 1]);
+});
+
+test('Part 12 fix I3: WIRING — the roster taken only once its shape is read; its count after the org check and before the team save; the rule imported', () => {
+    const l = code(read(P12FXI_LAYER));
+    assert.ok(/emptyReceipt, unreadOnRoster,\n\} from '\.\.\/\.\.\/utils\/importReceipt';/.test(l), 'REGRESSION: the rule not imported — the import throws once a roster lands');
+    const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
+    // Moved in round 4 (I4): each request apart (push(chunk)), flattened for the team count; the ones on the roster
+    // left unread as onRoster, and counted with the invited for the team sentence.
+    order(h, 'receipt.unread += chunk.length;', 'sentUnread.push(chunk);', 'continue;', "if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');",
+        'setSettings(prev => ({ ...prev, users: ud.users }));', 'roster = ud.users;', '} catch (e) { rosterWhy = failureWords(e); }', 'if (!stillOrg(askedOrg)) return stopped();',
+        'let teamless = sentUnread.flat();', 'if (roster) {', 'const { invited, onRoster, notInvited } = unreadOnRoster(sentUnread, roster);', 'receipt.created += invited.length;',
+        'receipt.failed += notInvited.length;', 'receipt.unread = onRoster.length;', 'receipt.onRoster = onRoster.length;', 'refusals.push(...notInvited);', 'teamless = [...invited, ...onRoster];',
+        'const unreadTeams = teamless.filter(v => v && v.teamId).length;', "const added = await addToSettingsList('teams'");
+    assert.equal(count(h, 'unreadOnRoster('), 1, 'one count by the roster');
+    assert.ok(!/\bit\b/.test(between(h, 'if (unreadTeams) warning', '\n')), 'REGRESSION: a person named "it"');
+});
+
+// ── Part 12 — the review's fixes, round 3 (C3 — Calendar) ──
+// The verifier's two residuals of round 2 (state §0.249). (1) App's calendar read kept every answer: a Refresh sent
+// before a Disconnect's DELETE could answer after it and write connected:true and the deleted connection's events back,
+// and an older read's finally cleared a newer read's flag. App keeps only its latest read now (calendarReadGen, as the
+// list hooks' loadGen); a landed Disconnect moves it on (dropCalendarReads); Disconnect is not offered while a read is in
+// flight, and its title says why. (2) A calendar never read in this org was drawn "not connected": calendarConnected's
+// false is only its starting value. calendarRead (org-bound, set when a read lands) now stands before every "not
+// connected": the profile panel's Calendar tab and Tasks' calendar view start a read when none has landed and none is in
+// flight, and Home, Tasks and the panel say they are checking until one lands — Home's first frame too.
+const P12FXC3_APP = 'src/App.jsx';
+const p12fxC3Ev = { id: 'ev_9', summary: 'Old connection meeting' };
+const P12FXC3_FETCH_PARAMS = ['requestOrg', 'stillOrg', 'setCalendarLoading', 'setCalendarError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords',
+    'setCalendarConnected', 'setCalendarEvents', 'calendarReadGen', 'setCalendarRead'];
+const P12FXC3_DISCONNECT_PARAMS = ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn',
+    'fetchCalendarEvents', 'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'];
+// App's dropCalendarReads, built from its own source over the sequence handed in.
+const p12fxC3Drop = (gen) => new Function('calendarReadGen',
+    `${between(code(read(P12FXC3_APP)), '    const dropCalendarReads = ', ';\n')};\nreturn dropCalendarReads;`)(gen);
+// One shared state and App's own calendar read over it: each GET takes the next of `reads` ({ answer, gate }), a DELETE
+// `del` ({ answer, gate }); a gate holds the answer until released.
+const p12fxC3Build = (st, { reads = [], del = null } = {}) => {
+    const org = { now: 'org_a' };
+    const gen = { current: 0 };
+    const queue = [...reads];
+    const dbFetch = async (url, opts = {}) => {
+        const method = opts.method || 'GET';
+        st.sent.push(method);
+        const step = method === 'DELETE' ? del : queue.shift();
+        if (step.gate) await step.gate.held;
+        if (step.answer instanceof Error) throw step.answer;
+        return step.answer;
+    };
+    const fetchCal = p12aFn(P12FXC3_APP, '    const fetchCalendarEvents = async () => {', '\n    };', '\n    };', P12FXC3_FETCH_PARAMS, 'fetchCalendarEvents')(
+        () => 'org_a', (o) => o === org.now, (v) => { st.loading = v; }, (v) => { st.error = v; }, async () => {}, dbFetch, readRefusal, failureWords,
+        (v) => { st.connected = v; }, (v) => { st.events = v; }, gen, (v) => { st.read = v; });
+    return { org, gen, dbFetch, fetchCal };
+};
+const p12fxC3State = (over = {}) => ({ connected: true, events: [p12fxC3Ev], error: null, loading: false, disconnected: false, conn: { id: 'cc_1' },
+    said: [], sent: [], read: true, ...over });
+const p12fxC3Now = (st) => [st.connected, st.events, st.error, st.loading, st.read];
+
+test('Part 12 fix C3: App keeps only its latest calendar read — an older answer, landed, refused or unsent, is dropped, and its finally never clears the newer read\'s flag — RUN', async () => {
+    for (const [older, what] of [[onceOf(200, { connected: true, events: [p12fxC3Ev] }), 'landed'], [onceOf(500, { error: 'x', requestId: 'r1' }), 'refused'],
+        [UNSENT(), 'unsent'], [P11_UNREADABLE(), 'unreadable']]) {
+        // The older answers while the newer is in flight: nothing it says is kept, and the flag stays the newer's.
+        const st = p12fxC3State({ connected: false, events: [], read: false });
+        const g1 = p11Gate(), g2 = p11Gate();
+        const { fetchCal } = p12fxC3Build(st, { reads: [{ gate: g1, answer: older }, { gate: g2, answer: onceOf(200, { connected: false, events: [] }) }] });
+        const r1 = fetchCal();
+        const r2 = fetchCal();
+        g1.release();
+        await r1;
+        assert.deepEqual(p12fxC3Now(st), [false, [], null, true, false],
+            `REGRESSION: an older read's answer kept, or its finally cleared the newer read's flag — ${what}`);
+        g2.release();
+        await r2;
+        assert.deepEqual(p12fxC3Now(st), [false, [], null, false, true], `the newer read's answer — ${what}`);
+    }
+    // The newer answers first: the older, answering after it, is dropped.
+    const st = p12fxC3State({ connected: false, events: [], read: false });
+    const g1 = p11Gate(), g2 = p11Gate();
+    const { fetchCal } = p12fxC3Build(st, { reads: [{ gate: g1, answer: onceOf(200, { connected: true, events: [p12fxC3Ev] }) },
+        { gate: g2, answer: onceOf(200, { connected: false, events: [] }) }] });
+    const r1 = fetchCal();
+    const r2 = fetchCal();
+    g2.release();
+    await r2;
+    g1.release();
+    await r1;
+    assert.deepEqual(p12fxC3Now(st), [false, [], null, false, true], 'REGRESSION: an older read written over the latest');
+    // One read alone is kept, as before.
+    const one = p12fxC3State({ connected: false, events: [], read: false });
+    await p12fxC3Build(one, { reads: [{ answer: onceOf(200, { connected: true, events: [p12fxC3Ev] }) }] }).fetchCal();
+    assert.deepEqual(p12fxC3Now(one), [true, [p12fxC3Ev], null, false, true]);
+});
+
+test('Part 12 fix C3: a calendar read that lands marks the org\'s calendar read — connected or not; a refusal, a failure, an unreadable answer or an org switch never does — RUN', async () => {
+    assert.deepEqual((await p12bCalendar({ answer: onceOf(200, { events: [], connected: false }) })).read, [true], 'REGRESSION: a landed "not connected" never marked read');
+    assert.deepEqual((await p12bCalendar({ answer: onceOf(200, { events: [p12fxC3Ev] }) })).read, [true], 'REGRESSION: a landed connection never marked read');
+    for (const [answer, words] of [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.']]) {
+        const r = await p12bCalendar({ answer });
+        assert.deepEqual([r.read, r.said], [[], [`The calendar could not be read — ${words}`]], `REGRESSION: a read that failed taken as read — ${words}`);
+    }
+    for (const answer of [onceOf(200, { events: [p12fxC3Ev] }), onceOf(200, { connected: false }), onceOf(500, { error: 'x' })]) {
+        assert.deepEqual((await p12bCalendar({ answer, switchOrg: true })).read, [], 'REGRESSION: the last org\'s read marked the new org\'s calendar read');
+    }
+});
+
+test('Part 12 fix C3: a landed Disconnect moves App\'s read sequence on — a read sent before the DELETE never writes the deleted connection or its events back, however the answers fall — RUN', async () => {
+    // App's own dropCalendarReads moves the sequence on.
+    const g = { current: 4 };
+    p12fxC3Drop(g)();
+    assert.equal(g.current, 5, 'REGRESSION: dropCalendarReads leaves the sequence where it was');
+    const run = async ({ reread, staleFirst, refetch = true }) => {
+        const st = p12fxC3State();
+        const gDel = p11Gate(), gStale = p11Gate(), gRe = p11Gate();
+        const { gen, dbFetch, fetchCal } = p12fxC3Build(st, {
+            reads: [{ gate: gStale, answer: onceOf(200, { connected: true, events: [p12fxC3Ev] }) }, { gate: gRe, answer: reread }],
+            del: { gate: gDel, answer: onceOf(200, { ok: true }) } });
+        const disconnect = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };', P12FXC3_DISCONNECT_PARAMS, 'disconnectCalendar')(
+            st.conn, () => 'org_a', () => true, () => {}, (v) => { if (v) st.said.push(v); }, dbFetch, readRefusal, failureWords,
+            (v) => { st.conn = v; }, refetch ? fetchCal : null, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; },
+            p12fxC3Drop(gen), false);
+        const pressed = disconnect();        // pressed with no read in flight
+        await settle();
+        const stale = fetchCal();            // a Refresh while the DELETE is out
+        await settle();
+        gDel.release();
+        await settle();
+        if (staleFirst) { gStale.release(); await stale; await settle(); gRe.release(); }
+        else { gRe.release(); await settle(); gStale.release(); }
+        await pressed;
+        await stale;
+        await settle();
+        return { st, panel: p12fxCPanel({ loading: st.loading, error: st.error, connected: st.connected, conn: st.conn, disconnected: st.disconnected, read: st.read }) };
+    };
+    for (const staleFirst of [false, true]) {
+        for (const [reread, words] of [[onceOf(502, { error: 'Bad gateway', requestId: 'r7' }), 'Bad gateway (ref r7)'], [P11_PAGE(), 'The server returned 502.'], [UNSENT(), 'The server could not be reached.']]) {
+            const { st, panel } = await run({ reread, staleFirst });
+            assert.deepEqual([st.connected, st.events, st.disconnected, st.loading, st.error], [false, [], true, false, `The calendar could not be read — ${words}`],
+                `REGRESSION: a read sent before the DELETE wrote the deleted connection back — ${staleFirst ? 'it answered first' : 'it answered last'}, ${words}`);
+            assert.deepEqual(panel, { status: 'Disconnected', pill: 'OFF', connect: true, refresh: false, count: false });
+        }
+        const { st } = await run({ reread: onceOf(200, { connected: false, events: [] }), staleFirst });
+        assert.deepEqual([st.connected, st.events, st.error, st.loading], [false, [], null, false],
+            'REGRESSION: the deleted connection\'s meetings back on Home with no error at all');
+    }
+    // No re-read to overtake it: the drop alone keeps the stale Refresh out.
+    const { st } = await run({ reread: null, staleFirst: true, refetch: false });
+    assert.deepEqual([st.connected, st.events, st.disconnected], [false, [], true], 'REGRESSION: the DELETE moved nothing on — the stale read wrote the connection back');
+    // The drop comes before the re-read, landed only.
+    const landed = await p12bHeaderDisconnect({ answer: onceOf(200, { ok: true }) });
+    assert.equal(landed.dropAt.length, 1, 'REGRESSION: a landed Disconnect never moves the read sequence on');
+    assert.ok(landed.dropAt[0] <= landed.steps.indexOf('refetch'), 'dropped before the re-read is sent');
+    for (const [answer] of p12bRefused()) assert.deepEqual((await p12bHeaderDisconnect({ answer })).dropAt, [], 'a refused Disconnect drops nothing');
+    assert.deepEqual((await p12bHeaderDisconnect({ answer: onceOf(200, { ok: true }), switchOrg: true })).dropAt, [], 'nor one answered after a switch');
+});
+
+test('Part 12 fix C3: Disconnect is not offered while a calendar read is in flight — the press does nothing, the button is disabled and its title says why — RUN', async () => {
+    const r = await p12bHeaderDisconnect({ answer: onceOf(200, { ok: true }), loading: true });
+    assert.deepEqual([r.sent, r.busy, r.conn, r.connected, r.dropAt, r.refetched], [[], [], [], [], [], 0],
+        'REGRESSION: a Disconnect sent while a read was in flight');
+    const s = code(read(P12B_HEADER));
+    const btn = between(s, '<button onClick={disconnectCalendar}', 'style={{');
+    const disabled = btn.match(/disabled=\{([^}]*)\}/);
+    const title = btn.match(/title=\{([\s\S]*)\}\s*$/);
+    assert.ok(disabled && title, 'the Disconnect button\'s disabled and title');
+    const style = between(s, '<button onClick={disconnectCalendar}', "{disconnecting ? 'Disconnecting…'");
+    const cursor = style.match(/cursor: \(([^)]*)\) \? 'default'/);
+    const opacity = style.match(/opacity: \(([^)]*)\) \? 0\.5/);
+    assert.ok(cursor && opacity, 'its cursor and opacity');
+    const button = new Function('disconnecting', 'calConn', 'calendarLoading', 'calConnLoaded',
+        `return { disabled: !!(${disabled[1]}), title: ${title[1]}, cursorOff: !!(${cursor[1]}), dim: !!(${opacity[1]}) };`);
+    const C = { id: 'cc_1' };
+    assert.deepEqual(button(false, C, true, true),
+        { disabled: true, title: 'The calendar is being read — Disconnect is offered once that read answers.', cursorOff: true, dim: true },
+        'REGRESSION: Disconnect offered while a calendar read is in flight, or its title silent on why');
+    assert.deepEqual(button(false, C, false, true), { disabled: false, title: undefined, cursorOff: false, dim: false });
+    assert.deepEqual(button(true, C, true, true), { disabled: true, title: undefined, cursorOff: true, dim: true }, 'its own re-read: "Disconnecting…" says it');
+    assert.equal(button(false, null, false, true).title, 'No stored connection found to disconnect');
+    assert.equal(button(false, null, true, false).title, 'Loading connection…');
+});
+
+test('Part 12 fix C3: the profile panel — a calendar never read in this org is "Checking…", "—", no Connect; never "Not connected" or OFF before a read lands — RUN', () => {
+    const ERR = 'The calendar could not be read — The server returned 502.';
+    assert.deepEqual(p12fxCPanel({ connected: false, read: false }),
+        { status: 'Checking…', pill: '—', connect: false, refresh: true, count: false },
+        'REGRESSION: "Not connected", OFF and "Connect Google Calendar" over a calendar never read');
+    assert.deepEqual(p12fxCPanel({ loading: true, connected: false, read: false }),
+        { status: 'Checking…', pill: '—', connect: false, refresh: true, count: false });
+    assert.deepEqual(p12fxCPanel({ error: ERR, connected: false, read: false }),
+        { status: 'Could not be read', pill: '—', connect: false, refresh: true, count: false }, 'a failed first read keeps round 2\'s words');
+    assert.deepEqual(p12fxCPanel({ connected: false, disconnected: true, read: false }),
+        { status: 'Disconnected', pill: 'OFF', connect: true, refresh: false, count: false }, 'a landed Disconnect is known');
+    assert.deepEqual(p12fxCPanel({ connected: false, read: true }),
+        { status: 'Not connected', pill: 'OFF', connect: true, refresh: false, count: false }, 'a read that found none offers Connect');
+});
+
+test('Part 12 fix C3: the profile panel\'s Calendar tab starts a read when none has landed and none is in flight — never over a landed one, one in flight or a failure, nor while closed or on another tab — RUN', () => {
+    const s = code(read(P12B_HEADER));
+    const eff = between(s, '    }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);\n', ']);\n').slice(
+        '    }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);\n'.length) + ']);';
+    const run = (open, tab, read, loading, error) => {
+        let fetched = 0, deps = null;
+        new Function('useEffect', 'showProfilePanel', 'profilePanelTab', 'calendarRead', 'calendarLoading', 'calendarError', 'fetchCalendarEvents', eff)(
+            (fn, d) => { deps = d; fn(); }, open, tab, read, loading, error, () => { fetched++; });
+        return { fetched, deps };
+    };
+    assert.deepEqual(run(true, 'calendar', false, false, null), { fetched: 1, deps: [true, 'calendar', false, false, null] },
+        'REGRESSION: a calendar never read in this org left unread on the Calendar tab — or the effect not re-run when a switch puts its read back');
+    assert.equal(run(true, 'calendar', true, false, null).fetched, 0, 'a read landed: none started');
+    assert.equal(run(true, 'calendar', false, true, null).fetched, 0, 'REGRESSION: a second read over one in flight');
+    assert.equal(run(true, 'calendar', false, false, 'The calendar could not be read — x').fetched, 0, 'REGRESSION: a failed read retried on its own, without end');
+    assert.equal(run(false, 'calendar', false, false, null).fetched, 0, 'the panel closed');
+    assert.equal(run(true, 'email', false, false, null).fetched, 0, 'another tab');
+});
+
+test('Part 12 fix C3: Home\'s calendar strip — a calendar never read in this org is "Checking your calendar…" from the first frame, never "Connect your calendar…" — RUN', () => {
+    const home = code(read(P12FXC_HOME));
+    assert.ok(home.includes('calendarEvents, calendarConnected, calendarLoading, calendarError, fetchCalendarEvents, calendarRead,'), 'REGRESSION: Home never reads calendarRead');
+    const strip = p12fxC2Chain(between(home, '{calendarError ? (', 'Refreshing…</span>'), /(?:^\{|\n\s*\) : )(?:([^\n?]+?) \? )?\(\n/g,
+        { error: '{calendarError}', checking: 'Checking your calendar…', connect: 'Connect your calendar to see', connected: 'Calendar connected — no meetings today' },
+        ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']);
+    assert.equal(strip({ calendarConnected: false, calendarRead: false }), 'checking',
+        'REGRESSION: "Connect your calendar…" painted before the first read is sent, or over a calendar never read');
+    assert.equal(strip({ calendarLoading: true, calendarConnected: false, calendarRead: false }), 'checking');
+    assert.equal(strip({ calendarError: 'The calendar could not be read — x', calendarConnected: false, calendarRead: false }), 'error', 'a failed read keeps its words');
+    assert.equal(strip({ calendarConnected: false, calendarRead: true }), 'connect', 'a read that found none offers Connect');
+    assert.equal(strip({ calendarConnected: true, calendarRead: true }), 'connected');
+    // App's Home effect starts the read on Home (auth-gated-loads pins it): Home draws checking until it lands.
+    const app = code(read(P12FXC3_APP));
+    assert.ok(app.includes("if (activeTab === 'home' && !calendarFetchAttempted.current && (switched || !calendarLoading)) {"));
+});
+
+test('Part 12 fix C3: Tasks\' calendar view — a calendar never read in this org is checking, never "Calendar not connected"; the view starts a read when none has landed and none is in flight — RUN and WIRING', () => {
+    const tasks = code(read(P12FXC_TASKS));
+    assert.ok(/function CalendarView\(\{[^}]*\bcalendarRead\b[^}]*\}\)/.test(tasks), 'REGRESSION: CalendarView never takes calendarRead (module scope)');
+    assert.ok(tasks.includes('calendarRead={calendarRead}'), 'REGRESSION: CalendarView never told whether a read landed');
+    assert.ok(/calendarEvents, calendarConnected, calendarLoading, calendarError,\s*calendarRead, fetchCalendarEvents,/.test(tasks), 'Tasks reads calendarRead and the read');
+    const rail = p12fxC2Chain(between(tasks, '{calendarError\n', 'Calendar not connected</div>)') + 'Calendar not connected', /(?:^\{|\n\s*: )(?:([^\n?]+?)\n\s*\? )?\(/g,
+        { error: '{calendarError}', synced: 'Synced', checking: 'Checking the calendar…', notConnected: 'Calendar not connected' },
+        ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']);
+    assert.equal(rail({ calendarConnected: false, calendarRead: false }), 'checking', 'REGRESSION: "Calendar not connected" over a calendar never read');
+    assert.equal(rail({ calendarError: 'x', calendarRead: false }), 'error');
+    assert.equal(rail({ calendarConnected: false, calendarRead: true }), 'notConnected');
+    const eff = between(tasks, '    const [calDayOffset, setCalDayOffset] = useState(0);\n', ']);\n').slice(
+        '    const [calDayOffset, setCalDayOffset] = useState(0);\n'.length) + ']);';
+    const run = (view, read, loading, error) => {
+        let fetched = 0, deps = null;
+        new Function('useEffect', 'view', 'calendarRead', 'calendarLoading', 'calendarError', 'fetchCalendarEvents', eff)(
+            (fn, d) => { deps = d; fn(); }, view, read, loading, error, () => { fetched++; });
+        return { fetched, deps };
+    };
+    assert.deepEqual(run('calendar', false, false, null), { fetched: 1, deps: ['calendar', false, false, null] },
+        'REGRESSION: the calendar view leaves a calendar never read unread — "Calendar not connected" until Home is visited');
+    assert.equal(run('calendar', true, false, null).fetched, 0, 'a read landed');
+    assert.equal(run('calendar', false, true, null).fetched, 0, 'REGRESSION: a second read over one in flight');
+    assert.equal(run('calendar', false, false, 'x').fetched, 0, 'REGRESSION: a failed read retried on its own');
+    assert.equal(run('list', false, false, null).fetched, 0, 'another view');
+});
+
+test('Part 12 fix C3: WIRING — calendarRead is the org\'s (reset on a switch), App hands it and dropCalendarReads to the screens, the header takes both', () => {
+    const hook = code(read('src/hooks/useCalendarState.js'));
+    assert.ok(hook.includes('const [calendarRead, setCalendarRead] = useOrgBoundState(resets, false);'), 'REGRESSION: calendarRead outlives an org switch');
+    assert.ok(hook.includes('        calendarRead: calendarHere && calendarRead, setCalendarRead,\n'), 'the hook returns it');   // moved in §0.249 (review fixes, round 4): for the org it was read in
+    const app = code(read(P12FXC3_APP));
+    assert.ok(between(app, '    const {\n        calendarEvents, setCalendarEvents, calendarLoading', '} = calState;').includes('calendarRead, setCalendarRead,'), 'App takes it from the hook');
+    assert.ok(between(app, '    const appContextValue = {', '\n    };').includes('        calendarRead, dropCalendarReads,\n'), 'REGRESSION: the screens never get calendarRead or dropCalendarReads');
+    assert.equal(count(app, 'setCalendarRead('), 1, 'set by a landed read alone');
+    order(app, 'const calendarReadGen = useRef(0);', 'const dropCalendarReads = ', 'const fetchCalendarEvents = async () => {', 'const gen = ++calendarReadGen.current;',
+        'if (gen !== calendarReadGen.current) return;', 'setCalendarRead(true);', 'if (gen !== calendarReadGen.current) return;', 'if (gen === calendarReadGen.current) {');
+    const h = code(read(P12B_HEADER));
+    assert.ok(/setCalendarConnected, setCalendarEvents,\s*calendarRead, dropCalendarReads,/.test(h), 'REGRESSION: the header never takes calendarRead or dropCalendarReads');
+});
+
+// ── Part 12 — the review's fixes, round 3 (S3 — Sales Manager claims) ──
+// The residual the S2 round left open (state §0.249): a SPIFF claim's Approve, Reject or Delete refused with no words of
+// its own — a 4xx with an empty body, a blank error, a body that is not JSON — said claimRefused's own lowercase "Not
+// saved — the server returned 409", no period, and a ref with no words beside it. It says the house words: "Not saved —"
+// / "Not deleted —" and refusalWords — the server's words with their ref, else "The server returned N.". A 5xx is still
+// "reload and see" (the write may have landed, §0.204), and a lost answer still claimUnanswered's.
+const P12FXS3_SMT = 'src/Tabs/SalesManagerTab.jsx';
+const P12FXS3_LINE = '    ? `Not ${done} — ${refusalWords({ status }, d)}`';
+
+test('Part 12 fixes, round 3 (S3): a SPIFF claim\'s Approve and Delete refused say refusalWords\' words — the server\'s with their ref, else "The server returned N."; a wordless 4xx or a 5xx says the claim may have been (round 4) — RUN', async () => {
+    const { claimRefused } = p12bClaimWords();
+    for (const [d, status, done, msg] of [
+        // Moved in §0.249 (review fixes, round 4, S4): a 4xx with no words of its own says the claim may have been.
+        [{}, 409, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 409.'],
+        [{}, 403, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 403.'],
+        [{ error: '   ' }, 400, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 400.'],
+        [{ error: 42 }, 400, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 400.'],
+        [{ requestId: 'r9' }, 404, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 404.'],
+        [null, 409, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 409.'],
+        [{ error: 'id required', requestId: 'req_4' }, 400, 'deleted', 'Not deleted — id required (ref req_4)'],
+        [{ error: ' Claim not found in your organization ', requestId: '  ' }, 404, 'saved', 'Not saved — Claim not found in your organization'],
+        [{ error: 'Only managers and admins can approve or reject claims' }, 403, 'saved', 'Not saved — Only managers and admins can approve or reject claims'],
+        [{}, 502, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 502.'],
+    ]) assert.equal(claimRefused(done, d, status), msg, `REGRESSION: ${status} ${JSON.stringify(d)} — claimRefused's own "the server returned N"`);
+    // Pressed, end to end: Approve and Delete over a 4xx with no words, a blank error and one with words and a ref.
+    for (const [which, done] of [['status', 'saved'], ['delete', 'deleted']]) {
+        for (const [answer, msg] of [
+            // Moved in §0.249 (review fixes, round 4, S4): the wordless 4xx say the claim may have been.
+            [onceOf(409, {}), `The claim may have been ${done} — reload the page to see whether it was: The server returned 409.`],
+            [onceOf(400, { error: ' ', requestId: 'r3' }), `The claim may have been ${done} — reload the page to see whether it was: The server returned 400.`],
+            [onceOf(400, new SyntaxError("Unexpected token '<'")), `The claim may have been ${done} — reload the page to see whether it was: The server returned 400.`],
+            [onceOf(403, { error: 'Only managers and admins can approve or reject claims', requestId: 'r4' }), `Not ${done} — Only managers and admins can approve or reject claims (ref r4)`],
+        ]) {
+            const r = await p12bClaimPress(which, { answer });
+            assert.deepEqual([r.states, r.claims], [[{ status: 'error', msg }], [P12B_CLAIM, P12B_CLAIM_2]], `REGRESSION (${which}): ${msg}`);
+            assert.doesNotMatch(r.states[0].msg, /the server returned|Unexpected token|undefined|HTTP/);
+        }
+    }
+});
+
+test('Part 12 fixes, round 3 (S3): WIRING — claimRefused\'s refusal says refusalWords\' words, once; no own-worded "the server returned" anywhere in the tab', () => {
+    const s = code(read(P12FXS3_SMT));
+    // Moved in §0.249 (review fixes, round 4, S4): the head names the server's own refusal; the maybe line says refusalWords too.
+    // Moved in §0.249 (review fixes, last pass, F4): the head reads the tab's one ownRefusal (pinned whole in S4's WIRING).
+    const words = between(s, 'const claimRefused = (done, d, status) => (ownRefusal(status, d)\n', '\nconst claimUnanswered');
+    order(words, 'const claimRefused = (done, d, status) => (ownRefusal(status, d)', P12FXS3_LINE, '    : `The claim may have been ${done}');
+    assert.equal(s.split('\n').filter((l) => l === P12FXS3_LINE).length, 1, 'the refusal\'s line, whole');
+    assert.equal(count(words, 'refusalWords('), 2, 'the house words: the refusal\'s and the maybe sentence\'s');
+    assert.ok(!/d\?\.error \|\||the server returned \$\{status\}/.test(words), 'REGRESSION: claimRefused\'s own words for a refusal');
+    // Lowercase: the tab's own "the server returned" — the house words capitalise it, and say it through refusalWords.
+    assert.ok(!s.includes('the server returned'), 'REGRESSION: an own-worded "the server returned" in SalesManagerTab');
+    // The dash is the character, never its escape (a backslash and "u2014" built here so no escape is typed).
+    assert.ok(!P12FXS3_LINE.includes(`${String.fromCharCode(92)}u2014`) && P12FXS3_LINE.includes('—'));
+});
+
+// ── Part 12 — the review's fixes, round 3 (L3 — Leads requests and lead import owners) ──
+// The two residuals round 2 left open (state §0.249). [1] A rep's claim-requests list that had not landed yet was still
+// drawn as "no request": while GET /lead-requests was in flight, leadRequests was [] and requestsError '', so Triage's row
+// offered "Request" and the Cockpit said "Request this lead" / "Not yet assigned" with Request assignment — over a request
+// Karen had already filed (a press: the server's 409), and no Cancel for it. A landed flag (requestsLanded, false on each
+// mount — an org switch remounts the tab) makes myRequestOf `loading` until the read lands: neither Request nor Cancel is
+// offered, and Triage and the Cockpit say "Checking requests…". [2] The lead import's Results never said the owner names
+// the server reported (leads.mjs ambiguousOwners / unmatchedOwners, carried by receiptFromInsert): they say describeOwners'
+// lines, as the account, contact and deal imports do — never a failure (isClean's rule, state §0.216), so a clean run
+// stays "Import Complete" with the lines beneath it.
+const P12FXL3_LEADS = 'src/Tabs/LeadsTab.jsx';
+const P12FXL3_MODAL = 'src/components/modals/LeadImportModal.jsx';
+const P12FXL3_CHECKING = 'Checking requests…';
+const P12FXL3_PENDING = Object.freeze([{ id: 'lcr_1', leadId: 'l1', status: 'pending' }]);
+// The Cockpit's "Assigned to" words and its next-action button's gate, extracted as the expressions they are and run.
+const p12fxL3Detail = () => between(code(read(P12FXL3_LEADS)), 'const CockpitDetail = (', 'const CockpitView');
+const p12fxL3AssignedWords = (st) => {
+    const expr = between(p12fxL3Detail(), "{canAssign ? 'Not yet assigned' : ", '\n').trim().slice(1, -1);
+    return new Function('canAssign', 'requestsUnread', 'requestsError', 'requestsChecking', 'myPending', `return (${expr});`)(
+        st.canAssign, st.requestsUnread, st.requestsError, st.requestsChecking, st.myPending);
+};
+const p12fxL3NextButton = (st, lead) => {
+    const expr = between(p12fxL3Detail(), '{canEdit && !(', ' && <button onClick={e => {\n                        if (!lead) return;').slice(1);
+    return new Function('canEdit', 'requestsUnread', 'requestsChecking', 'lead', `return !!(${expr});`)(st.canEdit, st.requestsUnread, st.requestsChecking, lead);
+};
+const p12fxL3Cockpit = (o = {}) => {
+    const lead = o.lead || { id: 'l1', status: 'New', assignee: null };
+    const st = p12fxL2Cockpit({ ...o, lead });
+    const canEdit = o.canEdit ?? true;
+    return { ...st, assigned: p12fxL3AssignedWords({ ...st, canAssign: !!o.canAssign, requestsError: o.requestsError || '' }),
+        button: p12fxL3NextButton({ ...st, canEdit }, lead) };
+};
+
+test('Part 12 fixes, round 3 (L3): a rep\'s request on a lead — before the list lands it is loading, never "no request", whatever the list it starts as holds; a failed read is unread; landed, as before — RUN', () => {
+    const myRequestOf = p12fxL2MyRequestOf();
+    for (const list of [[], P12FXL3_PENDING, null]) {
+        assert.deepEqual(myRequestOf(list, '', false, 'l1'), { unread: false, loading: true, pending: null },
+            'REGRESSION: a list that has not landed read as no request (or as a request it may not hold)');
+    }
+    assert.deepEqual(myRequestOf([], 'The server returned 502.', false, 'l1'), { unread: true, loading: false, pending: null }, 'a read that failed is unread, not loading');
+    assert.deepEqual(myRequestOf([], '', true, 'l1'), { unread: false, loading: false, pending: null }, 'landed and empty: no request');
+    assert.deepEqual(myRequestOf(P12FXL3_PENDING, '', true, 'l1'), { unread: false, loading: false, pending: P12FXL3_PENDING[0] });
+});
+
+test('Part 12 fixes, round 3 (L3): the requests read marks the list landed only when it lands — never on a refusal, a failure, an unreadable answer, an org switch or an unmount — RUN', async () => {
+    const LIST = [{ id: 'lcr_1', leadId: 'l1', status: 'pending' }];
+    const landed = await p12fxLLoad({ answer: onceOf(200, { leadRequests: LIST }) });
+    assert.deepEqual([landed.lists, landed.errors, landed.landed], [[LIST], [''], [true]], 'REGRESSION: a list that landed is never marked landed');
+    for (const [answer, words] of [...p12bRefused(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, { other: 1 }), 'Its answer could not be read.']]) {
+        const did = await p12fxLLoad({ answer });
+        assert.deepEqual([did.errors, did.landed], [[words], []], `REGRESSION: ${words} — a read that failed marked landed`);
+    }
+    for (const answer of [onceOf(200, { leadRequests: LIST }), UNSENT()]) {
+        assert.deepEqual((await p12fxLLoad({ answer, switchAt: true })).landed, [], 'REGRESSION: landed in the org switched to');
+        assert.deepEqual((await p12fxLLoad({ answer, cancel: true })).landed, [], 'unmounted: nothing');
+    }
+});
+
+test('Part 12 fixes, round 3 (L3): the Cockpit before the requests list lands — a rep is told "Checking requests…", offered neither Request nor Cancel, never "Not yet assigned"; a manager, a reader and an owned lead as before — RUN', () => {
+    for (const leadRequests of [[], P12FXL3_PENDING]) {
+        const rep = p12fxL3Cockpit({ requestsLanded: false, leadRequests });
+        assert.deepEqual([rep.requestsChecking, rep.requestsUnread, rep.myPending, rep.nextAction], [true, false, null, P12FXL3_CHECKING],
+            'REGRESSION: "Request this lead" (or "Requested") over a list that has not landed');
+        assert.equal(rep.assigned, P12FXL3_CHECKING, 'REGRESSION: "Not yet assigned" drawn from a list that has not landed');
+        assert.equal(rep.button, false, 'REGRESSION: the next action\'s Request / Cancel offered over a list that has not landed');
+    }
+    const landedRead = p12fxL3Cockpit({ leadRequests: P12FXL3_PENDING });
+    assert.deepEqual([landedRead.requestsChecking, landedRead.nextAction, landedRead.assigned, landedRead.button],
+        [false, 'Requested — awaiting approval', 'Requested — awaiting a manager\'s approval', true], 'landed: the request, and its Cancel');
+    const empty = p12fxL3Cockpit();
+    assert.deepEqual([empty.nextAction, empty.assigned, empty.button], ['Request this lead', 'Not yet assigned', true], 'landed and empty: Request');
+    const failed = p12fxL3Cockpit({ requestsLanded: false, requestsError: 'Internal server error (ref r1)' });
+    assert.deepEqual([failed.requestsUnread, failed.requestsChecking, failed.assigned, failed.button],
+        [true, false, 'Your requests could not be read — Internal server error (ref r1)', false], 'a read that failed says so, not "Checking"');
+    const mgr = p12fxL3Cockpit({ canAssign: true, requestsLanded: false });
+    assert.deepEqual([mgr.requestsChecking, mgr.nextAction, mgr.assigned, mgr.button], [false, 'Assign to a rep', 'Not yet assigned', true], 'a manager assigns');
+    const reader = p12fxL3Cockpit({ canEdit: false, requestsLanded: false });
+    assert.deepEqual([reader.requestsChecking, reader.nextAction, reader.button], [false, 'Waiting to be assigned', false], 'a reader is offered nothing');
+    const owned = p12fxL3Cockpit({ lead: { id: 'l1', status: 'Working', assignee: 'Karen' }, requestsLanded: false });
+    assert.deepEqual([owned.nextAction, owned.button], ['Check in — keep the ball moving', true], 'an owned lead\'s next action is not a request');
+});
+
+test('Part 12 fixes, round 3 (L3): WIRING — LeadsTab holds the landed flag and hands it to both views; Triage\'s row says "Checking requests…" and offers no Request or Cancel until it lands; the Cockpit\'s Request assignment waits too', () => {
+    const s = code(read(P12FXL3_LEADS));
+    const main = between(s, 'export default function LeadsTab() {', '\n}\n');
+    order(main, "    const [requestsError, setRequestsError] = useState('');", '    const [requestsLanded, setRequestsLanded] = useState(false);',
+        '                setLeadRequests(data.leadRequests);\n                setRequestsError(\'\');\n                setRequestsLanded(true);\n            } catch (e) {');
+    assert.equal(count(main, 'setRequestsLanded('), 1, 'set once, where the list lands — never on a failure');
+    assert.equal(count(main, 'requestsLanded={requestsLanded}'), 2, 'REGRESSION: a view never told whether the list landed');
+    assert.ok(between(main, '<TriageView', '/>').includes('requestsLanded={requestsLanded}'));
+    assert.ok(between(main, '<CockpitView', '/>').includes('requestsLanded={requestsLanded}'));
+    const triage = between(s, 'const TriageView = (', 'const CockpitListRow');
+    assert.ok(between(triage, 'const TriageView = (', '=> {').includes('requestsLanded, leadRequests, requestsError'));
+    const row = between(triage, ') : (() => {\n                                            const mine = ', '})()}');
+    order(row, 'myRequestOf(leadRequests, requestsError, requestsLanded, l.id);', 'if (mine.unread) return l.assignee ? <LeadAssignee name={l.assignee}/>',
+        'if (mine.loading) return l.assignee ? <LeadAssignee name={l.assignee}/>',
+        `: <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>${P12FXL3_CHECKING}</span>;`, 'const myPending = mine.pending;',
+        "label={myPending ? '✓ Requested' : 'Request'}");
+    const view = between(s, 'const CockpitView = (', 'export default function LeadsTab');
+    assert.ok(between(s, 'const CockpitView = (', '=> {').includes('requestsLanded, leadRequests'));
+    assert.ok(view.includes('canAssign={canAssign} requestsLanded={requestsLanded} leadRequests={leadRequests}'), 'REGRESSION: the detail never told whether the list landed');
+    const detail = p12fxL3Detail();
+    assert.ok(between(s, 'const CockpitDetail = (', '=> {').includes('requestsLanded, canEdit'));
+    assert.ok(detail.includes('myRequestOf(leadRequests, requestsError, requestsLanded, lead.id)'));
+    assert.ok(detail.includes('    const requestsChecking = canEdit && mine.loading;'));
+    order(detail, ') : !canEdit ? null : myPending ? (', 'Cancel request</button>', ') : (requestsUnread || requestsChecking) ? null : (', 'Request assignment</button>');
+});
+
+// The lead import's owner names: the handler's receipt over the real bulk client, then the modal's doImport.
+const p12fxL3Answer = (ids, owners) => onceOf(201, { insertedIds: ids, ...owners });
+const p12fxL3Ids = (from, to) => Array.from({ length: to - from }, (_, i) => `lead_${from + i}`);
+const P12FXL3_NO_MEMBER = 'No member is named “Jon Smith” — those rows were saved with no owner. Set the owner on each record\'s page.';
+const P12FXL3_TWO_MEMBERS = 'More than one member is named “Pat Lee” — those rows were saved with no owner (an overwrite kept the owner it had). Set the owner on each record\'s page.';
+
+test('Part 12 fixes, round 3 (L3): the lead import\'s Results say the owner names the server matched to no member or to more than one — a clean run still "Import Complete", a partial one too; none, no lines — RUN', async () => {
+    const owners = { unmatchedOwners: ['Jon Smith'], ambiguousOwners: ['Pat Lee'] };
+    const clean = await p12fxL2DoImport(p12fxL2Handler({ answers: [p12fxL3Answer(p12fxL3Ids(0, 3), owners)] }).onImport);
+    assert.deepEqual(clean.steps, ['results']);
+    assert.deepEqual(clean.stats, [{ added: 3, skipped: 1, errors: ['Row 5: missing first and last name'], owners: [P12FXL3_NO_MEMBER, P12FXL3_TWO_MEMBERS] }],
+        'REGRESSION: the owner names the server reported never said');
+    assert.equal(clean.stats[0].said, undefined, 'never a failure: a clean run with owner lines is still "Import Complete" (isClean)');
+    // Owner names kept across the chunks, each once, then a later chunk refused: partial, with its lines.
+    const partial = await p12fxL2DoImport(p12fxL2Handler({ answers: [p12fxL3Answer(p12fxL3Ids(0, 400), { unmatchedOwners: ['Jon Smith'] }), P11_PAGE()] }).onImport,
+        p12fxL2Leads(900));
+    assert.deepEqual(partial.stats, [{ added: 400, failed: 500, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: [P12FXL3_NO_MEMBER] }],
+        'REGRESSION: a partial import drops the owner names of the leads that landed');
+    const none = await p12fxL2DoImport(p12fxL2Handler({ answers: ['ok'] }).onImport);
+    assert.equal(none.stats[0].owners, null, 'no owner names: no lines');
+});
+
+test('Part 12 fixes, round 3 (L3): WIRING — the lead import\'s Results draw the owner lines, as the other importers do; both Results paths carry them', () => {
+    const m = code(read(P12FXL3_MODAL));
+    assert.ok(m.includes("import { receiptFromError, describeReceipt, describeOwners } from '../../utils/importReceipt';"));
+    const doImport = between(m, '    const doImport = async () => {', '\n    };');
+    assert.equal(count(doImport, 'owners: describeOwners(receipt) });'), 2, 'REGRESSION: a Results path without the owner names');
+    const results = between(m, "{step === 'results' && importStats && (", '<ResizeHandles');
+    order(results, "{importStats.said ? 'Partially Imported' : 'Import Complete'}", 'Leads Imported</div>',
+        '{(importStats.owners || []).map(line => (',
+        "<p key={line} style={{ color:T.warn, fontSize:'0.8125rem', margin:'0 auto 0.75rem', maxWidth:480, overflowWrap:'anywhere' }}>{line}</p>",
+        '{importStats.errors.length > 0 && (');
+    // The account, contact and deal imports say the same lines (CsvImportModal), from the same helper.
+    assert.ok(read('src/components/modals/CsvImportModal.jsx').includes('{(describeOwners(r) || []).map(line => ('));
+});
+
+// ── Part 12 — the review's fixes, round 3 (G3 — THE GUARD floors) ──
+// Re-measured after every round 3 fix (§0.249): (iii) 190 body reads over the 242 sources under src/ (A3's Pause /
+// Resume / Rotate and Send test refusal bodies, read in their ok checks), (iv) 188 catch clauses over its 54 files,
+// (i) 126 error states. Its WIRING test, which held the first round's (G) and round 2's (G2), is merged into the one floors
+// test at the end of this file (round 4, G4), so no floor is left looser beside it.
+
+// ── Part 12 — the review's fixes, round 4 (A4 — Audit log Add and Remove) ──
+// The review of round 3 (its two residuals): the Add and the Remove said every answer that was not ok as a refusal —
+// "Internal server error (ref r1)" in the Add window, left open for a retry, and "Remove destination failed", the row kept
+// as live — though audit-stream.mjs inserts or deletes the row before its audit write and the caller's name, either of
+// which can answer 500 after the write, and a gateway's page or a request that threw may have reached it. A second press
+// made a second destination with a second secret; a removed row was drawn live, with a Pause. They follow round 3's
+// destRefusedOwn rule: only the server's own refusal (a 4xx with its words) says "not saved" / "failed" and leaves the
+// screen as it was, the Add window open for a retry; any other answer says the destination may have been added — the
+// window closed, the list not known — or removed — the row kept, its status not known.
+const p12fxA4Own = () => [
+    [onceOf(400, { error: 'A name is required.', requestId: 'r5' }), 'A name is required. (ref r5)'],
+    [onceOf(401, { error: 'Unauthorized' }), 'Unauthorized'],
+    [onceOf(403, { error: 'Forbidden: insufficient role' }), 'Forbidden: insufficient role'],
+];
+const P12FXA4_MAYBE_ADD = (words) => `The destination may have been added — reload the page to see whether it was: ${words}`;
+const P12FXA4_MAYBE_REMOVE = (words) => `The destination may have been removed — reload the page to see whether it was: ${words}`;
+const P12FXA4_LIST = 'A destination may be missing from the list — reload the page to see every destination.';
+
+test('Part 12 fixes (A4): the Audit log\'s Add — the server\'s own refusal in the window, left open for a retry; any other answer "may have been added", the window closed, the list not known — RUN', async () => {
+    for (const [answer, words] of p12fxA4Own()) {
+        const did = await p12fxAPress('createDest', answer, [{ name: 'X' }]);
+        assert.deepEqual([did.answered, did.modal, did.read, did.unread.value, did.said, did.reveal, did.dests.value.map((d) => d.id), did.sent.length],
+            [{ ok: false, error: words }, [], [], '', [], [], ['dst_1'], 1], `the server's own refusal: ${words}`);
+    }
+    for (const [answer, words] of p12fxA3Maybe()) {
+        const did = await p12fxAPress('createDest', answer, [{ name: 'X' }]);
+        assert.deepEqual([did.answered, did.modal, did.read, did.unread.value, did.said, did.reveal, did.dests.value.map((d) => d.id), did.sent.length],
+            [{ ok: true }, [false], [false], P12FXA4_LIST, [P12FXA4_MAYBE_ADD(words)], [], ['dst_1'], 1],
+            `REGRESSION: "${words}" in a window left open over a destination the server may have made — a second press makes a second one`);
+        assert.ok(!did.said[0].includes('not saved'), 'never "not saved" over a destination the server may have made');
+        const [again] = p12fxA3Maybe().find(([, w]) => w === words);   // a fresh answer: a body is read once
+        const kept = await p12fxAPress('createDest', again, [{ name: 'X' }], P12FXA_LOAD);
+        assert.equal(kept.unread.value, P12FXA_LOAD, `REGRESSION: the load's failure replaced by an Add that may have landed — ${words}`);
+    }
+});
+
+test('Part 12 fixes (A4): the Audit log\'s Remove — the server\'s own refusal "failed", the row known; any other answer "may have been removed", the row kept, its status not known — RUN', async () => {
+    // Moved pin (§0.249, the review's fixes, last pass — F1): the 404 in the server's words proves the row gone — it leaves
+    // the list, said "already removed" (the last pass's own test); the 400 and 403 are as they were.
+    for (const [answer, words] of p12fxA3Own().filter(([a]) => a.status !== 404)) {
+        const did = await p12fxARemove(answer);
+        assert.deepEqual([did.said, did.ids, did.statusUnread, did.busy], [[`Remove destination failed — ${words}`], ['dst_1', 'dst_2'], [], ['dst_1', null]],
+            `the server's own refusal: ${words}`);
+    }
+    const gone404 = await p12fxARemove(p12fxA3Own().find(([a]) => a.status === 404)[0]);
+    assert.deepEqual([gone404.said, gone404.ids, gone404.statusUnread], [['The destination was already removed.'], ['dst_2'], []]);
+    for (const [answer, words] of p12fxA3Maybe()) {
+        const did = await p12fxARemove(answer);
+        assert.deepEqual([did.said, did.ids, did.statusUnread, did.busy], [[P12FXA4_MAYBE_REMOVE(words)], ['dst_1', 'dst_2'], ['dst_1'], ['dst_1', null]],
+            `REGRESSION: "Remove destination failed" and a live row over a destination the server may have removed — ${words}`);
+        assert.ok(!did.said[0].includes('failed'), 'never "failed" over a destination the server may have removed');
+        // The row kept is counted as not known (round 2's badge, over this answer) — never as delivering.
+        assert.equal(p12fxABadge(did.dests, true, did.statusUnread), 'Streaming to 2 destinations · 1 status not known');
+    }
+    const landed = await p12fxARemove(onceOf(200, { success: true }), ['dst_1']);
+    assert.deepEqual([landed.said, landed.ids, landed.busy], [[], ['dst_2'], ['dst_1', null]]);
+    assert.equal(p12fxABadge(landed.dests, true, landed.statusUnread), 'Streaming to 1 destination', 'a removed row\'s id counts nothing');
+});
+
+test('Part 12 fixes (A4): WIRING — the Audit log\'s Add and Remove read a refusal once and judge it by destRefusedOwn; a maybe Add closes its window', () => {
+    const s = code(read(P12A_AUDIT));
+    const add = between(s, '    const createDest = async (input) => {', '\n    const putDest = ');
+    order(add, 'const maybeAdded = (words) => {', 'setShowAddDest(false);', 'if (!res.ok) {', 'const refused = await res.json().catch(() => null);',
+        'if (destRefusedOwn(res, refused)) return { ok: false, error: refusalWords(res, refused) };', 'return maybeAdded(refusalWords(res, refused));',
+        '} catch (e) {', 'return maybeAdded(failureWords(e));');
+    assert.ok(!add.includes('readRefusal('), 'REGRESSION: the Add says every answer as a refusal again');
+    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);');
+    order(rm, 'const maybeRemoved = (words) => {', 'setStatusUnread(ids => [...ids, dest.id]);', 'if (!res.ok) {', 'const refused = await res.json().catch(() => null);',
+        'if (destRefusedOwn(res, refused)) setDestError(`Remove destination failed — ${refusalWords(res, refused)}`);', 'else maybeRemoved(refusalWords(res, refused));',
+        'setDests(prev => prev.filter(d => d.id !== dest.id));', '} catch (e) {', 'maybeRemoved(failureWords(e));');
+    assert.ok(!rm.includes('readRefusal('), 'REGRESSION: the Remove says every answer as a refusal again');
+    assert.equal(count(s, 'destRefusedOwn(res, refused)'), 4, 'the Add, Pause / Rotate, Send test and Remove judge a refusal by one rule');
+    assert.ok(s.includes('{showAddDest && <AddDestinationModal onClose={() => setShowAddDest(false)} onSave={createDest}/>}'),
+        'the window is drawn only while showAddDest — a maybe Add closes it');
+});
+
+// ── Part 12 — the review's fixes, round 4 (U4 — Users MFA chip and words) ──
+// The review of round 3 (residuals U3): Settings → Users' list drew "MFA off · 0" while the MFA read was still out and
+// after it failed or was refused — a count over a read that failed — and its MFA off filter listed the pending invites
+// (their mfa:false no answer of Clerk's) the chip did not count. The profile's Security card read "Not linked in Clerk,
+// or still loading" and the list's dot "Unknown — loading, or not linked in Clerk" for good over a read that failed. The
+// load now keeps the failure's words in mfaFailed ('' while none failed): the refusal's (readRefusal), a thrown
+// failure's (failureWords), or "Its answer could not be read." for an answer the rule refuses; one module-scope rule
+// (mfaUnreadWords) says "The MFA status could not be read — <words>" over a failed read and "still loading" only while
+// it is out, on the chip's title (its label "MFA off · —"), the dot's title, the profile's card (handed mfaFailed as a
+// prop) and the MFA off list's empty line. The filter lists what the chip counts: an active member Clerk says is off.
+const p12fxU4Src = () => code(read(P12A_USERS));
+// The one rule, extracted and run.
+const p12fxU4Rule = () => new Function(`return (${between(p12fxU4Src(), 'const mfaUnreadWords = ', ';\n').slice('const mfaUnreadWords = '.length)});`)();
+// A roster as UsersDetail builds it: three active members (one Clerk does not name), one deactivated whom Clerk says is
+// off, and a pending invite (mfa:false, as pendingRows builds it); `mfa` from mfaByEmail as realUsers maps it.
+const p12fxU4Roster = (mfaByEmail) => [
+    ...[['A', 'A@x.co', 'Active'], ['C', 'c@x.co', 'Active'], ['D', 'd@x.co', 'Deactivated'], ['N', 'n@x.co', 'Active']]
+        .map(([name, email, status]) => ({ id: name, name, email, team: null, status,
+            mfa: mfaByEmail ? (mfaByEmail.get((email || '').toLowerCase()) ?? null) : null })),
+    { id: 'pending_p', name: 'P', email: 'p@x.co', team: null, status: 'Invited', mfa: false },
+];
+// The server's whole answer with the deactivated member off too (n@x.co Clerk does not name: not linked).
+const P12FXU4_WHOLE = () => {
+    const w = P12FXU3_WHOLE();
+    w.notEnrolled.push({ userId: 'user_d', email: 'd@x.co', name: 'D', role: 'User' });
+    return w;
+};
+// The load's state after an answer (mfaData kept, mfaFailed's words) — p12fxU3Load's run over the source.
+const p12fxU4LoadAfter = async (answer) => p12fxU3After(await p12fxU3Load(answer));
+// Everything the list and the profile draw from (mfaData, mfaFailed) — each expression extracted from the source and run.
+// Moved (§0.249, the review's fixes, last pass — F1): the filter and the empty line take the search box's text; the
+// empty line is the module's usersEmptyWords (its table and rule extracted from the source and run).
+const p12fxU4Drawn = (mfaData, mfaFailed, filter = 'MFA off', search = '') => {
+    const s = p12fxU4Src();
+    const mfaUnreadWords = p12fxU4Rule();
+    const { mfaByEmail } = p12fxU3Drawn(mfaData, mfaFailed);
+    const displayUsers = p12fxU4Roster(mfaByEmail);
+    const chipSrc = between(s, "        { key:'MFA off',", '\n    ];').trim().replace(/,$/, '');
+    const chip = new Function('displayUsers', 'mfaByEmail', 'mfaFailed', 'mfaUnreadWords', `return (${chipSrc});`)(displayUsers, mfaByEmail, mfaFailed, mfaUnreadWords);
+    const filterSrc = between(s, '    const visible = displayUsers.filter(u => {', '\n    });');
+    const visible = new Function('displayUsers', 'filter', 'search', `${filterSrc}\n    });\nreturn visible;`)(displayUsers, filter, search);
+    const usersEmptyWords = new Function(`${between(s, 'const USERS_EMPTY = ', '\n};')}\n};\n${between(s, 'const usersEmptyWords = ', '\n};')}\n};\nreturn usersEmptyWords;`)();
+    const emptyLine = between(s, '{usersEmptyWords(', '\n');
+    const empty = new Function('filter', 'search', 'mfaByEmail', 'mfaFailed', 'mfaUnreadWords', 'usersEmptyWords', `return (${emptyLine.slice(1, emptyLine.lastIndexOf('}'))});`)(
+        filter, search, mfaByEmail, mfaFailed, mfaUnreadWords, usersEmptyWords);
+    const dotAttr = between(s, '<span title={mfaUnreadWords(', ' style=');
+    const dotTitle = new Function('mfaByEmail', 'mfaFailed', 'mfaUnreadWords', `return (${dotAttr.slice('<span title={'.length, -1)});`)(mfaByEmail, mfaFailed, mfaUnreadWords);
+    const cardSrc = between(s, "{v !== null ? 'Second factor' : ", '}</div>').slice(1);
+    const card = (v) => new Function('v', 'mfaByEmail', 'mfaFailed', 'mfaUnreadWords', `return (${cardSrc});`)(v, mfaByEmail, mfaFailed, mfaUnreadWords);
+    return { chip, visible: visible.map((u) => u.id), empty, dotTitle, card, mfaByEmail };
+};
+
+test('Part 12 fixes (U4): Settings → Users\' MFA off chip draws no count while the MFA read is out or after it failed — "MFA off · —", titled with why; the filter lists only what the chip counts — RUN', async () => {
+    const rule = p12fxU4Rule();
+    // A read that failed, by each way it fails: the load's words reach the chip's title, its label no count.
+    const failed = [
+        ...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.'],
+        [onceOf(200, {}), 'Its answer could not be read.'], [onceOf(200, null), 'Its answer could not be read.'],
+        [onceOf(200, P12FXU3_BAD_FIELDS()[0]), 'Its answer could not be read.'],
+    ];
+    for (const [answer, words] of failed) {
+        const did = await p12fxU4LoadAfter(answer);
+        assert.deepEqual(did, [null, words], 'the load keeps the failure\'s words');
+        const d = p12fxU4Drawn(...did);
+        assert.equal(d.chip.label, 'MFA off · —', `REGRESSION: "MFA off · 0" over a read that failed (${words})`);
+        assert.equal(d.chip.title, `The MFA status could not be read — ${words}`, 'REGRESSION: the chip says nothing of why it has no count');
+        assert.deepEqual(d.visible, [], 'REGRESSION: the MFA off list draws a member over a read that failed — an invite\'s mfa:false taken as Clerk\'s');
+        assert.equal(d.empty, `The MFA status could not be read — ${words}`, 'REGRESSION: "No users yet" over a read that failed');
+    }
+    // Still loading: no count, titled loading.
+    const loading = p12fxU4Drawn(null, '');
+    assert.deepEqual([loading.chip.label, loading.chip.title, loading.empty, loading.visible],
+        ['MFA off · —', 'The MFA status is still loading…', 'The MFA status is still loading…', []], 'REGRESSION: "MFA off · 0" while the read is out');
+    // Read: the count of active members Clerk says are off — not the deactivated one, not the invite; no title.
+    const read = p12fxU4Drawn(P12FXU4_WHOLE(), '');
+    assert.deepEqual([read.chip.key, read.chip.label, read.chip.title], ['MFA off', 'MFA off · 1', undefined], 'REGRESSION: the chip\'s count over a read');
+    assert.deepEqual(read.visible, ['C'], 'REGRESSION: the MFA off list draws what the chip does not count (an invite, a deactivated member)');
+    // A read where no active member is off: none, said in the filter's words — never "No users yet".
+    const none = p12fxU4Drawn({ ...P12FXU4_WHOLE(), notEnrolled: [] }, '');
+    assert.deepEqual([none.chip.label, none.visible, none.empty], ['MFA off · 0', [], 'No active member has MFA off.']);
+    // Moved pin (§0.249, the review's fixes, last pass — F1): another filter's empty line names that filter — "No users
+    // yet" only for a roster with no one in it (the last pass's own test runs each filter, with and without a search).
+    assert.equal(p12fxU4Drawn(null, 'x', 'Deactivated').empty, 'No deactivated members.');
+    // The rule itself: '' once read, the words over a failure, loading only while out.
+    assert.deepEqual([rule(new Map(), 'x'), rule(null, 'Forbidden'), rule(null, '')],
+        ['', 'The MFA status could not be read — Forbidden', 'The MFA status is still loading…']);
+});
+
+test('Part 12 fixes (U4): the profile\'s Security card and the list\'s MFA dot name a read that failed, in its words — "still loading" only while it is out, "Not linked in Clerk" only over a read — RUN', async () => {
+    for (const [answer, words] of [...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, {}), 'Its answer could not be read.']]) {
+        const d = p12fxU4Drawn(...(await p12fxU4LoadAfter(answer)));
+        const want = `The MFA status could not be read — ${words}`;
+        assert.equal(d.card(null), want, 'REGRESSION: the profile reads "Not linked in Clerk, or still loading" over a read that failed');
+        assert.equal(d.dotTitle, want, 'REGRESSION: the dot reads "Unknown — loading, or not linked in Clerk" over a read that failed');
+        assert.ok(!P12A_OLD.test(d.card(null)) && !P12A_OLD.test(d.chip.title), `the house's words: ${d.card(null)}`);
+    }
+    const loading = p12fxU4Drawn(null, '');
+    assert.deepEqual([loading.card(null), loading.dotTitle], ['The MFA status is still loading…', 'The MFA status is still loading…']);
+    const read = p12fxU4Drawn(P12FXU4_WHOLE(), '');
+    assert.deepEqual([read.card(null), read.card(true), read.card(false), read.dotTitle],
+        ['Not linked in Clerk', 'Second factor', 'Second factor', 'Not linked in Clerk'], 'a member Clerk does not name, over a read: not linked');
+});
+
+test('Part 12 fixes (U4): WIRING — one module-scope rule for an unknown MFA mark\'s words; the profile is handed mfaFailed as a prop; the chip draws its title; the load keeps the failure\'s words', () => {
+    const s = p12fxU4Src();
+    // Module scope: defined at column 0, before UserProfilePage — never inside a component.
+    order(s, '\nconst mfaUnreadWords = (mfaByEmail, mfaFailed) => mfaByEmail ? ', '\nconst UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail, mfaFailed }) => {');
+    assert.equal(count(s, 'const mfaUnreadWords = '), 1);
+    assert.equal(count(s, 'mfaUnreadWords(mfaByEmail, mfaFailed)'), 4, 'the chip\'s title, the empty line, the dot and the profile read the one rule');
+    const profile = between(s, 'const UserProfilePage = ', 'export const UsersDetail = ');
+    assert.ok(profile.includes("{v !== null ? 'Second factor' : mfaUnreadWords(mfaByEmail, mfaFailed) || 'Not linked in Clerk'}"),
+        'REGRESSION: the profile\'s card does not read the failure');
+    assert.ok(s.includes(' mfaByEmail={mfaByEmail} mfaFailed={mfaFailed}/>;'), 'REGRESSION: the profile is not handed mfaFailed');
+    assert.ok(s.includes('<button key={ft.key} title={ft.title} onClick={() => setFilter(ft.key)}'), 'REGRESSION: the chip\'s title is never drawn');
+    assert.ok(s.includes("const [mfaFailed, setMfaFailed] = useState('');"), 'mfaFailed holds words, none while none failed');
+    const load = between(s, "                const res = await dbFetch('/.netlify/functions/clerk-mfa-status');", '\n        })();');
+    order(load, 'const why = await readRefusal(res); if (!cancelled) setMfaFailed(why);', "setMfaFailed('Its answer could not be read.')",
+        '} catch (e) { if (!cancelled) setMfaFailed(failureWords(e)); }');
+    assert.ok(!load.includes('setMfaFailed(true)'), 'REGRESSION: a failed read kept without its words');
+    assert.ok(!s.includes('Not linked in Clerk, or still loading') && !s.includes('Unknown — loading, or not linked in Clerk'),
+        'REGRESSION: "still loading" said for good over a read that failed');
+});
+
+// ── Part 12 — the review's fixes, round 4 (D4 — Document drops) ──
+// The verifier's three residuals of D3, all in a record's Documents (RecordDocuments.jsx attachFiles). (1) A drop while a
+// batch was sending ran a second batch beside it: each cleared and overwrote the other's words and busy mark, and the first
+// one's "Not sent" names were lost. A drop while one sends is now refused — two batches never run at once (a ref, read at
+// once, not the render's `busy`) — its files named in their own red box, "Not sent: <names> — wait for the current upload
+// to finish, then drop them again.", until the next drop that is taken; the batch's own words are left as they are. (2) A
+// drop refused by validateFile kept the last batch's notice above its red box; it now clears it, as a batch that sends
+// does. (3) The check stopped at the first refused file and named every other file, refused or not, "drop them again";
+// every file is now checked before any is sent, each refused said by its name and its own words, and only the files that
+// would pass named "Not sent". Nothing is sent while any is refused — the file's rule before round 3 (and since). The
+// upload rail is not on this path: it takes one file, and while it uploads its drop zone and file input are not drawn.
+// A record's Documents with one sending mark across drops: `drop(named)` drops the files named, each answered by its
+// value — a promise is awaited first, an Error thrown; `invalid` maps a file's name to validateFile's words.
+const p12fxD4Make = (invalid = {}) => {
+    const did = { errors: [], notices: [], busy: [], sent: [], held: [] };
+    const sending = { current: false };
+    const answers = {};
+    const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        (f) => invalid[f.name] || null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
+        async (f) => { did.sent.push(f.name); const a = await answers[f.name]; if (a instanceof Error) throw a; return a; },
+        (n) => n.replace(/\.[^.]+$/, ''), { type: 'account', recordId: 'acc_1' }, failureWords,
+        sending, (v) => did.held.push(typeof v === 'function' ? v(did.held.at(-1) ?? null) : v));
+    const drop = (named) => { Object.assign(answers, named); return attach(Object.keys(named).map((name) => ({ name, size: 10, type: 'application/pdf' }))); };
+    return { did, drop, sending };
+};
+const p12fxD4Gate = () => { let open; const gate = new Promise((r) => { open = r; }); return { gate, open }; };
+
+test('Part 12 fixes, round 4 (D4): a record\'s Documents — a drop while a batch is sending is refused, its files named apart; the batch\'s words, notice and busy mark untouched; two batches never run at once — RUN', async () => {
+    // Moved in §0.249 (review fixes, last pass, F2): a held file is held as [name, validateFile's words].
+    const DOC = { id: 'doc_y' };
+    const own = (await p12fxdThrown({ record: onceOf(403, { error: 'Forbidden' }) })).e;
+    const { did, drop, sending } = p12fxD4Make();
+    const { gate, open } = p12fxD4Gate();
+    const first = drop({ 'a.pdf': gate, 'b.pdf': own, 'c.pdf': DOC });
+    await settle();
+    assert.deepEqual([did.sent, did.busy, did.errors, did.held, sending.current], [['a.pdf'], [true], [null], [null], true]);
+    // Dropped while a.pdf sends: not sent, named; nothing of the batch's touched.
+    await drop({ 'd.pdf': DOC });
+    assert.deepEqual([did.sent, did.busy, did.errors, did.notices, did.held.at(-1)], [['a.pdf'], [true], [null], [null], [['d.pdf', null]]],
+        'REGRESSION: a drop while a batch sends ran a second batch beside it — each overwrote the other\'s words');
+    // A second drop while it still sends: added, each name once.
+    await drop({ 'e.pdf': DOC, 'd.pdf': DOC });
+    assert.deepEqual([did.sent, did.held.at(-1)], [['a.pdf'], [['d.pdf', null], ['e.pdf', null]]], 'REGRESSION: the first drop\'s names lost, or a name said twice');
+    open(DOC);
+    await first;
+    // The batch's stop keeps its own words, "Not sent: c.pdf" among them; the held drop's names are still said apart.
+    assert.deepEqual([did.sent, did.busy, did.errors.at(-1), did.held.at(-1), sending.current],
+        [['a.pdf', 'b.pdf'], [true, false], 'b.pdf: The document was not saved — Forbidden\nNot sent: c.pdf — drop them again', [['d.pdf', null], ['e.pdf', null]], false],
+        'REGRESSION: the batch left the sending mark set — every drop after it refused');
+    // The batch over, the next drop is taken: sent, the held names and the last words cleared.
+    await drop({ 'd.pdf': DOC });
+    assert.deepEqual([did.sent, did.busy, did.errors.at(-1), did.held.at(-1), sending.current], [['a.pdf', 'b.pdf', 'd.pdf'], [true, false, true, false], null, null, false],
+        'REGRESSION: the held names kept over a drop that was taken');
+});
+
+test('Part 12 fixes, round 4 (D4): a record\'s Documents — every dropped file is checked before any is sent: each refused named with its own words, only the files that would pass named "Not sent", nothing sent; the last notice and held names cleared — RUN', async () => {
+    // Moved in §0.249 (review fixes, last pass, F2): a held file is held as [name, validateFile's words].
+    const DOC = { id: 'doc_y' };
+    const EXE = 'Unsupported file type: .exe';
+    const BIG = 'File exceeds the 50 MB limit';
+    const invalid = { 'a.exe': EXE, 'b.exe': EXE, 'x.exe': EXE, 'big.pdf': BIG };
+    // Two refused, one fine: each refused on its own line, the fine one alone "Not sent".
+    const two = p12fxD4Make(invalid);
+    await two.drop({ 'a.exe': DOC, 'b.exe': DOC, 'c.pdf': DOC });
+    assert.deepEqual([two.did.sent, two.did.busy, two.did.errors], [[], [], ['a.exe: Unsupported file type: .exe\nb.exe: Unsupported file type: .exe\nNot sent: c.pdf — drop them again']],
+        'REGRESSION: a refused file named "drop them again" — dropped again it is refused again — or a refused file not named');
+    assert.deepEqual(p12fxd3Unsent(two.did.errors.at(-1)), ['c.pdf']);
+    // Fine files on both sides of two refused, each with its own words: the fine ones named in the order dropped.
+    const mixed = p12fxD4Make(invalid);
+    await mixed.drop({ 'a.pdf': DOC, 'x.exe': DOC, 'big.pdf': DOC, 'b.pdf': DOC });
+    assert.deepEqual([mixed.did.sent, mixed.did.errors],
+        [[], ['x.exe: Unsupported file type: .exe\nbig.pdf: File exceeds the 50 MB limit\nNot sent: a.pdf, b.pdf — drop them again']]);
+    // Every file refused: no "Not sent" line.
+    const all = p12fxD4Make(invalid);
+    await all.drop({ 'a.exe': DOC, 'big.pdf': DOC });
+    assert.deepEqual([all.did.sent, all.did.errors], [[], ['a.exe: Unsupported file type: .exe\nbig.pdf: File exceeds the 50 MB limit']]);
+    // A refused drop after a batch that made a file unread, and a drop held while it sent: the notice and the names cleared.
+    const made = (await p12fxdThrown({ record: P11_UNREADABLE() })).e;
+    const after = p12fxD4Make(invalid);
+    const { gate, open } = p12fxD4Gate();
+    const batch = after.drop({ 'a.pdf': gate, 'b.pdf': made });
+    await settle();
+    await after.drop({ 'c.pdf': DOC });
+    open(DOC);
+    await batch;
+    assert.deepEqual([after.did.notices.at(-1), after.did.held.at(-1)], [`b.pdf: ${P12FXD_MADE}`, [['c.pdf', null]]]);
+    await after.drop({ 'x.exe': DOC });
+    assert.deepEqual([after.did.sent, after.did.errors.at(-1), after.did.notices.at(-1), after.did.held.at(-1)],
+        [['a.pdf', 'b.pdf'], 'x.exe: Unsupported file type: .exe', null, null],
+        'REGRESSION: the last batch\'s notice kept above a refused drop, as if this drop had made a file — or the held names kept over it');
+});
+
+test('Part 12 fixes, round 4 (D4): a record\'s Documents — the held drop\'s words name its files and say to wait while a batch sends, then to drop them again — RUN', () => {
+    // Moved in §0.249 (review fixes, last pass, F2): a held file is held as [name, validateFile's words].
+    const src = code(read(P12FXD_RECORD));
+    const heldWords = new Function(`return ${between(src, 'const heldWords = ', ';\n').slice('const heldWords = '.length)};`)();
+    assert.equal(heldWords([['d.pdf', null]], true), 'Not sent: d.pdf — wait for the current upload to finish, then drop them again.');
+    assert.equal(heldWords([['d.pdf', null], ['e.pdf', null]], true), 'Not sent: d.pdf, e.pdf — wait for the current upload to finish, then drop them again.',
+        'REGRESSION: the held names run together');
+    assert.equal(heldWords([['d.pdf', null], ['e.pdf', null]], false), 'Not sent: d.pdf, e.pdf — drop them again.', 'REGRESSION: "wait" said with nothing sending');
+});
+
+test('Part 12 fixes, round 4 (D4): WIRING — one batch at a time by a ref; every file checked before any is sent; the held names drawn in their own red box; heldWords at module scope', () => {
+    const record = code(read(P12FXD_RECORD));
+    // Module scope, before the component — never inside it.
+    // Moved in §0.249 (review fixes, last pass, F2): a held file is held as [name, validateFile's words].
+    order(record, '\nconst heldWords = (held, busy) => ', '\nexport default function RecordDocuments(');
+    assert.equal(count(record, 'const heldWords = '), 1);
+    assert.ok(record.includes('    const [held, setHeld] = useState(null);') && record.includes('    const sending = useRef(false);'));
+    const attach = between(record, '    const attachFiles = async (fileList) => {', '\n    };');
+    order(attach, 'if (!files.length) return;',
+        'if (sending.current) { setHeld((h) => [...new Map([...(h || []), ...files.map((f) => [f.name, validateFile(f)])])]); return; }',
+        'const refused = files.map((f) => [f, validateFile(f)]).filter((r) => r[1]);', 'if (refused.length) {',
+        'const fine = files.filter((f) => !refused.some((r) => r[0] === f));',
+        'setNotice(null); setHeld(null); setError(said);', 'return;',
+        'sending.current = true;', 'setBusy(true); setError(null); setNotice(null);', 'setHeld(null);', 'try {',
+        '} finally {', 'setBusy(false);', 'sending.current = false;');
+    assert.equal(count(attach, 'sending.current'), 3, 'read once, set once, cleared once');
+    // Moved in §0.249 (review fixes, last pass, F2): a held file is checked as it is held — the one check, twice.
+    assert.equal(count(attach, 'validateFile('), 2, 'every file through the one check — held or taken');
+    assert.ok(!attach.includes('if (invalid)'), 'REGRESSION: the check stops at the first refused file');
+    assert.ok(record.includes("            {held && (\n                <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger, whiteSpace: 'pre-line' }}>{heldWords(held, busy)}</div>\n            )}"),
+        'REGRESSION: the held drop\'s names never drawn, or drawn apart from the red');
+});
+
+// ── Part 12 — the review's fixes, round 4 (I4 — Invitation import roster match) ──
+// The verifier's residual of I3: unreadOnRoster counted an address found on the roster read again as invited by this
+// import. It may have been on the server's roster before the import (the screen's settings.users stale, its invitation
+// refused this time — users.mjs: Clerk refuses a member, a Manager's held address), and the Results said "10 invitations
+// sent." with a ✅. A roster row (users.mjs flatten) carries no created or invited time and no inviter, so it proves
+// nothing of who invited them: each found is now `onRoster` — "on the roster — invited by this import or before it" —
+// still unread (the invariant holds; onRoster is a breakdown of unread, as notFound is of failed), never "sent". Counted
+// sent only where the answer proves it: a 201 says one of ITS request was invited, so the one of a request on the roster
+// while the rest of it are not is it. Each not found is still "not invited" (the server refused it).
+const P12FXI4_REQ = (from, n) => Array.from({ length: n }, (_, i) => ({ email: `p${from + i}@x.test`, ...((from + i) % 4 === 0 ? { team: 'East', teamId: 't1' } : {}) }));
+const p12fxI4Roster = (...emails) => onceOf(200, { users: [{ id: 'usr_old', email: 'old@x.test' }, ...emails.map((e, i) => ({ id: `usr_${i}`, email: e, status: 'Invited' }))] });
+const p12fxI4Words = async () => {
+    const lit = code(read(P12FXI_MODAL)).match(/describeReceipt\(r, 'invitation', (\{[^}]*\})\)/);
+    assert.ok(lit, 'the Results\' invitation words');
+    return new Function(`return ${lit[1]};`)();
+};
+
+test('Part 12 fix I4: unreadOnRoster — an address on the roster read again is on it (invited by this import or before it), never proven sent; the one of a request on it while the rest are not is proven sent; each request apart — RUN', async () => {
+    const { unreadOnRoster, NOT_ON_ROSTER } = await import('../src/utils/importReceipt.js');
+    // The residual: pat held before the import (the screen's roster stale), refused this time; the nine invited. All ten
+    // are on the roster read again — none proven: pat must never be counted as invited by this import.
+    const pat = { email: 'pat@x.test' };
+    const nine = P12FXI4_REQ(1, 9);
+    const all = unreadOnRoster([[pat, ...nine]], [{ email: 'pat@x.test', status: 'Active' }, ...nine.map(v => ({ email: v.email, status: 'Invited' }))]);
+    assert.deepEqual([all.invited, all.onRoster, all.notInvited], [[], [pat, ...nine], []],
+        'REGRESSION: an address on the roster before the import counted as invited by it');
+    // Proven: one of the request on the roster, the rest not — the 201 says one was invited, so it is that one.
+    const req = P12FXI4_REQ(0, 3);
+    const one = unreadOnRoster([req], [{ email: ' P1@X.TEST ' }]);
+    assert.deepEqual([one.invited, one.onRoster, one.notInvited.map(f => f.email)], [[req[1]], [], ['p0@x.test', 'p2@x.test']],
+        'REGRESSION: the one the answer proves sent left unproven');
+    assert.ok(one.notInvited.every(f => f.error === NOT_ON_ROSTER));
+    // A request of one, on the roster: proven (its 201 names it alone).
+    assert.deepEqual(unreadOnRoster([[pat]], [{ email: 'pat@x.test' }]), { invited: [pat], onRoster: [], notInvited: [] });
+    // Each request apart: the proof is per request — two of the first on the roster are not, the one of the second is.
+    const a = P12FXI4_REQ(0, 2), b = P12FXI4_REQ(10, 2);
+    const two = unreadOnRoster([a, b], [{ email: 'p0@x.test' }, { email: 'p1@x.test' }, { email: 'p10@x.test' }]);
+    assert.deepEqual([two.invited, two.onRoster, two.notInvited.map(f => f.email)], [[b[0]], [a[0], a[1]], ['p11@x.test']],
+        'REGRESSION: the requests read as one — a 201 proves one of ITS request, not one of all');
+    assert.equal(two.invited.length + two.onRoster.length + two.notInvited.length, 4, 'each sent unread counted once');
+});
+
+test('Part 12 fix I4: the invitation import — the ones found on the roster read again said "on the roster — invited by this import or before it", never "sent" with a ✅; sent only where proven — RUN', async () => {
+    const { describeReceipt, isClean, isPartial, NOT_ON_ROSTER, mergeReceipts, receiptFromPreflight } = await import('../src/utils/importReceipt.js');
+    const words = await p12fxI4Words();
+    // The residual's scenario: ten in one request, answered unread; all ten on the roster (pat before the import).
+    const pat = [{ email: 'pat@x.test' }, ...P12FXI4_REQ(1, 9)];
+    const r = await p12fxI2Import({ invites: pat, posts: [p12fxIUnreadable()], roster: p12fxI4Roster(...pat.map(v => v.email)) });
+    const rc = r.out.receipt;
+    assert.deepEqual([rc.unread, rc.onRoster, rc.created, rc.failed, rc.attempted], [10, 10, 0, 0, 10],
+        'REGRESSION: the ones found counted as invited by this import — "10 invitations sent." over pat refused');
+    p12fxIInvariant(rc);
+    assert.equal(describeReceipt(rc, 'invitation', words), '10 on the roster — invited by this import or before it.');
+    assert.deepEqual([isClean(rc), isPartial(rc)], [false, true], 'REGRESSION: drawn as clean — "Invitations Sent" and a ✅');
+    assert.deepEqual(r.out.refusals, []);
+    assert.ok(!/invitations? sent|up to|some may have been refused|reload/.test(describeReceipt(rc, 'invitation', words)), 'never "sent", never "up to"');
+    // Proven: one of the request on the roster, the rest not.
+    const p = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()], roster: p12fxI4Roster('p3@x.test') });
+    assert.deepEqual([p.out.receipt.unread, p.out.receipt.onRoster, p.out.receipt.created, p.out.receipt.failed], [0, 0, 1, 9],
+        'REGRESSION: the one the 201 proves sent left unread');
+    assert.equal(describeReceipt(p.out.receipt, 'invitation', words), '1 invitation sent. 9 not sent.');
+    assert.equal(p.out.refusals.length, 9);
+    assert.ok(p.out.refusals.every(f => f.error === NOT_ON_ROSTER));
+    // A request of one on the roster: sent, clean.
+    const solo = await p12fxI2Import({ invites: P12FXI4_REQ(1, 1), posts: [p12fxIUnreadable()], roster: p12fxI4Roster('p1@x.test') });
+    assert.deepEqual([solo.out.receipt.unread, solo.out.receipt.onRoster, solo.out.receipt.created, isClean(solo.out.receipt)], [0, 0, 1, true]);
+    // Two requests answered unread: each read apart — p0, p1 of the first on the roster (not proven), p10 of the second (proven).
+    const two = await p12fxI2Import({ invites: P12FXI4_REQ(0, 12), posts: [p12fxIUnreadable(), p12fxIUnreadable()],
+        roster: p12fxI4Roster('p0@x.test', 'p1@x.test', 'p10@x.test') });
+    const t = two.out.receipt;
+    assert.deepEqual([t.unread, t.onRoster, t.created, t.failed, t.attempted], [2, 2, 1, 9, 12], 'REGRESSION: the two requests read as one');
+    p12fxIInvariant(t);
+    assert.equal(describeReceipt(t, 'invitation', words), '1 invitation sent, 2 on the roster — invited by this import or before it. 9 not sent.');
+    // Of the ones that named a team (p0, p4, p8), only p0 is on the roster — the on-roster ones still said, "they".
+    // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
+    assert.equal(two.out.warning, "1 whose answer could not be read named a team — check on the Teams page that they are on its list.");
+    // A roster read that failed: no onRoster, the "up to" words, as before.
+    const f = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()], roster: UNSENT() });
+    assert.deepEqual([f.out.receipt.unread, f.out.receipt.onRoster, f.out.receipt.failed], [10, 0, 0]);
+    assert.equal(describeReceipt(f.out.receipt, 'invitation', words), 'Up to 10 invitations sent — the answer could not be read; some may have been refused.');
+    // The Results merge the handler's receipt with the preflight's (CsvImportModal mergeReceipts): onRoster survives it.
+    const merged = mergeReceipts(receiptFromPreflight({ skipped: 1 }), rc);
+    assert.equal(merged.onRoster, 10, 'REGRESSION: the merge drops onRoster — the Results say "Up to 10 … sent"');
+    assert.equal(describeReceipt(merged, 'invitation', words), '10 on the roster — invited by this import or before it. 1 skipped.');
+});
+
+test('Part 12 fix I4: describeReceipt — the ones on the roster said apart from the ones unread, in their own words, never twice — RUN', async () => {
+    const { emptyReceipt, describeReceipt } = await import('../src/utils/importReceipt.js');
+    const words = await p12fxI4Words();
+    const say = (o) => describeReceipt({ ...emptyReceipt(), ...o }, 'invitation', words);
+    assert.equal(emptyReceipt().onRoster, 0, 'REGRESSION: the empty receipt holds no onRoster — the merge drops it');
+    assert.equal(say({ attempted: 2, unread: 2, onRoster: 2 }), '2 on the roster — invited by this import or before it.');
+    assert.equal(say({ attempted: 4, created: 1, failed: 1, unread: 2, onRoster: 2 }), '1 invitation sent, 2 on the roster — invited by this import or before it. 1 not sent.');
+    // Some unread (a failed read) and some on the roster (never one path, but a merge may hold both): each said once.
+    assert.equal(say({ attempted: 5, unread: 5, onRoster: 2 }), 'Up to 3 invitations sent — the answer could not be read; some may have been refused, 2 on the roster — invited by this import or before it.',
+        'REGRESSION: the ones on the roster said twice — once as "up to"');
+    assert.equal(say({ attempted: 3, unread: 3, onRoster: 2 }), '1 invitation sent — the answer could not be read, 2 on the roster — invited by this import or before it.');
+    // onRoster never more than unread.
+    assert.equal(say({ attempted: 1, unread: 1, onRoster: 3 }), '1 on the roster — invited by this import or before it.');
+    // None on the roster: the words of rounds 2-3, unchanged.
+    assert.equal(say({ attempted: 10, unread: 10 }), 'Up to 10 invitations sent — the answer could not be read; some may have been refused.');
+});
+
+test('Part 12 fix I4: the Results\' tiles — the ones on the roster a tile of their own, "on the roster — invited by this import or before it", never in the unread tile; the tiles add up to everyone attempted — RUN', async () => {
+    const { emptyReceipt } = await import('../src/utils/importReceipt.js');
+    const r = { ...emptyReceipt(), attempted: 12, created: 1, failed: 9, unread: 2, onRoster: 2 };
+    const tiles = await p12fxI2Tiles(r);
+    assert.deepEqual(tiles.map(t => [t.label, t.n]), [['invited', 1], ['failed', 9], ['on the roster — invited by this import or before it', 2]],
+        'REGRESSION: the ones on the roster drawn as "sent or refused", or twice');
+    assert.equal(tiles.reduce((a, t) => a + t.n, 0), r.attempted);
+    assert.equal(tiles[2].color, T.warn);
+    assert.ok(!tiles[2].upTo, 'a count of rows on the roster, not "up to"');
+    // A merge holding both: each its own tile, the unread one less the ones on the roster.
+    const mixed = await p12fxI2Tiles({ ...emptyReceipt(), attempted: 3, unread: 3, onRoster: 2 });
+    assert.deepEqual(mixed.map(t => [t.label, t.n, !!t.upTo]), [['sent — answer unread', 1, false], ['on the roster — invited by this import or before it', 2, false]]);
+    const mixed2 = await p12fxI2Tiles({ ...emptyReceipt(), attempted: 5, unread: 5, onRoster: 2 });
+    assert.deepEqual(mixed2.map(t => [t.label, t.n, !!t.upTo]), [['sent or refused — answer unread', 3, true], ['on the roster — invited by this import or before it', 2, false]]);
+    assert.equal(new Set(mixed2.map(t => t.label)).size, mixed2.length, 'each tile its own key');
+    // No onRoster: the tiles of round 3, unchanged.
+    assert.ok(!(await p12fxI2Tiles({ ...emptyReceipt(), attempted: 3, unread: 3 })).some(t => t.label.startsWith('on the roster')));
+});
+
+test('Part 12 fix I4: WIRING — each request answered unread kept apart; the ones on the roster stay unread as onRoster; the team count reads every one sent unread', () => {
+    const l = code(read(P12FXI_LAYER));
+    const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
+    assert.equal(count(h, 'sentUnread.push('), 1);
+    assert.ok(h.includes('sentUnread.push(chunk);') && !h.includes('sentUnread.push(...chunk)'), 'REGRESSION: the requests read as one');
+    order(h, 'let teamless = sentUnread.flat();', 'receipt.unread = onRoster.length;', 'receipt.onRoster = onRoster.length;', 'teamless = [...invited, ...onRoster];');
+    assert.ok(!h.includes('receipt.unread = 0;'), 'REGRESSION: the ones on the roster dropped from the receipt');
+    const rc = read('src/utils/importReceipt.js');
+    assert.ok(rc.includes("onRoster: 'on the roster — invited by this import or before it'"));
+});
+
+// ── Part 12 — the review's fixes, round 4 (C4 — Calendar after an org switch) ──
+// The verifier's residual of round 3 (state §0.249). App's switch effect puts the calendar strip back (useOrgBoundState,
+// §0.174) only after the switch's own render has painted, and the tabs remount in that render: Home's first frame in
+// the new org drew the last org's read — "Connect your calendar to see your meetings on Home." and its Connect button
+// over a calendar connected in the new org — and the profile panel "Not connected", OFF and Connect, Tasks "Calendar not
+// connected". The calendar hook now takes the org on screen and holds the org its strip was put back for
+// (calendarStripOrg, moved in its own effect in the reset's commit): until the two match, every screen gets a calendar
+// not read in it — no events, no error, not loading, not connected, not read — so Home, Tasks and the panel say they are
+// checking. The header's own Disconnect state ("Disconnected", "Not disconnected — …") is tied to its org the same way
+// (calTabOrg). Run here: the REAL hook, from its source, through React's own renderer (react-dom/server, whose
+// render-phase updates stand in for an answer and a switch; it runs no effect, so the switch's commit is run by hand —
+// the hook's effect, then App's reset).
+const P12FXC4_HOOK = 'src/hooks/useCalendarState.js';
+const p12fxC4EvA = { id: 'ev_a', summary: 'Org A meeting' };
+const p12fxC4EvB = { id: 'ev_b', summary: 'Org B meeting' };
+// The hook built from its own source over React's useState and a useEffect that keeps each render's effects for the
+// commit, which runs those whose dependencies changed since the last commit (the mount's runs in the first render);
+// `steps[i]` runs in render i with the hook's answer and { org, commit }; each render's strip is kept.
+const p12fxC4Run = async (org0, steps) => {
+    const React = await import('react');
+    const { renderToString } = await import('react-dom/server');
+    const { useOrgBoundState, resetAllOf } = await import('../src/hooks/useOrgBoundState.js');
+    const { isoLocal, todayLocal } = await import('../src/utils/dateLocal.js');
+    const src = code(read(P12FXC4_HOOK));
+    const effects = [];
+    let committed = null;
+    const runEffects = () => {
+        effects.forEach((e, k) => {
+            const was = committed?.[k];
+            if (!was || !e.deps || e.deps.some((d, j) => !Object.is(d, was[j]))) e.fn();
+        });
+        committed = effects.map((e) => e.deps);
+    };
+    const useCalendarState = new Function('useState', 'useEffect', 'useOrgBoundState', 'resetAllOf', 'isoLocal', 'todayLocal',
+        `${between(src, 'const NO_EVENTS = ', ';\n')};\n${src.slice(src.indexOf('function useCalendarState(activeOrgId) {'))}\nreturn useCalendarState;`)(
+        React.useState, (fn, deps) => { effects.push({ fn, deps }); }, useOrgBoundState, resetAllOf, isoLocal, todayLocal);
+    const org = { now: org0 };
+    const seen = [];
+    let i = 0;
+    function Probe() {
+        effects.length = 0;
+        const cal = useCalendarState(org.now);
+        seen.push({ org: org.now, events: cal.calendarEvents, loading: cal.calendarLoading, error: cal.calendarError,
+            connected: cal.calendarConnected, read: cal.calendarRead });
+        if (committed === null) runEffects();   // the mount's commit
+        const step = steps[i++];
+        // The switch's commit, as App runs it: the hook's effect, then App's reset (declared after the hooks).
+        if (step) step(cal, { org, commit: () => { runEffects(); cal.resetOnOrgSwitch(); } });
+        return null;
+    }
+    renderToString(React.createElement(Probe));
+    return seen;
+};
+const p12fxC4Strip = (s) => [s.events, s.loading, s.error, s.connected, s.read];
+const P12FXC4_NOT_READ = [[], false, null, false, false];
+// What each screen draws from a strip: Home's strip, Tasks' rail and the profile panel's Calendar tab, from their source.
+const p12fxC4Screens = (() => {
+    let built = null;
+    return (s, { disconnected = false } = {}) => {
+        if (!built) {
+            const home = code(read(P12FXC_HOME));
+            const tasks = code(read(P12FXC_TASKS));
+            built = {
+                home: p12fxC2Chain(between(home, '{calendarError ? (', 'Refreshing…</span>'), /(?:^\{|\n\s*\) : )(?:([^\n?]+?) \? )?\(\n/g,
+                    { error: '{calendarError}', checking: 'Checking your calendar…', connect: 'Connect your calendar to see', connected: 'Calendar connected — no meetings today' },
+                    ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']),
+                tasks: p12fxC2Chain(between(tasks, '{calendarError\n', 'Calendar not connected</div>)') + 'Calendar not connected', /(?:^\{|\n\s*: )(?:([^\n?]+?)\n\s*\? )?\(/g,
+                    { error: '{calendarError}', synced: 'Synced', checking: 'Checking the calendar…', notConnected: 'Calendar not connected' },
+                    ['calendarError', 'calendarLoading', 'calendarConnected', 'calendarRead']),
+            };
+        }
+        const st = { calendarError: s.error, calendarLoading: s.loading, calendarConnected: s.connected, calendarRead: s.read };
+        return { home: built.home(st), tasks: built.tasks(st),
+            panel: p12fxCPanel({ loading: s.loading, error: s.error, connected: s.connected, read: s.read, disconnected }) };
+    };
+})();
+const P12FXC4_CHECKING = { home: 'checking', tasks: 'checking', panel: { status: 'Checking…', pill: '—', connect: false, refresh: true, count: false } };
+
+test('Part 12 fix C4: the switch\'s own render never draws the last org\'s calendar — a read that found none, no "Connect your calendar…", "Calendar not connected" or "Not connected"; the new org\'s read drawn once it lands — RUN', async () => {
+    const seen = await p12fxC4Run('org_a', [
+        (cal) => { cal.setCalendarRead(true); cal.setCalendarConnected(false); },               // org A's read lands: none
+        (cal, { org }) => { org.now = 'org_b'; cal.setCalView('day'); },                          // the switch's own render
+        (cal, { commit }) => { commit(); cal.setCalendarLoading(true); },                         // its commit; App's Home effect reads
+        (cal) => { cal.setCalendarConnected(true); cal.setCalendarEvents([p12fxC4EvB]); cal.setCalendarRead(true); cal.setCalendarLoading(false); },
+    ]);
+    assert.equal(seen.length, 5);
+    assert.deepEqual(p12fxC4Strip(seen[1]), [[], false, null, false, true], 'org A: a read that found none');
+    assert.deepEqual(p12fxC4Screens(seen[1]).home, 'connect', 'org A offers Connect — its own read said none');
+    assert.equal(seen[2].org, 'org_b');
+    assert.deepEqual(p12fxC4Strip(seen[2]), P12FXC4_NOT_READ,
+        'REGRESSION: the switch\'s own render handed the new org the last org\'s read');
+    assert.deepEqual(p12fxC4Screens(seen[2]), P12FXC4_CHECKING,
+        'REGRESSION: org B\'s first frame drew org A\'s "Connect your calendar…", "Calendar not connected" or "Not connected", OFF and Connect');
+    assert.deepEqual(p12fxC4Strip(seen[3]), [[], true, null, false, false], 'after the commit: org B\'s read in flight');
+    assert.deepEqual(p12fxC4Screens(seen[3]), P12FXC4_CHECKING);
+    assert.deepEqual(p12fxC4Strip(seen[4]), [[p12fxC4EvB], false, null, true, true],
+        'REGRESSION: org B\'s own read never drawn — the strip left masked after the switch\'s commit');
+    assert.deepEqual([p12fxC4Screens(seen[4]).home, p12fxC4Screens(seen[4]).tasks], ['connected', 'synced']);
+});
+
+test('Part 12 fix C4: the switch\'s own render hands the new org none of the last org\'s strip — no events, no error, no read in flight, not connected, not read; one empty list every masked render — RUN', async () => {
+    const ERR = 'The calendar could not be read — The server returned 502.';
+    const seen = await p12fxC4Run('org_a', [
+        (cal) => { cal.setCalendarRead(true); cal.setCalendarConnected(true); cal.setCalendarEvents([p12fxC4EvA]); cal.setCalendarError(ERR); cal.setCalendarLoading(true); },
+        (cal, { org }) => { org.now = 'org_b'; cal.setCalView('day'); },
+        (cal) => { cal.setCalOffset(1); },                                                        // a second render before the commit
+        (cal, { commit }) => { commit(); },
+    ]);
+    assert.deepEqual(p12fxC4Strip(seen[1]), [[p12fxC4EvA], true, ERR, true, true], 'org A: its own strip');
+    for (const at of [2, 3]) {
+        assert.deepEqual(p12fxC4Strip(seen[at]), P12FXC4_NOT_READ,
+            'REGRESSION: org A\'s events, error, read in flight, connection or read handed to org B\'s first frame');
+        assert.deepEqual(p12fxC4Screens(seen[at]), P12FXC4_CHECKING, 'REGRESSION: org A\'s meetings, error or "Connected" drawn under org B');
+    }
+    assert.equal(seen[2].events, seen[3].events, 'REGRESSION: a new empty list each masked render — what depends on the events runs again for nothing');
+    assert.deepEqual(p12fxC4Strip(seen[4]), P12FXC4_NOT_READ, 'after the commit: the reset\'s, org B\'s own');
+});
+
+test('Part 12 fix C4: no org on screen, no calendar — a strip never handed out while no org is active, the switch to none included — RUN', async () => {
+    const none = await p12fxC4Run(null, [
+        (cal) => { cal.setCalendarRead(true); cal.setCalendarConnected(true); cal.setCalendarEvents([p12fxC4EvA]); },
+    ]);
+    assert.deepEqual(p12fxC4Strip(none[1]), P12FXC4_NOT_READ, 'REGRESSION: a calendar handed out with no org active');
+    const toNone = await p12fxC4Run('org_a', [
+        (cal) => { cal.setCalendarRead(true); cal.setCalendarConnected(true); cal.setCalendarEvents([p12fxC4EvA]); },
+        (cal, { org }) => { org.now = null; cal.setCalView('day'); },
+        (cal, { commit }) => { commit(); },
+        (cal) => { cal.setCalendarRead(true); cal.setCalendarConnected(true); },
+    ]);
+    assert.deepEqual(p12fxC4Strip(toNone[2]), P12FXC4_NOT_READ, 'the switch to none');
+    assert.deepEqual(p12fxC4Strip(toNone[4]), P12FXC4_NOT_READ, 'REGRESSION: with no org active, a strip handed out once the commit ran');
+});
+
+test('Part 12 fix C4: the profile panel\'s own Disconnect state is its org\'s — the switch\'s own render draws no "Disconnected" and no "Not disconnected — …" of the last org; the tag moves in the resets\' commit — RUN', () => {
+    const h = code(read(P12B_HEADER));
+    const derive = new Function('activeOrgId', 'calTabOrg', 'calActionErrorKept', 'calDisconnectedKept',
+        `${between(h, '    const calTabHere = ', '\n    const calUnread = ')}\nreturn { calActionError, calDisconnected };`);
+    const WORDS = 'Not disconnected — The server returned 500.';
+    assert.deepEqual(derive('org_b', 'org_a', WORDS, true), { calActionError: '', calDisconnected: false },
+        'REGRESSION: org A\'s "Disconnected" or "Not disconnected — …" drawn in org B\'s first frame');
+    assert.deepEqual(derive('org_a', 'org_a', WORDS, true), { calActionError: WORDS, calDisconnected: true }, 'its own org: both stand');
+    assert.deepEqual(derive('org_a', 'org_a', '', false), { calActionError: '', calDisconnected: false });
+    assert.deepEqual(derive(null, null, WORDS, true), { calActionError: '', calDisconnected: false }, 'REGRESSION: drawn with no org active');
+    // The residual's frame whole: org A's read found none and its Disconnect landed; org B's first frame is checking.
+    const first = derive('org_b', 'org_a', WORDS, true);
+    assert.deepEqual(p12fxC4Screens({ events: [], loading: false, error: null, connected: false, read: false }, { disconnected: first.calDisconnected }).panel,
+        P12FXC4_CHECKING.panel, 'REGRESSION: "Disconnected", OFF and "Connect Google Calendar" of org A in org B\'s first frame');
+    // The tag moves with the org, in the same commit as the two resets.
+    const line = between(h, '    useEffect(() => { setCalTabOrg(activeOrgId); }', ']);') + ']);';
+    const ran = [];
+    let deps = null;
+    new Function('useEffect', 'setCalTabOrg', 'activeOrgId', line)((fn, d) => { deps = d; fn(); }, (v) => ran.push(v), 'org_b');
+    assert.deepEqual([ran, deps], [['org_b'], ['org_b']], 'REGRESSION: the tab\'s tag never moves — its own org\'s Disconnect never drawn again');
+    order(h, '    useEffect(() => { setCalActionError(\'\'); }, [showProfilePanel, activeOrgId]);', '    useEffect(() => { setCalDisconnected(false); }, [activeOrgId]);',
+        '    useEffect(() => { setCalTabOrg(activeOrgId); }, [activeOrgId]);');
+    assert.ok(h.includes('const [calTabOrg, setCalTabOrg] = useState(activeOrgId);'));
+    assert.ok(h.includes('const [calActionErrorKept, setCalActionError] = useState(\'\');'));
+    assert.equal(count(h, 'calActionErrorKept'), 2, 'kept, and read through the tag alone');
+    assert.equal(count(h, 'calDisconnectedKept'), 2, 'kept, and read through the tag alone');
+});
+
+test('Part 12 fix C4: WIRING — App hands the calendar hook the org on screen; the hook alone holds the strip, and every screen reads it through App', () => {
+    const app = code(read(P12FXC3_APP));
+    assert.ok(app.includes('    const calState = useCalendarState(activeOrgId);'), 'REGRESSION: the hook never told the org on screen');
+    order(app, 'const activeOrgId = ', 'const calState = useCalendarState(activeOrgId);');
+    const hook = code(read(P12FXC4_HOOK));
+    assert.ok(hook.includes('export function useCalendarState(activeOrgId) {'));
+    assert.ok(hook.includes("import { useState, useEffect } from 'react';"));
+    assert.ok(hook.includes('    const [calendarStripOrg, setCalendarStripOrg] = useState(activeOrgId);'), 'plain state: the reset never puts it back');
+    assert.equal(count(hook, 'setCalendarStripOrg('), 1, 'moved by its effect alone');
+    const callers = srcFiles().filter((f) => f !== P12FXC4_HOOK && read(f).includes('useCalendarState('));
+    assert.deepEqual(callers, [P12FXC3_APP], 'one caller: App, which hands the strip to every screen');
+});
+
+// ── Part 12 — the review's fixes, round 4 (S4 — Sales Manager claim words) ──
+// The verifier's residuals on round 3 (state §0.249) and the main session's decision: the batch's rule holds (the quota
+// board's, §0.203; round 3's Audit destRefusedOwn; the document record step's) — only a 4xx carrying the server's own
+// words proves nothing was written. claimRefused (a SPIFF claim's Approve, Reject and Delete) says "Not saved —" / "Not
+// deleted —" and refusalWords for that answer alone; anything else — a 5xx, a gateway's page, a wordless 4xx — says "The
+// claim may have been saved — reload the page to see whether it was: " and refusalWords' words, typed and trimmed. Its 5xx
+// line said a raw d.error ("The server returned 500 —    .", "— [object Object]"), and round 3 said a wordless 4xx was
+// "Not saved — The server returned 409.". sendQuotas is unchanged.
+const P12FXS4_SMT = 'src/Tabs/SalesManagerTab.jsx';
+// Moved in §0.249 (review fixes, last pass, F4): the test is the tab's one, ownRefusal — a 4xx, its error a string, trimmed — and claimRefused reads it.
+const P12FXS4_OWN = "const ownRefusal = (status, d) => status >= 400 && status < 500 && typeof d?.error === 'string' && !!d.error.trim();";
+const P12FXS4_HEAD = "const claimRefused = (done, d, status) => (ownRefusal(status, d)";
+const P12FXS4_MAYBE = '    : `The claim may have been ${done} — reload the page to see whether it was: ${refusalWords({ status }, d)}`);';
+const P12FXS4_NEVER = /\[object Object\]|undefined|the server returned|Unexpected token|HTTP|:\s*$|—\s+\.|\(ref\s*\)/;
+
+test('Part 12 fixes, round 4 (S4): a SPIFF claim\'s words — "Not saved" only for a 4xx in the server\'s own words (typed and trimmed); a 5xx, a gateway\'s page or a wordless 4xx says the claim may have been, in refusalWords\' words, never a raw d.error — RUN', () => {
+    const { claimRefused } = p12bClaimWords();
+    for (const [d, status, done, msg] of [
+        // The server's own refusal: it wrote nothing.
+        [{ error: 'id required', requestId: 'req_4' }, 400, 'deleted', 'Not deleted — id required (ref req_4)'],
+        [{ error: ' Forbidden ', requestId: '  ' }, 403, 'saved', 'Not saved — Forbidden'],
+        [{ error: 'Claim already approved', requestId: ' r5 ' }, 409, 'saved', 'Not saved — Claim already approved (ref r5)'],
+        // A 4xx with no words of its own: nothing proves it wrote nothing.
+        [{}, 409, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 409.'],
+        [null, 400, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 400.'],
+        [{ error: '   ', requestId: 'r6' }, 400, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 400.'],
+        [{ error: 42 }, 422, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 422.'],
+        [{ error: { message: 'x' } }, 409, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 409.'],
+        // A 5xx: the write may have landed — its words, typed and trimmed, with their ref (the verifier's residual 1).
+        [{ error: 'Internal server error', requestId: 'r1' }, 500, 'saved', 'The claim may have been saved — reload the page to see whether it was: Internal server error (ref r1)'],
+        [{ error: '  Boom  ', requestId: ' r2 ' }, 500, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: Boom (ref r2)'],
+        [{ error: '   ' }, 500, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 500.'],
+        [{ error: { message: 'x' } }, 503, 'saved', 'The claim may have been saved — reload the page to see whether it was: The server returned 503.'],
+        [null, 502, 'deleted', 'The claim may have been deleted — reload the page to see whether it was: The server returned 502.'],
+    ]) {
+        const said = claimRefused(done, d, status);
+        assert.equal(said, msg, `REGRESSION: ${status} ${JSON.stringify(d)}`);
+        assert.doesNotMatch(said, P12FXS4_NEVER, `REGRESSION: ${status} ${JSON.stringify(d)} — own or raw words`);
+    }
+});
+
+test('Part 12 fixes, round 4 (S4): Approve and Delete pressed — a 5xx with a blank or non-string error, a 4xx with a non-string error, say the claim may have been; a 4xx in the server\'s words says "Not"; the list unchanged — RUN', async () => {
+    for (const [which, done] of [['status', 'saved'], ['delete', 'deleted']]) {
+        for (const [answer, msg] of [
+            [onceOf(500, { error: '   ' }), `The claim may have been ${done} — reload the page to see whether it was: The server returned 500.`],
+            [onceOf(503, { error: { message: 'x' } }), `The claim may have been ${done} — reload the page to see whether it was: The server returned 503.`],
+            [onceOf(422, { error: 42, requestId: 'r7' }), `The claim may have been ${done} — reload the page to see whether it was: The server returned 422.`],
+            [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), `The claim may have been ${done} — reload the page to see whether it was: Internal server error (ref r1)`],
+            [onceOf(409, { error: 'Claim already approved', requestId: 'r5' }), `Not ${done} — Claim already approved (ref r5)`],
+        ]) {
+            const r = await p12bClaimPress(which, { answer });
+            assert.deepEqual([r.states, r.claims], [[{ status: 'error', msg }], [P12B_CLAIM, P12B_CLAIM_2]], `REGRESSION (${which}): ${msg}`);
+            assert.doesNotMatch(r.states[0].msg, P12FXS4_NEVER);
+        }
+    }
+});
+
+test('Part 12 fixes, round 4 (S4): WIRING — claimRefused reads the server\'s own refusal as the batch does (a 4xx, its error a string, trimmed) and says every other answer in the maybe sentence, refusalWords\' words; no raw d.error, no old 5xx sentence', () => {
+    const s = code(read(P12FXS4_SMT));
+    const lines = s.split('\n');
+    assert.equal(lines.filter((l) => l === P12FXS4_OWN).length, 1, 'the test, whole: only a 4xx with words, typed and trimmed, is the server\'s own refusal');
+    assert.equal(lines.filter((l) => l === P12FXS4_HEAD).length, 1, 'the head, whole: claimRefused reads that test');
+    order(s, P12FXS4_OWN, P12FXS4_HEAD);
+    assert.equal(lines.filter((l) => l === P12FXS4_MAYBE).length, 1, 'the maybe sentence, whole');
+    order(s, P12FXS4_HEAD, '    ? `Not ${done} — ${refusalWords({ status }, d)}`', P12FXS4_MAYBE, '\nconst claimUnanswered = ');
+    const words = between(s, 'const claimRefused = (', '\nconst claimUnanswered');
+    assert.equal(count(words, 'refusalWords({ status }, d)'), 2, 'the refusal\'s words and the maybe sentence\'s, both refusalWords\'');
+    assert.ok(!/\$\{d\??\.error|d\??\.error \?|d\??\.requestId/.test(words), 'REGRESSION: a raw d.error or ref in claimRefused\'s words');
+    assert.ok(!words.includes('Reload the page') && !words.includes('The server returned'), 'REGRESSION: the old 5xx sentence, its own words');
+    assert.ok(!words.includes(`${String.fromCharCode(92)}u2014`), 'the dash is the character, never its escape');
+});
+
+// ── Part 12 — the review's fixes, round 4 (G4 — THE GUARD floors) ──
+// Re-measured after every round 4 fix (§0.249), with the guard's own functions in memory (node:test stubbed, the module
+// piped through stdin): (iii) 192 body reads over the 242 sources under src/ — the Audit log's Add and Remove read a
+// refusal's body inside their ok checks too, judged by destRefusedOwn (A4), two checked reads where readRefusal read them
+// before; (iv) 188 catch clauses over its 54 files, CLEANED naming each once; (i) 126 error states. BODY_FIRST's 24 names
+// all remain (its stale check), 10 with a check, App's one `outer`. The verifier's residuals on round 3: this file's own
+// source walks — Part 12c's "check your connection" scan and S's "network error" scan — held at 240 where 242 sources
+// are measured (two could drop out of the walk and go unsearched); both are 242 now, and Part 7c's srcFiles (read by
+// 7c's scans, 9g's and C4's callers) is held at the same 242. G3's WIRING (with G and G2 before it) is merged here: one
+// test holds every floor at the measured count, so none is left looser beside it. A floor lowered without its reason
+// fails here: say the new count, and why, in both places.
+const P12FXG4_SOURCES = 242;
+const p12fxG4Floor = (s, needle) => {
+    const i = s.indexOf(needle);
+    assert.ok(i >= 0, needle);
+    assert.equal(s.split(needle).length, 2, `one floor: ${needle}`);
+    return Number(/^\d+/.exec(s.slice(i + needle.length))[0]);
+};
+
+test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts measured after round 4: (iii) 192 body reads over 242 sources, (iv) 188 catch clauses over 54 files, the list held, (i) 126 error states', () => {
+    const s = read('tests/refusals-said.test.mjs');
+    const iii = between(s, "test('(iii) under src/,", "test('(iii) self-test (§0.248)");
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 192, 'REGRESSION: scan (iii)\'s floor below the 192 body reads measured after round 4');
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
+    order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
+    const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 188, 'REGRESSION: scan (iv)\'s floor below the 188 catch clauses measured after round 4');
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 54, 'REGRESSION: scan (iv)\'s list no longer held at its 54 files');
+    assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
+    order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
+    const i = between(s, "test('(i) every error state under src/ is read", "test('(i) self-test");
+    assert.ok(p12fxG4Floor(i, 'assert.ok(states >= ') >= 126, 'REGRESSION: scan (i)\'s floor below the 126 error states measured after round 4');
+    order(i, 'unreadStatesIn(', 'assert.ok(states >= ');
+});
+
+test('Part 12 fixes, round 4 (G4): WIRING — this file\'s source walks are held at the 242 sources measured under src/: 12c\'s "check your connection" scan, S\'s "network error" scan, and 7c\'s srcFiles — RUN, and WIRING', () => {
+    // RUN: the shared walk sees every source (a walk that lost a folder or an extension would pass 7c's deepEqual([]) scans).
+    assert.ok(srcFiles().length >= P12FXG4_SOURCES, `REGRESSION: 7c's srcFiles reads ${srcFiles().length} of the 242 sources under src/`);
+    assert.ok(srcFiles().includes('src/App.jsx') && srcFiles().includes('src/utils/storage.js'), 'the walk reads .jsx and .js');
+    const s = read('tests/refusal-sweep.test.mjs');
+    const c12 = between(s, "test('Part 12c: WIRING — no source under src/ says", '\n});');
+    assert.ok(p12fxG4Floor(c12, 'assert.ok(files.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: 12c\'s "check your connection" walk held below the 242 sources');
+    order(c12, "walk('src/');", 'assert.ok(files.length >= ', 'const said = files.filter(');
+    const sNet = between(s, "test('Part 12 fixes (S): WIRING — no source under src/ draws \"network error\"", '\n});');
+    assert.ok(p12fxG4Floor(sNet, 'assert.ok(files.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: S\'s "network error" walk held below the 242 sources');
+    order(sNet, "walk('src/');", 'assert.ok(files.length >= ', 'for (const f of files) {');
+    const helper = between(s, 'const srcFiles = () => {', '\n};');
+    order(helper, "walk('src/');", 'return out;');
+    assert.ok(helper.includes('else if (/\\.(js|jsx)$/.test(name)) out.push(p);'), '7c\'s walk reads both extensions');
+});
+
+// ── Part 12 — the review's fixes, last pass (F1 — Audit Remove 404 and Users MFA filter) ──
+// The review of round 4 (A4's first residual, U4). (1) The Audit log's Remove said a delete answered 404 "Destination not
+// found." as "Remove destination failed — Destination not found.", the row kept (and, after a Remove that may have
+// landed, still counted "status not known") — though audit-stream.mjs answers that 404 only when it finds no such row in
+// this org, before its delete: the destination is gone. The module's destGone (a 404 in the server's words) now takes the
+// row out of the list and out of statusUnread and says "The destination was already removed.", on a first press or after
+// a maybe-Remove; a 404 page without the server's words still proves nothing, and the 400 and 403 are as they were.
+// (2) Settings → Users' MFA off filter said "No active member has MFA off." over a list the search box alone emptied, the
+// chip beside it counting one; every other filter said "No users yet" over a search, or over a roster with members but
+// none in that filter. The module's usersEmptyWords names what emptied the list: a read still out or one that failed
+// under MFA off, else the search ("No <who> matches the search."), else the filter's own none.
+// The Audit Remove, run over an answer with the rows' status marks before it (p12fxARemove, moved for destGone).
+const p12fxF1Gone = () => onceOf(404, { error: 'Destination not found.', requestId: 'r4' });
+
+test('Part 12 fixes (F1): the Audit log\'s Remove — a 404 in the server\'s words takes the row out, said "already removed", on a first press or after a maybe-Remove; a 404 page still a maybe — RUN', async () => {
+    // A first press: the row leaves the list, never "failed".
+    const first = await p12fxARemove(p12fxF1Gone());
+    assert.deepEqual([first.said, first.ids, first.statusUnread, first.busy, first.sent],
+        [['The destination was already removed.'], ['dst_2'], [], ['dst_1', null], [['/.netlify/functions/audit-stream?id=dst_1', 'DELETE']]],
+        'REGRESSION: "Remove destination failed — Destination not found." over a destination the server proves gone');
+    assert.ok(!first.said[0].includes('failed'));
+    assert.equal(p12fxABadge(first.dests, true, first.statusUnread), 'Streaming to 1 destination');
+    // After a Remove that may have landed (a 500 after the delete): the row kept, not known — then the second press's 404
+    // takes it out and out of statusUnread, another row's mark kept.
+    const maybe = await p12fxARemove(onceOf(500, { error: 'Internal server error', requestId: 'r1' }), ['dst_2']);
+    assert.deepEqual([maybe.ids, maybe.statusUnread], [['dst_1', 'dst_2'], ['dst_2', 'dst_1']]);
+    const again = await p12fxARemove(p12fxF1Gone(), maybe.statusUnread);
+    assert.deepEqual([again.said, again.ids, again.statusUnread], [['The destination was already removed.'], ['dst_2'], ['dst_2']],
+        'REGRESSION: the gone row kept, or its "status not known" mark left behind');
+    assert.equal(p12fxABadge(again.dests, true, again.statusUnread), 'Streaming to 1 destination · 1 status not known');
+    // A 404 without the server's words proves nothing: still a maybe, the row kept, not known.
+    for (const [answer, words] of [[onceOf(404, new SyntaxError("Unexpected token '<'")), 'The server returned 404.'], [onceOf(404, { error: '  ' }), 'The server returned 404.'], [onceOf(404, {}), 'The server returned 404.']]) {
+        const did = await p12fxARemove(answer);
+        assert.deepEqual([did.said, did.ids, did.statusUnread], [[P12FXA4_MAYBE_REMOVE(words)], ['dst_1', 'dst_2'], ['dst_1']], `REGRESSION: a 404 page taken as gone — ${words}`);
+    }
+    // The server's other own refusals are as they were: "failed", the row known.
+    for (const [answer, words] of [[onceOf(400, { error: 'id is required.' }), 'id is required.'], [onceOf(403, { error: 'Forbidden: insufficient role' }), 'Forbidden: insufficient role']]) {
+        const did = await p12fxARemove(answer, ['dst_1']);
+        assert.deepEqual([did.said, did.ids, did.statusUnread], [[`Remove destination failed — ${words}`], ['dst_1', 'dst_2'], ['dst_1']], `REGRESSION: ${words} taken as gone`);
+    }
+    // A landed Remove is as it was.
+    const landed = await p12fxARemove(onceOf(200, { success: true }));
+    assert.deepEqual([landed.said, landed.ids], [[], ['dst_2']]);
+});
+
+test('Part 12 fixes (F1): WIRING — the Audit log\'s Remove judges a 404 by the module\'s destGone before the server\'s other refusals; the server answers it only before its delete', () => {
+    const s = code(read(P12A_AUDIT));
+    order(s, '\nconst destRefusedOwn = (res, body) => ', '\nconst destGone = (res, body) => res.status === 404 && destRefusedOwn(res, body);', '\nexport const AuditDetail = ');
+    assert.equal(count(s, 'const destGone = '), 1);
+    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);');
+    order(rm, 'const refused = await res.json().catch(() => null);', 'if (destGone(res, refused)) {', 'setDests(rows => rows.filter(row => row.id !== dest.id));',
+        'setStatusUnread(ids => ids.filter(id => id !== dest.id));', "setDestError('The destination was already removed.');",
+        'else if (destRefusedOwn(res, refused)) setDestError(`Remove destination failed — ${refusalWords(res, refused)}`);', 'else maybeRemoved(refusalWords(res, refused));');
+    assert.equal(count(s, 'destGone(res, refused)'), 1, 'only the Remove reads a 404 as gone');
+    // The server: the DELETE's 404 is its "no such row in this org", answered before the delete.
+    const del = between(code(read('netlify/functions/audit-stream.mjs')), "if (event.httpMethod === 'DELETE') {", "return json(200, { success: true });");
+    order(del, 'const existing = await rowOf(id);', "if (!existing) return json(404, { error: 'Destination not found.' });", 'await db.delete(auditStreamDestinations)');
+    assert.equal(count(del, 'json(404'), 1);
+});
+
+// Settings → Users' roster, filtered and searched — the filter, the empty line and the chip extracted from the source and
+// run (p12fxU4Drawn, moved to take the search).
+const p12fxF1Lines = (mfaData, mfaFailed, search) => ['All', 'Active', 'Invited', 'Deactivated', 'MFA off'].map((f) => {
+    const d = p12fxU4Drawn(mfaData, mfaFailed, f, search);
+    return [f, d.visible, d.empty];
+});
+
+test('Part 12 fixes (F1): Settings → Users\' empty line names a search that emptied the list — never "No active member has MFA off." beside a chip counting one, never "No users yet" over members — RUN', async () => {
+    // The MFA read landed, one active member off (C): the chip counts 1; a search for another name empties the list.
+    const read = p12fxU4Drawn(P12FXU4_WHOLE(), '', 'MFA off', 'zzz');
+    assert.deepEqual([read.chip.label, read.visible, read.empty], ['MFA off · 1', [], 'No active member with MFA off matches the search.'],
+        'REGRESSION: "No active member has MFA off." over a list the search alone emptied, the chip counting one');
+    assert.deepEqual(p12fxU4Drawn(P12FXU4_WHOLE(), '', 'MFA off', 'c@x').visible, ['C'], 'the search narrows the MFA off list');
+    // Every filter, a search that empties it: the search named, the filter's who — never the filter's none.
+    assert.deepEqual(p12fxF1Lines(P12FXU4_WHOLE(), '', 'zzz'), [
+        ['All', [], 'No member matches the search.'],
+        ['Active', [], 'No active member matches the search.'],
+        ['Invited', [], 'No pending invitation matches the search.'],
+        ['Deactivated', [], 'No deactivated member matches the search.'],
+        ['MFA off', [], 'No active member with MFA off matches the search.'],
+    ], 'REGRESSION: a search that emptied the list said as none');
+    // No search: each filter's own none — "No users yet" only under All (a roster with no one in it).
+    const rule = new Function(`${between(p12fxU4Src(), 'const USERS_EMPTY = ', '\n};')}\n};\n${between(p12fxU4Src(), 'const usersEmptyWords = ', '\n};')}\n};\nreturn usersEmptyWords;`)();
+    assert.deepEqual(['All', 'Active', 'Invited', 'Deactivated', 'MFA off'].map((f) => rule(f, '', '')),
+        ['No users yet — use "Invite users" to add your team.', 'No active members.', 'No invited member in the roster.', 'No deactivated members.', 'No active member has MFA off.'],
+        'REGRESSION: "No users yet" under a filter that only has none of its own');
+    // The roster's Pending list is its pending_ rows alone — it never reads Clerk, so its none names the roster, never
+    // "No invitations pending." (an invitation made only in Clerk is listed on the Pending invitations page, which says
+    // that only over Clerk's list read and empty; the main session, last pass).
+    assert.ok(!p12fxU4Src().includes("['pending invitation', 'No invitations pending.']"),
+        'REGRESSION: the roster\'s Pending filter says "No invitations pending." from a list that never read Clerk');
+    // A read still out or one that failed: under MFA off its words, a search or not — the read is why it is empty; the
+    // other filters, which do not read MFA, name the search.
+    for (const [answer, words] of [...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.']]) {
+        const [mfaData, mfaFailed] = await p12fxU4LoadAfter(answer);
+        const lines = p12fxF1Lines(mfaData, mfaFailed, 'zzz');
+        assert.deepEqual(lines.at(-1), ['MFA off', [], `The MFA status could not be read — ${words}`], `REGRESSION: a failed read under a search said as no match — ${words}`);
+        assert.deepEqual(lines[1], ['Active', [], 'No active member matches the search.']);
+    }
+    assert.deepEqual(p12fxF1Lines(null, '', 'zzz').at(-1), ['MFA off', [], 'The MFA status is still loading…']);
+    // An unknown filter reads as All.
+    assert.equal(rule('Other', 'q', ''), 'No member matches the search.');
+});
+
+test('Part 12 fixes (F1): WIRING — one module-scope rule for the roster\'s empty line, handed the search box the filter reads and the MFA rule\'s words', () => {
+    const s = p12fxU4Src();
+    order(s, '\nconst mfaUnreadWords = ', '\nconst USERS_EMPTY = {', '\nconst usersEmptyWords = (filter, search, mfaUnread) => {',
+        "if (filter === 'MFA off' && mfaUnread) return mfaUnread;", 'const [who, none] = USERS_EMPTY[filter] || USERS_EMPTY.All;',
+        'return search ? `No ${who} matches the search.` : none;', '\nconst UserProfilePage = ');
+    assert.equal(count(s, 'const usersEmptyWords = '), 1);
+    assert.equal(count(s, 'usersEmptyWords('), 1, 'the roster draws one empty line');
+    const empty = between(s, '{visible.length === 0 && (', '\n                        )}');
+    assert.ok(empty.includes('{usersEmptyWords(filter, search, mfaUnreadWords(mfaByEmail, mfaFailed))}'), 'REGRESSION: the empty line is not handed the search');
+    assert.ok(!s.includes("{filter === 'MFA off' ? (mfaUnreadWords("), 'REGRESSION: the MFA off line says none over a search again');
+    // The search the line names is the one the filter narrows by.
+    assert.ok(s.includes("const [search, setSearch]   = useState('');"));
+    order(between(s, '    const visible = displayUsers.filter(u => {', '\n    });'), 'const q = search.toLowerCase();', 'return !q || ');
+});
+
+// ── Part 12 — the review's fixes, last pass (F2 — Document held drops, import team words and import thrown failure) ──
+// The verifiers' residuals of D4 and I4 (the first and third). (1) A record's Documents held a drop made while a batch
+// sent by its files' names alone, and named every one "wait … then drop them again" — a file validateFile refuses was
+// invited back and refused when dropped again. Each held file is now checked as it is held ([name, words]): a refused one
+// is said by its name and its words, and only the files that would pass are named "Not sent". (2) The invitation import's
+// team sentence said "they are on no team's list" of people found on the roster read again — one may have been a member
+// before the import, already on its team's list, and a re-invited held row keeps its own team; no row says which. It now
+// claims only that they named a team and asks the Admin to check their lists on the Teams page. (3) The CSV import's
+// Results drew a thrown failure with no receipt as the raw err.message; it is said through failureWords now.
+
+// A record's Documents with one batch held open: a.pdf sends until `open` is called; `invalid` is validateFile's words.
+const p12fxF2Held = async (invalid) => {
+    const DOC = { id: 'doc_y' };
+    const mk = p12fxD4Make(invalid);
+    const { gate, open } = p12fxD4Gate();
+    const batch = mk.drop({ 'a.pdf': gate });
+    await settle();
+    return { ...mk, DOC, finish: async () => { open(DOC); await batch; } };
+};
+const p12fxF2HeldWords = () => {
+    const src = code(read(P12FXD_RECORD));
+    return new Function(`return ${between(src, 'const heldWords = ', ';\n').slice('const heldWords = '.length)};`)();
+};
+const P12FXF2_EXE = 'Unsupported file type: .exe';
+const P12FXF2_BIG = 'File exceeds the 50 MB limit';
+
+test('Part 12 fixes, last pass (F2): a record\'s Documents — a drop held while a batch sends is checked as it is held: a refused file said by its words, only the files that would pass named "Not sent" — RUN', async () => {
+    const heldWords = p12fxF2HeldWords();
+    const h = await p12fxF2Held({ 'x.exe': P12FXF2_EXE, 'big.pdf': P12FXF2_BIG });
+    await h.drop({ 'x.exe': h.DOC, 'c.pdf': h.DOC });
+    assert.deepEqual(h.did.held.at(-1), [['x.exe', P12FXF2_EXE], ['c.pdf', null]],
+        'REGRESSION: a held file never checked — one the check refuses invited back');
+    assert.deepEqual(h.did.sent, ['a.pdf'], 'nothing held is sent');
+    assert.equal(heldWords(h.did.held.at(-1), true),
+        'x.exe: Unsupported file type: .exe\nNot sent: c.pdf — wait for the current upload to finish, then drop them again.',
+        'REGRESSION: a refused file named "drop them again" — dropped again it is refused again');
+    // A second drop while it still sends: each name once, in the order first held, a refused one with its words.
+    await h.drop({ 'big.pdf': h.DOC, 'c.pdf': h.DOC });
+    assert.deepEqual(h.did.held.at(-1), [['x.exe', P12FXF2_EXE], ['c.pdf', null], ['big.pdf', P12FXF2_BIG]]);
+    await h.finish();
+    assert.equal(heldWords(h.did.held.at(-1), false),
+        'x.exe: Unsupported file type: .exe\nbig.pdf: File exceeds the 50 MB limit\nNot sent: c.pdf — drop them again.');
+    // Dropped again as the words ask, the one named is sent.
+    await h.drop({ 'c.pdf': h.DOC });
+    assert.deepEqual([h.did.sent, h.did.held.at(-1)], [['a.pdf', 'c.pdf'], null]);
+});
+
+test('Part 12 fixes, last pass (F2): a record\'s Documents — the held words: each refused file on its own line with its words, the files that would pass named once "Not sent", none named when every one is refused — RUN', () => {
+    const heldWords = p12fxF2HeldWords();
+    assert.equal(heldWords([['x.exe', P12FXF2_EXE]], true), 'x.exe: Unsupported file type: .exe',
+        'REGRESSION: a "Not sent" line naming no file, or the refused one named "drop them again"');
+    assert.equal(heldWords([['a.pdf', null], ['x.exe', P12FXF2_EXE], ['b.pdf', null], ['big.pdf', P12FXF2_BIG]], false),
+        'x.exe: Unsupported file type: .exe\nbig.pdf: File exceeds the 50 MB limit\nNot sent: a.pdf, b.pdf — drop them again.',
+        'REGRESSION: a refused file left unsaid, or named among the files to drop again');
+    assert.equal(heldWords([['a.pdf', null], ['b.pdf', null]], true), 'Not sent: a.pdf, b.pdf — wait for the current upload to finish, then drop them again.');
+});
+
+test('Part 12 fixes, last pass (F2): WIRING — a held drop checked by validateFile as it is held, each name once; the held box keeps its lines; heldWords at module scope', () => {
+    const record = code(read(P12FXD_RECORD));
+    order(record, '\nconst heldWords = (held, busy) => [', '\nexport default function RecordDocuments(');
+    const attach = between(record, '    const attachFiles = async (fileList) => {', '\n    };');
+    order(attach, 'if (!files.length) return;',
+        'if (sending.current) { setHeld((h) => [...new Map([...(h || []), ...files.map((f) => [f.name, validateFile(f)])])]); return; }',
+        'const refused = files.map((f) => [f, validateFile(f)]).filter((r) => r[1]);');
+    assert.equal(count(attach, 'validateFile('), 2, 'a held drop and a taken drop, each through the one check');
+    assert.ok(record.includes("color: T.danger, whiteSpace: 'pre-line' }}>{heldWords(held, busy)}</div>"),
+        'REGRESSION: the held box runs its lines together');
+});
+
+test('Part 12 fixes, last pass (F2): the invitation import\'s team sentence — the ones found on the roster read again who named a team are never said to be on no team\'s list; the Admin is asked to check — RUN', async () => {
+    const CHECK1 = '1 whose answer could not be read named a team — check on the Teams page that they are on its list.';
+    // p0..p9 one request answered unread; p0 and p1 on the roster read again (on it, not proven) — p0 named East.
+    const one = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()], roster: p12fxI4Roster('p0@x.test', 'p1@x.test') });
+    assert.equal(one.out.receipt.onRoster, 2);
+    assert.equal(one.out.warning, CHECK1, 'REGRESSION: one on the roster said to be on no team\'s list — they may have been on it before the import');
+    // p0 alone on the roster: proven sent by this import's 201 — still a check, never "on no team's list".
+    const proven = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()], roster: p12fxI4Roster('p0@x.test') });
+    assert.deepEqual([proven.out.receipt.created, proven.out.warning], [1, CHECK1]);
+    // The residual's scenario: all ten on the roster, three of them named East.
+    const all = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()],
+        roster: p12fxI4Roster(...P12FXI4_REQ(0, 10).map((v) => v.email)) });
+    assert.equal(all.out.warning, "3 whose answers could not be read named a team — check on the Teams page that they are on their teams' lists.",
+        'REGRESSION: the many said as one');
+    // A roster read that failed: reload first, then the same check.
+    const failed = await p12fxI2Import({ invites: P12FXI4_REQ(0, 10), posts: [p12fxIUnreadable()], roster: UNSENT() });
+    assert.ok(failed.out.warning.endsWith("3 whose answers could not be read named a team — reload the page, then check on the Teams page that they are on their teams' lists."));
+    for (const w of [one.out.warning, proven.out.warning, all.out.warning, failed.out.warning]) {
+        assert.ok(!/no team's list|none is on/.test(w), `REGRESSION: a claim no roster row proves — ${w}`);
+        assert.ok(!/\bit\b/.test(w), `REGRESSION: a person named "it" — ${w}`);
+    }
+});
+
+// The CSV import's runImport, run on a contacts import whose handler throws `thrown`; the Results' receipt it sets.
+const p12fxF2Run = async (thrown) => {
+    const R = await import('../src/utils/importReceipt.js');
+    const did = { called: 0, stats: [], steps: [] };
+    const noop = () => {};
+    const runImport = p12aFn(P12FXI_MODAL, '    const runImport = async (data, resolvedConflicts, droppedCount = 0, refused = []) => {', '\n    };', '\n    };',
+        ['setImporting', 'setImportProgress', 'setRefusals', 'setImportWarning', 'setRefusedRows', 'setParentsIgnored', 'importType', 'window', 'filledCells',
+            'receiptFromPreflight', 'onImportContacts', 'onImportOpportunities', 'onImportAccounts', 'onImportUsers', 'inviteFrom', 'teams', 'territories',
+            'mergeReceipts', 'emptyReceipt', 'receiptFromError', 'failureWords', 'setImportStats', 'setStep'], 'runImport')(
+        noop, noop, noop, noop, noop, noop, 'contacts', {}, (x) => x,
+        R.receiptFromPreflight, async () => { did.called++; throw thrown; }, noop, noop, noop, (x) => x, [], [],
+        R.mergeReceipts, R.emptyReceipt, R.receiptFromError, failureWords, (v) => did.stats.push(v), (v) => did.steps.push(v));
+    await runImport([{ firstName: 'Ann' }], []);
+    assert.equal(did.called, 1, 'the handler ran — the failure is the one it threw');
+    return { stats: did.stats.at(-1), steps: did.steps };
+};
+
+test('Part 12 fixes, last pass (F2): the CSV import — a thrown failure with no receipt said in plain words (failureWords), never its raw message; a receipt still read as fields — RUN', async () => {
+    const R = await import('../src/utils/importReceipt.js');
+    const off = await p12fxF2Run(UNSENT());
+    assert.equal(off.stats.error, 'The server could not be reached.', 'REGRESSION: "Failed to fetch" drawn raw');
+    assert.deepEqual(off.steps, ['results']);
+    const bug = await p12fxF2Run(new TypeError("Cannot read properties of undefined (reading 'id')"));
+    assert.equal(bug.stats.error, 'Its answer could not be read.', 'REGRESSION: a handler\'s TypeError drawn raw');
+    const plain = await p12fxF2Run(new Error('The import was refused.'));
+    assert.equal(plain.stats.error, 'The import was refused.', 'a plain Error\'s own words');
+    const blank = await p12fxF2Run(new Error(''));
+    assert.equal(blank.stats.error, 'Its answer could not be read.');
+    // An ImportError carries its receipt: its fields, never words.
+    const receipt = { ...R.emptyReceipt(), attempted: 1, failed: 1, error: 'The server returned 502.' };
+    const counted = await p12fxF2Run(new R.ImportError(receipt, 'contact'));
+    assert.deepEqual([counted.stats.attempted, counted.stats.failed, counted.stats.error], [1, 1, 'The server returned 502.']);
+});
+
+test('Part 12 fixes, last pass (F2): WIRING — the CSV import says a thrown failure through failureWords, imported from the house rule; no raw message', () => {
+    const m = code(read(P12FXI_MODAL));
+    assert.ok(m.includes("import { failureWords } from '../../utils/refusalWords.js';"));
+    const run = between(m, '    const runImport = async (data, resolvedConflicts, droppedCount = 0, refused = []) => {', '\n    };');
+    assert.ok(run.includes('fromHandler || { ...emptyReceipt(), error: failureWords(err) },'), 'REGRESSION: a thrown failure drawn as its raw message');
+    assert.ok(!run.includes('err.message'), 'REGRESSION: a raw message');
+});
+
+// ── Part 12 — the review's fixes, last pass (F3 — Calendar connect-return after an org switch) ──
+// The verifier's residual of round 4 (state §0.249). calConnectResult — the outcome of a calendar Connect the app landed
+// back from — is org-bound calendar state, but the hook handed it out unmasked, and App's switch effect puts it back only
+// after the switch's own render has painted: in that frame the profile panel's Calendar tab drew the last org's "Google
+// Calendar connected — your calendar is live." under the new org's "Checking…", and Company calendar and Connected apps
+// (remounted under the new org's key) the last org's line. The hook now hands it out under the strip's tag (calendarHere),
+// as round 4 did the strip: none until the strip's org names the org on screen. Run here: the REAL hook, from its source,
+// through React's own renderer, as round 4's C4 runner does; each reader's line from its own source.
+const P12FXF3_COMPANY = 'src/Tabs/settings/company/CompanyCalendarDetail.jsx';
+const P12FXF3_APPS = 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx';
+const P12FXF3_A = { status: 'success', provider: 'google', scope: 'user', from: 'profile', reason: null };
+const P12FXF3_A_APPS = { status: 'success', provider: 'google', scope: 'org', from: 'apps', reason: null };
+const P12FXF3_B = { status: 'error', provider: 'google', scope: 'org', from: 'company', reason: 'server_error' };
+// The hook built from its own source (as p12fxC4Run builds it); `steps[i]` runs in render i with the hook's answer and
+// { org, effects, commit } — effects runs the hook's effects whose dependencies changed (the first load's commit, which
+// App's reset skips); commit runs them and then App's reset (a switch's). Each render's connect-return is kept.
+const p12fxF3Run = async (org0, steps) => {
+    const React = await import('react');
+    const { renderToString } = await import('react-dom/server');
+    const { useOrgBoundState, resetAllOf } = await import('../src/hooks/useOrgBoundState.js');
+    const { isoLocal, todayLocal } = await import('../src/utils/dateLocal.js');
+    const src = code(read(P12FXC4_HOOK));
+    const effects = [];
+    let committed = null;
+    const runEffects = () => {
+        effects.forEach((e, k) => {
+            const was = committed?.[k];
+            if (!was || !e.deps || e.deps.some((d, j) => !Object.is(d, was[j]))) e.fn();
+        });
+        committed = effects.map((e) => e.deps);
+    };
+    const useCalendarState = new Function('useState', 'useEffect', 'useOrgBoundState', 'resetAllOf', 'isoLocal', 'todayLocal',
+        `${between(src, 'const NO_EVENTS = ', ';\n')};\n${src.slice(src.indexOf('function useCalendarState(activeOrgId) {'))}\nreturn useCalendarState;`)(
+        React.useState, (fn, deps) => { effects.push({ fn, deps }); }, useOrgBoundState, resetAllOf, isoLocal, todayLocal);
+    const org = { now: org0 };
+    const seen = [];
+    let i = 0;
+    function Probe() {
+        effects.length = 0;
+        const cal = useCalendarState(org.now);
+        seen.push({ org: org.now, result: cal.calConnectResult });
+        if (committed === null) runEffects();   // the mount's commit
+        const step = steps[i++];
+        if (step) step(cal, { org, effects: runEffects, commit: () => { runEffects(); cal.resetOnOrgSwitch(); } });
+        return null;
+    }
+    renderToString(React.createElement(Probe));
+    return seen;
+};
+// What each reader draws from the connect-return it is handed, from its own source: the profile panel's line
+// (returnedHere, then calendarReturnMessage), Company calendar's banner and Connected apps' Google card note.
+const p12fxF3Lines = (() => {
+    let built = null;
+    return async (result) => {
+        if (!built) {
+            const { calendarReturnMessage } = await import('../src/utils/calendarReturn.js');
+            const h = code(read(P12B_HEADER));
+            const cc = code(read(P12FXF3_COMPANY));
+            const ca = code(read(P12FXF3_APPS));
+            const returnedHere = new Function('calConnectResult', `${between(h, '    const returnedHere = ', ';\n')};\nreturn returnedHere;`);
+            const company = new Function('calConnectResult', `return ${between(cc, "{calConnectResult && calConnectResult.from === 'company'", ' && (\n').slice(1)};`);
+            const note = new Function('returned', 'cal', 'calendarReturnMessage', `${between(ca, '    const returnNote = ', ';\n')};\nreturn returnNote;`);
+            assert.ok(h.includes('{calendarReturnMessage(calConnectResult)}'));
+            assert.ok(cc.includes('{calendarReturnMessage(calConnectResult)}'));
+            assert.ok(ca.includes('returned={calConnectResult}'));
+            built = (r) => ({
+                panel: returnedHere(r) ? calendarReturnMessage(r) : '',
+                company: company(r) ? calendarReturnMessage(r) : '',
+                apps: note(r, { provider: 'google' }, calendarReturnMessage),
+            });
+        }
+        return built(result);
+    };
+})();
+const P12FXF3_NONE = { panel: '', company: '', apps: '' };
+
+test('Part 12 fixes, last pass (F3): the switch\'s own render never says the last org\'s calendar Connect — no "Google Calendar connected — …" in the panel, Company calendar or Connected apps; the new org\'s own drawn once its tag moves — RUN', async () => {
+    const seen = await p12fxF3Run('org_a', [
+        (cal) => { cal.setCalConnectResult(P12FXF3_A); },                                        // org A lands back from its Connect
+        (cal, { org }) => { org.now = 'org_b'; cal.setCalView('day'); },                          // the switch's own render
+        (cal) => { cal.setCalOffset(1); },                                                        // a second render before the commit
+        (cal, { commit }) => { commit(); },                                                       // its commit: the tag, then App's reset
+        (cal) => { cal.setCalConnectResult(P12FXF3_B); },                                         // org B's own Connect returns
+    ]);
+    assert.equal(seen.length, 6);
+    assert.equal(seen[1].result, P12FXF3_A, 'org A: its own outcome');
+    assert.deepEqual(await p12fxF3Lines(seen[1].result), { panel: 'Google Calendar connected — your calendar is live.', company: '', apps: 'Google Calendar connected — your calendar is live.' },
+        'org A: the panel and the Google card say its own outcome');
+    for (const at of [2, 3]) {
+        assert.equal(seen[at].org, 'org_b');
+        assert.equal(seen[at].result, null, 'REGRESSION: the switch\'s own render handed org B the last org\'s connect-return');
+        assert.deepEqual(await p12fxF3Lines(seen[at].result), P12FXF3_NONE,
+            'REGRESSION: org B\'s first frame said org A\'s "Google Calendar connected — your calendar is live."');
+    }
+    assert.equal(seen[4].result, null, 'after the commit: the reset\'s, org B\'s own');
+    assert.equal(seen[5].result, P12FXF3_B, 'REGRESSION: org B\'s own connect-return never drawn — left masked after the switch\'s commit');
+    const b = await p12fxF3Lines(seen[5].result);
+    assert.equal(b.panel, '', 'a Connect begun in Company calendar is not the panel\'s');
+    assert.match(b.company, /^Google Calendar was not connected — /, 'org B\'s Company calendar says its own outcome');
+    assert.equal(b.apps, b.company);
+});
+
+test('Part 12 fixes, last pass (F3): Connected apps and Company calendar remount in the switch\'s render with none of the last org\'s outcome; no org on screen, none; the first load\'s return (the OAuth landing) still drawn — RUN', async () => {
+    const apps = await p12fxF3Run('org_a', [
+        (cal) => { cal.setCalConnectResult(P12FXF3_A_APPS); },
+        (cal, { org }) => { org.now = 'org_b'; cal.setCalView('day'); },
+    ]);
+    assert.deepEqual(await p12fxF3Lines(apps[1].result), { panel: '', company: '', apps: 'Google Calendar connected — your company calendar is live.' },
+        'org A: Connected apps says its own outcome');
+    assert.deepEqual(await p12fxF3Lines(apps[2].result), P12FXF3_NONE,
+        'REGRESSION: Connected apps, remounted for org B, said org A\'s "Google Calendar connected — …"');
+    const none = await p12fxF3Run(null, [(cal) => { cal.setCalConnectResult(P12FXF3_A); }]);
+    assert.equal(none[1].result, null, 'REGRESSION: a connect-return handed out with no org active');
+    const toNone = await p12fxF3Run('org_a', [
+        (cal) => { cal.setCalConnectResult(P12FXF3_A); },
+        (cal, { org }) => { org.now = null; cal.setCalView('day'); },
+        (cal, { commit }) => { commit(); cal.setCalConnectResult(P12FXF3_A); },
+    ]);
+    assert.deepEqual([toNone[2].result, toNone[3].result], [null, null], 'REGRESSION: with no org active, a connect-return handed out');
+    // The first load: the hook mounts before the org is known; App's landing effect waits for the role in the org
+    // (roleKnown), after the tag has moved in the first load's commit, which App's reset skips.
+    const first = await p12fxF3Run(null, [
+        (cal, { org }) => { org.now = 'org_a'; cal.setCalView('day'); },
+        (cal, { effects }) => { effects(); cal.setCalConnectResult(P12FXF3_A); },
+    ]);
+    assert.equal(first[2].result, P12FXF3_A, 'REGRESSION: the OAuth landing\'s outcome never drawn in the org it came back to');
+});
+
+test('Part 12 fixes, last pass (F3): WIRING — the hook hands the connect-return out under the strip\'s tag; every reader takes it through App', () => {
+    const hook = code(read(P12FXC4_HOOK));
+    assert.ok(hook.includes('        calConnectResult: calendarHere ? calConnectResult : null, setCalConnectResult,\n'),
+        'REGRESSION: the last org\'s connect-return handed out in the new org\'s first frame');
+    assert.equal(count(hook, 'calConnectResult'), 3, 'declared, and handed out through the tag alone');
+    assert.ok(hook.includes('    const [calConnectResult, setCalConnectResult] = useOrgBoundState(resets, null);'), 'still the org\'s: the reset puts it back');
+    const app = code(read(P12FXC3_APP));
+    assert.ok(between(app, '        calendarRead, setCalendarRead,\n', '} = calState;').includes('        calConnectResult, setCalConnectResult,\n'), 'App takes it from the hook');
+    assert.ok(app.includes('calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,'), 'and hands it on in its context');
+    const readers = srcFiles().filter((f) => f !== P12FXC4_HOOK && read(f).includes('calConnectResult')).sort();
+    assert.deepEqual(readers, [P12FXC3_APP, P12B_HEADER, P12FXF3_COMPANY, P12FXF3_APPS].sort(), 'a new reader: take it through App, masked');
+    for (const f of [P12B_HEADER, P12FXF3_COMPANY, P12FXF3_APPS]) {
+        const s = code(read(f));
+        const own = s.indexOf('calConnectResult');
+        assert.ok(own >= 0 && s.indexOf('= useApp();', own) > own, `${f}: read through useApp, never another copy`);
+    }
+});
+
+// ── Part 12 — the review's fixes, last pass (F4 — Sales Manager saves follow the one rule) ──
+// The verifier's residuals on S4 (state §0.249): the batch's rule — only a 4xx carrying the server's own words (a
+// non-blank string error) proves nothing was written — held for a SPIFF claim's words alone. The quota board read any
+// truthy error below 500 as the server's refusal (a blank or a number said "Not saved"; a JSON null body threw out of the
+// save, the banner left at "saving") and said a 5xx in its own words, the server's and their ref dropped; a forecast call
+// (saveUser), the commission tiers and SPIFFs (saveExtra, on writeSettings' words) and a coaching note's Delete said "Not
+// saved" / "Not deleted" over a 5xx and a gateway's page — each server answers a 500 after it writes (the audit, the
+// caller's name); and Approve dropped a claim's row on any 404, a wordless one too. One test now, ownRefusal, at module
+// scope in SalesManagerTab.jsx (saidOf reads words already said as the body they came from); the server's own refusal
+// says "Not saved — <words>", any other answer "… may have been saved — reload the page to see whether …: <words>".
+const P12FXF4_SMT = 'src/Tabs/SalesManagerTab.jsx';
+const P12FXF4_OWN = "const ownRefusal = (status, d) => status >= 400 && status < 500 && typeof d?.error === 'string' && !!d.error.trim();";
+const P12FXF4_NEVER = /\[object Object\]|undefined|null|the server returned|Unexpected token|HTTP|:\s*$|—\s+\.|\(ref\s*\)|\s{2,}/;
+// writeSettings' refusal as saveSettings.js builds it: refusalOf's words over the body as read.
+const p12fxF4Written = async (status, body, stale = null) => ({ ok: false, status, error: await refusalOf({ status, json: async () => body }), ...(stale ? { stale } : {}) });
+
+test('Part 12 fixes, last pass (F4): ownRefusal — the server\'s own refusal is a 4xx whose error is words (a string, trimmed), nothing else; saidOf reads words already said as their body, none for the status\'s own — RUN', () => {
+    const { ownRefusal, saidOf } = p12bClaimWords();
+    for (const [status, d, own] of [
+        [400, { error: 'id required' }, true], [403, { error: ' Forbidden ' }, true], [404, { error: 'Claim not found in your organization', requestId: 'r1' }, true], [499, { error: 'x' }, true],
+        [500, { error: 'Internal server error', requestId: 'r1' }, false], [502, { error: 'Bad gateway' }, false], [399, { error: 'x' }, false],
+        [400, {}, false], [400, null, false], [400, undefined, false], [400, { error: '   ' }, false], [422, { error: 42 }, false],
+        [409, { error: { message: 'x' } }, false], [404, { requestId: 'r9' }, false],
+    ]) assert.equal(ownRefusal(status, d), own, `REGRESSION: ${status} ${JSON.stringify(d)}`);
+    for (const [status, words, body] of [
+        [400, 'Quota periods are quarters or months.', { error: 'Quota periods are quarters or months.' }],
+        [500, 'Internal server error (ref r1)', { error: 'Internal server error (ref r1)' }],
+        [400, 'The server returned 400.', null], [502, 'The server returned 502.', null],
+        [400, 'The server returned 500.', { error: 'The server returned 500.' }],
+        [422, 42, null], [400, undefined, null], [400, null, null],
+    ]) assert.deepEqual(saidOf(status, words), body, `REGRESSION: ${status} ${JSON.stringify(words)}`);
+});
+
+test('Part 12 fixes, last pass (F4): the quota board\'s save — "Not saved" only for the server\'s own refusal; a blank, numbered or missing error, a JSON null body, a 5xx or a page say the quotas may have been saved, in refusalWords\' words with their ref — never a throw out of the save — RUN', async () => {
+    const SAVING = { status: 'saving', msg: '' };
+    const MAYBE = (words) => `The quotas may have been saved — reload the page to see whether they were: ${words}`;
+    for (const [answer, msg, refused = false] of [
+        [onceOf(400, { error: ' FY2031 is outside the years quotas can be set for (FY2024–FY2028). ', requestId: 'r3' }), 'Not saved — FY2031 is outside the years quotas can be set for (FY2024–FY2028). (ref r3)', true],
+        [onceOf(409, { error: 'This company now sets quotas by month. Reload the page to see its board.' }), 'Not saved — This company now sets quotas by month. Reload the page to see its board.', true],
+        [onceOf(400, { error: '   ' }), MAYBE('The server returned 400.')],
+        [onceOf(422, { error: 42 }), MAYBE('The server returned 422.')],
+        [onceOf(409, { error: { message: 'x' } }), MAYBE('The server returned 409.')],
+        [onceOf(400, null), MAYBE('The server returned 400.')],
+        [onceOf(404, new SyntaxError("Unexpected token '<'")), MAYBE('The server returned 404.')],
+        [onceOf(500, null), MAYBE('The server returned 500.')],
+        [onceOf(500, { error: '  Internal server error ', requestId: ' r1 ' }), MAYBE('Internal server error (ref r1)')],
+        [onceOf(503, { error: { message: 'x' } }), MAYBE('The server returned 503.')],
+        [P11_PAGE(), MAYBE('The server returned 502.')],
+    ]) {
+        const r = await p12bQuotaSave({ answer });
+        assert.deepEqual([r.thrown, r.states, r.drafts], [refused ? msg.slice('Not saved — '.length) : msg, [SAVING, { status: 'error', msg }], []],
+            `REGRESSION: ${msg} — a truthy error read as the server's own, a null body thrown out of the save, or a 5xx's words dropped`);
+        assert.doesNotMatch(msg, P12FXF4_NEVER);
+    }
+});
+
+test('Part 12 fixes, last pass (F4): a forecast call\'s save — "Not saved" naming the rep only for the server\'s own refusal; a 5xx, a page, a wordless or numbered 4xx, a null body say the rep\'s call may have been saved, in refusalWords\' words with their ref; a 403 with no words keeps its role sentence — RUN', async () => {
+    const MAYBE = (words) => `Ann's forecast call may have been saved — reload the page to see whether it was: ${words}`;
+    for (const [answer, msg] of [
+        [onceOf(404, { error: 'That member is not in your organization — they may have been removed. Reload and try again.', requestId: 'r4' }),
+            'Not saved — Ann: That member is not in your organization — they may have been removed. Reload and try again. (ref r4)'],
+        [onceOf(409, { error: ' Someone in this organization already has that name. ' }), 'Not saved — Ann: Someone in this organization already has that name.'],
+        [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), MAYBE('Internal server error (ref r1)')],
+        [onceOf(503, { error: { message: 'x' } }), MAYBE('The server returned 503.')],
+        [onceOf(404, new SyntaxError("Unexpected token '<'")), MAYBE('The server returned 404.')],
+        [onceOf(422, { error: 42 }), MAYBE('The server returned 422.')],
+        [onceOf(400, null), MAYBE('The server returned 400.')],
+        [P11_PAGE(), MAYBE('The server returned 502.')],
+        [onceOf(403, {}), 'Not saved — only Admins can change forecast call.'],
+    ]) {
+        const r = await p12fxSSaveUser(answer);
+        assert.deepEqual([r.out, r.sent, r.states], [false, ['PUT'], [{ status: 'error', msg }]], `REGRESSION: ${msg}`);
+        assert.doesNotMatch(msg, P12FXF4_NEVER);
+    }
+});
+
+test('Part 12 fixes, last pass (F4): the commission tiers and SPIFFs — on writeSettings\' words, "Not saved" only for the server\'s own refusal; a 5xx, a page, a wordless, blank or numbered 4xx say they may have been saved, in refusalWords\' words — RUN', async () => {
+    const MAYBE = (words) => `The SPIFFs may have been saved — reload the page to see whether they were: ${words}`;
+    for (const [w, msg] of [
+        [await p12fxF4Written(400, { error: 'Choose who approves: by role or by person.' }), 'Not saved — Choose who approves: by role or by person.'],
+        [await p12fxF4Written(404, { error: '  A SPIFF names a deal that is not in this organization.  ', field: 'spiffs' }), 'Not saved — A SPIFF names a deal that is not in this organization.'],
+        [await p12fxF4Written(400, { error: 'Bad', requestId: 'r2' }), 'Not saved — Bad (ref r2)'],
+        [await p12fxF4Written(409, { error: STALE_ERROR, code: 'stale', stale: ['spiffs'] }, ['spiffs']), `Not saved — ${STALE_ERROR}`],
+        [await p12fxF4Written(500, { error: 'Internal server error', requestId: 'r1' }), MAYBE('Internal server error (ref r1)')],
+        [await p12fxF4Written(503, { error: 'Key encryption is not available. Contact your administrator.' }), MAYBE('Key encryption is not available. Contact your administrator.')],
+        [await p12fxF4Written(502, null), MAYBE('The server returned 502.')],
+        [await p12fxF4Written(400, {}), MAYBE('The server returned 400.')],
+        [await p12fxF4Written(400, { error: '   ' }), MAYBE('The server returned 400.')],
+        [await p12fxF4Written(422, { error: 42 }), MAYBE('The server returned 422.')],
+        [await p12fxF4Written(409, { error: { message: 'x' } }), MAYBE('The server returned 409.')],
+    ]) {
+        const r = await p12fxSSaveExtra(w);
+        assert.deepEqual([r.out, r.states.at(-1), r.drafts], [false, { status: 'error', msg }, []], `REGRESSION: ${JSON.stringify(w)} — ${msg}`);
+        assert.doesNotMatch(msg, P12FXF4_NEVER);
+    }
+    // The 403 keeps its role sentence; a request that never left says Q4's.
+    assert.deepEqual((await p12fxSSaveExtra(await p12fxF4Written(403, { error: 'Forbidden: insufficient role' }))).states.at(-1), { status: 'error', msg: 'Not saved — only Admins can change SPIFFs.' });
+    assert.deepEqual((await p12fxSSaveExtra({ ok: false, status: 0, error: NETWORK_ERROR })).states.at(-1), { status: 'error', msg: 'Not saved — The server could not be reached.' });
+});
+
+test('Part 12 fixes, last pass (F4): a claim\'s Approve answered 404 drops its row only in the server\'s words — a wordless 404 (a gateway\'s page, no body, a blank error) keeps it and says the claim may have been saved — RUN', async () => {
+    const gone = await p12bClaimPress('status', { answer: onceOf(404, { error: 'Claim not found in your organization', requestId: 'r8' }) });
+    assert.deepEqual([gone.claims, gone.states], [[P12B_CLAIM_2], [{ status: 'error', msg: 'Not saved — Claim not found in your organization (ref r8)' }]], 'a claim deleted since: its row goes');
+    for (const answer of [onceOf(404, new SyntaxError("Unexpected token '<'")), onceOf(404, {}), onceOf(404, { error: '  ' }), onceOf(404, null)]) {
+        const r = await p12bClaimPress('status', { answer });
+        assert.deepEqual([r.claims, r.states], [[P12B_CLAIM, P12B_CLAIM_2], [{ status: 'error', msg: 'The claim may have been saved — reload the page to see whether it was: The server returned 404.' }]],
+            'REGRESSION: a wordless 404 dropped the claim\'s row — the claim may still be stored');
+    }
+    const after = await p12bClaimPress('status', { answer: onceOf(404, { error: 'Claim not found in your organization' }), switchOrg: true });
+    assert.deepEqual([after.claims, after.states], [[P12B_CLAIM, P12B_CLAIM_2], []], 'after an org switch nothing');
+});
+
+test('Part 12 fixes, last pass (F4): a coaching note\'s Delete — through the hook as written, "Not deleted" only for the server\'s own refusal or a request that never left; a 5xx (the audit after the delete), a page, a wordless 4xx, a failure after it left say it may have been deleted; the list unchanged — RUN', async () => {
+    const { noteNotDeleted } = p12bClaimWords();
+    const MAYBE = (words) => `The coaching note may have been deleted — reload the page to see whether it was: ${words}`;
+    for (const [answer, msg] of [
+        [answerOf(403, { error: 'Only the note\'s author or an Admin can delete it.' }), 'Not deleted — Only the note\'s author or an Admin can delete it.'],
+        [answerOf(404, { error: 'Not found', requestId: 'r5' }), 'Not deleted — Not found (ref r5)'],
+        [UNSENT(), 'Not deleted — The server could not be reached.'],
+        [answerOf(500, { error: 'Internal server error', requestId: 'r1' }), MAYBE('Internal server error (ref r1)')],
+        [PAGE_502(), MAYBE('The server returned 502.')],
+        [answerOf(400, {}), MAYBE('The server returned 400.')],
+        [answerOf(400, { error: '   ' }), MAYBE('The server returned 400.')],
+        [answerOf(422, { error: 42 }), MAYBE('The server returned 422.')],
+        [new RangeError('x'), MAYBE('Its answer could not be read.')],
+    ]) {
+        const st = await coaching({ answers: [LOAD_OK(), answer] });
+        const r = await st.hook.deleteCoachingNote('cn_1');
+        assert.equal(r.ok, false);
+        assert.equal(noteNotDeleted(r), msg, `REGRESSION: ${msg}`);
+        assert.deepEqual(st.notes.value, [NOTE], 'the list unchanged');
+        assert.doesNotMatch(msg, P12FXF4_NEVER);
+    }
+});
+
+test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own refusal, ownRefusal, at module scope; every Sales Manager save reads it; no other copy, no truthy-error test, no 404 that drops a row without words', () => {
+    const s = code(read(P12FXF4_SMT));
+    const lines = s.split('\n');
+    assert.equal(lines.filter((l) => l === P12FXF4_OWN).length, 1, 'the test, whole, at column 0');
+    assert.ok(s.indexOf(`\n${P12FXF4_OWN}\n`) < s.indexOf('\nfunction AdminTab({'), 'module scope, above the tabs');
+    assert.equal(count(s, "typeof d?.error === 'string'"), 1, 'REGRESSION: a second copy of the test');
+    assert.equal(count(s, 'ownRefusal('), 7, 'claimRefused, the 404, saveUser (twice), saveExtra, sendQuotas, noteNotDeleted');
+    assert.equal(lines.filter((l) => l === "const saidOf = (status, words) => (typeof words === 'string' && words !== `The server returned ${status}.` ? { error: words } : null);").length, 1, 'saidOf, whole');
+    const quotas = between(s, '    const sendQuotas = async () => {', '\n    };');
+    order(quotas, 'if (!res.ok) {', 'const refused = await res.json().catch(() => ({}));', 'if (!stillOrg(askedOrg)) return;',
+        'throw ownRefusal(res.status, refused) ? refuse(refusalWords(res, refused)) : unsure(`The quotas may have been saved — reload the page to see whether they were: ${refusalWords(res, refused)}`);');
+    assert.ok(!/refused\.error|res\.status < 500|The server returned \$\{res\.status\}/.test(quotas), 'REGRESSION: the truthy-error test, or the 5xx\'s own words');
+    const upd = between(s, '    const updateClaimStatus = async (claim, status) => {', '\n    };');
+    assert.equal(count(upd, 'setSpiffClaims(prev => prev.filter('), 1);
+    assert.ok(upd.includes('if (res.status === 404 && ownRefusal(res.status, d)) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));'), 'REGRESSION: a wordless 404 drops the claim\'s row');
+    const user = between(s, '    const saveUser = async (user, label, who = user.name) => {', '\n    };');
+    order(user, "setSaveState({ status: 'error', msg: res.status === 403 && !ownRefusal(res.status, d)", '? `Not saved — only Admins can change ${label}.`',
+        ': ownRefusal(res.status, d)', "? `Not saved — ${who || 'a member'}: ${refusalWords(res, d)}`",
+        ": `${who || 'A member'}'s ${label} may have been saved — reload the page to see whether it was: ${refusalWords(res, d)}` });");
+    const extra = between(s, '    const saveExtra = async (patch, label) => {', '\n    };');
+    order(extra, ': w.status === 0', '? `Not saved — ${NETWORK_ERROR}`', ': ownRefusal(w.status, saidOf(w.status, w.error))',
+        '? `Not saved — ${refusalWords(w, saidOf(w.status, w.error))}`',
+        ': `The ${label} may have been saved — reload the page to see whether they were: ${refusalWords(w, saidOf(w.status, w.error))}` });');
+    assert.ok(!extra.includes('${w.error}'), 'REGRESSION: writeSettings\' raw words — a number, a blank, "[object Object]"');
+    const note = between(s, 'const noteNotDeleted = (r) => (', ');\n');
+    order(note, 'r.error === NETWORK_ERROR || ownRefusal(r.status, saidOf(r.status, r.error))', '? `Not deleted — ${r.error}`',
+        ': `The coaching note may have been deleted — reload the page to see whether it was: ${r.error}`');
+    assert.equal(count(s, 'noteNotDeleted(r)'), 1, 'the Delete\'s banner says it');
+    assert.ok(!s.includes('`Not deleted — ${r.error}` }'), 'REGRESSION: the Delete\'s own "Not deleted" over every refusal');
+    const hook = code(read('src/hooks/useCoachingNotes.js'));
+    assert.ok(hook.includes('if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };'), 'the hook hands the status beside the words');
+    // The dash is the character, never its escape (a backslash and "u2014" built here so no escape is typed).
+    const added = [between(s, P12FXF4_OWN, '\nconst claimUnanswered'), note, quotas, upd, user, extra].join('\n');
+    assert.ok(!added.includes(`${String.fromCharCode(92)}u2014`), 'an escaped dash in the lines this pass wrote');
+});
+
+// ── Part 12 — the review's fixes, last pass (G5 — source-walk floors across tests) ──
+// The verifier's residual on G4: the floors on a source walk outside refusals-said and this file were left below their
+// counts — single-token-file's T readers held at 60 where 113 are measured, the itest guard's suites at 19 of 65, the
+// Settings save slots at 18 of 26 — so a walk that lost half its folder stayed green and left the files it skipped
+// unchecked. Each floor was measured with its own suite's walk, in memory (the file piped through stdin, the floor's
+// operand logged; nothing written), and set to the count: only the number moved. A floor written `>` holds one under
+// the count (`files.length > 241` holds the 242 sources under src/; `> 347` the 348 under src/ and netlify/functions/);
+// a floor inside a loop holds the least of its rounds (app-links' templates 11 of 21/11/12; audit-close's tables, the
+// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188) and this file's (242, 242, 6)
+// were re-measured after this pass and already stood at their counts (G4 holds them). This test holds every floor this
+// pass raised: lowered, it fails here — say the new count, and why, in both places.
+const P12FXG5_FLOORS = [
+    // [suite, the floor up to its number, the number at each occurrence in order, what the walk counts]
+    ['tests/ai-models.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under src/ and netlify/functions/'],
+    ['tests/ai-score.test.mjs', 'assert.ok(files.length > ', [105], 'the 106 function files'],
+    ['tests/app-links.test.mjs', 'assert.ok(all.length >= ', [11], 'the templates of each sender (21, 11, 12)'],
+    ['tests/app-links.test.mjs', 'assert.ok(calls.length >= ', [19], 'the alerts\' 19 deal calls'],
+    ['tests/audit-close.test.mjs', 'assert.ok(cols.size > ', [20], 'each table\'s schema columns (21 the least)'],
+    ['tests/audit-close.test.mjs', 'assert.ok(reads.length > ', [13], 'each shaper\'s reads (14 the least)'],
+    ['tests/border-sides.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
+    ['tests/deal-engagement.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under src/ and netlify/functions/'],
+    ['tests/deal-fields.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under src/ and netlify/functions/'],
+    ['tests/forecast-call.test.mjs', 'assert.ok(tags.length >= ', [24], 'the Sales Manager tab\'s 24 buttons'],
+    ['tests/invoices.test.mjs', 'assert.ok((f.match(/eq\\(invoices\\.orgId, orgId\\)/g) || []).length >= ', [9], 'the 9 invoice statements by org'],
+    ['tests/itest-targets-test-db.test.mjs', 'assert.ok(suites.length >= ', [65], 'the 65 integration suites'],
+    ['tests/job-roster.test.mjs', 'assert.ok(SCHEDULED_JOBS.length >= ', [6], 'the 6 scheduled jobs'],
+    ['tests/merge-undo.test.mjs', 'assert.ok(at.length >= ', [26], 'the Undo\'s and Past merges\' 26 statements'],
+    ['tests/merge-undo.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
+    ['tests/merged-away-lists.test.mjs', 'assert.ok(g.files.length >= ', [58], 'the 58 files that import useApp'],
+    ['tests/merged-away-lists.test.mjs', 'assert.ok(Object.keys(found).length >= ', [16], 'the 16 functions that read accounts or contacts'],
+    ['tests/open-states.test.mjs', 'assert.ok(states.length >= ', [26], 'the 26 open-states'],
+    ['tests/open-states.test.mjs', 'assert.ok(files.length > ', [241, 241], 'the 242 sources under src/, both walks'],
+    ['tests/org-roles.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under netlify/functions/ and src/'],
+    ['tests/quota-plan.test.mjs', 'assert.ok(seen >= ', [14, 10], 'the 14 quota reads, then the 10 members writes'],
+    ['tests/quote-templates.test.mjs', 'assert.ok(money.length >= ', [19], 'the Quotes tab\'s 19 money lines'],
+    ['tests/quote-templates.test.mjs', 'assert.ok(money.filter(([, ctx]) => ctx.includes(\'fontFamily: T.sans\')).length >= ', [17], 'the 17 that name the app face'],
+    ['tests/resize-targets.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
+    ['tests/resize-targets.test.mjs', 'assert.ok(all.length >= ', [13], 'the 13 window listeners'],
+    ['tests/rounded-scrollers.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
+    ['tests/sales-links.test.mjs', 'assert.ok(pins.length >= ', [32], 'the suites\' 32 "graded by the harness" pins'],
+    ['tests/search-match.test.mjs', 'assert.ok(SRC.length > ', [241], 'the 242 sources under src/'],
+    ['tests/self-profile.test.mjs', 'assert.ok(keys.size >= ', [11], 'the profile panel\'s 11 saved keys'],
+    ['tests/settings-hygiene.test.mjs', 'assert.ok(resolved.length >= ', [7], 'users.mjs\'s 7 caller-name reads'],
+    ['tests/settings-leave-guard.test.mjs', 'assert.ok(panels.length >= ', [26], 'the 26 Settings panels with a save slot'],
+    ['tests/single-token-file.test.mjs', 'assert.ok(readers.length >= ', [113], 'the 113 files that read T'],
+    ['tests/tab-layers.test.mjs', 'assert.ok(files.length > ', [85], 'the 86 files under the tabs'],
+    // The main session, last pass: the two function-file walks the fixer left at `> 0` (the verifier's G5 residuals).
+    ['tests/org-scoping.test.mjs', 'assert.ok(files.length > ', [97], 'the 98 function files the org-scoping guard scans (106, less its 8 skipped)'],
+    ['tests/function-imports.test.mjs', 'assert.ok(files.length > ', [105], 'the 106 function files whose imports must resolve'],
+];
+const p12fxG5Floors = (s, needle) => s.split(needle).slice(1).map((after) => Number(/^\d+/.exec(after)?.[0]));
+
+test('Part 12 fixes, last pass (G5): WIRING — every source walk\'s floor across tests/ is held at the count its own walk measured after the last pass (single-token-file 113 T readers, the itest guard 65 suites, the Settings save slots 26, the src/ walks 242, the src/ and functions walks 348, and the rest), so a walk that lost files fails its own suite', () => {
+    assert.equal(P12FXG5_FLOORS.length, 35, 'the floors this pass raised, each listed once');
+    for (const [file, needle, floors, what] of P12FXG5_FLOORS) {
+        const got = p12fxG5Floors(read(file), needle);
+        assert.equal(got.length, floors.length, `${file}: ${needle.trim()} — ${floors.length} floor(s), found ${got.length}`);
+        got.forEach((n, k) => assert.ok(Number.isInteger(n) && n >= floors[k], `REGRESSION: ${file}'s floor on ${what} is ${n}, below the ${floors[k]} measured (§0.249, G5) — say the new count, and why, in both places`));
+    }
 });

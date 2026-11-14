@@ -7,6 +7,8 @@ import { popoverPlacement } from '../utils/popoverPlacement.js';
 import { T } from '../tokens.js';
 import { canEditCrm } from '../utils/roles.js';
 import { daysSince } from '../utils/dateLocal';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { pressNoticeOf } from '../utils/pressNotice.js';
 
 // ── Design tokens ────────────────────────────────────────────
 
@@ -399,15 +401,42 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute, onShowUnassig
     );
 };
 
+// A claim request's press notice is titled by its lead, as the panel names it (§0.249); a lead not in the list is "A lead".
+const claimTitleOf = (leads, leadId) => {
+    const lead = (leads || []).find(l => l.id === leadId);
+    return (lead && (`${lead.first || ''} ${lead.last || ''}`.trim() || lead.company)) || 'A lead';
+};
+
+// A Sales Rep's request on one lead, from the list as read (§0.249, the review's round 2): `unread` when the list did
+// not load — a failed read is never "no request", so neither Request nor Cancel is offered over it (a pending request
+// would be filed twice, and its Cancel has no id to send); `loading` while the read has not landed (the review's round
+// 3) — the empty list it starts as is not "no request" either, so neither is offered and the screens say "Checking
+// requests…"; else the pending request, or none.
+const myRequestOf = (leadRequests, requestsError, requestsLanded, leadId) => (requestsError
+    ? { unread: true, loading: false, pending: null }
+    : !requestsLanded ? { unread: false, loading: true, pending: null }
+    : { unread: false, loading: false, pending: (leadRequests || []).find(r => r.leadId === leadId && r.status === 'pending') || null });
+
+// What a Sales Rep's Triage rail says when their requests did not load (§0.249, the review's round 2): the read's words,
+// kept until a load lands (the list is read once, when Leads opens). The Assignment Requests panel is the managers'.
+const RequestsUnread = ({ words }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.danger}`, borderRadius:T.r, padding:'12px 14px' }}>
+        <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans, marginBottom:6 }}>Your Requests</div>
+        <div style={{ fontSize:11, color:T.danger, fontFamily:T.sans, overflowWrap:'anywhere' }}>Your requests could not be read — {words}</div>
+        <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, marginTop:4 }}>Request and Cancel are off until they load. Reload the page to try again.</div>
+    </div>
+);
+
 // ── Assignment requests panel (§0.58) — renders for canSeeAll only ───────────
 // Pending claim requests, org-wide like DistributePanel above it. Approve
 // assigns the lead to the requester ON THE SERVER (which also denies sibling
 // requests for the same lead); the caller mirrors the result locally. Hidden
 // entirely when nothing is pending — an empty approvals queue is not
-// information worth a panel.
-const RequestsPanel = ({ requests, leads, reps, onResolve, onReview }) => {
+// information worth a panel. A read that failed is not nothing pending
+// (§0.249): the panel stays and says it could not be read (`readError`).
+const RequestsPanel = ({ requests, leads, reps, onResolve, onReview, readError }) => {
     const pending = requests.filter(r => r.status === 'pending');
-    if (pending.length === 0) return null;
+    if (pending.length === 0 && !readError) return null;
     const nameOf = (id) => reps.find(r => r.id === id)?.name || 'Unknown rep';
     const leadLabel = (id) => {
         const lead = leads.find(l => l.id === id);
@@ -418,8 +447,9 @@ const RequestsPanel = ({ requests, leads, reps, onResolve, onReview }) => {
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.goldInk}`, borderRadius:T.r, padding:'12px 14px' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Assignment Requests</div>
-                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600, fontFamily:T.sans }}>{pending.length} pending</span>
+                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600, fontFamily:T.sans }}>{readError ? '—' : `${pending.length} pending`}</span>
             </div>
+            {readError && <div style={{ fontSize:11, color:T.danger, fontFamily:T.sans, overflowWrap:'anywhere' }}>The requests could not be read — {readError}</div>}
             {pending.map((r, i) => (
                 <div key={r.id} style={{ padding:'8px 0', borderTop: i === 0 ? 'none' : `1px solid ${T.border}` }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -528,7 +558,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canEdit, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest, showAllScope }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canEdit, canDistribute, canDelete, deleteLead, requestsLanded, leadRequests, requestsError, requestLead, cancelRequest, resolveRequest, showAllScope }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -717,7 +747,15 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         ) : !canEdit ? (
                                             <LeadAssignee name={l.assignee}/>
                                         ) : (() => {
-                                            const myPending = (leadRequests || []).find(r => r.leadId === l.id && r.status === 'pending');
+                                            // A list that did not load offers neither Request nor Cancel (§0.249, the review's
+                                            // round 2): the rail says why; an owned lead is drawn as before. Nor one that has not
+                                            // landed yet (round 3): "Checking requests…" until it does.
+                                            const mine = myRequestOf(leadRequests, requestsError, requestsLanded, l.id);
+                                            if (mine.unread) return l.assignee ? <LeadAssignee name={l.assignee}/>
+                                                : <span title={`Your requests could not be read — ${requestsError}`} style={{ fontSize:11, color:T.danger, fontWeight:600, fontFamily:T.sans }}>Requests not read</span>;
+                                            if (mine.loading) return l.assignee ? <LeadAssignee name={l.assignee}/>
+                                                : <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Checking requests…</span>;
+                                            const myPending = mine.pending;
                                             return (
                                                 <LeadAssignee name={l.assignee}
                                                     label={myPending ? '✓ Requested' : 'Request'}
@@ -743,7 +781,8 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
                     {/* Org-wide lists on purpose — see the comment on DistributePanel. */}
-                    {canDistribute && <RequestsPanel requests={leadRequests || []} leads={allLeads} reps={reps} onResolve={resolveRequest} onReview={onOpenLead}/>}
+                    {canDistribute && <RequestsPanel requests={leadRequests || []} leads={allLeads} reps={reps} onResolve={resolveRequest} onReview={onOpenLead} readError={requestsError}/>}
+                    {!canDistribute && canEdit && requestsError && <RequestsUnread words={requestsError}/>}
                     <DistributePanel leads={allLeads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}
                         onShowUnassigned={() => { setStatusFilter('unassigned'); if (showAllScope) showAllScope(); }}/>
                     <LeadSourcesPanel leads={leads}/>
@@ -776,7 +815,7 @@ const CockpitListRow = ({ lead, active, onClick }) => (
     </div>
 );
 
-const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm, canEdit, canAssign, leadRequests, requestLead, cancelRequest }) => {
+const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm, requestsLanded, canEdit, canAssign, leadRequests, requestsError, requestLead, cancelRequest }) => {
     // Assignee picker anchor (DOMRect); null = closed. Declared before the
     // empty-state return — hooks must run on every render path.
     const [repPick, setRepPick] = useState(null);
@@ -788,9 +827,14 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
 
     // A rep's GET returns only their own requests, so any pending request for
     // this lead in the list is theirs — no identity needed client-side.
-    const myPending = !canAssign && (leadRequests || []).find(r => r.leadId === lead.id && r.status === 'pending');
+    // A list that did not load is never "no request" (§0.249, the review's round 2): a rep who may request is told so,
+    // and offered neither Request nor Cancel. Nor over one that has not landed yet (round 3): "Checking requests…".
+    const mine = canAssign ? { unread: false, loading: false, pending: null } : myRequestOf(leadRequests, requestsError, requestsLanded, lead.id);
+    const myPending = mine.pending;
+    const requestsUnread = canEdit && mine.unread;
+    const requestsChecking = canEdit && mine.loading;
 
-    const nextAction = lead.status === 'New' && !lead.assignee ? (canAssign ? 'Assign to a rep' : !canEdit ? 'Waiting to be assigned' : myPending ? 'Requested — awaiting approval' : 'Request this lead')
+    const nextAction = lead.status === 'New' && !lead.assignee ? (canAssign ? 'Assign to a rep' : !canEdit ? 'Waiting to be assigned' : requestsUnread ? 'Your requests could not be read — reload the page to request this lead' : requestsChecking ? 'Checking requests…' : myPending ? 'Requested — awaiting approval' : 'Request this lead')
         : lead.status === 'New'       ? 'Send first-touch email'
         : lead.status === 'Contacted' ? 'Schedule qualification call'
         : lead.status === 'Working'   ? 'Check in — keep the ball moving'
@@ -854,7 +898,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                 <div style={{ fontSize:11, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Recommended next action</div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(200,185,154,0.15)', border:`1px solid ${T.gold}`, borderRadius:T.r }}>
                     <div style={{ flex:1, fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{nextAction}</div>
-                    {canEdit && <button onClick={e => {
+                    {canEdit && !((requestsUnread || requestsChecking) && lead.status === 'New' && !lead.assignee) && <button onClick={e => {
                         if (!lead) return;
                         if (lead.status === 'New' && !lead.assignee) {
                             // Managers pick a rep; a rep files/cancels a claim
@@ -895,8 +939,8 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                 ) : (
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <div style={{ width:32, height:32, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>+</div>
-                        <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>
-                            {canAssign ? 'Not yet assigned' : myPending ? 'Requested — awaiting a manager\'s approval' : 'Not yet assigned'}
+                        <div style={{ flex:1, fontSize:13, color: requestsUnread ? T.danger : T.inkMid, fontFamily:T.sans, overflowWrap:'anywhere' }}>
+                            {canAssign ? 'Not yet assigned' : requestsUnread ? `Your requests could not be read — ${requestsError}` : requestsChecking ? 'Checking requests…' : myPending ? 'Requested — awaiting a manager\'s approval' : 'Not yet assigned'}
                         </div>
                         {canAssign ? (
                             <button onClick={e => {
@@ -904,7 +948,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                             }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
                         ) : !canEdit ? null : myPending ? (
                             <button onClick={() => cancelRequest && cancelRequest(myPending.id)} style={{ padding:'6px 12px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Cancel request</button>
-                        ) : (
+                        ) : (requestsUnread || requestsChecking) ? null : (
                             <button onClick={() => requestLead && requestLead(lead.id)} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Request assignment</button>
                         )}
                     </div>
@@ -949,7 +993,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
     );
 };
 
-const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canEdit, canAssign, leadRequests, requestLead, cancelRequest }) => {
+const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canEdit, canAssign, requestsLanded, leadRequests, requestsError, requestLead, cancelRequest }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
     // A deep-link id (row click, request Review, save-and-open) wins over the
@@ -1012,7 +1056,7 @@ const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConf
             {/* Detail pane */}
             <div style={{ flex:1, minWidth:0 }}>
                 <CockpitDetail lead={selected} reps={reps} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}
-                    canEdit={canEdit} canAssign={canAssign} leadRequests={leadRequests} requestLead={requestLead} cancelRequest={cancelRequest}/>
+                    canEdit={canEdit} canAssign={canAssign} requestsLanded={requestsLanded} leadRequests={leadRequests} requestsError={requestsError} requestLead={requestLead} cancelRequest={cancelRequest}/>
             </div>
         </div>
     );
@@ -1031,7 +1075,7 @@ export default function LeadsTab() {
         setActiveTab,
         setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
-        setUndoToast,
+        setUndoToast, setPressNotices,
     } = useApp();
 
     // The CRM write roles (state §0.191): a ReadOnly user or a Dispatcher reads
@@ -1116,13 +1160,31 @@ export default function LeadsTab() {
     // local state — the server is the resolver, and every read follows the
     // canonical res.ok → res.json() → adopt shape (§0.57's scanner class).
     const [leadRequests, setLeadRequests] = useState([]);
+    // Non-empty when the list did not load (§0.249, docs/design/refusal-sweep Part 12): the Assignment Requests panel
+    // says it could not be read — a failed read is never drawn as nothing pending.
+    const [requestsError, setRequestsError] = useState('');
+    // True once the list has landed (§0.249, the review's round 3): until then the empty list it starts as is not "no
+    // request" — a rep's Triage and Cockpit say "Checking requests…" and offer neither Request nor Cancel. It starts
+    // false on each mount, and an org switch remounts the tab (App.jsx keys it by the org), so each org's read starts it.
+    const [requestsLanded, setRequestsLanded] = useState(false);
     useEffect(() => {
         let cancelled = false;
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
+        const mine = () => !cancelled && stillOrg(askedOrg);
         (async () => {
-            const res = await dbFetch('/.netlify/functions/lead-requests');
-            if (!res.ok) return;   // a failed list read leaves an empty panel; nothing to revert
-            const data = await res.json();
-            if (!cancelled) setLeadRequests(data?.leadRequests || []);
+            try {
+                const res = await dbFetch('/.netlify/functions/lead-requests');
+                if (!mine()) return;
+                if (!res.ok) { const words = await readRefusal(res); if (mine()) setRequestsError(words); return; }
+                const data = await res.json();
+                if (!mine()) return;
+                if (!Array.isArray(data?.leadRequests)) throw new Error('Its answer could not be read.');
+                setLeadRequests(data.leadRequests);
+                setRequestsError('');
+                setRequestsLanded(true);
+            } catch (e) {
+                if (mine()) setRequestsError(failureWords(e));   // never "Failed to fetch" or a parse error's words
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -1140,57 +1202,76 @@ export default function LeadsTab() {
         else setUndoToast({ error: `Lead not deleted — ${r.error}` });
     }, [setLeads, setUndoToast]);
 
+    // A claim request's refusal, a failure, or a landed answer that cannot be read is said in a press notice (§0.249,
+    // docs/design/refusal-sweep Part 12; Jeff's Q1): kept until its ✕, never the one-slot toast a later toast replaces —
+    // the server's words with their ref, else "The server returned N.", or "The server could not be reached.". They said
+    // the server's words without the ref, "Request not sent." over a refusal with none, and nothing for a request that
+    // never left or an answer that could not be read.
+    const sayClaim = useCallback((leadId, words) => {
+        setPressNotices(list => [...list, pressNoticeOf(claimTitleOf(allLeads, leadId), words)]);
+    }, [allLeads, setPressNotices]);
+
     const requestLead = useCallback(async (leadId, note) => {
         const askedOrg = requestOrg();
         const id = 'lcr_' + crypto.randomUUID();
-        const res = await dbFetch('/.netlify/functions/lead-requests', {
-            method: 'POST',
-            body: JSON.stringify({ id, leadId, note: note || null }),
-        });
+        let res;
+        try {
+            res = await dbFetch('/.netlify/functions/lead-requests', {
+                method: 'POST',
+                body: JSON.stringify({ id, leadId, note: note || null }),
+            });
+        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not sent: ${failureWords(e)}`); return; }
         if (!stillOrg(askedOrg)) return;
-        if (res.ok) {
-            const data = await res.json();
-            if (data?.leadRequest) setLeadRequests(prev => [data.leadRequest, ...prev]);
-        } else {
-            let error = 'Request not sent.';
-            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
-            if (!stillOrg(askedOrg)) return;
-            setUndoToast({ error });
+        if (!res.ok) {
+            const words = await readRefusal(res);
+            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not sent: ${words}`);
+            return;
         }
-    }, [setUndoToast]);
+        // Landed: an answer that cannot be read is said as landed — the request was filed (its Cancel waits for a reload).
+        const data = await res.json().catch(() => null);
+        if (!stillOrg(askedOrg)) return;
+        if (data?.leadRequest) setLeadRequests(prev => [data.leadRequest, ...prev]);
+        else sayClaim(leadId, 'Requested — Its answer could not be read. Reload the page to see the request.');
+    }, [sayClaim]);
 
     const cancelRequest = useCallback(async (id) => {
         const askedOrg = requestOrg();
-        const res = await dbFetch(`/.netlify/functions/lead-requests?id=${id}`, { method: 'DELETE' });
+        const leadId = leadRequests.find(r => r.id === id)?.leadId;
+        let res;
+        try {
+            res = await dbFetch(`/.netlify/functions/lead-requests?id=${id}`, { method: 'DELETE' });
+        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not cancelled: ${failureWords(e)}`); return; }
         if (!stillOrg(askedOrg)) return;
         if (res.ok) {
             setLeadRequests(prev => prev.filter(r => r.id !== id));
         } else {
-            let error = 'Request not cancelled.';
-            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
-            if (!stillOrg(askedOrg)) return;
-            setUndoToast({ error });
+            const words = await readRefusal(res);
+            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not cancelled: ${words}`);
         }
-    }, [setUndoToast]);
+    }, [leadRequests, sayClaim]);
 
     const resolveRequest = useCallback(async (id, action) => {
         const askedOrg = requestOrg();
-        const res = await dbFetch('/.netlify/functions/lead-requests', {
-            method: 'PUT',
-            body: JSON.stringify({ id, action }),
-        });
+        const leadId = leadRequests.find(r => r.id === id)?.leadId;
+        const verb = action === 'approve' ? 'approved' : 'denied';
+        let res;
+        try {
+            res = await dbFetch('/.netlify/functions/lead-requests', {
+                method: 'PUT',
+                body: JSON.stringify({ id, action }),
+            });
+        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not ${verb}: ${failureWords(e)}`); return; }
         if (!stillOrg(askedOrg)) return;
         if (!res.ok) {
-            let error = 'Request not resolved.';
-            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
-            if (!stillOrg(askedOrg)) return;
-            setUndoToast({ error });
+            const words = await readRefusal(res);
+            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not ${verb}: ${words}`);
             return;
         }
-        const data = await res.json();
+        // Landed: the server assigned (or denied) it — an answer that cannot be read is said as landed, never as refused.
+        const data = await res.json().catch(() => null);
         if (!stillOrg(askedOrg)) return;
         const resolved = data?.leadRequest;
-        if (!resolved) return;
+        if (!resolved) { sayClaim(leadId, `Request ${verb} — Its answer could not be read. Reload the page to see the lead and its requests.`); return; }
         if (action === 'approve') {
             // The server assigned the lead and denied the sibling pending
             // requests in the same stroke — mirror all three locally.
@@ -1205,7 +1286,7 @@ export default function LeadsTab() {
         } else {
             setLeadRequests(prev => prev.map(r => r.id === resolved.id ? resolved : r));
         }
-    }, [reps, setLeads, setUndoToast]);
+    }, [reps, setLeads, leadRequests, sayClaim]);
 
     // ── Convert a lead to an opportunity ─────────────────────
     const convertLead = useCallback((lead) => {
@@ -1314,7 +1395,9 @@ export default function LeadsTab() {
                         canDelete={userRole === 'Admin'}
                         deleteLead={deleteLead}
                         showAllScope={() => setScopePersist('all')}
+                        requestsLanded={requestsLanded}
                         leadRequests={leadRequests}
+                        requestsError={requestsError}
                         requestLead={requestLead}
                         cancelRequest={cancelRequest}
                         resolveRequest={resolveRequest}
@@ -1330,7 +1413,9 @@ export default function LeadsTab() {
                         showConfirm={showConfirm}
                         canEdit={canEdit}
                         canAssign={canSeeAll}
+                        requestsLanded={requestsLanded}
                         leadRequests={leadRequests}
+                        requestsError={requestsError}
                         requestLead={requestLead}
                         cancelRequest={cancelRequest}
                     />

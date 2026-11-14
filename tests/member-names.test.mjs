@@ -380,10 +380,14 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
         'const askedOrg = requestOrg();',
         'const undo = Object.fromEntries(',
         "dbFetch('/.netlify/functions/users?me=true'",
-        'const data = await res.json().catch(() => ({}));',
+        // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal's words with their ref.
+        'if (!res.ok) {',
+        'const why = await readRefusal(res);',
         'if (!stillOrg(askedOrg)) return;',
         'setMyProfile(prev => ({ ...(prev||{}), ...undo }));',
-        'setProfileError(`Not saved — ${data.error ||',
+        'setProfileError(`Not saved — ${why}`);',
+        'const data = await res.json().catch(() => ({}));',
+        'if (!stillOrg(askedOrg)) return;',
         'if (data.user) {',
         'setMyProfile(prev => ({ ...(prev||{}), ...data.user }));',
         'setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === data.user.id ? { ...u, name: data.user.name } : u) }));',
@@ -409,10 +413,12 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
     // The page holds the member as stored, and the roster on screen takes the stored row — the name as trimmed.
     order(profile,
         'body:JSON.stringify(toSave) });',
-        'const d = await resp.json().catch(() => ({}));',
         'if (!stillOrg(askedOrg)) return;',
-        "if (!resp.ok) throw new Error(d.error || 'Save failed');",
-        'row = d.user || { ...user, ...toSave };',
+        // The ok check before the body, a refusal in the server's words (docs/design/refusal-sweep Part 12).
+        'if (!resp.ok) { const why = await readRefusal(resp); if (!stillOrg(askedOrg)) return; throw new Error(why); }',
+        'const stored = await resp.json().catch(() => null);',
+        'if (!stillOrg(askedOrg)) return;',
+        'row = stored?.user || { ...user, ...toSave };',
         'setUser(row);',
         'u.id === row.id ? { ...u, ...row } : u');
 

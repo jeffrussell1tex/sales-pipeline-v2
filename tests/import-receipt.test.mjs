@@ -15,8 +15,8 @@ import {
 } from '../src/utils/importReceipt.js';
 
 const invariant = (r) => assert.equal(
-    r.attempted, r.created + r.updated + r.failed,
-    `attempted (${r.attempted}) must equal created+updated+failed (${r.created}+${r.updated}+${r.failed})`
+    r.attempted, r.created + r.updated + r.failed + (r.unread || 0),
+    `attempted (${r.attempted}) must equal created+updated+failed+unread (${r.created}+${r.updated}+${r.failed}+${r.unread || 0})`
 );
 
 // ── builders ─────────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ const REDIRECT = 'process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TE
 
 test('every *.itest.mjs refuses to run without DATABASE_URL_TEST and redirects NETLIFY_DATABASE_URL to it before its first import', () => {
     const suites = readdirSync(DIR).filter(f => f.endsWith('.itest.mjs')).sort();
-    assert.ok(suites.length >= 19, `expected the nineteen suites, found ${suites.length}`);
+    assert.ok(suites.length >= 65, `expected the nineteen suites, found ${suites.length}`);
     for (const f of suites) {
         const s = readFileSync(new URL(f, DIR), 'utf8');
         const guardAt = s.indexOf(GUARD), redirectAt = s.indexOf(REDIRECT);

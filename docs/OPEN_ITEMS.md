@@ -577,8 +577,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    id; Webhooks reading its server's answers (wrong in prod since 11 May
    2026, `5772f63`) and the API page naming the same keys. Strike them
    once §0.247 ships. **Parts 10-11 built 12 Nov (state §0.248; guide
-   §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — NOT
-   committed; not yet shipped; harness deferred**, its Admin browser
+   §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — committed
+   `4f171d4`; not yet shipped; harness deferred**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: the record
    windows' saves (account, contact, task, activity, member, quote,
    product), the lead window, the account picker's Create and the AI
@@ -587,8 +587,25 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    that failed; Dispatch's load, saves, invoice panel, address (Q20),
    Service due and New Job, and Service plans, likewise — a 403 the
    role's sentence (Q13); scan (iii) tightened. Strike them once §0.248
-   ships. What remains is Part 12 of the design — the next batch (its
-   batch 5; Q4 answered for it):
+   ships. **Part 12 built 13 Nov (state §0.249; guide §18b125 rule 5,
+   since §0.249; Jeff, 13 Nov: "Start Part 12"; Q4 answered) — NOT
+   committed; not yet shipped; harness deferred**, its Admin browser
+   check PASSED as Jeff, the rep-path check PASSED as Karen:
+   the rest of src/ ok-first, in the server's words and plain words —
+   Settings' Users, Audit log, MFA, Lead scoring and Connected apps, the
+   Quotes, Reports, Sales Manager, Pipeline and Leads tabs, the header,
+   the invitation import, the SPIFF claim, App's calendar and Settings
+   loads, the document uploads, the bulk importer, the lead import and
+   the outage banner; no failed or unlanded read a count, "none" or "Not
+   connected"; on the Audit log's destinations, a document's record and
+   the Sales Manager's tab a write whose answer proves nothing said as
+   "may have been saved" (the maybe rule); Q4's "The server could not be
+   reached." (`NETWORK_ERROR`); THE GUARD's scan (iii) over all of src/.
+   Strike them once §0.249 ships. Part 12 was the design's last: what the
+   sweep leaves is filed — the maybe rule's reach, one rule for a write
+   whose answer proves nothing (§2.4, Jeff's call), scan
+   (iv) over all of src/ (§6), and the batches' own items (§4.2-§4.8,
+   §6). The design's map, Part by Part:
    - ~~the Kanban stage drag with no rollback; a task's complete and snooze
      un-ticking without a word (TasksTab); Reports' deal contact add,
      remove and persona~~ (DONE in §0.245, Parts 1-3; committed `b1b56e7`,
@@ -614,13 +631,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      (DispatchVehiclesDetail.jsx:339, :381) — Part 8~~ (DONE in §0.247,
      Part 8: every one says `failureWords`, scan (iv) holding the swept
      files to it; the fleet's Deletes say the server's words, a 403 "Your
-     role cannot delete vehicles." or "… equipment." (Q13); not
-     committed, not yet shipped). useOpportunities.js:41's deals load
+     role cannot delete vehicles." or "… equipment." (Q13); committed
+     `6cd6bf1`, not yet shipped). useOpportunities.js:41's deals load
      throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's build; read
      in code): Part 10 (§0.248) left it and the four record loads' twins —
      each reaches only a console catch, pinned by a WIRING test; that a
      failed load draws an empty list is filed in §4.2 (§0.248).
-   - outside the files the sweep owns, a body read before its response's
+   - ~~outside the files the sweep owns, a body read before its response's
      ok check — the design's count over `f5f0139`, by the guard's own scan
      over src: 202 reads, 108 flagged (109 with the named BackupDetail
      read; "67 lines" here was an earlier line scan); Parts 1-2 cleaned the
@@ -639,12 +656,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      and since §0.248 with the thirteen Part 10 files, DispatchTab.jsx
      and DispatchServicePlansDetail.jsx —
      ReportsTab.jsx waits for Part 12, though its Part 5 reads are
-     ok-first now; QuotesTab.jsx for Part 12, its job and version reads).
+     ok-first now; QuotesTab.jsx for Part 12, its job and version reads)~~
+     (DONE in §0.249, Part 12: `SWEPT = srcFiles()` — scan (iii) reads
+     all 242 sources under src/, 192 body reads, the 25 still before
+     their check each named in `BODY_FIRST` with its reason; ReportsTab.jsx,
+     QuotesTab.jsx and the rest of the design's Part 12 table cleaned;
+     not committed, not yet shipped).
    - ~~Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
      `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
      joining `SWEPT` (§0.246's build, 11 Nov; read in code)~~ (DONE in
-     §0.248, Part 11: `failureWords(e)`, DispatchTab.jsx in `SWEPT`; not
-     committed, not yet shipped).
+     §0.248, Part 11: `failureWords(e)`, DispatchTab.jsx in `SWEPT`;
+     committed `4f171d4`, not yet shipped).
 
 ---
 
@@ -1280,6 +1302,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   Q8: "Refuse it") would refuse a merge that moves one of the twelve.
   Jeff's data decision: leave them, or fix each by hand (how each screen
   would re-fit them is not read yet — read before advising a fix).
+- **A write whose answer proves nothing — a 5xx, a gateway's page, a wordless 4xx, a request that threw: "Not saved" or "may have been saved"? — Jeff's call** (§0.249, 13 Nov — the last pass's verifier (F4), medium, and the docs' checkers; read in code): only a 4xx in the server's own words proves nothing was written. A server may answer a 500 after its write (users.mjs after the row, for the audit; settings.mjs after its transaction; documents.mjs with no transaction), and a fetch that throws ("Failed to fetch") does not prove the request never reached the server — the connection can drop after the server wrote. The app says both today. §0.249's maybe rule ("may have been saved — reload the page to see whether it was", the screen marking the state not known) holds only on the quota board (§0.203), the Audit log's destination writes (`destRefusedOwn`), the document record step (`recordRefusal`) and the Sales Manager's saves (`ownRefusal`). Every other save says it not done over any refused answer, a 5xx included — the header's profile save "Not saved — <words>" (AppHeader.jsx, to users?me=true), and every `dbWrite` caller (src/utils/storage.js; each words its own sentence, e.g. Connected apps' calendar Disconnect "Not disconnected — The server returned 500.", the Kanban board's drag (KanbanView.jsx) "Not moved to <stage>: …"). A request that threw: `dbWrite` hands back Q4's sentence, "The server could not be reached." (`NETWORK_ERROR` — Q4, "All Recommended"), said as not done ("Not moved to Proposal: The server could not be reached."); so do three Sales Manager saves — a forecast call (`saveUser`'s catch, "Not saved — …"), the commission tiers and SPIFFs (`saveExtra`'s status 0) and a coaching note's Delete (`noteNotDeleted`, "Not deleted — …"); the quota board, the SPIFF claims' Approve, Reject and Delete ("No answer from the server — reload the page to see whether the claim was …"), the Audit log's destination writes and the document record step say it may have been saved. Example: a Manager deletes a coaching note, coaching-notes.mjs deletes it, the connection drops before the answer — "Not deleted — The server could not be reached.", though the note is gone and stays gone on reload. Decide one rule: (a) the maybe rule everywhere — any answer but the server's own 4xx says it may have been saved (Q4's sentence kept as the words for a throw), a sweep over every write; (b) the maybe rule where it holds today, and a thrown write "Not saved" everywhere (the quota board, the claims, the Audit log and the documents changed back for a throw); or (c) as today. The F4 harness entry and tests pin today's "Not" on the three Sales Manager saves. Claude's recommendation: (a), which is the batch's own rule; not asked.
 
 ---
 
@@ -1655,19 +1678,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - `menuPlacement` should fold into `popoverPlacement`;
   - the menu card's height allowance is a constant (300);
   - RepPickerPopover and the status picker are not audited.
-- **Home's calendar strip keeps the previous org's events** while the new
-  org's fetch runs. §0.125, as recorded. §0.173's per-org clearing may have
-  closed it. Read 10 Oct: App.jsx empties the events on an org switch,
-  before the new org's load. This was read in the code, not seen in the pane.
-  Likely closed: confirm in the pane, then remove.
-- **Home says "Connect your calendar" while it loads, and when the load
-  fails.** HomeTab checks only the connected flag, which is off until the
-  answer arrives. A connected user sees the prompt for a moment on every load
-  and org switch, and in place of an error. The profile's Calendar tab shows
-  the error. Recommended: "Checking…", then an error with Retry. Read 10 Oct.
-- **The profile's Calendar tab reads what Home fetched.** After an org switch
-  made from another tab, a connected user sees "Not connected", OFF and
-  "Connect Google Calendar", with no Refresh. Read 10 Oct.
 - **Three dialogs on the legacy `.modal` class** (confirm, prompt, coaching
   note — the blocked delete is inline-styled; corrected 28 Oct by §0.213's
   docs check). The guide wants inline chrome. Since §0.213 the class clips
@@ -2363,6 +2373,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A landed report save still closes the create flow after the member moved on** (§0.246, 11 Nov — its build; read in code; older): `handleSaveReport`'s success calls `setShowCreateReport(false)` and `setCreateMode('picker')` whatever screen is shown when the answer lands; what that does to each screen the member may have moved to was not traced. §0.246 ties only the refusal to the screen pressed. Low.
 - **The shared "✓ Saved" and "Saving…" show beside another screen's Save** (§0.246, 11 Nov — its build and review; read in code): the six report templates, the Duplicate list and the builder share one `saveState`; since §0.246 a refusal is tied to the screen pressed (`refusalHere`), but a success's "✓ Saved" (its 3 s) and a save's "Saving…" are not — another template's button reads them (the "Saving…" older). Recommended: the same place tag on both, if Jeff wants it. Low.
 - **A failed load of the record lists and the price book draws an empty list** (§0.248, 12 Nov — Part 10's builder and the review's rule lens; read in code; older): useAccounts', useActivities', useContacts' and useTasks' loads, and useOpportunities' deals load, throw `'HTTP ' + r.status` into a console-only catch — the member sees dbStatusOf's banner on a refusal, and nothing on a request that never left or a 200 that cannot be read, the list left empty; useQuotes' `loadProducts` returns silently on a refusal (`if (!res.ok || !stillOrg(askedOrg)) return;`), so a failed read of the price book draws "No products yet. Click "+ Add product" …" (QuotesTab.jsx) and the builder "No products in the price book yet.", and `loadQuotes`' catch is console-only too. Against the house rule that a read that failed is never "none" (§0.247). Outside Parts 10-11's design; a batch of its own — each load's error said where its list is drawn. Medium.
+- **The Sales Manager's commission and SPIFF saves judge a refusal on words rebuilt from a string** (§0.249, 13 Nov — the last pass's verifier (F4); read in code; contrived bodies): `saveExtra` reads `writeSettings`' answer, whose words `refusalOf` (src/utils/storage.js) has already composed — it tests `body?.error` for truthiness and appends ` (ref <requestId>)` without checking that the error is a string — and `saidOf` (SalesManagerTab.jsx) turns them back into a body for `ownRefusal`. So a 4xx whose error is blank or not a string but which carries a `requestId` reads as the server's own refusal and says "Not saved — …" (400 `{ error: '   ', requestId: 'r1' }` the blank and the ref; 422 `{ error: { message: 'x' }, requestId: 'r1' }` "[object Object] (ref r1)"), where the maybe sentence is the rule. settings.mjs's own 4xx carry no `requestId`, so no answer seen has the shape. Recommended: `refusalOf` takes only a non-blank string error, or `writeSettings` hands back the body as well as the words. Low.
+- **A quiet activity save's thrown failure answers nothing** (§0.249, 13 Nov — Part 12c's builder; read in code; older): useActivities' `saveActivity` (src/hooks/useActivities.js) answers a refusal `{ ok: false, status, error, field }`, but its edit's and create's catches answer `undefined` after `setActivityModalError(failureWords(err))` — and a quiet save (the task rail's completion notes, `QUIET_RAIL`) drops that setter, so the caller has no words of the failure: TaskRail's `said()` falls back to Q4's "The server could not be reached." whatever threw. Recommended: the catches answer `{ ok: false, status: 0, error: failureWords(err) }`. Low.
+- **The outage banner is cleared by the next load that lands** (§0.249, 14 Nov — found in the browser check as Jeff; older — the loaders as at HEAD): each record load sets the banner from its own answer (`setDbOffline(dbStatusOf(r))` in useAccounts, useContacts, useOpportunities, useTasks, useActivities and useDocuments, useQuotes, and App.jsx's `checkOk`), so a load that lands after a failed one sets it back to none — with all six record loads answered 500 in the page on an org switch, "The server returned an error loading your data — changes may not be saving. Refresh the page to try again." stood for one frame and was gone, the failed lists drawn empty beneath nothing. Recommended: the banner holds while any load's latest answer failed (the failed loads kept by name, each cleared by its own next ok), reset on an org switch. Medium.
 
 ### 4.3 Settings
 
@@ -2961,6 +2974,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Job templates' Save is offered while the equipment list is unread** (§0.247, 12 Nov — review fix 10's optional half, not done): a press says "Not saved — the equipment list couldn't be read, so these templates can't be saved. Reload the page to try again." and sends nothing. Recommended: the primary button disabled, with a title, while the list is unread. Low.
 - **A landed corporate calendar Disconnect whose reload fails keeps its row** (§0.247, 12 Nov — the review, refuted as the batch's: older; read in code): `disconnectCorporateCalendar` (CompanyCalendarDetail.jsx) reloads the list instead of dropping the row; when that reload fails, the row still reads "Corporate · connected" with a live Disconnect (a second press: "Connection not found"), the "could not be read" words beside it since §0.247. Recommended: drop the row by id when the DELETE lands, before the reload. Low.
 - **A Backups download with no org known saves and says nothing** (§0.247, 12 Nov — review fix 2's verifier; open question): `stillOrg(null)` is false, so if `requestOrg()` answered none on Settings → Data the table's Download would now save nothing and say nothing (it saved before); the restore window and Run backup already behaved so. Whether a session with no org reaches the screen was not checked. Low.
+- **The calendar Connect says the wrong reason offline, on a member's 403 and over the server's own 400 and 503 words** (§0.249, 13 Nov — Part 12c's builder and the round-1 fixer and verifier; read in code; the server not changed): `startCalendarConnect` (src/utils/calendarConnect.js) maps every failure but a 403 to `server_error` — so a Connect that never reached the server, or a 200 that cannot be read, says the server could not store the connection — and every 403 to `not_admin`, the sentence that only an Admin can connect a company calendar, including a user-scope 403 from `verifyAuth` (a deactivated member, or no membership; calendar-oauth-start.mjs:70) — only :82 (`scope === 'org'`) means it; the server's own words for its 400s and 503s ("provider must be google, outlook, or yahoo", the scope's, "Yahoo Calendar does not support org-level connections", "… OAuth is not configured …", no signing key — :79-88) are dropped for `server_error`'s. A fix needs new reasons allowlisted in `CALENDAR_RETURN_REASONS` (src/utils/calendarReturn.js), which `calendarReturnUrl` otherwise rewrites to `server_error` — a file shared with calendar-oauth-start.mjs, calendar-oauth-callback.mjs and _oauthState.mjs, so a function-bundle batch with test:int. Recommended: an unreached reason ("The server could not be reached."), a member-scope refusal reason, the 403 read as `not_admin` only for `scope === 'org'`, and the server's words carried for its 400 and 503. Low.
+- **A calendar connect's return words show on any surface for their provider, and Settings' cleanups take the value at mount** (§0.249, 13 Nov — the last pass's verifier (F3), pre-existing, disclosed by its fixer; read in code; not traced further): CalendarCard (Connected apps) draws a connect-return for its provider whichever surface the Connect was pressed on, and the Settings panels' unmount cleanups capture `calConnectResult` as it was at their mount. Since §0.249 the value is handed out only for the org it was set in (`calendarHere`). Low.
+- **The Audit log's destination banner and two of Users' error banners have no ✕** (§0.249, 13 Nov — Part 12a's builder; read in code; looks only): `destError` (AuditDetail.jsx), `actionError` (UsersDetail.jsx, above the Invitations card) and `userActionError` (UsersDetail.jsx, the member list) are plain banners kept until the next press replaces them, never on a timer — the refusal sweep's errors are kept until closed. Recommended: a ✕ on each. Low.
+- **A lead row's Save and Delete say a refusal on the one-slot undo toast** (§0.249, 13 Nov — the round-1 fixer of the Leads group; read in code; older): `saveLead` and `deleteLead` (src/Tabs/LeadsTab.jsx) say `Lead not saved — <words>` / `Lead not deleted — <words>` through `setUndoToast({ error })` — kept until its ✕, but replaced by the next toast, so a later undo or refusal takes the words away unread. The house rule since §0.245 is a press notice kept until its ✕ (`pressNoticeOf`), as the same tab's claim requests now do (`sayClaim`). Both are `dbWrite` paths, outside Part 12's claim-requests scope. Recommended: both say their refusal through `pressNoticeOf`. Low.
+- **A pending member with no email is counted on the Users list but never listed on Pending invites** (§0.249, 14 Nov — found in the browser check as Jeff; older — memberStatus.js unchanged by the batch): the Users list counts every row `memberStatus` reads Invited ("Pending · 1", "1 pending invite"), but the Pending invites page lists through `invitationEntries` (src/Tabs/settings/people/memberStatus.js), which skips a row with no email — Accelerep QA's TEST Profile Rep, an invited test row with no email, is counted pending on the list while the page says "0 invited in the roster · Clerk's list not read" and "No invited member in the roster." Recommended: list an invited row with no email by its name (no Revoke or Resend — a Clerk invitation is by email), or say on the page how many it cannot list. Low.
 
 ### 4.4 Dispatch
 
@@ -3348,6 +3366,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing.
 - **Coaching notes: a lost answer makes a note twice; a late success closes another dialog** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map): a note whose answer was lost is re-sent with a new id, so it can be made twice; a late success closes whichever coaching dialog is open by then. The sweep's Part 7 says the network rejects; these two are not in it. Low. **More reachable since §0.246 (11 Nov — Part 7's build; read in code):** an add that landed with an answer that could not be read now says "Its answer could not be read." and keeps the dialog open, so a second Send makes the note again with a new id. Both still so.
 - **The coaching notes' load failure reads "(The server returned 502.)."** (§0.246, 11 Nov — the batch's own; read in code): Home's "Notes from your manager" and Sales Manager's "Recent coaching" say "Coaching notes couldn't be loaded (<why>). Reload the page to try again.", and `readRefusal`'s fallback words end in a full stop, so the brackets close after a full stop — doubled punctuation. Recommended: drop the reason's trailing full stop inside the brackets, as `notFreedWords` does (§0.246's review). Low.
+- **A coaching note's second Delete after a maybe-Delete says "Not deleted — Not found"** (§0.249, 13 Nov — the last pass's verifier (F4); read in code): after a Delete answered with anything that proves nothing ("The coaching note may have been deleted — reload the page to see whether it was: …"), the note stays in the list — useCoachingNotes drops it only on ok; a second × gets coaching-notes.mjs's worded 404 'Not found', which proves the note gone, but `noteNotDeleted` (SalesManagerTab.jsx) reads any worded 4xx as the server's own refusal — "Not deleted — Not found" — and the gone note stays drawn until a reload. The Audit log's Remove treats its worded 404 as gone (`destGone`, "The destination was already removed."). Recommended: the same here — a worded 404 drops the note and says it was already deleted. Low.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
@@ -3906,6 +3925,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   roles that write). Recommended: offer "+ New Rep" to the roles that write
   members, and pin it with the role gate's other controls.
 - **Recently changed names a member by their Clerk id** (§0.247, 12 Nov — the Admin browser check, seen as Jeff in Accelerep QA; read in code): Settings' Recently changed listed "user_3ASC… coaching note created". AdminView.jsx:368 draws `e.userName || e.userId || 'System'`, and coaching-notes.mjs:121 (created) and :153 (deleted) call `writeAudit` with no `userName` — about 18 calls to _lib.mjs's `writeAudit` (a text parse) name no member (`auditAs`, netlify/functions/_lib.mjs, names the caller). Against CLAUDE.md (a message names who acted by member name, never a Clerk id). Recommended: those writes through `auditAs`, and the feed never draws a raw id (the member's name from the org's roster, else "A member"). Not fixed. Low.
+- **The Audit log's badge still counts a destination it marked not known after a maybe-Remove** (§0.249, 13 Nov — the round-4 verifier (A4); read in code; looks only — the round-4 test pins it): a Remove answered with anything that proves nothing keeps the row, marked "Not known" (`statusUnread`), and leaves `destsRead` true, so the badge counts it in its total — "Streaming to 2 destinations · 1 status not known" over a list of one or two — while a maybe-Add withholds the count (`destsRead` false). Recommended: leave a maybe-removed row out of the total, or say it apart. Low.
 
 ### 4.7 Imports and merge
 
@@ -4629,6 +4649,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing (409, "This merge has already been undone." — guide §18b100
   rule 3; reasoned, not clicked). Recommended: the busy mark released
   after the list read again answers (`await load()` first).
+- **The invitation import's one-found proof can be fooled by a delete in between** (§0.249, 13 Nov — the round-4 verifier (I4); read in code; theoretical — it needs a deletion in the same moments): after a request answered 201 with an answer that cannot be read, the import reads the roster again and counts a person invited by this import only where they are the one of their request found on it (`unreadOnRoster`, src/utils/importReceipt.js — users.mjs answers 201 when at least one of a request was invited, and a roster row carries no time or inviter). If another Admin deletes the invited person's row before that read, and one other address of the request was held before the import and refused, that one is counted invited and the invited one "not invited", and nothing says the proof failed. Recommended: none unless users.mjs's answer or roster row comes to say who invited whom. Low.
+- **A handler's own TypeError reads "Its answer could not be read." without the rows it may have written** (§0.249, 13 Nov — the last pass's verifier (F2), noted, not the batch's; read in code; older): an import handler that throws a TypeError of its own (a bug) is said by `failureWords` — "Its answer could not be read." (CsvImportModal.jsx `runImport`; since §0.249 never the raw message) — but nothing is said of rows the handler may have written before it threw. Recommended: none until a handler is seen to throw one; the counts would have to travel with the throw (`ImportError`). Low.
 
 ### 4.8 Other UI
 
@@ -4739,16 +4761,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   last refusal until a quote save starts in B. Since §0.204 a refused New
   version is shown only there. Recommended: reset it on an org switch.
   (`productModalError` was App-level too, read by no screen — removed in §0.242.)
-- **The Leads tab's lead-requests load throws an uncaught rejection on a
-  dropped connection** (§0.199's pane check, 13 Oct — the pane's console
-  showed "Uncaught (in promise) TypeError: Failed to fetch" during a burst
-  of refused connections whose cause it did not keep; read in code). The
-  "Lead claim requests" effect (LeadsTab.jsx) awaits `dbFetch` in an async
-  block with no catch, and `dbFetch` rethrows a network failure. The panel
-  stays empty, as the comment intends for a refused read; nothing else
-  breaks. Older than §0.199. Recommended: a catch that leaves the panel
-  empty, and a sweep for the same shape (an async block around `dbFetch`
-  with no catch).
 - **Save on an account rail whose account has left the screen's list creates
   a second account** (the pre-ship sweep; as in prod — which screen can leave
   a rail open on a row gone from the list is unverified).
@@ -4978,6 +4990,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   dated 3 Mar 2026, with no files in any; git tracks none. Recommended:
   delete all three (Jeff's call).
 - **A member create that landed with an answer that cannot be read is titled "Failed to Save User"** (§0.248, 12 Nov — the Admin pane check; read in code; older): the member window (UserModal.jsx, opened from the deal window's Sales Rep "+ New Rep") draws its error under a fixed title, "Failed to Save User", so a 2xx page reads "Failed to Save User — Its answer could not be read." though the member may be on the server; a second Create would be refused for the name (409). At HEAD the same case said "Unexpected token …" under the same title. Also read: the window's edit path (`handleEditUser`) is opened by no screen. Low — Jeff's call on the words.
+- **A document upload's timeout says unprefixed words and never fires** (§0.249, 13 Nov — Part 12c's builder and the round-1 documents fixer; read in code; older): `putToR2`'s `xhr.ontimeout` rejects with "Upload timed out" (src/utils/documentsStorage.js:113), with no step's words before it, and `xhr.timeout` is never set, so it never fires — a stalled upload waits on the browser. Recommended: a timeout set, its words the R2 step's ("The file was not stored — …"), or the handler removed. Low.
+- **A refused or failed document record leaves its file in R2** (§0.249, 13 Nov — the round-1 documents fixer; read in code; older): the file is stored (the R2 PUT) before the record is written; a record the server refuses, or that fails, leaves the object behind, and a retry mints a new id and stores the file again (the rail offers the retry, rightly — no document was made). Recommended: an orphan sweep of R2 keys with no document row, org by org (a function-bundle batch). Low.
+- **Neither upload screen reloads the documents list after an upload that landed with an answer that cannot be read** (§0.249, 13 Nov — the round-1 documents fixer; read in code): DocumentUploadRail.jsx and RecordDocuments.jsx say "The file was uploaded. Its answer could not be read — reload the page to see it." (or the maybe sentence) and leave the list as it was; a reload through useDocuments' `loadDocuments` would set the library's load state and error, and the util's words would then need to change. Recommended: a quiet re-read of the list after a landed-unread upload. Low.
 
 ---
 
@@ -5316,10 +5331,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   profile's own keys, remove the key from the defaults, both halves of
   settings.mjs and `REV_KEYS` together (stored rows can keep it — keys are
   additive).
-- **A raw `.message` scan over all of src/** (the refusal sweep's OUT, §0.245, 11 Nov; a grep, as recorded): the sweep's Part 8 adds scan (iv) over an explicit list of files; over all of src/ a grep finds 140 `.message` reads, the error boundaries by design and the putSettings panels' always-plain words among them — each to be named or cleaned before the scan can widen. Low. **Since §0.247 (12 Nov)** scan (iv) runs over `SWEPT` plus CompanyCalendarDetail.jsx (`caughtMessagesOf`, tests/refusals-said.test.mjs).
+- **A raw `.message` scan over all of src/** (the refusal sweep's OUT, §0.245, 11 Nov; a grep, as recorded): the sweep's Part 8 adds scan (iv) over an explicit list of files; over all of src/ a grep finds 140 `.message` reads, the error boundaries by design and the putSettings panels' always-plain words among them — each to be named or cleaned before the scan can widen. Low. **Since §0.247 (12 Nov)** scan (iv) runs over `SWEPT` plus CompanyCalendarDetail.jsx (`caughtMessagesOf`, tests/refusals-said.test.mjs). **Since §0.249 (13 Nov)** scan (iii) reads all of src/ (`SWEPT = srcFiles()`), and scan (iv) reads `MESSAGE_SCANNED` — `CLEANED`'s 54 files (with CompanyCalendarDetail.jsx), 188 catch clauses, none showing its `.message`. What is left of this item — the sweep's remaining work: 27 lines in 24 Settings panels still set a catch's raw `e.message` (the last pass's final check, a parse scan over all of src/, listed them; its own summary line says "23 lines in 21 files"; a grep of 13 Nov finds the 27): CompanyProfileDetail, FiscalYearDetail, FeaturesDetail (2), DispatchBlockTypesDetail, DispatchCustomerNotificationsDetail, DispatchJobTypesDetail, DispatchSkillsDetail, TeamsDetail (2), TerritoriesDetail (2), ProductTypesDetail, QuoteTemplatesDetail and the thirteen sales-process panels (AccountSegments, BuyerPersonas, CustomFields, CustomerTypes, EmailTemplates, FlatList, FunnelStages, Industries, KPIThresholds, LeadConversion, LeadVisibility, PainPoints, Pipelines). Most sit behind putSettings, whose throws carry plain words (`NETWORK_ERROR`, the server's words, the role's sentence), so what shows is plain unless something else in the try throws. Recommended: each says `failureWords(e)` and joins `CLEANED`, then (iv) reads all of src/, with the shapes the next item names ("Scan (iv) reads only a catch clause's own `.message`").
 - **Scan (iv) reads only a catch clause's own `.message`** (§0.247, 12 Nov — the review's tests lens, refuted as a defect: the design's stated scope; none of the shapes is in the scanned files): a promise handler's `.catch(err => setError(err.message))`, an alias (`const err = e; err.message`), a destructure in the body (`const { message } = e`), `String(e)` or `` `${e}` `` ("TypeError: Failed to fetch") and `e['message']` pass it; its header's "no catch param's `.message` is read" overstates it. Recommended: a KNOWN LIMITS line in the header now, and these shapes with the all-src widening above. Low.
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
 - **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run.
 - **Scan (iii) matches a response by name, not by binding** (§0.248, 12 Nov — the review's tests lens, refuted as a defect: no swept file has the shape; noted in the guard's KNOWN LIMITS): an outer `res.ok` check counts toward a nested block's or loop's own `const res`. A later tightening could resolve the binding (the readsIn / `nearest` tracker of scan (i) does similar work). Low.
 - **An older harness entry's anchor matches twice** (§0.248, 12 Nov — the Part 10 fixer's parse check): "deal window: an unnamed row on the deal is blank" (`{c.name || UNLISTED_CONTACT}`, OpportunityModal.jsx) matches twice, the same at HEAD; the harness mutates the first, and the stale check asks only that an anchor be present. A uniqueness check in the stale check would catch the class. Low.
+- **Harness labels and test messages that name older counts** (§0.249, 13 Nov — the review rounds' verifiers (G2, G3, G5); cosmetic): a label is its entry's name, kept as the rounds moved its anchor, so a few name counts the guard has moved past — "four-fifths of its 187 catch clauses", "178 of 187 seen", "84 of 187 seen", "the measured 185 body reads" (scan (iv) reads 188 catch clauses, scan (iii) 192 reads); and the last pass changed only the number of each source-walk floor it set, so some messages beside them still name the old count (tests/itest-targets-test-db.test.mjs: "expected the nineteen suites" beside a floor of 65). Recommended: each message says its count, or none; the labels stay. Low.

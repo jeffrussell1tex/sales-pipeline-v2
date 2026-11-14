@@ -661,7 +661,7 @@ const namedMismatches = (hits, named) => named
 
 test('THE GUARD: every layer under the tabs takes its Escape in the order, or is named — a later batch, a listener serving one, or not a layer', () => {
     const files = scanned();
-    assert.ok(files.length > 60, `the walk sees the tabs (${files.length})`);
+    assert.ok(files.length > 85, `the walk sees the tabs (${files.length})`);
     assert.ok(files.includes('src/components/ui/TimeDropdown.jsx'), 'and follows their imports (the time picker)');
     const classes = fixedClasses();
     assert.ok(classes.has('modal-overlay') && classes.has('lead-form-modal'), 'the classes index.css draws fixed, media queries too');

@@ -27,6 +27,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { startCalendarConnect } from '../../../utils/calendarConnect.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 import { putSettings, takeLatestSettings } from '../shared/saveSettings.js';
 // The saves name the tokens this panel opened with; a stale refusal draws it again on the latest (state §0.229).
 import { usePanelRevs } from '../shared/usePanelRevs.js';
@@ -112,7 +113,9 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
     const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([webhookUrl, channel, alerts]) !== opened, busy: saving || testing });
 
     // send-slack.mjs posts to an explicit webhookUrl when one is in the body —
-    // the org's stored one is not touched until Save.
+    // the org's stored one is not touched until Save. The ok check before the body (docs/design/refusal-sweep
+    // Part 12): a refusal says the server's words with their ref, else "The server returned N." — a 502's page said
+    // "Unexpected token '<'"; a failure in plain words. A landed test reads no body: its answer is the 200.
     const handleTest = async () => {
         if (!webhookUrl.trim()) return;
         setTesting(true); setMsg(null);
@@ -121,11 +124,10 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                 method: 'POST',
                 body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Test failed');
+            if (!res.ok) throw new Error(await readRefusal(res));
             setMsg({ ok: true, text: 'Message sent — check your Slack channel.' });
         } catch (e) {
-            setMsg({ ok: false, text: e.message });
+            setMsg({ ok: false, text: `Test not sent — ${failureWords(e)}` });
         } finally { setTesting(false); }
     };
 
@@ -142,7 +144,7 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
         try {
             await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });
         } catch (e) {
-            setMsg({ ok: false, text: 'Not saved — ' + e.message });
+            setMsg({ ok: false, text: 'Not saved — ' + failureWords(e) });
             setSaving(false);
         }
     };
@@ -395,29 +397,34 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
     // the requests and the web form come from the settings prop (state §0.229):
     // the panel's own settings load is gone, and with it its Loading… page and
     // its banner — Settings draws no panel until the org's settings are in.
+    // The ok check before each body (docs/design/refusal-sweep Part 12): a refusal says the server's words with their
+    // ref, else "The server returned N."; a failure in plain words — a 502's page said "Unexpected token '<'" on the
+    // card. The job-status read stays silent by design: the Slack card claims nothing it could not read.
     useEffect(() => {
         let cancelled = false;
         const loadCal = async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/calendar-connections');
-                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load calendar connections');
-                setCal({ userConnections: data.userConnections || [], orgConnections: data.orgConnections || [], providers: data.providers || null });
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const conns = await res.json();
+                if (cancelled) return;
+                setCal({ userConnections: conns.userConnections || [], orgConnections: conns.orgConnections || [], providers: conns.providers || null });
             } catch (e) {
-                if (!cancelled) setCal({ userConnections: [], orgConnections: [], providers: null, error: e.message });
+                if (!cancelled) setCal({ userConnections: [], orgConnections: [], providers: null, error: failureWords(e) });
             }
         };
         const loadBcc = async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/email-inbound');
-                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load the email logging address');
-                setBcc({ address: data.address || null, configured: data.configured === true });
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const inbound = await res.json();
+                if (cancelled) return;
+                setBcc({ address: inbound.address || null, configured: inbound.configured === true });
             } catch (e) {
                 // A failed fetch is not "not available on this site" — the card says which.
-                if (!cancelled) setBcc({ address: null, configured: false, error: e.message });
+                if (!cancelled) setBcc({ address: null, configured: false, error: failureWords(e) });
             }
         };
         const loadJobs = async () => {
@@ -432,10 +439,13 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         return () => { cancelled = true; };
     }, []);
 
+    // The connections read again after a Disconnect: the ok check first, a refusal thrown in the server's words
+    // (docs/design/refusal-sweep Part 12) — it read the body first and dropped a failed read without a word.
     const reloadCal = async () => {
         const res = await dbFetch('/.netlify/functions/calendar-connections');
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) setCal({ userConnections: data.userConnections || [], orgConnections: data.orgConnections || [], providers: data.providers || null });
+        if (!res.ok) throw new Error(await readRefusal(res));
+        const again = await res.json();
+        setCal({ userConnections: again.userConnections || [], orgConnections: again.orgConnections || [], providers: again.providers || null });
     };
 
     // ── Slack ──────────────────────────────────────────────────────────────
@@ -469,7 +479,7 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
             if (e.stale && await panelStale(e)) return;
-            note('slack', `Not disconnected — ${e.message}`);
+            note('slack', `Not disconnected — ${failureWords(e)}`);
         }
         setBusy(null);
     };
@@ -478,12 +488,18 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
     // ── Calendars ──────────────────────────────────────────────────────────
     // calendarConnect.js (state §0.160): who and which org are the server's to say.
     const connectCalendar = (provider, scope) => startCalendarConnect({ provider, scope, from: 'apps' });
+    // Busy clears in a finally (docs/design/refusal-sweep Part 12): offline, the read after the Disconnect threw and
+    // the row stayed busy for good. A Disconnect that landed but whose read again failed says so on its card.
     const disconnectCalendar = async (id, scope, provider) => {
         setBusy('cal'); note('cal:' + provider, '');
-        const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });
-        if (!r.ok) note('cal:' + provider, `Not disconnected — ${r.error}`);
-        await reloadCal();
-        setBusy(null);
+        try {
+            const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });
+            if (!r.ok) note('cal:' + provider, `Not disconnected — ${r.error}`);
+            try { await reloadCal(); }
+            catch (e) { if (r.ok) note('cal:' + provider, `Disconnected — the connections could not be read again: ${failureWords(e)} Reload the page to see them.`); }
+        } finally {
+            setBusy(null);
+        }
     };
 
     // ── Requests ───────────────────────────────────────────────────────────
@@ -497,13 +513,19 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appId: app.id }),
             });
-            const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
+            // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
+            // their ref; a landed answer that cannot be read is said — the request is the server's, its date unknown.
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const recorded = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;   // answered after a switch: the copy on screen is another org's
-            if (!res.ok) throw new Error(data.error || `The server returned ${res.status}.`);
-            setSettings(prev => ({ ...prev, integrationRequests: { ...(prev.integrationRequests || {}), [app.id]: data.request } }));
+            if (!recorded?.request) note(app.id, 'Requested — Its answer could not be read. Reload the page to see the request.');
+            else {
+                setSettings(prev => ({ ...prev, integrationRequests: { ...(prev.integrationRequests || {}), [app.id]: recorded.request } }));
+            }
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            note(app.id, `Not requested — ${e.message}`);
+            note(app.id, `Not requested — ${failureWords(e)}`);
         }
         setBusy(null);
     };
@@ -525,7 +547,7 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
             if (e.stale && await panelStale(e)) return;
-            note('webform', `Not saved — ${e.message}`);
+            note('webform', `Not saved — ${failureWords(e)}`);
         } finally {
             setBusy(null);
         }
@@ -545,7 +567,7 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
 
             <IntCrumb page="Connected apps" onBack={onBack}/>
             <IntTitle title="Connected apps"
-                sub={`${liveCount} live · Slack, calendars, email logging and the web-to-lead form are the integrations that exist; anything else can be requested below`}/>
+                sub={`${cal?.error || bcc?.error ? 'Some connections could not be read — the cards say which' : `${liveCount} live`} · Slack, calendars, email logging and the web-to-lead form are the integrations that exist; anything else can be requested below`}/>
 
             {/* ── Integrations that exist ── */}
             <div style={{ marginBottom:24 }}>

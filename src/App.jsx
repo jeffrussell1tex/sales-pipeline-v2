@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
+import { readRefusal, failureWords } from './utils/refusalWords.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
@@ -134,7 +135,7 @@ function App() {
     // ── State hooks ──
     const modalState = useModalState();
     const uiState = useUIState();
-    const calState = useCalendarState();
+    const calState = useCalendarState(activeOrgId);   // the calendar strip of the org on screen, from the switch's own render (§0.249, round 4)
 
     // An org switch puts back every value that belongs to the org on screen
     // (state §0.174): each modal, rail, confirm, undo and reminder; each record
@@ -278,6 +279,7 @@ function App() {
     const {
         calendarEvents, setCalendarEvents, calendarLoading, setCalendarLoading,
         calendarError, setCalendarError, calendarConnected, setCalendarConnected,
+        calendarRead, setCalendarRead,
         calConnectResult, setCalConnectResult,
         calView, setCalView, calOffset, setCalOffset, showCalConfig, setShowCalConfig,
         calShowGcal, setCalShowGcal, calShowCalls, setCalShowCalls,
@@ -310,7 +312,9 @@ function App() {
     // stage and switch looks reset with no explanation.
     useEffect(() => {
         if (!settingsLoadError) return;
-        setUndoToast({ error: `Settings did not load (${settingsLoadError}) — nothing in Settings can be saved until they do. Reload the page to try again.` });
+        // The load's words after a dash, never in parentheses (§0.249, the review's round 2: "(… (ref r1))"); the
+        // Settings screen says them too, kept until a load lands — this toast is replaced by the next one.
+        setUndoToast({ error: `Settings did not load — ${settingsLoadError}${/[.!?]$/.test(settingsLoadError) ? '' : '.'} Nothing in Settings can be saved until they do. Reload the page to try again.` });
     }, [settingsLoadError]);
 
     // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
@@ -1208,10 +1212,16 @@ dbFetch('/.netlify/functions/users?me=true')
     // handleSaveActivity managed by useActivities hook
 
     // ── Calendar strip auto-fetch (hoisted so useEffect can call it) ──────────
+    // Only the latest calendar read's answer is kept (state §0.249, review fixes, round 3) — the list hooks' loadGen: an
+    // older answer is dropped, and its finally never clears the flag of a newer read. A landed Disconnect moves it on
+    // (dropCalendarReads), so a read sent before the DELETE never writes the deleted connection or its events back.
+    const calendarReadGen = useRef(0);
+    const dropCalendarReads = () => { calendarReadGen.current += 1; };
     const fetchCalendarEvents = async () => {
         // The calendar of the org on screen when it was asked for (state §0.173):
         // an answer for an org switched away from is dropped.
         const askedOrg = requestOrg();
+        const gen = ++calendarReadGen.current;
         setCalendarLoading(true);
         setCalendarError(null);
         try {
@@ -1222,9 +1232,12 @@ dbFetch('/.netlify/functions/users?me=true')
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekStart.getDate() + 7);
             const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
-            if (!res.ok) throw new Error('Failed to load calendar');
+            // The house words (state §0.249, docs/design/refusal-sweep Part 12): the server's with their ref, else "The
+            // server returned N."; a thrown failure in plain words — never "Failed to fetch" or "Unexpected token '<'".
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
+            if (gen !== calendarReadGen.current) return;   // a later read, or a landed Disconnect, overtook it
             if (data.connected === false) {
                 setCalendarConnected(false);
                 setCalendarEvents([]);
@@ -1232,12 +1245,18 @@ dbFetch('/.netlify/functions/users?me=true')
                 setCalendarEvents(data.events || []);
                 setCalendarConnected(true);
             }
+            // A read landed in this org: from here "not connected" is the server's word, never a calendar unread.
+            setCalendarRead(true);
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
-            setCalendarError(err.message);
-            setCalendarConnected(false);
+            if (gen !== calendarReadGen.current) return;
+            // A read that failed says so and leaves calendarConnected as last read (state §0.249, review fixes): never
+            // "not connected" — Home, Tasks and the profile panel draw the failure, never Connect, while it stands.
+            setCalendarError(`The calendar could not be read — ${failureWords(err)}`);
         } finally {
-            if (stillOrg(askedOrg)) setCalendarLoading(false);   // the new org's fetch keeps its own
+            if (gen === calendarReadGen.current) {   // a newer read keeps its own flag
+                if (stillOrg(askedOrg)) setCalendarLoading(false);   // the new org's fetch keeps its own
+            }
         }
     };
 
@@ -1253,14 +1272,14 @@ dbFetch('/.netlify/functions/users?me=true')
         try {
             const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error('Failed to load calendar events');
+            if (!res.ok) throw new Error(await readRefusal(res));
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
             setLogFromCalEvents(data.events || []);
             setLogFromCalOpen(true);
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
-            setLogFromCalError(err.message);
+            setLogFromCalError(`The calendar could not be read — ${failureWords(err)}`);
         } finally {
             if (stillOrg(askedOrg)) setLogFromCalLoading(false);
         }
@@ -1918,6 +1937,7 @@ dbFetch('/.netlify/functions/users?me=true')
         calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,
         profileTabAsk, setProfileTabAsk,
         fetchCalendarEvents,
+        calendarRead, dropCalendarReads,
         // Navigation
         activeTab, setActiveTab: navigateTo,   // the guarded switch (state §0.170)
         activePipelineId, setActivePipelineId,

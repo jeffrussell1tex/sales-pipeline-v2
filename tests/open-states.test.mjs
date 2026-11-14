@@ -140,9 +140,9 @@ const openStates = () => HOOKS.flatMap((f) => statesOf(read(f))).filter((s) => O
 
 test('THE GUARD: every open-state is drawn, and opened — or recorded with its reason', () => {
     const states = openStates();
-    assert.ok(states.length >= 25, `the open-states found (${states.length})`);
+    assert.ok(states.length >= 26, `the open-states found (${states.length})`);
     const files = srcFiles().map((f) => [f, read(f)]);
-    assert.ok(files.length > 150, `the files walked (${files.length})`);
+    assert.ok(files.length > 241, `the files walked (${files.length})`);
     const { drawn, opened } = scan(files);
     const appOnly = scan(files.filter(([f]) => f === 'src/App.jsx')).opened;
     const own = new Set(contextOwn(read('src/App.jsx')));
@@ -267,7 +267,7 @@ const goneIn = (src, file = '') => [...namesIn(src)].filter((n) => goneOf(file).
 test('D8 and D20: the copies nothing reached are deleted, and nothing under src names them', () => {
     for (const f of GONE_FILES) assert.ok(!existsSync(new URL(f, ROOT)), `${f} is deleted`);
     const files = srcFiles();
-    assert.ok(files.length > 150, `the files walked (${files.length})`);
+    assert.ok(files.length > 241, `the files walked (${files.length})`);
     for (const f of Object.keys(GONE_IN)) assert.ok(files.includes(f), `${f} is walked`);
     const hits = files.map((f) => [f, read(f)])
         .filter(([f, src]) => goneOf(f).some((n) => src.includes(n)))   // only a file that mentions one is parsed

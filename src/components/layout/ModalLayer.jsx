@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg, stopped } from '../../utils/storage';
+import { readRefusal, refusalWords, failureWords } from '../../utils/refusalWords.js';
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
@@ -11,7 +12,7 @@ import { teamsWithMembers } from '../../utils/teamMembership.js';
 import { addToSettingsList } from '../../Tabs/settings/shared/saveSettings.js';
 import { TEAMS_CHANGED_TWICE } from '../../utils/settingsRevs.js';
 import {
-    mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
+    mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt, unreadOnRoster,
 } from '../../utils/importReceipt';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
@@ -725,6 +726,7 @@ export default function ModalLayer() {
                         const receipt = { ...emptyReceipt(), attempted: invites.length };
                         const refusals = [];
                         const landed = [];
+                        const sentUnread = [];   // the requests answered unread (state §0.249), each apart — matched to the roster read again
                         for (let i = 0; i < invites.length; i += INVITES_PER_REQUEST) {
                             if (!stillOrg(askedOrg)) return stopped();
                             const chunk = invites.slice(i, i + INVITES_PER_REQUEST);
@@ -736,14 +738,26 @@ export default function ModalLayer() {
                                 });
                                 d = await res.json().catch(() => ({}));
                             } catch (e) {
-                                d = { error: e.message || 'The request did not complete.' };
+                                d = { error: failureWords(e) };   // in plain words (state §0.249) — never a raw message
                             }
                             if (!stillOrg(askedOrg)) return stopped();
                             const answered = !!res && (res.status === 201 || (res.status === 400 && Array.isArray(d.errors)));
                             if (!answered) {
                                 receipt.failed += invites.length - i;
-                                receipt.error = `Sending stopped: ${d.error || ('HTTP ' + (res ? res.status : 'no response'))}.`;
+                                // The server's words with their ref, else "The server returned N." (state §0.249) — never "HTTP N".
+                                receipt.error = `Sending stopped: ${res ? refusalWords(res, d) : d.error}`;
                                 break;
+                            }
+                            // Landed, with an answer that cannot be read (state §0.249): a 201 is the server's word that it
+                            // invited at least one of this request's people and sent their emails (users.mjs answers 201 when
+                            // any was invited), but not which — so they are counted as sent unread ("up to"), never as not
+                            // sent, and the run goes on. Their ids are the server's, so they join no team list here; the
+                            // roster is read again after the last request, and says which were not invited.
+                            if (res.status === 201 && !Array.isArray(d.invited)) {
+                                receipt.unread += chunk.length;
+                                sentUnread.push(chunk);   // apart (round 4): its 201 says one of THIS request was invited
+                                onProgress(i + chunk.length, invites.length);
+                                continue;
                             }
                             const sent = Array.isArray(d.invited) ? d.invited : [];
                             landed.push(...sent);
@@ -758,6 +772,40 @@ export default function ModalLayer() {
                             });
                             onProgress(i + chunk.length, invites.length);
                         }
+                        // The ones sent unread are the server's (the §0.249 review, round 2): the roster is read again, as
+                        // the Invite page's send does, so the import's own duplicate check (settings.users) knows who was
+                        // sent — a second import of the same file never emails them twice. Only a read that fails says to
+                        // reload, in the house words with the server's ref; after an org switch nothing is set or said.
+                        let rosterWhy = '';
+                        let roster = null;
+                        if (receipt.unread) {
+                            try {
+                                const rosterRes = await dbFetch('/.netlify/functions/users');
+                                if (!rosterRes.ok) throw new Error(await readRefusal(rosterRes));
+                                const ud = await rosterRes.json();
+                                if (!stillOrg(askedOrg)) return stopped();
+                                if (!Array.isArray(ud?.users)) throw new Error('Its answer could not be read.');
+                                setSettings(prev => ({ ...prev, users: ud.users }));
+                                roster = ud.users;
+                            } catch (e) { rosterWhy = failureWords(e); }
+                            if (!stillOrg(askedOrg)) return stopped();
+                        }
+                        // The roster read again landed (the §0.249 review, rounds 3-4): each sent unread not on it is a "Not
+                        // invited" row in plain words; each on it is on the roster — invited by this import or before it (a
+                        // row shows no who or when; the screen's roster may have been stale), still unread, said so — and
+                        // counted sent only where the answer proves it (the one of a request on it, the rest not). Only a
+                        // read that failed leaves them "up to".
+                        let teamless = sentUnread.flat();   // the ones sent unread that join no team's list here
+                        if (roster) {
+                            const { invited, onRoster, notInvited } = unreadOnRoster(sentUnread, roster);
+                            receipt.created += invited.length;
+                            receipt.failed += notInvited.length;
+                            receipt.unread = onRoster.length;
+                            receipt.onRoster = onRoster.length;
+                            refusals.push(...notInvited);
+                            teamless = [...invited, ...onRoster];
+                        }
+                        const unreadTeams = teamless.filter(v => v && v.teamId).length;
                         // Each new member joins the list of the team its row names
                         // (state §0.168): the invite stores the team's name and id on
                         // the row, and the Teams page reads the team's own list. The
@@ -770,6 +818,14 @@ export default function ModalLayer() {
                         if (!stillOrg(askedOrg)) return stopped();
                         if (added.twice) warning = TEAMS_CHANGED_TWICE;
                         else if (!added.ok) warning = `The invitations went out, but the team list was not updated — ${added.error}`;
+                        // A roster that could not be read again: reload to see who was sent (the §0.249 review, round 2).
+                        if (rosterWhy) warning = [warning, `The roster could not be read again — reload the page to see ${receipt.unread === 1 ? 'the invitation' : 'the invitations'} sent: ${rosterWhy}`].filter(Boolean).join(' ');
+                        // The ones sent unread that named a team joined no team's list here (state §0.249) — said, never
+                        // left silent; it claims only that they named a team, and asks the Admin to check their lists: one on
+                        // the roster may have been a member before the import, already on its team's list, and a re-invited
+                        // held row keeps its own team (users.mjs) — no row says which (the review, last pass). A person is
+                        // "they", never "it" (round 3).
+                        if (unreadTeams) warning = [warning, `${unreadTeams} whose ${unreadTeams === 1 ? 'answer' : 'answers'} could not be read named a team — ${rosterWhy ? 'reload the page, then ' : ''}check on the Teams page that they are on ${unreadTeams === 1 ? 'its list' : "their teams' lists"}.`].filter(Boolean).join(' ');
                         return { receipt, refusals, warning };
                     }}
                 />
@@ -807,8 +863,11 @@ export default function ModalLayer() {
                         // failure in a later chunk discards rows already written
                         // server-side and state disagrees with the database.
                         if (res.landed.length > 0) setLeads(prev => [...(prev || []), ...res.landed]);
-                        if (res.error) throw new Error(res.error);
-                        // Modal handles its own close via Done button
+                        // The receipt the other three importers end on (§0.249, the review's round 2): a chunk that failed
+                        // after earlier ones landed throws an ImportError carrying how many leads were saved, and the
+                        // modal says them on its Results — it threw the words alone, stayed on Preview, and a second
+                        // Import re-sent the leads that had landed. Clean, the receipt is the answer.
+                        return settle(receiptFromInsert(res), 'lead');
                     }}
                 />
             )}
@@ -1251,19 +1310,23 @@ export default function ModalLayer() {
                                                             headers: { 'Content-Type': 'application/json' },
                                                             body: JSON.stringify(newClaim),
                                                         });
-                                                        let payload = null;
-                                                        try { payload = await res.json(); } catch { /* empty body */ }
-                                                        if (!stillOrg(askedOrg)) return;
+                                                        // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a
+                                                        // refusal in the server's words with their ref, else "The server returned N.".
                                                         if (!res.ok) {
-                                                            setSpiffClaimError((payload && payload.error)
-                                                                || `Claim not submitted — the server returned ${res.status}.`);
+                                                            const why = await readRefusal(res);
+                                                            if (!stillOrg(askedOrg)) return;
+                                                            setSpiffClaimError(`Claim not submitted — ${why}`);
                                                             return;
                                                         }
+                                                        // Filed, with an answer that cannot be read: the claim as sent.
+                                                        let payload = null;
+                                                        try { payload = await res.json(); } catch { /* an answer that is no JSON */ }
+                                                        if (!stillOrg(askedOrg)) return;
                                                         setSpiffClaims(prev => [...prev, (payload && payload.spiffClaim) || newClaim]);
                                                     } catch (err) {
                                                         if (!stillOrg(askedOrg)) return;
-                                                        console.error('Failed to submit SPIFF claim:', err.message);
-                                                        setSpiffClaimError('Claim not submitted — network error. Nothing was saved.');
+                                                        console.error('Failed to submit SPIFF claim:', err);
+                                                        setSpiffClaimError(`Claim not submitted — ${failureWords(err)}`);
                                                     } finally {
                                                         setSpiffClaimBusy(null);
                                                     }

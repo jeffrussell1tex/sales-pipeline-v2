@@ -11,6 +11,12 @@ import DocumentPicker from './DocumentPicker';
 import { validateFile } from '../../utils/documentsStorage';
 import { canEditCrm } from '../../utils/roles.js';
 import { standsFor } from '../../utils/pickLink.js';
+import { failureWords } from '../../utils/refusalWords.js';
+
+// The files of a drop refused while a batch was sending, each held as [name, validateFile's words]: one the check would
+// refuse said by its name and its words, and only the files that would pass named "Not sent", with when to drop them
+// again (§0.249, the review, round 4; last pass: a file the check would refuse was invited back, refused when dropped).
+const heldWords = (held, busy) => [...held.filter((h) => h[1]).map(([n, w]) => `${n}: ${w}`), ...(held.some((h) => !h[1]) ? [`Not sent: ${held.filter((h) => !h[1]).map((h) => h[0]).join(', ')} — ${busy ? 'wait for the current upload to finish, then drop them again' : 'drop them again'}.`] : [])].join('\n');
 
 export default function RecordDocuments({ recordType, recordId, recordName, recordSub }) {
     const {
@@ -28,8 +34,16 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
     const [drag, setDrag] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
+    // Files made whose answers could not be read: said as made, apart from the red box of a failure (§0.249).
+    const [notice, setNotice] = useState(null);
+    // A drop refused while a batch was sending: its files, each [name, validateFile's words], said apart from the batch's
+    // words (§0.249, round 4; checked as they are held, last pass).
+    const [held, setHeld] = useState(null);
     const [showPicker, setShowPicker] = useState(false);
     const dragDepth = useRef(0);
+    // One batch at a time: set as a batch starts sending and cleared when it ends, read by the next drop at once (§0.249,
+    // round 4: a drop while one sent ran a second batch beside it, each overwriting the other's words).
+    const sending = useRef(false);
 
     const recordLink = { type: recordType, recordId, name: recordName, sub: recordSub };
 
@@ -54,19 +68,56 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
     const attachFiles = async (fileList) => {
         const files = Array.from(fileList || []);
         if (!files.length) return;
-        for (const f of files) {
-            const invalid = validateFile(f);
-            if (invalid) { setError(invalid); return; }
+        // A drop while a batch is sending is refused — two batches never run at once — its files named until the next drop
+        // that is taken, apart from the batch's words, which would replace them, or be replaced (§0.249, the review, round 4:
+        // the second batch cleared the first one's words, and the first one's "Not sent" names were lost).
+        // Each held file is checked as it is held (last pass): one the check would refuse is said with its words, never
+        // invited back. A name held twice is said once, with the words of its latest drop.
+        if (sending.current) { setHeld((h) => [...new Map([...(h || []), ...files.map((f) => [f.name, validateFile(f)])])]); return; }
+        // A batch that stops says the file it stopped at by its name and its words, and the files never sent by theirs —
+        // dropped again they are sent; a file made, or one that may have been, is never among them (§0.249, the review,
+        // round 3: the words named neither, and the member who dropped the batch again wrote the made files twice).
+        const stopWords = (f, words, unsent) => [`${f.name}: ${words}`, ...(unsent.length ? [`Not sent: ${unsent.map((u) => u.name).join(', ')} — drop them again`] : [])].join('\n');
+        // Every file is checked before any is sent, and nothing is sent while any is refused (as before): each refused is
+        // said by its name and its own words, and only the files that would pass are named "Not sent" (§0.249, the review,
+        // round 4: the first refused ended the check, and every other file, refused or not, was named "drop them again").
+        // A refused drop clears the last one's notice and held names, as a batch that sends does.
+        const refused = files.map((f) => [f, validateFile(f)]).filter((r) => r[1]);
+        if (refused.length) {
+            const fine = files.filter((f) => !refused.some((r) => r[0] === f));
+            const said = refused.map(([f, words], i) => stopWords(f, words, i === refused.length - 1 ? fine : [])).join('\n');
+            setNotice(null); setHeld(null); setError(said);
+            return;
         }
-        setBusy(true); setError(null);
+        sending.current = true;
+        setBusy(true); setError(null); setNotice(null);
+        setHeld(null);
+        // A file made whose answer cannot be read (documentsStorage's `landed`) is made, not failed: the next file goes, and
+        // it is said as made — stopping there asked for the drop again, which wrote that file twice (§0.249).
+        const landed = [];
+        let at = 0;
         try {
-            for (const f of files) {
-                await createDocument(f, { name: baseName(f.name), category: 'Note', visibility: 'team', links: [recordLink] });
+            for (; at < files.length; at += 1) {
+                const f = files[at];
+                try {
+                    await createDocument(f, { name: baseName(f.name), category: 'Note', visibility: 'team', links: [recordLink] });
+                } catch (e) {
+                    if (!e || !e.landed) throw e;
+                    landed.push([f.name, failureWords(e), !!e.maybe]);
+                }
             }
         } catch (e) {
-            setError(e.message || 'Upload failed');
+            setError(stopWords(files[at], failureWords(e), files.slice(at + 1)));
         } finally {
+            // A file that may have been made (`maybe`: a 5xx, a gateway's page, a request that threw — §0.249, round 2) is
+            // said in the red box by its name, each on its own line, before a failure that stopped the batch.
+            const maybe = landed.filter((l) => l[2]).map(([n, w]) => `${n}: ${w}`);
+            const made = landed.filter((l) => !l[2]);
+            if (made.length === 1) setNotice(`${made[0][0]}: ${made[0][1]}`);
+            else if (made.length > 1) setNotice(`${made.map(([n]) => n).join(', ')}: The files were uploaded. Their answers could not be read — reload the page to see them.`);
+            if (maybe.length) setError((stop) => [...maybe, ...(stop ? [stop] : [])].join('\n'));
             setBusy(false);
+            sending.current = false;
         }
     };
 
@@ -121,7 +172,13 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             </div>
 
             {error && (
-                <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger }}>{error}</div>
+                <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger, whiteSpace: 'pre-line' }}>{error}</div>
+            )}
+            {held && (
+                <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger, whiteSpace: 'pre-line' }}>{heldWords(held, busy)}</div>
+            )}
+            {notice && (
+                <div style={{ background: `${T.ok}12`, border: `1px solid ${T.ok}55`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.ink }}>{notice}</div>
             )}
 
             {/* Drag hint */}

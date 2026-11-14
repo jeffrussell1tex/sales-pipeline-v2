@@ -3,6 +3,7 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 // "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
 import { mayUseAi } from '../utils/aiModels.js';
 import { storedScore } from '../utils/aiScore.js';
@@ -587,13 +588,21 @@ export default function PipelineTab() {
                 if (!stillOrg(askedOrg)) return;   // the next score would be asked with the new org's token
                 try {
                     const res  = await dbFetch('/.netlify/functions/ai-score', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }) });
-                    const data = await res.json().catch(() => ({}));
-                    if (!stillOrg(askedOrg)) return;
-                    // What the deal keeps — the score without its transport flags, as the deal window keeps it (state §0.238).
-                    const score = res.ok ? storedScore(data) : null;
-                    if (score) { kept++; setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o)); }
-                    else if (!firstCause) firstCause = data.error || (data.disabled ? 'AI scoring is off for this workspace.' : 'Scoring failed.');
-                } catch (err) { console.warn('Bulk score failed for', opp.id, err.message); if (!firstCause) firstCause = 'Claude could not be reached.'; }
+                    // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal in the server's words with
+                    // their ref, else "The server returned N." — never "Scoring failed." over a 502's page.
+                    if (!res.ok) {
+                        const why = await readRefusal(res);
+                        if (!stillOrg(askedOrg)) return;
+                        if (!firstCause) firstCause = why;
+                    } else {
+                        const data = await res.json().catch(() => ({}));
+                        if (!stillOrg(askedOrg)) return;
+                        // What the deal keeps — the score without its transport flags, as the deal window keeps it (state §0.238).
+                        const score = storedScore(data);
+                        if (score) { kept++; setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o)); }
+                        else if (!firstCause) firstCause = data.disabled ? 'AI scoring is off for this workspace.' : 'Its answer could not be read.';
+                    }
+                } catch (err) { console.warn('Bulk score failed for', opp.id, err); if (!firstCause) firstCause = failureWords(err); }
                 done++;
                 setBulkScoreProgress({ done, total: active.length });
             }

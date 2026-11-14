@@ -1153,7 +1153,7 @@ test("T8 — THE GUARD, class-wide (state §0.208): every file that takes the ap
     const all = srcFiles().filter((f) => f !== 'src/App.jsx');
     const g = guard(all, fromDisk);
     // A scan that finds nothing proves nothing: every file the parse picks, each with its own component, every key read.
-    assert.ok(g.files.length >= 57, `the files that import useApp — 57 since §0.208: ${g.files.length} (a file that stopped taking the app's lists on purpose: lower the floor here and say why)`);
+    assert.ok(g.files.length >= 58, `the files that import useApp — 57 since §0.208: ${g.files.length} (a file that stopped taking the app's lists on purpose: lower the floor here and say why)`);
     for (const file of g.files) {
         const own = file.match(/(\w+)\.jsx?$/)[1];
         assert.ok(g.holders[file].some((n) => n === own || n === `${own}Host`),
@@ -1530,7 +1530,7 @@ test("T10 — the server's reads of either table: every function that imports ac
         const counted = serverReads(file, read(file));
         if (counted) found[file] = counted;
     }
-    assert.ok(Object.keys(found).length >= 14, `the functions that read either table — fourteen since §0.208: ${Object.keys(found).length} (one that stopped reading them on purpose: take it out of SERVER_READS, lower the floor here and say why)`);
+    assert.ok(Object.keys(found).length >= 16, `the functions that read either table — fourteen since §0.208: ${Object.keys(found).length} (one that stopped reading them on purpose: take it out of SERVER_READS, lower the floor here and say why)`);
     assert.deepEqual(Object.keys(found).filter((f) => !Object.hasOwn(SERVER_READS, f)), [], 'REGRESSION: a function reads accounts or contacts and is not named — does it answer merged-away rows? Name it in SERVER_READS with its reason');
     for (const [file, [why, selects, handed]] of Object.entries(SERVER_READS)) {
         assert.ok(why, file);

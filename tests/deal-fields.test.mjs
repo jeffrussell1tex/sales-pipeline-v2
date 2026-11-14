@@ -203,7 +203,7 @@ test('the account rail\'s close date reads as a date — "Nov 30, 2026" — and 
 });
 
 test('THE GUARD: every field read off a deal is a field a deal has — or a fallback, or recorded', () => {
-    assert.ok(files.length > 250, `the tree was read (${files.length} files)`);
+    assert.ok(files.length > 347, `the tree was read (${files.length} files)`);
     const found = [];
     for (const f of files) for (const m of dealReads(read(f))) found.push({ ...m, file: f });
     const unknown = found.filter((m) => !KNOWN.has(`${m.file} ${m.text}`)).map((m) => `${m.file}:${m.line} ${m.text}`);

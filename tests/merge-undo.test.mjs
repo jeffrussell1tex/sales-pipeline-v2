@@ -647,7 +647,7 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
     // Isolation (CLAUDE.md): every read and write the Undo and Past merges make names this org; none deletes
     const fresh = between(g, 'const undoRowsOf = async (table, log, orgId) => {', 'const reverseContactMerge = ') + lm;
     const at = [...fresh.matchAll(/db\.(update|select|insert|delete)\(/g)].map((m) => m.index);
-    assert.ok(at.length >= 15, `the statements read: ${at.length}`);
+    assert.ok(at.length >= 26, `the statements read: ${at.length}`);
     at.forEach((i, k) => {
         const stmt = fresh.slice(i, k + 1 < at.length ? at[k + 1] : fresh.length);
         assert.match(stmt, /\.orgId, orgId\)/, `a statement names no org: ${stmt.split('\n')[0].trim().slice(0, 100)}`);
@@ -663,7 +663,8 @@ test('T10 — the words (Q8 "Approve as written"; amend 12, 44; Jeff, 18 Oct: "N
         [{ ok: false, status: 403, error: 'You do not have permission to make this change.' }, 'You do not have permission to make this change.'],
         [{ ok: false, status: 500, error: 'Internal server error (ref req-1)' }, 'The server returned 500 — Internal server error (ref req-1). The merge may have been made — close this window and look under Past merges on this page.'],
         [{ ok: false, status: 502, error: 'The server returned 502.' }, 'The server returned 502. The merge may have been made — close this window and look under Past merges on this page.'],
-        [{ ok: false, status: 0, error: 'Network error — the change was not saved.' }, 'No answer from the server — the merge may have been made. Close this window and look under Past merges on this page.'],
+        // Moved pin (§0.249, docs/design/refusal-sweep Q4): dbWrite's words for no answer are the house's (NETWORK_ERROR).
+        [{ ok: false, status: 0, error: 'The server could not be reached.' }, 'No answer from the server — the merge may have been made. Close this window and look under Past merges on this page.'],
     ]) assert.equal(U.mergeWords(r), words, `REGRESSION: a merge's ${r.status} — "Merge failed" over a merge that may have been made, or a doubled "returned"`);
     const done = (data) => U.undoWords({ ok: true, status: 200, data: { restoredName: 'Resinall, Inc.', ...data } });
     assert.equal(done({ keptLinks: 0, keptFields: [] }), 'Merge undone — “Resinall, Inc.” is its own record again.', 'nothing kept: no count');
@@ -697,7 +698,7 @@ test('T10 — the words (Q8 "Approve as written"; amend 12, 44; Jeff, 18 Oct: "N
     assert.equal(U.undoWords({ ok: false, status: 500, error: 'Internal server error (ref req-1)' }), 'The server returned 500 — Internal server error (ref req-1). Reload the page to see whether the merge was undone.',
         'REGRESSION: a server error reads "not undone" over an Undo that may have landed');
     assert.equal(U.undoWords({ ok: false, status: 503, error: 'The server returned 503.' }), 'The server returned 503. Reload the page to see whether the merge was undone.');
-    assert.equal(U.undoWords({ ok: false, status: 0, error: 'Network error — the change was not saved.' }), 'No answer from the server — reload the page to see whether the merge was undone.',
+    assert.equal(U.undoWords({ ok: false, status: 0, error: 'The server could not be reached.' }), 'No answer from the server — reload the page to see whether the merge was undone.',
         'REGRESSION: no answer reads "not undone" over an Undo that may have landed');
     assert.equal(U.mergedNoticeWords('Resinall, Inc.', 'Resinall'), 'Merged “Resinall, Inc.” into “Resinall” — its Undo is under Past merges on this page.', 'amend 12.2');
     // Past merges' confirm, in Jeff's corrected text (18 Oct: "Use the corrected text")
@@ -798,7 +799,7 @@ test('T13 — the copy says what is offered (Q8): no file under src says a merge
     for (const rel of [DS, CS]) assert.equal(count(read(rel), SCAN_COPY), 1, `${rel}: the page says when a merge can be undone`);
     const cat = read('src/Tabs/settings/catalogue.js');
     for (const kind of ['accounts', 'contacts']) assert.equal(count(cat, `desc:'Scan ${kind} for likely duplicates and merge them — and undo a merge'`), 1, `Settings' ${kind} row`);
-    assert.ok(files.length > 150 && files.includes(PM) && files.includes(MU), `src read, Past merges and mergeUndo.js among it: ${files.length} files`);
+    assert.ok(files.length > 241 && files.includes(PM) && files.includes(MU), `src read, Past merges and mergeUndo.js among it: ${files.length} files`);
 });
 
 test('T14 — the suites: this file is graded by the harness', () => {

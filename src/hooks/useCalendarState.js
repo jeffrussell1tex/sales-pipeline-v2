@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOrgBoundState, resetAllOf } from './useOrgBoundState';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
 
-export function useCalendarState() {
+// The events of a calendar not read in the org on screen: one list, the same every render, so nothing that depends on
+// the events runs again for it.
+const NO_EVENTS = [];
+
+export function useCalendarState(activeOrgId) {
     // The values below that hold the org's events, connections, deals or a rep
     // belong to the org on screen (state §0.174): registered with
     // useOrgBoundState, and put back by resetOnOrgSwitch when the org switches.
@@ -14,6 +18,17 @@ export function useCalendarState() {
     const [calendarLoading, setCalendarLoading] = useOrgBoundState(resets, false);
     const [calendarError, setCalendarError] = useOrgBoundState(resets, null);
     const [calendarConnected, setCalendarConnected] = useOrgBoundState(resets, false);
+    // A read landed in this org (state §0.249, review fixes, round 3): until one has, no screen draws "not connected" —
+    // calendarConnected's false is only its starting value. Put back with it on a switch.
+    const [calendarRead, setCalendarRead] = useOrgBoundState(resets, false);
+    // The org the strip above was put back for (state §0.249, review fixes, round 4). App's switch effect puts the strip
+    // back only after the switch's own render has painted, so that render still holds the last org's read: its "not
+    // connected", its events, its error, its read in flight. Until this names the org on screen, every screen gets a
+    // calendar not read in it ("Checking…", never Connect, no events, no Connected). It moves in this hook's effect,
+    // in the same commit as the reset. The reset never puts it back.
+    const [calendarStripOrg, setCalendarStripOrg] = useState(activeOrgId);
+    useEffect(() => { setCalendarStripOrg(activeOrgId); }, [activeOrgId]);
+    const calendarHere = !!activeOrgId && calendarStripOrg === activeOrgId;
 
     // Calendar view
     const [calView, setCalView] = useState('week');
@@ -57,15 +72,18 @@ export function useCalendarState() {
     const [calDisconnecting, setCalDisconnecting] = useOrgBoundState(resets, null);
 
     // Set when the app lands back from the OAuth callback redirect
-    // (?calconnect=success|error) — used to show a toast/banner in the Calendar tab
+    // (?calconnect=success|error) — used to show a toast/banner in the Calendar tab. Handed out under the strip's tag
+    // (state §0.249, review fixes, last pass): the switch's own render never draws the last org's outcome.
     const [calConnectResult, setCalConnectResult] = useOrgBoundState(resets, null); // 'success' | 'error' | null
 
     return {
         resetOnOrgSwitch: resetAllOf(resets),
-        calendarEvents, setCalendarEvents,
-        calendarLoading, setCalendarLoading,
-        calendarError, setCalendarError,
-        calendarConnected, setCalendarConnected,
+        // The strip as the screens see it: the org's own, or a calendar not read in it (round 4).
+        calendarEvents: calendarHere ? calendarEvents : NO_EVENTS, setCalendarEvents,
+        calendarLoading: calendarHere && calendarLoading, setCalendarLoading,
+        calendarError: calendarHere ? calendarError : null, setCalendarError,
+        calendarConnected: calendarHere && calendarConnected, setCalendarConnected,
+        calendarRead: calendarHere && calendarRead, setCalendarRead,
         calView, setCalView,
         calOffset, setCalOffset,
         showCalConfig, setShowCalConfig,
@@ -93,6 +111,8 @@ export function useCalendarState() {
         calConnectionsLoading, setCalConnectionsLoading,
         calConnectionsError, setCalConnectionsError,
         calDisconnecting, setCalDisconnecting,
-        calConnectResult, setCalConnectResult,
+        // The connect-return outcome as the screens see it: the org's own, or none (last pass) — the panel's line,
+        // Company calendar and Connected apps never say the last org's Connect in the new org's first frame.
+        calConnectResult: calendarHere ? calConnectResult : null, setCalConnectResult,
     };
 }

@@ -312,7 +312,7 @@ const hitsIn = (src, re) => [...code(src).matchAll(re)].length;
 const countsOver = (re) => Object.fromEntries(files.map((f) => [f, hitsIn(read(f), re)]).filter(([, n]) => n));
 
 test('G1: nothing reads or writes contactName but the dispatch customer\'s column', () => {
-    assert.ok(files.length > 250, `the walk reached the tree (${files.length})`);
+    assert.ok(files.length > 347, `the walk reached the tree (${files.length})`);
     // dispatch_customers.contact_name (db/schema.ts) — a column of its own, not an activity's.
     assert.deepEqual(countsOver(CONTACT_NAME), {
         'src/Tabs/DispatchTab.jsx': 1,

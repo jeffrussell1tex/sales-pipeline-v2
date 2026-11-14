@@ -440,7 +440,9 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
         'Completed, not toggled — and once, by what the bar reads: a second press saves the notes alone (the fix review, screens F5), and a task set to Completed in its Status is completed (the re-check, code R1)');
     assert.ok(t.includes("            if (!done?.ok) notDone = done?.error || '';\n"),
         'a completion that does not land is kept to be said (the re-check, code R2) — and the notes go on to be saved (Jeff, 13 Oct: "Save them anyway")');
-    assert.ok(t.includes("const said = (words) => { const s = String(words || 'check your connection and try again'); return s.endsWith('.') ? s.slice(0, -1) : s; };"),
+    // Moved pin (§0.249, docs/design/refusal-sweep Q4): nothing answered says the house words — it said "check your
+    // connection and try again".
+    assert.ok(t.includes("const said = (words) => { const s = String(words || 'The server could not be reached.'); return s.endsWith('.') ? s.slice(0, -1) : s; };"),
         "a refusal's words, or the connection when nothing answered");
     assert.ok(t.includes('const askedOrg = requestOrg();'), 'the org the press began in');
     assert.ok(inOrder(t, "const done = await handleCompleteTask(task.id, 'Completed');", '        }\n        if (!stillOrg(askedOrg)) return;\n        if (completionNotes.trim()) {\n',

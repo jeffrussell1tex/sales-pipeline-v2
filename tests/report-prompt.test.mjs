@@ -360,7 +360,10 @@ test('the tab: Claude first when the switch is on, the built-in reader for every
     assert.ok(s.includes('const applyPrompt = async (text) => {'));
     assert.ok(s.includes("if (settings?.aiReportPromptsEnabled === true) {"), 'the org’s switch decides');
     assert.ok(s.includes("const res = await dbFetch('/.netlify/functions/report-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, today: isoLocal(new Date()) }) });"));
-    assert.ok(s.includes("if (res.ok && data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }"));
+    // Moved in §0.249 (the refusal sweep, Part 12): the ok check first — a refusal says why in the server's words — and
+    // Claude's reading taken only from a landed answer.
+    assert.ok(s.includes("if (!res.ok) extraNotes.push(`Claude could not read this one (${await readRefusal(res)}) — read by the built-in interpreter instead.`);\n                else {\n                    const data = await res.json().catch(() => ({}));"));
+    assert.ok(s.includes("if (data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }"));
     assert.ok(s.includes("else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed"), 'no key: said in words');
     assert.ok(s.includes("} catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }"), 'unreachable: the fallback, said');
     assert.ok(s.includes("else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired)"), 'a rejected key is named for the Admin (observed on dev: the site key answered 401)');

@@ -85,7 +85,7 @@ const srcFiles = () => {
 
 test('THE GUARD — no style under src lets a changing border shorthand overwrite a side set apart from it', () => {
     const files = srcFiles();
-    assert.ok(files.length > 150, 'the walk sees the tree');
+    assert.ok(files.length > 241, 'the walk sees the tree');
     assert.deepEqual(files.flatMap((f) => clashes(f, read(f))), []);
 });
 

@@ -61,6 +61,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { NOUNS, MERGES, notInOrg, NOT_AN_ID, linksAsked, linksDecided, productIdsOf, lineProductsCleared, memberLinksCleared } from '../src/utils/linkIds.js';
 import { PAGE_FIELDS } from '../src/utils/memberSave.js';
+import { refusalWords } from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -225,7 +226,11 @@ test("T5 — users.mjs: a member's team is asked where a write names one anew �
 test("T6 — the screens (state §0.205): a forecast call sends only its field — { id, forecastCalls } — its refusal naming the rep from the tab's copy (Jeff: \"Send only what changed\"); the member profile page sends no pins; the import window stays open on the restore's answer — closed neither by the page that opens it nor from inside — shows a refused restore's errors one per line, as an accepted one's, shows any other answer the server gave in words in those words, with its log ref, says the restore may have written records when no answer came, the function crashed or the restore's own answer counts rows not reached, is inert while the restore runs, reloads the page on Close once records were restored or may have been — and says so — and says what it does with a record already here (Jeff, 16 Oct: \"Fold it in\"; the review, the second fix round and the re-check — T15 runs it)", () => {
     const m = code(read('src/Tabs/SalesManagerTab.jsx'));
     once(m, ind(4, 'const saveUser = async (user, label, who = user.name) => {'));
-    once(m, ind(20, '? `Not saved \\u2014 ${who || \'a member\'}: ${d.error}`'));
+    // Moved in §0.249 (review fixes, round 2 — S2): the server's words through refusalWords, with their ref.
+    once(m, ind(20, '? `Not saved — ${who || \'a member\'}: ${refusalWords(res, d)}`'));
+    // Moved in §0.249 (review fixes, last pass, F4): only the server's own refusal is "Not saved"; any other answer says the rep's call may have
+    // been saved — both naming the rep from the tab's copy.
+    once(m, ind(20, ': `${who || \'A member\'}\'s ${label} may have been saved — reload the page to see whether it was: ${refusalWords(res, d)}` });'));
     assert.ok(!m.includes("${user.name || 'a member'}"), 'the refusal names the rep from the tab, not from the body sent');
     const upd = between(m, '    const updateRepField = async (userId, field, value) => {', '\n    };');
     order(upd, ind(8, 'const rep = (settings.users || []).find(u => u.id === userId);'), ind(8, 'if (!rep) return false;'),
@@ -710,8 +715,9 @@ test("T14 — a Pin from a window holding a stale pin list (ReportsTab.jsx's tog
             return answer(200, { user: { id: 'usr_karen', role: 'User', pinnedReports: [...held] } });
         };
         const setMyProfile = (f) => { myProfile = f(myProfile); adopted.push(myProfile.pinnedReports); };
-        const togglePin = new Function('myProfile', 'setMyProfile', 'setLibError', 'dbFetch', 'requestOrg', 'stillOrg', `${PINNED.join('\n')}\n${TP}\nreturn togglePin;`)(
-            myProfile, setMyProfile, (m) => { if (m) said.push(m); }, dbFetch, () => org, (asked) => asked === org);
+        // refusalWords handed in since §0.249 (the refusal sweep, Part 12): a refusal's words with their ref, after "Pin not saved — ".
+        const togglePin = new Function('myProfile', 'setMyProfile', 'setLibError', 'dbFetch', 'requestOrg', 'stillOrg', 'refusalWords', `${PINNED.join('\n')}\n${TP}\nreturn togglePin;`)(
+            myProfile, setMyProfile, (m) => { if (m) said.push(m); }, dbFetch, () => org, (asked) => asked === org, refusalWords);
         await togglePin({ id: click });
         return { sent, held, adopted, said };
     };
@@ -725,22 +731,23 @@ test("T14 — a Pin from a window holding a stale pin list (ReportsTab.jsx's tog
     assert.deepEqual(await run({ ...STALE, click: 'rep_w' }),
         { sent: [['rep_x'], 'GET', []], held: [], adopted: [['rep_w'], []], said: [] }, 'an Unpin from it: the report unpinned');
     assert.deepEqual(await run({ ...STALE, click: 'rep_z' }),
-        { sent: [['rep_x', 'rep_w', 'rep_z'], 'GET', ['rep_w', 'rep_z']], held: ['rep_w'], adopted: [['rep_w']], said: [notInOrg('report')] },
+        { sent: [['rep_x', 'rep_w', 'rep_z'], 'GET', ['rep_w', 'rep_z']], held: ['rep_w'], adopted: [['rep_w']], said: [`Pin not saved — ${notInOrg('report')}`] },
         "a report deleted since, pinned: refused twice, the server's words shown — the window's pins now the stored ones");
     assert.deepEqual(await run({ ...STALE, stored: ['rep_w', 'rep_y'], click: 'rep_y' }),
         { sent: [['rep_x', 'rep_w', 'rep_y'], 'GET', ['rep_w', 'rep_y']], held: ['rep_w', 'rep_y'], adopted: [['rep_w', 'rep_y'], ['rep_w', 'rep_y']], said: [] },
         'pinned in another window already: a Pin keeps it, once — what the member asked, never a toggle of the stored list');
     assert.deepEqual(await run({ ...STALE, click: 'rep_y', reread: false }),
-        { sent: [['rep_x', 'rep_w', 'rep_y'], 'GET'], held: ['rep_w'], adopted: [], said: [notInOrg('report')] }, "the row not read again: the refusal's words, nothing re-sent");
+        { sent: [['rep_x', 'rep_w', 'rep_y'], 'GET'], held: ['rep_w'], adopted: [], said: [`Pin not saved — ${notInOrg('report')}`] }, "the row not read again: the refusal's words, nothing re-sent");
     assert.deepEqual(await run({ ...STALE, click: 'rep_y', switchAt: 'GET' }),
         { sent: [['rep_x', 'rep_w', 'rep_y'], 'GET'], held: ['rep_w'], adopted: [], said: [] }, 'the org switched during the re-read: nothing adopted, nothing re-sent, nothing said');
     assert.deepEqual(await run({ ...STALE, click: 'rep_y', switchAt: 'PUT1' }),
         { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [] }, "REGRESSION: the org switched while a stale Pin was refused — the member's row read again in the org switched to (state §0.175)");
     assert.deepEqual(await run({ shown: ['rep_w'], stored: ['rep_w'], live: ['rep_w', 'rep_y'], click: 'rep_y', switchAt: 'PUT' }),
         { sent: [['rep_w', 'rep_y']], held: ['rep_w', 'rep_y'], adopted: [], said: [] }, 'the org switched during the PUT: its answer changes nothing (state §0.175)');
-    for (const refusal of [{ status: 500, body: { error: 'Internal server error', requestId: 'r1' } }, { status: 403, body: { error: 'Not your row.' } }]) {
+    for (const [refusal, words] of [[{ status: 500, body: { error: 'Internal server error', requestId: 'r1' } }, 'Internal server error (ref r1)'], [{ status: 403, body: { error: 'Not your row.' } }, 'Not your row.'],
+        [{ status: 502, body: {} }, 'The server returned 502.']]) {
         assert.deepEqual(await run({ ...STALE, click: 'rep_y', refusal }),
-            { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [refusal.body.error] }, `a refusal not about the pins (${refusal.status}): said as it is, never read again and re-sent`);
+            { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [`Pin not saved — ${words}`] }, `a refusal not about the pins (${refusal.status}): said as it is, with its ref, never "HTTP N", never read again and re-sent`);
     }
     // No answer to a PUT (the second fix round): it may have landed, so the window says to reload and see — what the
     // member asked, pinned or unpinned; nothing adopted; after an org switch nothing said (state §0.175). togglePin never

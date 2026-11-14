@@ -426,8 +426,16 @@ test('the board saves once: the rows checked first, then one PUT ?quotas=true na
         '                body: JSON.stringify({ fiscalYear: planYear, breakdown: quotaBreakdown, members }),',
         '        if (!stillOrg(askedOrg)) return;',
         "        if (!res) throw unsure('No answer from the server — reload the page to see whether the quotas were saved.');",
-        '        if (!res.ok) throw res.status < 500 && answer.error ? refuse(answer.error) : unsure(',
-        '        const rows = new Map((answer.users || []).map(u => [u.id, u]));',
+        // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal's words with their ref; a landed
+        // answer with no rows said, never shown as stored.
+        '        if (!res.ok) {',
+        '            const refused = await res.json().catch(() => ({}));',
+        // Moved in §0.249 (review fixes, last pass, F4): only the server's own refusal (ownRefusal) is "Not saved"; any other answer may have saved.
+        '            throw ownRefusal(res.status, refused) ? refuse(refusalWords(res, refused)) : unsure(`The quotas may have been saved — reload the page to see whether they were: ${refusalWords(res, refused)}`);',
+        '        const answer = await res.json().catch(() => null);',
+        '        if (!stillOrg(askedOrg)) return;',
+        "        if (!Array.isArray(answer?.users)) { setQuotaDrafts({}); setSaveState({ status: 'error', msg: 'Saved — Its answer could not be read. Reload the page to see the quotas as stored.' }); return; }",
+        '        const rows = new Map(answer.users.map(u => [u.id, u]));',
         '        setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => !removed.has(u.id)).map(u => rows.get(u.id) || u) }));',
         '        setQuotaDrafts({});');
     assert.equal((save.match(/dbFetch\(/g) || []).length, 1, 'one request');
@@ -566,7 +574,7 @@ test('every whole-profile write of a member keeps the quota plans the row holds 
             else assert.ok(keepsPlans(w.text), `${p}: a whole-profile write puts back plans saved since its read — keepQuotaPlans: ${w.text.slice(0, 120)}`);
         }
     }
-    assert.ok(seen >= 7, `the check saw ${seen} members writes`);
+    assert.ok(seen >= 10, `the check saw ${seen} members writes`);
     const sync = code(read('netlify/functions/users-sync.mjs'));
     assert.ok(sync.includes('            const patch = {};') && !/\bpatch\s*(?:\.\s*profile\b|\[\s*['"]profile['"]\s*\])/.test(sync), "users-sync's patch never carries a profile");
     // the check's own reader, on fixtures

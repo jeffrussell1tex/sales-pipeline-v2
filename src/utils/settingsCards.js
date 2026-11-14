@@ -235,6 +235,23 @@ export const answerOf = async (settled) => {
     return res.json().catch(() => null);
 };
 
+// ── One rule for an MFA answer (§0.249) ──────────────────────────────────────────────────────────────────────────
+// The overview's MFA card and Health check (liveCountsOf below), Settings → Multi-factor auth (MfaDetail.jsx) and
+// Settings → Users (UsersDetail.jsx: the list's MFA dots, the rail's "MFA on", Security health, the export's column) read
+// clerk-mfa-status's answer ({ enrolled, total, notEnrolled: [{…}], enrolledUsers: [{…}], byRole: [{…}] }) by this one
+// rule, so an answer one of them cannot read none of them draws: the two numbers and the three lists, each entry with
+// the fields clerk-mfa-status.mjs always sends — a role's name (a string) and its two counts (numbers); a member's
+// userId, email, name and role, each a string (the server sends '' for an email it has not, never leaves one out).
+// Anything less is a read that failed — never "0/0 enrolled", "No users found", a passing check or a render crash (an
+// object drawn as a React child; mfaByEmail lower-casing an email that is not a string). (The §0.249 review, round 3.)
+const isMfaRole = (v) => !!v && typeof v.role === 'string' && typeof v.enrolled === 'number' && typeof v.total === 'number';
+const isMfaMember = (v) => !!v && typeof v.userId === 'string' && typeof v.email === 'string' && typeof v.name === 'string' && typeof v.role === 'string';
+/** True when an MFA answer has the shape the pages and the tile draw from; anything else is a read that failed. */
+export const mfaAnswerRead = (d) => !!d && typeof d.total === 'number' && typeof d.enrolled === 'number'
+    && Array.isArray(d.byRole) && d.byRole.every(isMfaRole)
+    && Array.isArray(d.notEnrolled) && d.notEnrolled.every(isMfaMember)
+    && Array.isArray(d.enrolledUsers) && d.enrolledUsers.every(isMfaMember);
+
 /**
  * The cards' and the Health tile's live counts from AdminView's seven settled answers, in its order: API keys,
  * webhooks, automations, the audit log, backups, Clerk MFA, the scheduled jobs. A count whose answer did not come is
@@ -276,9 +293,10 @@ export async function liveCountsOf([keysRes, webhooksRes, autosRes, auditRes, ba
         counts.backupFreq = d.schedule?.frequency || 'Daily';
         counts.backupLastHours = diffH;
     }
-    // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank.
+    // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank. A landed answer is read by the page's own
+    // rule (mfaAnswerRead, §0.249): one the MFA page cannot read is unread here too, never 2/3 on the card.
     d = await answerOf(mfaRes);
-    if (d && typeof d.total === 'number') counts.mfa = { enrolled: d.enrolled, total: d.total };
+    if (mfaAnswerRead(d)) counts.mfa = { enrolled: d.enrolled, total: d.total };
     // Admin-only, site-wide: the four scheduled jobs' heartbeats (§0.98). The verdict is computed here from the rows,
     // against the server's clock; a 403 or a 500 leaves the check out of the denominator.
     d = await answerOf(jobsRes);

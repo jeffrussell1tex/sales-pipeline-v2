@@ -52,8 +52,10 @@ export const waitForToken = ()     => ${w}.waitForToken();
 `);
     // The defaults module is real (pure) — a data: URL module resolves it by its file URL.
     const defaults = new URL('../src/utils/settingsDefaults.js', import.meta.url).href;
-    const wired = swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
-        "from '../utils/settingsDefaults.js';", `from "${defaults}";`);
+    // The words module likewise (§0.249, the review's fixes L: the load says readRefusal's / failureWords' words).
+    const words = new URL('../src/utils/refusalWords.js', import.meta.url).href;
+    const wired = swap(swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
+        "from '../utils/settingsDefaults.js';", `from "${defaults}";`), "from '../utils/refusalWords.js';", `from "${words}";`);
     return (await import(dataUrl(wired))).useSettings;
 }
 
@@ -196,7 +198,8 @@ test('a failed first load records no org, keeps the reason, and saves nothing', 
     w.answer(USERS, A, { users: [{ id: 'u1', name: 'Rep One' }] });
     await w.flush();
     assert.equal(w.api.settingsOrgId, null, 'no org may be recorded for settings that never arrived');
-    assert.match(w.api.settingsLoadError, /500/, 'the reason must reach App and the Settings view');
+    // Moved in §0.249 (review fixes, L): the words are readRefusal's — it said "HTTP 500".
+    assert.equal(w.api.settingsLoadError, 'The server returned 500.', 'the reason must reach App and the Settings view');
     w.api.setSettings((prev) => ({ ...prev, pipelines: [{ id: 'x', name: 'Typed after the failure' }] }));
     await w.flush();
     assert.deepEqual(w.env.writes, [], "an edit over the defaults must not PUT them over the org's real settings");
@@ -328,7 +331,7 @@ test('switching away and back, a failed load is reported even for an org loaded 
     w.fail(SETTINGS, A, 500);
     await w.flush();
     assert.equal(w.api.settingsOrgId, null);
-    assert.match(w.api.settingsLoadError, /500/, 'Settings must say the load failed, not wait forever');
+    assert.equal(w.api.settingsLoadError, 'The server returned 500.', 'Settings must say the load failed, not wait forever');
     assert.notDeepEqual(w.api.settings.pipelines, pipelinesOf(B));
 });
 
@@ -343,7 +346,8 @@ test("Settings opens only on the active org's own settings, rebuilt for each org
         'a panel copies what it is handed when it opens: the previous org\'s settings, or the defaults after a failed load');
     assert.ok(/\{loaded\s*\?\s*<AdminView key=\{activeOrgId\} /.test(tabSrc),
         'without the key one AdminView, its open panel and its forms carry across a switch');
-    assert.ok(tabSrc.includes(': <SettingsNotLoaded failed={!!settingsLoadError}/>}'));
+    // Moved in §0.249 (the review's round 2): the view is handed the load's words, and draws them, not only "did not load".
+    assert.ok(tabSrc.includes(': <SettingsNotLoaded error={settingsLoadError}/>}'));
 });
 
 test('App loads the active org, and ends unsaved Settings edits on a switch', () => {

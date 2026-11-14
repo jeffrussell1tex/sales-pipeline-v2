@@ -11,6 +11,7 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { DEFAULT_LEAD_SCORING, isDecidedLead, trainNowMessage } from '../../../utils/leadScoringDefaults.js';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
 
 const FIELD_OPTS = [
     { v: 'title',        l: 'Title' },
@@ -129,18 +130,25 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
     // dirty: training reads the SAVED config, and a stale button would lie.
     const [training, setTraining] = useState(false);
     const [trainMsg, setTrainMsg] = useState(null);
+    // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal says the server's words with their
+    // ref, else "The server returned N." — it said "Training refused (N)", or "Unexpected token '<'" over a 502's page;
+    // a failure in plain words (failureWords). An answer that landed but cannot be read is said as such: the server
+    // trained (or not) and the model it made cannot be shown. After an org switch nothing is said.
     const handleTrainNow = async () => {
         setTraining(true); setTrainMsg(null);
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
-            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });
-            const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(data.error || `Training refused (${res.status})`);
-            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring, revs: revsAfter(prev.revs, data.revs) }));
-            setTrainMsg(trainNowMessage(data));
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const trained = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return;
+            if (!trained) { setTrainMsg({ ok: false, text: 'Its answer could not be read. Reload the page to see whether a model was trained.' }); return; }
+            if (trained.ok && trained.leadScoring) setSettings(prev => ({ ...prev, leadScoring: trained.leadScoring, revs: revsAfter(prev.revs, trained.revs) }));
+            setTrainMsg(trainNowMessage(trained));
         } catch (e) {
-            setTrainMsg({ ok: false, text: e.message });
+            if (!stillOrg(askedOrg)) return;
+            setTrainMsg({ ok: false, text: `Not trained — ${failureWords(e)}` });
         } finally { setTraining(false); }
     };
 
@@ -164,7 +172,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.226 — J-B5).
             if (e.stale && await panelStale(e)) throw e;
-            setSaveError(`Lead scoring not saved — ${e.message}`);
+            setSaveError(`Lead scoring not saved — ${failureWords(e)}`);
             // Clear the spinner, then rethrow: the leave guard's "Save and
             // continue" runs this too, and only a throw keeps it from moving on.
             setSaving(false);

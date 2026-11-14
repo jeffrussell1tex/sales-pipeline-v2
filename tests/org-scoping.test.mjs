@@ -85,7 +85,7 @@ test('the guard sees a db chain split across lines and a raw SQL write', () => {
 
 test('every tenant mutation in netlify/functions is org-scoped', () => {
     const files = readdirSync(FN_DIR).filter(f => f.endsWith('.mjs') && !SKIP.has(f));
-    assert.ok(files.length > 0, 'expected to find function files to scan');
+    assert.ok(files.length > 97, 'expected the 98 function files this guard scans (106, less the 8 it skips)');
 
     const violations = [];
     for (const f of files) {

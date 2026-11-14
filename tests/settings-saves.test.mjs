@@ -971,8 +971,8 @@ test("S4 — B-3c's refusals: Connected apps' catches hand a stale refusal to pa
     });
     assert.deepEqual(got, {
         handleSaveSlack: ["if (e.stale) await panelStale(e, (config.webhookUrl || '') !== (slackConfig.webhookUrl || '') ? PANEL_CHANGED_WEBHOOK : undefined);", 'throw e;'],
-        handleDisconnectSlack: ['if (e.stale && await panelStale(e)) return;', "note('slack', `Not disconnected — ${e.message}`);"],
-        saveWebForm: ['if (e.stale && await panelStale(e)) return;', "note('webform', `Not saved — ${e.message}`);"],
+        handleDisconnectSlack: ['if (e.stale && await panelStale(e)) return;', "note('slack', `Not disconnected — ${failureWords(e)}`);"],
+        saveWebForm: ['if (e.stale && await panelStale(e)) return;', "note('webform', `Not saved — ${failureWords(e)}`);"],
     }, 'REGRESSION (J-B5, JB3-3): a stale refusal not handed to AdminView first, the old mount going on over the latest, or Slack\'s words not asking for the URL again');
     assert.ok(src.includes("import { PANEL_CHANGED_WEBHOOK } from '../../../utils/settingsRevs.js';"), 'the words are the shared ones');
     assert.ok(!has(program, callsNamed('useRegisterSave')), 'no leave guard — the first-line rule of a guarded panel is not this file\'s');
@@ -2131,15 +2131,24 @@ test('S10 — Edit brand\'s window while its save is out, run as written (critic
     assert.equal(closeDecision({ busy: false, dirty: false }), 'close');
 });
 
+// Moved in §0.249 (review fixes, last pass, F4): saveExtra judges writeSettings' words by the tab's module-scope ownRefusal and saidOf, and says
+// refusalWords' words — read here as written, with refusalWords as the tab imports it.
+const salesManagerWords = async () => {
+    const { refusalWords } = await import('../src/utils/refusalWords.js');
+    const lines = read(SALES_MANAGER).split(/\r?\n/);
+    const line = (start) => { const l = lines.find((x) => x.startsWith(start)); assert.ok(l, start); return l; };
+    return new Function('refusalWords', `${line('const ownRefusal = ')}\n${line('const saidOf = ')}\nreturn { refusalWords, ownRefusal, saidOf };`)(refusalWords);
+};
 // The Sales Manager's saveExtra as written: the drafts' tokens (`opened`); writeSettings answers `answer`; the latest,
 // when given, is taken into the copy.
 const runSaveExtra = async ({ patch = { spiffs: [{ id: 's1', name: 'Q4 push' }] }, label = 'SPIFFs', answer, latest = null, loaded = true }) => {
     const { revsAfter, listChanged } = await import('../src/utils/settingsRevs.js');
+    const { NETWORK_ERROR } = await import('../src/utils/storage.js');   // as the tab imports it (§0.249, review fixes: Q4's sentence)
     const st = { copy: { spiffs: [], quotaData: {}, revs: { quotaData: 'Q0', spiffs: 'S0' } }, opened: { quotaData: 'QD', spiffs: 'SD' },
         sends: [], states: [], drafts: [], taken: 0, thrown: null, out: undefined };
     try {
         st.out = await runAs(handlerIn(read(SALES_MANAGER), 'SalesManagerTab', 'saveExtra'), {
-            settingsLoaded: loaded, opened: st.opened, revsAfter, listChanged,
+            settingsLoaded: loaded, opened: st.opened, revsAfter, listChanged, NETWORK_ERROR, ...await salesManagerWords(),
             writeSettings: async (...a) => { st.sends.push(a); return answer; },
             takeLatestSettings: async (set) => { st.taken += 1; if (!latest) return null; set((prev) => ({ ...prev, ...latest })); return latest; },
             setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
@@ -2178,8 +2187,11 @@ test('S10 — the Sales Manager\'s saveExtra, run as written (JB3-5): the tokens
     assert.deepEqual(unread.states.at(-1), { status: 'error', msg: `Not saved — ${STALE_ERROR}` });
     for (const [answer, msg] of [
         [{ ok: false, status: 403, error: 'x' }, 'Not saved — only Admins can change SPIFFs.'],
-        [{ ok: false, status: 0, error: 'x' }, 'Not saved — network error while saving SPIFFs.'],
-        [{ ok: false, status: 500, error: 'The server returned 500.' }, 'Not saved — The server returned 500.'],
+        // Q4's one sentence (state §0.249, review fixes) — whatever the answer's error says; it was "network error while saving SPIFFs."
+        [{ ok: false, status: 0, error: 'x' }, 'Not saved — The server could not be reached.'],
+        // Moved in §0.249 (review fixes, last pass, F4): a 5xx may have saved — only the server's own refusal (a 4xx in its words) is "Not saved".
+        [{ ok: false, status: 500, error: 'The server returned 500.' }, 'The SPIFFs may have been saved — reload the page to see whether they were: The server returned 500.'],
+        [{ ok: false, status: 400, error: 'Quota periods are quarters or months.' }, 'Not saved — Quota periods are quarters or months.'],
     ]) {
         const r = await runSaveExtra({ answer });
         assert.deepEqual([r.out, r.taken, r.drafts, r.thrown, r.states.at(-1)], [false, 0, [], null, { status: 'error', msg }], `${answer.status}`);
@@ -2241,7 +2253,7 @@ const salesManagerRig = async ({ quotaDrafts = {}, tiersDraft = null, spiffsDraf
     const src = read(SALES_MANAGER);
     const st = { flags: [], sends: [], states: [], quotas: 0, copy: { quotaData: {}, spiffs: [], revs: { quotaData: 'Q0', spiffs: 'S0' } } };
     const scope = {
-        settingsLoaded: true, opened: { quotaData: 'QD', spiffs: 'SD' }, revsAfter, listChanged, quotaDrafts, tiersDraft, spiffsDraft,
+        settingsLoaded: true, opened: { quotaData: 'QD', spiffs: 'SD' }, revsAfter, listChanged, quotaDrafts, tiersDraft, spiffsDraft, ...await salesManagerWords(),
         settings: st.copy,
         writeSettings: (...args) => { const d = deferred(); st.sends.push({ args, ...d }); return d.p; },
         takeLatestSettings: async (set) => { if (!latest) return null; set((prev) => ({ ...prev, ...latest })); return latest; },
@@ -2455,6 +2467,8 @@ const CA_COPY = () => ({ connectedApps: { slack: false, kept: 1 }, slackConfig: 
 const CA_FORM = { enabled: false, token: null, source: 'Web Form', thankYouUrl: null };
 const runConnected = async (handler, args, { answer = { success: true, revs: { slackConfig: 'S2' } }, refusal = null, took = false, latest = null, scope = {} } = {}) => {
     const { PANEL_CHANGED_WEBHOOK } = await import('../src/utils/settingsRevs.js');
+    // The words through refusalWords, as the panel imports them (docs/design/refusal-sweep Part 12): it said e.message.
+    const { readRefusal, failureWords } = await import('../src/utils/refusalWords.js');
     const steps = [], notes = [], handed = [];
     const opened = { slackConfig: 'OPENED' };
     const st = { copy: CA_COPY() };
@@ -2462,7 +2476,7 @@ const runConnected = async (handler, args, { answer = { success: true, revs: { s
     let thrown = null;
     try {
         await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', handler), {
-            PANEL_CHANGED_WEBHOOK, opened, setSettings,
+            PANEL_CHANGED_WEBHOOK, opened, setSettings, readRefusal, failureWords,
             connectedApps: CA_COPY().connectedApps, webForm: CA_FORM,
             putSettings: async (...a) => { steps.push(['put', ...a, JSON.parse(JSON.stringify(st.copy))]); if (refusal) throw refusal; return answer; },
             landed: (a) => steps.push(['landed', a]),
@@ -2577,10 +2591,11 @@ test('S10 — Connected apps\' web form, run as written (critic A7): the tokens 
 test('S10 — Connected apps\' request, run as written (state §0.229): it lands in the app\'s copy by an updater — the one app\'s request beside the others, whatever landed meanwhile — and only in the org that asked: answered, refused or failed after a switch, nothing set and nothing said', async () => {
     const APP = { id: 'hubspot', name: 'HubSpot' };
     const REQ = { requestedAt: '2026-11-03T00:00:00.000Z', byName: 'Ann' };
+    const { readRefusal, failureWords } = await import('../src/utils/refusalWords.js');   // as the panel imports them (Part 12)
     const run = async ({ ok = true, status = 200, body = { request: REQ }, offline = false, switchAt = null } = {}) => {
         const st = { org: 'org_A', copy: CA_COPY(), sent: [], sets: [], notes: [], busy: [], own: [] };
         await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', 'requestApp'), {
-            requestOrg: () => st.org, stillOrg: (o) => o === st.org,
+            requestOrg: () => st.org, stillOrg: (o) => o === st.org, readRefusal, failureWords,
             dbFetch: async (url, opts) => {
                 st.sent.push([url, opts.method, JSON.parse(opts.body)]);
                 // Meanwhile another request lands in the copy.

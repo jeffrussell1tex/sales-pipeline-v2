@@ -96,8 +96,10 @@ export const refusalOf = async (res) => {
     } catch { /* non-JSON error body */ }
     return `The server returned ${res.status}.`;
 };
-// …and one that never reached the server.
-export const NETWORK_ERROR = 'Network error — the change was not saved.';
+// …and one that never reached the server: one sentence on every screen (§0.249, docs/design/refusal-sweep Q4 — Jeff:
+// "The server could not be reached." everywhere), failureWords' own for a thrown fetch. It said "Network error — the
+// change was not saved." — a claim nothing checked, and a second wording for one failure.
+export const NETWORK_ERROR = 'The server could not be reached.';
 
 // dbWrite is for write paths. It resolves to { ok, status, error, data } and NEVER
 // throws, so a caller can roll back in one place without a try/catch around every

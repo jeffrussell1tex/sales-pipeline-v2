@@ -10,6 +10,8 @@
 // A control that promises an action and does nothing certifies (guide).
 import React from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { mfaAnswerRead } from '../../../utils/settingsCards.js';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, SecCallout, SecCard } from './shared.jsx';
 
@@ -21,17 +23,26 @@ export const MfaDetail = ({ onBack }) => {
     const [error,   setError]   = React.useState(null);
 
     // ── Load real MFA enrollment from Clerk via backend ───────────
+    // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal is said in the server's words with
+    // its ref, else "The server returned N."; a failure in plain words (failureWords) — never "Unexpected token '<'".
+    // A read that failed draws no count and no "none" below: the cards stay blank under the error.
     React.useEffect(() => {
         let cancelled = false;
         const load = async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/clerk-mfa-status');
-                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load MFA status');
-                setMfaData(data);
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const enrollment = await res.json();
+                if (cancelled) return;
+                // A landed answer without the shape the cards draw from (the two numbers, the lists, each entry with the
+                // fields the server sends) is a read that failed — never "0/0 enrolled", "No users found", "All users have
+                // MFA enrolled" or a render crash. One rule with the overview's MFA tile and Settings → Users
+                // (settingsCards.js mfaAnswerRead, §0.249).
+                if (!mfaAnswerRead(enrollment)) throw new Error('Its answer could not be read.');
+                setMfaData(enrollment);
             } catch (e) {
-                if (!cancelled) setError(e.message);
+                if (!cancelled) setError(`MFA enrollment could not be read — ${failureWords(e)}`);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -53,7 +64,7 @@ export const MfaDetail = ({ onBack }) => {
             <SecTitle
                 title="Multi-factor auth"
                 sub="A second factor on sign-in · policy and factors are set in Clerk"
-                badge={loading ? 'Loading…' : `${enrolled}/${total} enrolled · ${enrollPct}%`}
+                badge={loading ? 'Loading…' : error ? undefined : `${enrolled}/${total} enrolled · ${enrollPct}%`}
                 updatedAt="Enrollment is live from Clerk"
                 actions={[
                     <div key="enf" title="MFA policy is set in Clerk Dashboard" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
@@ -90,10 +101,10 @@ export const MfaDetail = ({ onBack }) => {
             )}
 
             {/* ── Enrollment by role ── */}
-            <SecCard title={loading ? 'Enrollment by role' : `Enrollment by role (${enrolled}/${total} · ${enrollPct}%)`}>
+            <SecCard title={loading || error ? 'Enrollment by role' : `Enrollment by role (${enrolled}/${total} · ${enrollPct}%)`}>
                 {loading ? (
                     <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading enrollment data…</div>
-                ) : byRole.length === 0 ? (
+                ) : error ? null : byRole.length === 0 ? (
                     <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>No users found in this organization.</div>
                 ) : (
                     <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
@@ -129,10 +140,10 @@ export const MfaDetail = ({ onBack }) => {
             </SecCard>
 
             {/* ── Not yet enrolled ── */}
-            <SecCard title={`Not yet enrolled (${notEnrolledCount})`} desc="Users who have not set up any MFA factor. Enrollment happens in Clerk.">
+            <SecCard title={error ? 'Not yet enrolled' : `Not yet enrolled (${notEnrolledCount})`} desc="Users who have not set up any MFA factor. Enrollment happens in Clerk.">
                 {loading ? (
                     <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading…</div>
-                ) : notEnrolled.length === 0 ? (
+                ) : error ? null : notEnrolled.length === 0 ? (
                     <div style={{ padding:'18px 0', textAlign:'center', fontSize:12.5, color:T.ok, fontFamily:T.sans }}>
                         ✓ All users have MFA enrolled.
                     </div>

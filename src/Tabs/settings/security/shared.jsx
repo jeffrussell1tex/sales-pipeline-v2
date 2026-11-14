@@ -13,7 +13,10 @@ export const SecCrumb = ({ page, onBack, section = 'Security' }) => (
     </div>
 );
 
-export const SecTitle = ({ title, sub, badge, updatedAt, actions, dirty }) => (
+// The badge's mark (the §0.249 review's fixes, round 3): a green ✓ only over what was read — 'ok', the default, as every
+// caller drew before; 'warn' a warning mark in the warning colour, for a badge that names something not known — never a
+// passing check beside it (state §0.247).
+export const SecTitle = ({ title, sub, badge, badgeTone = 'ok', updatedAt, actions, dirty }) => (
     <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
         <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
             <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
@@ -22,8 +25,8 @@ export const SecTitle = ({ title, sub, badge, updatedAt, actions, dirty }) => (
             <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
                 <span>{sub}</span>
                 {badge && <><span style={{ color:T.inkMuted }}>•</span>
-                    <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12.5, color:T.ok, fontWeight:600 }}>
-                        <span>✓</span><span>{badge}</span>
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12.5, color: badgeTone === 'warn' ? T.warn : T.ok, fontWeight:600 }}>
+                        {badgeTone === 'warn' ? <span title="Not known" style={{ fontWeight:700 }}>!</span> : <span>✓</span>}<span>{badge}</span>
                     </span></>}
                 {updatedAt && <><span style={{ color:T.inkMuted }}>•</span>
                     <span style={{ fontSize:11.5, color:T.inkMuted }}>{updatedAt}</span></>}

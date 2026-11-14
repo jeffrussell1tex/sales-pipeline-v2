@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
 import { DEFAULT_SETTINGS, settingsAsLoaded } from '../utils/settingsDefaults.js';
+import { readRefusal, failureWords } from '../utils/refusalWords.js';
 
 // The app's copy of the active org's settings. This hook LOADS them and never
 // writes them (state §0.170): each settings screen saves the keys it owns by its
@@ -79,8 +80,10 @@ export function useSettings() {
         // On org switch, delay users fetch 500ms to ensure Clerk JWT has rotated.
         const usersDelay = switched ? 500 : 0;
 
+        // Ok first (§0.249, docs/design/refusal-sweep Part 12): a refusal throws the server's words with their ref, else
+        // "The server returned N." — it threw "HTTP N".
         dbFetch('/.netlify/functions/settings')
-            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(async r => { if (!r.ok) throw new Error(await readRefusal(r)); return r.json(); })
             .then(data => {
                 if (gen !== loadGenRef.current) return;   // a newer load owns the state
                 // The defaults under what the org stored, the roster kept — one
@@ -98,7 +101,8 @@ export function useSettings() {
                 // A reload of the org already in state keeps that copy: it is
                 // this org's. A first load or a switch that failed has nothing
                 // in state — Settings stays closed, and says why.
-                if (settingsOrgRef.current !== orgId) setLoadError(err?.message || 'the request failed');
+                // A refusal in its words, a thrown failure in plain words (failureWords) — never "Failed to fetch".
+                if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));
             });
 
         waitForToken()

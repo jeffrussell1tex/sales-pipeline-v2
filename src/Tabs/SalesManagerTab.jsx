@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
-import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg, NETWORK_ERROR } from '../utils/storage';
+import { refusalWords, failureWords } from '../utils/refusalWords.js';
 import { isoLocal, todayLocal, daysSince } from '../utils/dateLocal';
 import { currentQuarter, fiscalStartOf, fiscalMonthOf } from '../utils/quarters';
 import { cleanQuotaPeriods, quotaPlanOf, quotaDraftRow, editQuotaDraft, checkQuotaSave, quotaRefusal, quotaYearsOffered } from '../utils/quotaPlan.js';
@@ -202,10 +203,30 @@ function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color }
 // A claim action's answer in words (state §0.204): a refusal says the server's own, with its log ref when it
 // sent one (a 500's requestId is what finds its log line); an answer lost, or a server error that said nothing,
 // is not "not done" — the write may have landed (the quota board's rule, §0.203), so it says to reload and see.
-const claimRefused = (done, d, status) => (status < 500
-    ? `Not ${done} \u2014 ${d?.error || `the server returned ${status}`}${d?.requestId ? ` (ref ${d.requestId})` : ''}`
-    : `The server returned ${status}${d?.error ? ` \u2014 ${d.error}${d.requestId ? ` (ref ${d.requestId})` : ''}` : ''}. Reload the page to see whether the claim was ${done}.`);
+// Since §0.249 (the refusal sweep's review fixes, round 3) a refusal's words are the house words, refusalWords — the
+// server's with their ref, else "The server returned N."; it said its own lowercase "the server returned N", no period.
+// Since round 4 only the server's own refusal — a 4xx with its words — says "Not saved" / "Not deleted": it is the one
+// answer that proves nothing was written (the quota board's rule, §0.203; the document record step's). A 5xx, a gateway's
+// page or a 4xx with no words of its own may have written it: it says to reload and see, in refusalWords' words — typed
+// and trimmed. Round 3 said a wordless 4xx was "Not saved", and the 5xx a raw d.error ("—    .", "[object Object]").
+// Since the last pass that test is ownRefusal, the tab's one: every save here reads its answer by it — a claim's Approve,
+// Reject and Delete, the quota board, a forecast call, the commission tiers and SPIFFs, a coaching note's Delete. Each
+// server sends its worded 4xx before it writes (spiff-claims.mjs, users.mjs, settings.mjs, coaching-notes.mjs), and may
+// answer a 500 after (the audit, the caller's name); a JSON null body is none.
+const ownRefusal = (status, d) => status >= 400 && status < 500 && typeof d?.error === 'string' && !!d.error.trim();
+// A save whose words were read for it — writeSettings' (refusalOf), the coaching hook's (readRefusal) — is judged on those
+// words as the body they came from: none when they are the status's own ("The server returned N.") or not words at all.
+const saidOf = (status, words) => (typeof words === 'string' && words !== `The server returned ${status}.` ? { error: words } : null);
+const claimRefused = (done, d, status) => (ownRefusal(status, d)
+    ? `Not ${done} — ${refusalWords({ status }, d)}`
+    : `The claim may have been ${done} — reload the page to see whether it was: ${refusalWords({ status }, d)}`);
 const claimUnanswered = (done) => `No answer from the server \u2014 reload the page to see whether the claim was ${done}.`;
+// A coaching note's Delete refused (state §0.246, 7b; the last pass): "Not deleted" only for the server's own refusal, or a
+// request that never reached it (Q4's sentence, NETWORK_ERROR); any other answer — a 5xx (coaching-notes.mjs audits after it
+// deletes), a gateway's page, a 4xx with no words — may have deleted it. The hook's words are readRefusal's, with its ref.
+const noteNotDeleted = (r) => (r.error === NETWORK_ERROR || ownRefusal(r.status, saidOf(r.status, r.error))
+    ? `Not deleted — ${r.error}`
+    : `The coaching note may have been deleted — reload the page to see whether it was: ${r.error}`);
 
 // A SPIFF's status on the SPIFF board (state §0.204 — Jeff asked for a clear Active / Inactive control on
 // each SPIFF): Active is offered to reps on a Closed Won deal; Inactive is not, and claims already filed can
@@ -473,14 +494,19 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
             const res = await dbFetch('/.netlify/functions/spiff-claims', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy }),
             });
-            const d = await res.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
+            // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): only a refusal's body is read, for its
+            // words; a landed change reads none — the list takes the change it sent.
             if (!res.ok) {
-                // Not found (404): a claim deleted since the list loaded is gone — its row goes too.
-                if (res.status === 404) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
+                const d = await res.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
+                // Not found (404) in the server's words (spiff-claims.mjs: "Claim not found in your organization"): a claim
+                // deleted since the list loaded is gone — its row goes too. A 404 with no words (a gateway's page) proves
+                // nothing: the row stays, and the words say to reload and see (§0.249, the last pass).
+                if (res.status === 404 && ownRefusal(res.status, d)) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
                 setSaveState({ status: 'error', msg: claimRefused('saved', d, res.status) });
                 return;
             }
+            if (!stillOrg(askedOrg)) return;
             setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));
             setSaveState({ status: 'saved', msg: '' });
         } catch (err) {
@@ -501,9 +527,14 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
         setDeletingIds(s => new Set(s).add(claim.id));
         try {
             const res = await dbFetch(`/.netlify/functions/spiff-claims?id=${encodeURIComponent(claim.id)}`, { method: 'DELETE' });
-            const d = await res.json().catch(() => ({}));
+            // The ok check first (state §0.249): only a refusal's body is read, for its words.
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
+                setSaveState({ status: 'error', msg: claimRefused('deleted', d, res.status) });
+                return;
+            }
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { setSaveState({ status: 'error', msg: claimRefused('deleted', d, res.status) }); return; }
             setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
             setSaveState({ status: 'saved', msg: '' });
         } catch (err) {
@@ -916,6 +947,8 @@ export default function SalesManagerTab() {
     // quarter's other figure — so another manager's call made since is put back: one for another quarter, and this
     // quarter's other figure too (a Commit re-sends the Best case as this tab holds it). Filed, OPEN_ITEMS §4.6.
     const saveUser = async (user, label, who = user.name) => {
+        // An answer after an org switch says nothing (state §0.249, review fixes round 2): the banner is the org's on screen.
+        const askedOrg = requestOrg();
         try {
             const res = await dbFetch('/.netlify/functions/users', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user),
@@ -923,18 +956,27 @@ export default function SalesManagerTab() {
             if (!res.ok) {
                 // The server's words, naming the member (state §0.202): one removed
                 // since the screen loaded answers 404, a row a Manager cannot change 403.
-                const d = await res.json().catch(() => ({}));
-                setSaveState({ status: 'error', msg: d.error
-                    ? `Not saved \u2014 ${who || 'a member'}: ${d.error}`
-                    : res.status === 403
-                    ? `Not saved \u2014 only Admins can change ${label}.`
-                    : `Not saved \u2014 the server returned ${res.status}. Your ${label} changes are not stored.` });
+                // In the house words (state §0.249, review fixes round 2): refusalWords — the server's words with their
+                // ref, else "The server returned N."; it dropped the ref and said its own "the server returned N. Your
+                // <label> changes are not stored." over a page. A 403 with no words keeps its role sentence.
+                const d = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return false;
+                // Only the server's own refusal (ownRefusal) is "Not saved" (§0.249, the last pass): users.mjs answers a 500
+                // after the row is written (the caller's name for the audit) — a 5xx, a page or a wordless 4xx says to reload.
+                setSaveState({ status: 'error', msg: res.status === 403 && !ownRefusal(res.status, d)
+                    ? `Not saved — only Admins can change ${label}.`
+                    : ownRefusal(res.status, d)
+                    ? `Not saved — ${who || 'a member'}: ${refusalWords(res, d)}`
+                    : `${who || 'A member'}'s ${label} may have been saved — reload the page to see whether it was: ${refusalWords(res, d)}` });
                 return false;
             }
             return true;
         } catch (err) {
             console.error('[SalesManagerTab] save ' + label, err);
-            setSaveState({ status: 'error', msg: `Not saved \u2014 network error while saving ${label}.` });
+            if (!stillOrg(askedOrg)) return false;
+            // A request that never left says Q4's one sentence (state §0.249, review fixes): failureWords — it said
+            // "network error while saving <label>", a second wording for one failure.
+            setSaveState({ status: 'error', msg: `Not saved — ${failureWords(err)}` });
             return false;
         }
     };
@@ -1026,8 +1068,13 @@ export default function SalesManagerTab() {
         setSaveState({ status: 'error', msg: w.status === 403
             ? `Not saved — only Admins can change ${label}.`
             : w.status === 0
-            ? `Not saved — network error while saving ${label}.`
-            : `Not saved — ${w.error}` });
+            // Q4's one sentence (state §0.249, review fixes) — it said "network error while saving <label>".
+            ? `Not saved — ${NETWORK_ERROR}`
+            // Only the server's own refusal (ownRefusal, on writeSettings' words) is "Not saved" (§0.249, the last pass):
+            // a 5xx, a page or a wordless 4xx may have written it — settings.mjs answers a 500 after its transaction.
+            : ownRefusal(w.status, saidOf(w.status, w.error))
+            ? `Not saved — ${refusalWords(w, saidOf(w.status, w.error))}`
+            : `The ${label} may have been saved — reload the page to see whether they were: ${refusalWords(w, saidOf(w.status, w.error))}` });
         return false;
     };
 
@@ -1060,13 +1107,12 @@ export default function SalesManagerTab() {
         }
         const askedOrg = requestOrg();
         setSaveState({ status: 'saving', msg: '' });
-        let res = null, answer = {};
+        let res = null;
         try {
             res = await dbFetch('/.netlify/functions/users?quotas=true', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fiscalYear: planYear, breakdown: quotaBreakdown, members }),
             });
-            answer = await res.json().catch(() => ({}));
         } catch (err) {
             console.error('[SalesManagerTab] save quotas', err);
         }
@@ -1074,8 +1120,20 @@ export default function SalesManagerTab() {
         // No answer, or one the server did not write (a timeout's 502), is not "not stored":
         // the plans may be in. The server's own refusals write nothing and say so.
         if (!res) throw unsure('No answer from the server — reload the page to see whether the quotas were saved.');
-        if (!res.ok) throw res.status < 500 && answer.error ? refuse(answer.error) : unsure(`The server returned ${res.status} — reload the page to see whether the quotas were saved.`);
-        const rows = new Map((answer.users || []).map(u => [u.id, u]));
+        // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal's words with their ref.
+        if (!res.ok) {
+            const refused = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
+            // Only the server's own refusal (ownRefusal) wrote nothing (§0.249, the last pass): a wordless 4xx, a 5xx or a page
+            // may have — said in refusalWords' words with their ref; a JSON null body is none, never a throw out of the try.
+            throw ownRefusal(res.status, refused) ? refuse(refusalWords(res, refused)) : unsure(`The quotas may have been saved — reload the page to see whether they were: ${refusalWords(res, refused)}`);
+        }
+        const answer = await res.json().catch(() => null);
+        if (!stillOrg(askedOrg)) return;
+        // Saved, with an answer that cannot be read: the plans are in, but not the rows the server gave back — said, the
+        // board's drafts cleared (sent), never the copy sent shown as stored.
+        if (!Array.isArray(answer?.users)) { setQuotaDrafts({}); setSaveState({ status: 'error', msg: 'Saved — Its answer could not be read. Reload the page to see the quotas as stored.' }); return; }
+        const rows = new Map(answer.users.map(u => [u.id, u]));
         const removed = new Set(answer.removed || []);
         setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => !removed.has(u.id)).map(u => rows.get(u.id) || u) }));
         setQuotaDrafts({});
@@ -1452,7 +1510,7 @@ export default function SalesManagerTab() {
                                     <button title="Delete this note"
                                         onClick={() => showConfirm('Delete this coaching note? The people it was addressed to will no longer see it.', async () => {
                                             const r = await deleteCoachingNote(n.id);
-                                            if (!r.ok) setSaveState({ status: 'error', msg: `Not deleted — ${r.error}` });
+                                            if (!r.ok) setSaveState({ status: 'error', msg: noteNotDeleted(r) });
                                         }, true)}
                                         style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:15, lineHeight:1, alignSelf:'flex-start', fontFamily:T.sans }}>×</button>
                                 )}

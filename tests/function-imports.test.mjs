@@ -104,7 +104,7 @@ function localImportsOf(ast) {
 
 test('every local import in netlify/functions resolves to a real export', () => {
     const files = readdirSync(FN_DIR).filter(f => f.endsWith('.mjs'));
-    assert.ok(files.length > 0, 'expected to find function files to scan');
+    assert.ok(files.length > 105, 'expected the 106 function files');
 
     // Parse once. A file that will not parse is its own failure — esbuild would
     // reject it too, and reporting "no violations" on an unreadable file is the

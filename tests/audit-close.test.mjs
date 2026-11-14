@@ -137,10 +137,10 @@ test('public API: every field a resource answers with, and every column it filte
     for (const table of ['opportunities', 'accounts', 'contacts', 'activities', 'leads', 'tasks']) {
         const block = between(api, `if (resource === '${table}') {`, 'body: JSON.stringify(paginatedResponse(shaped, page, limit, total)),');
         const cols = columnsOf(table);
-        assert.ok(cols.size > 15, `${table}: the schema parsed`);
+        assert.ok(cols.size > 20, `${table}: the schema parsed`);
         const reads = [...new Set([...block.matchAll(/\br\.([A-Za-z0-9_]+)/g)].map((m) => m[1]))];
         const named = [...new Set([...block.matchAll(new RegExp(`\\b${table}\\.([A-Za-z0-9_]+)`, 'g'))].map((m) => m[1]))];
-        assert.ok(reads.length > 10, `${table}: the shaper parsed`);
+        assert.ok(reads.length > 13, `${table}: the shaper parsed`);
         assert.deepEqual(reads.filter((f) => !cols.has(f)), [], `${table}: a field that is no column is always undefined, and JSON drops it`);
         assert.deepEqual(named.filter((f) => !cols.has(f)), [], `${table}: a filter on no column fails the request`);
     }

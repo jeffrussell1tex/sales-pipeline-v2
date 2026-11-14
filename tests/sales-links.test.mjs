@@ -27,6 +27,7 @@ import {
     NOUNS, MERGES, notInOrg, NOT_AN_ID, liveIds, linksAsked, linksDecided, listEntryIds, productIdsOf, assigneesOf,
 } from '../src/utils/linkIds.js';
 import { LOGIN_NOT_IN_ORG } from '../src/utils/techLogin.js';
+import { refusalWords } from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -636,9 +637,14 @@ test("a claim's Delete: every claim, every status, for whoever the tab shows (an
         ind(8, 'const askedOrg = requestOrg();'),
         ind(8, 'setDeletingIds(s => new Set(s).add(claim.id));'),
         ind(12, "const res = await dbFetch(`/.netlify/functions/spiff-claims?id=${encodeURIComponent(claim.id)}`, { method: 'DELETE' });"),
-        ind(12, 'const d = await res.json().catch(() => ({}));'),
+        // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, only a refusal's body read.
+        ind(12, 'if (!res.ok) {'),
+        ind(16, 'const d = await res.json().catch(() => ({}));'),
+        ind(16, 'if (!stillOrg(askedOrg)) return;'),
+        ind(16, "setSaveState({ status: 'error', msg: claimRefused('deleted', d, res.status) });"),
+        ind(16, 'return;'),
+        ind(12, '}'),
         ind(12, 'if (!stillOrg(askedOrg)) return;'),
-        ind(12, "if (!res.ok) { setSaveState({ status: 'error', msg: claimRefused('deleted', d, res.status) }); return; }"),
         ind(12, 'setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));'),
         ind(12, "setSaveState({ status: 'saved', msg: '' });"),
         ind(8, '} catch (err) {'),
@@ -666,10 +672,12 @@ test("the SPIFF board's Active / Inactive control: a component at module scope (
     const DECL = '\nfunction SpiffStatus({ name, active, disabled, onChange }) {\n';
     const at = m.indexOf(DECL);
     assert.ok(at > 0, 'declared at the top level, column 0');
-    const words = m.indexOf('\nconst claimRefused = (done, d, status) => (');
+    // Moved in §0.249 (review fixes, last pass, F4): the tab's one test of the server's own refusal (ownRefusal), its words read as a
+    // body (saidOf) and a coaching note's Delete words (noteNotDeleted) sit with the claim words, module scope.
+    const words = m.indexOf('\nconst ownRefusal = (status, d) => ');
     assert.ok(words > 0 && words < at && m.slice(0, words).trimEnd().endsWith('\n}'), 'after the module-level function before it has closed, and the claim words');
     assert.deepEqual(m.slice(words + 1, at).split('\n').filter((l) => /^\S/.test(l)).map((l) => l.slice(0, l.indexOf(' = ('))),
-        ['const claimRefused', 'const claimUnanswered'], 'nothing else at column 0 between them — each a module-scope declaration');
+        ['const ownRefusal', 'const saidOf', 'const claimRefused', 'const claimUnanswered', 'const noteNotDeleted'], 'nothing else at column 0 between them — each a module-scope declaration');
     assert.ok(at < m.indexOf('\nfunction AdminTab({'), 'above AdminTab, outside it');
     assert.ok(!between(m, 'function AdminTab({', '\n}\n').includes('function SpiffStatus'), 'never declared inside the tab');
     const comp = between(m, DECL, '\n}\n');
@@ -695,13 +703,16 @@ test("a claim's Approve and Reject send only the change (D2) and say the server'
     order(upd,
         ind(8, 'const approvedAt = new Date().toISOString(), approvedBy = currentUser;'),
         ind(16, "method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy }),"),
-        ind(12, 'const d = await res.json().catch(() => ({}));'),
-        ind(12, 'if (!stillOrg(askedOrg)) return;'),
+        // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, only a refusal's body read.
         ind(12, 'if (!res.ok) {'),
-        ind(16, 'if (res.status === 404) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));'),
+        ind(16, 'const d = await res.json().catch(() => ({}));'),
+        ind(16, 'if (!stillOrg(askedOrg)) return;'),
+        // Moved in §0.249 (review fixes, last pass, F4): a 404 drops the row only in the server's words — a wordless 404 (a gateway's page) proves nothing.
+        ind(16, 'if (res.status === 404 && ownRefusal(res.status, d)) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));'),
         ind(16, "setSaveState({ status: 'error', msg: claimRefused('saved', d, res.status) });"),
         ind(16, 'return;'),
         ind(12, '}'),
+        ind(12, 'if (!stillOrg(askedOrg)) return;'),
         ind(12, 'setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));'),
         ind(12, "setSaveState({ status: 'saved', msg: '' });"),
         ind(8, '} catch (err) {'),
@@ -721,30 +732,37 @@ test("a claim's Approve and Reject send only the change (D2) and say the server'
 });
 
 // The claim actions' words, as SalesManagerTab.jsx writes them — module scope, beside SpiffStatus (state §0.204).
+// Moved in §0.249 (the refusal sweep's review fixes, round 3, S3): a refusal's words are refusalWords' — the server's
+// with their ref, else "The server returned N." (it said its own lowercase "the server returned N", no period).
+// Moved in §0.249 (review fixes, round 4, S4): only the server's own refusal — a 4xx with its words — says "Not saved";
+// anything else (a 5xx, a gateway's page, a 4xx with no words) says the claim may have been saved, in refusalWords' words.
+// Moved in §0.249 (review fixes, last pass, F4): the test is the tab's one, ownRefusal — the same 4xx, its error a string, trimmed — read by claimRefused.
 const CLAIM_REFUSED = [
-    "const claimRefused = (done, d, status) => (status < 500",
-    "    ? `Not ${done} \\u2014 ${d?.error || `the server returned ${status}`}${d?.requestId ? ` (ref ${d.requestId})` : ''}`",
-    "    : `The server returned ${status}${d?.error ? ` \\u2014 ${d.error}${d.requestId ? ` (ref ${d.requestId})` : ''}` : ''}. Reload the page to see whether the claim was ${done}.`);",
+    "const ownRefusal = (status, d) => status >= 400 && status < 500 && typeof d?.error === 'string' && !!d.error.trim();",
+    "const claimRefused = (done, d, status) => (ownRefusal(status, d)",
+    "    ? `Not ${done} — ${refusalWords({ status }, d)}`",
+    "    : `The claim may have been ${done} — reload the page to see whether it was: ${refusalWords({ status }, d)}`);",
 ];
 const CLAIM_UNANSWERED = "const claimUnanswered = (done) => `No answer from the server \\u2014 reload the page to see whether the claim was ${done}.`;";
 
-test("the claim actions' words, run as written: a refusal says 'Not saved' / 'Not deleted' and the server's words, with its log ref when it sent one; a server error (5xx), or an answer with no words, says the status and to reload and see — the write may have landed; a lost answer says to reload and see, never 'unchanged'; at module scope, and Approve, Reject and Delete each say them (review F2, F6)", () => {
+test("the claim actions' words, run as written: only the server's own refusal — a 4xx with its words — says 'Not saved' / 'Not deleted' and those words, with its log ref when it sent one; anything else — a server error (5xx), a gateway's page, a 4xx with no words — says the claim may have been saved or deleted and to reload and see, in refusalWords' words, for the write may have landed; a lost answer says to reload and see, never 'unchanged'; at module scope, and Approve, Reject and Delete each say them (review F2, F6; §0.249 round 4)", () => {
     const m = smt();
     order(m, ...CLAIM_REFUSED, CLAIM_UNANSWERED);
     for (const line of [...CLAIM_REFUSED, CLAIM_UNANSWERED]) once(m, line);
     const at = m.indexOf(`\n${CLAIM_REFUSED[0]}\n`);
     assert.ok(at > 0 && at < m.indexOf('\nfunction AdminTab({'), 'column 0, above AdminTab');
     assert.ok(!between(m, 'function AdminTab({', '\n}\n').includes('const claimRefused'), 'never declared inside the tab');
-    const { claimRefused, claimUnanswered } = new Function(`${[...CLAIM_REFUSED, CLAIM_UNANSWERED].join('\n')}\nreturn { claimRefused, claimUnanswered };`)();
+    const { claimRefused, claimUnanswered } = new Function('refusalWords', `${[...CLAIM_REFUSED, CLAIM_UNANSWERED].join('\n')}\nreturn { claimRefused, claimUnanswered };`)(refusalWords);
     assert.equal(claimRefused('saved', { error: 'Only managers and admins can approve or reject claims' }, 403), 'Not saved — Only managers and admins can approve or reject claims');
     assert.equal(claimRefused('saved', { error: 'Claim not found in your organization' }, 404), 'Not saved — Claim not found in your organization', 'a claim deleted since the list loaded');
     assert.equal(claimRefused('deleted', { error: 'id required', requestId: 'req_4' }, 400), 'Not deleted — id required (ref req_4)');
+    // Moved in §0.249 (review fixes, round 4, S4): the 5xx and the wordless 4xx say the claim may have been saved.
     assert.equal(claimRefused('saved', { error: 'Internal server error', requestId: 'req_5' }, 500),
-        'The server returned 500 — Internal server error (ref req_5). Reload the page to see whether the claim was saved.',
+        'The claim may have been saved — reload the page to see whether it was: Internal server error (ref req_5)',
         "a 500 is not 'not saved' — the write may have landed; its ref finds the function's log line");
-    assert.equal(claimRefused('saved', { error: 'Internal server error' }, 500), 'The server returned 500 — Internal server error. Reload the page to see whether the claim was saved.');
-    assert.equal(claimRefused('deleted', {}, 502), 'The server returned 502. Reload the page to see whether the claim was deleted.', 'a gateway error with no words');
-    assert.equal(claimRefused('saved', {}, 403), 'Not saved — the server returned 403', 'a refusal with no words of its own writes nothing: not done, never "reload and see"');
+    assert.equal(claimRefused('saved', { error: 'Internal server error' }, 500), 'The claim may have been saved — reload the page to see whether it was: Internal server error');
+    assert.equal(claimRefused('deleted', {}, 502), 'The claim may have been deleted — reload the page to see whether it was: The server returned 502.', 'a gateway error with no words');
+    assert.equal(claimRefused('saved', {}, 403), 'The claim may have been saved — reload the page to see whether it was: The server returned 403.', 'a 4xx with no words of its own proves nothing was written: it may have been — reload and see, never "Not saved" (§0.249 round 4)');
     assert.equal(claimUnanswered('deleted'), 'No answer from the server — reload the page to see whether the claim was deleted.', 'a lost answer: the delete may have landed');
     assert.ok(!m.includes('The claim is unchanged'), "REGRESSION: a lost answer read 'unchanged' — the write may have landed (review F2)");
     assert.equal(count(m, 'claimRefused('), 2, 'Approve / Reject and Delete');
@@ -801,7 +819,7 @@ test("the suites: every suite's 'graded by the harness' pin reads the SUITES val
             pins.push({ f, src, line: src.slice(from, src.indexOf('\n', hit.index)).trim() });
         }
     }
-    assert.ok(pins.length >= 17, `the scan finds the suites' pins — seventeen since §0.211 (a scan that finds none proves nothing): ${pins.length}`);
+    assert.ok(pins.length >= 32, `the scan finds the suites' pins — seventeen since §0.211 (a scan that finds none proves nothing): ${pins.length}`);
     for (const { f, src, line } of pins) {
         assert.equal(line, `assert.ok(suites.includes('tests/${f}'), 'SUITES runs this file');`, `${f}: its own path, looked for in the SUITES value`);
         assert.ok(src.includes(SUITES_PARSE), `${f}: suites is the SUITES line's value, split on spaces`);

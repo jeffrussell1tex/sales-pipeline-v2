@@ -221,7 +221,7 @@ const isNamed = (h) => NAMED.some((n) => n.file === h.file && n.kind === h.kind 
 
 test('THE GUARD — no rounded box under src scrolls itself (6 px and up), and one that holds a scroller clips', () => {
     const files = srcFiles();
-    assert.ok(files.length > 150, 'the walk sees the tree');
+    assert.ok(files.length > 241, 'the walk sees the tree');
     const all = files.flatMap((f) => breaches(f, read(f)));
     assert.deepEqual(all.filter((h) => !isNamed(h)).map((h) => `${h.file}:${h.line} ${h.kind}`), [], 'a rounded box that scrolls itself, or holds a scroller unclipped, paints a scrollbar square over its corners');
     for (const n of NAMED) assert.ok(all.some((h) => isNamed(h) && h.file === n.file && h.text.includes(n.anchor)), `${n.file}: the named box (${n.reason.slice(0, 40)}…) — gone, or breaching another way`);

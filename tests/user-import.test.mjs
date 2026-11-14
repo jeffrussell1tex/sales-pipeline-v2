@@ -187,8 +187,9 @@ test('the Users page: Import CSV opens the importer; the mockup, its route and t
 
 test('MFA status: loading is not failure — the card and the Security page say which', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
-    assert.ok(s.includes('if (!res.ok) { if (!cancelled) setMfaFailed(true); return; }'));
-    assert.ok(s.includes('} catch (e) { if (!cancelled) setMfaFailed(true); }'));
+    // Moved (§0.249, review fixes round 4 — U4): a failed read sets its words (readRefusal, failureWords), not `true`.
+    assert.ok(s.includes('if (!res.ok) { const why = await readRefusal(res); if (!cancelled) setMfaFailed(why); return; }'));
+    assert.ok(s.includes('} catch (e) { if (!cancelled) setMfaFailed(failureWords(e)); }'));
     assert.ok(s.includes("sub:   !mfaByEmail ? (mfaFailed ? 'unknown — could not read Clerk' : 'loading…')"),
         'REGRESSION: the card says Clerk is not reachable while the fetch is on its way');
     assert.ok(s.includes('const loading     = mfaData === null && !mfaFailed;'), 'REGRESSION: the Security page says Loading… after the fetch failed');

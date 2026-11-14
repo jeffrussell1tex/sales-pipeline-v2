@@ -659,7 +659,7 @@ const G1_BLIND = [
 ];
 
 test('G1: no list of typed-text matches under src is cut without its count — but what is named here, with its reason', () => {
-    assert.ok(SRC.length > 150, `the walk reached the tree (${SRC.length})`);
+    assert.ok(SRC.length > 241, `the walk reached the tree (${SRC.length})`);
     // only a file that cuts a list is parsed (the harness runs this file for every mutant)
     const hits = SRC.filter((f) => /\.slice\(\s*0\s*,/.test(read(f))).flatMap((f) => silentCuts(read(f)).map((h) => ({ ...h, file: f })));
     const unexplained = hits.filter((h) => !G1_ALLOWED.some(([file, text]) => h.file === file && h.text === text));

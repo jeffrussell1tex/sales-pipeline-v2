@@ -173,7 +173,9 @@ test('LEADS: the write controls are the CRM write roles\' alone', () => {
 
     const detail = between(s, 'const CockpitDetail = (', 'const CockpitView');
     assert.ok(detail.includes("{canEdit && <div style={{ display:'flex', gap:6, marginTop:12, flexWrap:'wrap' }}>\n                    <button onClick={() => convertLead && convertLead(lead)}"), 'Convert, Email, Call, Schedule');
-    assert.ok(detail.includes('{canEdit && <button onClick={e => {\n                        if (!lead) return;'), 'Do it');
+    // Moved in §0.249 (the review's round 2): over a requests list that did not load, a rep's unassigned New lead offers
+    // no Request — the gate is still canEdit's.
+    assert.ok(detail.includes("{canEdit && !((requestsUnread || requestsChecking) && lead.status === 'New' && !lead.assignee) && <button onClick={e => {\n                        if (!lead) return;"), 'Do it');
     assert.ok(detail.includes(') : !canEdit ? null : myPending ? ('), 'Request assignment / Cancel request');
     assert.ok(detail.includes("!canEdit ? 'Waiting to be assigned'"), 'the next action reads as a reader\'s');
 });

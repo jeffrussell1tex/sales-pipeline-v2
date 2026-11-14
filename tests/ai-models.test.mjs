@@ -214,7 +214,7 @@ const strayIds = (files) => files.flatMap(([file, src]) => {
 
 test('THE GUARD: no model id is written in netlify/functions or src outside src/utils/aiModels.js — Ask AI\'s own model named with its reason', () => {
     const files = [...filesUnder('netlify/functions/'), ...filesUnder('src/')].map((f) => [f, read(f)]);
-    assert.ok(files.length > 200, `the files were read (${files.length})`);
+    assert.ok(files.length > 347, `the files were read (${files.length})`);
     assert.deepEqual(strayIds(files), []);
     for (const [file, ids] of Object.entries(NAMED)) for (const id of ids) assert.ok(read(file).includes(`'${id}'`), `${file} still holds ${id}, or the name goes`);
 });
@@ -336,7 +336,10 @@ test('the Features panel: the list\'s models, each marked by the key check; "Ava
 test('Score all deals: offered by "Available to"; keeps the score as the window does; says what went unscored; the button back after an org switch', () => {
     const p = read('src/Tabs/PipelineTab.jsx');
     const bulk = between(p, 'const handleBulkScore = async () => {', '// ── Export CSV');
-    assert.ok(bulk.includes('const score = res.ok ? storedScore(data) : null;'), 'REGRESSION: a refusal counted as done, transport flags kept');
+    // Moved in §0.249 (the refusal sweep, Part 12): the score is read only in the landed branch of the ok check.
+    before(bulk, 'if (!res.ok) {', '} else {', 'REGRESSION: a refusal counted as done');
+    before(bulk, '} else {', 'const score = storedScore(data);', 'REGRESSION: a refusal counted as done, transport flags kept');
+    assert.equal(bulk.split('storedScore(').length - 1, 1, 'one score read, in the landed branch');
     assert.ok(bulk.includes('setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o));'));
     assert.ok(bulk.includes('if (kept < active.length) setBulkScoreNote(`Scored ${kept} of ${active.length} deals. ${firstCause}`);'));
     before(bulk, '} finally {', 'setBulkScoring(false);', 'the button comes back however the loop ends');

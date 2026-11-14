@@ -100,7 +100,7 @@ const saveProfileKeys = (src) => {
 
 test('every key the profile panel sends through saveProfile is self-editable — nothing it saves is dropped on the server', () => {
     const keys = saveProfileKeys(read('src/components/layout/AppHeader.jsx'));
-    assert.ok(keys.size >= 8, `expected the panel's saves to be found — got ${[...keys].join(', ')}`);
+    assert.ok(keys.size >= 11, `expected the panel's saves to be found — got ${[...keys].join(', ')}`);
     for (const k of keys) {
         assert.ok(SELF_EDITABLE_KEYS.includes(k), `AppHeader saves "${k}" but the server would drop it`);
     }

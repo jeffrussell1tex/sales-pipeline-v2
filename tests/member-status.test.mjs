@@ -62,8 +62,8 @@ test('deactivate and reactivate — from the row menu and the profile — send o
     const helper = screen.slice(at, screen.indexOf('\n};', at) + 3);
     assert.ok(helper.includes("method:'PUT'"));
     assert.ok(helper.includes('body:JSON.stringify({ id, active }),'), 'REGRESSION: a whole row is sent with the flag again');
-    assert.ok(helper.includes("    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));"), 'a refusal is shown, not swallowed');
-    assert.ok(helper.includes('    return d.user || { id, active };'), "the server's row is what the screen keeps");
+    assert.ok(helper.includes('    if (!res.ok) throw new Error(await readRefusal(res));\n    const stored = await res.json().catch(() => null);'), 'a refusal is shown, not swallowed — in the server\'s words, the ok check first (refusal sweep Part 12)');
+    assert.ok(helper.includes('    return stored?.user || { id, active };'), "the server's row is what the screen keeps");
     // Deactivate sent the whole profile form, saving any unsaved edit with it.
     assert.ok(!screen.includes('id: user.id, active: false })') && !screen.includes('id: u.id, active: false })'),
         'REGRESSION: a deactivate builds its own PUT again');

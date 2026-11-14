@@ -4,6 +4,8 @@ import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { receiptFromError, describeReceipt, describeOwners } from '../../utils/importReceipt';
+import { failureWords } from '../../utils/refusalWords.js';
 
 const LEAD_FIELDS = [
     { key: 'firstName',    label: 'First Name',     required: true },
@@ -150,11 +152,23 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
         setParseError('');
         setImporting(true);
         try {
-            await onImport(preview.leads);
-            setImportStats({ added: preview.added, skipped: preview.skipped, errors: preview.errors });
+            const receipt = await onImport(preview.leads);
+            // The owner names the server matched to no member, or to more than one (§0.249, the review's round 3): said on
+            // the Results as the other three importers say them (describeOwners; state §0.216) — never a failure, so a
+            // clean run is still "Import Complete" (isClean), with the lines beneath it. They were never said here.
+            setImportStats({ added: receipt ? receipt.created : preview.added, skipped: preview.skipped, errors: preview.errors, owners: describeOwners(receipt) });
             setStep('results');
         } catch (err) {
-            setParseError('Import failed: ' + err.message);
+            // The handler's receipt (§0.249, the review's round 2): once any lead landed, the Results say how many in the
+            // house words (describeReceipt) and offer no second Import — Preview's Import re-sent the leads that had
+            // landed. Nothing landed: Preview says why and Import may try again. No receipt: a failure in plain words.
+            const receipt = receiptFromError(err);
+            if (receipt && receipt.created > 0) {
+                setImportStats({ added: receipt.created, failed: receipt.failed, said: describeReceipt(receipt, 'lead'), skipped: preview.skipped, errors: preview.errors, owners: describeOwners(receipt) });
+                setStep('results');
+            } else {
+                setParseError(`Import failed — ${receipt ? describeReceipt(receipt, 'lead') : failureWords(err)}`);
+            }
         } finally {
             setImporting(false);
         }
@@ -356,13 +370,22 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                 {step === 'results' && importStats && (
                     <>
                     <div style={{ ...body, textAlign:'center', padding:'2rem' }}>
-                        <div style={{ fontSize:'3rem', marginBottom:'0.75rem' }}>✅</div>
-                        <h3 style={{ fontSize:'1.125rem', fontWeight:'800', color:T.ink, marginBottom:'0.5rem' }}>Import Complete</h3>
+                        {/* Some leads landed and a later request failed (§0.249, the review's round 2): how many were
+                            saved, in the house words — this step has no Import, so none is sent twice. */}
+                        <div style={{ fontSize:'3rem', marginBottom:'0.75rem' }}>{importStats.said ? '⚠️' : '✅'}</div>
+                        <h3 style={{ fontSize:'1.125rem', fontWeight:'800', color: importStats.said ? T.warn : T.ink, marginBottom:'0.5rem' }}>{importStats.said ? 'Partially Imported' : 'Import Complete'}</h3>
+                        {importStats.said && <p style={{ color:T.inkMid, fontSize:'0.8125rem', margin:'0 auto', maxWidth:480, overflowWrap:'anywhere' }}>{importStats.said}</p>}
                         <div style={{ display:'flex', gap:'1rem', justifyContent:'center', margin:'1.25rem 0' }}>
                             <div style={{ background:`${T.ok}18`, border:`1px solid ${T.ok}40`, borderRadius:'10px', padding:'0.875rem 1.25rem', textAlign:'center' }}>
                                 <div style={{ fontSize:'1.5rem', fontWeight:'800', color:T.ok }}>{importStats.added}</div>
                                 <div style={{ fontSize:'0.75rem', color:T.ok, fontWeight:'600' }}>Leads Imported</div>
                             </div>
+                            {importStats.failed > 0 && (
+                                <div style={{ background:`${T.danger}14`, border:`1px solid ${T.danger}33`, borderRadius:'10px', padding:'0.875rem 1.25rem', textAlign:'center' }}>
+                                    <div style={{ fontSize:'1.5rem', fontWeight:'800', color:T.danger }}>{importStats.failed}</div>
+                                    <div style={{ fontSize:'0.75rem', color:T.danger, fontWeight:'600' }}>Did Not Save</div>
+                                </div>
+                            )}
                             {importStats.skipped > 0 && (
                                 <div style={{ background:`${T.warn}18`, border:`1px solid ${T.warn}40`, borderRadius:'10px', padding:'0.875rem 1.25rem', textAlign:'center' }}>
                                     <div style={{ fontSize:'1.5rem', fontWeight:'800', color:T.warn }}>{importStats.skipped}</div>
@@ -370,6 +393,11 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                                 </div>
                             )}
                         </div>
+                        {/* The owner names the server matched to no member, or to more than one (§0.249, round 3; state
+                            §0.216): those leads were saved with no owner — said as the other importers say them. */}
+                        {(importStats.owners || []).map(line => (
+                            <p key={line} style={{ color:T.warn, fontSize:'0.8125rem', margin:'0 auto 0.75rem', maxWidth:480, overflowWrap:'anywhere' }}>{line}</p>
+                        ))}
                         {importStats.errors.length > 0 && (
                             <div style={{ background:`${T.warn}18`, borderRadius:'8px', padding:'0.75rem', textAlign:'left', fontSize:'0.75rem', color:T.warn }}>
                                 <strong>Skipped rows:</strong> {importStats.errors.slice(0,3).join('; ')}{importStats.errors.length>3?` (+${importStats.errors.length-3} more)`:''}

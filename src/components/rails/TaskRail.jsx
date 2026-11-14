@@ -20,8 +20,10 @@ import { leaveOut } from '../../utils/leaveOut.js';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // A refusal's words to end a sentence with: the server's own, or the connection when nothing answered — the
-// full stop the sentence's (state §0.199).
-const said = (words) => { const s = String(words || 'check your connection and try again'); return s.endsWith('.') ? s.slice(0, -1) : s; };
+// full stop the sentence's (state §0.199). Nothing answered is the activity save's catch (useActivities: quiet, it
+// answers nothing over a request that never left) — the house words (§0.249, docs/design/refusal-sweep Q4), never
+// "check your connection and try again".
+const said = (words) => { const s = String(words || 'The server could not be reached.'); return s.endsWith('.') ? s.slice(0, -1) : s; };
 
 function SectionHeading({ label }) {
     return (

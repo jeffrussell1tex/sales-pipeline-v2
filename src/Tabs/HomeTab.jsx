@@ -155,7 +155,7 @@ export default function HomeTab() {
         getStageColor,
         calculateDealHealth, getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
-        calendarEvents, calendarConnected, calendarLoading,
+        calendarEvents, calendarConnected, calendarLoading, calendarError, fetchCalendarEvents, calendarRead,
         setActiveTab, isMobile,
         coachingNotes, coachingNotesError, markCoachingNoteRead, currentUserId, setPressNotices,
         myProfile, myProfileHere, leads,
@@ -817,8 +817,26 @@ export default function HomeTab() {
                         than shown as a calendar, so on a day with no meetings there was
                         previously nothing here at all — a freshly connected calendar
                         looked identical to no calendar. This strip is the one place that
-                        always says which it is. */}
-                    {!calendarConnected ? (
+                        always says which it is. A read that failed says so — never
+                        "Connect", never a count (state §0.249, review fixes). */}
+                    {calendarError ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.danger, flexShrink: 0 }}/>
+                            <div role="alert" style={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{calendarError}</div>
+                            {fetchCalendarEvents && (
+                                <button onClick={() => fetchCalendarEvents()} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Try again</button>
+                            )}
+                        </div>
+                    ) : !calendarConnected && (calendarLoading || !calendarRead) ? (
+                        // A read in flight with no connection known — the first, or a Try again after one that failed
+                        // (state §0.249, review fixes, round 2): checking, never "Connect" over a read not yet answered.
+                        // Nor over a calendar never read in this org (round 3): Home's first frame, before App's effect
+                        // starts its read (App.jsx, the Home tab's auto-fetch), says checking too.
+                        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.inkMuted, flexShrink: 0 }}/>
+                            <div style={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Checking your calendar…</div>
+                        </div>
+                    ) : !calendarConnected ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
                             <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
                             <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>

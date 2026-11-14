@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
+import { readRefusal, failureWords } from '../../utils/refusalWords.js';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
@@ -75,6 +76,8 @@ export default function AppHeader({
         setCsvImportType, setShowCsvImportModal,
         quickLogOpen, setQuickLogOpen,
         calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
+        setCalendarConnected, setCalendarEvents,
+        calendarRead, dropCalendarReads,
         calConnectResult, setCalConnectResult,
         profileTabAsk, setProfileTabAsk,
         activeOrgId,
@@ -219,13 +222,17 @@ export default function AppHeader({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: myProfile.id, ...updates }),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!stillOrg(askedOrg)) return;
+            // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal in the server's words with
+            // their ref, else "The server returned N."; a landed answer that cannot be read keeps the change as sent.
             if (!res.ok) {
+                const why = await readRefusal(res);
+                if (!stillOrg(askedOrg)) return;
                 setMyProfile(prev => ({ ...(prev||{}), ...undo }));
-                setProfileError(`Not saved — ${data.error || `the server returned ${res.status}`}`);
+                setProfileError(`Not saved — ${why}`);
                 return;
             }
+            const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (data.user) {
                 setMyProfile(prev => ({ ...(prev||{}), ...data.user }));
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === data.user.id ? { ...u, name: data.user.name } : u) }));
@@ -233,7 +240,7 @@ export default function AppHeader({
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
             setMyProfile(prev => ({ ...(prev||{}), ...undo }));
-            setProfileError('Not saved — the change did not reach the server. Try again.');
+            setProfileError(`Not saved — ${failureWords(err)}`);
         } finally {
             setProfileSaving(false);
         }
@@ -255,7 +262,21 @@ export default function AppHeader({
     const [calConn, setCalConn] = useState(null);
     const [calConnLoaded, setCalConnLoaded] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
-    const [calActionError, setCalActionError] = useState('');
+    const [calActionErrorKept, setCalActionError] = useState('');
+    // A Disconnect that landed is known (state §0.249, review fixes, round 2): the tab says "Disconnected" whatever the
+    // re-read after it does — never "Connected · syncing" over a connection just deleted. This org's only.
+    const [calDisconnectedKept, setCalDisconnected] = useState(false);
+    // The org the two above were kept for (state §0.249, review fixes, round 4). The header is not remounted by a switch,
+    // and its effects below forget both only after the switch's own render has painted. Until this names the org on
+    // screen, that render draws neither: no "Disconnected" and no "Not disconnected — …" of the last org.
+    const [calTabOrg, setCalTabOrg] = useState(activeOrgId);
+    const calTabHere = !!activeOrgId && calTabOrg === activeOrgId;
+    const calActionError = calTabHere ? calActionErrorKept : '';
+    const calDisconnected = calTabHere && calDisconnectedKept;
+    // No connection known and none read — the read failed, or one is in flight (state §0.249, review fixes): the tab
+    // says it could not be read, or is checking — never "Not connected", OFF or "Connect Google Calendar" — and offers
+    // Refresh. A calendar never read in this org is unread too (round 3): "Checking…" until its first read lands.
+    const calUnread = !calendarConnected && !calDisconnected && (!!calendarError || calendarLoading || !calendarRead);
 
     const loadCalConnection = React.useCallback(async () => {
         const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
@@ -273,6 +294,11 @@ export default function AppHeader({
     useEffect(() => {
         if (showProfilePanel && profilePanelTab === 'calendar' && !calConnLoaded) loadCalConnection();
     }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);
+    // A calendar never read in this org (state §0.249, review fixes, round 3): the Calendar tab starts a read when none
+    // has landed and none is in flight — Home's effect reads only on Home. A failed one keeps its words until Refresh.
+    useEffect(() => {
+        if (showProfilePanel && profilePanelTab === 'calendar' && !calendarRead && !calendarLoading && !calendarError && fetchCalendarEvents) fetchCalendarEvents();
+    }, [showProfilePanel, profilePanelTab, calendarRead, calendarLoading, calendarError]);
 
     // Landing back from a calendar Connect that started on Home or in this panel
     // (state §0.97, item 30): App.jsx opens the panel; this selects the Calendar
@@ -299,10 +325,13 @@ export default function AppHeader({
         const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         try {
             const res = await dbFetch('/.netlify/functions/email-inbound');
-            const data = await res.json().catch(() => ({}));
+            // The ok check first (state §0.249): the server's words with their ref, else "The server returned N." — an
+            // answer that cannot be read said as such, never "Email logging is not available on this site.".
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const data = await res.json();
             if (!stillOrg(askedOrg)) return;
-            setMyBcc(res.ok ? data : { configured: false, myAddress: null, error: data.error || `HTTP ${res.status}` });
-        } catch (e) { if (!stillOrg(askedOrg)) return; setMyBcc({ configured: false, myAddress: null, error: e.message }); }
+            setMyBcc(data && typeof data === 'object' ? data : { configured: false, myAddress: null, error: 'Its answer could not be read.' });
+        } catch (e) { if (!stillOrg(askedOrg)) return; setMyBcc({ configured: false, myAddress: null, error: failureWords(e) }); }
         setMyBccLoaded(true);
     }, []);
     useEffect(() => {
@@ -321,30 +350,50 @@ export default function AppHeader({
     // A refusal belongs to the save that drew it: gone when the panel opens or
     // closes, and on an org switch (the header is not remounted).
     useEffect(() => { setProfileError(''); }, [showProfilePanel, activeOrgId]);
+    // The calendar Disconnect's refusal likewise (state §0.249, review fixes): one org's words never stand on another
+    // org's Calendar tab, nor hide its calendarError.
+    useEffect(() => { setCalActionError(''); }, [showProfilePanel, activeOrgId]);
+    // A landed Disconnect is the org's it was pressed in: a switch forgets it, as it does calendarConnected.
+    useEffect(() => { setCalDisconnected(false); }, [activeOrgId]);
+    useEffect(() => { setCalTabOrg(activeOrgId); }, [activeOrgId]);   // the same commit as the two resets above (round 4)
     const copyMyBcc = async () => {
         if (!myBcc?.myAddress) return;
         try { await navigator.clipboard.writeText(myBcc.myAddress); setMyBccCopied(true); setTimeout(() => setMyBccCopied(false), 1800); }
         catch { setMyBccCopied(false); }
     };
 
+    // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal in the server's words with their
+    // ref, else "The server returned N."; a thrown failure in plain words. The header is not remounted by an org switch,
+    // so an answer for the org switched away from changes nothing.
     const disconnectCalendar = async () => {
-        if (!calConn) return;
+        if (!calConn || calendarLoading) return;   // not while a read is in flight (round 3): its answer would be stale
+        const askedOrg = requestOrg();
         setDisconnecting(true);
         setCalActionError('');
         try {
             const res = await dbFetch(
                 `/.netlify/functions/calendar-connections?id=${encodeURIComponent(calConn.id)}&scope=user`,
                 { method: 'DELETE' });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!stillOrg(askedOrg)) return;
             setCalConn(null);
-            // Re-fetch rather than assuming: this clears calendarConnected and the
-            // event list app-wide, so Home and the status strip update together.
+            // No read sent before the DELETE lands after it (round 3): its answer — connected, the deleted connection's
+            // events — is dropped, and the re-read below is the one kept.
+            dropCalendarReads();
+            // The connection is gone, whatever the re-read does (state §0.249, review fixes, round 2): not connected at
+            // once, its events with it, app-wide — a re-read that fails leaves "Disconnected" and its words, never the
+            // connection just deleted still "Connected · syncing".
+            setCalendarConnected(false);
+            setCalendarEvents([]);
+            setCalDisconnected(true);
+            // Re-fetch rather than assuming, so Home and the status strip read the
+            // server's word together.
             if (fetchCalendarEvents) await fetchCalendarEvents();
         } catch (e) {
-            setCalActionError(e.message);
+            if (stillOrg(askedOrg)) setCalActionError(`Not disconnected — ${failureWords(e)}`);
+        } finally {
+            setDisconnecting(false);
         }
-        setDisconnecting(false);
     };
 
     const panelTabBtn = (tab, label) => (
@@ -819,11 +868,15 @@ export default function AppHeader({
                                                 <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>Google Calendar</div>
                                                 <div style={{ fontSize: '0.75rem', marginTop: 2, fontFamily: T.sans,
                                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                                    color: calendarLoading ? T.inkMid : calendarConnected ? T.ok : T.inkMuted }}>
+                                                    color: calendarLoading ? T.inkMid : calendarConnected && !calendarError ? T.ok : T.inkMuted }}>
                                                     {calendarLoading
                                                         ? 'Checking…'
+                                                        : calUnread
+                                                            ? (calendarError ? 'Could not be read' : 'Checking…')
                                                         : calendarConnected
-                                                            ? (calConn?.calendarEmail || 'Connected · syncing')
+                                                            ? (calendarError ? 'Connected — the latest read failed' : (calConn?.calendarEmail || 'Connected · syncing'))
+                                                        : calDisconnected
+                                                            ? 'Disconnected'
                                                             : 'Not connected'}
                                                 </div>
                                                 {calendarConnected && calConn?.connectedAt && (
@@ -835,11 +888,11 @@ export default function AppHeader({
                                             <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, fontFamily: T.sans,
                                                 background: calendarConnected ? `${T.ok}1a` : `${T.inkMuted}1a`,
                                                 color: calendarConnected ? T.ok : T.inkMuted }}>
-                                                {calendarConnected ? 'ON' : 'OFF'}
+                                                {calendarConnected ? 'ON' : calUnread ? '—' : 'OFF'}
                                             </span>
                                         </div>
 
-                                        {calendarConnected && (
+                                        {calendarConnected && !calendarError && (
                                             <div style={{ fontSize: '0.75rem', color: T.inkMid, marginBottom: '0.875rem', fontFamily: T.sans }}>
                                                 {(calendarEvents || []).length > 0
                                                     ? `${calendarEvents.length} event${calendarEvents.length === 1 ? '' : 's'} in the next 7 days.`
@@ -859,6 +912,7 @@ export default function AppHeader({
                                         )}
 
                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            {!calUnread && (
                                             <button onClick={connectCalendar}
                                                 style={{ flex: 1, padding: '0.5rem 0.875rem', background: calendarConnected ? 'transparent' : T.ink,
                                                     color: calendarConnected ? T.inkMid : '#fbf8f3',
@@ -866,7 +920,8 @@ export default function AppHeader({
                                                     borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                                 {calendarConnected ? 'Reconnect' : 'Connect Google Calendar'}
                                             </button>
-                                            {calendarConnected && (
+                                            )}
+                                            {(calendarConnected || calUnread) && (
                                                 <button onClick={() => fetchCalendarEvents && fetchCalendarEvents()} disabled={calendarLoading}
                                                     style={{ padding: '0.5rem 0.875rem', background: 'transparent', color: T.inkMid,
                                                         border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem',
@@ -879,13 +934,14 @@ export default function AppHeader({
 
                                         {calendarConnected && (
                                             <button onClick={disconnectCalendar}
-                                                disabled={disconnecting || !calConn}
-                                                title={!calConn ? (calConnLoaded ? 'No stored connection found to disconnect' : 'Loading connection…') : undefined}
+                                                disabled={disconnecting || !calConn || calendarLoading}
+                                                title={!calConn ? (calConnLoaded ? 'No stored connection found to disconnect' : 'Loading connection…')
+                                                    : calendarLoading && !disconnecting ? 'The calendar is being read — Disconnect is offered once that read answers.' : undefined}
                                                 style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem 0.875rem',
                                                     background: 'transparent', color: T.danger, border: `1px solid ${T.border}`,
                                                     borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 600, fontFamily: T.sans,
-                                                    cursor: (disconnecting || !calConn) ? 'default' : 'pointer',
-                                                    opacity: (disconnecting || !calConn) ? 0.5 : 1 }}>
+                                                    cursor: (disconnecting || !calConn || calendarLoading) ? 'default' : 'pointer',
+                                                    opacity: (disconnecting || !calConn || calendarLoading) ? 0.5 : 1 }}>
                                                 {disconnecting ? 'Disconnecting…' : 'Disconnect calendar'}
                                             </button>
                                         )}

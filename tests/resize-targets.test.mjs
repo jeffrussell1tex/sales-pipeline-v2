@@ -151,9 +151,9 @@ const NAMED = new Map([
 
 test('THE GUARD — every handler a window event reaches under src asks for a node before it reads its event\'s target', () => {
     const files = srcFiles();
-    assert.ok(files.length > 150, 'the walk sees the tree');
+    assert.ok(files.length > 241, 'the walk sees the tree');
     const all = files.flatMap((f) => listeners(f, read(f)));
-    assert.ok(all.length >= 10, `the walk finds the listeners (${all.length}; ten, every one a resize, when §0.212 was written)`);
+    assert.ok(all.length >= 13, `the walk finds the listeners (${all.length}; ten, every one a resize, when §0.212 was written)`);
     assert.deepEqual(report(all), [], 'a resize hands the window to a node-only read — it throws, and the menu stays open');
     assert.deepEqual(unfound(all), [...NAMED.keys()], 'a handler the parse cannot find is named with its reason');
 });

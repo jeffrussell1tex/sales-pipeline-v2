@@ -76,7 +76,8 @@ test('network failure resolves rather than throwing', async () => {
     const r = await dbWrite('/x', { method: 'POST' });
     assert.equal(r.ok, false);
     assert.equal(r.status, 0);
-    assert.match(r.error, /Network error/);
+    // Moved pin (§0.249, docs/design/refusal-sweep Q4): the house words — it said "Network error — the change was not saved."
+    assert.equal(r.error, 'The server could not be reached.');
 });
 
 test('a missing Clerk token does not prevent the call', async () => {

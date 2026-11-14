@@ -19,12 +19,14 @@ import { readRefusal, failureWords } from '../utils/refusalWords.js';
 const URL = '/.netlify/functions/coaching-notes';
 
 // One write's answer: the ok check first, then — for a write whose answer carries the note (`body`) — the body:
-// { ok: true, data, status } or { ok: false, error }. Never throws. Each write sets its list only after its own org
-// check, in its own function (tests/late-answers.test.mjs reads it there).
+// { ok: true, data, status } or { ok: false, status, error } (no status when it never answered). Never throws. Each
+// write sets its list only after its own org check, in its own function (tests/late-answers.test.mjs reads it there).
 const answered = async (send, { body = true } = {}) => {
     try {
         const res = await send();
-        if (!res.ok) return { ok: false, error: await readRefusal(res) };
+        // The status beside the words (§0.249, the review's fixes, last pass): a screen tells the server's own refusal (a
+        // 4xx in its words — nothing written) from an answer that may have written it (Sales Manager's noteNotDeleted).
+        if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };
         return { ok: true, data: body ? await res.json() : null, status: res.status };
     } catch (e) { return { ok: false, error: failureWords(e) }; }
 };

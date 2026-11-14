@@ -91,7 +91,7 @@ const SETTINGS = fileURLToPath(new URL('src/Tabs/settings/', ROOT));
 
 test('every panel that takes a save slot hands its save over through useRegisterSave — and nothing else assigns the slot', () => {
     const panels = walk(SETTINGS).filter((f) => /settingsSaveRef/.test(readFileSync(f, 'utf8')) && !f.endsWith('useRegisterSave.js'));
-    assert.ok(panels.length >= 18, `the scan found the panels (${panels.length})`);
+    assert.ok(panels.length >= 26, `the scan found the panels (${panels.length})`);
     for (const f of panels) {
         const s = code(readFileSync(f, 'utf8'));
         assert.ok(/useRegisterSave\(settingsSaveRef, dirty, handleSave(Ai)?\);/.test(s), `${f} does not hand over its save through useRegisterSave`);

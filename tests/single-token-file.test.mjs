@@ -75,7 +75,7 @@ test('every file that reads T.<key> imports T from src/tokens.js (directly, via 
     const readers = files.filter(f => rel(f) !== 'src/tokens.js' && /\bT\.[A-Za-z_]/.test(read(f).split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n')));
     const missing = readers.filter(f => !IMPORT_RE.test(read(f))).map(rel);
     assert.deepEqual(missing, [], 'a T-reader with no import of T either crashes or reads a local copy');
-    assert.ok(readers.length >= 60, `sanity: expected the whole app to read T (found ${readers.length} files)`);
+    assert.ok(readers.length >= 113, `sanity: expected the whole app to read T (found ${readers.length} files)`);
 });
 
 test('every T.<key> read in src/ names a key src/tokens.js has (no alias keys, nothing silently undefined)', () => {

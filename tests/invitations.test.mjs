@@ -75,7 +75,7 @@ test('the Pending invites page lists the real invitations, with Clerk\'s dates, 
 test('Revoke and Resend are real calls — Revoke withdraws the invitation in Clerk, Resend sends a fresh one', () => {
     const revoke = between(screen, 'const revokeInvite = async (email) => {', '\n};');
     assert.ok(revoke.includes("body:JSON.stringify({ action:'revoke-invite', email }),"), 'REGRESSION: Revoke calls nothing again');
-    assert.ok(revoke.includes("if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));"), 'a refusal is shown');
+    assert.ok(revoke.includes("if (!res.ok) throw new Error(await readRefusal(res));\n    return res.json().catch(() => null);"), 'a refusal is shown, in the server\'s words (refusal sweep Part 12) — the body read only after the ok check');
     const resend = between(screen, 'const resendInvite = async (row) => {', '\n};');
     assert.ok(resend.includes("invites:[{ email: row.email, role: row.role || 'User', team: row.team || null, territory: row.territory || null }]"), 'the row\'s role travels with the resend');
     assert.ok(resend.includes("if (refused) throw new Error(refused.error || 'Clerk refused the invitation');"), 'a per-invite refusal is shown — the server answers it in `errors`');
@@ -84,7 +84,9 @@ test('Revoke and Resend are real calls — Revoke withdraws the invitation in Cl
     // Since §0.222 the server takes the row's id off the org's lists and answers them; the page applies the answer —
     // the row off the roster, the lists as written — only while the org that asked is still on screen.
     assert.ok(page.includes('const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.222)'));
-    assert.ok(page.includes('if (!stillOrg(askedOrg)) return;\n                setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the Pending page\'s revoke'), 'the roster on screen loses the row the server removed');
+    // Moved in the §0.249 review's fixes (U): only a list that was read loses the row — an unread one (false) stays unread.
+    assert.ok(page.includes('if (!stillOrg(askedOrg)) return;\n                setClerkInvites(prev => Array.isArray(prev) ? prev.filter(inv => inv.email !== e.email) : prev);\n                if (!r) { setActionError(REVOKED_UNREAD); return; }\n                setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the Pending page\'s revoke'),
+        'the roster on screen loses the row the server removed; a landed answer that cannot be read is said (refusal sweep Part 12)');
     assert.ok(!screen.includes('dropRevokedRow'), 'REGRESSION: a screen writes the team list of its own after a revoke');
     assert.ok(page.includes('try { await resendInvite(e.row); await loadInvites(); }'), 'Resend, then Clerk\'s new dates');
     assert.ok(page.includes('{e.row && <PeopleSecBtn onClick={() => doResend(e)}>'), 'Resend only for a roster row — an invitation made in Clerk carries no app role');

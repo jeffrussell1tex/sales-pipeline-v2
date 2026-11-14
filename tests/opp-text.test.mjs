@@ -74,6 +74,7 @@ test('the Actions report parses the recommendation-log Response and refuses a no
     assert.ok(i > 0);
     const after = src.slice(i, i + 400);
     assert.match(after, /if \(!res\.ok\) throw new Error/, 'a 4xx/5xx must not render as "no data"');
-    assert.match(after, /setData\(await res\.json\(\)\)/, 'the body, not the Response');
+    // Moved in §0.249 (the refusal sweep, Part 12): the body read, checked for its summary, then set.
+    assert.match(after, /const body = await res\.json\(\);[\s\S]*setData\(body\)/, 'the body, not the Response');
     assert.doesNotMatch(src, /const json = await dbFetch\(`\/\.netlify\/functions\/recommendation-log/);
 });

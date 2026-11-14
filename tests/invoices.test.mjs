@@ -352,7 +352,7 @@ test('invoices.mjs: technician 403, every read and write by org, totals recomput
     assert.ok(f.includes("if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot view invoices.' });"));
     assert.ok(f.includes("const prefix = `INV-${year}-`;"));
     assert.ok(f.includes("return prefix + String(max + 1).padStart(4, '0');"));
-    assert.ok((f.match(/eq\(invoices\.orgId, orgId\)/g) || []).length >= 8, 'every invoice statement carries the org');
+    assert.ok((f.match(/eq\(invoices\.orgId, orgId\)/g) || []).length >= 9, 'every invoice statement carries the org');
     assert.ok(f.includes('lineItems: lines, ...totalsFor(lines, taxRate),'), 'the client never sets a total');
     assert.ok(f.includes("if (editing.length && !isInvoiceEditable(current.status)) {"));
     assert.ok(f.includes('if (!canTransition(current.status, to)) {'));
@@ -382,8 +382,9 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
     // The accept names only the status since §0.156 — the server merges over the stored quote.
     assert.ok(s.includes("const handleAccept          = () => moveQuote(activeQuote, 'Accepted');"));
     assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'), 'a move carries no copy of the lines');
-    assert.ok(s.includes("if (res.status === 409 && data.job) { setLinkedJob(data.job); return; }"), 'an existing job is adopted');
-    assert.ok(s.includes("if (!res.ok || !data.job) { setJobError(data.error || `The job was not created (HTTP ${res.status}).`); return; }"), 'a refusal is shown, never logged');
+    // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal read once — RUN in tests/refusal-sweep.test.mjs Part 12b.
+    assert.ok(s.includes("if (res.status === 409 && refused?.job) { setLinkedJob(refused.job); setJobUnread(false); return; }"), 'an existing job is adopted');
+    assert.ok(s.includes("setJobError(`The job was not created — ${refusalWords(res, refused)}`);"), 'a refusal is shown, never logged');
     assert.ok(s.includes("}, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);"), 'the read re-keys on the quote and the switch');
     assert.ok(s.includes("if (!activeQuote || !quoteCanBecomeJob(activeQuote) || !settings?.dispatchEnabled) { setJobLoading(false); return; }"));
     assert.ok(s.includes('{jobError && <div role="alert"'));

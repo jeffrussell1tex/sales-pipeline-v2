@@ -125,7 +125,7 @@ test('every button on the Sales Manager tab has a handler (the batch-6 class, §
     // `[^>]*` stops at the first `>` — inside an `onClick={() => …}` that is the
     // arrow, but `onClick=` has already been seen by then, so the test still holds.
     const tags = sm.match(/<button\b[^>]*>/gs) || [];
-    assert.ok(tags.length >= 15, `found ${tags.length} buttons`);
+    assert.ok(tags.length >= 24, `found ${tags.length} buttons`);
     const inert = tags.filter(t => !/\bonClick=/.test(t));
     assert.deepEqual(inert, [], 'buttons with no onClick');
 });

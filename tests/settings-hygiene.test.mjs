@@ -15,7 +15,7 @@ const hookSrc  = codeOnly(readFileSync(new URL('../src/hooks/useSettings.js', im
 
 test('users.mjs audit rows attribute the CALLER as actor, never the target', () => {
     const resolved = usersSrc.match(/await getCallerName\(userId, orgId\)/g) || [];
-    assert.ok(resolved.length >= 4,
+    assert.ok(resolved.length >= 7,
         `all four writeAudit sites (created/updated/deleted/cleared) must resolve the caller's name — found ${resolved.length}`);
     assert.equal(/writeAudit\(orgId, 'user\.(created|updated)', result\.id, result\.name, userId, result\.name\)/.test(usersSrc), false,
         'the target-as-actor shape must not return: every user.updated row read as the subject acting on themselves');

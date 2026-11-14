@@ -54,7 +54,7 @@ test('the modal tests the URL the user typed and saves it enabled', () => {
     assert.ok(s.includes("dbFetch('/.netlify/functions/send-slack', {"), 'the test posts to send-slack');
     assert.ok(s.includes('body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),'), 'with the typed URL, so the stored one is untouched');
     assert.ok(s.includes('await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });'), 'saved enabled — send-slack treats enabled !== false as on — with the five-alert selection (item 29)');
-    assert.ok(s.includes("if (!res.ok) throw new Error(data.error || 'Test failed');"), 'a non-2xx test is a failure, not a success toast');
+    assert.ok(s.includes("if (!res.ok) throw new Error(await readRefusal(res));\n            setMsg({ ok: true, text: 'Message sent — check your Slack channel.' });"), 'a non-2xx test is a failure, not a success toast — the ok check first, the server words (refusal sweep Part 12)');
 });
 
 test('the panel still saves slackConfig and marks slack connected in one PUT', () => {
@@ -68,7 +68,7 @@ test('the panel still saves slackConfig and marks slack connected in one PUT', (
 // reported where the user is looking — in the modal, under the field.
 test('a refused Save is shown inside the modal, under the field — not in the panel banner behind it', () => {
     const s = code(read(CA));
-    assert.ok(s.includes("            setMsg({ ok: false, text: 'Not saved — ' + e.message });"), 'the modal catches what onSave throws and shows it');
+    assert.ok(s.includes("            setMsg({ ok: false, text: 'Not saved — ' + failureWords(e) });"), 'the modal catches what onSave throws and shows it, in plain words (refusal sweep Part 12)');
     assert.ok(s.includes('            throw e;                       // the modal shows it under the field'), 'the panel rethrows');
     // Not optimistic since §0.229: the copy changes once the save has landed, so a refusal has nothing to put back; a
     // stale one is handed to AdminView (J-B5) before the rethrow.
@@ -93,9 +93,9 @@ test('every card and row action reports on its own surface — no page banner: t
     assert.match(s, /^const CardNote = \(\{ text, tone = 'danger' \}\) => text \? \(/m, 'module-scope note (tone: danger for a refusal, ok for a landed Connect — §0.97)');
     assert.equal((s.match(/setError\(/g) || []).length, 0, 'no page banner to set — every action says it on its own card or row (state §0.229)');
     assert.ok(!s.includes('Settings could not be loaded') && !/\{error && </.test(s), 'the banner, and the settings load it was for, gone');
-    assert.ok(s.includes("note('slack', `Not disconnected — ${e.message}`)"), 'Slack Disconnect → the Slack card');
+    assert.ok(s.includes("note('slack', `Not disconnected — ${failureWords(e)}`)"), 'Slack Disconnect → the Slack card');
     assert.ok(s.includes("note('cal:' + provider, `Not disconnected — ${r.error}`)"), 'calendar Disconnect → that calendar card');
-    assert.ok(s.includes('note(app.id, `Not requested — ${e.message}`)'), 'Request → that row');
+    assert.ok(s.includes('note(app.id, `Not requested — ${failureWords(e)}`)'), 'Request → that row');
     assert.ok(s.includes("setBusy('slack'); note('slack', '');"), 'each action clears its own note when it starts');
     assert.ok(s.includes("setBusy('cal'); note('cal:' + provider, '');"));
     assert.ok(s.includes("setBusy(app.id); note(app.id, '');"));
@@ -108,7 +108,7 @@ test('every card and row action reports on its own surface — no page banner: t
 
 test('a failed fetch is reported as a failed fetch — never as "not available on this site" or "Not connected"', () => {
     const s = code(read(CA));
-    assert.ok(s.includes('setBcc({ address: null, configured: false, error: e.message })'), 'the BCC fetch keeps its error');
+    assert.ok(s.includes('setBcc({ address: null, configured: false, error: failureWords(e) })'), 'the BCC fetch keeps its error, in plain words (refusal sweep Part 12)');
     assert.ok(s.includes('The email logging address could not be loaded — {bcc.error}'));
     assert.ok(s.includes('Calendar connections could not be loaded — {loadError}'), 'on the calendar card, not under the grid');
     assert.ok(s.includes('foot={loadError ? ('), 'the foot yields to the load error before "Not connected"');

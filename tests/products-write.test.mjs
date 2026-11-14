@@ -189,7 +189,8 @@ test('the Price Book sends productChanges, closes only on success and draws a re
         'setSaving(true);',
         'await onSave(stored ? { ...changes, id: stored.id } : changes, stored);',
         'cancel();',
-        "} catch (err) { setError(err.message || 'Failed to save.'); }");
+        // Moved in §0.249 (the refusal sweep, Part 12): the thrown words in failureWords — the server's passed through.
+        "} catch (err) { setError(failureWords(err)); }");
     assert.equal(count(save, 'cancel();'), 2, 'nothing changed, or saved — never after a refusal');
     assert.ok(!save.includes('...form'), 'REGRESSION: the whole form sent on an edit');
     assert.ok(cat.includes("{error && <div style={{ color: T.danger, fontSize: '0.8125rem', marginBottom: '0.5rem', fontFamily: T.sans }}>{error}</div>}"), 'the refusal drawn');

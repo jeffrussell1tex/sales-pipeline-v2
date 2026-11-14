@@ -27,7 +27,10 @@ test('bannerCopyOf: the auth state names sign-in, not the database', () => {
     assert.doesNotMatch(auth.text, /Database/);
     const outage = bannerCopyOf(true);
     assert.equal(outage.tone, 'outage');
-    assert.match(outage.text, /Database connection lost/);
+    // Moved in §0.249 (review fixes, L): the outage state is a server that answered with an error (dbStatusOf), never
+    // "Check your connection" (Q4's words are for a request that never left) — the pin on its words, at the same strength.
+    assert.match(outage.text, /^The server returned an error loading your data — changes may not be saving\./);
+    assert.doesNotMatch(outage.text, /check your connection|Database connection lost/i);
 });
 
 test('mfaCardOf: live enrolment → chip, detail and attention; unknown → null', () => {

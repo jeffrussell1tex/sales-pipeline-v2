@@ -42,7 +42,7 @@ test('the guard recognises a Clerk role read in every spelling it has had', () =
 
 test('THE GUARD — no function or client file reads a role from Clerk\'s user-level metadata', () => {
     const files = [...walk(fileURLToPath(new URL('netlify/functions/', ROOT))), ...walk(fileURLToPath(new URL('src/', ROOT)))];
-    assert.ok(files.length > 100, `the walk found the tree (${files.length} files)`);
+    assert.ok(files.length > 347, `the walk found the tree (${files.length} files)`);
     const offenders = files.filter((f) => CLERK_ROLE_READ.test(code(readFileSync(f, 'utf8'))));
     assert.deepEqual(offenders, [], `these read a role from Clerk's user-level metadata — one value for every org:\n  ${offenders.join('\n  ')}`);
 });

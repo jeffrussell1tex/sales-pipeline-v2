@@ -7,6 +7,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { quotePdfOf } from '../utils/quotePdfAnswer.js';
+import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -662,7 +663,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
         if (lineRefusal) { setError(lineRefusal); return; }
         const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };
         try { await onSave(payload); onClose(); }
-        catch (err) { setError(err.message || 'Failed to save.'); }
+        catch (err) { setError(failureWords(err)); }
     };
 
     return (
@@ -887,7 +888,7 @@ const SendBackForm = ({ onSend, onCancel, saving, tone = 'light' }) => {
 };
 
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
-    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers,
+    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, jobUnread, onCreateJob, canEdit, userRole, tiers,
     onApprove, onSendBack, onWithdraw, sentBackBy, userId }) => {
     const { approverNames } = useQuoteConfig();
     const { margin } = calcLineTotals(quote.lineItems || [], products || []);
@@ -980,7 +981,7 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                                 ? <>Invoice <span style={{ fontFamily: T.mono, color: T.ink }}>{job.invoice.invoiceNumber}</span> · {invoiceStatusLabel(job.invoice.status)} · {fmtMoney(job.invoice.total)}</>
                                 : 'No invoice yet — it is raised from the job under Dispatch → Jobs.'}</div>
                         </div>
-                    ) : onCreateJob ? (
+                    ) : jobUnread ? null : onCreateJob ? (
                         <button onClick={onCreateJob} disabled={jobBusy} style={{ width: '100%', background: T.ink, color: T.surface, border: 'none', padding: '8px 12px', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: jobBusy ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: jobBusy ? 0.6 : 1 }}>
                             {jobBusy ? 'Creating job…' : 'Create dispatch job →'}
                         </button>
@@ -1126,7 +1127,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
         try {
             await onSave(stored ? { ...changes, id: stored.id } : changes, stored);
             cancel();
-        } catch (err) { setError(err.message || 'Failed to save.'); }
+        } catch (err) { setError(failureWords(err)); }
         finally { setSaving(false); }
     };
     const handleDelete = (id) => { showConfirm && showConfirm('Delete this product?', async () => { await onDelete(id); }); };
@@ -1563,6 +1564,9 @@ export default function QuotesTab() {
     const [jobLoading,         setJobLoading]       = useState(false);
     const [jobBusy,            setJobBusy]          = useState(false);
     const [jobError,           setJobError]         = useState('');
+    // The job lookup failed (state §0.249, docs/design/refusal-sweep Part 12): whether a job exists is not known, so the
+    // card draws neither "No job yet" nor Create over it — a read that failed is never "none".
+    const [jobUnread,          setJobUnread]        = useState(false);
     // The quote PDF (state §0.246, docs/design/refusal-sweep 7a; Jeff's Q14): one request at a time, and a PDF not made
     // said under that quote's Download PDF — { quoteId, words } — kept until its Close, with the print copy a button.
     const [pdfBusy,            setPdfBusy]          = useState(false);
@@ -1644,18 +1648,24 @@ export default function QuotesTab() {
     // and Dispatch is on; cleared on any other quote, status or org (§0.125's rule).
     useEffect(() => {
         let cancelled = false;
-        setLinkedJob(null); setJobError('');
+        setLinkedJob(null); setJobError(''); setJobUnread(false);
         if (!activeQuote || !quoteCanBecomeJob(activeQuote) || !settings?.dispatchEnabled) { setJobLoading(false); return; }
         setJobLoading(true);
         (async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/quote-to-job?quoteId=' + encodeURIComponent(activeQuote.id));
-                const data = await res.json().catch(() => ({}));
+                // The ok check first, the house words (state §0.249, docs/design/refusal-sweep Part 12): the server's words
+                // with their ref, else "The server returned N." — never the bare status, never a lost connection it was not.
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) { setJobError(data.error || `Could not look up the job (HTTP ${res.status}).`); return; }
+                // quote-to-job.mjs answers { job } — the job, or null when there is none; any other answer is no answer.
+                if (!data || typeof data !== 'object' || !('job' in data)) throw new Error('Its answer could not be read.');
                 setLinkedJob(data.job || null);
             } catch (e) {
-                if (!cancelled) setJobError('Could not look up the job — check your connection.');
+                if (cancelled) return;
+                setJobUnread(true);
+                setJobError(`Could not look up the job — ${failureWords(e)}`);
             } finally {
                 if (!cancelled) setJobLoading(false);
             }
@@ -1676,12 +1686,15 @@ export default function QuotesTab() {
         (async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/quotes?activity=true');
-                const data = await res.json().catch(() => ({}));
+                // The ok check first, the house words (state §0.249); an answer with no list is no answer — never "No
+                // decisions in the last 30 days" over a read that failed.
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) { setApprovalEventsError(data.error || `Could not read the approval record (HTTP ${res.status}).`); return; }
-                setApprovalEvents(Array.isArray(data.events) ? data.events : []);
+                if (!Array.isArray(data?.events)) throw new Error('Its answer could not be read.');
+                setApprovalEvents(data.events);
             } catch (e) {
-                if (!cancelled) setApprovalEventsError('Could not read the approval record — check your connection.');
+                if (!cancelled) setApprovalEventsError(`Could not read the approval record — ${failureWords(e)}`);
             }
         })();
         return () => { cancelled = true; };
@@ -1697,12 +1710,15 @@ export default function QuotesTab() {
         (async () => {
             try {
                 const res  = await dbFetch('/.netlify/functions/quotes?activity=true&quoteId=' + encodeURIComponent(activeQuote.id));
-                const data = await res.json().catch(() => ({}));
+                // The ok check first, the house words (state §0.249); an answer with no list is no answer — never "No
+                // recorded activity yet" over a read that failed.
+                if (!res.ok) throw new Error(await readRefusal(res));
+                const data = await res.json();
                 if (cancelled) return;
-                if (!res.ok) { setQuoteHistory({ events: null, error: data.error || `Could not read this quote's history (HTTP ${res.status}).` }); return; }
-                setQuoteHistory({ events: Array.isArray(data.events) ? data.events : [], error: '' });
+                if (!Array.isArray(data?.events)) throw new Error('Its answer could not be read.');
+                setQuoteHistory({ events: data.events, error: '' });
             } catch (e) {
-                if (!cancelled) setQuoteHistory({ events: null, error: 'Could not read this quote\'s history — check your connection.' });
+                if (!cancelled) setQuoteHistory({ events: null, error: `Could not read this quote's history — ${failureWords(e)}` });
             }
         })();
         return () => { cancelled = true; };
@@ -1744,7 +1760,7 @@ export default function QuotesTab() {
             // quoteModalError — and no builder opens on a quote that was never made (state §0.243, as
             // handleNewVersion). The id is the saved quote's: the hook issues its own.
             if (saved) openConfigurator(oppId, saved.id || payload.id);
-        } catch (err) { setError(err.message || 'Failed to create quote.'); }
+        } catch (err) { setError(`The quote was not created — ${failureWords(err)}`); }
         finally { setSaving(false); }
     };
 
@@ -1802,7 +1818,7 @@ export default function QuotesTab() {
                 setError(`v${maxV} had ${source.lineItems.length} product(s) but none carried over. Check the console and re-add them.`);
             }
             setConfiguratorQId(saved.id || payload.id);
-        } catch (err) { setError(err.message || 'Failed to create version.'); }
+        } catch (err) { setError(`The version was not created — ${failureWords(err)}`); }
         finally { setSaving(false); }
     };
 
@@ -1815,28 +1831,41 @@ export default function QuotesTab() {
         if (!q) return null;
         setSaving(true);
         try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }
-        catch (err) { setError(err.message); return null; }
+        catch (err) { setError(failureWords(err)); return null; }
         finally { setSaving(false); }
     };
     const handleSubmitApproval  = () => moveQuote(activeQuote, 'Pending Approval');
     const handleSendToCustomer  = () => moveQuote(activeQuote, 'Sent to Customer');
-    const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(failureWords(err)); } finally { setSaving(false); } };
     // The customer's decision (state §0.149): the server stamps acceptedAt and syncs the deal.
     const handleAccept          = () => moveQuote(activeQuote, 'Accepted');
     // Quote → job: written server-side first, the server's job adopted; a refusal
     // is shown on the card, never logged (§18b32). A 409 means the job already
     // exists — that job is adopted, which is what the user wanted to see.
+    // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal read once — a 409 naming the job
+    // adopts it, any other said in the server's words with their ref, else "The server returned N."; a thrown failure in
+    // plain words. A job made whose answer cannot be read is said as made (the server numbers it, so it cannot be shown)
+    // and Create is not offered again over it. An answer after an org switch says nothing.
     const handleCreateJob = async () => {
         if (!activeQuote) return;
+        const askedOrg = requestOrg();
         setJobBusy(true); setJobError('');
         try {
             const res  = await dbFetch('/.netlify/functions/quote-to-job', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) });
-            const data = await res.json().catch(() => ({}));
-            if (res.status === 409 && data.job) { setLinkedJob(data.job); return; }
-            if (!res.ok || !data.job) { setJobError(data.error || `The job was not created (HTTP ${res.status}).`); return; }
-            setLinkedJob(data.job);
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                if (res.status === 409 && refused?.job) { setLinkedJob(refused.job); setJobUnread(false); return; }
+                setJobError(`The job was not created — ${refusalWords(res, refused)}`);
+                return;
+            }
+            const data = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return;
+            if (!data?.job) { setJobUnread(true); setJobError('The job was created. Its answer could not be read — reload the page to see it.'); return; }
+            setLinkedJob(data.job); setJobUnread(false);
         } catch (e) {
-            setJobError('The job was not created — check your connection.');
+            if (!stillOrg(askedOrg)) return;
+            setJobError(`The job was not created — ${failureWords(e)}`);
         } finally {
             setJobBusy(false);
         }
@@ -2220,7 +2249,7 @@ export default function QuotesTab() {
                                         {activeQuote && <ConfiguratorPanel key={activeQuote.id} quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
                                             onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled} canEdit={canEdit} userRole={userRole} tiers={approvalTiers}
                                             onApprove={handleApprove} onSendBack={handleSendBack} onWithdraw={canEdit ? handleWithdraw : null} sentBackBy={sentBackBy} userId={currentUserId}
-                                            job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canCreateJob ? handleCreateJob : null} />}
+                                            job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} jobUnread={jobUnread} onCreateJob={canCreateJob ? handleCreateJob : null} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} events={quoteHistory.events} error={quoteHistory.error} /></div>}
                                 </>

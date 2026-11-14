@@ -143,14 +143,19 @@ test('useUIState: a record, an id, a name or a form is the org\'s (31); the tab,
     }
 });
 
-test('useCalendarState: the org\'s events, connections, deals and rep are the org\'s (22); the view\'s choices stay (9)', () => {
+// Moved in §0.249 (review fixes, round 3): calendarRead joins the org's values (22 -> 23) — a read landed in the org it
+// was asked in; kept, the last org's read stood for the new one.
+test('useCalendarState: the org\'s events, connections, deals and rep are the org\'s (23); the view\'s choices stay (9)', () => {
     const src = read('src/hooks/useCalendarState.js');
     hookShape(src, 'useCalendarState');
     const states = statesOf(src);
-    assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), CAL_KEPT,
+    // Moved in §0.249 (review fixes, round 4): calendarStripOrg is plain too, by design: it names the org the strip was
+    // put back for, and the reset putting it back would mask the new org's calendar for good. Its rule is pinned in
+    // tests/refusal-sweep.test.mjs (Part 12 fix C4).
+    assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), ['calendarStripOrg', ...CAL_KEPT],
         'a new plain state: decide whether it is the org\'s (useOrgBoundState) or the view\'s choice (add it to CAL_KEPT)');
-    assert.equal(states.filter((s) => s.bound).length, 22);
-    for (const name of ['calendarEvents', 'calendarConnected', 'calRepFilter', 'userCalConnections', 'orgCalConnections',
+    assert.equal(states.filter((s) => s.bound).length, 23);
+    for (const name of ['calendarEvents', 'calendarConnected', 'calendarRead', 'calRepFilter', 'userCalConnections', 'orgCalConnections',
         'logFromCalOppMap', 'loggedCalendarIds', 'meetingPrepOppId', 'calConnectResult']) {
         assert.ok(states.some((s) => s.name === name && s.bound), `${name} is org-bound`);
     }
@@ -177,7 +182,7 @@ test('App: the reset runs on a switch only — from one org to another or to non
 
 test('App: the reset is declared before App\'s other effects, so what they start for the new org in the switch\'s commit is not put back', () => {
     const app = code(read('src/App.jsx'));
-    const hooksEnd = app.indexOf('const calState = useCalendarState();');
+    const hooksEnd = app.indexOf('const calState = useCalendarState(activeOrgId);');   // moved in §0.249 (review fixes, round 4): it takes the org on screen
     const reset = app.indexOf('const uiOrgRef = useRef(null);');
     assert.ok(hooksEnd >= 0 && reset > hooksEnd, 'after the three hooks it resets');
     assert.ok(!app.slice(hooksEnd, reset).includes('useEffect('), 'the first effect after the hooks');

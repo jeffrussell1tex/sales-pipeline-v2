@@ -116,7 +116,7 @@ const aiScoreWrites = (files) => {
 test("THE GUARD: a deal's score is written by ai-score.mjs alone — no other function builds an aiScore, the deal's sanitize least of all", () => {
     const dir = 'netlify/functions/';
     const files = readdirSync(new URL(dir, ROOT)).filter((f) => f.endsWith('.mjs')).map((f) => [f, read(dir + f)]);
-    assert.ok(files.length > 90, `the function files were read (${files.length})`);
+    assert.ok(files.length > 105, `the function files were read (${files.length})`);
     const hits = aiScoreWrites(files);
     assert.deepEqual(hits.map((h) => h.split(':')[0]), ['ai-score.mjs'], `aiScore built outside ai-score.mjs: ${hits.join(', ')}`);
 });

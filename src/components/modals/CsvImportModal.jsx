@@ -8,6 +8,7 @@ import {
     mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
     receiptFromError, emptyReceipt, describeOwners,
 } from '../../utils/importReceipt';
+import { failureWords } from '../../utils/refusalWords.js';
 import { USER_IMPORT_FIELDS, userConflicts, inviteFrom, roleLabelOf } from '../../utils/userImport.js';
 import { DEFAULT_INVITE_EXPIRY_DAYS } from '../../utils/inviteExpiry.js';
 import { T } from '../../tokens.js';
@@ -409,8 +410,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             setImportStats(mergeReceipts(
                 preflight,
                 // No receipt means a bug in a handler, not a counted partial
-                // failure, and it must not be rendered as one.
-                fromHandler || { ...emptyReceipt(), error: err.message || 'Import failed. Please try again.' },
+                // failure, and it must not be rendered as one. Said in plain
+                // words (state §0.249, the review, last pass) — never a raw message.
+                fromHandler || { ...emptyReceipt(), error: failureWords(err) },
             ));
         }
 
@@ -1099,6 +1101,13 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         { n: r.dropped,   label: 'not sent',  color: T.warn,    show: r.dropped > 0 },
                         { n: r.refused,   label: 'refused',   color: T.warn,    show: r.refused > 0 },
                         { n: r.failed,    label: 'failed',    color: T.danger,  show: r.failed > 0 },
+                        // Sent, its answer unreadable (the §0.249 review, round 2): a tile of its own, so the tiles
+                        // account for everyone attempted (attempted === created + updated + failed + unread). Only a
+                        // roster read that failed leaves any "up to" (round 3), and the tile says what a 201 proves: "up to
+                        // N", sent or refused; one alone was sent. The ones on the roster read again (round 4) are a tile
+                        // apart, said as what the roster shows — invited by this import or before it.
+                        { n: r.unread - (r.onRoster || 0), upTo: r.unread - (r.onRoster || 0) > 1, label: r.unread - (r.onRoster || 0) === 1 ? 'sent — answer unread' : 'sent or refused — answer unread', color: T.warn, show: r.unread - (r.onRoster || 0) > 0 },
+                        { n: r.onRoster || 0, label: 'on the roster — invited by this import or before it', color: T.warn, show: r.onRoster > 0 },
                     ].filter(t => t.show);
 
                     return (
@@ -1122,7 +1131,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
                             {tiles.map(t => (
                                 <div key={t.label} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
-                                    <div style={{ fontSize: '22px', fontWeight: '700', color: t.color }}>{t.n}</div>
+                                    <div style={{ fontSize: '22px', fontWeight: '700', color: t.color }}>{t.upTo ? `up to ${t.n}` : t.n}</div>
                                     <div style={{ fontSize: '12px', color: T.inkMid }}>{t.label}</div>
                                 </div>
                             ))}

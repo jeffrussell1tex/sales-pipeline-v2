@@ -14,6 +14,8 @@
 // recording stub in tests/bulk-client.test.mjs goes in through the front door: no
 // module mocks, no --experimental flag, no window.
 
+import { failureWords, refusalWords } from './refusalWords.js';
+
 export const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_bulk.mjs
 
 // An import cut by an org switch stops before its next chunk (state §0.175): the
@@ -22,13 +24,10 @@ export const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_
 // the org on screen; without one, nothing stops.
 export const ORG_SWITCHED = 'Stopped: the organization changed before every row was sent.';
 
-// Pull the most useful message out of an error response.
-// serverErrorBody returns a requestId; surfacing it is what makes the Netlify
-// function log for this exact failure findable.
-const errorFrom = (status, body, fallback) => {
-    if (body?.error) return body.requestId ? `${body.error} (ref ${body.requestId})` : body.error;
-    return `${fallback} (${status}).`;
-};
+// A refused chunk is said in refusalWords' words (§0.249, docs/design/refusal-sweep Part 12): the server's, with the
+// ref of its log line (serverErrorBody's requestId — what makes the Netlify function log for this exact failure
+// findable), else "The server returned N.". It said "Bulk import failed (502)." — the receipt that draws it already
+// says what did not save ("400 did not save."), so no prefix of its own.
 
 // The owner names each chunk's answer says no member matched, or more than one did (_lib.mjs stampOwnerIds,
 // rekeyBulkOwners: those rows were saved with no owner, or an overwrite kept its own) — kept across the chunks, each
@@ -70,10 +69,14 @@ export function makeBulkClient(fetchFn) {
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
             if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
             const chunk = items.slice(i, i + BULK_CHUNK);
-            const r = await fetchFn(url, { method: 'POST', body: JSON.stringify(chunk) });
+            // A chunk whose request threw (offline) ends the import with the house words, keeping what landed before it
+            // (§0.249, docs/design/refusal-sweep Part 12): it threw out of the loop, so earlier chunks' rows, written
+            // server-side, never reached the screen, and the importer said the raw "Failed to fetch" (18b15).
+            let r;
+            try { r = await fetchFn(url, { method: 'POST', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); break; }
             const body = await readJson(r);
 
-            if (!r.ok) { error = errorFrom(r.status, body, 'Bulk import failed'); break; }
+            if (!r.ok) { error = refusalWords(r, body); break; }   // the server's words with their ref, else its status (§0.249)
             addOwners(owners, body);
 
             if (Array.isArray(body?.insertedIds)) {
@@ -121,10 +124,11 @@ export function makeBulkClient(fetchFn) {
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
             if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
             const chunk = items.slice(i, i + BULK_CHUNK);
-            const r = await fetchFn(url, { method: 'PUT', body: JSON.stringify(chunk) });
+            let r;   // as postNew's: a chunk whose request threw ends the run, keeping what was applied (§0.249)
+            try { r = await fetchFn(url, { method: 'PUT', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); break; }
             const body = await readJson(r);
 
-            if (!r.ok) { error = errorFrom(r.status, body, 'Bulk update failed'); break; }
+            if (!r.ok) { error = refusalWords(r, body); break; }   // as postNew's (§0.249)
             addOwners(owners, body);
 
             const chunkNotFound  = Array.isArray(body?.notFound)  ? body.notFound  : [];

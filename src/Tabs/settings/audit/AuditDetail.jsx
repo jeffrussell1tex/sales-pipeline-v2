@@ -23,13 +23,13 @@
 import React from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch } from '../../../utils/storage';
+import { readRefusal, refusalWords, failureWords } from '../../../utils/refusalWords.js';
 import { todayLocal } from '../../../utils/dateLocal';
 import { useApp } from '../../../AppContext';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, DropdownPanel, DropdownOption, PolicySelect } from '../security/shared.jsx';
 
 const STREAM_URL = '/.netlify/functions/audit-stream';
-const errorOf = async (res, fallback) => { try { const b = await res.json(); return b?.error || fallback; } catch { return fallback; } };
 
 // ── filters ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +354,18 @@ const destStatusStyle = (status) => {
     return { bg:'rgba(138,131,120,0.12)', fg:T.inkMid };
 };
 
+// Only the server's own refusal proves a destination's PUT or test wrote nothing (the review's fixes, round 3; its create
+// and delete since round 4):
+// audit-stream.mjs answers each refusal it words in the 4xx range (400, 403, 404) before its update or its delivery. A
+// 5xx may come after them — the audit write and the caller's name follow the update, and the row is read again after a
+// test's delivery — and a gateway's page, a 4xx without the server's words or a request that threw (it may have reached
+// the server first) proves nothing: said as maybe, as the quota board's save says it (SalesManagerTab sendQuotas).
+const destRefusedOwn = (res, body) => res.status >= 400 && res.status < 500 && typeof body?.error === 'string' && !!body.error.trim();
+// A delete's 404 in the server's words proves the row is gone (the review's fixes, last pass): audit-stream.mjs answers
+// "Destination not found." only when it finds no such row in this org, before its delete — on a first press, or on a
+// second after a Remove that may have landed. A 404 page without the server's words proves nothing.
+const destGone = (res, body) => res.status === 404 && destRefusedOwn(res, body);
+
 export const AuditDetail = ({ onBack }) => {
     const { showConfirm } = useApp();
     const [catFilter,   setCatFilter]   = React.useState('All categories');
@@ -373,47 +385,66 @@ export const AuditDetail = ({ onBack }) => {
     // Streaming destinations — the endpoint's rows; never a mock.
     const [dests, setDests] = React.useState([]);
     const [destsLoading, setDestsLoading] = React.useState(true);
+    const [destsRead, setDestsRead] = React.useState(false);     // the list was read: "No destinations." and the count only then
+    const [destsUnread, setDestsUnread] = React.useState('');    // why the list is not known — kept until a read lands, never cleared by an action
     const [destError, setDestError] = React.useState('');
     const [showAddDest, setShowAddDest] = React.useState(false);
     const [reveal, setReveal] = React.useState(null);           // { dest, secret, rotated }
     const [busyId, setBusyId] = React.useState(null);           // a row with an action in flight
     const [testResult, setTestResult] = React.useState(null);   // { id, ok, status, error }
+    const [statusUnread, setStatusUnread] = React.useState([]); // ids of rows whose status a landed answer could not show
 
     const loadDests = React.useCallback(async () => {
         const res = await dbFetch(STREAM_URL);
-        if (!res.ok) { setDestError(await errorOf(res, `Destinations did not load (${res.status}).`)); return; }
-        const data = await res.json();
-        setDests(Array.isArray(data?.destinations) ? data.destinations : []);
+        // A refusal in readRefusal's words, its ref kept (docs/design/refusal-sweep Part 12, the review's fixes): said on
+        // its own line, which an action's banner never clears — the list stays unknown until a read lands.
+        if (!res.ok) { setDestsUnread(`Destinations did not load — ${await readRefusal(res)}`); return; }
+        const listed = await res.json();
+        // An answer with no list is no answer (docs/design/refusal-sweep Part 12): never drawn as "No destinations."
+        if (!Array.isArray(listed?.destinations)) throw new Error('Its answer could not be read.');
+        setDests(listed.destinations);
+        setDestsRead(true);
+        setDestsUnread('');
     }, []);
 
+    // The ok check before the body (docs/design/refusal-sweep Part 12): the audit log's read said the server's words
+    // without their ref, or "Unexpected token '<'" over a 502's page; a refusal says readRefusal's words, a failure
+    // failureWords — the event stream says "The audit log did not load" over them, never a count of none.
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const auditRes = await dbFetch('/.netlify/functions/audit-log');
                 if (cancelled) return;
+                if (!auditRes.ok) throw new Error(await readRefusal(auditRes));
                 const auditData = await auditRes.json();
-                if (auditRes.ok && Array.isArray(auditData.entries)) {
-                    setEvents(auditData.entries.map(e => ({
-                        id:     e.id,
-                        when:   fmtEventAge(e.timestamp),
-                        rawTs:  e.timestamp,
-                        actor:  e.userName || e.userId || 'System',
-                        action: e.action,
-                        target: e.entityName || e.entityId || '—',
-                        detail: e.detail || '',
-                        cat:    mapEntityTypeToCat(e.entityType),
-                        sev:    mapActionToSev(e.action),
-                    })));
-                } else if (!auditRes.ok) {
-                    setEventsError(auditData?.error || `The audit log did not load (${auditRes.status}).`);
-                }
+                if (cancelled) return;
+                if (!Array.isArray(auditData?.entries)) throw new Error('Its answer could not be read.');
+                setEvents(auditData.entries.map(e => ({
+                    id:     e.id,
+                    when:   fmtEventAge(e.timestamp),
+                    rawTs:  e.timestamp,
+                    actor:  e.userName || e.userId || 'System',
+                    action: e.action,
+                    target: e.entityName || e.entityId || '—',
+                    detail: e.detail || '',
+                    cat:    mapEntityTypeToCat(e.entityType),
+                    sev:    mapActionToSev(e.action),
+                })));
             } catch (e) {
-                if (!cancelled) setEventsError(e.message);
+                if (!cancelled) setEventsError(failureWords(e));
             } finally {
                 if (!cancelled) setEventsLoading(false);
             }
-            try { await loadDests(); } catch (e) { if (!cancelled) setDestError(e.message); }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+    // The destinations are read at once, beside the audit log (the review's fixes, round 3): they waited for the log's
+    // read, so a slow log held both Adds off, "still loading", with no request out. Neither read uses the other's answer.
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try { await loadDests(); } catch (e) { if (!cancelled) setDestsUnread(`Destinations did not load — ${failureWords(e)}`); }
             if (!cancelled) setDestsLoading(false);
         })();
         return () => { cancelled = true; };
@@ -428,6 +459,10 @@ export const AuditDetail = ({ onBack }) => {
         const q = search.toLowerCase();
         return !q || e.action.toLowerCase().includes(q) || e.actor.toLowerCase().includes(q) || (e.target||'').toLowerCase().includes(q) || (e.detail||'').toLowerCase().includes(q);
     });
+    // The export offers only a log that was read (docs/design/refusal-sweep Part 12, the review's fixes): while it loads or
+    // after its read failed, Export CSV and ▾ are off and say why — never "0 events", never a file of none.
+    const eventsRead = !eventsLoading && !eventsError;
+    const exportWhy = eventsError ? 'The audit log did not load — there is nothing to export' : eventsLoading ? 'The audit log is still loading' : undefined;
 
     const handleAddFilter = (key, val) => {
         if (key === 'actor')  setActorFilter(val);
@@ -437,34 +472,107 @@ export const AuditDetail = ({ onBack }) => {
     };
 
     // ── destination actions — every one reads res.ok and adopts the server's row ──
+    // A request that never left, or a landed answer that cannot be read, is said in plain words (docs/design/refusal-sweep
+    // Part 12): each action rejected offline — the Add window stayed "Adding…" and the row busy, nothing said. A landed
+    // answer that cannot be read is said as landed: the destination and its secret are the server's, and cannot be shown.
     const createDest = async (input) => {
         setDestError('');
-        const res = await dbFetch(STREAM_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(input) });
-        if (!res.ok) return { ok: false, error: await errorOf(res, `The server returned ${res.status}.`) };
-        const data = await res.json();
-        setDests(prev => [...prev, data.destination]);
-        setShowAddDest(false);
-        setReveal({ dest: data.destination, secret: data.secret, rotated: false });
-        return { ok: true };
+        // An answer that proves nothing (the review's fixes, round 4) — never "not saved" over a destination the server may
+        // have made: audit-stream.mjs answers each refusal it words in the 4xx range before its insert, a 5xx may come after
+        // it (the audit write and the caller's name follow the insert), and a gateway's page or a request that threw proves
+        // nothing. The window closes — a second press could make a second destination — and the list may be missing one.
+        const maybeAdded = (words) => {
+            setShowAddDest(false);
+            setDestsRead(false);
+            setDestsUnread(u => u || 'A destination may be missing from the list — reload the page to see every destination.');
+            setDestError(`The destination may have been added — reload the page to see whether it was: ${words}`);
+            return { ok: true };
+        };
+        try {
+            const res = await dbFetch(STREAM_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(input) });
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (destRefusedOwn(res, refused)) return { ok: false, error: refusalWords(res, refused) };
+                return maybeAdded(refusalWords(res, refused));
+            }
+            const made = await res.json().catch(() => null);
+            setShowAddDest(false);
+            if (!made?.destination) {
+                // The list no longer holds every destination (the review's fixes): no "No destinations." and no count under
+                // it; a load's own failure, already said, is kept.
+                setDestsRead(false);
+                setDestsUnread(u => u || 'The list may be missing the destination just added — reload the page to see every destination.');
+                setDestError('Destination added — Its answer could not be read, so its secret cannot be shown. Reload the page, then rotate its secret to see a new one.');
+                return { ok: true };
+            }
+            setDests(prev => [...prev, made.destination]);
+            setReveal({ dest: made.destination, secret: made.secret, rotated: false });
+            return { ok: true };
+        } catch (e) {
+            return maybeAdded(failureWords(e));
+        }
     };
     const putDest = async (body, label) => {
         setDestError(''); setBusyId(body.id);
+        // An answer that proves nothing (the review's fixes, round 3) — never "not saved" over a Pause the server may have
+        // made: a Pause / Resume leaves its row's status not known; a Rotate moves no status, and says its secret may be new.
+        const maybeSaved = (words) => {
+            if ('paused' in body) setStatusUnread(ids => [...ids, body.id]);
+            setDestError(body.rotateSecret
+                ? `The secret may have been rotated — reload the page to see whether it was, and rotate again to see a new one: ${words}`
+                : `${label} may have been saved — reload the page to see whether it was: ${words}`);
+        };
         try {
             const res = await dbFetch(STREAM_URL, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
-            if (!res.ok) { setDestError(`${label} not saved — ${await errorOf(res, `the server returned ${res.status}`)}`); return null; }
-            const data = await res.json();
-            setDests(prev => prev.map(d => d.id === data.destination.id ? data.destination : d));
-            return data;
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (destRefusedOwn(res, refused)) setDestError(`${label} not saved — ${refusalWords(res, refused)}`);
+                else maybeSaved(refusalWords(res, refused));
+                return null;
+            }
+            const saved = await res.json().catch(() => null);
+            if (!saved?.destination) {
+                // A Pause / Resume that landed unread leaves its row's status unknown (the review's fixes, round 2): never
+                // drawn as the old status, counted in the badge or offered as its old Pause / Resume.
+                if ('paused' in body) setStatusUnread(ids => [...ids, body.id]);
+                setDestError(`${label} saved — Its answer could not be read${body.rotateSecret ? ', so the new secret cannot be shown; rotate again to see one' : ''}. Reload the page to see the destination.`);
+                return null;
+            }
+            setDests(prev => prev.map(d => d.id === saved.destination.id ? saved.destination : d));
+            setStatusUnread(ids => ids.filter(id => id !== saved.destination.id));
+            return saved;
+        } catch (e) {
+            maybeSaved(failureWords(e));
+            return null;
         } finally { setBusyId(null); }
     };
+    // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal said its words without the ref, and
+    // offline the test rejected with nothing said (try/finally, no catch).
     const sendTest = async (dest) => {
         setDestError(''); setBusyId(dest.id); setTestResult(null);
+        // An answer that proves nothing (the review's fixes, round 3): the test may have gone out, moving the row's status.
+        const maybeSent = (words) => {
+            setStatusUnread(ids => [...ids, dest.id]);
+            setDestError(`The test may have been sent — reload the page to see whether it was: ${words}`);
+        };
         try {
             const res = await dbFetch(`${STREAM_URL}?test=${encodeURIComponent(dest.id)}`, { method:'POST' });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) { setDestError(`Test not sent — ${data?.error || `the server returned ${res.status}`}`); return; }
-            setTestResult({ id: dest.id, ok: data.ok, status: data.status, error: data.error });
-            if (data.destination) setDests(prev => prev.map(d => d.id === data.destination.id ? data.destination : d));
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (destRefusedOwn(res, refused)) setDestError(`Test not sent — ${refusalWords(res, refused)}`);
+                else maybeSent(refusalWords(res, refused));
+                return;
+            }
+            const tested = await res.json().catch(() => null);
+            // A test that landed unread leaves the row's status unknown (a delivery or a failure moves it).
+            if (!tested) { setStatusUnread(ids => [...ids, dest.id]); setDestError('Test sent — Its answer could not be read, so whether it was delivered is not known.'); return; }
+            setTestResult({ id: dest.id, ok: tested.ok, status: tested.status, error: tested.error });
+            if (tested.destination) {
+                setDests(prev => prev.map(d => d.id === tested.destination.id ? tested.destination : d));
+                setStatusUnread(ids => ids.filter(id => id !== tested.destination.id));
+            }
+        } catch (e) {
+            maybeSent(failureWords(e));
         } finally { setBusyId(null); }
     };
     const rotate = (dest) => showConfirm(`Rotate the signing secret for "${dest.name}"? The current secret stops verifying immediately; you will see the new one once.`, async () => {
@@ -473,15 +581,42 @@ export const AuditDetail = ({ onBack }) => {
     }, true);
     const remove = (dest) => showConfirm(`Remove destination "${dest.name}"? Audit events stop going there at once.`, async () => {
         setDestError(''); setBusyId(dest.id);
+        // An answer that proves nothing (the review's fixes, round 4): audit-stream.mjs answers each refusal it words (400,
+        // 403, 404) before its delete, and a 5xx may come after it (the audit write and the caller's name follow the delete).
+        // The row is kept, its status not known — never drawn as a live destination with a Pause.
+        const maybeRemoved = (words) => {
+            setStatusUnread(ids => [...ids, dest.id]);
+            setDestError(`The destination may have been removed — reload the page to see whether it was: ${words}`);
+        };
         try {
             const res = await dbFetch(`${STREAM_URL}?id=${encodeURIComponent(dest.id)}`, { method:'DELETE' });
-            if (!res.ok) { setDestError(`Remove destination failed — ${await errorOf(res, `the server returned ${res.status}`)}`); return; }
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (destGone(res, refused)) {
+                    setDests(rows => rows.filter(row => row.id !== dest.id));
+                    setStatusUnread(ids => ids.filter(id => id !== dest.id));
+                    setDestError('The destination was already removed.');
+                }
+                else if (destRefusedOwn(res, refused)) setDestError(`Remove destination failed — ${refusalWords(res, refused)}`);
+                else maybeRemoved(refusalWords(res, refused));
+                return;
+            }
             setDests(prev => prev.filter(d => d.id !== dest.id));
+        } catch (e) {
+            maybeRemoved(failureWords(e));
         } finally { setBusyId(null); }
     }, true);
 
-    const activeCount = dests.filter(d => d.status === 'Active').length;
-    const streamingBadge = dests.length ? `Streaming to ${dests.length} destination${dests.length === 1 ? '' : 's'}${activeCount < dests.length ? ` · ${dests.length - activeCount} not delivering` : ''}` : undefined;
+    // A count only over a list that was read (the review's fixes): a failed load, or a create whose answer could not be
+    // read, leaves the list unknown — "Streaming to 1 destination" over it would be a count of what is not known.
+    // A row whose status a landed answer could not show (the review's fixes, round 2) is counted as not known — never
+    // as delivering or not delivering.
+    const unknownCount = dests.filter(d => statusUnread.includes(d.id)).length;
+    const activeCount = dests.filter(d => d.status === 'Active' && !statusUnread.includes(d.id)).length;
+    const notDelivering = dests.length - activeCount - unknownCount;
+    const streamingBadge = destsRead && dests.length ? `Streaming to ${dests.length} destination${dests.length === 1 ? '' : 's'}${notDelivering ? ` · ${notDelivering} not delivering` : ''}${unknownCount ? ` · ${unknownCount} status not known` : ''}` : undefined;
+    // No green ✓ beside a status not known (the review's fixes, round 3): a warning mark while any row's is (§0.247).
+    const streamingTone = unknownCount ? 'warn' : 'ok';
 
     const catStyle = (cat) => {
         const map = { auth:'rgba(58,90,122,0.12)', security:'rgba(156,58,46,0.10)', admin:'rgba(77,107,61,0.10)', data:'rgba(200,185,154,0.20)', billing:'rgba(184,115,51,0.10)' };
@@ -489,6 +624,8 @@ export const AuditDetail = ({ onBack }) => {
         return { bg: map[cat] || 'rgba(138,131,120,0.10)', fg: col[cat] || T.inkMid };
     };
     const fmtWhen = (iso) => iso ? new Date(iso).toLocaleString() : 'never';
+    // No Add while the list is loading (the review's fixes, round 2): a landed Add could not then race its first read.
+    const addWhy = destsLoading ? 'The destinations are still loading' : undefined;
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -498,24 +635,25 @@ export const AuditDetail = ({ onBack }) => {
             <SecCrumb page="Audit log" onBack={onBack}/>
             <SecTitle
                 title="Audit log"
-                sub={`${visible.length} of ${events.length} events · ${timeFilter} · the last 500 events are loaded`}
+                sub={eventsError ? 'The audit log did not load' : eventsLoading ? 'The audit log is still loading…' : `${visible.length} of ${events.length} events · ${timeFilter} · the last 500 events are loaded`}
                 badge={streamingBadge}
+                badgeTone={streamingTone}
                 updatedAt="Events are written by the server as things happen"
                 actions={[
                     <div key="exp" style={{ display:'inline-flex', position:'relative' }}>
-                        <button onClick={() => downloadEvents(visible, 'CSV')}
-                            style={{ padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRight:'none', borderRadius:`${T.r}px 0 0 ${T.r}px`, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                        <button disabled={!eventsRead} title={exportWhy} onClick={() => { if (eventsRead) downloadEvents(visible, 'CSV'); }}
+                            style={{ padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRight:'none', borderRadius:`${T.r}px 0 0 ${T.r}px`, fontSize:12.5, fontWeight:600, color: eventsRead ? T.ink : T.inkMuted, cursor: eventsRead ? 'pointer' : 'not-allowed', fontFamily:T.sans }}>
                             Export CSV
                         </button>
-                        <button ref={exportBtnRef} onClick={() => setExportOpen(o => !o)}
-                            style={{ padding:'7px 8px', background: exportOpen ? T.surface2 : T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:`0 ${T.r}px ${T.r}px 0`, fontSize:10, color:T.inkMid, cursor:'pointer', display:'inline-flex', alignItems:'center', fontFamily:T.sans }}>▾</button>
-                        {exportOpen && (
+                        <button ref={exportBtnRef} disabled={!eventsRead} title={exportWhy} onClick={() => { if (eventsRead) setExportOpen(o => !o); }}
+                            style={{ padding:'7px 8px', background: exportOpen ? T.surface2 : T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:`0 ${T.r}px ${T.r}px 0`, fontSize:10, color: eventsRead ? T.inkMid : T.inkMuted, cursor: eventsRead ? 'pointer' : 'not-allowed', display:'inline-flex', alignItems:'center', fontFamily:T.sans }}>▾</button>
+                        {exportOpen && eventsRead && (
                             <AuditAnchoredMenu btnRef={exportBtnRef} onClose={() => setExportOpen(false)} alignRight={true}>
                                 <AuditExportDropdown events={visible} onClose={() => setExportOpen(false)}/>
                             </AuditAnchoredMenu>
                         )}
                     </div>,
-                    <SecBtn key="add" label="+ Add destination" primary onClick={() => setShowAddDest(true)}/>,
+                    <span key="add" title={addWhy} style={{ display:'inline-flex' }}><SecBtn label="+ Add destination" primary disabled={destsLoading} onClick={() => { if (!destsLoading) setShowAddDest(true); }}/></span>,
                 ]}/>
 
             {/* ── Filters ── */}
@@ -531,7 +669,7 @@ export const AuditDetail = ({ onBack }) => {
                         <button onClick={() => { setCatFilter('All categories'); setActorFilter('All actors'); setSearch(''); }}
                             style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600, whiteSpace:'nowrap' }}>Clear filters</button>
                     )}
-                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>Showing {visible.length} of {events.length}{eventsLoading ? ' (loading…)' : ''}</span>
+                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>{eventsError ? 'Not loaded' : eventsLoading ? 'Loading…' : <>Showing {visible.length} of {events.length}</>}</span>
                 </div>
             </div>
 
@@ -592,8 +730,11 @@ export const AuditDetail = ({ onBack }) => {
                         <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
                         <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Every audit event is POSTed to each destination as it is written, signed with HMAC-SHA256. One attempt, 4 s timeout, no queue; ten consecutive failures pause a destination.</div>
                     </div>
-                    <SecBtn label="+ Add destination" onClick={() => setShowAddDest(true)}/>
+                    <span title={addWhy} style={{ display:'inline-flex' }}><SecBtn label="+ Add destination" disabled={destsLoading} onClick={() => { if (!destsLoading) setShowAddDest(true); }}/></span>
                 </div>
+                {!destsLoading && !destsRead && (
+                    <div style={{ padding:'9px 16px', background:'rgba(156,58,46,0.08)', borderBottom:`1px solid ${T.border}`, color:T.danger, fontSize:12, fontWeight:600 }}>{destsUnread || 'The destinations could not be read — reload the page to see every destination.'}</div>
+                )}
                 {destError && (
                     <div style={{ padding:'9px 16px', background:'rgba(156,58,46,0.08)', borderBottom:`1px solid ${T.border}`, color:T.danger, fontSize:12, fontWeight:600 }}>{destError}</div>
                 )}
@@ -607,11 +748,12 @@ export const AuditDetail = ({ onBack }) => {
                     </thead>
                     <tbody>
                         {destsLoading && <tr><td colSpan={6} style={{ padding:'20px', textAlign:'center', color:T.inkMuted, fontSize:12.5 }}>Loading…</td></tr>}
-                        {!destsLoading && dests.length === 0 && (
+                        {!destsLoading && destsRead && dests.length === 0 && (
                             <tr><td colSpan={6} style={{ padding:'28px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>No destinations. Audit events are kept here and go nowhere else until you add one.</td></tr>
                         )}
                         {dests.map((s, i) => {
-                            const st = destStatusStyle(s.status);
+                            const unknown = statusUnread.includes(s.id);
+                            const st = destStatusStyle(unknown ? null : s.status);
                             const busy = busyId === s.id;
                             const tr = testResult?.id === s.id ? testResult : null;
                             return (
@@ -625,8 +767,9 @@ export const AuditDetail = ({ onBack }) => {
                                         <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
                                     </td>
                                     <td style={{ padding:'10px 14px' }}>
-                                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700, background:st.bg, color:st.fg }}>{s.status}</span>
-                                        {s.lastError && <div style={{ fontSize:10.5, color:s.status==='Paused'?T.warn:T.danger, marginTop:4, maxWidth:220, lineHeight:1.4 }}>{s.lastError}</div>}
+                                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700, background:st.bg, color:st.fg }}>{unknown ? 'Not known' : s.status}</span>
+                                        {unknown && <div style={{ fontSize:10.5, color:T.danger, marginTop:4, maxWidth:220, lineHeight:1.4 }}>Its status could not be read — reload the page to see it.</div>}
+                                        {!unknown && s.lastError && <div style={{ fontSize:10.5, color:s.status==='Paused'?T.warn:T.danger, marginTop:4, maxWidth:220, lineHeight:1.4 }}>{s.lastError}</div>}
                                         {tr && <div style={{ fontSize:10.5, color:tr.ok?T.ok:T.danger, marginTop:4, fontWeight:600 }}>{tr.ok ? `Test delivered · ${tr.status}` : `Test failed · ${tr.error || tr.status}`}</div>}
                                     </td>
                                     <td style={{ padding:'10px 14px', fontSize:12, color:T.inkMid }}>
@@ -636,7 +779,7 @@ export const AuditDetail = ({ onBack }) => {
                                     <td style={{ padding:'10px 14px', textAlign:'right', whiteSpace:'nowrap' }}>
                                         <div style={{ display:'inline-flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
                                             <SecBtn label={busy ? '…' : 'Send test event'} disabled={busy} onClick={() => sendTest(s)}/>
-                                            <SecBtn label={s.paused ? 'Resume' : 'Pause'} disabled={busy} onClick={() => putDest({ id: s.id, paused: !s.paused }, s.paused ? 'Resume' : 'Pause')}/>
+                                            <SecBtn label={unknown ? 'Pause / Resume' : s.paused ? 'Resume' : 'Pause'} disabled={busy || unknown} onClick={() => putDest({ id: s.id, paused: !s.paused }, s.paused ? 'Resume' : 'Pause')}/>
                                             <SecBtn label="Rotate secret" disabled={busy} onClick={() => rotate(s)}/>
                                             <SecBtn label="Remove" warn disabled={busy} onClick={() => remove(s)}/>
                                         </div>

@@ -35,6 +35,7 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { PAGE_FIELDS, sameValue, memberChanges, roleChanged, formAfterSave, clause } from '../src/utils/memberSave.js';
 import { NETWORK_ERROR } from '../src/utils/storage.js';
+import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
 import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from '../src/Tabs/settings/people/memberPickers.js';
 import { linksAsked, linksDecided, memberLinksCleared, NOT_AN_ID, namesItself, notInOrg } from '../src/utils/linkIds.js';
 import { teamIdNamed, teamsWithMemberOn } from '../src/utils/teamMembership.js';
@@ -348,8 +349,8 @@ const freeNames = (fnSrc) => {
 };
 
 const SAVE = handlerOf(read(UD), 'UserProfilePage', 'handleSave');
-const SAVE_NAMES = ['TEAM_MOVE_CHANGED', 'TEAM_MOVE_CHANGED_UNREAD', 'clause', 'dbFetch', 'form', 'formAfterSave', 'listOwed', 'memberChanges',
-    'requestOrg', 'revsAfter', 'roleChanged', 'setError', 'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving',
+const SAVE_NAMES = ['TEAM_MOVE_CHANGED', 'TEAM_MOVE_CHANGED_UNREAD', 'clause', 'dbFetch', 'failureWords', 'form', 'formAfterSave', 'listOwed', 'memberChanges',
+    'readRefusal', 'requestOrg', 'revsAfter', 'roleChanged', 'setError', 'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving',
     'setSettings', 'setTimeout', 'setUser', 'settings', 'stillOrg', 'takeLatestSettings', 'teamsWithMemberOn', 'user', 'writeSettings'];
 
 // The server's answer to a member PUT, made up the way it builds one: the body laid over the stored row, the name
@@ -382,6 +383,7 @@ const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, 
     const set = (name, key) => (v) => { sets.push([name, v]); state[key] = typeof v === 'function' ? v(state[key]) : v; };
     const scope = {
         user, form, listOwed, settings, memberChanges, roleChanged, teamsWithMemberOn, formAfterSave, clause, teamIdNamed,
+        readRefusal, failureWords,   // the house words (docs/design/refusal-sweep Part 12), as the page imports them
         requestOrg: () => 'org_A',
         stillOrg: (asked) => asked === 'org_A' && org(calls),
         dbFetch: async (url, opts) => {
@@ -547,7 +549,8 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     const r12 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), role: 'Manager' }, answers: { 'user-role': [{ throws: 'Failed to fetch' }] } });
     assert.deepEqual(r12.to, ['users', 'settings', 'user-role'], 'REGRESSION: a role request that fails first leaves the team list unmoved');
     assert.deepEqual(r12.named('setListOwed'), [null]);
-    assert.deepEqual(SAID(r12), ['Saved, but not everything — Failed to fetch. Reload to see what was saved.']);
+    // In plain words (failureWords, docs/design/refusal-sweep Part 12): it said fetch's own "Failed to fetch".
+    assert.deepEqual(SAID(r12), ['Saved, but not everything — The server could not be reached. Reload to see what was saved.']);
     assert.equal(r12.state.user.teamId, 'team_west');
     assert.equal(r12.state.user.role, 'User');
     assert.equal(r12.state.form.role, 'Manager');
@@ -576,7 +579,8 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.deepEqual(r14.named('setSettings'), []);
     assert.equal(roleChanged(r14.state.user, r14.state.form), true);
     const r14b = await runSave({ user: TESS, form: { ...TESS, role: 'Manager' }, answers: { 'user-role': [{ status: 400, body: {} }] } });
-    assert.deepEqual(SAID(r14b), ['Could not change the role.']);
+    // A refusal with no words says its status (docs/design/refusal-sweep Part 12): it said "Could not change the role."
+    assert.deepEqual(SAID(r14b), ['The server returned 400.']);
 
     // R15 the member, the list and the role all land: one roster update holding all three; nothing owed; saved.
     const r15 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), phone: '2', role: 'Manager' }, revs: { teams: 'T_OPEN', territories: 'R_HELD' } });
@@ -602,7 +606,7 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
         answers: { settings: [{ ok: false, status: 500, error: 'The server returned 500.' }], 'user-role': [{ throws: 'NetworkError when attempting to fetch resource.' }] } });
     assert.deepEqual(r16b.to, ['users', 'settings', 'user-role']);
     assert.deepEqual(SAID(r16b), ['Saved, but the team list was not updated — The server returned 500. Save changes tries the list again. '
-        + 'Saved, but not everything — NetworkError when attempting to fetch resource. Save changes tries again.'],
+        + 'Saved, but not everything — The server could not be reached. Save changes tries again.'],   // failureWords (Part 12): never fetch's own words
         "REGRESSION: an owed list's words say Reload, which loses the move");
     assert.deepEqual(r16b.named('setListOwed'), [{ teamId: 'team_west' }]);
     assert.equal(r16b.state.form.role, 'Manager', 'the pick waits too: Save sends the list and the role again');
@@ -768,7 +772,8 @@ test("S10 OLD — faed240's handleSave on the same rows: the whole form as loade
 test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Save changes" against it (run), picks a team and (§0.212) a manager by id, offers held values as themselves, and sets what landed once after the requests', async () => {
     const page = between(code(read(UD)), 'const UserProfilePage = ', 'export const UsersDetail = ');
     // Since §0.222 the page is handed onRemoved too: a removal goes back to the list, saying what it has to say there.
-    once(page, ind(0, 'const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail }) => {'));
+    // Moved (§0.249, review fixes round 4 — U4): handed mfaFailed too, so its Security card names a read that failed.
+    once(page, ind(0, 'const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, mfaByEmail, mfaFailed }) => {'));
     once(page, ind(4, 'const { setSettings, showConfirm, setMyProfile } = useApp();'));
     once(page, ind(4, 'const [user, setUser]     = useState(opened);'));
     once(page, ind(4, 'const [listOwed, setListOwed] = useState(null);'));

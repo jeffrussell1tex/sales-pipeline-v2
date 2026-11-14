@@ -92,7 +92,9 @@ test('a network failure resolves too, and says so', async () => {
         answer = () => { throw new TypeError('Failed to fetch'); };
         const r = await run();
         assert.equal(r.ok, false, what);
-        assert.deepEqual(messages, [{ error: `${said} — Network error — the change was not saved.` }], what);
+        // Moved pin (§0.249, docs/design/refusal-sweep Q4): NETWORK_ERROR is the house words — it said "Network error —
+        // the change was not saved."
+        assert.deepEqual(messages, [{ error: `${said} — The server could not be reached.` }], what);
     }
 });
 

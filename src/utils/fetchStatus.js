@@ -12,7 +12,13 @@ export function dbStatusOf(res) {
     return res.status === 401 || res.status === 403 ? 'auth' : true;
 }
 
-/** Copy for the banner, by state. */
+/**
+ * Copy for the banner, by state. `true` is reached only through dbStatusOf — a load the server ANSWERED with a
+ * non-ok status other than 401/403 (a 5xx, a 404); a load that never left throws before any loader calls it, so the
+ * banner never stands for a request that did not reach the server. It says the server's failure, never "Check your
+ * connection" (§0.249, docs/design/refusal-sweep Q4: that is "The server could not be reached.", and only for a
+ * request that never left) and never "Database connection lost" (the database is not what the answer names).
+ */
 export function bannerCopyOf(state) {
     if (state === 'auth') {
         return {
@@ -22,7 +28,7 @@ export function bannerCopyOf(state) {
     }
     return {
         tone: 'outage',
-        text: 'Database connection lost — changes may not be saving. Check your connection and refresh.',
+        text: 'The server returned an error loading your data — changes may not be saving. Refresh the page to try again.',
     };
 }
 

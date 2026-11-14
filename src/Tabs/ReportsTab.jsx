@@ -19,7 +19,7 @@ import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { matchSearch } from '../utils/searchMatch.js';
 import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
@@ -2439,13 +2439,18 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             setPromptBusy(true);
             try {
                 const res = await dbFetch('/.netlify/functions/report-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, today: isoLocal(new Date()) }) });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }
-                else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed — an Admin adds one under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
-                else if (data.unavailable && data.reason === 'off') extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
-                else if (data.unavailable && data.reason === 'role') extraNotes.push(`${aiAccessWords(settings?.aiSettings)} Read by the built-in interpreter.`);
-                else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
-                else extraNotes.push('Claude could not read this one — read by the built-in interpreter instead.');
+                // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal says why in the server's
+                // words with their ref, else "The server returned N." — the built-in reader reads the prompt either way.
+                if (!res.ok) extraNotes.push(`Claude could not read this one (${await readRefusal(res)}) — read by the built-in interpreter instead.`);
+                else {
+                    const data = await res.json().catch(() => ({}));
+                    if (data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }
+                    else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed — an Admin adds one under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                    else if (data.unavailable && data.reason === 'off') extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
+                    else if (data.unavailable && data.reason === 'role') extraNotes.push(`${aiAccessWords(settings?.aiSettings)} Read by the built-in interpreter.`);
+                    else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                    else extraNotes.push('Claude could not read this one — read by the built-in interpreter instead.');
+                }
             } catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }
             finally { setPromptBusy(false); }
         } else {
@@ -2526,16 +2531,23 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [deliveryBusy, setDeliveryBusy] = React.useState(false);
     const [deliveryNote, setDeliveryNote] = React.useState(null);   // { ok, text }
     // A PARTIAL PUT: the endpoint merges it over the stored row and answers
-    // with the row, which the list adopts — never the body.
+    // with the row, which the list adopts — never the body. The ok check first (state §0.249, docs/design/refusal-sweep
+    // Part 12): a 403 the owner's sentence, any other refusal the server's words with their ref, else "The server
+    // returned N."; a landed answer that cannot be read is null — the change landed, the stored row not known.
     const patchReport = async (id, patch) => {
         setLibError('');
         const res = await dbFetch('/.netlify/functions/saved-reports', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...patch }) });
+        if (!res.ok) throw new Error(res.status === 403 ? 'Only the report’s owner or an Admin can change it.' : await readRefusal(res));
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(res.status === 403 ? 'Only the report’s owner or an Admin can change it.' : (data.error || ('HTTP ' + res.status)));
         if (data.report) setSavedReportsList(prev => prev.map(r => r.id === data.report.id ? data.report : r));
         return data.report || null;
     };
-    const toggleShare = async (r) => { try { await patchReport(r.id, { isShared: !r.isShared }); } catch (e) { setLibError(e.message); } };
+    const toggleShare = async (r) => {
+        try {
+            const saved = await patchReport(r.id, { isShared: !r.isShared });
+            if (!saved) setLibError(`${r.isShared ? 'Unshared' : 'Shared'} — Its answer could not be read. Reload the page to see the report as stored.`);
+        } catch (e) { setLibError(`Sharing not changed — ${failureWords(e)}`); }
+    };
     const pinnedIds = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];
     const isPinned = (r) => pinnedIds.includes(r.id);
     // The pin list is MINE: it rides my own profile row through the self-service
@@ -2573,15 +2585,15 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             }
         }
         if (!stillOrg(askedOrg)) return;
-        if (!res.ok) { setLibError(data.error || ('Pin not saved — HTTP ' + res.status)); return; }
+        if (!res.ok) { setLibError(`Pin not saved — ${refusalWords(res, data)}`); return; }   // the server's words with their ref, else "The server returned N." (state §0.249)
         const stored = Array.isArray(data.user?.pinnedReports) ? data.user.pinnedReports : next;
         if (setMyProfile) setMyProfile(prev => ({ ...(prev || {}), ...(data.user || {}), pinnedReports: stored }));
     };
     const openDelivery = (r) => { setDeliveryNote(null); setDeliveryFor(r); };
     const saveDelivery = async (delivery) => {
         setDeliveryBusy(true); setDeliveryNote(null);
-        try { const saved = await patchReport(deliveryFor.id, { delivery }); if (saved) setDeliveryFor(saved); setDeliveryNote({ ok: true, text: delivery.enabled ? `Schedule saved — ${deliverySummary(saved?.config?.delivery || delivery)}.` : 'Schedule saved, delivery off.' }); return saved; }
-        catch (e) { setDeliveryNote({ ok: false, text: e.message }); return null; }
+        try { const saved = await patchReport(deliveryFor.id, { delivery }); if (saved) setDeliveryFor(saved); setDeliveryNote({ ok: true, text: (delivery.enabled ? `Schedule saved — ${deliverySummary(saved?.config?.delivery || delivery)}.` : 'Schedule saved, delivery off.') + (saved ? '' : ' Its answer could not be read — reload the page to see the schedule as stored.') }); return saved; }
+        catch (e) { setDeliveryNote({ ok: false, text: `Schedule not saved — ${failureWords(e)}` }); return null; }
         finally { setDeliveryBusy(false); }
     };
     // Save, then the same path the hourly job takes — and say what went where.
@@ -2592,16 +2604,29 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             const saved = await patchReport(deliveryFor.id, { delivery });
             if (!stillOrg(askedOrg)) return;   // the send would be asked with the new org's token
             const res = await dbFetch('/.netlify/functions/saved-reports?action=deliver&id=' + encodeURIComponent(deliveryFor.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-            const data = await res.json().catch(() => ({}));
+            // The ok check first (state §0.249, docs/design/refusal-sweep Part 12). A run that did not reach every channel
+            // answers 400 with its own result (deliverReport: what went, its errors) — said as before; any other refusal (a
+            // 403, a 404, a 500, a 502's page) in the server's words with their ref, else "The server returned N.".
+            let data;
+            if (!res.ok) {
+                data = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                if (!Array.isArray(data?.errors)) { setDeliveryNote({ ok: false, text: `Not sent — ${refusalWords(res, data)}` }); return; }
+            } else {
+                data = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                // Sent, with an answer that cannot be read: where it went is not known — said, never "Nothing was sent.".
+                if (!data) { setDeliveryNote({ ok: true, text: 'Sent — Its answer could not be read, so where it went is not shown.' }); return; }
+            }
             const went = [...(data.sent?.email || []), ...(data.sent?.slack ? ['Slack'] : [])];
             const text = (went.length ? `Sent to ${went.join(', ')} — ${data.rows ?? 0} row${data.rows === 1 ? '' : 's'} in the period.` : 'Nothing was sent.') + (Array.isArray(data.errors) && data.errors.length ? ` ${data.errors.join(' ')}` : '');
-            setDeliveryNote({ ok: res.ok, text: res.ok ? text : (data.error || text) });
+            setDeliveryNote({ ok: res.ok, text });
             if (data.delivery && saved) {
                 const stamped = { ...saved, config: { ...(saved.config || {}), delivery: data.delivery } };
                 setDeliveryFor(stamped);
                 setSavedReportsList(prev => prev.map(r => r.id === stamped.id ? stamped : r));
             }
-        } catch (e) { setDeliveryNote({ ok: false, text: e.message }); }
+        } catch (e) { if (stillOrg(askedOrg)) setDeliveryNote({ ok: false, text: `Not sent — ${failureWords(e)}` }); }
         finally { setDeliveryBusy(false); }
     };
     const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };
@@ -4666,11 +4691,15 @@ function RecommendationReport({ currentUser, canSeeAll, scopedRepNames = null, s
             // endpoint returns { logs, summary } as a JSON body. Storing the
             // Response left data.summary undefined forever, so this report read
             // "No actions logged yet" over any number of rows (0.68).
+            // The server's words with their ref, else "The server returned N." (state §0.249) — never "HTTP N"; an answer
+            // with no summary is no answer, never "No actions logged yet".
             const res = await dbFetch(`/.netlify/functions/recommendation-log?${params}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            setData(await res.json());
+            if (!res.ok) throw new Error(await readRefusal(res));
+            const body = await res.json();
+            if (!body || typeof body !== 'object' || !body.summary) throw new Error('Its answer could not be read.');
+            setData(body);
         } catch (err) {
-            setError(err.message);
+            setError(failureWords(err));
         } finally {
             setLoading(false);
         }

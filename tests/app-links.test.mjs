@@ -133,7 +133,7 @@ test('THE GUARD: every template handed a deal or a task links it — by appLink,
     const misses = [];
     for (const [file, holder] of [['netlify/functions/send-email.mjs', 'emailTemplates'], ['netlify/functions/send-sms.mjs', 'smsTemplates'], ['netlify/functions/send-slack.mjs', 'slackTemplates']]) {
         const all = templatesOf(read(file), holder);
-        assert.ok(all.length >= 8, `${file}: the templates read (${all.length})`);
+        assert.ok(all.length >= 11, `${file}: the templates read (${all.length})`);
         for (const t of all) {
             const takesDeal = /\bopportunityId\b/.test(t.params), takesTask = /\btaskId\b/.test(t.params);
             if (!takesDeal && !takesTask) continue;
@@ -170,7 +170,7 @@ test('WIRING: every sender hands its record\'s org — the deal emails\' helper,
     assert.ok(read('netlify/functions/opportunities.mjs').includes('...emailTemplates[alertType]({ ...templateArgs, orgId }),'));
     const pa = code(read('netlify/functions/pipeline-alerts.mjs'));
     const calls = [...pa.matchAll(/(?:emailTemplates|smsTemplates|slackTemplates)\.(?:dealSilent|dealStuck|closeDateLapsed|managerDealAlert|dealMomentum|scoreDrop)\(\{([^\n]*)/g)];
-    assert.ok(calls.length >= 18, `the alerts' deal calls (${calls.length})`);
+    assert.ok(calls.length >= 19, `the alerts' deal calls (${calls.length})`);
     for (const c of calls) assert.ok(/\borgId\b/.test(c[1]) && /opportunityId: opp\.id/.test(c[1]), `REGRESSION: ${c[0].slice(0, 60)} without its deal and org`);
     const dg = code(read('netlify/functions/digest.mjs'));
     assert.equal((dg.match(/orgId: user\.orgId/g) || []).length >= 4, true, 'the task emails and texts name the org');

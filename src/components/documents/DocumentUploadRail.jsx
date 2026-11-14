@@ -15,6 +15,7 @@ import {
     VisibilityControl, PeopleChooser, CATEGORIES,
 } from './atoms';
 import { validateFile } from '../../utils/documentsStorage';
+import { failureWords } from '../../utils/refusalWords.js';
 import { sharablePeople, toggled } from '../../utils/documentPeople.js';
 
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.csv,.txt';
@@ -42,6 +43,8 @@ export default function DocumentUploadRail() {
     const [progress, setProgress] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
+    // An upload made whose answer could not be read: said as made, apart from the red box of a failure (§0.249).
+    const [notice, setNotice] = useState(null);
     const [drag, setDrag] = useState(false);
     const inputRef = useRef(null);
 
@@ -58,7 +61,7 @@ export default function DocumentUploadRail() {
         setShowUploadRail(false);
         setUploadRailContext && setUploadRailContext(null);
         setFile(null); setName(''); setCategory('Contract'); setLinks([]); setVisibility('team'); setSharedWith([]);
-        setNote(''); setProgress(null); setUploading(false); setError(null); setDrag(false);
+        setNote(''); setProgress(null); setUploading(false); setError(null); setNotice(null); setDrag(false);
     };
 
     // Escape closes this rail as its backdrop and Cancel do — not while a file is uploading —
@@ -70,11 +73,20 @@ export default function DocumentUploadRail() {
 
     if (!showUploadRail) return null;
 
+    // The rail as it opened (the seed above): a document made — or one that may have been — leaves none of its file, name,
+    // links, category, visibility or note for the next file to take (§0.249, the review, round 2: the next file was saved
+    // under the last one's name and links). The rail stays open so its words stay until closed or replaced.
+    const opened = () => {
+        setFile(null); setName(''); setNote(''); setVisibility('team'); setSharedWith([]);
+        setLinks(!isVersion && Array.isArray(ctx.links) ? ctx.links : []);
+        setCategory(!isVersion && ctx.category ? ctx.category : 'Contract');
+    };
+
     const pickFile = (f) => {
         if (!f) return;
         const invalid = validateFile(f);
         if (invalid) { setError(invalid); return; }
-        setError(null);
+        setError(null); setNotice(null);
         setFile(f);
         if (!isVersion && !name) setName(baseName(f.name));
     };
@@ -91,7 +103,7 @@ export default function DocumentUploadRail() {
 
     const submit = async () => {
         if (blocked) return;
-        setUploading(true); setError(null); setProgress(0);
+        setUploading(true); setError(null); setNotice(null); setProgress(0);
         try {
             if (isVersion) {
                 await addDocumentVersion(ctx.documentId, file, { note, onProgress: setProgress });
@@ -100,7 +112,11 @@ export default function DocumentUploadRail() {
             }
             close();
         } catch (e) {
-            setError(e.message || 'Upload failed');
+            // Made, with an answer that cannot be read (documentsStorage's `landed`): said as made, and the file let go —
+            // Upload is not offered over it again (a second press minted a new id and wrote the file twice, §0.249). One that
+            // may have been made (`maybe`: a 5xx, a gateway's page, a request that threw) likewise, said in the red box.
+            if (e && e.landed) { (e.maybe ? setError : setNotice)(failureWords(e)); opened(); }
+            else setError(failureWords(e));
             setUploading(false);
             setProgress(null);
         }
@@ -130,6 +146,9 @@ export default function DocumentUploadRail() {
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '16px 18px' }}>
                     {error && (
                         <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger }}>{error}</div>
+                    )}
+                    {notice && (
+                        <div style={{ background: `${T.ok}12`, border: `1px solid ${T.ok}55`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.ink }}>{notice}</div>
                     )}
 
                     {/* Dropzone / selected file */}

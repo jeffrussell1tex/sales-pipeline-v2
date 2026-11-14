@@ -62,12 +62,12 @@ test('QuotesTab: money is set in the app’s face — no dollar amount in monosp
     // value. Its style is on that line or the one above it (the Catalog's list
     // price is a two-line element) — the harness proved a one-line read blind.
     const money = lines.map((l, i) => [i + 1, (lines[i - 1] || '') + '\n' + l]).filter(([, ctx]) => /\{fmtFull\(|\{fmt\(|\{r\.v\}|\{r\.value\}|toLocaleString\(\)\}/.test(ctx.split('\n')[1]));
-    assert.ok(money.length >= 7, `expected the seven money sites, found ${money.length}`);
+    assert.ok(money.length >= 19, `expected the seven money sites, found ${money.length}`);
     for (const [n, ctx] of money) assert.ok(!/monospace/.test(ctx), `QuotesTab.jsx:${n} sets money in monospace: ${ctx.trim().slice(0, 160)}`);
     // Nineteen lines print money (stat-card literals and the print template
     // among them, which carry no style of their own); the six the batch moved
     // off monospace name the face explicitly.
-    assert.ok(money.filter(([, ctx]) => ctx.includes('fontFamily: T.sans')).length >= 6, 'the six moved money sites name the app face explicitly');
+    assert.ok(money.filter(([, ctx]) => ctx.includes('fontFamily: T.sans')).length >= 17, 'the six moved money sites name the app face explicitly');
     assert.ok(lines.some(l => l.includes('{quote.quoteNumber}') && l.includes('monospace')), 'an identifier (the quote number) keeps the monospace face');
 });
 
