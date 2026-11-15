@@ -257,8 +257,8 @@ test('putSettings answers only in the org that asked: after a switch it never se
     const { putSettings } = await import('../src/Tabs/settings/shared/saveSettings.js');
     const { setRequestOrg } = await import('../src/utils/storage.js');
     const PENDING = Symbol('pending');
-    const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), new Promise((r) => setTimeout(() => r(PENDING), 60))]);
-    const tick = () => new Promise((r) => setTimeout(r, 0));
+    const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), (async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r)); return PENDING; })()]);   // pending after 50 turns of the loop (§0.251)
+    const tick = () => new Promise((r) => setImmediate(r));   // one turn of the loop, not a timer (§0.251)
     const savedWindow = globalThis.window, savedFetch = globalThis.fetch;
     globalThis.window = { __getClerkToken: async () => 'token' };
     try {
@@ -336,7 +336,7 @@ test('an upload cut by an org switch after its presign stops there and never set
     const { uploadNewDocument, uploadNewVersion } = await import('../src/utils/documentsStorage.js');
     const { setRequestOrg } = await import('../src/utils/storage.js');
     const PENDING = Symbol('pending');
-    const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), new Promise((r) => setTimeout(() => r(PENDING), 60))]);
+    const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), (async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r)); return PENDING; })()]);   // pending after 50 turns of the loop (§0.251)
     const file = { name: 'contract.pdf', size: 2048, type: 'application/pdf' };
     // Node has no XMLHttpRequest: an upload that went on to the bytes would throw.
     assert.equal(typeof globalThis.XMLHttpRequest, 'undefined');

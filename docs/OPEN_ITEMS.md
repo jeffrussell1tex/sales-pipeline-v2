@@ -843,7 +843,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   by the full run of 4 Nov before their ship, on `80b21fb` (4,183/4,183
   caught, exit 0 — state §0.229); §0.230-§0.233 by their one scoped run
   (5 Nov, 3,428/3,428) and the full run of 5–6 Nov before their ship, on
-  `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233).
+  `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233). The run on
+  `5a4665a` (15 Nov, 6,104 entries) was stopped at 950, all caught: about
+  35 s a mutant, some 70 h (Jeff: "Stop, speed up first"); since §0.251
+  a mutant's SUITES take about 9.9 s, not 35.4 s (guide §18b126).
 - **The quote PDF on prod — after the next ship** (state §0.234, §0.235):
   dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
   Q-2026-001 rendered there as Karen and read back — 200, QA's name,
@@ -5039,6 +5042,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ## 6. Tooling, tests and housekeeping
 
+- **late-answers' org-switch cases answer without checking the request went
+  out** (§0.251, 15 Nov — the review's settings-saves / late-answers lens;
+  read in code; older, not §0.251's): tests/late-answers.test.mjs's
+  putSettings cases (about :268-:293) do `pr = putSettings(...); await
+  tick(); answer(...)` (or `releaseBody()`) with no check that the request
+  is out, as settings-saves' `until(() => release)` makes, and `release` /
+  `releaseBody` are shared bindings: had the request not gone out by then,
+  the answer would resolve the previous request's settled resolver, the new
+  one would wait for good, and its PENDING verdict pass on nothing. Today
+  nothing on that path takes more than microtasks (§0.251's probe).
+  Recommended: check the request is out before answering it. Low.
 - **The late-answer guard counts an org check on another branch** (§0.236's
   harness run, 9 Nov — read in tests/late-answers.test.mjs scanText): a late
   set or write is cleared when an org check appears anywhere in the text
@@ -5059,6 +5073,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   1.5-2 h. Before it is used, a sample graded both ways must match. With it,
   a stale check that lists the entries a weakened test grades (a lowered
   floor, a loosened pin), to prove them by hand with the batch's own.
+  Since §0.251 (15 Nov, measured): SUITES is 184 suites, about 9.9 s
+  a mutant (35.4 s before §0.251's waits, guide §18b126); what is left is
+  work across them all — quote-pdf-pages 5.6 s alone (pdfkit),
+  refusals-said 4.1 s, settings-saves 2.2 s, and the whole-src guard
+  scans each parsing src/ again; starting the slowest first gains about
+  1 s. This item is the next lever.
 
 - **The harness runs each mutant with no time limit** (§0.215's fourth
   review, run in a scratch copy): scripts/mutate-import.mjs and
@@ -5350,7 +5370,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Scan (iv) reads only a catch clause's own `.message`** (§0.247, 12 Nov — the review's tests lens, refuted as a defect: the design's stated scope; none of the shapes is in the scanned files): a promise handler's `.catch(err => setError(err.message))`, an alias (`const err = e; err.message`), a destructure in the body (`const { message } = e`), `String(e)` or `` `${e}` `` ("TypeError: Failed to fetch") and `e['message']` pass it; its header's "no catch param's `.message` is read" overstates it. Recommended: a KNOWN LIMITS line in the header now, and these shapes with the all-src widening above. Low.
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
-- **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run.
+- **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run. Since §0.251 (15 Nov) the race is 50 turns of the loop, not 60 ms (guide §18b126).
 - **Scan (iii) matches a response by name, not by binding** (§0.248, 12 Nov — the review's tests lens, refuted as a defect: no swept file has the shape; noted in the guard's KNOWN LIMITS): an outer `res.ok` check counts toward a nested block's or loop's own `const res`. A later tightening could resolve the binding (the readsIn / `nearest` tracker of scan (i) does similar work). Low.
 - **An older harness entry's anchor matches twice** (§0.248, 12 Nov — the Part 10 fixer's parse check): "deal window: an unnamed row on the deal is blank" (`{c.name || UNLISTED_CONTACT}`, OpportunityModal.jsx) matches twice, the same at HEAD; the harness mutates the first, and the stale check asks only that an anchor be present. A uniqueness check in the stale check would catch the class. Low. Since §0.250 (14 Nov — the deals builder; read in code; older): a second, "deals endpoint (G2): the walk reads no parent" (`accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,`, netlify/functions/opportunities.mjs), whose anchor occurs twice, the same at HEAD.
 - **Harness labels and test messages that name older counts** (§0.249, 13 Nov — the review rounds' verifiers (G2, G3, G5); cosmetic): a label is its entry's name, kept as the rounds moved its anchor, so a few name counts the guard has moved past — "four-fifths of its 187 catch clauses", "178 of 187 seen", "84 of 187 seen", "the measured 185 body reads" (scan (iv) reads 188 catch clauses, scan (iii) 192 reads); and the last pass changed only the number of each source-walk floor it set, so some messages beside them still name the old count (tests/itest-targets-test-db.test.mjs: "expected the nineteen suites" beside a floor of 65). Recommended: each message says its count, or none; the labels stay. Low.

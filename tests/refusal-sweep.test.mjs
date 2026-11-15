@@ -109,7 +109,7 @@ const order = (s, ...needles) => {
     let at = -1;
     for (const n of needles) { const i = s.indexOf(n, at + 1); assert.ok(i > at, `in order: ${n}`); at = i; }
 };
-const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
+const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };   // six turns of the loop, not six timers (a timer waits ~15 ms on Windows — §0.251)
 const quiet = { error: () => {}, warn: () => {}, log: () => {} };
 // A state setter that applies updaters, as React's does.
 const stateOf = (initial) => {
@@ -6110,7 +6110,7 @@ const p12cDocs = await import('../src/utils/documentsStorage.js');
 const { setRequestOrg: p12cSetOrg, dbWrite: p12cDbWrite } = await import('../src/utils/storage.js');
 const { makeBulkClient: p12cBulk } = await import('../src/utils/bulkClient.js');
 const P12C_PENDING = Symbol('pending');
-const p12cOutcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), new Promise((r) => setTimeout(() => r(P12C_PENDING), 60))]);
+const p12cOutcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e: e.message })), (async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r)); return P12C_PENDING; })()]);   // pending after 50 turns of the loop (§0.251)
 const P12C_FILE = { name: 'contract.pdf', size: 2048, type: 'application/pdf' };
 // An answer whose body read switches the request org first (storage.js setRequestOrg — the uploads ask stillOrg).
 const p12cSwitchOnRead = (status, body) => {
@@ -6127,12 +6127,12 @@ const p12cXhr = (r2, puts) => class {
     setRequestHeader() {}
     send() {
         puts.push(this.url);
-        setTimeout(() => {
+        setImmediate(() => {
             if (r2.switch) p12cSetOrg('org_b');
             if (r2.offline) { this.onerror(); return; }
             this.status = r2.status; this.responseText = r2.responseText || '';
             this.onload();
-        }, 0);
+        });
     }
 };
 // One upload over stubs: `presign`, `record` the documents function's answers (an Error throws); `r2` the PUT's end;

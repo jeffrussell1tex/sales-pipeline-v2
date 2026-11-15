@@ -433,6 +433,9 @@ One commit per verified batch; doc patch in the same commit.
 ## Environment and tooling
 
 - Windows, Git Bash. `node --env-file=.env` (never `set -a; source .env`).
+- A test waits by `setImmediate` turns, never a timer: on Windows `setTimeout(r, 0)`
+  waits ~15 ms, and every harness mutant reruns all of SUITES (state §0.251;
+  THE GUARD, tests/test-waits.test.mjs; guide §18b126).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with
   asserted occurrence counts, dry-run default, `--apply` flag, write once,
   re-read FROM DISK to verify. `App.jsx` is CRLF — preserve it.

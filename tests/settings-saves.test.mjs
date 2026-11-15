@@ -590,8 +590,8 @@ test('S2 — every send names its tokens, read from its draft\'s binding — a p
 // ── S3 — the sender, run ─────────────────────────────────────────────────────
 
 const PENDING = Symbol('pending');
-const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e })), new Promise((r) => setTimeout(() => r(PENDING), 60))]);
-const tick = () => new Promise((r) => setTimeout(r, 0));
+const outcome = (pr) => Promise.race([pr.then((v) => ({ v }), (e) => ({ e })), (async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r)); return PENDING; })()]);   // pending after 50 turns of the loop (§0.251)
+const tick = () => new Promise((r) => setImmediate(r));   // one turn of the loop, not a timer (~15 ms on Windows — §0.251)
 const until = async (cond) => { for (let i = 0; i < 100 && !cond(); i++) await tick(); assert.ok(cond(), 'the request never went out'); };
 // An answer held open: released after a switch — whole, or its body read across one.
 const held = () => {
