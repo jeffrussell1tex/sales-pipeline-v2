@@ -8,7 +8,9 @@
 // builder-style save (config: null) keeps the schedule; Send now runs the
 // report over the OWNER's read of the org and mails the chosen member — with
 // org B's deals nowhere in it — and stamps the schedule; a schedule with no
-// recipients is refused, not sent.
+// recipients is refused, not sent. Since §0.250: who made a report is the
+// server's — a create stamps the caller's member name, a save keeps the stored
+// one, the GET names the maker live by THIS org's roster, a taken id is a 409.
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST)
 if (!process.env.DATABASE_URL_TEST) {
@@ -59,9 +61,9 @@ mock.module(new URL('../../netlify/functions/send-email.mjs', import.meta.url).h
 
 const { handler } = await import('../../netlify/functions/saved-reports.mjs');
 const { db } = await import('../../db/index.js');
-const { savedReports, users, opportunities } = await import('../../db/schema.js');
+const { savedReports, users, opportunities, auditLog } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
-const { eq } = await import('drizzle-orm');
+const { eq, and } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
 const ORG_A = 'itest_sr_A', ORG_B = 'itest_sr_B';
@@ -208,4 +210,92 @@ test('DELETE: a stranger is 403, org B is a no-op, the owner deletes', async () 
     assert.equal((await db.select().from(savedReports).where(eq(savedReports.id, R_MINE))).length, 1, 'org B’s delete touched nothing');
     assert.equal((await call('DELETE', ORG_A, { user: OWNER, body: { id: R_MINE } })).statusCode, 200);
     assert.equal((await db.select().from(savedReports).where(eq(savedReports.id, R_MINE))).length, 0);
+});
+
+// ── Who made a report is the server's (state §0.250, guide §18b125 rule 2; Jeff, 14 Nov: "Start the maker items") ──
+test('§0.250: a create stamps the caller\'s member name (a forged maker ignored; none for a caller with no roster row); a save keeps the stored maker; the GET names the maker live, by THIS org\'s roster; a taken id is a 409 that writes nothing', async () => {
+    const R_NULL = 'rpt_itest_sr_nullname', R_NEW = 'rpt_itest_sr_new', R_NOBODY = 'rpt_itest_sr_nobody';
+    await db.insert(savedReports).values([{ id: R_NULL, orgId: ORG_A, ownerId: OWNER, ownerName: null, name: 'No name stored', source: 'Opportunities', dims: [], metrics: [], chartType: 'table', filters: null, config: null, isShared: true }]);
+    // The same Clerk id is a member of org B under another name: org A's answers never carry it.
+    await db.insert(users).values([{ id: 'usr_itest_sr_owner_b', orgId: ORG_B, clerkUserId: OWNER, name: 'Owner In B', email: 'owner-b@itest.local', role: 'User', active: true, profile: { userType: 'User' } }]);
+    invalidateRoster();
+    const stored = async (id) => (await db.select().from(savedReports).where(eq(savedReports.id, id)))[0];
+
+    // A create naming a maker: the caller's member name and Clerk id are stored — never the body's.
+    const made = await call('POST', ORG_A, { user: REP, body: { id: R_NEW, name: 'Made by the rep', source: 'Opportunities', dims: [], metrics: [], chartType: 'bar', ownerName: 'Mallory', ownerId: 'clerk_mallory' } });
+    assert.equal(made.statusCode, 201, made.body);
+    assert.deepEqual([json(made).report.ownerId, json(made).report.ownerName], [REP, 'Rep Person'], 'the answer names the caller');
+    const madeRow = await stored(R_NEW);
+    assert.deepEqual([madeRow.ownerId, madeRow.ownerName], [REP, 'Rep Person'], 'REGRESSION (§0.250): the create stored the body\'s maker');
+    // A caller with no roster row in this org: none stored, never the body's.
+    const nobody = await call('POST', ORG_A, { user: 'clerk_itest_sr_nobody', body: { id: R_NOBODY, name: 'Made by nobody', ownerName: 'Mallory' } });
+    assert.equal(nobody.statusCode, 201, nobody.body);
+    assert.equal((await stored(R_NOBODY)).ownerName, null, 'REGRESSION (§0.250): a roster-less caller\'s create stored the body\'s maker');
+    assert.equal(json(nobody).report.ownerName, null);
+
+    // The stamp is read in THIS org (the review's two-org gap): the answers pass through makersNamed, which would mask a
+    // wrong stored name, so the STORED row is read. Nothing of either create lands in org B.
+    const R_TWO_ORG = 'rpt_itest_sr_twoorg', R_B_ONLY = 'rpt_itest_sr_bonly';
+    const bRowsBefore = (await db.select().from(savedReports).where(eq(savedReports.orgId, ORG_B))).map(r => r.id).sort();
+    const bAuditsBefore = (await db.select().from(auditLog).where(eq(auditLog.orgId, ORG_B))).length;
+    // A member of both orgs ('Owner Person' here, 'Owner In B' there) creates in org A naming a maker: org A's name stored.
+    const twoOrg = await call('POST', ORG_A, { user: OWNER, body: { id: R_TWO_ORG, name: 'Made by a member of two orgs', ownerName: 'Owner In B' } });
+    assert.equal(twoOrg.statusCode, 201, twoOrg.body);
+    const twoOrgRow = await stored(R_TWO_ORG);
+    assert.equal(twoOrgRow.orgId, ORG_A);
+    assert.deepEqual([twoOrgRow.ownerId, twoOrgRow.ownerName], [OWNER, 'Owner Person'], 'REGRESSION (§0.250): a two-org member\'s create stored another org\'s name or the body\'s');
+    assert.ok(!twoOrg.body.includes('Owner In B'), 'org B\'s name never in org A\'s answer');
+    // A Clerk id with a row in org B only creates in org A: none stored — never their org-B name, never the body's.
+    const bOnly = await call('POST', ORG_A, { user: 'clerk_itest_sr_b', body: { id: R_B_ONLY, name: 'Made by org B\'s member', ownerName: 'Mallory' } });
+    assert.equal(bOnly.statusCode, 201, bOnly.body);
+    const bOnlyRow = await stored(R_B_ONLY);
+    assert.equal(bOnlyRow.orgId, ORG_A);
+    assert.equal(bOnlyRow.ownerName, null, 'REGRESSION (§0.250): org B\'s member name stored for a create in org A');
+    assert.equal(json(bOnly).report.ownerName, null);
+    assert.ok(!bOnly.body.includes('B Person') && !bOnly.body.includes('Mallory'), 'neither org B\'s name nor the body\'s in the answer');
+    assert.deepEqual((await db.select().from(savedReports).where(eq(savedReports.orgId, ORG_B))).map(r => r.id).sort(), bRowsBefore, 'nothing written in org B');
+    assert.equal((await db.select().from(auditLog).where(eq(auditLog.orgId, ORG_B))).length, bAuditsBefore, 'no audit row in org B');
+
+    // A save naming a maker keeps the stored one — a stored none stays none (an Admin's save never stamps the Admin).
+    const adminSave = await call('PUT', ORG_A, { user: ADMIN, role: 'Admin', body: { id: R_NULL, name: 'No name stored, saved', ownerName: 'Admin Person' } });
+    assert.equal(adminSave.statusCode, 200, adminSave.body);
+    assert.equal((await stored(R_NULL)).ownerName, null, 'REGRESSION (§0.250): a save over a stored none took the body\'s maker');
+    assert.equal(json(adminSave).report.ownerName, 'Owner Person', 'the answer names the maker by their owner id, live — not the Admin');
+    const ownerSave = await call('PUT', ORG_A, { user: OWNER, body: { id: R_SHARED, ownerName: 'Mallory' } });
+    assert.equal(ownerSave.statusCode, 200, ownerSave.body);
+    assert.equal((await stored(R_SHARED)).ownerName, 'Owner Person', 'REGRESSION (§0.250): a save wrote the body\'s maker');
+
+    // The GET names a renamed member by their live name, and a report stored with none by its owner's name; nothing written.
+    await db.update(users).set({ name: 'Owner Renamed' }).where(eq(users.id, OWNER_ROW));
+    try {
+        const repView = json(await call('GET', ORG_A, { user: REP })).reports;
+        const nameOf = (id) => repView.find(r => r.id === id)?.ownerName;
+        assert.equal(nameOf(R_SHARED), 'Owner Renamed', 'REGRESSION (§0.250): the GET answered the stored snapshot over the live name');
+        assert.equal(nameOf(R_NULL), 'Owner Renamed', 'a report stored with no maker names its owner');
+        assert.equal(nameOf(R_NEW), 'Rep Person');
+        assert.equal((await stored(R_SHARED)).ownerName, 'Owner Person', 'read-only: the stored name is untouched');
+        assert.equal((await stored(R_NULL)).ownerName, null);
+        // The Admin's whole-org read: a maker with no row here keeps the stored name (none); org B's member name never appears.
+        const adminBody = (await call('GET', ORG_A, { user: ADMIN, role: 'Admin' })).body;
+        assert.equal(JSON.parse(adminBody).reports.find(r => r.id === R_NOBODY)?.ownerName, null);
+        assert.ok(!adminBody.includes('Owner In B') && !adminBody.includes('B Person'), 'REGRESSION: another org\'s member named in this org\'s answer');
+        const bBody = (await call('GET', ORG_B, { user: 'clerk_itest_sr_b', role: 'Admin' })).body;
+        assert.deepEqual(JSON.parse(bBody).reports.map(r => [r.id, r.ownerName]), [[R_B, 'B Person']]);
+        assert.ok(!bBody.includes('Owner Renamed') && !bBody.includes('Rep Person'), 'org A\'s members never in org B\'s answer');
+    } finally {
+        await db.update(users).set({ name: 'Owner Person' }).where(eq(users.id, OWNER_ROW));
+    }
+
+    // A taken id — another org's, or this org's — is a 409 that writes nothing and audits nothing.
+    const auditsOf = async () => (await db.select().from(auditLog).where(and(eq(auditLog.orgId, ORG_A), eq(auditLog.action, 'saved_report.created')))).length;
+    const auditsBefore = await auditsOf();
+    const beforeB = await stored(R_B);
+    const taken = await call('POST', ORG_A, { user: ADMIN, role: 'Admin', body: { id: R_B, name: 'Taking B', ownerName: 'Mallory' } });
+    assert.equal(taken.statusCode, 409, 'REGRESSION (§0.250): a primary-key 500 for an id another org holds');
+    assert.deepEqual(json(taken), { error: 'That report id is already in use.' });
+    assert.deepEqual(await stored(R_B), beforeB, 'org B\'s row unchanged');
+    const ownTaken = await call('POST', ORG_A, { user: REP, body: { id: R_NEW, name: 'Again' } });
+    assert.equal(ownTaken.statusCode, 409);
+    assert.equal((await stored(R_NEW)).name, 'Made by the rep', 'this org\'s row unchanged');
+    assert.equal(await auditsOf(), auditsBefore, 'no audit row for a create that wrote nothing');
 });

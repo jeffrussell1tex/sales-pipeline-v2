@@ -66,10 +66,11 @@ const ALLOWED_FIELDS = [
     'id', 'opportunityId', 'version', 'name', 'status',
     'validUntil', 'paymentTerms', 'billingContact', 'lineItems',
     'subtotal', 'dealDiscount', 'totalValue', 'recurringValue', 'oneTimeValue',
-    'notes', 'approvalNote', 'approvalTier', 'approvalReason', 'createdBy',
+    'notes', 'approvalNote', 'approvalTier', 'approvalReason',
     // The quote's tax rate and "Tax exempt" switch (state §0.241) — each cleaned below before it is stored; the
     // tax AMOUNT is the server's, never the body's, so it is not here.
     'taxRate', 'taxExempt',
+    // createdBy is NOT here (guide §18b125 rule 2): who made a quote is the server's, stamped by the POST.
 ];
 
 function sanitize(data) {
@@ -371,8 +372,9 @@ export const handler = async (event) => {
                 // A new draft carries no approval stamp — the server writes one when
                 // the quote is submitted.
                 approvalTier: null, approvalReason: null, approvalNote: null,
-                // Who wrote it, from the roster — not the body's word for it.
-                createdBy: (await getCallerName(auth.userId, orgId)) || data.createdBy || null,
+                // Who made it (guide §18b125 rule 2): the server's, never the body's — the caller's name from the
+                // roster, none when the roster names none. A new version is a create: its maker is whoever made it.
+                createdBy: (await getCallerName(auth.userId, orgId)) || null,
             };
 
             // Resolved inside the retry so a collision re-reads the maximum. Note a

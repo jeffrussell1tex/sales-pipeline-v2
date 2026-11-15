@@ -1532,7 +1532,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
 // ─── Main QuotesTab ───────────────────────────────────────────
 export default function QuotesTab() {
     const {
-        quotes, setQuotes, products, opportunities, settings, currentUser, currentUserId, userRole,
+        quotes, setQuotes, products, opportunities, settings, currentUserId, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
         loadQuotes, showConfirm, quoteModalError,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
@@ -1752,7 +1752,7 @@ export default function QuotesTab() {
                 opportunityId: oppId,
                 lineItems: template ? templateLineItems(template, products) : [],
                 status: 'Draft',
-                createdBy: currentUser,
+                // No createdBy: who made it is the server's (guide §18b125 rule 2).
                 paymentTerms: 'Net 30 · Annual',
             };
             const saved = await handleSaveQuote(payload, null);
@@ -1805,7 +1805,7 @@ export default function QuotesTab() {
                 notes: source.notes,
                 billingContact: source.billingContact || '',
                 status: 'Draft',
-                createdBy: currentUser,
+                // No createdBy: the server stamps whoever makes this version (guide §18b125 rule 2).
             };
             const saved = await handleSaveQuote(payload, null);
             // Refused: the server's own words are on the banner already — handleSaveQuote keeps them

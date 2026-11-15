@@ -1172,10 +1172,10 @@ const reportSaves = (which) => {
     };
     const setWords = (v) => { st.words.set(v); if (typeof v !== 'function' && v) st.said.push(v); };
     const common = [() => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, (f, ms) => { st.timers.push([f, ms]); },
-        { randomUUID: () => 'u' + st.sent.length }, 'Karen Rep'];
-    const names = ['requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setTimeout', 'crypto', 'currentUser'];
+        { randomUUID: () => 'u' + st.sent.length }, 'Karen Rep', 'clerk_karen'];
+    const names = ['requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setTimeout', 'crypto', 'currentUser', 'clerkUserId'];   // clerkUserId since §0.250
     if (which === 'library') {
-        const fn = callbackOf(r, 'handleSaveReport', '[currentUser]');
+        const fn = callbackOf(r, 'handleSaveReport', '[currentUser, clerkUserId]');
         st.at = stateOf(null);
         st.place = { current: 't3' };   // savePlaceRef: the screen shown — the Rep scorecard template unless a case moves it
         st.call = new Function(...names, 'setSaveState', 'setSaveError', 'setSavedReportsList', 'setShowCreateReport', 'setCreateMode',
@@ -1183,7 +1183,7 @@ const reportSaves = (which) => {
             `${fn}\nreturn handleSaveReport;`)(...common, st.state.set, setWords, st.list.set, (v) => st.closed.push(v), (v) => st.modes.push(v),
             st.at.set, st.place);
     } else {
-        const fn = callbackOf(r, 'handleSaveAsReport', '[currentUser, onSaveReport]');
+        const fn = callbackOf(r, 'handleSaveAsReport', '[currentUser, clerkUserId, onSaveReport]');
         st.call = new Function(...names, 'setSaveReportState', 'setSaveReportError', 'onSaveReport',
             `${fn}\nreturn handleSaveAsReport;`)(...common, st.state.set, setWords, (rep) => st.handed.push(rep));
     }

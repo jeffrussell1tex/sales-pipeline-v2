@@ -26,7 +26,7 @@ const sanitizeOpp = (d) => ({
     notes:              d.notes               || null,
     nextSteps:          d.nextSteps           || null,
     site:               d.site                || null,
-    createdBy:          d.createdBy           || null,
+    // createdBy: not built since state §0.250 — the endpoint's sanitize names no maker (a create stamps it).
     createdDate:        d.createdDate         || null,
     stageChangedDate:   d.stageChangedDate    || null,
     contactIds:         d.contactIds          || [],

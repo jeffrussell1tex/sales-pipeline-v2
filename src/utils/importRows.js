@@ -126,7 +126,7 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
         ...merged,
         ...(byImporter ? { ownerId: currentUserId } : {}),
         createdDate: fromCsv.createdDate || today,
-        createdBy:   currentUser,
+        // No createdBy (state §0.250): who made an imported deal is the server's — the importer's member name.
         // The deal entered its stage in this system today. Leaving it unset
         // rendered "NaNd" in the funnel and made `stale = NaN > 14` permanently
         // false, so an imported deal could never flag as stalled.

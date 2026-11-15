@@ -7,6 +7,9 @@
 //   CREATED  a deal's created date is the server's once the deal exists: a save naming one, single or import row,
 //            keeps the stored one; a create keeps a real day it names, else the server's day (Jeff: "Server-owned")
 //   WON      a move to Closed Won naming no won date is dated by the move; one named is kept
+//   MAKER    who made a deal is the server's (state §0.250): a create, single or import, stores the caller's member
+//            name whatever the body names — none for a caller with no member row here, never another org's name; a
+//            save, single or import row, naming a maker keeps the stored one
 //
 // The auth mock fakes the SIGN-IN only and re-exports the REAL gate and predicates; the mailer is captured (no
 // outbound calls), webhooks and automations stubbed.
@@ -56,6 +59,7 @@ const { assertTestSchema } = await import('./_schema-guard.mjs');
 
 // ORG NAMESPACE: this file owns 'itest_ff_*', and only this file writes to it.
 const A = 'itest_ff_A';
+const B = 'itest_ff_B';   // another org, where the GHOST's Clerk id IS a member (the maker is read in the caller's org only)
 const KAREN = { id: 'usr_itest-ff-karen', clerk: 'clerk_itest_ff_karen', name: 'Itest FF Karen', email: 'karen@ff.itest' };
 const BOB   = { id: 'usr_itest-ff-bob',   clerk: 'clerk_itest_ff_bob',   name: 'Itest FF Bob',   email: 'bob@ff.itest' };
 const GHOST = { clerk: 'clerk_itest_ff_ghost' };   // signed in, no member row in this org
@@ -76,6 +80,8 @@ const cleanup = async () => {
     await db.delete(auditLog).where(eq(auditLog.orgId, A));
     await db.delete(settings).where(eq(settings.orgId, A));
     await db.delete(users).where(eq(users.orgId, A));
+    await db.delete(opportunities).where(eq(opportunities.orgId, B));
+    await db.delete(users).where(eq(users.orgId, B));
 };
 
 before(async () => {
@@ -85,11 +91,14 @@ before(async () => {
         // Karen hears of edits too, to prove her own are skipped (the update email is off by default).
         { id: KAREN.id, clerkUserId: KAREN.clerk, orgId: A, name: KAREN.name, email: KAREN.email, role: 'User', profile: { notificationPrefs: { opportunityUpdated: { enabled: true, mode: 'instant' } } } },
         { id: BOB.id,   clerkUserId: BOB.clerk,   orgId: A, name: BOB.name,   email: BOB.email,   role: 'Admin' },
+        // The GHOST is a member of org B only: their name there must never be org A's maker.
+        { id: 'usr_itest-ff-ghost-b', clerkUserId: GHOST.clerk, orgId: B, name: 'Itest FF Other Org', email: 'ghost@ff.itest', role: 'Admin' },
     ]);
     invalidateRoster();
     const deal = (id, extra = {}) => ({ id, orgId: A, ownerId: KAREN.id, salesRep: KAREN.name, opportunityName: id, account: 'Itest FF Co', pipelineId: 'default', stage: 'Proposal', arr: '1000.00', forecastedCloseDate: '2026-12-31', createdDate: '2026-09-01', comments: [], stageHistory: [], ...extra });
     await db.insert(opportunities).values([
         deal(D('bobmoves')), deal(D('karenmoves')), deal(D('ghost')), deal(D('created')), deal(D('bulk')), deal(D('won')), deal(D('wonnamed')),
+        deal(D('maker'), { createdBy: 'Seeded maker' }), deal(D('makerbulk'), { createdBy: 'Seeded maker' }), deal(D('makernone'), { createdBy: null }),
     ]);
 });
 after(cleanup);
@@ -149,6 +158,46 @@ test('CREATED: a create keeps a real day it names, else the server\'s day', asyn
     const rb = await dealsFn(ev(BOB, 'POST', [{ id: D('c-bulk'), opportunityName: 'b', account: 'Itest FF Co', stage: 'Proposal', salesRep: KAREN.name }]));
     assert.equal(rb.statusCode, 201, rb.body);
     assert.equal((await dealOf(D('c-bulk'))).createdDate, SERVER_DAY(), 'an import\'s new row with none');
+});
+
+// ── MAKER ────────────────────────────────────────────────────────────────────
+
+test('MAKER: a save naming who made a deal keeps the stored one — single and import row, a stored none included', async () => {
+    const r1 = await put(BOB, { id: D('maker'), createdBy: 'Mallory', nextSteps: 'm' });
+    assert.equal(r1.statusCode, 200, r1.body);
+    assert.equal((await dealOf(D('maker'))).createdBy, 'Seeded maker', 'REGRESSION (§0.250): a save wrote the body\'s maker');
+    assert.equal((await dealOf(D('maker'))).nextSteps, 'm', 'the rest of the save landed');
+    assert.equal((await put(BOB, { id: D('maker'), createdBy: null, nextSteps: 'm2' })).statusCode, 200);
+    assert.equal((await dealOf(D('maker'))).createdBy, 'Seeded maker', 'a save naming none never clears it');
+    assert.equal((await put(BOB, { id: D('makernone'), createdBy: 'Mallory', nextSteps: 'n' })).statusCode, 200);
+    assert.equal((await dealOf(D('makernone'))).createdBy, null, 'a stored none is never filled from a body');
+    const rb = await put(BOB, [{ id: D('makerbulk'), createdBy: 'Mallory', nextSteps: 'b' }, { id: D('makernone'), createdBy: 'Mallory', nextSteps: 'nb' }]);
+    assert.equal(rb.statusCode, 200, rb.body);
+    const b = await dealOf(D('makerbulk'));
+    assert.equal(b.createdBy, 'Seeded maker', 'REGRESSION (§0.250): an import\'s Overwrite wrote the row\'s maker');
+    assert.equal(b.nextSteps, 'b', 'the rest of the row landed');
+    assert.equal((await dealOf(D('makernone'))).createdBy, null);
+});
+
+test('MAKER: a create stores the caller\'s member name, never the body\'s — single and import; none for a caller with no member row here, never another org\'s name', async () => {
+    const body = (id) => ({ id, opportunityName: id, account: 'Itest FF Co', stage: 'Proposal', salesRep: KAREN.name, createdBy: 'Mallory' });
+    const r1 = await dealsFn(ev(BOB, 'POST', body(D('m-single'))));
+    assert.equal(r1.statusCode, 201, r1.body);
+    assert.equal((await dealOf(D('m-single'))).createdBy, BOB.name, 'REGRESSION (§0.250): a create stored the body\'s maker');
+    assert.equal(JSON.parse(r1.body).opportunity.createdBy, BOB.name, 'the answer names the maker stored');
+    const rb = await dealsFn(ev(BOB, 'POST', [body(D('m-bulk1')), { ...body(D('m-bulk2')), createdBy: '' }, (({ createdBy: _c, ...rest }) => rest)(body(D('m-bulk3')))]));
+    assert.equal(rb.statusCode, 201, rb.body);
+    for (const n of [1, 2, 3]) assert.equal((await dealOf(D(`m-bulk${n}`))).createdBy, BOB.name, `REGRESSION (§0.250): import row ${n} — the importer's member name on every new deal`);
+    // The GHOST is signed in to org A with no member row there (a member of org B): none, never B's name, never the body's.
+    const rg = await dealsFn(ev(GHOST, 'POST', body(D('m-ghost'))));
+    assert.equal(rg.statusCode, 201, rg.body);
+    assert.equal((await dealOf(D('m-ghost'))).createdBy, null, 'no member here: none');
+    const rgb = await dealsFn(ev(GHOST, 'POST', [body(D('m-ghostbulk'))]));
+    assert.equal(rgb.statusCode, 201, rgb.body);
+    assert.equal((await dealOf(D('m-ghostbulk'))).createdBy, null, 'an import by no member here: none');
+    const all = await db.select().from(opportunities).where(eq(opportunities.orgId, A));
+    assert.ok(!all.some((o) => o.createdBy === 'Itest FF Other Org' || o.createdBy === 'Mallory'), 'never another org\'s member, never a body\'s maker');
+    assert.deepEqual(await db.select().from(opportunities).where(eq(opportunities.orgId, B)), [], 'nothing written in org B');
 });
 
 // ── WON ──────────────────────────────────────────────────────────────────────

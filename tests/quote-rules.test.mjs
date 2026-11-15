@@ -137,7 +137,7 @@ test('quotes.mjs: a quote reaches the caller where its deal does; a POST and a P
     assert.ok(s.includes("if (!canApproveQuotes(userRole)) return refuse(403, 'Forbidden: approval statistics are for an Admin or a Manager');"));
     const post = s.slice(s.indexOf("if (event.httpMethod === 'POST') {"), s.indexOf("if (event.httpMethod === 'PUT') {"));
     assert.ok(post.includes('const access = await dealAccess(auth, data.opportunityId);') && post.includes('if (!access.canWrite) return refuse(403,'), 'a quote only on a deal the caller may change');
-    assert.ok(post.includes("status: 'Draft',") && post.includes('createdBy: (await getCallerName(auth.userId, orgId))'), 'a Draft, by the roster\'s name');
+    assert.ok(post.includes("status: 'Draft',") && post.includes('createdBy: (await getCallerName(auth.userId, orgId)) || null,'), 'a Draft, by the roster\'s name — never the body\'s (§0.250; tests/maker-quotes.test.mjs)');
     const put = s.slice(s.indexOf("if (event.httpMethod === 'PUT') {"), s.indexOf("if (event.httpMethod === 'DELETE') {"));
     assert.ok(put.includes('if (!existing) return refuse(404, NOT_FOUND);'), 'a PUT never creates');
     assert.ok(!/onConflictDoUpdate|\.insert\(quotes\)/.test(put), 'no upsert');

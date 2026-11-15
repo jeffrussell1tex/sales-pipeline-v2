@@ -2143,7 +2143,7 @@ function SaveRefusalNote({ words, onClose }) {
     );
 }
 
-const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare, onDeliver, onDelete }) => {
+const LibraryCard = ({ r, mayTouch, pinned, onOpen, onPin, onShare, onDeliver, onDelete }) => {
     const small = (active) => ({ background: 'transparent', border: `1px solid ${active ? T.goldInk : T.border}`, borderRadius: 999, color: active ? T.goldInk : T.inkMid, cursor: 'pointer', fontSize: 10, fontWeight: 600, padding: '2px 7px', lineHeight: 1.4, fontFamily: T.sans });
     const stop = (fn) => (e) => { e.stopPropagation(); fn(r); };
     const delivery = r.config?.delivery;
@@ -2163,7 +2163,7 @@ const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare,
                 </div>
             )}
             <div style={{ marginTop: 'auto', paddingTop: 6, borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.ownerName || currentUser}</span>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.ownerName || '—'}</span>
                 <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                     <button onClick={stop(onPin)} title={pinned ? 'Remove from your Home' : 'Pin to your Home'} style={small(pinned)}>{pinned ? 'Pinned' : 'Pin'}</button>
                     {mayTouch && <button onClick={stop(onShare)} title={r.isShared ? 'Stop sharing with the team' : 'Share with the team'} style={small(!!r.isShared)}>{r.isShared ? 'Unshare' : 'Share'}</button>}
@@ -2664,7 +2664,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         // §0.133: a report opened from the library saves back to ITS row (PUT);
         // a new one is a POST. The endpoint's PUT is an owner-or-Admin upsert.
         const id = existingId || ('rpt_' + crypto.randomUUID());
-        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters, ownerId: currentUser, ownerName: currentUser };
+        // Who made it is the server's (state §0.250, guide §18b125 rule 2): the body names no maker, neither id nor name.
+        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters };
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
@@ -2680,7 +2681,19 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
             const saved = data?.report || payload;
-            setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]);
+            // A 2xx whose answer names no row (state §0.250): a save in place merges over the row in the list — its maker
+            // the stored one — and a create is the viewer's own, named here only: the body never names a maker.
+            const listed = data?.report || (existingId ? null : { ...payload, ownerId: clerkUserId, ownerName: currentUser });
+            // A save in place merges its config as the server does (saved-reports.mjs configFor): the body's keys over the
+            // stored ones, the stored schedule (config.delivery) kept — a builder save sends config null, and the row's
+            // schedule and template id stand.
+            const keptInPlace = (r) => {
+                const config = { ...(r.config || {}), ...(payload.config && typeof payload.config === 'object' && !Array.isArray(payload.config) ? payload.config : {}) };
+                delete config.delivery;
+                if (r.config?.delivery) config.delivery = r.config.delivery;
+                return { ...r, ...payload, config: Object.keys(config).length ? config : null };
+            };
+            setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? (listed || keptInPlace(r)) : r) : [listed || saved, ...prev]);
             setSaveState('saved');
             // The success's timer clears only a success, never a later refusal (Q10).
             setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 3000);
@@ -2693,7 +2706,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             setSaveError(`The report was not saved — ${failureWords(err)}`);
             setSaveErrorAt(at);
         }
-    }, [currentUser]);
+    }, [currentUser, clerkUserId]);
     // A refusal's Close: its words go, and the button reads as before (only while it still says the refusal).
     const closeSaveRefusal = () => { setSaveError(null); setSaveState(s => (s === 'error' ? 'idle' : s)); };
 
@@ -4624,7 +4637,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <SectionS title="Your reports" subtitle="Reports you've created and saved to your library — share one with the team, pin it to your Home, or schedule its delivery" count={`${filteredSaved.filter(r=>r.ownerId===clerkUserId).length} report${filteredSaved.filter(r=>r.ownerId===clerkUserId).length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
                         {filteredSaved.filter(r=>r.ownerId===clerkUserId).map(r=>(
-                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)} currentUser={currentUser}
+                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)}
                                 onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>
                         ))}
                     </div>
@@ -4634,7 +4647,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <SectionS title="Shared with you" subtitle="Reports other members shared with the team — open them, pin them; only the owner or an Admin changes them" count={`${filteredSaved.filter(r=>r.ownerId!==clerkUserId).length} report${filteredSaved.filter(r=>r.ownerId!==clerkUserId).length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
                         {filteredSaved.filter(r=>r.ownerId!==clerkUserId).map(r=>(
-                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)} currentUser={currentUser}
+                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)}
                                 onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>
                         ))}
                     </div>
@@ -5706,6 +5719,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     // A refused "Save as report" (state §0.246, Q9): one banner at the top of Activity history for its three buttons,
     // in the house words, kept until its Close — never on a timer.
     const [saveReportError, setSaveReportError] = React.useState('');
+    const { userId: clerkUserId } = useAuth();   // the viewer's Clerk id: a report they make is theirs (state §0.250)
 
     const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
         setSaveReportState('saving');
@@ -5717,8 +5731,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             dims: [{id:'date',label:'Date',kind:'dim'},{id:'type',label:'Type',kind:'dim'}],
             metrics: [{id:'count',label:'Events',kind:'metric'}],
             chartType: 'table', description: `Activity history for ${entityName || entityType}`,
-            ownerId: currentUser, ownerName: currentUser,
-        };
+        };   // no maker, neither id nor name: who made it is the server's (state §0.250, guide §18b125 rule 2)
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
@@ -5733,7 +5746,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             const data = await res.json();
             if (!stillOrg(askedOrg)) return;
             // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
-            if (onSaveReport) onSaveReport(data?.report || payload);
+            // A 2xx whose answer names no row (state §0.250): the viewer made it — their Clerk id and name, here only.
+            if (onSaveReport) onSaveReport(data?.report || { ...payload, ownerId: clerkUserId, ownerName: currentUser });
             setSaveReportState('saved');
             // The success's timer clears only a success, never a later refusal (Q10).
             setTimeout(() => setSaveReportState(s => (s === 'saved' ? 'idle' : s)), 3000);
@@ -5742,7 +5756,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             setSaveReportState('error');
             setSaveReportError(`The history report was not saved — ${failureWords(e)}`);
         }
-    }, [currentUser, onSaveReport]);
+    }, [currentUser, clerkUserId, onSaveReport]);
     const closeSaveReportRefusal = () => { setSaveReportError(''); setSaveReportState(s => (s === 'error' ? 'idle' : s)); };
 
     const handleExportPDF = React.useCallback((entityName, entityType, events) => {

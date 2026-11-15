@@ -837,7 +837,7 @@
       <tr><td>recurringValue</td><td>string</td><td>Annualized recurring revenue portion.</td></tr>
       <tr><td>oneTimeValue</td><td>string</td><td>One-time fee portion.</td></tr>
       <tr><td>approvalTier</td><td>string</td><td>Computed approval tier label (e.g. <code>"Mgr approval"</code>).</td></tr>
-      <tr><td>createdBy</td><td>string</td><td>Rep display name who created the quote.</td></tr>
+      <tr><td>createdBy</td><td>string | null</td><td>Set by the server: the member name of whoever created the quote (each version names its own maker), or <code>null</code> when no member name was found for the creator: they have no member name in the organization, or the name lookup failed when the quote was made. A value sent in a request is ignored.</td></tr>
     </tbody>
   </table>
 
@@ -878,10 +878,10 @@
     </div>
     <div class="endpoint-body">
       <div class="callout info"><b>Server-side totals:</b> Do not compute <code>subtotal</code>, <code>totalValue</code>, <code>recurringValue</code>, or <code>oneTimeValue</code> yourself — they are recalculated server-side from <code>lineItems</code> and <code>dealDiscount</code> on every write.</div>
+      <p>The server issues <code>quoteNumber</code>. A new version (<code>version</code> above 1) names the number of the quote it revises, and keeps that number only when this organization holds a quote with it on the same opportunity; otherwise, and for every version 1, a new number is issued.</p>
       <pre>-d <span class="str">'{
   "id": "quote_001_v1",
   "opportunityId": "opp_abc123",
-  "quoteNumber": "Q-2025-0047",
   "version": 1,
   "name": "Acme Corp — Enterprise Proposal",
   "status": "Draft",
@@ -898,8 +898,7 @@
       "listPrice": 48000,
       "discountPct": 0
     }
-  ],
-  "createdBy": "Morgan Reyes"
+  ]
 }'</span></pre>
     </div>
   </div>
@@ -911,7 +910,7 @@
       <span class="endpoint-desc">Update a quote</span>
     </div>
     <div class="endpoint-body">
-      <p>Upserts by <code>id</code>. Setting <code>status: "Accepted"</code> automatically syncs <code>totalValue</code> to the linked opportunity's <code>arr</code> field.</p>
+      <p>Updates the quote with this <code>id</code>. A quote this organization does not hold is a <code>404</code>: a PUT never creates a quote (create one with POST). Setting <code>status: "Accepted"</code> automatically syncs <code>totalValue</code> to the linked opportunity's <code>arr</code> field.</p>
     </div>
   </div>
 

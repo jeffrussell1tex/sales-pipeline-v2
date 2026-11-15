@@ -21,8 +21,9 @@ import { db }            from '../../db/index.js';
 import { savedReports, users } from '../../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isAdmin } from './auth.mjs';
-import { serverErrorBody, auditAs } from './_lib.mjs';
+import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
 import { cleanDelivery, deliverySummary } from '../../src/utils/reportDelivery.js';
+import { namedByMaker } from '../../src/utils/reportMaker.js';
 import { deliverReport } from './report-deliveries.mjs';
 
 const headers = {
@@ -65,6 +66,23 @@ const deliveryFor = async (bodyDelivery, existingDelivery, orgId) => {
     return d;
 };
 
+// Who made each report (state §0.250, guide §18b125 rule 2): the maker's LIVE name — the member of THIS org whose
+// Clerk id is the row's ownerId — else the stored name, else none (namedByMaker, src/utils/reportMaker.js). One read
+// of this org's roster, its names and Clerk ids only, mapped in JS: never another org's member; nothing is written.
+// Display only: a roster read that fails answers the rows with their stored names — never a 500 over a create or a
+// save that landed (a retried create would meet its own id's 409), nor over the whole library's GET.
+const makersNamed = async (rows, orgId) => {
+    if (!orgId || !rows.some(Boolean)) return rows;
+    let roster;
+    try {
+        roster = await db.select({ clerkUserId: users.clerkUserId, name: users.name }).from(users).where(eq(users.orgId, orgId));
+    } catch (e) {
+        console.warn('saved-reports makers:', e.message);
+        return rows;
+    }
+    return namedByMaker(rows, roster);
+};
+
 // config after a body: the body's config keys merge over the stored ones; the
 // delivery key is decided separately and never overwritten by a body's config.
 const configFor = (bodyConfig, existingConfig, delivery) => {
@@ -104,7 +122,7 @@ export const handler = async (event) => {
                 ? eq(savedReports.orgId, orgId)
                 : and(eq(savedReports.orgId, orgId), or(eq(savedReports.ownerId, userId), eq(savedReports.isShared, true)));
             const rows = await db.select().from(savedReports).where(where).orderBy(desc(savedReports.updatedAt));
-            return { statusCode: 200, headers, body: JSON.stringify({ reports: rows }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ reports: await makersNamed(rows, orgId) }) };
         }
 
         // POST ?action=deliver&id= — run the report now and send it where its
@@ -130,13 +148,20 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const delivery = 'delivery' in data ? await deliveryFor(data.delivery, null, orgId) : null;
-            const payload = sanitize({ ...data, orgId, ownerId: userId, config: configFor(data.config, null, delivery) });
-            const [inserted] = await db.insert(savedReports).values(payload).returning();
+            const payload = sanitize({
+                ...data, orgId, ownerId: userId, config: configFor(data.config, null, delivery),
+                // Who made it (state §0.250, guide §18b125 rule 2): the server's — the caller's member name on this
+                // org's roster, none when they have no row here — after the body's keys, so a body naming one is ignored.
+                ownerName: (await getCallerName(userId, orgId)) || null,
+            });
+            // A taken id — this org's or another's — writes nothing and is answered 409 (state §0.250, as products §0.242).
+            const [inserted] = await db.insert(savedReports).values(payload).onConflictDoNothing({ target: savedReports.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That report id is already in use.' }) };
             await auditAs(orgId, userId, {
                 action: 'saved_report.created', entityType: 'saved_report', entityId: inserted.id, entityName: inserted.name,
                 detail: inserted.description || `${inserted.source || 'Opportunities'}${inserted.isShared ? ' · shared' : ''}`,
             });
-            return { statusCode: 201, headers, body: JSON.stringify({ report: inserted }) };
+            return { statusCode: 201, headers, body: JSON.stringify({ report: (await makersNamed([inserted], orgId))[0] }) };
         }
 
         // PUT — read-then-merge: rename, share, schedule, or the builder's save in place
@@ -153,7 +178,7 @@ export const handler = async (event) => {
                 ...existing, ...data,
                 orgId,
                 ownerId:   existing.ownerId,                       // never the caller's
-                ownerName: existing.ownerName ?? data.ownerName ?? null,
+                ownerName: existing.ownerName ?? null,                 // the stored one, never a body's (§0.250)
                 isShared:  'isShared' in data ? data.isShared === true : existing.isShared === true,
                 config:    configFor(data.config, existing.config, delivery),
             });
@@ -169,7 +194,7 @@ export const handler = async (event) => {
                 action, entityType: 'saved_report', entityId: updated.id, entityName: updated.name,
                 detail: action === 'saved_report.scheduled' ? deliverySummary(updated.config?.delivery) : null,
             });
-            return { statusCode: 200, headers, body: JSON.stringify({ report: updated }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ report: (await makersNamed([updated], orgId))[0] }) };
         }
 
         // DELETE

@@ -166,7 +166,9 @@ const sanitize = (data) => ({
     wonDate:            data.wonDate             || null,
     stageChangedDate:   data.stageChangedDate    || null,
     createdDate:        data.createdDate         || null,
-    createdBy:          data.createdBy           || null,
+    // No createdBy (state §0.250; guide §18b125 rule 2): who made a deal is the server's — the two POSTs stamp the
+    // caller's member name after this runs, and no save writes it (the merged PUT and partialRows write only the keys
+    // this builds), so the stored one stands.
     stageHistory:       data.stageHistory        || [],
     comments:           data.comments            || [],
     // No aiScore: a deal's AI score is ai-score.mjs's alone (state §0.188). The deal
@@ -361,6 +363,10 @@ export const handler = async (event) => {
                 // _lib.mjs (18b8).
                 const owned = await stampOwnerIds(people.rows.map(d => sanitize({ ...d, createdDate: createdDayOf(d) })), 'opportunity', { clerkUserId: userId, orgId });
                 owned.rows = importer.stamp(owned.rows);
+                // Who made each deal is the importer (state §0.250; guide §18b125 rule 2): their member name on every row,
+                // never the row's own; none when the importer is no member of this org.
+                const maker = await getCallerName(userId, orgId);
+                owned.rows = owned.rows.map(r => ({ ...r, createdBy: maker || null }));
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;
@@ -377,6 +383,10 @@ export const handler = async (event) => {
             const named = { ...data, ...people.set };
             const dated = { ...named, createdDate: createdDayOf(named) };
             const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
+            // Who made it is the server's (state §0.250; guide §18b125 rule 2): the caller's member name, read before the
+            // insert — never a body's; none when the caller is no member of this org.
+            const creatorName = await getCallerName(userId, orgId);
+            Object.assign(newRow, { createdBy: creatorName || null });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That deal id is already in use.' }) };
@@ -389,8 +399,7 @@ export const handler = async (event) => {
             // suppressed anything and a rep creating their own deal always emailed
             // themselves about it. Pre-existing (userId has always been Clerk's),
             // and the same category as the two GET filters -- a name compared to
-            // an id -- so it is fixed in the same pass.
-            const creatorName = await getCallerName(userId, orgId);
+            // an id -- so it is fixed in the same pass. (creatorName is read before the insert since state §0.250.)
             if (inserted.salesRep && inserted.salesRep !== creatorName) {
                 await maybeEmail(inserted.salesRep, 'opportunityCreated', {
                     repName:       inserted.salesRep,
@@ -679,8 +688,9 @@ export const handler = async (event) => {
             // between this request's read and its write would be written over. A move appends in SQL, to what is stored.
             const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
             if (!closeNamed) { delete updateData.forecastedCloseDate; if (!('closeQuarter' in data)) delete updateData.closeQuarter; }
+            // §0.250: a save that lands as an insert (the deal deleted between its read and its write) keeps the maker it read; the body never names it.
             const [upserted] = await db.insert(opportunities)
-                .values({ ...clean, orgId })
+                .values({ ...clean, createdBy: existing.createdBy ?? null, orgId })
                 .onConflictDoUpdate({
                     target: opportunities.id, setWhere: eq(opportunities.orgId, orgId),
                     set: {

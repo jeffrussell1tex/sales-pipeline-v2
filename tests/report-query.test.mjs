@@ -225,7 +225,9 @@ test('a saved report OPENS into the builder and saves back to its own row; the n
     assert.ok(s.includes("        setEditingReportId(r.id);") && s.includes("        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: fiscalStartOf(settings?.fiscalYearStart) }));"), 'opening runs the saved definition (the filters and the custom bounds with it since §0.139)');
     assert.ok(s.includes("                method: existingId ? 'PUT' : 'POST',"), 'a reopened report saves in place');
     assert.ok(s.includes("onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod, from: builderPeriod==='custom' ? builderFrom : '', to: builderPeriod==='custom' ? builderTo : '', where: builderWhere },"), 'the save carries the id, the name, the period and (§0.139) the filters');
-    assert.ok(s.includes('setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]);'), 'the library updates in place');
+    // Moved pin (§0.250): an answer with no row merges over the row in the list (its maker and schedule kept) —
+    // tests/maker-reports.test.mjs runs it.
+    assert.ok(s.includes('setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? (listed || keptInPlace(r)) : r) : [listed || saved, ...prev]);'), 'the library updates in place');
     assert.ok(s.includes('<input value={builderName} onChange={e=>setBuilderName(e.target.value)} placeholder="Name this report" aria-label="Report name"'), 'the name input');
     const header = s.slice(s.indexOf('const BuilderHeader = ('), s.indexOf("        if (createMode === 'picker') {"));   // comments are stripped: end at the picker's first code line
     assert.ok(header.length > 800 && header.length < 6000, 'the header slice is bounded');

@@ -284,7 +284,9 @@ One commit per verified batch; doc patch in the same commit.
   the org and updates the keys the body names — an id the org does not
   hold is a 404, nothing written (products.mjs; export-schedules.mjs and
   export-dsr.mjs merge over the stored row; backup.mjs's schedule field
-  by field); who made a product, export schedule or GDPR request is the server's, never a body's (quotes and deals not yet — OPEN_ITEMS §4.6); the Price
+  by field); who made a product, export schedule, GDPR request, quote,
+  deal or saved report is the server's, never a body's (§0.242; quotes,
+  deals and saved reports §0.250); the Price
   Book sends only what changed (`src/utils/productChanges.js`) and says
   a refusal. A new insert or upsert in a PUT or PATCH block fails THE
   GUARD (tests/put-upserts.test.mjs) until named with its reason. A

@@ -192,7 +192,8 @@ export function useOpportunities(deps) {
                 .finally(() => setOppModalSaving(false));
         } else {
             const newId = 'id_' + crypto.randomUUID();
-            const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id, createdBy: currentUser || '' };
+            // No maker sent (state §0.250): who made the deal is the server's, the caller's member name.
+            const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id };
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {

@@ -80,9 +80,11 @@ test('a mapped-but-empty column IS written on an overwrite', () => {
 
 test('a new deal gets every column, because the row does not exist yet', () => {
     const row = buildOpportunityRow(csvRecord, opts);
-    for (const k of ['nextSteps', 'products', 'territory', 'vertical', 'implementationCost', 'salesRep', 'pipelineId', 'createdBy', 'stageChangedDate']) {
+    for (const k of ['nextSteps', 'products', 'territory', 'vertical', 'implementationCost', 'salesRep', 'pipelineId', 'stageChangedDate']) {
         assert.ok(k in row, `${k} must be present on a create`);
     }
+    // Who made it is the server's (state §0.250): a create row names no maker — the importer's member name is stamped there.
+    assert.equal('createdBy' in row, false, 'a new deal sends no maker');
     assert.deepEqual(row.stageHistory, []);
     assert.deepEqual(row.comments, []);
     assert.deepEqual(row.contactIds, []);

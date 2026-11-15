@@ -126,7 +126,7 @@ test('the two AI calls and the job say what left the app and as whom', () => {
 
 test('saved reports: the schedule event carries the schedule in words; a share is its own event; Send now records where it went', () => {
     const s = code(src('saved-reports.mjs'));
-    assert.ok(s.includes("import { serverErrorBody, auditAs } from './_lib.mjs';"));
+    assert.ok(s.includes("import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';"));   // getCallerName since §0.250 (the maker's stamp)
     assert.ok(s.includes("import { cleanDelivery, deliverySummary } from '../../src/utils/reportDelivery.js';"));
     assert.ok(s.includes("const action = 'delivery' in data ? 'saved_report.scheduled' : ('isShared' in data && !('name' in data) && !('dims' in data)) ? (data.isShared ? 'saved_report.shared' : 'saved_report.unshared') : 'saved_report.updated';"));
     assert.ok(s.includes("detail: action === 'saved_report.scheduled' ? deliverySummary(updated.config?.delivery) : null"));

@@ -47,7 +47,8 @@ test('the six template Save buttons save a real report that names its template, 
     assert.doesNotMatch(src, /<button style=\{\{[^}]*\}\}>\+ Save as my report<\/button>/, 'no Save button without a handler');
     // §0.133: the handler also takes an existing id (a reopened builder report saves in place) and the filters.
     assert.match(src, /const handleSaveReport = React\.useCallback\(async \(\{ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null \}\)/);
-    assert.match(src, /chartType, description, config, filters, ownerId: currentUser/);
+    // Moved pin (§0.250): the payload names no maker — it ended "filters, ownerId: currentUser, ownerName: currentUser".
+    assert.ok(src.includes("const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters };"), 'the template id rides the payload; no maker does');
     // Since §0.135 the card is the module-scope LibraryCard and its onOpen is openCard.
     assert.match(src, /const openCard = \(r\) => \{ if \(r\.config\?\.templateId\) setActiveTemplate\(r\.config\.templateId\); else openSavedReport\(r\); \};/, 'a saved card opens its template, or the builder report it is');
     assert.match(src, /onOpen=\{openCard\}/, 'and the card is wired to it');

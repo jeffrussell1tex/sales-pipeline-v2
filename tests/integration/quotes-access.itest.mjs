@@ -12,6 +12,10 @@
 //          a discount that needs approval is not sent before it; an accepted
 //          quote is final; an approved one that is edited returns to Draft; an
 //          accept pushes the value to the STORED deal
+//   MAKER  who made a quote is the server's (§0.250): a create stores the
+//          caller's roster name — none for a caller with no roster row, never
+//          the body's, nor another org's name; a New version names whoever
+//          made it; a save keeps it
 //   EMAIL  the CRM's writers only, the deal's writer only, by the send rule;
 //          every value escaped; the sender's signature found (by the Clerk id)
 //   JOB    the quote card's read answers only for a quote the caller can see
@@ -196,6 +200,43 @@ test('PUT: never creates; another rep\'s quote is a 404; the stored deal stays; 
     assert.equal(r.opportunityId, OPP.mine, 'the body\'s deal is ignored — the quote stays on its own');
     assert.equal(r.lineItems.length, 1, 'a PUT without lineItems keeps them (it used to write [] and zero totals)');
     assert.equal(Number(r.totalValue), 190, 'and the totals: 2 × 100 at 5%');
+});
+
+test('MAKER: a create stores the caller\'s roster name, none without one, never the body\'s; a New version its own maker; a save keeps the stored one (§0.250)', async () => {
+    // A caller with no roster row in this org (verifyAuth still admits them): the body's maker is NOT the fallback.
+    const nobody = parse(await quotesFn(ev(A, 'Admin', 'clerk_itest_quotes_nobody', 'POST', { id: 'q_itest_quotes_new_nobody', opportunityId: OPP.mine, createdBy: 'Mallory', lineItems: lines(0) })));
+    assert.equal(nobody.status, 201, JSON.stringify(nobody.body));
+    assert.equal(nobody.body.quote.createdBy, null, 'the answer: no maker');
+    assert.equal((await row('q_itest_quotes_new_nobody')).createdBy, null, 'stored: none — never the body\'s "Mallory"');
+    // Org B's member, signed in to org A where they hold no roster row (an Admin there, so the deal is theirs to write):
+    // the stamp is read in org A — none — never their org-B name ('Itest Quotes repB'), never the body's.
+    const crossOrg = parse(await quotesFn(ev(A, 'Admin', CLERK.repB, 'POST', { id: 'q_itest_quotes_new_crossorg', opportunityId: OPP.mine, createdBy: 'Mallory', lineItems: lines(0) })));
+    assert.equal(crossOrg.status, 201, JSON.stringify(crossOrg.body));
+    const crossRow = await row('q_itest_quotes_new_crossorg');
+    assert.equal(crossRow.orgId, A);
+    assert.equal(crossRow.createdBy, null, 'REGRESSION (§0.250): a create in org A stored org B\'s member name, or the body\'s');
+    assert.equal(crossOrg.body.quote.createdBy, null, 'the answer: no maker');
+    assert.ok(!JSON.stringify(crossOrg.body).includes('Itest Quotes repB'), 'org B\'s member name nowhere in org A\'s answer');
+    assert.deepEqual((await db.select().from(quotes).where(eq(quotes.orgId, B))).map(q => q.id), [Q.b], 'nothing written in org B');
+    // A New version is a create: the Manager who makes it is its maker, not the copy's.
+    const { quoteNumber } = await row(Q.draft);
+    const v2 = await as.mgr('POST', { id: 'q_itest_quotes_v2', opportunityId: OPP.mine, version: 2, quoteNumber, createdBy: 'Itest Quotes rep', lineItems: lines(5) });
+    assert.equal(v2.status, 201, JSON.stringify(v2.body));
+    const stored = await row('q_itest_quotes_v2');
+    assert.equal(stored.quoteNumber, quoteNumber, 'a version of the same quote');
+    assert.equal(stored.version, 2);
+    assert.equal(stored.createdBy, 'Itest Quotes mgr', 'whoever made the version');
+    // A save naming a maker keeps the stored one.
+    const saved = await as.rep('PUT', { id: Q.draft, createdBy: 'Mallory', notes: 'the maker is kept' });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const r = await row(Q.draft);
+    assert.equal(r.createdBy, 'Itest Quotes rep', 'the stored maker, never the body\'s');
+    assert.equal(r.notes, 'the maker is kept', 'the save itself landed');
+    assert.equal(saved.body.quote.createdBy, 'Itest Quotes rep', 'the answer names the stored maker');
+    // Org B's member never names org A's quote.
+    const fromB = parse(await quotesFn(ev(B, 'User', CLERK.repB, 'POST', { id: 'q_itest_quotes_new_from_b', opportunityId: OPP.mine, createdBy: 'Mallory' })));
+    assert.equal(fromB.status, 404, 'org A\'s deal from org B');
+    assert.equal(await row('q_itest_quotes_new_from_b'), undefined);
 });
 
 test('APPROVAL: only a Manager or an Admin approves — by name; a rep\'s "Approved" is refused and changes nothing', async () => {
