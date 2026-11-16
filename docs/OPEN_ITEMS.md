@@ -1718,8 +1718,38 @@ to add meetings. Nothing in the app adds a meeting to Google:
   shortcuts, notes, search, profile and notification panels do not close on
   Escape meanwhile. Recommended: hold both checkers while the boundary shows
   its notice.
+- **The deal window closes over typed work without asking, and on Escape
+  even mid-save** (seen 16 Nov in the dev check as Karen, state §0.251;
+  the rest read in code, not run). A new deal with its name, account and
+  rep filled closed at once on Cancel — no "Discard changes?". Cancel
+  (OpportunityModal.jsx:2247) and the header × (:1492) call `onClose`, and
+  ModalLayer's (:215) just closes; App's Escape (App.jsx:624) closes it
+  too, and does not read `oppModalSaving` — so Escape closes the window
+  while its save is out, which guide §18b80 rule 4 refuses ("Nothing
+  mid-save closes on Escape"); Cancel is disabled while saving. The deal
+  window is an app window: Escape in the tabs (§0.230-§0.233;
+  docs/design/escape-tabs/) asked "Discard?" for layers inside the tabs
+  only (`useLocalLayer`); the lead window asks "Discard this lead?"
+  (LeadModal.jsx:346). Recommended: the mid-save Escape held as rule 4
+  says; Jeff decides whether the app's windows ask "Discard?" too. Low.
 
 ### 4.2 Deals, activities and pipeline
+
+- **A deal create stores a body's notes and stage history** (read in code
+  16 Nov, state §0.251's dev check; not run). `sanitize`
+  (opportunities.mjs:172-173) keeps `data.stageHistory` and
+  `data.comments`; neither the single POST (:375-392) nor the bulk POST
+  (:348-374) refuses or drops them, while the bulk PUT refuses both
+  (:445) and the single PUT refuses `comments` (:619) and drops
+  `stageHistory` (:628). Guide §18b119 rule 2 says a whole list in a body
+  is refused "single or bulk", and rule 5 makes who wrote an entry the
+  server's — only the PUTs hold to it. A create can so carry notes under
+  any author and time, and any stage history. Every caller found sends
+  both empty: the deal window and the Closed Lost dialog
+  (useOpportunities.js:130-133, :231-232), the import (importRows.js:138-
+  139, bulk); a restore and a merge write directly. A fix must not refuse
+  the empty lists those send (a key check as at :445 would refuse every
+  create): drop the keys, or refuse only entries. Low.
 
 - **Reports' "Contacts on this deal" keeps its adds and removes to itself**
   (the cleanup batch's design, 18 Oct, P37; re-read 23 Oct; read in code,
