@@ -568,7 +568,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    §0.247; guide §18b125 rules 5 and 9, since §0.247; Jeff, 12 Nov: "lets
    proceed in that order", Q13, Q18 and Q19 answered; then "Name the
    unread (Recommended)" and "Fix in this batch (Recommended)") — committed
-   `6cd6bf1`; not yet shipped; harness deferred, graded green in the full
+   `6cd6bf1`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
+   GREEN); not yet shipped; harness deferred, graded green in the full
    run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: a failure
    said in plain words in the swept files (`failureWords`; putSettings
@@ -583,7 +584,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    2026, `5772f63`) and the API page naming the same keys. Strike them
    once §0.247 ships. **Parts 10-11 built 12 Nov (state §0.248; guide
    §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — committed
-   `4f171d4`; not yet shipped; harness deferred, graded green in the full
+   `4f171d4`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
+   GREEN); not yet shipped; harness deferred, graded green in the full
    run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: the record
    windows' saves (account, contact, task, activity, member, quote,
@@ -595,7 +597,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    role's sentence (Q13); scan (iii) tightened. Strike them once §0.248
    ships. **Part 12 built 13 Nov (state §0.249; guide §18b125 rule 5,
    since §0.249; Jeff, 13 Nov: "Start Part 12"; Q4 answered) — committed
-   `7211d3f`; not yet shipped; harness deferred, graded green in the full
+   `7211d3f`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
+   GREEN); not yet shipped; harness deferred, graded green in the full
    run (15–16 Nov: 6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen:
    the rest of src/ ok-first, in the server's words and plain words —
@@ -639,7 +642,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Part 8: every one says `failureWords`, scan (iv) holding the swept
      files to it; the fleet's Deletes say the server's words, a 403 "Your
      role cannot delete vehicles." or "… equipment." (Q13); committed
-     `6cd6bf1`, not yet shipped). useOpportunities.js:41's deals load
+     `6cd6bf1`, pushed to dev 16 Nov, not yet shipped).
+     useOpportunities.js:41's deals load
      throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's build; read
      in code): Part 10 (§0.248) left it and the four record loads' twins —
      each reaches only a console catch, pinned by a WIRING test; that a
@@ -668,12 +672,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      all 242 sources under src/, 192 body reads, the 25 still before
      their check each named in `BODY_FIRST` with its reason; ReportsTab.jsx,
      QuotesTab.jsx and the rest of the design's Part 12 table cleaned;
-     committed `7211d3f`, not yet shipped).
+     committed `7211d3f`, pushed to dev 16 Nov, not yet shipped).
    - ~~Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
      `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
      joining `SWEPT` (§0.246's build, 11 Nov; read in code)~~ (DONE in
      §0.248, Part 11: `failureWords(e)`, DispatchTab.jsx in `SWEPT`;
-     committed `4f171d4`, not yet shipped).
+     committed `4f171d4`, pushed to dev 16 Nov, not yet shipped).
 
 ---
 
@@ -859,7 +863,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   baseline, exit 0, 18 h 02 min, about 10.6 s a mutant (state §0.251) —
   it grades every batch since the forty-fifth ship, §0.234-§0.251
   (§0.247-§0.251, each committed "harness deferred", by it alone); only docs since, so it stands as the run before
-  the dev push and the full run before the ship.
+  the dev push — pushed to dev 16 Nov (`321143f..87c2e23`, Tests GREEN),
+  not yet shipped — and the full run before the ship.
 - **The quote PDF on prod — after the next ship** (state §0.234, §0.235):
   dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
   Q-2026-001 rendered there as Karen and read back — 200, QA's name,
