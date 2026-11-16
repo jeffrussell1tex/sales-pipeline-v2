@@ -833,21 +833,6 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
     `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other
     site's reads fail with no message and show an empty calendar (§4.4).
-- **Read `MAIL_FROM` and `APP_URL` on both Netlify sites** (the quote
-  branding design, 9 Nov; docs/design/quote-branding/DESIGN.md D4, D6):
-  every email goes out from `MAIL_FROM`'s address (send-email.mjs:46,
-  fallback `Sales Pipeline <noreply@salespipeline.app>`); a quote email and
-  a dispatch visit email show the org's name, where it has one, over it
-  (`mailFromAs`; quote-email.mjs:271, _customerNotify.mjs:91; §0.234), so
-  the address must stay on Resend's verified domain. The quote email reads no `APP_URL`:
-  §0.234 dropped its link, which fell back to the dev site when `APP_URL`
-  was unset (re-read 16 Nov). Every member email's link is
-  `appLink(APP_URL || 'https://salespipelinetracker.com', …)` (send-email.mjs:85,
-  §0.237): on a site with it unset, a member email links to prod. **Read
-  for dev, 10 Nov** (Jeff): `APP_URL` = `https://accelerep.netlify.app`, so a
-  dev email links to dev (state §0.238, the dev checks). Still unread:
-  `APP_URL` on prod, and `MAIL_FROM` on both (a member email from dev came
-  from noreply@salespipelinetracker.com, 10 Nov).
 
 ### 2.2 Around the next ship to prod
 
@@ -5413,7 +5398,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Read Resend's webhook targets before any email work.** There are two
   inbound webhooks, prod's and dev's, and a row proves only that a row was
   written. A standing note. Last read 16 Nov by Jeff ("prod enabled, dev
-  off"): prod's Enabled, dev's Disabled. The handoff's carry-over
+  off"; his screenshot of resend.com/webhooks the same day: the
+  salespipelinetracker.com endpoint Enabled, created 5mo ago, the
+  accelerep.netlify.app one Disabled, 2mo ago): prod's Enabled, dev's
+  Disabled. The handoff's carry-over
   "Resend's webhook back to prod (pointed at dev since 8 Sep)" was stale:
   dev's was the target for the test of 8 Sep (state's header, the inbound
   line-break fix), Jeff flipped it back to prod after the tenth ship that
