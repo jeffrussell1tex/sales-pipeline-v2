@@ -835,12 +835,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     site's reads fail with no message and show an empty calendar (§4.4).
 - **Read `MAIL_FROM` and `APP_URL` on both Netlify sites** (the quote
   branding design, 9 Nov; docs/design/quote-branding/DESIGN.md D4, D6):
-  every email goes out from `MAIL_FROM` (send-email.mjs:38, fallback
-  `Sales Pipeline <noreply@salespipeline.app>`); the quote email's link
-  falls back to the dev site when `APP_URL` is unset (quote-email.mjs:33).
-  Neither value was read. The quote branding batch makes the From name the
-  org's and drops the quote email's link; the address must stay on
-  Resend's verified domain. Every member email's link is
+  every email goes out from `MAIL_FROM`'s address (send-email.mjs:46,
+  fallback `Sales Pipeline <noreply@salespipeline.app>`); a quote email and
+  a dispatch visit email show the org's name, where it has one, over it
+  (`mailFromAs`; quote-email.mjs:271, _customerNotify.mjs:91; §0.234), so
+  the address must stay on Resend's verified domain. The quote email reads no `APP_URL`:
+  §0.234 dropped its link, which fell back to the dev site when `APP_URL`
+  was unset (re-read 16 Nov). Every member email's link is
   `appLink(APP_URL || 'https://salespipelinetracker.com', …)` (send-email.mjs:85,
   §0.237): on a site with it unset, a member email links to prod. **Read
   for dev, 10 Nov** (Jeff): `APP_URL` = `https://accelerep.netlify.app`, so a
@@ -877,19 +878,6 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   the dev push — pushed to dev 16 Nov (`321143f..87c2e23`, Tests GREEN),
   SHIPPED 16 Nov, the forty-sixth ship (`6d8fecb..a73c618`; only docs after
   the run) — and the full run before the ship.
-- **The quote PDF on prod — shipped 16 Nov, the forty-sixth ship; its
-  check on prod Jeff's** (state §0.234, §0.235):
-  dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
-  Q-2026-001 rendered there as Karen and read back — 200, QA's name,
-  address and contact, nothing of the app's — and two pages, the second
-  holding only its number: §0.235, built 9 Nov, pushed to dev 10 Nov). On
-  dev since: a 60-line quote in three pages, "Page i of 3" in every
-  footer, nothing cut (state §0.238, the dev checks). SHIPPED 16 Nov, the
-  forty-sixth ship, with `netlify.toml`'s pdfkit outside the quote PDF's
-  bundle; not yet checked on salespipelinetracker.com (no browser pass on
-  prod) — next, the same render there, Jeff's. Before the ship prod's
-  Download fell back to its print copy (no call to prod's quote-pdf in
-  seven days).
 - **§0.236's TEST data in Accelerep QA, Jeff's to clear if he wishes** (its
   browser check, 9 Nov — state §0.236): on the deal "TEST §0.209 deal", a
   team note "TEST 0.236 note from tab A", Next Steps "TEST 0.236 saved from
@@ -5424,7 +5412,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   function invocation. §0.132, as recorded.
 - **Read Resend's webhook targets before any email work.** There are two
   inbound webhooks, prod's and dev's, and a row proves only that a row was
-  written. A standing note.
+  written. A standing note. Last read 16 Nov by Jeff ("prod enabled, dev
+  off"): prod's Enabled, dev's Disabled. The handoff's carry-over
+  "Resend's webhook back to prod (pointed at dev since 8 Sep)" was stale:
+  dev's was the target for the test of 8 Sep (state's header, the inbound
+  line-break fix), Jeff flipped it back to prod after the tenth ship that
+  evening (`77c4b77`, his screenshot) and read it so again on 9 Sep
+  (state line 4); nothing to flip.
 - **App.jsx's stray blank lines** left by §0.187. Cosmetic.
 - **The second-role-list scan misses a frozen list** (the profile batch's
   P38; read in code): tests/roles.test.mjs:149's role-list literal needs `[`
