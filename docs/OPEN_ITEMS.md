@@ -535,7 +535,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    Nov: "Refusal sweep", then "Parts 1-4 now (Recommended)" and Q1-Q20
    "All Recommended (Recommended)"). **Parts 1-4 built 11 Nov (state
    §0.245; guide §18b125 rules 5 and 9) — committed `b1b56e7`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN);
-   not yet shipped; harness deferred**, its rep-path browser check
+   not yet shipped; harness deferred, graded green in the one scoped
+   run (12 Nov: 3,284/3,284 caught) and the full run of 15–16 Nov on
+   `fba41c1` (6,104/6,104 caught)**, its rep-path browser check
    PASSED as Karen, the Admin check (Export) PASSED as Jeff: a refusal
    at a press with no error place of its own said in a press notice
    kept until its ✕
@@ -548,7 +550,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    Complete removed (Q5). Strike them once §0.245 ships. **Parts 5-7
    built 11 Nov (state §0.246; guide §18b125 rule 5, since §0.246; Jeff,
    11 Nov: "proceed", Q9-Q17 answered) — committed `16b0ffb`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN); not yet shipped;
-   harness deferred**, its Admin browser check PASSED as Jeff, the
+   harness deferred, graded green in the one scoped run (12 Nov:
+   3,284/3,284 caught) and the full run of 15–16 Nov (6,104/6,104
+   caught)**, its Admin browser check PASSED as Jeff, the
    rep-path check PASSED as Karen: no refusal on a timer, each
    said beside the control pressed — Reports' saves (tied to the screen
    pressed, `refusalHere`), Activity history's "Save as report", the
@@ -564,7 +568,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    §0.247; guide §18b125 rules 5 and 9, since §0.247; Jeff, 12 Nov: "lets
    proceed in that order", Q13, Q18 and Q19 answered; then "Name the
    unread (Recommended)" and "Fix in this batch (Recommended)") — committed
-   `6cd6bf1`; not yet shipped; harness deferred**, its Admin browser
+   `6cd6bf1`; not yet shipped; harness deferred, graded green in the full
+   run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: a failure
    said in plain words in the swept files (`failureWords`; putSettings
    `refusalWords`, the ref kept; scan (iv)); a read that failed never a
@@ -578,7 +583,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    2026, `5772f63`) and the API page naming the same keys. Strike them
    once §0.247 ships. **Parts 10-11 built 12 Nov (state §0.248; guide
    §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — committed
-   `4f171d4`; not yet shipped; harness deferred**, its Admin browser
+   `4f171d4`; not yet shipped; harness deferred, graded green in the full
+   run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: the record
    windows' saves (account, contact, task, activity, member, quote,
    product), the lead window, the account picker's Create and the AI
@@ -589,7 +595,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    role's sentence (Q13); scan (iii) tightened. Strike them once §0.248
    ships. **Part 12 built 13 Nov (state §0.249; guide §18b125 rule 5,
    since §0.249; Jeff, 13 Nov: "Start Part 12"; Q4 answered) — committed
-   `7211d3f`; not yet shipped; harness deferred**, its Admin browser
+   `7211d3f`; not yet shipped; harness deferred, graded green in the full
+   run (15–16 Nov: 6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen:
    the rest of src/ ok-first, in the server's words and plain words —
    Settings' Users, Audit log, MFA, Lead scoring and Connected apps, the
@@ -831,11 +838,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **The full mutation-harness run on the tree that ships — run for the
   forty-fourth ship 4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229),
   and for the forty-fifth 5–6 Nov on `b5880ec`, 4,301/4,301 caught (state
-  §0.233); each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
+  §0.233), and for the next ship 15–16 Nov on `fba41c1`, 6,104/6,104
+  caught (state §0.251; only docs since); each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
   run before each prod ship"): since §0.212 a batch runs its scope (`node
   scripts/mutate-scope.mjs`), and every entry (`node
   scripts/mutate-import.mjs`, 4 h 06 min on 27 Oct, 8 h 01 min on 4 Nov, 8 h
-  50 min on 5–6 Nov) runs
+  50 min on 5–6 Nov, 18 h 02 min on 15–16 Nov) runs
   before each ship. §0.209-§0.211 were each graded by a full run (§0.208 by
   its 3,139 older entries run on its step G's build in four slices and its
   own seven pre-run on the final tree — no full run on its final tree);
@@ -846,7 +854,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   `b5880ec` (4,301/4,301 caught, exit 0 — state §0.233). The run on
   `5a4665a` (15 Nov, 6,104 entries) was stopped at 950, all caught: about
   35 s a mutant, some 70 h (Jeff: "Stop, speed up first"); since §0.251
-  a mutant's SUITES take about 9.9 s, not 35.4 s (guide §18b126).
+  a mutant's SUITES take about 9.9 s, not 35.4 s (guide §18b126). The full run on `fba41c1` (15–16 Nov,
+  every entry) came back green: 6,104/6,104 caught after a printed green
+  baseline, exit 0, 18 h 02 min, about 10.6 s a mutant (state §0.251) —
+  it grades every batch since the forty-fifth ship, §0.234-§0.251
+  (§0.247-§0.251, each committed "harness deferred", by it alone); only docs since, so it stands as the run before
+  the dev push and the full run before the ship.
 - **The quote PDF on prod — after the next ship** (state §0.234, §0.235):
   dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
   Q-2026-001 rendered there as Karen and read back — 200, QA's name,
@@ -5078,7 +5091,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   work across them all — quote-pdf-pages 5.6 s alone (pdfkit),
   refusals-said 4.1 s, settings-saves 2.2 s, and the whole-src guard
   scans each parsing src/ again; starting the slowest first gains about
-  1 s. This item is the next lever.
+  1 s. This item is the next lever. The full run of 15–16 Nov on
+  `fba41c1` (6,104 entries) took 18 h 02 min, about 10.6 s a mutant (its
+  30-min pace check read 10.1 s; state §0.251).
 
 - **The harness runs each mutant with no time limit** (§0.215's fourth
   review, run in a scratch copy): scripts/mutate-import.mjs and
@@ -5239,7 +5254,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
   what each reaches
   keeps its last grade (a suite added can only turn a run red; guide §18b23
   part 4); the full run of 4 Nov, every entry, graded what they all miss:
-  4,183/4,183 caught (state §0.229). Recommended: mutate-scope.mjs runs each edited test
+  4,183/4,183 caught (state §0.229); the full run of 15–16 Nov on
+  `fba41c1`, every entry, likewise: 6,104/6,104 caught (state §0.251).
+  Recommended: mutate-scope.mjs runs each edited test
   once with the tracer and adds what it traced to the scope (Jeff's call).
 - **The self-pin scan's floor stays seventeen with twenty pins** (§0.212
   added tests/mutate-scope.test.mjs's and tests/resize-targets.test.mjs's,
@@ -5370,7 +5387,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Scan (iv) reads only a catch clause's own `.message`** (§0.247, 12 Nov — the review's tests lens, refuted as a defect: the design's stated scope; none of the shapes is in the scanned files): a promise handler's `.catch(err => setError(err.message))`, an alias (`const err = e; err.message`), a destructure in the body (`const { message } = e`), `String(e)` or `` `${e}` `` ("TypeError: Failed to fetch") and `e['message']` pass it; its header's "no catch param's `.message` is read" overstates it. Recommended: a KNOWN LIMITS line in the header now, and these shapes with the all-src widening above. Low.
 - **Scan (iii)'s enclosing-check rule accepts any `.ok` in an enclosing condition** (the refusal sweep's OUT, §0.245, 11 Nov; the design's read): the rule the sweep's Part 10 brings counts a check like `!res.ok && …` however it is combined. Recommended: count only a condition the read cannot pass without the check. Low.
 - **TaskRail still builds its press notice by hand** (§0.245's build, 11 Nov; read in code): src/components/rails/TaskRail.jsx:366 makes `{ id: 'press_' + crypto.randomUUID(), title, words, refused }` inline, not through `pressNoticeOf` (src/utils/pressNotice.js, new in §0.245, which takes no `refused`), and pressNotice.js's header names only the Pipeline's drag as its user, though the Tasks tab uses it too. Recommended: one maker with an optional `refused`, the header naming its users. Low.
-- **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a 9-hour run. Since §0.251 (15 Nov) the race is 50 turns of the loop, not 60 ms (guide §18b126).
+- **A bare await in an older suite can stall the full harness run** (§0.246, 11 Nov — the Part 5 builder's lesson): two new tests/settings-saves.test.mjs S10 cases first awaited `st.call()` bare; with the repointed §0.228 gate mutant on disk the handler waited forever on a putSettings deferred never resolved, and the builder's first proof hung about 10 minutes (stopped, the removed line put back by hand from the edit's known text). scripts/mutate-import.mjs has no per-run timeout, so the full run before prod would stall at such a mutant. The two cases race it now (`outcome()`, the suite's 60 ms race). The older suites in SUITES were not checked for a bare await on something a mutant can leave unresolved. Recommended: check them before the full run before prod; a per-run timeout in the harness would make a hang a failure instead (Jeff's call). Medium — it can cost a full run (8 h 50 min on 5–6 Nov, 18 h 02 min on 15–16 Nov). Since §0.251 (15 Nov) the race is 50 turns of the loop, not 60 ms (guide §18b126). The full run of 15–16 Nov on `fba41c1` (every entry) ran to its end: 6,104/6,104 caught, exit 0, so no mutant stalled it.
 - **Scan (iii) matches a response by name, not by binding** (§0.248, 12 Nov — the review's tests lens, refuted as a defect: no swept file has the shape; noted in the guard's KNOWN LIMITS): an outer `res.ok` check counts toward a nested block's or loop's own `const res`. A later tightening could resolve the binding (the readsIn / `nearest` tracker of scan (i) does similar work). Low.
 - **An older harness entry's anchor matches twice** (§0.248, 12 Nov — the Part 10 fixer's parse check): "deal window: an unnamed row on the deal is blank" (`{c.name || UNLISTED_CONTACT}`, OpportunityModal.jsx) matches twice, the same at HEAD; the harness mutates the first, and the stale check asks only that an anchor be present. A uniqueness check in the stale check would catch the class. Low. Since §0.250 (14 Nov — the deals builder; read in code; older): a second, "deals endpoint (G2): the walk reads no parent" (`accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,`, netlify/functions/opportunities.mjs), whose anchor occurs twice, the same at HEAD.
 - **Harness labels and test messages that name older counts** (§0.249, 13 Nov — the review rounds' verifiers (G2, G3, G5); cosmetic): a label is its entry's name, kept as the rounds moved its anchor, so a few name counts the guard has moved past — "four-fifths of its 187 catch clauses", "178 of 187 seen", "84 of 187 seen", "the measured 185 body reads" (scan (iv) reads 188 catch clauses, scan (iii) 192 reads); and the last pass changed only the number of each source-walk floor it set, so some messages beside them still name the old count (tests/itest-targets-test-db.test.mjs: "expected the nineteen suites" beside a floor of 65). Recommended: each message says its count, or none; the labels stay. Low.
