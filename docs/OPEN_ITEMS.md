@@ -453,9 +453,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    (state §0.238; guide §18b121) — committed `3395b01`; pushed to dev 10 Nov** after the one
    scoped run (3,262/3,262; `b494e03..9dc9944`, Tests GREEN); its browser check PASSED as Karen
    and as an Admin, its dev checks on 10 Nov (a real score, the key check).
-   Strike this once it ships. Next in §3.1: the close-date history column
+   **SHIPPED 16 Nov, the forty-sixth ship** (`6d8fecb..a73c618`; the full
+   run first, 6,104/6,104 caught — state §0.251). Next in §3.1: the
+   close-date history column
    (decision 3) — **built 10 Nov (state §0.239; guide §18b122), the column
-   applied on Jeff's go — committed `de2bd08`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its browser
+   applied on Jeff's go — committed `de2bd08`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); SHIPPED 16 Nov, the forty-sixth ship**, its browser
    check PASSED as Jeff and as Karen — then batch 2.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
@@ -490,8 +492,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    3,262/3,262; a note posted on dev): a note one operation the server applies
    (compare-and-set), stamped by the server, only its author changing it; a
    whole list refused; a stage move appended to the stored history in the
-   write; a contact's Undo a restore keeping its stored owner by id. Strike
-   this once it ships.
+   write; a contact's Undo a restore keeping its stored owner by id.
+   **SHIPPED 16 Nov, the forty-sixth ship** (`6d8fecb..a73c618`; the full
+   run first, 6,104/6,104 caught — state §0.251).
 5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
    **Designed and answered 9 Nov** (docs/design/email-links/DESIGN.md and
@@ -506,13 +509,15 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    committed `15b8197`; pushed to dev 10 Nov** (the one scoped run first,
    3,262/3,262; the reader checked on dev, a switch of org included): one link shape (`appLink`) and one reader;
    every deal, task and quote link names its org; a preferences link opens
-   the Notifications tab. Strike this once it ships.
+   the Notifications tab. **SHIPPED 16 Nov, the forty-sixth ship**
+   (`6d8fecb..a73c618`; the full run first, 6,104/6,104 caught — state
+   §0.251).
 6. **The save cleanup batch** (Jeff, 10 Nov: "Cleanup batch" — the items
    §0.241 filed). **Designed and answered 10 Nov**
    (docs/design/save-cleanup/DESIGN.md and ANSWERS.md — S "Parts 1-4 now
    (Recommended)", Q1-Q6 each the Recommended). **Parts 1-4 built 10 Nov
    (state §0.242; guide §18b125), `products.custom_price` applied on Jeff's
-   go — committed `6342364`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its Admin browser check PASSED
+   go — committed `6342364`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); SHIPPED 16 Nov, the forty-sixth ship**, its Admin browser check PASSED
    as Jeff: a save writes only what it names (the products PUT a strict
    update, 404 for an id the org does not hold; the export schedule and
    GDPR request PUTs merged over the stored row; the backup schedule field
@@ -521,7 +526,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    percent a request names anew in range or refused naming the field; a
    day shown for an instant the member's day. **Parts 5-6 built 10 Nov
    (state §0.243; guide §18b125 rules 5, 7 and 8; Q7 "Send only what's
-   missing (Recommended)") — committed `94b5729`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN)**, its
+   missing (Recommended)") — committed `94b5729`; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); SHIPPED 16 Nov, the forty-sixth ship**, its
    rep-path browser check PASSED as Karen, its Admin check as Jeff
    (the import card not opened: QA holds no old list): a refusal said in the server's words or plain ones
    (`readRefusal`, `failureWords`) in the four Settings panels, Backup,
@@ -529,13 +534,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    tests/refusals-said.test.mjs; a backup's file saved only when the
    server sent it; the backup schedule never written from values never
    read; the Dispatch legacy import sends only what the tables do not
-   hold. Strike Parts 1-6 once §0.242 and §0.243 ship. **The rest of the
+   hold. **The rest of the
    sweep** — designed and answered 11 Nov (docs/design/refusal-sweep/,
    DESIGN.md and ANSWERS.md, committed `058469e`: twelve Parts; Jeff, 11
    Nov: "Refusal sweep", then "Parts 1-4 now (Recommended)" and Q1-Q20
    "All Recommended (Recommended)"). **Parts 1-4 built 11 Nov (state
    §0.245; guide §18b125 rules 5 and 9) — committed `b1b56e7`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN);
-   not yet shipped; harness deferred, graded green in the one scoped
+   SHIPPED 16 Nov, the forty-sixth ship; harness deferred, graded green
+   in the one scoped
    run (12 Nov: 3,284/3,284 caught) and the full run of 15–16 Nov on
    `fba41c1` (6,104/6,104 caught)**, its rep-path browser check
    PASSED as Karen, the Admin check (Export) PASSED as Jeff: a refusal
@@ -547,9 +553,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    on this deal" on one banner with a Close; Export's Delete on its banner
    and its two windows' saves inside the window, never `window.alert`;
    each optimistic change putting back only its own copy; Home's dead
-   Complete removed (Q5). Strike them once §0.245 ships. **Parts 5-7
+   Complete removed (Q5). **Parts 5-7
    built 11 Nov (state §0.246; guide §18b125 rule 5, since §0.246; Jeff,
-   11 Nov: "proceed", Q9-Q17 answered) — committed `16b0ffb`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN); not yet shipped;
+   11 Nov: "proceed", Q9-Q17 answered) — committed `16b0ffb`; pushed to dev 12 Nov (`25ff73a..321143f`, Tests GREEN); SHIPPED 16 Nov, the forty-sixth ship;
    harness deferred, graded green in the one scoped run (12 Nov:
    3,284/3,284 caught) and the full run of 15–16 Nov (6,104/6,104
    caught)**, its Admin browser check PASSED as Jeff, the
@@ -564,12 +570,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    copy a button with its lines to the cent; the coaching notes hook
    never rejecting, a failed load said on Home and Sales Manager, Home's
    "Mark read" a press notice; Quick Log's calendar box removed (Q16).
-   Strike them once §0.246 ships. **Parts 8-9 built 12 Nov (state
+   **Parts 8-9 built 12 Nov (state
    §0.247; guide §18b125 rules 5 and 9, since §0.247; Jeff, 12 Nov: "lets
    proceed in that order", Q13, Q18 and Q19 answered; then "Name the
    unread (Recommended)" and "Fix in this batch (Recommended)") — committed
    `6cd6bf1`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
-   GREEN); not yet shipped; harness deferred, graded green in the full
+   GREEN); SHIPPED 16 Nov, the forty-sixth
+   ship; harness deferred, graded green in the full
    run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: a failure
    said in plain words in the swept files (`failureWords`; putSettings
@@ -581,11 +588,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    counts; Automations', Export's and Webhooks' Pause / Resume and Delete
    putting back only the flag, one request per row, a banner cleared by
    id; Webhooks reading its server's answers (wrong in prod since 11 May
-   2026, `5772f63`) and the API page naming the same keys. Strike them
-   once §0.247 ships. **Parts 10-11 built 12 Nov (state §0.248; guide
+   2026, `5772f63`) and the API page naming the same keys.
+   **Parts 10-11 built 12 Nov (state §0.248; guide
    §18b125, since §0.248; Jeff, 12 Nov: "Start Parts 10-11") — committed
-   `4f171d4`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
-   GREEN); not yet shipped; harness deferred, graded green in the full
+   `4f171d4`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests GREEN); SHIPPED
+   16 Nov, the forty-sixth ship; harness deferred, graded green in the full
    run of 15–16 Nov (6,104/6,104 caught)**, its Admin browser
    check PASSED as Jeff, the rep-path check PASSED as Karen: the record
    windows' saves (account, contact, task, activity, member, quote,
@@ -594,13 +601,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    duplicate scans and Past merges never a count or "none" over a read
    that failed; Dispatch's load, saves, invoice panel, address (Q20),
    Service due and New Job, and Service plans, likewise — a 403 the
-   role's sentence (Q13); scan (iii) tightened. Strike them once §0.248
-   ships. **Part 12 built 13 Nov (state §0.249; guide §18b125 rule 5,
+   role's sentence (Q13); scan (iii) tightened.
+   **Part 12 built 13 Nov (state §0.249; guide §18b125 rule 5,
    since §0.249; Jeff, 13 Nov: "Start Part 12"; Q4 answered) — committed
    `7211d3f`; pushed to dev 16 Nov (`321143f..87c2e23`, Tests
-   GREEN); not yet shipped; harness deferred, graded green in the full
-   run (15–16 Nov: 6,104/6,104 caught)**, its Admin browser
-   check PASSED as Jeff, the rep-path check PASSED as Karen:
+   GREEN); SHIPPED 16 Nov, the forty-sixth ship; harness deferred,
+   graded green in the full run (15–16 Nov: 6,104/6,104 caught)**, its Admin
+   browser check PASSED as Jeff, the rep-path check PASSED as Karen:
    the rest of src/ ok-first, in the server's words and plain words —
    Settings' Users, Audit log, MFA, Lead scoring and Connected apps, the
    Quotes, Reports, Sales Manager, Pipeline and Leads tabs, the header,
@@ -611,7 +618,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    the Sales Manager's tab a write whose answer proves nothing said as
    "may have been saved" (the maybe rule); Q4's "The server could not be
    reached." (`NETWORK_ERROR`); THE GUARD's scan (iii) over all of src/.
-   Strike them once §0.249 ships. Part 12 was the design's last: what the
+   Part 12
+   was the design's last: what the
    sweep leaves is filed — the maybe rule's reach, one rule for a write
    whose answer proves nothing (§2.4, Jeff's call), scan
    (iv) over all of src/ (§6), and the batches' own items (§4.2-§4.8,
@@ -619,8 +627,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    - ~~the Kanban stage drag with no rollback; a task's complete and snooze
      un-ticking without a word (TasksTab); Reports' deal contact add,
      remove and persona~~ (DONE in §0.245, Parts 1-3; committed `b1b56e7`,
-     not yet shipped — and HomeTab's PlateRow, once listed here, has drawn no
-     Complete since `7ae0608`, 5 Jun 2026: its dead code removed, Q5);
+     SHIPPED 16 Nov, the forty-sixth ship — and HomeTab's PlateRow, once
+     listed here, has drawn no Complete since `7ae0608`, 5 Jun 2026: its dead
+     code removed, Q5);
      ~~calendar adds that only `console.warn`~~ (DONE in §0.246, Part 7:
      Q16 removed the box and the adds nothing reached — real meetings are
      §3.6's); ~~ExportDetail's delete error replacing the
@@ -631,8 +640,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      failures~~ (DONE in §0.246, Part 6); ~~the quote PDF's silent
      fallback~~ (DONE in §0.246, Part 7 — the copy a button, so its
      `window.open` after an await, which may be popup-blocked, is gone;
-     the design's OUT, §0.245, 11 Nov). Parts 5-7 committed `16b0ffb`, pushed to dev 12 Nov, not yet
-     shipped.
+     the design's OUT, §0.245, 11 Nov). Parts 5-7 committed `16b0ffb`, pushed to dev 12 Nov, SHIPPED 16
+     Nov, the forty-sixth ship.
    - ~~about 20 other raw `e.message` sites in the swept panels and
      DispatchVehiclesDetail (§0.243's re-check, 10 Nov): a request that
      never reached the server says "Failed to fetch" there — said by
@@ -642,7 +651,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Part 8: every one says `failureWords`, scan (iv) holding the swept
      files to it; the fleet's Deletes say the server's words, a 403 "Your
      role cannot delete vehicles." or "… equipment." (Q13); committed
-     `6cd6bf1`, pushed to dev 16 Nov, not yet shipped).
+     `6cd6bf1`, pushed to dev 16 Nov, SHIPPED 16 Nov, the forty-sixth ship).
      useOpportunities.js:41's deals load
      throws `'HTTP ' + r.status` (§0.247, 12 Nov — Part 8's build; read
      in code): Part 10 (§0.248) left it and the four record loads' twins —
@@ -672,12 +681,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      all 242 sources under src/, 192 body reads, the 25 still before
      their check each named in `BODY_FIRST` with its reason; ReportsTab.jsx,
      QuotesTab.jsx and the rest of the design's Part 12 table cleaned;
-     committed `7211d3f`, pushed to dev 16 Nov, not yet shipped).
+     committed `7211d3f`, pushed to dev 16 Nov, SHIPPED 16 Nov, the
+     forty-sixth ship).
    - ~~Dispatch's `saveWorkingHours` and ShiftPatternDialog still show a raw
      `e.message` (`setErr(e.message)`) — Part 11's, with DispatchTab
      joining `SWEPT` (§0.246's build, 11 Nov; read in code)~~ (DONE in
      §0.248, Part 11: `failureWords(e)`, DispatchTab.jsx in `SWEPT`;
-     committed `4f171d4`, pushed to dev 16 Nov, not yet shipped).
+     committed `4f171d4`, pushed to dev 16 Nov, SHIPPED 16 Nov, the
+     forty-sixth ship).
 
 ---
 
@@ -842,7 +853,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **The full mutation-harness run on the tree that ships — run for the
   forty-fourth ship 4 Nov on `80b21fb`, 4,183/4,183 caught (state §0.229),
   and for the forty-fifth 5–6 Nov on `b5880ec`, 4,301/4,301 caught (state
-  §0.233), and for the next ship 15–16 Nov on `fba41c1`, 6,104/6,104
+  §0.233), and for the forty-sixth 15–16 Nov on `fba41c1`, 6,104/6,104
   caught (state §0.251; only docs since); each later ship needs its own on the tree that ships** (guide §18b23 part 4; Jeff, 27 Oct: "the full
   run before each prod ship"): since §0.212 a batch runs its scope (`node
   scripts/mutate-scope.mjs`), and every entry (`node
@@ -864,16 +875,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   it grades every batch since the forty-fifth ship, §0.234-§0.251
   (§0.247-§0.251, each committed "harness deferred", by it alone); only docs since, so it stands as the run before
   the dev push — pushed to dev 16 Nov (`321143f..87c2e23`, Tests GREEN),
-  not yet shipped — and the full run before the ship.
-- **The quote PDF on prod — after the next ship** (state §0.234, §0.235):
+  SHIPPED 16 Nov, the forty-sixth ship (`6d8fecb..a73c618`; only docs after
+  the run) — and the full run before the ship.
+- **The quote PDF on prod — shipped 16 Nov, the forty-sixth ship; its
+  check on prod Jeff's** (state §0.234, §0.235):
   dev renders it since the push of 9 Nov (`ec4204e..b494e03`; Karen's
   Q-2026-001 rendered there as Karen and read back — 200, QA's name,
   address and contact, nothing of the app's — and two pages, the second
   holding only its number: §0.235, built 9 Nov, pushed to dev 10 Nov). On
   dev since: a 60-line quote in three pages, "Page i of 3" in every
-  footer, nothing cut (state §0.238, the dev checks); after the ship, on
-  salespipelinetracker.com. Until then prod's Download falls
-  back to its print copy (no call to prod's quote-pdf in seven days).
+  footer, nothing cut (state §0.238, the dev checks). SHIPPED 16 Nov, the
+  forty-sixth ship, with `netlify.toml`'s pdfkit outside the quote PDF's
+  bundle; not yet checked on salespipelinetracker.com (no browser pass on
+  prod) — next, the same render there, Jeff's. Before the ship prod's
+  Download fell back to its print copy (no call to prod's quote-pdf in
+  seven days).
 - **§0.236's TEST data in Accelerep QA, Jeff's to clear if he wishes** (its
   browser check, 9 Nov — state §0.236): on the deal "TEST §0.209 deal", a
   team note "TEST 0.236 note from tab A", Next Steps "TEST 0.236 saved from
@@ -941,9 +957,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   none) and holds such a deal — at most the Undos in which the deal rule
   would leave a deal where it is rather than put it on a site (Jeff, 18
   Oct: "Leave such deals and count them"; UKG's 6 deals on sites, §2.4).
-- **Reload every app tab opened before the forty-fifth ship** (Deployed:
-  prod 15:19 UTC 9 Nov — §0.230-§0.233, on dev from 09:30 UTC 5 Nov; it
-  covers the forty-fourth's, prod 17:55 UTC 4 Nov — §0.208-§0.229, each on
+- **Reload every app tab opened before the forty-sixth ship** (Deployed:
+  prod 18:05 UTC 16 Nov — §0.234-§0.251, each on dev from the push its
+  section records; it covers the forty-fifth's, prod 15:19 UTC 9 Nov —
+  §0.230-§0.233, on dev from 09:30 UTC 5 Nov — the forty-fourth's, prod
+  17:55 UTC 4 Nov — §0.208-§0.229, each on
   dev from the push its section records — the forty-third's, dev 20:48 UTC, prod 20:51 UTC, 18
   Oct, the forty-second's, 17 Oct 18:36 UTC, the forty-first's, 17 Oct 13:06
   UTC, the fortieth's, 16 Oct 15:03 UTC, the thirty-ninth's, 16 Oct 03:28
@@ -956,6 +974,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   Manager tab's quota board, claims list, SPIFF board and forecast ledger, a
   saved report's Pin, the backup page's import window, the Fiscal year page,
   and the Accounts and Contacts tabs' lists among them. A tab opened before
+  its site's §0.234-§0.251 deploy and not reloaded keeps the screens from
+  before them (what each keeps not read for this record). A tab opened before
   its site's §0.230-§0.233 deploy and not reloaded keeps the in-tab layers
   from before them: an Escape closes the rail or window under a layer, and
   App's letter and number shortcuts fire under one. A tab opened before
@@ -995,7 +1015,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   unpinned elsewhere, as before); its import window closes on an accepted
   restore's answer and reads only "Import failed" on a refused one, so
   nothing the restore says is read. Reload, then strike this.
-- Nothing else open. The forty-fifth ship (9 Nov, 15:19 UTC: §0.230-§0.233,
+- Nothing else open. The forty-sixth ship (16 Nov, 18:05 UTC: §0.234-§0.251,
+  every batch since the forty-fifth, each pushed to dev before it as its
+  section records; prod in one push), the forty-fifth ship (9 Nov, 15:19
+  UTC: §0.230-§0.233,
   Escape in the tabs, its four batches pushed to dev together 5 Nov; prod in
   one push), the forty-fourth ship (4 Nov, 17:55 UTC: §0.208-§0.229,
   every batch since the forty-third, each pushed to dev before it as its
@@ -1032,7 +1055,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.3 Before selling
 
-- **A quote shows Accelerep's name to every org** (Escape in the tabs'
+- ~~**A quote shows Accelerep's name to every org** (Escape in the tabs'
   critique, 4 Nov; re-read — the multi-tenant rule: nothing tenant-visible
   global unless a per-org setting overrides it): the Quotes tab's preview
   prints "ACCELEREP", "500 Market Street, Suite 800, San Francisco, CA
@@ -1056,8 +1079,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   look; and the quote PDF, which answered 500 everywhere (pdfkit bundled
   without its fonts — Jeff: "Fold it in"), renders again. Its pages (a
   page for the quote number alone, a long quote in fragments, the address
-  under a wrapped quote name): state §0.235, built 9 Nov, pushed to dev 10 Nov.
-  Strike this once both ship.
+  under a wrapped quote name): state §0.235, built 9 Nov,
+  pushed to dev 10 Nov.~~ — DONE: both SHIPPED 16 Nov, the forty-sixth
+  ship (the PDF's check on prod is §2.2's, Jeff's).
 
 - **Google's verification of the calendar app** (10 Oct; from Google's
   documentation, not tried). Calendar access is a "sensitive" scope.
@@ -1212,10 +1236,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **Schema changes, each additive and nullable, both databases, Jeff's go:**
   - an owner id on `spiff_claims` (§0.169 (d));
   - `org_id` in `document_links_unique_idx` (§0.166 (2));
-  - a close-date history column on deals (§3.1). Decided 9 Nov (Jeff: "3
+  - ~~a close-date history column on deals (§3.1). Decided 9 Nov (Jeff: "3
     recommended"); **applied 10 Nov on Jeff's go** — `close_date_history`,
     jsonb, nullable, no default, both databases (state §0.239). Strike this
-    once §0.239 ships.
+    once §0.239 ships.~~ — DONE 16 Nov, the forty-sixth ship (the column
+    read present before it, nullable, no default — information_schema,
+    SELECT only).
   - A unique index on `users`, on the org plus the name with whitespace
     collapsed, trimmed and lowercased. It closes the race §0.196 leaves: every
     check reads, then writes, so two writes at one moment can still make a
@@ -1354,7 +1380,7 @@ way.
   converted and dead leads. Its threshold is 150 by default and never fewer
   than 20.
 
-**Batch 1: the Admin's model choice (small; recommended first).** **Built 9 Nov (state §0.238); pushed to dev 10 Nov.**
+**Batch 1: the Admin's model choice (small; recommended first).** **Built 9 Nov (state §0.238); pushed to dev 10 Nov; SHIPPED 16 Nov, the forty-sixth ship.**
 
 - The AI score uses the model the Admin chose, from a list the server
   accepts.
@@ -1425,14 +1451,16 @@ docs/design/ai-scoring/ANSWERS.md):**
    to" (a role check when scoring, small). Remove the budget until a per-org
    usage counter backs it. **Built 9 Nov in AI scoring batch 1** (state
    §0.238: "Available to" decides who may ask Claude, the token budget out;
-   committed `3395b01`, pushed to dev 10 Nov; not yet shipped).
+   committed `3395b01`, pushed to dev 10 Nov; SHIPPED 16 Nov, the forty-sixth
+   ship).
 3. **A history of close-date changes.** Recommended: yes. A new deal column,
    additive and nullable, both databases, with Jeff's go. **Designed and
    answered 10 Nov** (docs/design/close-date-history/DESIGN.md and
    ANSWERS.md — Q1-Q4 each the Recommended, Q4 all three). **Built 10 Nov
    (state §0.239); the column applied 10 Nov on Jeff's go** (the test and
    app databases; `db/apply-close-date-history.mjs`). Committed `de2bd08`;
-   harness deferred; not yet shipped.
+   harness deferred; pushed to dev 11 Nov (`9dc9944..25ff73a`); SHIPPED 16
+   Nov, the forty-sixth ship.
 4. **Which models to offer.** Recommended: the current Haiku, Sonnet and Opus,
    checked against what the workspace's key can call before they are listed.
 
@@ -1467,14 +1495,14 @@ docs/design/ai-scoring/ANSWERS.md):**
   an exempt switch prefilled from the linked Dispatch customer; carried to the job's invoice;
   one quote money function) next to build, **batch B** (the address lookup on one Zip-Tax
   account) gated on Zip-Tax's three written answers (Jeff's to get).
-  **Batch A built 10 Nov (state §0.241; guide §18b124; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); not yet shipped)** — the four
+  **Batch A built 10 Nov (state §0.241; guide §18b124; pushed to dev 11 Nov (`9dc9944..25ff73a`, Tests GREEN); SHIPPED 16 Nov, the forty-sixth ship)** — the four
   columns applied 10 Nov on Jeff's go (the test and app databases, `db/apply-sales-tax.mjs`);
   harness deferred; its browser check PASSED as Karen, its Admin check (the default rate, the
   Price Book's Taxable) as Jeff. Batch B stays gated on Zip-Tax's
-  three written answers. Until §0.241 ships, prod's quotes endpoint never names the columns
-  (the database is shared): a quote taxed on dev and edited on prod keeps its old tax amount,
-  and one made a job on prod gets every line taxable, no discount line and an invoice at 0.
-  Strike batch A once §0.241 ships.
+  three written answers. Until §0.241 shipped (16 Nov, the forty-sixth ship), prod's quotes
+  endpoint never named the columns (the database is shared): a quote taxed on dev and edited on
+  prod kept its old tax amount, and one made a job on prod got every line taxable, no discount
+  line and an invoice at 0.
 - **A tax rate with three decimal places cannot be stored** (§0.241, 10 Nov): `quotes.tax_rate` is numeric(5,2), as `invoices.tax_rate` is (db/schema.ts:645, :696); the screens refuse a third place in words (`taxRateFromInput`, src/utils/quoteMoneyRows.js) and a request straight to the API has it kept to two (`cleanTaxRate`, src/utils/quoteTotals.js). Real US combined rates carry three (8.875%), and batch B's lookup returns them. Batch B must decide; widening the column is a type change, not an additive one — Jeff's go, both databases. Low until batch B.
 - **The dead `priceBookProducts` key.** Drop it from both settings.mjs halves.
 - **The quote Activity list** is derived from the current status, so earlier
@@ -1778,7 +1806,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   through `dbWrite`, the list taking `data.opportunity` through
   `setOpportunities` (as the Closed Lost save does, useOpportunities.js:243)
   and the local ids retired; the refusal's words beside the panel and the
-  table. **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov)** the
+  table. **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov;
+  SHIPPED 16 Nov, the forty-sixth ship)** the
   refusal half is done: the add and remove send through `dbWrite`, a
   refused add, remove or persona is said on one banner in the section,
   kept until its Close (Q6), and an answer after another deal was
@@ -1859,7 +1888,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   nothing (§0.199's review); the task rail's Complete says it (§0.199's
   re-check). Recommended: the same rule as the links (send what
   changed), or a stale-row check on the server (`updatedAt`). Jeff decides.
-  **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov)** the Tasks
+  **Since §0.245 (11 Nov; committed `b1b56e7`, pushed to dev 12 Nov;
+  SHIPPED 16 Nov, the forty-sixth ship)** the Tasks
   tab's Complete and snooze and Reports' contact and persona edits say a
   refusal, Home's complete toggle is gone, and Reports' persona edit
   sends only `{ id, buyerPersona }`. Still so (the refusal sweep's OUT,
@@ -2145,7 +2175,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Recommended: keep (each is rare, or data from before the rule), but the
   merge's Undo's shapes by name, which have no age limit, are batch 3's
   to close (Jeff, 18 Oct: "Ship as is, file the edge" — §4.7).
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **The deal PUT's "opportunity updated" email compares the rep's name to
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **The deal PUT's "opportunity updated" email compares the rep's name to
   the caller's Clerk id**, so a rep with that email on is emailed about their
   own edits. §0.176 (c).
 - **Deals on a pipeline that does not exist vanish.** 31 of the Test org's
@@ -2283,13 +2313,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `Authorization: Bearer` is the current header — both calls.)
 - **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
 - **The server's day counts are UTC's, not the member's** (§0.240, Jeff: "App now, file server"): ai-score.mjs's prompt ("Deal age", "days PAST DUE" — a floor from 12:00 UTC), pipeline-alerts.mjs (`daysSince` from UTC noon at the member's alert hour; `todayStr` the UTC day for `daysLapsed` and task overdue) and digest.mjs (`daysOverdue` from UTC midnight) can be a day off for members far from UTC. Recommended: count from the member's day (`dayIn(tz, now)` — task-reminders.mjs's `getTodayInTimezone` lifted into dateLocal.js) with `calendarDays`; ai-score from the day the client sends or the caller's stored timezone. Low. The days the server prints are the same class (the save cleanup design's OUT, 10 Nov; as recorded where no line is given): the quote PDF's date line (`_quotePdf.mjs:390`, the function's clock), the digest's "Week of" (digest.mjs:475), the days opportunities, leads, email-inbound, invoices and `_coaching` stamp, and the UTC year in record numbers — each needs the member's day or time zone.
-- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 4 — `dayOf`; Reports' "Customer since" and "First touch" with it; the date guard's three scans).** **A version's date on a Quotes card is its timestamp's UTC day** (found 10 Nov, §0.241's Admin check): src/Tabs/QuotesTab.jsx:2003 prints `(q.updatedAt || q.createdAt || '').slice(5, 10)` — the ISO string's UTC month and day, so a quote saved after 6 pm Central reads tomorrow (on the local server a day ahead all evening: the `timestamp without time zone` read back as local time). src/Tabs/ReportsTab.jsx:5789 ("Customer since") and :5850 ("First touch") slice a timestamp the same way. The class of guide §18b123 (a day a member sees is their own calendar day) for dates, not counts. Recommended: one local-day formatter in src/utils/dateLocal.js and a guard scan for a timestamp sliced to a day. Low.
+- **Fixed in §0.242 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b125 rule 4 — `dayOf`; Reports' "Customer since" and "First touch" with it; the date guard's three scans).** **A version's date on a Quotes card is its timestamp's UTC day** (found 10 Nov, §0.241's Admin check): src/Tabs/QuotesTab.jsx:2003 prints `(q.updatedAt || q.createdAt || '').slice(5, 10)` — the ISO string's UTC month and day, so a quote saved after 6 pm Central reads tomorrow (on the local server a day ahead all evening: the `timestamp without time zone` read back as local time). src/Tabs/ReportsTab.jsx:5789 ("Customer since") and :5850 ("First touch") slice a timestamp the same way. The class of guide §18b123 (a day a member sees is their own calendar day) for dates, not counts. Recommended: one local-day formatter in src/utils/dateLocal.js and a guard scan for a timestamp sliced to a day. Low.
 - **Days compared through `new Date(day)` are not scanned** (§0.242's guard, 10 Nov; read in code): tests/date-local.test.mjs's DAY_AS_UTC takes a stored day handed to `new Date` only where it is printed (toLocale*). Four comparisons read both sides the same way, so they agree today and pass: src/components/FunnelView.jsx:302 (a sort by `stageChangedDate`), src/components/KanbanView.jsx:72 (the latest activity by `date`), src/Tabs/PipelineTab.jsx:983 (`forecastedCloseDate` against a history entry's `date`), src/Tabs/ReportsTab.jsx:5929 (the timeline's sort by `rawDate`). A day compared that way with an instant or with now would be a day off west of Greenwich. Recommended: `parseLocalDate` when each is next touched. Low.
 - **An import's stage entry made in a race is dated the clock read before it** (§0.239's review, 10 Nov; opportunities.mjs `importStagesWith`): a save that moves a deal's stage between an Overwrite's read and its write, on a deal the file leaves at the stage it read, gets a reversal entry dated the deal's earlier clock (the batch backfills that row's `stageChangedDate` from the read), and the move is not in the batch's count, audit row or Slack post. Race-only; before §0.239 the save's own entry was lost instead. Recommended: date an entry the read did not expect with the import's day. Low.
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **The deal window's day counts read -1 before noon** (§0.238's dev check, 10 Nov): "DEAL AGE -1d · IN STAGE -1d" and "-1 days in Evaluation (Demo)" on a deal moved that morning. The window counts from noon of the stored day (`T12:00:00`) with no floor (OpportunityModal.jsx:286, 1273-1274, 1593); Kanban and the Pipeline list clamp at 0 (KanbanView.jsx:51, PipelineTab.jsx:609). Recommended: count calendar days, never below 0 — one helper for every such count. Low.
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **A deal with no created date takes the day of its first edit** (§0.238's dev check, 10 Nov): the save sends `createdDate: prevOpp?.createdDate || today` (useOpportunities.js:124), so a deal stored without one is aged from its first edit — QA's "TEST3c Deal" reads 2026-11-10 against `createdAt` 30 Oct, "TEST §0.209 deal" 2026-11-09 against 23 Oct, and one more has none. Which paths store a deal with none: not read. Recommended: fill an empty one from `createdAt`, on the server; a census (SELECT only) before any backfill. Low.
 
 - **The Recommendation report's outcomes never move.** Nothing calls
   `recommendation-log.mjs`'s PUT, the sweep that marks a pending alert
@@ -2402,8 +2432,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Quotes: the server takes two lines of one product** (the editor refuses
   a second; the version compare and the analytics assume one per product).
   No screen makes them; refusing them is quote-shape integrity, not tenancy.
-- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 3 — a 400 naming `dealDiscount` before any write, a held value never asked again; a line's discount likewise, naming `lineItems`).** **Quotes: the deal discount is never range-checked on the server** (§0.241's review, 10 Nov; read in code): quotes.mjs stores `String(data.dealDiscount || 0)` (:349, :498) and works the totals from it, so a request straight to the API can store a deal discount below 0 (a surcharge) or over 100 (a total below 0); no screen sends one. §0.241's job lines carry either as stored (`quoteDiscountJobItems`), so the job and its invoice still match the quote. Recommended: refuse a deal discount outside 0-100 with a 400 naming the field, as the tax rate is. Low.
-- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 1 — a strict update of the keys named, read in the org; 404 for an id it does not hold, nothing written). Corrected 10 Nov: "no screen meets it" was wrong — the Price Book's form never sent `minPrice`, so every edit wiped it (the save cleanup design's critic).** **products.mjs PUT: a body that leaves fields out fails or wipes** (§0.241's review, 10 Nov; read in code; older than §0.241): the upsert's insert half takes the body as sent (products.mjs:88-97), so a PUT without `name` or `listPrice` is a 500 (both NOT NULL), and `minPrice` is written null whenever the body leaves it out (:92) — the `sanitize` full-row wipe CLAUDE.md names, a fourth instance. The Price Book sends the whole form, so no screen meets it. Recommended: merge over the stored row first (`sanitize({ ...existing, ...data })`, the users/leads pattern). Low.
+- **Fixed in §0.242 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b125 rule 3 — a 400 naming `dealDiscount` before any write, a held value never asked again; a line's discount likewise, naming `lineItems`).** **Quotes: the deal discount is never range-checked on the server** (§0.241's review, 10 Nov; read in code): quotes.mjs stores `String(data.dealDiscount || 0)` (:349, :498) and works the totals from it, so a request straight to the API can store a deal discount below 0 (a surcharge) or over 100 (a total below 0); no screen sends one. §0.241's job lines carry either as stored (`quoteDiscountJobItems`), so the job and its invoice still match the quote. Recommended: refuse a deal discount outside 0-100 with a 400 naming the field, as the tax rate is. Low.
+- **Fixed in §0.242 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b125 rule 1 — a strict update of the keys named, read in the org; 404 for an id it does not hold, nothing written). Corrected 10 Nov: "no screen meets it" was wrong — the Price Book's form never sent `minPrice`, so every edit wiped it (the save cleanup design's critic).** **products.mjs PUT: a body that leaves fields out fails or wipes** (§0.241's review, 10 Nov; read in code; older than §0.241): the upsert's insert half takes the body as sent (products.mjs:88-97), so a PUT without `name` or `listPrice` is a 500 (both NOT NULL), and `minPrice` is written null whenever the body leaves it out (:92) — the `sanitize` full-row wipe CLAUDE.md names, a fourth instance. The Price Book sends the whole form, so no screen meets it. Recommended: merge over the stored row first (`sanitize({ ...existing, ...data })`, the users/leads pattern). Low.
 - **A product switched off custom with no list price keeps 0** (§0.242, 10 Nov; read in code): products.mjs `pricesOf` (:60) writes a list price only when the body names one, or 0 while the product stays custom-priced, so a PUT of `{ customPrice: false }` alone leaves the stored 0 and the product reads list-priced at $0. The Price Book always sends the typed price with the switch (`productChanges`; its own check refuses an empty one), so only a request straight to the API meets it. Recommended: refuse a switch off that names no list price, naming `listPrice`. Low.
 - **A product set inactive leaves the Price Book after a reload** (the save cleanup design's OUT, 10 Nov; read in code): the app loads products once, with no `includeInactive` (App.jsx:512 `loadProducts()`; useQuotes.js:48), and the products GET answers an inactive one only when asked, to an Admin (products.mjs:80-82) — so after a reload an inactive product is in no list the app draws, and the Price Book cannot set it active again. The quote builder filters `active` itself (QuotesTab.jsx:600); the other product readers are not read. Recommended: the Price Book loads with `includeInactive` for an Admin, and each other reader filters. Low.
 - **Percents and amounts the save cleanup batch left unchecked** (the design's OUT, 10 Nov; as recorded): a deal's probability (no range check; an import's "0" becomes none; a stage default copies the funnel weight unclamped) needs a census of probabilities and funnel weights first — a deal window re-sending a stored 150 would be refused, and the import's Preview needs per-row refusals — beside §4.3's Funnel stages item (Medium); a SPIFF's percent and a claim's amount; commission tiers (no reader); KPI thresholds; lead conversion benchmarks; a lead score's `?? 50`. Low.
@@ -3244,7 +3274,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   DONE in §0.223 (random ids; committed `a1de400`, pushed to dev 2 Nov; SHIPPED 4 Nov, the forty-fourth ship); ~~a
   re-run of Settings → Vehicles & equipment's legacy import resets an
   imported row's technician, holder and status (a full-row upsert)~~ —
-  fixed in §0.243 (10 Nov; committed `94b5729`; not yet shipped; guide §18b125 rule 7): a press
+  fixed in §0.243 (10 Nov; committed `94b5729`, pushed to dev 11 Nov;
+  SHIPPED 16 Nov, the forty-sixth ship; guide §18b125 rule 7): a press
   sends only the rows the tables do not hold; the
   crew builder prints a technician's vehicle id, not its name; the
   technician↔vehicle pairing is kept twice
@@ -3379,13 +3410,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   report** (§0.237's map): it names no saved report, and the app has no
   reader for one. Wants a `report` kind (src/utils/appLinks.js) and the
   Reports tab opening a saved report.
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A message link's notice is the five-second toast** (§0.237's browser
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **A message link's notice is the five-second toast** (§0.237's browser
   check): "That deal isn't available to you" shows at load and goes after
   five seconds, often under the overdue-task reminder — a member who looks
   away misses it. And it carries the undo toast's ✓, so a refusal reads as
   done (§0.238's dev check, 10 Nov: "✓ That link is for an organization
   you're not a member of.").
-- **Fixed in §0.240 (10 Nov; not yet shipped; guide §18b123).** **A member's deal email names who acted by their Clerk id** (§0.238's dev
+- **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **A member's deal email names who acted by their Clerk id** (§0.238's dev
   check, 10 Nov): "Hi Jeff RussellAdmin, user_3ASC6O… updated the stage on
   one of your deals." The deal PUT hands the stage email `changedBy:
   userId`, the close email `closedBy: userId` and the update email
@@ -3409,7 +3440,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   §0.174 (d).
 - **Imported leads fire no `lead.created` webhook or automation.** If that
   matters, it needs a batched dispatch. As recorded.
-- **Fixed in §0.241 (10 Nov; not yet shipped; guide §18b124).** **A quote's email shows every line as 1 × list price** (the 4b-2 map, 15
+- **Fixed in §0.241 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b124).** **A quote's email shows every line as 1 × list price** (the 4b-2 map, 15
   Oct; read in code, not run — customers see it). quote-email.mjs reads
   `li.qty` and `li.unitPrice`, which no line stores (a line holds
   `quantity`, `listPrice` and `discountPct` — QuotesTab.jsx), so each
@@ -3427,7 +3458,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **Fixed in §0.241 (10 Nov; not yet shipped; guide §18b124 — the stored quote by id under the deal's read rule; an unsaved edit is not in it).** **The quote PDF is built from the request body, not the stored quote**
+- **Fixed in §0.241 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b124 — the stored quote by id under the deal's read rule; an unsaved edit is not in it).** **The quote PDF is built from the request body, not the stored quote**
   (the quote branding design, 9 Nov, Q4; read in code, not run): quote-pdf.mjs
   takes `{ quote, opportunity, lines }` from the body (:356) and checks only
   that the caller is signed in (:349) — no org check on the quote, no
@@ -3733,13 +3764,15 @@ to add meetings. Nothing in the app adds a meeting to Google:
   a scope such as 'toString' passes the "Unknown scope" check and the read
   is expected to throw — a 500, Admin only, nothing read (read in code,
   not run).
-  Since §0.242 (10 Nov; not yet shipped; guide §18b125): the products
+  Since §0.242 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide
+  §18b125): the products
   create answers 409 for a taken id, this org's or another's; the
   export-schedules and export-dsr PUTs are updates merged over the stored
   row read in the org — an id the org does not hold a 404, nothing written,
   the maker the stored one — so neither crashes on another org's id nor
   blanks what a save leaves out.
-  Since §0.250 (14 Nov; not yet shipped; guide §18b125 rule 2): the
+  Since §0.250 (14 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide
+  §18b125 rule 2): the
   saved-reports create, as the products create since §0.242, answers
   409 "That report id is already in use." for a taken id, this org's
   or another's — nothing written, no audit row
@@ -4737,7 +4770,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   values are covered (`_quotePdf.mjs` `printable`).
 - **The quote PDF and email do not mark an untaxed line** (§0.241, 10 Nov): a quote with a rate taxes only its taxable lines and the Tax row says the rate, but neither document says which lines it left out — the version compare has a NOT TAXED pill (QuotesTab.jsx:519); the PDF (`_quotePdf.mjs`) and the email (quote-email.mjs) nothing. Recommended: a "Not taxed" mark on the line where the quote has a rate and is not exempt. Low.
 - **A quote PDF landing after another quote was opened still downloads** (§0.246, 11 Nov — Part 7's build; read in code): within one org, a Download PDF answered after the member opened another quote still downloads its file, named for its own quote (the name taken at the press); a PDF not made is said only when its quote is shown again (`pdfError.quoteId`). After an org switch nothing downloads or is said. Guide §18b125 rule 9's "an answer for a record no longer shown writes nothing and says nothing" may call for dropping the file too — Jeff's call. Low.
-- **Fixed in §0.242 (10 Nov; not yet shipped; guide §18b125 rule 5 — `handleSaveProduct` answers `{ ok, error | quiet }`; the form closes only on success and draws the server's words).** **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
+- **Fixed in §0.242 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b125 rule 5 — `handleSaveProduct` answers `{ ok, error | quiet }`; the form closes only on success and draws the server's words).** **The Price Book closes the product form on a refused save without a word** (§0.241's review, 10 Nov; older than §0.241): `handleSaveProduct` (src/hooks/useQuotes.js:149-152) sets `productModalError` and returns null on a refusal — a 400 such as `taxable`, or a 403 — and nothing draws `productModalError`; CatalogTab's save (QuotesTab.jsx:1094-1095) sees no refusal and closes the form, so the edit is lost and nothing is said. Recommended: throw on a refusal, so the form stays open with the words. Low.
 - **Est. margin and the average discount leave out the deal discount** (§0.241's review, 10 Nov; older than §0.241): the tab's `calcLineTotals` (QuotesTab.jsx:104-112) works both from the lines' subtotal (`netTotal = t.subtotal`), so a quote with a deal discount shows a margin and an "N% off list" above what it earns. The totals block's rows include the deal discount since §0.241. Recommended: work both from `totalValue`. Low.
 - **Day words from 24-hour spans** (the save cleanup design's OUT, 10 Nov; as recorded): AdminView, AuditDetail, BackupDetail's `fmtWhen`, ExportDetail, ApiKeysDetail and TasksTab's `fmtAgo` say "yesterday" or "N days ago" from a span of time rounded to days, not from calendar days (§18b123 rule 1's class, for words). Recommended: `calendarDays` where a day is said. Low.
 - **Home's "completed this week" compares an instant's text with a day** (the save cleanup design's OUT, 10 Nov; read in code): src/Tabs/HomeTab.jsx:476-479 takes `t.completedDate || t.updatedAt` and compares the text with the week's first day (`comp >= weekStartStr`) — an `updatedAt` instant compares by its UTC day. Low. Beside it, not read: the format of Dispatch's certificate `expiresAt`.
