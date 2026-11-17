@@ -439,7 +439,7 @@ One commit per verified batch; doc patch in the same commit.
   forecast call, commission or SPIFF save or coaching-note Delete says
   "Not"); every other save still says "Not saved" and readRefusal's words
   for any refused answer, a thrown one "The server could not be reached."
-  — one rule is Jeff's call, OPEN_ITEMS §2.4; a message names who acted
+  — one rule decided 16 Nov (Jeff: "A"), to build, OPEN_ITEMS §4.8; a message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the
