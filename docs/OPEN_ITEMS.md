@@ -476,8 +476,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    fall into Critical, the API adds `win_chance`, a rep's own switch.
    **2C built 17 Nov (state §0.258; guide §18b132)**; its browser check
    PASSED as Karen (the alert itself on prod's hourly pass, after the ship).
-   Batch 2 is done. Next in §3.1: batch 3, next-step suggestions — on
-   Jeff's word.
+   Batch 2 is done. **Batch 3 designed and answered 17 Nov**
+   (docs/design/deal-score/DESIGN-3.md; ANSWERS.md "Batch 3" — Q1-Q4 each
+   the Recommended): its first part now — log each next action Claude gives
+   and whether the deal moved, meeting prep shows it, Settings counts won
+   deals with history, Home's Velocity win says only what is true; the
+   comparisons from wins once an org has 10 won deals with history (none has
+   one today). Next: the first part's build.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —

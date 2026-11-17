@@ -44,4 +44,19 @@ Next: the build. **Built 17 Nov (state §0.257; guide §18b131); committed `d463
 | Q2 | The public API's win chance | **"Add win_chance (Recommended)"** — `win_chance: { score, status, stage_weight, scored_at }`, null for a closed or unscored deal; `ai_score` as it is |
 | Q3 | A rep's own switch for the alert (none today — always on) | **"Add the switch (Recommended)"** — "Win chance fell to Critical" in the profile panel's alerts, on by default |
 
+Next: the build. **Built 17 Nov (state §0.258; guide §18b132); committed `cac7049`.**
+
+## Batch 3 — next-step suggestions from past wins (DESIGN-3.md §4; asked 17 Nov, each standing on its own)
+
+A SELECT (17 Nov): no org has a won deal with a stage path — the demo org's 10 wins and QA's 3 hold at most one stage entry, two of QA's one activity each; UKG none.
+
+| Q | Asked | Answer |
+|---|---|---|
+| Q1 | What to build now | **"First part only (Recommended)"** — log each next action Claude gives, and whether the deal moved after it; show it in meeting prep; Settings counts won deals with history; the comparisons come once an org has 10 |
+| Q2 | What counts as acting on a next step | **"What happens on the deal (Recommended)"** — an activity logged or a stage moved within 14 days, checked as the alerts are; nothing to press |
+| Q3 | Where the next action shows | **"Deal window + meeting prep (Recommended)"** — Home waits for the comparisons |
+| Q4 | Home's "Velocity win" claims an average it never measured | **"Fix it (Recommended)"** — say only what is true |
+
+The answer to Q1 reads "each next action Claude gives": the row is written when Claude gives it (ai-score.mjs, on the server), not when a screen shows it — DESIGN-3.md R1 says so since.
+
 Next: the build.
