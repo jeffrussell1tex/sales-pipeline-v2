@@ -177,6 +177,9 @@ export default function AppHeader({
         dealStuck:          { enabled: true,  mode: 'instant' },
         closeLapsed:        { enabled: true,  mode: 'instant' },
         dealMomentum:       { enabled: true,  mode: 'instant' },
+        // A rep's own switch for the win-chance alert (AI scoring batch 2C — Jeff, 17 Nov, Q3): on by default, as the
+        // server's DEFAULT_PREFS (pipeline-alerts.mjs) has always had it.
+        scoreDropAlert:     { enabled: true,  mode: 'instant' },
         managerAlerts:      { enabled: true,  mode: 'instant' },
         quoteApproved:      { enabled: true,  mode: 'instant' },
         quoteRejected:      { enabled: true,  mode: 'instant' },
@@ -190,6 +193,7 @@ export default function AppHeader({
         taskDigest: 'Daily task digest', overdueTaskNudge: 'Overdue task reminder',
         dealSilent: 'Deal gone silent (no activity 14d)', dealStuck: 'Deal stuck in stage too long',
         closeLapsed: 'Close date lapsed', dealMomentum: 'Deal momentum (stage advance)',
+        scoreDropAlert: 'Win chance fell to Critical',
         managerAlerts: 'Manager escalation alerts', quoteApproved: 'Quote approved',
         // The stored key stays 'quoteRejected'; the step is a send-back since §0.156.
         // "Quote accepted by customer" is gone: nothing ever sent it (guide §18b50).

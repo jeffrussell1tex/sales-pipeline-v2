@@ -280,15 +280,15 @@ export const slackTemplates = {
         ],
     }),
 
-    // AI score dropped
+    // The win chance fell into Critical (AI scoring batch 2C): `score` the win chance, `verdict` its band.
     scoreDrop: ({ repName, dealName, account, arr, stage, score, verdict, opportunityId, orgId }) => ({
-        text: `⚠️ *${dealName}* AI score dropped to ${score}/100 (${verdict})`,
+        text: `⚠️ *${dealName}* win chance fell to ${score}% — ${verdict}`,
         blocks: [
             {
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
-                    text: `⚠️ *AI score alert*\n*${dealName}* (${account}) scored *${score}/100* — ${verdict}`,
+                    text: `⚠️ *Win chance alert*\n*${dealName}* (${account}) fell to *${score}%* — ${verdict}`,
                 },
             },
             {

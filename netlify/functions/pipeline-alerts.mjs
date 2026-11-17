@@ -16,7 +16,7 @@
  *   stuck       - days in stage >= 2x historical average (or 21d fallback)
  *   lapsed      - forecasted close date has passed
  *   velocity    - 2+ stages in 14 days (positive alert)
- *   scoreDrop   - AI score dropped below 40
+ *   scoreDrop   - the win chance fell into Critical (AI scoring batch 2C)
  *   renewal     - a dispatch customer's maintenance agreement is inside its
  *                 plan's renewal window, or has expired (state §0.110)
  *
@@ -43,6 +43,8 @@ import { dispatchAutomations }                        from './dispatch-automatio
 import { dealEventData, taskEventData }               from '../../src/utils/automationEvents.js';
 // The same recurrence arithmetic the Service Due queue renders (state §0.110).
 import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
+// The win chance's fall into Critical, the score-drop alert's rule and words (AI scoring batch 2C).
+import { fellToCritical, managerCopied, fallWords }   from '../../src/utils/dealScore.js';
 
 const DEDUP_DAYS = 7;
 
@@ -448,21 +450,21 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 } else { skipped++; }
             }
 
-            // ── Signal 5: AI score dropped below threshold ──────────────────────
-            if (
-                opp.aiScore?.score !== undefined &&
-                opp.aiScore.score < 40
-            ) {
+            // ── Signal 5: the win chance fell into Critical (AI scoring batch 2C — Jeff, 17 Nov, Q1) ──────────────
+            // A fall, not a level: the band moved from Healthy or At Risk to Critical within the day this rep's alert hour
+            // covers (the server notes each move — src/utils/dealScore.js withBandChange). A deal already Critical gets no
+            // mail for it; the stale, stuck and lapsed alerts say their own causes. Once a week per deal at most.
+            const winScore = opp.dealScore;
+            if (fellToCritical(winScore, now.getTime() - 86400000)) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'scoreDrop');
                 if (!alerted) {
                     try {
-                        const verdictLabel = opp.aiScore.verdict || 'At Risk';
-                        const headline = opp.aiScore.headline || 'Deal health has declined';
+                        const fall = fallWords(winScore, name, opp.stage);
                         // The rep's preference gates the rep's email only (state §0.99); the block closes before logAlert.
                         if (wantsAlert(resolvedProfile, 'scoreDropAlert')) {
                         await sendEmail({
                             to: repUser.email,
-                            subject: `⚠️ AI Score Alert: ${name} scored ${opp.aiScore.score}/100 (${verdictLabel})`,
+                            subject: `⚠️ ${fall.subject}`,
                             html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><style>
                                 body{margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a2e}
                                 .wrapper{max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
@@ -478,35 +480,36 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                                 .footer{background:#f4f6f8;padding:16px 32px;border-top:1px solid #e5e7eb;font-size:11px;color:#8b92a9;text-align:center}
                                 .footer a{color:#3b82f6;text-decoration:none}
                             </style></head><body><div class="wrapper">
-                                <div class="header"><p class="header-title">Accelerep — AI Score Alert</p></div>
+                                <div class="header"><p class="header-title">Accelerep — Win chance alert</p></div>
                                 <div class="body">
-                                    <h2>Deal health warning: ${name}</h2>
-                                    <p>Hi ${repName}, your deal <strong>${name}</strong> (${opp.account}) has been scored below the attention threshold.</p>
+                                    <h2>Win chance warning: ${name}</h2>
+                                    <p>Hi ${repName}, the win chance on your deal <strong>${name}</strong> (${opp.account}) fell to Critical — it was ${winScore.previousStatus}.</p>
                                     <div class="score-box">
-                                        <div class="score-num">${opp.aiScore.score}</div>
+                                        <div class="score-num">${winScore.score}%</div>
                                         <div class="score-detail">
-                                            <div class="score-verdict">${verdictLabel}</div>
-                                            <div class="score-headline">${headline}</div>
+                                            <div class="score-verdict">${fall.band} (the stage's usual is ${winScore.weight}%)</div>
+                                            <div class="score-headline">${fall.why}</div>
                                         </div>
                                     </div>
                                     <p>Stage: ${opp.stage} · ARR: ${Math.round(arr).toLocaleString()}</p>
                                     <a class="btn" href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'deal', id: opp.id, org: orgId })}">Review this deal →</a>
                                 </div>
-                                <div class="footer"><p>AI Score Alert · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: orgId })}">Manage preferences</a></p></div>
+                                <div class="footer"><p>Win chance alert · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: orgId })}">Manage preferences</a></p></div>
                             </div></body></html>`,
                         });
                         emailsSent++;
                         }
-                        await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
-                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
-                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));
-                        console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);
+                        await logAlert(orgId, repName, 'scoreDrop', opp, fall.log);
+                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: winScore.score, verdict: fall.band }), 'scoreDropAlert');
+                        // The trigger's key stays (saved automations keep working); `score` is the win chance, `verdict` the band.
+                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: winScore.score, verdict: 'Critical' }));
+                        console.log(`scoreDropAlert → ${repUser.email} (${name}, win chance ${winScore.score}%)`);
 
-                        // Escalate to manager if Critical
-                        if (opp.aiScore.score < 25 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                        // The manager copied below a quarter of the stage's usual (2C, Q1).
+                        if (managerCopied(winScore) && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
                             await sendEmail({
                                 to: manager.email,
-                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `AI score ${opp.aiScore.score}/100 — ${verdictLabel}: ${headline}`, opportunityId: opp.id }),
+                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `Win chance ${winScore.score}% — ${fall.band} (the stage's usual is ${winScore.weight}%): ${fall.why}`, opportunityId: opp.id }),
                             });
                             emailsSent++;
                         }

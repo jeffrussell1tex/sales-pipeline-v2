@@ -4728,8 +4728,8 @@ function RecommendationReport({ currentUser, canSeeAll, scopedRepNames = null, s
         velocity:         'High velocity',
         task:             'Overdue task',
         silent:           'Deal gone silent',
-        scoreDrop:        'AI score dropped',
-        'score-critical': 'AI score critical',
+        scoreDrop:        'Win chance fell to Critical',   // AI scoring batch 2C; before 17 Nov, Claude's score below 40
+        'score-critical': 'Win chance critical',
     };
     const outcomeColors = {
         resolved: { bg: 'rgba(77,107,61,0.12)', text: '#2e4a24', label: 'Resolved' },

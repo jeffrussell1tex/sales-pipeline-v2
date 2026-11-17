@@ -23,6 +23,8 @@ import { db } from '../../db/index.js';
 import { apiKeys, opportunities, accounts, contacts, activities, leads, tasks } from '../../db/schema.js';
 import { eq, and, isNull, sql, desc } from 'drizzle-orm';
 import { createHash } from 'crypto';
+// A deal's win chance as the API hands it (AI scoring batch 2C).
+import { winChanceOf } from '../../src/utils/dealScore.js';
 
 // ── In-memory rate limiter (resets on cold start — good enough for now) ───────
 const rateLimitMap = new Map(); // keyId → { count, windowStart }
@@ -186,6 +188,9 @@ export const handler = async (event) => {
                 // Claude's own score, where one is stored; an explanation (AI scoring batch 2B) carries none, so null — never
                 // an empty object. The win chance comes to the API in batch 2C (Jeff, 17 Nov, Q2).
                 ai_score:            r.aiScore && Number.isFinite(Number(r.aiScore.score)) ? { score: r.aiScore.score, verdict: r.aiScore.verdict } : null,
+                // The deal's win chance, the server's (AI scoring batch 2C — Jeff, 17 Nov, Q2: added; ai_score as it was).
+                // None for a closed deal or one not yet scored.
+                win_chance:          winChanceOf(r.dealScore),
                 created_at:          r.createdAt,
                 updated_at:          r.updatedAt,
             }));

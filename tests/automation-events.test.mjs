@@ -226,7 +226,7 @@ test('the hourly job fires opportunity.silent / .stuck / .close_lapsed right aft
         ["'dealStuck');",   "                        await dispatchAutomations(orgId, 'opportunity.stuck', dealEventData(opp, { days_in_stage: daysInStage, avg_days_in_stage: avgForStage }));"],
         ["'closeLapsed');", "                        await dispatchAutomations(orgId, 'opportunity.close_lapsed', dealEventData(opp, { days_lapsed: daysLapsed }));"],
         ["'dealMomentum');",   "                        await dispatchAutomations(orgId, 'opportunity.momentum', dealEventData(opp, { stage_count: stageCount, days_since_created: createdDays }));"],
-        ["'scoreDropAlert');", "                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));"],
+        ["'scoreDropAlert');", "                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: winScore.score, verdict: 'Critical' }));"],   // the win chance since AI scoring batch 2C
     ];
     for (const [slackTail, dispatch] of pairs) {
         const slack = s.indexOf(slackTail);

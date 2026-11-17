@@ -11,7 +11,7 @@
 import { db } from '../../db/index.js';
 import { opportunities, activities, settings as settingsTable } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { scoreDeal, trainDealModel, sameDealScore } from '../../src/utils/dealScore.js';
+import { scoreDeal, trainDealModel, sameDealScore, withBandChange } from '../../src/utils/dealScore.js';
 import { DEFAULT_SETTINGS } from '../../src/utils/settingsDefaults.js';
 import { extraPatched } from './_settingsRevs.mjs';
 
@@ -52,7 +52,8 @@ async function keepScores(orgId, deals, actsByDeal, { funnelStages, model, now }
     const out = {};
     const changed = [];
     for (const d of deals) {
-        const next = scoreDeal(d, actsByDeal[d.id] || [], { funnelStages, model, today, now });
+        // The band's last move noted (2C): the score-drop alert fires on a fall into Critical, not on a level.
+        const next = withBandChange(d.dealScore, scoreDeal(d, actsByDeal[d.id] || [], { funnelStages, model, today, now }), now);
         if (sameScore(d.dealScore, next)) { out[d.id] = d.dealScore ?? null; continue; }
         out[d.id] = next;
         changed.push([d.id, next]);

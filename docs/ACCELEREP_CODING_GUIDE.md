@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b131** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b132** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4816,3 +4816,14 @@ THE GUARD: tests/deal-score.test.mjs (the rule, run; a deal closed won and close
 4. **One number on every screen** — no screen reads `aiScore.score` as the deal's (the report's "AI score" metric, Claude's stored own scores, named).
 
 THE GUARD: tests/ai-explain.test.mjs (the shape, the moved words, the scorer's order, no screen reading Claude's number); tests/integration/ai-score.itest.mjs (the prompt, the schema, a closed deal, an own score no cached answer).
+
+## 18b132. An Alert On A Probability Fires On A Fall Into Its Worst Band, Never On A Level — And Each Recipient Can Turn It Off (hard rule)
+
+**Origin (§0.258, 17 Nov 2026 — OPEN_ITEMS §3.1 batch 2C; docs/design/deal-score/DESIGN-2C.md, Jeff: Q1-Q3 the Recommended).** The score-drop alert fired every week on any deal "below 40": a level. On a win chance — a probability, where Qualification's best is 10% — a level mails every early deal weekly, for the same silence and stalls the stale and stuck alerts already name. It had no switch a rep could reach.
+
+1. **The server notes a band's last move on each write of the score** (`withBandChange`: the band it left and when); the note is not part of "the same score" (`sameDealScore`), so no deal is rewritten for it alone.
+2. **The alert fires on a fall into Critical from a better band**, within the window its recipient's alert hour covers, once a week per deal; a deal already there, or first scored there, gets no mail for it.
+3. **Its words say the number, the stage's usual and the cause costing the most** — never a number off another scale. A trigger's stored key stays when its meaning moves, so saved automations keep working, relabelled.
+4. **Every alert a member receives has a switch in their profile panel**, on by default as the server's default; the company's own post (Slack, the log, an automation) is not the member's to switch.
+
+THE GUARD: tests/win-alert.test.mjs (the notes, the fall, the words, the switch); tests/integration/win-alert.itest.mjs (the hourly pass: a fall alerted once, a level not, a switched-off rep's email not, org B's apart).

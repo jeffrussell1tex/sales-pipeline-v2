@@ -628,7 +628,8 @@ export const emailTemplates = {
      * @param {{ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId }} data
      */
     managerDealAlert({ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId, orgId }) {
-        const alertLabels = { silent: 'Gone silent', stuck: 'Stuck in stage', lapsed: 'Close date lapsed' };
+        // 'score-critical' had no label, so the subject read the key (AI scoring batch 2C).
+        const alertLabels = { silent: 'Gone silent', stuck: 'Stuck in stage', lapsed: 'Close date lapsed', 'score-critical': 'Win chance critical' };
         const subject = `Pipeline alert: ${alertLabels[alertType] || alertType} — ${dealName} (${repName})`;
         const html = layout(subject, `
             <h2>Pipeline alert for your team</h2>

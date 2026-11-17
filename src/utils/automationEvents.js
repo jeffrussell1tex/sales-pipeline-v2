@@ -51,7 +51,7 @@ export const AUTOMATION_TRIGGERS = Object.freeze([
     Object.freeze({ value: 'opportunity.stuck',         label: 'Deal stuck in a stage past the average',       group: 'Deal health', kind: 'hourly', entity: 'opportunity' }),
     Object.freeze({ value: 'opportunity.close_lapsed',  label: 'Close date lapsed',                            group: 'Deal health', kind: 'hourly', entity: 'opportunity' }),
     Object.freeze({ value: 'opportunity.momentum',      label: 'Deal gaining momentum (2+ stages in 14 days)', group: 'Deal health', kind: 'hourly', entity: 'opportunity' }),
-    Object.freeze({ value: 'opportunity.score_drop',    label: 'AI score dropped below 40',                    group: 'Deal health', kind: 'hourly', entity: 'opportunity' }),
+    Object.freeze({ value: 'opportunity.score_drop',    label: 'Win chance fell to Critical',                    group: 'Deal health', kind: 'hourly', entity: 'opportunity' }),
     Object.freeze({ value: 'lead.created',              label: 'Lead created',                                 group: 'Leads',       kind: 'event',  entity: 'lead' }),
     Object.freeze({ value: 'lead.converted',            label: 'Lead converted',                               group: 'Leads',       kind: 'event',  entity: 'lead' }),
     Object.freeze({ value: 'task.completed',            label: 'Task completed',                               group: 'Tasks',       kind: 'event',  entity: 'task' }),
@@ -111,7 +111,8 @@ export const EVENT_FIELDS = Object.freeze({
     'opportunity.stuck':         Object.freeze([...DEAL_FIELDS, F('days_in_stage', 'Days in stage'), F('avg_days_in_stage', 'Average days in this stage')]),
     'opportunity.close_lapsed':  Object.freeze([...DEAL_FIELDS, F('days_lapsed', 'Days past the close date')]),
     'opportunity.momentum':      Object.freeze([...DEAL_FIELDS, F('stage_count', 'Stages advanced'), F('days_since_created', 'Days since created')]),
-    'opportunity.score_drop':    Object.freeze([...DEAL_FIELDS, F('score', 'AI score'), F('verdict', 'AI verdict')]),
+    // The keys stay (saved automations keep working); since AI scoring batch 2C `score` is the win chance, `verdict` its band.
+    'opportunity.score_drop':    Object.freeze([...DEAL_FIELDS, F('score', 'Win chance (%)'), F('verdict', 'Band')]),
     'lead.created':              Object.freeze([...LEAD_FIELDS]),
     'lead.converted':            Object.freeze([...LEAD_FIELDS]),
     'task.completed':            Object.freeze([...TASK_FIELDS]),

@@ -113,7 +113,8 @@ test("the five hourly signals fire on the signal alone; the rep's preference gat
     assert.ok(s.includes('            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14) {'), 'stuck');
     assert.ok(s.includes('            if (daysLapsed !== null && daysLapsed > 0) {'), 'lapsed');
     assert.ok(s.includes("                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage)\n            ) {"), 'momentum');
-    assert.ok(s.includes('                opp.aiScore.score < 40\n            ) {'), 'score drop');
+    // A fall into Critical since AI scoring batch 2C (Jeff, 17 Nov, Q1): the signal alone, no preference in it.
+    assert.ok(s.includes('            if (fellToCritical(winScore, now.getTime() - 86400000)) {'), 'score drop');
     assert.ok(!/&& wantsAlert\(resolvedProfile/.test(s), "REGRESSION: a rep's preference gates the company's post");
     // The preference now wraps the rep's own email (five) — and the log + Slack post sit outside it.
     for (const k of SLACK_HOURLY_KEYS) assert.ok(s.includes(`if (wantsAlert(resolvedProfile, '${k}')) {`), `${k}: the rep's email is behind the rep's preference`);

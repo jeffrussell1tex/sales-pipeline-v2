@@ -473,8 +473,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    PASSED as Jeff and Karen (the explanation itself on dev, after a push).
    **2C designed and answered 17 Nov** (docs/design/deal-score/DESIGN-2C.md;
    ANSWERS.md "Batch 2C" — Q1-Q3 each the Recommended): the alert fires on a
-   fall into Critical, the API adds `win_chance`, a rep's own switch. Next:
-   2C's build.
+   fall into Critical, the API adds `win_chance`, a rep's own switch.
+   **2C built 17 Nov (state §0.258; guide §18b132)**; its browser check
+   PASSED as Karen (the alert itself on prod's hourly pass, after the ship).
+   Batch 2 is done. Next in §3.1: batch 3, next-step suggestions — on
+   Jeff's word.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1417,7 +1420,9 @@ number said, Refresh asks again; "Score all deals" out. **2B built 17 Nov
 (state §0.257; guide §18b131).** Until 2C the hourly score-drop alert reads
 Claude's own score below 40, so it fires only on a deal that still keeps an
 old one — never on an explained deal — and the public API's `ai_score` is
-Claude's stored own score, else null. **2C, after:** the
+Claude's stored own score, else null. **2C built 17 Nov (state §0.258; guide
+§18b132)**: the alert fires on a fall into Critical, once; the API adds
+`win_chance`; a rep's own switch for it. **2C, as designed:** the
 score-drop alert and the public API move to the win chance (an alert on a
 probability needs a band, not a fixed 40).
 A SELECT-only census (17 Nov): no org has 20 closed deals (most 17, a demo

@@ -157,9 +157,56 @@ const canonical = (v) => (Array.isArray(v) ? v.map(canonical)
     : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v);
 export function sameDealScore(a, b) {
     if (a == null || b == null) return a == null && b == null;
-    const { scoredAt: _a, ...x } = a;
-    const { scoredAt: _b, ...y } = b;
+    // The band-change notes (2C) are when it moved, not what it is — left out as the time is.
+    const { scoredAt: _a, previousStatus: _pa, statusChangedAt: _ca, ...x } = a;
+    const { scoredAt: _b, previousStatus: _pb, statusChangedAt: _cb, ...y } = b;
     return JSON.stringify(canonical(x)) === JSON.stringify(canonical(y));
+}
+
+// ── The band's moves (AI scoring batch 2C; docs/design/deal-score/DESIGN-2C.md — Jeff, 17 Nov, Q1: "A fall into
+// Critical") ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The score a write keeps, with the band's last move noted: a new band records the one it left and when; the same band
+// carries the last move on. A deal with no score (closed) keeps none.
+export function withBandChange(prev, next, now = new Date()) {
+    if (!next) return next;
+    if (prev && typeof prev === 'object' && prev.status && prev.status !== next.status) {
+        return { ...next, previousStatus: prev.status, statusChangedAt: now.toISOString() };
+    }
+    if (prev && typeof prev === 'object' && prev.status === next.status && prev.statusChangedAt) {
+        return { ...next, previousStatus: prev.previousStatus ?? null, statusChangedAt: prev.statusChangedAt };
+    }
+    return next;
+}
+
+// Whether a deal's win chance fell into Critical from a better band since `sinceMs` — the alert's rule. A deal already
+// Critical, or first scored Critical, did not fall.
+export function fellToCritical(dealScore, sinceMs) {
+    const s = dealScore;
+    if (!s || s.status !== 'Critical') return false;
+    if (s.previousStatus !== 'Healthy' && s.previousStatus !== 'At Risk') return false;
+    const at = Date.parse(s.statusChangedAt || '');
+    return Number.isFinite(at) && at > sinceMs;
+}
+
+// The public API's win_chance (2C, Q2): the kept score's number, band, stage weight and time — none for a closed deal
+// or one not yet scored.
+export const winChanceOf = (s) => (s && typeof s === 'object' && Number.isFinite(Number(s.score))
+    ? { score: Number(s.score), status: s.status || null, stage_weight: Number.isFinite(Number(s.weight)) ? Number(s.weight) : null, scored_at: s.scoredAt || null }
+    : null);
+
+// The manager is copied when the win chance is below a quarter of its stage's usual.
+export const managerCopied = (dealScore) => Number(dealScore?.score) < Number(dealScore?.weight) / 4;
+
+// What the alert says, by every channel.
+export function fallWords(dealScore, dealName, stage) {
+    const pct = `${dealScore.score}%`;
+    return {
+        subject: `Win chance fell to Critical: ${dealName} — ${pct} (the stage's usual is ${dealScore.weight}%)`,
+        log: `Win chance ${pct} (Critical, was ${dealScore.previousStatus})`,
+        why: (Array.isArray(dealScore.factors) ? dealScore.factors : []).find((f) => f && f.text && Number(f.effect) < 0)?.text || 'Its win chance has fallen',
+        band: `Critical for ${stage}`,
+    };
 }
 
 // The app's deals with the scores an answer handed back (an activity's save moves its deal's score on the server —
