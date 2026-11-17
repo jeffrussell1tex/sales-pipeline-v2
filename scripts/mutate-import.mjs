@@ -10,10 +10,10 @@
 //
 // Run: node scripts/mutate-import.mjs
 import { readFileSync } from 'fs';
-import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
+import { readersOf, partsOf, gradeParts, runSuites, runSuitesOut, soloBaseline, repoIsFile, PARTS } from './_likely.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs tests/settings-leave-guard.test.mjs tests/member-status.test.mjs tests/invitations.test.mjs tests/foreign-ids.test.mjs tests/user-import.test.mjs tests/team-membership.test.mjs tests/in-org-gates.test.mjs tests/save-buttons.test.mjs tests/audit-close.test.mjs tests/org-switch.test.mjs tests/org-switch-reset.test.mjs tests/late-answers.test.mjs tests/src-scope.test.mjs tests/contact-deals.test.mjs tests/hook-deps.test.mjs tests/activity-save.test.mjs tests/deal-modal-saves.test.mjs tests/layers.test.mjs tests/one-delete-path.test.mjs tests/select-where-tickable.test.mjs tests/border-sides.test.mjs tests/escape-layers.test.mjs tests/document-link-names.test.mjs tests/document-refusals.test.mjs tests/document-access.test.mjs tests/document-sharing.test.mjs tests/layer-boundary.test.mjs tests/escape-order.test.mjs tests/meeting-prep.test.mjs tests/deal-fields.test.mjs tests/ai-score.test.mjs tests/open-states.test.mjs tests/security-closes.test.mjs tests/deal-engagement.test.mjs tests/owner-kept.test.mjs tests/search-match.test.mjs tests/app-name.test.mjs tests/member-names.test.mjs tests/pick-link.test.mjs tests/account-parent.test.mjs tests/deal-account.test.mjs tests/db-write.test.mjs tests/rail-links.test.mjs tests/task-links.test.mjs tests/leave-out.test.mjs tests/link-ids.test.mjs tests/import-parents.test.mjs tests/task-alerts.test.mjs tests/dispatch-links.test.mjs tests/member-identity.test.mjs tests/quota-plan.test.mjs tests/sales-links.test.mjs tests/member-links.test.mjs tests/merged-away-lists.test.mjs tests/merge-undo.test.mjs tests/merged-away-cleanup.test.mjs tests/member-profile-save.test.mjs tests/mutate-scope.test.mjs tests/resize-targets.test.mjs tests/rounded-scrollers.test.mjs tests/dispatch-customer.test.mjs tests/import-links.test.mjs tests/merge-links.test.mjs tests/merge-place.test.mjs tests/settings-links.test.mjs tests/plan-links.test.mjs tests/settings-revs.test.mjs tests/settings-saves.test.mjs tests/pain-points.test.mjs tests/tab-layers.test.mjs tests/customer-docs.test.mjs tests/quote-pdf-pages.test.mjs tests/deal-data.test.mjs tests/app-links.test.mjs tests/ai-models.test.mjs tests/deal-history.test.mjs tests/five-findings.test.mjs tests/quote-totals.test.mjs tests/sales-tax.test.mjs tests/quote-tax-screens.test.mjs tests/quote-tax-docs.test.mjs tests/percent-ranges.test.mjs tests/put-upserts.test.mjs tests/products-write.test.mjs tests/refusals-said.test.mjs tests/legacy-dispatch-import.test.mjs tests/refusal-sweep.test.mjs tests/maker-deals.test.mjs tests/maker-quotes.test.mjs tests/maker-reports.test.mjs tests/deal-create.test.mjs tests/window-closes.test.mjs tests/lead-convert.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs tests/settings-leave-guard.test.mjs tests/member-status.test.mjs tests/invitations.test.mjs tests/foreign-ids.test.mjs tests/user-import.test.mjs tests/team-membership.test.mjs tests/in-org-gates.test.mjs tests/save-buttons.test.mjs tests/audit-close.test.mjs tests/org-switch.test.mjs tests/org-switch-reset.test.mjs tests/late-answers.test.mjs tests/src-scope.test.mjs tests/contact-deals.test.mjs tests/hook-deps.test.mjs tests/activity-save.test.mjs tests/deal-modal-saves.test.mjs tests/layers.test.mjs tests/one-delete-path.test.mjs tests/select-where-tickable.test.mjs tests/border-sides.test.mjs tests/escape-layers.test.mjs tests/document-link-names.test.mjs tests/document-refusals.test.mjs tests/document-access.test.mjs tests/document-sharing.test.mjs tests/layer-boundary.test.mjs tests/escape-order.test.mjs tests/meeting-prep.test.mjs tests/deal-fields.test.mjs tests/ai-score.test.mjs tests/open-states.test.mjs tests/security-closes.test.mjs tests/deal-engagement.test.mjs tests/owner-kept.test.mjs tests/search-match.test.mjs tests/app-name.test.mjs tests/member-names.test.mjs tests/pick-link.test.mjs tests/account-parent.test.mjs tests/deal-account.test.mjs tests/db-write.test.mjs tests/rail-links.test.mjs tests/task-links.test.mjs tests/leave-out.test.mjs tests/link-ids.test.mjs tests/import-parents.test.mjs tests/task-alerts.test.mjs tests/dispatch-links.test.mjs tests/member-identity.test.mjs tests/quota-plan.test.mjs tests/sales-links.test.mjs tests/member-links.test.mjs tests/merged-away-lists.test.mjs tests/merge-undo.test.mjs tests/merged-away-cleanup.test.mjs tests/member-profile-save.test.mjs tests/mutate-scope.test.mjs tests/resize-targets.test.mjs tests/rounded-scrollers.test.mjs tests/dispatch-customer.test.mjs tests/import-links.test.mjs tests/merge-links.test.mjs tests/merge-place.test.mjs tests/settings-links.test.mjs tests/plan-links.test.mjs tests/settings-revs.test.mjs tests/settings-saves.test.mjs tests/pain-points.test.mjs tests/tab-layers.test.mjs tests/customer-docs.test.mjs tests/quote-pdf-pages.test.mjs tests/deal-data.test.mjs tests/app-links.test.mjs tests/ai-models.test.mjs tests/deal-history.test.mjs tests/five-findings.test.mjs tests/quote-totals.test.mjs tests/sales-tax.test.mjs tests/quote-tax-screens.test.mjs tests/quote-tax-docs.test.mjs tests/percent-ranges.test.mjs tests/put-upserts.test.mjs tests/products-write.test.mjs tests/refusals-said.test.mjs tests/legacy-dispatch-import.test.mjs tests/refusal-sweep.test.mjs tests/maker-deals.test.mjs tests/maker-quotes.test.mjs tests/maker-reports.test.mjs tests/deal-create.test.mjs tests/window-closes.test.mjs tests/lead-convert.test.mjs tests/mutate-likely.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -14741,8 +14741,9 @@ const mutations = [
         "if (stale.length || notUnique.length) { console.log('Repoint those before grading anything.'); }"],
     ["§0.212 scoped harness: the baseline is never run — a red suite grades every mutant caught",
         "scripts/mutate-scope.mjs",
-        "    execSync(`node --test ${suites.join(' ')}`, { stdio: 'pipe' });",
-        "    void 0;"],
+        // Repointed (state §0.254): the baseline is run through scripts/_likely.mjs.
+        "const baseline = runSuitesOut(suites);",
+        "const baseline = { red: false, out: '' };"],
     ["§0.212 scoped harness: the exit hook is never armed — a death mid-mutant leaves it on disk",
         "scripts/mutate-scope.mjs",
         "armRestoreOnExit();",
@@ -27000,6 +27001,78 @@ const mutations = [
         "src/App.jsx",
         "    _onLeadConvertedRef.current = markLeadConverted;\n",
         ""],
+
+    // ── §0.254 (16 Nov 2026): a mutant graded by its likely tests first, the rest of SUITES only if they pass ──
+    // OPEN_ITEMS §6 ("The harness: the likely tests first"); Jeff, 16 Nov: "Do option 1 harness improvements".
+    // Caught by tests/mutate-likely.test.mjs (joined SUITES here) and tests/mutate-scope.test.mjs.
+    ["§0.254 harness: the slow likely tests are dropped from every part",
+        "scripts/_likely.mjs",
+        "{ name: PARTS[1], tests: suites.filter((t) => isLikely(t) && slow(t)) },",
+        "{ name: PARTS[1], tests: [] },"],
+    ["§0.254 harness: the rest runs the likely tests again",
+        "scripts/_likely.mjs",
+        "{ name: PARTS[2], tests: suites.filter((t) => !isLikely(t)) },",
+        "{ name: PARTS[2], tests: suites },"],
+    ["§0.254 harness: a mutant in a test is not run by that test first",
+        "scripts/_likely.mjs",
+        "const isLikely = (t) => t === file || !!readers.get(file)?.has(t);",
+        "const isLikely = (t) => !!readers.get(file)?.has(t);"],
+    ["§0.254 harness: a test as slow as SLOW_MS counts as fast",
+        "scripts/_likely.mjs",
+        "const slow = (t) => (soloMs.get(t) ?? 0) >= slowMs;",
+        "const slow = (t) => (soloMs.get(t) ?? 0) > slowMs;"],
+    ["§0.254 harness: an empty part is run",
+        "scripts/_likely.mjs",
+        "].filter((p) => p.tests.length);",
+        "];"],
+    ["§0.254 harness: a survivor is graded on its first part alone",
+        "scripts/_likely.mjs",
+        "for (const p of parts) if (run(p.tests)) return { caught: true, by: p.name };",
+        "for (const p of parts.slice(0, 1)) if (run(p.tests)) return { caught: true, by: p.name };"],
+    ["§0.254 harness: a mutant run keeps its output — an overrun buffer reads as CAUGHT",
+        "scripts/_likely.mjs",
+        "exec(process.execPath, ['--test', ...tests], { stdio: 'ignore', env: runEnv() }); return false;",
+        "exec(process.execPath, ['--test', ...tests], { stdio: 'pipe', env: runEnv() }); return false;"],
+    ["§0.254 harness: a run keeps a test runner's context — under one, it exits 0 over a failing test",
+        "scripts/_likely.mjs",
+        "    delete out.NODE_TEST_CONTEXT;\n",
+        ""],
+    ["§0.254 harness: a failing run grades SURVIVED",
+        "scripts/_likely.mjs",
+        "    catch { return true; }",
+        "    catch { return false; }"],
+    ["§0.254 harness: the baseline's output is held to 1 MB",
+        "scripts/_likely.mjs",
+        "maxBuffer: 64 * 1024 * 1024",
+        "maxBuffer: 1024 * 1024"],
+    ["§0.254 harness: a suite red alone goes unnamed — its part grades every mutant CAUGHT",
+        "scripts/_likely.mjs",
+        "if (run([t])) red.push(t);",
+        "run([t]);"],
+    ["§0.254 harness: a suite alone is not timed — every suite counts as fast",
+        "scripts/_likely.mjs",
+        "soloMs.set(t, now() - at);",
+        "soloMs.set(t, 0);"],
+    ["§0.254 harness: no suite is slow",
+        "scripts/_likely.mjs",
+        "export const SLOW_MS = 1000;",
+        "export const SLOW_MS = 0;"],
+    ["§0.254 harness: no file has a reader — every mutant runs the whole of SUITES in one part",
+        "scripts/_likely.mjs",
+        "            readers.get(f).add(t);\n",
+        ""],
+    ["§0.254 harness: a path in another case names a repo file",
+        "scripts/_likely.mjs",
+        ".endsWith(`/${p}`); } catch { return false; } };",
+        "; } catch { return false; } };"],
+    ["§0.254 scoped harness: a suite red alone does not stop the run",
+        "scripts/mutate-scope.mjs",
+        "if (solo.red.length) {",
+        "if (false) {"],
+    ["§0.254 scoped harness: a mutant is graded on SUITES whole — no likely tests first",
+        "scripts/mutate-scope.mjs",
+        "gradeParts(partsOf(file, { suites, readers, soloMs: solo.soloMs }), runSuites);",
+        "gradeParts([{ name: PARTS[2], tests: suites }], runSuites);"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
@@ -27014,24 +27087,34 @@ const mutations = [
 // prove the guards worked was, at that moment, proving only that node exits 1.
 //
 // So: prove GREEN first, and refuse to grade anything otherwise.
+const SUITE_LIST = SUITES.split(' ');
 console.log('Baseline: running the suites unmutated...');
-try {
-    execSync(`node --test ${SUITES}`, { stdio: 'pipe' });
-    console.log('Baseline: green.\n');
-} catch (e) {
+const baseline = runSuitesOut(SUITE_LIST);
+if (baseline.red) {
     console.error('\nBASELINE IS RED — refusing to run mutations.\n');
     console.error('Every mutation would report CAUGHT because the suite already fails,');
     console.error('and the score would be meaningless. Fix the failing test(s) first:\n');
-    const out = `${e.stdout || ''}${e.stderr || ''}`;
-    const fails = out.split(/\r?\n/).filter((l) => /^(not ok|✖|# fail)/.test(l.trim()));
-    console.error(fails.length ? fails.join('\n') : out.slice(-2000));
+    const fails = baseline.out.split(/\r?\n/).filter((l) => /^(not ok|✖|# fail)/.test(l.trim()));
+    console.error(fails.length ? fails.join('\n') : baseline.out.slice(-2000));
     process.exit(1);
 }
+// Each suite alone too, timed (scripts/_likely.mjs): a mutant runs its likely tests first, and a part of SUITES is
+// graded as the full run would grade it only while every suite is green alone as well as together. "Baseline: green."
+// is printed once both are.
+const solo = soloBaseline(SUITE_LIST);
+if (solo.red.length) {
+    console.error(`\nBASELINE IS RED ALONE — refusing to run mutations. Green together, red alone:\n${solo.red.join('\n')}`);
+    process.exit(1);
+}
+console.log('Baseline: green.');
+console.log(`Baseline: each of the ${solo.soloMs.size} suites green alone too.\n`);
+const READERS = readersOf(SUITE_LIST, { isFile: repoIsFile, read: (p) => readFileSync(p, 'utf8') });
 
 armRestoreOnExit();   // no exit path leaves a mutant on disk (§0.102)
 
 let survived = 0;
 let stale = 0;
+const caughtBy = Object.fromEntries(PARTS.map((p) => [p, 0]));
 for (const [name, file, from, to] of mutations) {
     const original = readFileSync(file, 'utf8');
     const re = anchorRe(from);
@@ -27047,13 +27130,15 @@ for (const [name, file, from, to] of mutations) {
     // The mutant goes on and comes off through the sidecar: restored in a finally,
     // and again by the exit hook if this process dies mid-run (§0.102, item 35).
     const failed = withMutant(file, original.replace(re, () => toFileEol(to, original)), () => {
-        try { execSync(`node --test ${SUITES}`, { stdio: 'pipe' }); return false; }
-        catch { return true; }
+        const verdict = gradeParts(partsOf(file, { suites: SUITE_LIST, readers: READERS, soloMs: solo.soloMs }), runSuites);
+        if (verdict.caught) caughtBy[verdict.by]++;
+        return verdict.caught;
     });
     console.log(`${failed ? 'CAUGHT' : 'SURVIVED'}  ${name}`);
     if (!failed) survived++;
 }
 
 console.log(`\n${mutations.length - survived}/${mutations.length} mutations caught.`);
+console.log(`Caught by: ${PARTS.map((p) => `${caughtBy[p]} the ${p}`).join(' · ')}.`);
 if (stale) console.log(`${stale} anchor(s) STALE — those mutations never ran. Repoint them before trusting the count.`);
 process.exit(survived ? 1 : 0);

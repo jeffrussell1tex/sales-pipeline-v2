@@ -1,8 +1,8 @@
 // The harness, scoped to a batch (Jeff, 27 Oct 2026: "each batch gets the stale check, its own entries, every older
 // entry on the files it changed and every entry caught by a test file it edited; the full run before each prod ship").
 // The rules are scripts/_scope.mjs's (tests/mutate-scope.test.mjs runs them); each mutant goes on and comes off as the
-// full harness's do (scripts/mutate-import.mjs, through scripts/_mutant.mjs), against the full SUITES, after a green
-// baseline.
+// full harness's do (scripts/mutate-import.mjs, through scripts/_mutant.mjs), against SUITES — its likely tests first, the
+// rest only if they pass (scripts/_likely.mjs) — after a green baseline, together and each suite alone.
 //
 // 1. The stale check: every entry's anchor parsed against this tree — none may be missing; the batch's own must each be
 //    their file's only match (the harness mutates the first).
@@ -15,8 +15,9 @@
 //   node scripts/mutate-scope.mjs [--base <rev>] [--git <repo dir>] [--list]
 // --base: what the batch is measured from (default HEAD — an uncommitted batch); --list: print the scope, run nothing.
 import { readFileSync, statSync, realpathSync } from 'fs';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
+import { readersOf, partsOf, gradeParts, runSuites, runSuitesOut, soloBaseline, PARTS } from './_likely.mjs';
 import { parseHarness, matchesOf, anchorRe, filesOf, scopeOf, normal } from './_scope.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
@@ -57,28 +58,37 @@ if (stale.length || notUnique.length) { console.log('Repoint those before gradin
 
 // 2–3. The baseline, then the scope.
 console.log(`Baseline: running the ${suites.length} suites unmutated...`);
-try {
-    execSync(`node --test ${suites.join(' ')}`, { stdio: 'pipe' });
-    console.log('Baseline: green.\n');
-} catch (e) {
+const baseline = runSuitesOut(suites);
+if (baseline.red) {
     console.error('\nBASELINE IS RED — refusing to run mutations.\n');
-    const out = `${e.stdout || ''}${e.stderr || ''}`;
-    const fails = out.split(/\r?\n/).filter((l) => /^(not ok|✖|# fail)/.test(l.trim()));
-    console.error(fails.length ? fails.join('\n') : out.slice(-2000));
+    const fails = baseline.out.split(/\r?\n/).filter((l) => /^(not ok|✖|# fail)/.test(l.trim()));
+    console.error(fails.length ? fails.join('\n') : baseline.out.slice(-2000));
     process.exit(1);
 }
+// Each suite alone too, timed — a mutant runs its likely tests first (scripts/_likely.mjs).
+const solo = soloBaseline(suites);
+if (solo.red.length) {
+    console.error(`\nBASELINE IS RED ALONE — refusing to run mutations. Green together, red alone:\n${solo.red.join('\n')}`);
+    process.exit(1);
+}
+console.log('Baseline: green.');
+console.log(`Baseline: each of the ${solo.soloMs.size} suites green alone too.\n`);
+const readers = readersOf(suites, { isFile, read });
 armRestoreOnExit();
 const toFileEol = (t, s) => (s.includes('\r\n') ? t.replace(/\r?\n/g, '\r\n') : t.replace(/\r\n/g, '\n'));
 let survived = 0;
+const caughtBy = Object.fromEntries(PARTS.map((p) => [p, 0]));
 for (const [name, file, from, to] of scope.entries) {
     const original = readFileSync(file, 'utf8');
     const re = anchorRe(from);
     const failed = withMutant(file, original.replace(re, () => toFileEol(to, original)), () => {
-        try { execSync(`node --test ${suites.join(' ')}`, { stdio: 'pipe' }); return false; }
-        catch { return true; }
+        const verdict = gradeParts(partsOf(file, { suites, readers, soloMs: solo.soloMs }), runSuites);
+        if (verdict.caught) caughtBy[verdict.by]++;
+        return verdict.caught;
     });
     console.log(`${failed ? 'CAUGHT' : 'SURVIVED'}  ${name}`);
     if (!failed) survived++;
 }
 console.log(`\n${scope.entries.length - survived}/${scope.entries.length} mutations caught (scoped: ${scope.own} own, ${scope.changed} changed-file, ${scope.tested} edited-test; 0 stale of ${mutations.length}).`);
+console.log(`Caught by: ${PARTS.map((p) => `${caughtBy[p]} the ${p}`).join(' · ')}.`);
 process.exit(survived ? 1 : 0);

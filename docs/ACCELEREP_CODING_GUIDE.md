@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b128** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b129** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -2899,6 +2899,8 @@ tests it edited — and, through a test it did not edit, a file that test reache
 a fixture it reads, or the SUITES list. The scope runs the first three; the rest
 wait for the full run.
 
+**Since §0.254 (16 Nov 2026):** every mutant — the scoped run's and the full run's — is graded by its likely tests first, the rest of SUITES only if they pass; the verdict is the full suites' as before (§18b129).
+
 **Since 4 Nov 2026, standing** (Jeff: "Do not run the full harness after each change", "I said do not run the full harness until we are committing to dev", "Before each push to dev", "Prove them by hand"; then, on the recommendation, "apply your recommendation to the project rules", "keep in mind this product is still in dev", "then we run the full harness before committing to production"): no harness run is started while a batch is built or committed — every batch is a deferred one (below), the scoped run waits for the next push to dev, and the full run for the next ship. Why: a batch's scoped run had grown to hours (2,706 entries projected at about 5 h, 4 Nov) and stalled the work; the product is in dev, with dev between every batch and prod. What it costs, named: an older mutant made to survive by a batch's edit to a test (a lowered floor, a loosened pin) is found at the push, not at the commit — so a batch names each test it weakened in its state section, and the push's survivors trace to it.
 
 - **The scoped run — before each push to dev**, over every batch since the last green scope (`--base` that commit): `node scripts/mutate-scope.mjs` — from a copy of
@@ -4777,3 +4779,14 @@ THE GUARD: tests/window-closes.test.mjs — `topWindow` and the close decision r
 3. **One window, one record** — a bulk action that opens a window acts on one record, in the table's order, never one already done; the rest stay selected, and what it said stands only for the selection it was said of.
 
 THE GUARD: tests/lead-convert.test.mjs — both creates and `markLeadConverted` run; the seed's wiring and the bulk Convert pinned.
+
+## 18b129. A Mutant Is Graded By Its Likely Tests First — The Rest Of SUITES Only If They Pass; Each Suite Proven Green Alone (hard rule)
+
+**Origin (§0.254, 16 Nov 2026 — OPEN_ITEMS §6, recommended 4 Nov; Jeff: "Do option 1 harness improvements").** Every mutant ran all of SUITES, about 10 s; a full run took 18 h. Nearly every mutant is caught by a test that reads, imports or runs its file.
+
+1. **A mutant's SUITES run in parts, stopping at the first that fails** (scripts/_likely.mjs): its likely tests — the SUITES tests that read, import or run its file (scripts/_scope.mjs `filesOf`), and the file itself when it is a suite — under `SLOW_MS` alone, then the slower of them, then the rest. The parts split SUITES, each test in exactly one, so a survivor has run every test: the verdict is the full suites'. A wrong guess costs time, never a grade.
+2. **The baseline proves every suite green alone as well as together**, and refuses to grade otherwise — a part is graded as the full run would grade it only then. "Baseline: green." is printed once both are.
+3. **A run reads only its exit code:** node started without a shell (cmd.exe stops a command at 8,191 characters), its output not kept (a kept output overrunning its buffer threw, read as CAUGHT), with no test runner's context (`NODE_TEST_CONTEXT`: a run under one exits 0 over a failure).
+4. **A change to the grading is proven by a sample graded both ways** — each entry by the full SUITES and by the parts, every verdict the same — before it is used.
+
+THE GUARD: tests/mutate-likely.test.mjs — the parts, the verdict, a run's options and a real run, each suite alone, and both runners line by line.

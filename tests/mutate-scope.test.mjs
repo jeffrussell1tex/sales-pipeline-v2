@@ -84,11 +84,13 @@ test('mutate-scope.mjs: the stale check over every entry first, a green baseline
         "const stale = mutations.filter(([, f, from]) => src(f) === null || matchesOf(src(f), from) === 0);",
         "const notUnique = own.filter(([, f, from]) => src(f) !== null && matchesOf(src(f), from) > 1);",
         "if (stale.length || notUnique.length) { console.log('Repoint those before grading anything.'); process.exit(1); }",
-        "    execSync(`node --test ${suites.join(' ')}`, { stdio: 'pipe' });",
+        'const baseline = runSuitesOut(suites);',
+        'const solo = soloBaseline(suites);',
+        "        const verdict = gradeParts(partsOf(file, { suites, readers, soloMs: solo.soloMs }), runSuites);",
         'armRestoreOnExit();',
         'process.exit(survived ? 1 : 0);',
     ]) assert.equal(s.split('\n').filter((l) => l === line).length, 1, line);
-    assert.ok(s.indexOf("console.log('Baseline: green.\\n');") < s.indexOf('for (const [name, file, from, to] of scope.entries) {'), 'the baseline before any mutant');
+    assert.ok(s.indexOf("console.log('Baseline: green.');") > 0 && s.indexOf("console.log('Baseline: green.');") < s.indexOf('for (const [name, file, from, to] of scope.entries) {'), 'the baseline before any mutant');
     assert.ok(s.includes("    ...git('ls-files', '--others', '--exclude-standard').split("), 'a file the batch added, untracked, is a file it changed');
     // As the full harness (tests/mutant-restore.test.mjs): every mutant goes on and comes off through the sidecar alone.
     const code = s.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');

@@ -20,7 +20,7 @@
 // retry met the same lock. Any other error, and a lock that outlasts the tries,
 // is thrown as before.
 //
-// Runs must be SYNCHRONOUS (the harness uses execSync): an async run would
+// Runs must be SYNCHRONOUS (the harness runs node through execFileSync, scripts/_likely.mjs): an async run would
 // return a promise and the finally would restore before it settled — that is
 // refused with an error rather than silently graded.
 import { readFileSync, writeFileSync } from 'fs';

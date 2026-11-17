@@ -5096,30 +5096,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
   the guard (the hook's own test now pins the check). Recommended: clear a
   point only by a check that runs on its path (not on another branch of an
   if, a ?:, a try's catch).
-- **The harness: the likely tests first, the full suites only for a survivor**
-  (recommended 4 Nov, Jeff: "apply your recommendation to the project rules"
-  — planned tooling, its own small batch, not started): each mutant now runs
-  all 164 SUITES, about 7 s; nearly every one is caught by a test that reads
-  the file it changes. Run first the tests that name or read the mutated file
-  and the whole-tree guards; caught, it is done (about 1 s); not caught, the
-  full SUITES as today — so every verdict is the one the full suites give,
-  a wrong guess costing time, never a grade. Estimated (not measured): a
-  batch's scope from about 5 h to about 1 h, the full run from about 8 h to
-  1.5-2 h. Before it is used, a sample graded both ways must match. With it,
-  a stale check that lists the entries a weakened test grades (a lowered
-  floor, a loosened pin), to prove them by hand with the batch's own.
-  Since §0.251 (15 Nov, measured): SUITES is 184 suites, about 9.9 s
-  a mutant (35.4 s before §0.251's waits, guide §18b126); what is left is
-  work across them all — quote-pdf-pages 5.6 s alone (pdfkit),
-  refusals-said 4.1 s, settings-saves 2.2 s, and the whole-src guard
-  scans each parsing src/ again; starting the slowest first gains about
-  1 s. This item is the next lever. The full run of 15–16 Nov on
-  `fba41c1` (6,104 entries) took 18 h 02 min, about 10.6 s a mutant (its
-  30-min pace check read 10.1 s; state §0.251).
+- **A stale check that lists the entries a weakened test grades** (carried from "the likely tests first", done as §0.254, 16 Nov): a batch that lowers a floor or loosens a pin names it in its state section by hand (CLAUDE.md); the scoped list could name the entries each edited test catches, to prove them by hand with the batch's own. Low.
+- **scripts/mutate-scope.mjs's `isFile` is scripts/_likely.mjs's `repoIsFile` again** (§0.254's review, 16 Nov): the same case-exact check twice, each pinned (tests/mutate-scope.test.mjs, tests/mutate-likely.test.mjs) and each with its own harness entry. Import `repoIsFile` in mutate-scope.mjs, move the pin and retire one entry. Low.
 
 - **The harness runs each mutant with no time limit** (§0.215's fourth
   review, run in a scratch copy): scripts/mutate-import.mjs and
-  scripts/mutate-scope.mjs run `node --test` through `execSync` with no
+  scripts/mutate-scope.mjs run `node --test` (since §0.254 through scripts/_likely.mjs `runSuites`, `execFileSync`) with no
   `timeout`, so a mutant that makes the code under test loop forever hangs
   the run — no summary, and its mutant left on disk (stopping a run leaves
   it). §0.215 had one; it was re-pointed. Recommended: a per-mutant timeout
