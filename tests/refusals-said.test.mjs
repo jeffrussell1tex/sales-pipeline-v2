@@ -872,7 +872,8 @@ test('(iv) in the files the sweep owns, no catch says its raw `.message` — fai
         `the files the sweep cleaned (${MESSAGE_SCANNED.length}) — fewer means the list was cut short`);
     assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');
     for (const f of MESSAGE_SCANNED) { const r = caughtMessagesOf(read(f)); catches += r.catches; for (const x of r.found) found.push({ file: f, ...x }); }
-    assert.ok(catches >= 188, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
+    // 187 since AI scoring batch 2B: "Score all deals" and its catch were taken out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
+    assert.ok(catches >= 187, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
     const named = (x) => CAUGHT_MESSAGES.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
     assert.deepEqual(unnamed, [], `a caught failure said in its raw words — "Failed to fetch", "Unexpected token '<'" — say failureWords(e) (src/utils/refusalWords.js), or name it in CAUGHT_MESSAGES:\n${unnamed.map((x) => `  ${x.file}:${x.line} ${x.text}`).join('\n')}`);

@@ -12,7 +12,7 @@ import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 import { capMatches } from '../../utils/searchMatch.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
-import { storedScore, signalKind } from '../../utils/aiScore.js';
+import { storedScore, signalKind, isExplanation, earlierScoresOf, movedWords } from '../../utils/aiScore.js';
 // Who may ask Claude, and the model a score names (state §0.238).
 import { mayUseAi, aiAccessWords, modelLabel } from '../../utils/aiModels.js';
 import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
@@ -690,7 +690,7 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
 // `askWords`: null when this member's role may ask Claude; else the words saying who may ("Available to",
 // state §0.238) — the score the deal keeps still shows, with no Score or Refresh.
 function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, onUpdate }) {
-    const { setOpportunities } = useApp();
+    const { setOpportunities, dealScoreOf } = useApp();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [off, setOff] = useState(false);   // the org's switch, as the endpoint read it
@@ -714,7 +714,9 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
             if (data.disabled) { setOff(true); return; }
             const score = storedScore(data);
             if (!score) throw new Error('The answer carried no score.');
-            setOpportunities(prev => prev.map(o => (o.id === dealId ? { ...o, aiScore: score } : o)));
+            // The explanation, and the win chance as the server worked it out for it (AI scoring batch 2B): the deal on
+            // screen takes both, so "explained at" and "now" read the same number.
+            setOpportunities(prev => prev.map(o => (o.id === dealId ? { ...o, aiScore: score, ...(data.winChance ? { dealScore: data.winChance } : {}) } : o)));
             onScored(score);
         } catch (err) {
             if (!stillOrg(askedOrg)) return;   // after an org switch it says nothing
@@ -724,6 +726,8 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
         }
     };
 
+    // The band's colours: the win chance's (Healthy / At Risk / Critical), and Claude's own verdicts for its earlier
+    // scores (Strong / On Track, state §0.188).
     const verdictConfig = {
         'Strong':   { color: T.ok,     bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)'   },
         'On Track': { color: T.ok,     bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)'   },   // one of ai-score's four (state §0.188)
@@ -732,15 +736,20 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
         'At Risk':  { color: T.warn,   bg: 'rgba(184,115,51,0.09)', border: 'rgba(184,115,51,0.3)'  },
         'Critical': { color: T.danger, bg: 'rgba(156,58,46,0.09)',  border: 'rgba(156,58,46,0.3)'  },
     };
-    const score = aiScore;
-    const history = Array.isArray(score?.history) ? score.history : [];
+    // AI scoring batch 2B (Jeff, 17 Nov — Q1: Claude's own number retires now): the number is the deal's win chance, the
+    // server's (dealScoreOf — none while Deal scoring is off); Claude's words explain it. A score Claude gave before is
+    // its own, earlier — never the deal's number.
+    const win = dealScoreOf ? dealScoreOf(opportunity) : null;
+    const expl = isExplanation(aiScore) ? aiScore : null;
+    const earlier = earlierScoresOf(aiScore);
+    const moved = movedWords(aiScore, opportunity);
 
     return (
         <div style={{ paddingBottom: '1rem' }}>
             {loading && (
                 <div style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: `3px solid ${T.border}`, borderTopColor: T.ink, margin: '0 auto 1rem', animation: 'opp-spin 0.7s linear infinite' }}/>
-                    <div style={{ fontSize: '0.875rem', color: T.inkMid, fontFamily: T.sans }}>Analysing deal signals…</div>
+                    <div style={{ fontSize: '0.875rem', color: T.inkMid, fontFamily: T.sans }}>Asking Claude to explain this deal…</div>
                 </div>
             )}
             {error && (
@@ -753,43 +762,50 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
                     AI scoring is off for this workspace — an Admin turns it on in Settings → Features &amp; AI.
                 </div>
             )}
-            {!loading && score && (() => {
-                const vc = verdictConfig[score.verdict] || verdictConfig['Neutral'];
+            {!loading && (() => {
+                const vc = verdictConfig[win?.status] || verdictConfig['Neutral'];
                 return (
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: vc.bg, border: `1px solid ${vc.border}`, borderRadius: T.r, marginBottom: '1.25rem' }}>
-                            <div style={{ textAlign: 'center', minWidth: '56px' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: '800', color: vc.color, lineHeight: 1, fontFamily: T.sans }}>{score.score}</div>
-                                <div style={{ fontSize: '0.625rem', fontWeight: '700', color: vc.color, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: T.sans }}>{score.verdict}</div>
+                            <div style={{ textAlign: 'center', minWidth: '64px' }}>
+                                <div style={{ fontSize: '2rem', fontWeight: '800', color: vc.color, lineHeight: 1, fontFamily: T.sans }}>{win ? win.percent : '—'}</div>
+                                <div style={{ fontSize: '0.625rem', fontWeight: '700', color: vc.color, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: T.sans }}>{win ? `${win.status} · win chance` : 'Win chance'}</div>
                             </div>
-                            {/* The heading only over a next action (state §0.240): a score kept with none showed it over nothing. */}
                             <div style={{ flex: 1 }}>
-                                {score.recommendation && (<>
+                                {expl?.headline && <div style={{ fontSize: '0.875rem', color: T.ink, fontWeight: '600', lineHeight: 1.45, marginBottom: expl?.recommendation ? '0.5rem' : 0, fontFamily: T.sans }}>{expl.headline}</div>}
+                                {/* The heading only over a next action (state §0.240): a score kept with none showed it over nothing. */}
+                                {expl?.recommendation && (<>
                                 <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px', fontFamily: T.sans }}>Recommended next action</div>
-                                <div style={{ fontSize: '0.875rem', color: T.ink, fontWeight: '500', lineHeight: 1.5, fontFamily: T.sans }}>{score.recommendation}</div>
+                                <div style={{ fontSize: '0.875rem', color: T.ink, fontWeight: '500', lineHeight: 1.5, fontFamily: T.sans }}>{expl.recommendation}</div>
                                 </>)}
+                                {!expl && <div style={{ fontSize: '0.8125rem', color: T.inkMid, lineHeight: 1.5, fontFamily: T.sans }}>{win ? 'Claude can explain this number and suggest the next step.' : 'This deal has no win chance yet. It is worked out when the deal or an activity on it is saved — or when Claude explains it.'}</div>}
                             </div>
                         </div>
-                        {(score.signals || []).some((s) => s?.text) && (
+                        {moved && (
+                            <div style={{ padding: '0.625rem 0.875rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, fontSize: '0.8125rem', marginBottom: '1rem', fontFamily: T.sans }}>{moved}</div>
+                        )}
+                        {(expl?.signals || []).some((s) => s?.text) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                                {score.signals.filter((s) => s?.text).map((s, i) => (
+                                {expl.signals.filter((s) => s?.text).map((s, i) => (
                                     <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
                                 ))}
                             </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
                             <div style={{ fontSize: '0.6875rem', color: T.inkMuted, lineHeight: 1.5, fontFamily: T.sans }}>
-                                {score.model ? `Scored by Claude ${modelLabel(score.model)}` : 'Powered by Claude AI'} · Deal data is sent to Anthropic's API
+                                {expl ? `Explained by Claude ${modelLabel(expl.model)}` : 'Explained by Claude'} · Deal data is sent to Anthropic's API
                             </div>
                             {askWords
                                 ? <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>{askWords}</div>
-                                : <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>}
+                                : expl
+                                    ? <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh</GhostBtn>
+                                    : <PrimaryBtn type="button" onClick={() => fetchScore(false)}>Explain this deal</PrimaryBtn>}
                         </div>
-                        {history.length > 0 && (
+                        {earlier.length > 0 && (
                             <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
-                                <div style={{ ...ey(), marginBottom: 8 }}>Earlier scores</div>
+                                <div style={{ ...ey(), marginBottom: 8 }}>Claude's earlier scores — its own, before the win chance</div>
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {history.map((h, i) => {
+                                    {earlier.map((h, i) => {
                                         const hvc = verdictConfig[h.verdict] || verdictConfig['Neutral'];
                                         const ageLabel = h.scoredAt ? (() => {
                                             const m = Math.floor((Date.now() - new Date(h.scoredAt).getTime()) / 60000);
@@ -809,16 +825,6 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
                     </div>
                 );
             })()}
-            {!loading && !error && !off && !score && (
-                <div style={{ textAlign: 'center', padding: '3rem' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🤖</div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.ink, marginBottom: '4px', fontFamily: T.sans }}>No score yet</div>
-                    <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginBottom: '1.25rem', fontFamily: T.sans }}>Generate an AI health assessment for this deal</div>
-                    {askWords
-                        ? <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>{askWords}</div>
-                        : <PrimaryBtn type="button" onClick={() => fetchScore(false)}>Score this deal</PrimaryBtn>}
-                </div>
-            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
                 <GhostBtn onClick={onClose}>Cancel</GhostBtn>
                 <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
@@ -900,7 +906,7 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
 //  Right Rail — 3 sections (AI, Contacts, Activity)
 // ─────────────────────────────────────────────────────────────
 function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
-    const { setViewingActivity } = useApp();   // a recent-activity row opens the read-only viewer (§0.93)
+    const { setViewingActivity, dealScoreOf } = useApp();   // a recent-activity row opens the read-only viewer (§0.93)
 
     // Last touch recency → engagement level
     const engLevel = (lastActivityDate) => {
@@ -922,8 +928,11 @@ function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts,
     // The deal's AI score — the window's (state §0.188): the one the deal was opened with,
     // or the one its AI Score tab just asked for. The rail read `cachedScore`, which no
     // deal has, so it never showed one.
-    const aiSignals = aiScore?.signals || [];
-    const aiNumber  = aiScore?.score ?? null;
+    // Since AI scoring batch 2B the number is the deal's win chance, the server's; Claude's words explain it (Jeff, 17 Nov,
+    // Q1). A score Claude gave before is its own — the AI Score tab lists it as earlier, never as the deal's number.
+    const explained = isExplanation(aiScore);
+    const aiSignals = explained ? (aiScore.signals || []) : [];
+    const winView   = dealScoreOf ? dealScoreOf(opportunity) : null;
 
     // Recent activities for timeline (top 5)
     const recentActs = oppActivities.slice(0, 5);
@@ -942,14 +951,14 @@ function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts,
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ ...ey(T.goldInk) }}>AI read</div>
-                    {aiNumber != null && (
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                            <span style={{ fontSize: 18, fontWeight: 800, color: T.ink, fontFeatureSettings: '"tnum"', fontFamily: T.sans }}>{aiNumber}</span>
-                            <span style={{ fontSize: 10, color: T.ok, fontWeight: 700, fontFamily: T.sans }}>/ 100</span>
+                    {winView && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }} title={winView.words}>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: T.ink, fontFeatureSettings: '"tnum"', fontFamily: T.sans }}>{winView.percent}</span>
+                            <span style={{ fontSize: 10, color: T[winView.tone], fontWeight: 700, fontFamily: T.sans }}>{winView.status}</span>
                         </div>
                     )}
                 </div>
-                {aiScore ? (
+                {explained ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {aiSignals.filter((s) => s?.text).slice(0, 4).map((s, i) => (
                             <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
@@ -963,8 +972,8 @@ function RightRail({ opportunity, aiScore, aiOn, aiAsk, oppActivities, contacts,
                     </div>
                 ) : (
                     <div style={{ padding: '12px', background: T.surface2, border: `1px dashed ${T.border}`, borderRadius: T.r, textAlign: 'center' }}>
-                        <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, marginBottom: 8 }}>No score yet</div>
-                        <GhostBtn size="sm" icon="sparkle" onClick={onOpenAi}>Score this deal</GhostBtn>
+                        <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, marginBottom: 8 }}>Not explained yet</div>
+                        <GhostBtn size="sm" icon="sparkle" onClick={onOpenAi}>Explain this deal</GhostBtn>
                     </div>
                 )}
             </div>
@@ -1561,7 +1570,7 @@ export default function OpportunityModal({
                                 {[
                                     { id: 'history',   label: 'History'   },
                                     { id: 'contacts',  label: 'Contacts'  },
-                                    ...(settings?.aiScoringEnabled && (aiAsk || aiScore) ? [{ id: 'ai-score', label: 'AI Score' }] : []),
+                                    ...(settings?.aiScoringEnabled && (aiAsk || aiScore) ? [{ id: 'ai-score', label: 'AI read' }] : []),
                                     { id: 'quotes',    label: 'Quotes'    },
                                     { id: 'documents', label: 'Documents' },
                                 ].map(tab => (

@@ -3,10 +3,7 @@ import { useLocalLayer } from '../hooks/useLocalLayer';
 import { useApp } from '../AppContext';
 import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
 // "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
-import { mayUseAi } from '../utils/aiModels.js';
-import { storedScore } from '../utils/aiScore.js';
 import { isoLocal, todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
@@ -312,7 +309,6 @@ function ForecastCard({ opp, deps }) {
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.inkMuted, alignItems: 'center' }}>
                 <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }} title={win ? win.words : undefined}/>
-                {opp.aiScore && <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>{opp.aiScore.score}</>}
                 <span style={{ flex: 1 }}/><span style={{ color: T.inkMuted }}>{opp.stage}</span>
             </div>
         </div>
@@ -403,10 +399,6 @@ export default function PipelineTab() {
     const [selectMode,          setSelectMode]          = useState(false);
     const [pipelineSortField,   setPipelineSortField]   = useState('forecastedCloseDate');
     const [pipelineSortDir,     setPipelineSortDir]     = useState('asc');
-    const [bulkScoring,         setBulkScoring]         = useState(false);
-    const [bulkScoreProgress,   setBulkScoreProgress]   = useState(null);
-    // What the last "Score all deals" came to, when a deal went unscored (state §0.238): it counted a refusal as done.
-    const [bulkScoreNote,       setBulkScoreNote]       = useState(null);
 
     // ── Column sort handler ───────────────────────────────────
     const handleSort = (field) => {
@@ -565,56 +557,13 @@ export default function PipelineTab() {
         .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100), 0);
 
 
-    // ── Bulk AI score ─────────────────────────────────────────
-    useEffect(() => {
-        const handler = () => handleBulkScore();
-        document.addEventListener('accelerep:bulkScore', handler);
-        return () => document.removeEventListener('accelerep:bulkScore', handler);
-    }, []);
-
-    const handleBulkScore = async () => {
-        if (bulkScoring) return;
-        const active = visibleOpportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
-        if (!active.length) return;
-        setBulkScoring(true);
-        setBulkScoreNote(null);
-        setBulkScoreProgress({ done: 0, total: active.length });
-        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-        let done = 0, kept = 0, firstCause = null;
-        try {
-            for (const opp of active) {
-                if (!stillOrg(askedOrg)) return;   // the next score would be asked with the new org's token
-                try {
-                    const res  = await dbFetch('/.netlify/functions/ai-score', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }) });
-                    // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal in the server's words with
-                    // their ref, else "The server returned N." — never "Scoring failed." over a 502's page.
-                    if (!res.ok) {
-                        const why = await readRefusal(res);
-                        if (!stillOrg(askedOrg)) return;
-                        if (!firstCause) firstCause = why;
-                    } else {
-                        const data = await res.json().catch(() => ({}));
-                        if (!stillOrg(askedOrg)) return;
-                        // What the deal keeps — the score without its transport flags, as the deal window keeps it (state §0.238).
-                        const score = storedScore(data);
-                        if (score) { kept++; setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o)); }
-                        else if (!firstCause) firstCause = data.disabled ? 'AI scoring is off for this workspace.' : 'Its answer could not be read.';
-                    }
-                } catch (err) { console.warn('Bulk score failed for', opp.id, err); if (!firstCause) firstCause = failureWords(err); }
-                done++;
-                setBulkScoreProgress({ done, total: active.length });
-            }
-            if (kept < active.length) setBulkScoreNote(`Scored ${kept} of ${active.length} deals. ${firstCause}`);
-        } finally {
-            // Cut by an org switch too, the button comes back (it stayed "Scoring…").
-            setBulkScoring(false);
-            setBulkScoreProgress(null);
-        }
-    };
+    // "Score all deals" is gone (AI scoring batch 2B — Jeff, 17 Nov, Q4: "Take it out"): the server scores every deal for
+    // free (src/utils/dealScore.js), and Claude explains one deal at a time, from its window. Its listener went with it
+    // (OPEN_ITEMS §4.2: nothing sent the event).
 
     // ── Export CSV ────────────────────────────────────────────
     const handleExport = () => {
-        const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Win %', 'AI Score', 'Days in Stage'];
+        const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Win %', 'Days in Stage'];
         const rows = smartFilteredOpps.map(o => {
             const win        = dealScoreOf(o);   // none while Deal scoring is off (AI scoring batch 2A)
             const daysInStage = o.stageChangedDate ? (daysSince(o.stageChangedDate) ?? '') : '';
@@ -629,7 +578,6 @@ export default function PipelineTab() {
                 o.forecastedCloseDate || '',
                 o.salesRep || '',
                 win ? win.score : '',
-                o.aiScore?.score || '',
                 daysInStage,
             ];
         });
@@ -915,22 +863,6 @@ export default function PipelineTab() {
 
             {/* ── Desktop views ─────────────────────────────────── */}
             <div className="spt-pipeline-desktop">
-
-                {/* AI bulk score */}
-                {/* Offered to a role "Available to" names (state §0.238); the server refuses the rest. */}
-                {settings?.aiScoringEnabled && mayUseAi(userRole, settings?.aiSettings) && (
-                    <div style={{ padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <button onClick={handleBulkScore} disabled={bulkScoring}
-                            style={{ padding: '0.3rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: T.rSm, background: bulkScoring ? T.surface2 : T.surface, color: T.inkMid, fontSize: '0.75rem', fontWeight: '600', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                            {bulkScoring ? (
-                                <><span style={{ width: 10, height: 10, border: `2px solid ${T.border}`, borderTopColor: T.inkMid, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…</>
-                            ) : '🤖 Score all deals'}
-                        </button>
-                        {bulkScoreNote && !bulkScoring && (
-                            <span style={{ fontSize: '0.75rem', color: T.warn, fontFamily: T.sans }}>{bulkScoreNote}</span>
-                        )}
-                    </div>
-                )}
 
                 {/* ── LIST VIEW ──────────────────────────────────── */}
                 {pipelineView === 'table' && (

@@ -113,7 +113,9 @@ test('every activity row opens the viewer: three rails and both deal-modal lists
     assert.ok(opp.includes('onClick={item.activity ? () => setViewingActivity(item.activity) : undefined}'), 'History tab');
     assert.ok(opp.includes('onClick={e => { e.stopPropagation(); item.onDelete(); }}'), 'delete does not also open');
     assert.ok(opp.includes('onClick={() => setViewingActivity(a)}'), 'the Activity rail list');
-    assert.equal((opp.match(/const \{ setViewingActivity \} = useApp\(\);/g) || []).length, 2, 'DealHistoryTab and RightRail');
+    assert.equal((opp.match(/const \{ setViewingActivity \} = useApp\(\);/g) || []).length, 1, 'DealHistoryTab');
+    // The rail reads the win chance too since AI scoring batch 2B.
+    assert.ok(opp.includes('const { setViewingActivity, dealScoreOf } = useApp();'), 'RightRail');
     const row = code(read('src/components/rails/ActivityRowText.jsx'));
     assert.ok(row.includes('WebkitLineClamp: 2'), 'two-line clamp');
     assert.ok(row.includes('const { title, snippet } = previewOf(activity);'));

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b130** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b131** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4805,3 +4805,14 @@ THE GUARD: tests/mutate-likely.test.mjs — the parts, the verdict, a run's opti
 6. **A kept score is compared key by key, never as text** (`sameDealScore`): the database hands a jsonb object back in its own key order, and a score read as changed is rewritten on every pass. A pass that changed nothing writes nothing; Train now loads the screen's deals again once it lands.
 
 THE GUARD: tests/deal-score.test.mjs (the rule, run; a deal closed won and closed lost measures the same) and tests/deal-score-server.test.mjs (one writer; every write rescored; the model the server's; one reader on screen); tests/integration/deal-score.itest.mjs (another org's model, deals and scores untouched).
+
+## 18b131. Claude Explains The Server's Number; It Never Sets One — Claude's Earlier Own Scores Stay Its Own (hard rule)
+
+**Origin (§0.257, 17 Nov 2026 — OPEN_ITEMS §3.1 batch 2B; docs/design/deal-score/DESIGN-2B.md, Jeff: Q1-Q4 the Recommended).** After §0.256 a deal showed its win chance, a probability, beside Claude's own 0–100 health judgment — two numbers on two scales on one screen, Qualification's healthy 10% beside Claude's 70.
+
+1. **The deal's number is its win chance, the server's** (guide §18b130). Claude is handed it — the number, its band, its parts and every factor with its effect — and asked to explain it; the schema asks for no score and no verdict, and the prompt says never to state another. The scorer works the number out again before it asks, and refuses a closed deal before anything is sent.
+2. **An explanation names the number it explained** (`explains`), and a screen says when the deal's number has moved since — "Explained at 42% — now 50%" — never asking Claude again by itself.
+3. **Claude's own earlier scores are its own**: kept, listed apart as Claude's, never shown or read as the deal's number, never answered from the cache as current. An explanation never enters the history of scores.
+4. **One number on every screen** — no screen reads `aiScore.score` as the deal's (the report's "AI score" metric, Claude's stored own scores, named).
+
+THE GUARD: tests/ai-explain.test.mjs (the shape, the moved words, the scorer's order, no screen reading Claude's number); tests/integration/ai-score.itest.mjs (the prompt, the schema, a closed deal, an own score no cached answer).

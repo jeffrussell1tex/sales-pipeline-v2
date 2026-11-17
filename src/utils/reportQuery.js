@@ -65,7 +65,7 @@ const isOpenDeal = (o) => !CLOSED_STAGES.includes(o?.stage);
 
 // ── Field definitions ───────────────────────────────────────────────────────
 // dim:    { id, label, kind: 'text' | 'month' | 'stage', valueOf(row, ctx) }
-// metric: { id, label, agg: 'sum' | 'count' | 'avg' | 'median' | 'distinct', valueOf(row, ctx) → number | null, format: 'money' | 'int' | 'days' | 'score' }
+// metric: { id, label, agg: 'sum' | 'count' | 'avg' | 'median' | 'distinct', valueOf(row, ctx) → number | null, format: 'money' | 'int' | 'days' | 'score' | 'percent' }
 const D = (id, label, kind, valueOf, advanced = false) => Object.freeze({ id, label, kind, valueOf, advanced });
 const M = (id, label, agg, valueOf, format, advanced = false) => Object.freeze({ id, label, agg, valueOf, format, advanced });
 
@@ -89,6 +89,8 @@ const OPP_METRICS = [
     M('avg_deal',      'Avg deal size',  'avg',    (o) => num(o.arr), 'money'),
     M('days_to_close', 'Days to close',  'median', (o) => cycleDaysOf(o), 'days', true),
     M('days_in_stage', 'Days in stage',  'avg',    (o, ctx) => (isOpenDeal(o) ? daysBetween(dayOf(o.stageChangedDate || o.createdDate || o.createdAt), ctx.today) : null), 'days', true),
+    // A deal's win chance, the server's (AI scoring batch 2B — Q2: reports gain it; 'AI score' stays for Claude's own stored scores).
+    M('win_chance',    'Win chance',     'avg',    (o) => (o.dealScore && Number.isFinite(Number(o.dealScore.score)) ? Number(o.dealScore.score) : null), 'percent', true),
     M('ai_score',      'AI score',       'avg',    (o) => (o.aiScore && Number.isFinite(Number(o.aiScore.score)) ? Number(o.aiScore.score) : null), 'score', true),
     M('activities',    '# activities',   'sum',    (o, ctx) => ctx.activityCountByOpp.get(o.id) || 0, 'int', true),
 ];
@@ -408,6 +410,7 @@ export function formatMetric(value, format) {
     if (format === 'money') return n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n);
     if (format === 'days')  return Math.round(n) + 'd';
     if (format === 'score') return String(Math.round(n));
+    if (format === 'percent') return Math.round(n) + '%';
     return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 

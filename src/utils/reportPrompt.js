@@ -173,7 +173,9 @@ const METRIC_WORDS = {
         ['avg_deal',      /\b(?:average|avg|mean|typical) (?:deal|deal size|size|arr|revenue|value|amount)\b|\bdeal size\b/],
         ['days_to_close', /\b(days (?:from \S+ )?to close|sales cycle|cycle (?:time|length)|time to close|velocity|how long (?:to|until) close)\b/],
         ['days_in_stage', /\b(days in stage|stage age|age in stage|time in stage|how long in stage)\b/],
-        ['ai_score',      /\b(ai score|health score|deal health|average score|avg score)\b/],
+        // 'health score' and 'deal health' ask for the win chance since AI scoring batch 2B (Q2); 'AI score' is Claude's own, stored.
+        ['win_chance',    /\b(win chance|win %|win percent(?:age)?|chance of winning|health score|deal health)\b/],
+        ['ai_score',      /\b(ai score|average score|avg score)\b/],
         ['activities',    /\b(activities per|activity count|# ?activities|number of activities|touches per)\b/],
         ['revenue',       /\b(revenue|arr|dollars?|amount|value|bookings?|worth|acv|tcv|sales(?! ?reps?| ?people|persons?)|at risk)\b|\$/],
         ['deals',         COUNT_WORDS],

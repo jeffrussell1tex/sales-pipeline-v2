@@ -38,9 +38,10 @@ test('WIRING (1): the scorer keeps the last answer that read, else one with no n
     assert.ok(s.includes('        if (!kept) {'), 'none read, none kept: the 502');
     assert.ok(s.includes("const fellBack = attempts.filter((a) => a !== kept).map((a) => ` · ${a === attempts[0] ? 'after' : 'then'} ${a.model}: ${a.outcome.detail}`).join('');"), 'every attempt not kept named');
     const m = code(read('src/components/modals/OpportunityModal.jsx'));
-    assert.ok(m.includes('{score.recommendation && (<>'), 'the heading only over a next action');
-    assert.ok(m.includes('{(score.signals || []).some((s) => s?.text) && ('));
-    assert.ok(m.includes('{score.signals.filter((s) => s?.text).map((s, i) => ('), 'no empty chip in the tab');
+    // The tab reads Claude's explanation since AI scoring batch 2B (`expl`).
+    assert.ok(m.includes('{expl?.recommendation && (<>'), 'the heading only over a next action');
+    assert.ok(m.includes('{(expl?.signals || []).some((s) => s?.text) && ('));
+    assert.ok(m.includes('{expl.signals.filter((s) => s?.text).map((s, i) => ('), 'no empty chip in the tab');
     assert.ok(m.includes('{aiSignals.filter((s) => s?.text).slice(0, 4).map((s, i) => ('), 'nor in the rail');
 });
 

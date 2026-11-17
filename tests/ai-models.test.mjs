@@ -105,9 +105,10 @@ test('the request: the model asked, room for thinking, effort low, JSON that mat
     assert.equal(body.max_tokens, 4000);
     assert.deepEqual(body.output_config, { effort: 'low', format: { type: 'json_schema', schema: SCORE_SCHEMA } });
     assert.deepEqual(body.messages, [{ role: 'user', content: 'P' }]);
-    assert.deepEqual(SCORE_SCHEMA.required, ['score', 'verdict', 'headline', 'signals', 'recommendation']);
+    // Since AI scoring batch 2B Claude explains the win chance: no number and no verdict of its own (Jeff, 17 Nov, Q1).
+    assert.deepEqual(SCORE_SCHEMA.required, ['headline', 'signals', 'recommendation']);
     assert.equal(SCORE_SCHEMA.additionalProperties, false);
-    assert.deepEqual(SCORE_SCHEMA.properties.verdict.enum, ['Strong', 'On Track', 'At Risk', 'Critical']);
+    assert.ok(!('score' in SCORE_SCHEMA.properties) && !('verdict' in SCORE_SCHEMA.properties), 'REGRESSION: Claude asked for a number of its own');
     assert.equal(SCORE_SCHEMA.properties.signals.items.additionalProperties, false);
     // The function's 60 seconds (Netlify, not configurable): the attempts share BUDGET_MS from the request's start, the
     // rest kept for the reads before and the write and audit row after (the review, 9 Nov).
@@ -252,7 +253,9 @@ test('ai-score.mjs: the Admin\'s model, then once more on the fallback — the s
     assert.ok(s.includes('const model = modelOf(aiSettings);') && s.includes('const fallback = fallbackOf(aiSettings);'));
     assert.ok(s.includes('const attempts = [{ model, outcome: await ask(model) }];'));
     assert.ok(s.includes('if (!attempts[0].outcome.ok && attempts[0].outcome.retry && attemptTime(Date.now() - startedAt) >= MIN_ATTEMPT_MS) attempts.push({ model: fallback, outcome: await ask(fallback) });'), 'once, where the cause allows and the time holds an attempt');
-    assert.ok(s.includes('score:          Number.isFinite(parseInt(parsed.score, 10)) ? Math.max(0, Math.min(100, parseInt(parsed.score, 10))) : 50,'), 'a score of 0 is kept as 0');
+    // The number it explained, kept beside its words (2B) — never a number of Claude's own.
+    assert.ok(s.includes('explains:       { score: Number(win.score), status: win.status || null, scoredAt: win.scoredAt || null },'), 'the win chance explained, kept');
+    assert.ok(!/parsed\.score|parsed\.verdict/.test(s), 'REGRESSION: a number of Claude\'s own read');
     assert.ok(!/model:\s*'claude-/.test(s), 'no model written in the request');
 });
 
@@ -333,15 +336,10 @@ test('the Features panel: the list\'s models, each marked by the key check; "Ava
     assert.ok(f.includes("to Claude ${modelLabel(modelOf(aiSettings))}"), 'the switch names the model');
 });
 
-test('Score all deals: offered by "Available to"; keeps the score as the window does; says what went unscored; the button back after an org switch', () => {
+// "Score all deals" is gone (AI scoring batch 2B — Jeff, 17 Nov, Q4: "Take it out"): the server scores every deal, and
+// Claude explains one deal at a time from its window.
+test('Score all deals is gone: no button, no handler, no listener', () => {
     const p = read('src/Tabs/PipelineTab.jsx');
-    const bulk = between(p, 'const handleBulkScore = async () => {', '// ── Export CSV');
-    // Moved in §0.249 (the refusal sweep, Part 12): the score is read only in the landed branch of the ok check.
-    before(bulk, 'if (!res.ok) {', '} else {', 'REGRESSION: a refusal counted as done');
-    before(bulk, '} else {', 'const score = storedScore(data);', 'REGRESSION: a refusal counted as done, transport flags kept');
-    assert.equal(bulk.split('storedScore(').length - 1, 1, 'one score read, in the landed branch');
-    assert.ok(bulk.includes('setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: score } : o));'));
-    assert.ok(bulk.includes('if (kept < active.length) setBulkScoreNote(`Scored ${kept} of ${active.length} deals. ${firstCause}`);'));
-    before(bulk, '} finally {', 'setBulkScoring(false);', 'the button comes back however the loop ends');
-    assert.ok(p.includes('{bulkScoreNote && !bulkScoring && ('));
+    assert.ok(!/handleBulkScore|bulkScor|accelerep:bulkScore/.test(p), 'REGRESSION: Score all deals back');
+    assert.ok(!p.includes("'🤖 Score all deals'"));
 });

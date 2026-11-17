@@ -58,8 +58,8 @@ function StagePill({ stage }) {
 // default, and its Select ticked nothing). The quarter rail already organises by
 // date, so there is no Days column.
 const listCols = (canSeeAll, selectMode) => (selectMode ? '32px ' : '') + (canSeeAll
-    ? '1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 24px'
-    : '1.6fr 1fr 100px 90px 90px 60px 70px 24px');
+    ? '1.4fr 0.9fr 100px 100px 90px 90px 70px 24px'
+    : '1.6fr 1fr 100px 90px 90px 70px 24px');
 
 // ── Table header ──────────────────────────────────────────────
 function TableHeader({ canSeeAll, selectMode }) {
@@ -82,7 +82,6 @@ function TableHeader({ canSeeAll, selectMode }) {
             <div style={{ textAlign: 'right' }}>Revenue</div>
             {/* Revenue sits right, Close left: the gap between them is Close's (state §0.187) */}
             <div style={{ paddingLeft: 16 }}>Close</div>
-            <div>AI</div>
             <div>Win %</div>
             <div/>
         </div>
@@ -99,7 +98,6 @@ function TableRow({ opp, canSeeAll, dealScoreOf, onEdit, selectMode, isSelected,
         ? calendarDays(todayLocal(), opp.forecastedCloseDate)   // signed calendar days: overdue from the next morning (§0.240)
         : null;
     const overdue   = closeDays !== null && closeDays < 0;
-    const aiRisk    = opp.aiScore && opp.aiScore.score < 50;
 
     return (
         <div
@@ -163,24 +161,6 @@ function TableRow({ opp, canSeeAll, dealScoreOf, onEdit, selectMode, isSelected,
             {/* Close date */}
             <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400, paddingLeft: 16 }}>
                 {relativeDay(opp.forecastedCloseDate)}
-            </div>
-
-            {/* AI score */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                {opp.aiScore ? (
-                    <>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                            stroke={aiRisk ? T.danger : T.inkMid}
-                            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>
-                        </svg>
-                        <span style={{ fontSize: 11, color: aiRisk ? T.danger : T.inkMid, fontVariantNumeric: 'tabular-nums' }}>
-                            {opp.aiScore.score}
-                        </span>
-                    </>
-                ) : (
-                    <span style={{ fontSize: 11, color: T.inkMuted }}>—</span>
-                )}
             </div>
 
             {/* Win chance */}

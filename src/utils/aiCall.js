@@ -20,12 +20,12 @@ export const MIN_ATTEMPT_MS = 5_000;
 // The time the next attempt may take, `elapsed` ms into the request: its own limit, or what the budget has left.
 export const attemptTime = (elapsed) => Math.min(ATTEMPT_MS, BUDGET_MS - elapsed);
 
-// The score's fields as Claude returns them (the server cuts and checks them again — ai-score.mjs).
+// The explanation's fields as Claude returns them (the server cuts and checks them again — ai-score.mjs). No score and
+// no verdict: since AI scoring batch 2B the number is the deal's win chance, the server's (src/utils/dealScore.js), and
+// Claude explains it (Jeff, 17 Nov, Q1: "Now, every org").
 export const SCORE_SCHEMA = Object.freeze({
     type: 'object',
     properties: {
-        score: { type: 'integer' },
-        verdict: { type: 'string', enum: ['Strong', 'On Track', 'At Risk', 'Critical'] },
         headline: { type: 'string' },
         signals: {
             type: 'array',
@@ -38,7 +38,7 @@ export const SCORE_SCHEMA = Object.freeze({
         },
         recommendation: { type: 'string' },
     },
-    required: ['score', 'verdict', 'headline', 'signals', 'recommendation'],
+    required: ['headline', 'signals', 'recommendation'],
     additionalProperties: false,
 });
 

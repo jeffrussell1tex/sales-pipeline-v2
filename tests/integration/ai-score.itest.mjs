@@ -126,12 +126,16 @@ const call = async (fn, who, method, body, org = A) => {
     return { status: res.statusCode, body: parsed };
 };
 const kept = async (id) => (await db.select().from(opportunities).where(eq(opportunities.id, id)))[0]?.aiScore ?? null;
-const reply = (score, verdict) => ({
-    score, verdict, headline: `Scored ${score}`,
+// Claude's answer since AI scoring batch 2B: an explanation of the win chance — no number of its own. The tag tells one
+// answer from another.
+const reply = (tag) => ({
+    headline: `Explained ${tag}`,
     signals: [{ text: 'The champion replied last week', sentiment: 'positive' }, { text: 'No next meeting is booked', sentiment: 'warning' }],
     recommendation: 'Book the walkthrough',
 });
-const withoutFlags = ({ fromCache: _c, usingOrgKey: _k, ...score }) => score;
+const withoutFlags = ({ fromCache: _c, usingOrgKey: _k, winChance: _w, ...score }) => score;
+// The audit row's words for an explanation of a win chance (2B).
+const explainedRow = (model, win, tail = '') => `${model} · the site key · explained ${win.score}% (${win.status})${tail}`;
 
 const cleanup = async () => {
     for (const t of [activities, contacts, opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
@@ -183,22 +187,31 @@ before(async () => {
 });
 after(cleanup);
 
-test('a rep scores their own deal by its id — Claude asked once, with the deal; the answer is the score as kept, no history yet; the deal keeps it', async () => {
+test('a rep asks Claude to explain their own deal by its id — Claude asked once, with the deal and its win chance; the answer is the explanation as kept, no history yet; the deal keeps it (2B)', async () => {
     MODEL.calls.length = 0;
-    MODEL.reply = reply(72, 'On Track');
+    MODEL.reply = reply('first');
     const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(MODEL.calls.length, 1, 'one call to the model');
     assert.equal(MODEL.calls[0].headers['x-api-key'], 'itest-aiscore-site-key', 'the site key — no org key is installed');
-    assert.match(MODEL.calls[0].body.messages[0].content, /Name: Aiscore deal/, 'the deal went in the prompt');
-    assert.equal(r.body.score, 72);
-    assert.equal(r.body.verdict, 'On Track');
-    assert.deepEqual(r.body.signals, reply(72).signals, 'each signal with its sentiment');
+    const prompt = MODEL.calls[0].body.messages[0].content;
+    assert.match(prompt, /Name: Aiscore deal/, 'the deal went in the prompt');
+    const win = r.body.winChance;
+    assert.ok(win && Number.isInteger(win.score), 'the win chance it explained rides along');
+    assert.equal((await db.select().from(opportunities).where(eq(opportunities.id, DEAL)))[0].dealScore.score, win.score, 'the deal scored, as explained');
+    assert.ok(prompt.includes(`- Win chance: ${win.score}% — ${win.status} for Proposal (the stage's usual is 60%)`), 'the number, fixed, in the prompt');
+    assert.ok(prompt.includes('- Factor: No activities logged for this opportunity (-18 points)'), 'its factors, each with its effect');
+    assert.ok(prompt.includes('Do not give your own score'), 'Claude explains; it does not score');
+    assert.ok(!('score' in r.body) && !('verdict' in r.body), 'REGRESSION: a number of Claude\'s own kept');
+    assert.deepEqual(r.body.explains, { score: win.score, status: win.status, scoredAt: win.scoredAt });
+    assert.equal(r.body.headline, 'Explained first');
+    assert.deepEqual(r.body.signals, reply('x').signals, 'each signal with its sentiment');
     assert.deepEqual(r.body.history, []);
     assert.equal(r.body.usingOrgKey, false);
-    assert.deepEqual(await kept(DEAL), withoutFlags(r.body), 'the deal keeps exactly the score answered');
+    assert.deepEqual(await kept(DEAL), withoutFlags(r.body), 'the deal keeps exactly the explanation answered, never the win chance');
     const audit = await db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.action, 'ai.deal_scored')));
-    assert.equal(audit.length, 1, 'the scoring is in the audit log');
+    assert.equal(audit.length, 1, 'the explanation is in the audit log');
+    assert.equal(audit[0].detail, explainedRow('claude-haiku-5-5', win));
 });
 
 test('within a day, without a refresh, the kept score answers — Claude is not asked again', async () => {
@@ -211,20 +224,34 @@ test('within a day, without a refresh, the kept score answers — Claude is not 
     assert.deepEqual(withoutFlags(r.body), before);
 });
 
-test('a refresh keeps the score it replaces at the head of the history — four kept, newest first', async () => {
-    const first = await kept(DEAL);
-    MODEL.reply = reply(55, 'At Risk');
-    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+test('Claude\'s own earlier score stays its own: a refresh keeps it at the head of the history, an explanation never enters it; a cached own score is no answer now (2B, Q1)', async () => {
+    // A deal that kept Claude's own score from before 2B, with three earlier ones.
+    const OWN = { score: 70, verdict: 'On Track', headline: 'Own', signals: [], recommendation: 'Call', model: 'claude-haiku-5-5', scoredAt: new Date().toISOString(),
+        history: [{ score: 60, verdict: 'At Risk', scoredAt: '2026-11-01T00:00:00.000Z' }, { score: 50, verdict: 'At Risk', scoredAt: '2026-10-01T00:00:00.000Z' }] };
+    await db.update(opportunities).set({ aiScore: OWN }).where(and(eq(opportunities.id, DEAL), eq(opportunities.orgId, A)));
+    MODEL.calls.length = 0;
+    MODEL.reply = reply('after own');
+    // Not a refresh, and the own score is fresh: still no answer now — Claude is asked.
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL });
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.equal(r.body.score, 55);
-    assert.deepEqual(r.body.history, [{ score: first.score, verdict: first.verdict, scoredAt: first.scoredAt, model: 'claude-haiku-5-5' }], 'its model too (state §0.238)');
-    for (const n of [40, 35, 30, 25]) {
-        MODEL.reply = reply(n, 'Critical');
-        assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true })).status, 200);
-    }
+    assert.equal(MODEL.calls.length, 1, 'REGRESSION: a cached score of Claude\'s own answered as current');
+    assert.equal(r.body.headline, 'Explained after own');
+    assert.deepEqual(r.body.history.map((h) => h.score), [70, 60, 50], 'Claude\'s own scores, newest first');
+    MODEL.reply = reply('again');
+    assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true })).status, 200);
     const now = await kept(DEAL);
-    assert.equal(now.score, 25);
-    assert.deepEqual(now.history.map((h) => h.score), [30, 35, 40, 55], 'four, newest first — the first score, 72, dropped');
+    assert.equal(now.headline, 'Explained again');
+    assert.deepEqual(now.history.map((h) => h.score), [70, 60, 50], 'an explanation never enters the history');
+});
+
+test('a closed deal has no win chance to explain — 400, nothing sent, nothing kept (2B)', async () => {
+    await db.insert(opportunities).values({ id: 'opp_itest_aiscore_won', orgId: A, pipelineId: 'default', stage: 'Closed Won', opportunityName: 'Won deal', ownerId: 'usr_itest_aiscore_rep' });
+    MODEL.calls.length = 0;
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: 'opp_itest_aiscore_won' });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.code, 'closed');
+    assert.equal(MODEL.calls.length, 0, 'nothing sent');
+    assert.equal(await kept('opp_itest_aiscore_won'), null);
 });
 
 test('a deal save never writes the score — the window sends the deal it opened, its old score too; a create carries none', async () => {
@@ -288,10 +315,10 @@ const auditsOf = async (action) => db.select().from(auditLog).where(and(eq(audit
 const hasRow = (rows, detail) => assert.ok(rows.some((x) => x.detail === detail), `no row: ${detail} — ${JSON.stringify(rows.map((x) => x.detail))}`);
 const err = (status, type, message) => ({ status, body: { type: 'error', error: { type, message } } });
 
-test("the Admin's model is asked — at effort low, for JSON, room for thinking; the score and the audit row name it", async () => {
+test("the Admin's model is asked — at effort low, for JSON with no number of Claude's own, room for thinking; the explanation and the audit row name it", async () => {
     await setAi({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5' });
     MODEL.calls.length = 0; MODEL.plan = [];
-    MODEL.reply = reply(66, 'On Track');
+    MODEL.reply = reply('opus');
     const audits = (await auditsOf('ai.deal_scored')).length;
     const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
     assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -300,13 +327,14 @@ test("the Admin's model is asked — at effort low, for JSON, room for thinking;
     assert.equal(body.max_tokens, 4000);
     assert.equal(body.output_config.effort, 'low');
     assert.equal(body.output_config.format.type, 'json_schema');
+    assert.deepEqual(body.output_config.format.schema.required, ['headline', 'signals', 'recommendation'], 'no score asked for (2B)');
     for (const k of ['temperature', 'top_p', 'top_k', 'thinking']) assert.ok(!(k in body), `no ${k}`);
     assert.ok(MODEL.calls[0].signal, 'the attempt has its own time limit');
     assert.equal(r.body.model, 'claude-opus-5-5');
     assert.equal((await kept(DEAL)).model, 'claude-opus-5-5', 'the deal keeps the model that answered');
     const rows = await auditsOf('ai.deal_scored');
     assert.equal(rows.length, audits + 1);
-    hasRow(rows, 'claude-opus-5-5 · the site key · score 66 (On Track)');
+    hasRow(rows, explainedRow('claude-opus-5-5', r.body.winChance));
 });
 
 test('a stored model off the list runs as Haiku 5.5 (Q2) — what a panel nobody chose in stored', async () => {
@@ -326,43 +354,43 @@ test('busy, missing, refused or a dropped connection: the fallback answers, once
         ['throw', 'network: TypeError'],
     ]) {
         MODEL.calls.length = 0; MODEL.plan = [first];
-        MODEL.reply = reply(44, 'At Risk');
+        MODEL.reply = reply('fallback');
         const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
         assert.equal(r.status, 200, `${words}: ${JSON.stringify(r.body)}`);
         assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5', 'claude-haiku-5-5'], words);
         assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), ['itest-aiscore-site-key', 'itest-aiscore-site-key']);
         assert.equal(MODEL.calls[0].body.messages[0].content, MODEL.calls[1].body.messages[0].content, 'the same prompt');
         assert.equal((await kept(DEAL)).model, 'claude-haiku-5-5', 'the model that answered');
-        hasRow(await auditsOf('ai.deal_scored'), `claude-haiku-5-5 · the site key · score 44 (At Risk) · after claude-opus-5-5: ${words}`);
+        hasRow(await auditsOf('ai.deal_scored'), explainedRow('claude-haiku-5-5', r.body.winChance, ` · after claude-opus-5-5: ${words}`));
     }
 });
 
 test('a blank recommendation goes once to the fallback; kept with no next action when none brings one; a signal with no words dropped (§0.240)', async () => {
     await setAi({ model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5' });
     const answer = (body) => ({ status: 200, body: { content: [{ type: 'text', text: JSON.stringify(body) }], stop_reason: 'end_turn' } });
-    const blank = { ...reply(31, 'Critical'), recommendation: '  ', signals: [{ text: 'No reply in a month', sentiment: 'negative' }, { text: '', sentiment: 'warning' }] };
+    const blank = { ...reply('blank'), recommendation: '  ', signals: [{ text: 'No reply in a month', sentiment: 'negative' }, { text: '', sentiment: 'warning' }] };
     // blank first, the fallback brings one: the fallback's kept
     MODEL.calls.length = 0; MODEL.plan = [answer(blank)];
-    MODEL.reply = reply(52, 'At Risk');
+    MODEL.reply = reply('brings one');
     let r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5', 'claude-haiku-5-5'], 'REGRESSION: a blank next action kept without asking again');
     assert.equal((await kept(DEAL)).recommendation, 'Book the walkthrough');
-    hasRow(await auditsOf('ai.deal_scored'), 'claude-haiku-5-5 · the site key · score 52 (At Risk) · after claude-opus-5-5: a blank recommendation');
-    // both blank: the score kept, with no next action, and said so (Jeff: "Keep score, no action")
-    MODEL.calls.length = 0; MODEL.plan = [answer(blank), answer({ ...blank, score: 29 })];
+    hasRow(await auditsOf('ai.deal_scored'), explainedRow('claude-haiku-5-5', r.body.winChance, ' · after claude-opus-5-5: a blank recommendation'));
+    // both blank: the explanation kept, with no next action, and said so (Jeff: "Keep score, no action")
+    MODEL.calls.length = 0; MODEL.plan = [answer(blank), answer({ ...blank, headline: 'Explained second blank' })];
     r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
-    assert.equal(r.status, 200, 'never a 502 for a score with no next action');
+    assert.equal(r.status, 200, 'never a 502 for an explanation with no next action');
     const k = await kept(DEAL);
-    assert.deepEqual([k.score, k.model, k.recommendation], [29, 'claude-haiku-5-5', ''], 'the last answer that read');
-    assert.deepEqual(k.signals.map((s) => s.text), ['No reply in a month'], 'a signal with no words dropped');
-    hasRow(await auditsOf('ai.deal_scored'), 'claude-haiku-5-5 · the site key · score 29 (Critical) · after claude-opus-5-5: a blank recommendation · kept with no next action');
+    assert.deepEqual([k.headline, k.model, k.recommendation], ['Explained second blank', 'claude-haiku-5-5', ''], 'the last answer that read');
+    assert.deepEqual(k.signals.map((x) => x.text), ['No reply in a month'], 'a signal with no words dropped');
+    hasRow(await auditsOf('ai.deal_scored'), explainedRow('claude-haiku-5-5', r.body.winChance, ' · after claude-opus-5-5: a blank recommendation · kept with no next action'));
     // blank first, the fallback busy: the first answer kept, the fallback named after it
-    MODEL.calls.length = 0; MODEL.plan = [answer({ ...blank, score: 33 }), err(529, 'overloaded_error', 'Overloaded')];
+    MODEL.calls.length = 0; MODEL.plan = [answer({ ...blank, headline: 'Explained first blank' }), err(529, 'overloaded_error', 'Overloaded')];
     r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
     assert.equal(r.status, 200);
-    assert.deepEqual([(await kept(DEAL)).score, (await kept(DEAL)).model], [33, 'claude-opus-5-5']);
-    hasRow(await auditsOf('ai.deal_scored'), 'claude-opus-5-5 · the site key · score 33 (Critical) · then claude-haiku-5-5: 529 overloaded_error: Overloaded · kept with no next action');
+    assert.deepEqual([(await kept(DEAL)).headline, (await kept(DEAL)).model], ['Explained first blank', 'claude-opus-5-5']);
+    hasRow(await auditsOf('ai.deal_scored'), explainedRow('claude-opus-5-5', r.body.winChance, ' · then claude-haiku-5-5: 529 overloaded_error: Overloaded · kept with no next action'));
 });
 
 test('a refused key or request: no fallback, 502 with the cause in words, the deal unchanged, the failure in the log; both failing names both', async () => {

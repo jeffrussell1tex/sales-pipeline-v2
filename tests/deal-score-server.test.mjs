@@ -96,7 +96,7 @@ test('the screens read the kept score through one reader, behind the Deal scorin
     const panel = code(read('src/Tabs/settings/salesProcess/DealScoringDetail.jsx'));
     const landedAt = panel.indexOf('setTrainMsg(trainDealWords(answer));'), reloadAt = panel.indexOf("if (typeof loadOpportunities === 'function') loadOpportunities(() => {});");
     assert.ok(landedAt > -1 && reloadAt > landedAt, 'REGRESSION: Train now leaves the screen\'s deals without their scores until the next sign-in');
-    assert.ok(read('src/Tabs/PipelineTab.jsx').includes("'Sales Rep', 'Win %', 'AI Score'"), 'the CSV\'s column');
+    assert.ok(read('src/Tabs/PipelineTab.jsx').includes("'Sales Rep', 'Win %', 'Days in Stage'"), 'the CSV\'s column — Claude\'s AI Score gone (2B, Q2)');
 });
 
 test('an answer\'s scores land on the deals they name, and only those', () => {

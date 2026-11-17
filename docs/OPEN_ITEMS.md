@@ -468,7 +468,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    2A's code map, then the build. **2A built 17 Nov (state §0.256; guide
    §18b130)** — its own Q6-Q9 answered (ANSWERS.md), the column applied on
    Jeff's go; its browser check PASSED as Karen and Jeff 17 Nov (two fixes
-   found in it and made). Next: 2B.
+   found in it and made). **2B built 17 Nov (state §0.257; guide §18b131)**:
+   Claude explains the win chance, its own number retired; its browser check
+   PASSED as Jeff and Karen (the explanation itself on dev, after a push).
+   Next: 2C.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1407,7 +1410,11 @@ deal window shows no win chance yet (the health score never showed there).
 ANSWERS.md "Batch 2B" — Q1-Q4 each the Recommended): Claude's own number
 retires now, for every org; Claude explains the win chance; Kanban's ✦, the
 list's AI column and the CSV's AI Score go, reports gain "Win chance"; a moved
-number said, Refresh asks again; "Score all deals" out. **2C, after:** the
+number said, Refresh asks again; "Score all deals" out. **2B built 17 Nov
+(state §0.257; guide §18b131).** Until 2C the hourly score-drop alert reads
+Claude's own score below 40, so it fires only on a deal that still keeps an
+old one — never on an explained deal — and the public API's `ai_score` is
+Claude's stored own score, else null. **2C, after:** the
 score-drop alert and the public API move to the win chance (an alert on a
 probability needs a band, not a fixed 40).
 A SELECT-only census (17 Nov): no org has 20 closed deals (most 17, a demo
@@ -2309,7 +2316,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   `attemptOutcome`'s detail in its row. Low. (While there, from the item
   §0.238 closed: Anthropic's docs call `x-api-key` legacy, still supported;
   `Authorization: Bearer` is the current header — both calls.)
-- **The Pipeline's `accelerep:bulkScore` listener** (§0.238's review, 9 Nov; PipelineTab.jsx): nothing sends the event, and its effect has no dependencies, so it holds the first render's `handleBulkScore` (an old list, the old "Available to"). Dead code today. Recommended: remove it. Low.
 - **The Features panel's key check has no test of its states** (§0.238's review): the grey-out of a model the key cannot call, and ai-models.mjs's `refused` and `unreachable` answers, are pinned only by their wiring. Recommended: an itest of each answer, and the panel's words read in the pane. Low.
 - **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **An AI score's recommendation can come back blank** (§0.238's dev check, 10 Nov): `opp_qa_12`'s real score on dev answered `recommendation: ""`, and the AI Score tab shows "Recommended next action" with nothing under it. The schema requires the field but not its length; the parse and the cut keep what the model wrote, so the blank was the model's — thirteen requests of the same body (the local site key) each answered one. Recommended: read a blank recommendation or headline as unreadable, so it goes to the fallback once (aiCall.js `attemptOutcome`), and leave the heading out when a stored score has none. Low.
 - **The server's day counts are UTC's, not the member's** (§0.240, Jeff: "App now, file server"): ai-score.mjs's prompt ("Deal age", "days PAST DUE" — a floor from 12:00 UTC), pipeline-alerts.mjs (`daysSince` from UTC noon at the member's alert hour; `todayStr` the UTC day for `daysLapsed` and task overdue) and digest.mjs (`daysOverdue` from UTC midnight) can be a day off for members far from UTC. Recommended: count from the member's day (`dayIn(tz, now)` — task-reminders.mjs's `getTodayInTimezone` lifted into dateLocal.js) with `calendarDays`; ai-score from the day the client sends or the caller's stored timezone. Low. The days the server prints are the same class (the save cleanup design's OUT, 10 Nov; as recorded where no line is given): the quote PDF's date line (`_quotePdf.mjs:390`, the function's clock), the digest's "Week of" (digest.mjs:475), the days opportunities, leads, email-inbound, invoices and `_coaching` stamp, and the UTC year in record numbers — each needs the member's day or time zone.

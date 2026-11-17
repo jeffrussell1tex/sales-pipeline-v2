@@ -5867,38 +5867,6 @@ test('Part 12b: WIRING — Sales Manager: each claim write and the quota save re
     }
 });
 
-// ── Score all deals ──
-const p12bBulkScore = async ({ answers, switchAt = -1 }) => {
-    const { storedScore } = await import('../src/utils/aiScore.js');
-    const opps = stateOf([{ id: 'd1', stage: 'Proposal' }, { id: 'd2', stage: 'Proposal' }]);
-    const did = { sent: [], notes: [], scoring: [] };
-    const org = { now: 'org_a' };
-    const queue = [...answers];
-    const h = p12aFn('src/Tabs/PipelineTab.jsx', '    const handleBulkScore = async () => {', '\n    };', '\n    };',
-        ['bulkScoring', 'visibleOpportunities', 'setBulkScoring', 'setBulkScoreNote', 'setBulkScoreProgress', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords',
-            'storedScore', 'setOpportunities', 'console'], 'handleBulkScore')(
-        false, opps.value, (v) => did.scoring.push(v), (v) => did.notes.push(v), () => {}, () => 'org_a', (o) => o === org.now,
-        p11Fetch(did, () => queue.shift(), org, { switchAt }), readRefusal, failureWords, storedScore, opps.set, quiet);
-    await h();
-    return { ...did, said: did.notes.filter(Boolean), scores: opps.value.map((o) => o.aiScore ?? null) };
-};
-
-test('Part 12b: Score all deals — a refusal in the server\'s words with its ref, never "Scoring failed." over a 502\'s page or "Claude could not be reached" for the server; the score kept as the window keeps it; after an org switch nothing — RUN', async () => {
-    const SCORED = () => onceOf(200, { score: 72, verdict: 'On Track', fromCache: true, usingOrgKey: false });
-    for (const [answer, words] of p12bRefused()) {
-        const r = await p12bBulkScore({ answers: [answer, SCORED()] });
-        assert.deepEqual([r.said, r.scores], [[`Scored 1 of 2 deals. ${words}`], [null, { score: 72, verdict: 'On Track' }]], `REGRESSION: ${words}`);
-    }
-    assert.deepEqual((await p12bBulkScore({ answers: [onceOf(200, { disabled: true }), onceOf(200, { disabled: true })] })).said, ['Scored 0 of 2 deals. AI scoring is off for this workspace.']);
-    assert.deepEqual((await p12bBulkScore({ answers: [P11_UNREADABLE(), SCORED()] })).said, ['Scored 1 of 2 deals. Its answer could not be read.']);
-    const all = await p12bBulkScore({ answers: [SCORED(), SCORED()] });
-    assert.deepEqual([all.said, all.scoring], [[], [true, false]]);
-    for (const answer of [onceOf(500, { error: 'x' }), SCORED(), UNSENT()]) {
-        const r = await p12bBulkScore({ answers: [answer, SCORED()], switchAt: 0 });
-        assert.deepEqual([r.said, r.scores, r.sent.length, r.scoring], [[], [null, null], 1, [true, false]], 'REGRESSION: the last org\'s answer said or kept after a switch');
-    }
-});
-
 // ── The profile panel (AppHeader) ──
 const P12B_HEADER = 'src/components/layout/AppHeader.jsx';
 const p12bProfileSave = async ({ answer, switchOrg = false }) => {
@@ -10105,7 +10073,8 @@ test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts
     assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
-    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 188, 'REGRESSION: scan (iv)\'s floor below the 188 catch clauses measured after round 4');
+    // 187 since AI scoring batch 2B took "Score all deals" and its catch out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 187, 'REGRESSION: scan (iv)\'s floor below the 187 catch clauses measured after AI scoring batch 2B');
     assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 54, 'REGRESSION: scan (iv)\'s list no longer held at its 54 files');
     assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
     order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
@@ -10737,7 +10706,7 @@ const P12FXG5_FLOORS = [
     ['tests/quote-templates.test.mjs', 'assert.ok(money.length >= ', [19], 'the Quotes tab\'s 19 money lines'],
     ['tests/quote-templates.test.mjs', 'assert.ok(money.filter(([, ctx]) => ctx.includes(\'fontFamily: T.sans\')).length >= ', [17], 'the 17 that name the app face'],
     ['tests/resize-targets.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
-    ['tests/resize-targets.test.mjs', 'assert.ok(all.length >= ', [13], 'the 13 window listeners'],
+    ['tests/resize-targets.test.mjs', 'assert.ok(all.length >= ', [12], 'the 12 window listeners'],   // 12 since AI scoring batch 2B took the bulkScore listener out
     ['tests/rounded-scrollers.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
     ['tests/sales-links.test.mjs', 'assert.ok(pins.length >= ', [32], 'the suites\' 32 "graded by the harness" pins'],
     ['tests/search-match.test.mjs', 'assert.ok(SRC.length > ', [241], 'the 242 sources under src/'],

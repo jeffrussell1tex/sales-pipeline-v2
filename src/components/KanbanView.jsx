@@ -30,13 +30,6 @@ const fmtARR = (v) => {
     return '$' + n.toLocaleString();
 };
 
-// Spark icon matching mockup's Icon name="spark"
-const SparkIcon = ({ size = 9, color = 'currentColor' }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>
-    </svg>
-);
-
 const CheckIcon = ({ size = 11 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 12l5 5L20 6"/>
@@ -59,8 +52,6 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
     const closedays = opp.forecastedCloseDate
         ? calendarDays(todayLocal(), opp.forecastedCloseDate)   // signed calendar days: overdue from the next morning (§0.240)
         : null;
-
-    const atRisk = opp.aiScore && opp.aiScore.score < 50;
 
     // Each side by itself, not the `border` shorthand: React re-sets only what changed,
     // and a changed shorthand overwrote the stage's top edge when a card was ticked
@@ -156,16 +147,6 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
             }}>
                 {win && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T[win.tone], flexShrink: 0 }}
                     title={win.words}/>}
-
-                {opp.aiScore && (
-                    <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 3,
-                        color: atRisk ? T.danger : T.inkMid, fontWeight: 500,
-                    }}>
-                        <SparkIcon color="currentColor"/>
-                        {opp.aiScore.score}
-                    </span>
-                )}
 
                 <span style={{ flex: 1 }}/>
 

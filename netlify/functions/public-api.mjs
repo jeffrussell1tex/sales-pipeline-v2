@@ -183,7 +183,9 @@ export const handler = async (event) => {
                 lost_category:       r.lostCategory,
                 notes:               r.notes,
                 next_steps:          r.nextSteps,
-                ai_score:            r.aiScore ? { score: r.aiScore.score, verdict: r.aiScore.verdict } : null,
+                // Claude's own score, where one is stored; an explanation (AI scoring batch 2B) carries none, so null — never
+                // an empty object. The win chance comes to the API in batch 2C (Jeff, 17 Nov, Q2).
+                ai_score:            r.aiScore && Number.isFinite(Number(r.aiScore.score)) ? { score: r.aiScore.score, verdict: r.aiScore.verdict } : null,
                 created_at:          r.createdAt,
                 updated_at:          r.updatedAt,
             }));
