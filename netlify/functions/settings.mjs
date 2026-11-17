@@ -192,6 +192,9 @@ const handle = async (event, retry) => {
                 // the Connected Apps panel. Carried here so an Admin settings save
                 // never wipes it.
                 integrationRequests: row.extra?.integrationRequests || {},
+                // The org's deal model and its standing (AI scoring batch 2A): written only by the nightly pass and Train now
+                // (_dealScore.mjs); read by Settings' Deal scoring card. None until the first pass.
+                dealModel: row.extra?.dealModel || null,
                 // Company profile detail fields
                 companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
                 companyLegalName:     row.extra?.companyLegalName     || '',
@@ -434,6 +437,9 @@ const handle = async (event, retry) => {
                 // The server's own (state §0.221 — Q15): written only by integration-requests.mjs; a save keeps what is
                 // stored, whatever its body says (a body could mark an app requested and block the real request).
                 integrationRequests: existingExtra.integrationRequests || {},
+                // The server's own too (AI scoring batch 2A): written only by _dealScore.mjs; a save keeps what is stored,
+                // whatever its body says — named here so no save drops it.
+                dealModel: existingExtra.dealModel ?? null,
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
                 companyLegalName:     'companyLegalName'     in data ? (data.companyLegalName     || null) : existingExtra.companyLegalName     || null,

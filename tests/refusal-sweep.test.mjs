@@ -3465,7 +3465,9 @@ const P10_HOOKS = {
     },
 };
 const P10_HOOK_PARAMS = ['setRows', 'setContactModalError', 'setContactModalSaving', 'setTaskModalError', 'setTaskModalSaving', 'requestOrg', 'stillOrg', 'dbFetch',
-    'sentBody', 'shownRow', 'readRefusal', 'refusalWords', 'failureWords', 'addAudit', 'console', 'fireMentionSms'];
+    'sentBody', 'shownRow', 'readRefusal', 'refusalWords', 'failureWords', 'addAudit', 'console', 'fireMentionSms',
+    // The activity save hands its answer's deal scores to the app's deals (AI scoring batch 2A) — the hook's own helper.
+    'adoptScores'];
 const ROW_C1 = Object.freeze({ id: 'c1', name: 'as loaded' });
 const saveRecord = async (kind, { answer, create = false, switchOrg = false }) => {
     const k = P10_HOOKS[kind];
@@ -3477,7 +3479,7 @@ const saveRecord = async (kind, { answer, create = false, switchOrg = false }) =
     const setter = { contact: 'setContacts', task: 'setTasks', activity: 'setActivities' }[kind];
     const params = P10_HOOK_PARAMS.map((p) => (p === 'setRows' ? setter : p));
     const h = p10Fn(k.file, k.start, '\n    };\n', params, k.name, '\n    };')(rows.set, setError, setSaving, setError, setSaving, () => 'org_a', (o) => o === org.now,
-        p10Fetch(did, answer, org, switchOrg), sentBody, shownRow, readRefusal, refusalWords, failureWords, (...a) => did.audits.push(a), quiet, () => {});
+        p10Fetch(did, answer, org, switchOrg), sentBody, shownRow, readRefusal, refusalWords, failureWords, (...a) => did.audits.push(a), quiet, () => {}, () => {});
     const answered = await k.call(h, did, create, { setActivityModalError: setError, setActivityModalSaving: setSaving });
     return { ...did, answered, list: rows.value, same: rows.value === list, said: did.errors[did.errors.length - 1] };
 };

@@ -15,7 +15,7 @@ import { unarchived } from '../../utils/pickLink.js';
 export default function MeetingPrepPanel() {
     const {
         meetingPrepOpen, meetingPrepEvent, meetingPrepOppId, setMeetingPrepOpen, setMeetingPrepOppId,
-        opportunities, contacts, accounts, activities, tasks, calculateDealHealth,
+        opportunities, contacts, accounts, activities, tasks, dealScoreOf,
         handleAddActivity, setTaskRailId, setTaskRailMode, setEditingTask,
         escapeBlocked,
     } = useApp();
@@ -63,10 +63,11 @@ export default function MeetingPrepPanel() {
             .slice(0, 5)
         : [];
 
-    // Deal health
-    const health = matchedOpp ? calculateDealHealth(matchedOpp) : null;
-    const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.inkMuted;
-    const healthBg = health ? (health.score >= 70 ? `${T.ok}18` : health.score >= 40 ? `${T.warn}18` : `${T.danger}14`) : T.surface2;
+    // The deal's win chance, the server's (AI scoring batch 2A): its band read against the stage's usual; none while
+    // Deal scoring is off or before the deal is scored.
+    const win = matchedOpp ? dealScoreOf(matchedOpp) : null;
+    const healthColor = win ? T[win.tone] : T.inkMuted;
+    const healthBg = win ? (win.tone === 'danger' ? `${T.danger}14` : `${T[win.tone]}18`) : T.surface2;
 
     return (
         <>
@@ -112,20 +113,20 @@ export default function MeetingPrepPanel() {
                         </div>
                     )}
 
-                    {/* Deal Health */}
-                    {health && (
+                    {/* Win chance */}
+                    {win && (
                         <div>
-                            <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
+                            <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Win chance</div>
                             <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                                    <span style={{ fontWeight: '800', fontSize: '1.5rem', color: healthColor }}>{health.score}</span>
-                                    <span style={{ background: healthBg, color: healthColor, fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.625rem', borderRadius: '999px' }}>{health.score >= 70 ? 'Healthy' : health.score >= 40 ? 'At Risk' : 'Critical'}</span>
+                                    <span style={{ fontWeight: '800', fontSize: '1.5rem', color: healthColor }}>{win.percent}</span>
+                                    <span style={{ background: healthBg, color: healthColor, fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.625rem', borderRadius: '999px' }} title={win.words}>{win.status} for {matchedOpp.stage}</span>
                                 </div>
                                 <div style={{ height: '6px', background: T.border, borderRadius: '3px', overflow: 'hidden', marginBottom: '0.5rem' }}>
-                                    <div style={{ height: '100%', width: health.score + '%', background: healthColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                                    <div style={{ height: '100%', width: win.score + '%', background: healthColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
                                 </div>
-                                {health.reasons.slice(0, 2).map((r, i) => (
-                                    <div key={i} style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '0.25rem' }}>· {r}</div>
+                                {win.factors.slice(0, 2).map((f, i) => (
+                                    <div key={i} style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '0.25rem' }}>· {f.text}</div>
                                 ))}
                             </div>
                         </div>

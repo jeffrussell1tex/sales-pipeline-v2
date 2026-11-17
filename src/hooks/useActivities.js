@@ -11,6 +11,8 @@ const QUIET_RAIL = { setActivityModalError: () => {}, setActivityModalSaving: ()
 
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
+    // A write's answer names the deal scores it moved (AI scoring batch 2A): the deals on screen take them.
+    const adoptScores = (data) => { if (data?.dealScores && typeof deps.adoptDealScores === 'function') deps.adoptDealScores(data.dealScores); };
 
     const [activities, setActivities] = useState([]);
     const [activityModalError, setActivityModalError] = useState(null);
@@ -50,6 +52,7 @@ export function useActivities(deps) {
                 setUndoToast({ error: `Activity not deleted — ${r.error}` });
                 return;
             }
+            adoptScores(r.data);
             softDelete(
                 `Activity "${activity.type || 'Activity'}"`,
                 () => {},
@@ -63,6 +66,7 @@ export function useActivities(deps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(activity),
                     });
+                    if (rr.ok && stillOrg(askedOrg)) adoptScores(rr.data);
                     if (rr.ok || !stillOrg(askedOrg)) return;
                     setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
                     setUndoToast({ error: `Could not restore the activity — ${rr.error}` });
@@ -84,6 +88,7 @@ export function useActivities(deps) {
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
         if (!r.ok) return { ok: false, error: r.error };
         setActivities(prev => [...prev, activity]);
+        adoptScores(r.data);
         return { ok: true };
     };
 
@@ -118,6 +123,7 @@ export function useActivities(deps) {
                 const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
+                adoptScores(data);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
@@ -134,6 +140,7 @@ export function useActivities(deps) {
                 const data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
                 setActivities(prev => [...prev, data.activity || newActivity]);
+                adoptScores(data);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;

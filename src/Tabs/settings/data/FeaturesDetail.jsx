@@ -12,7 +12,7 @@ import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
 const FLAG_DEFS = [
-    { id:'deal-scoring',      name:'Deal scoring',           desc:'Health score (0–100) on every opportunity based on activity, stage age, and close date.',   beta:false, new:false, live:true  },
+    { id:'deal-scoring',      name:'Deal scoring',           desc:'Each open deal\'s chance of winning (Win %) — its stage, its health, and what this workspace has won and lost. Settings → Deal scoring.',   beta:false, new:false, live:true  },
     { id:'account-health-scores', name:'Account health scores', desc:'Aggregate health score per account rolled up from open opportunities.',                  beta:false, new:false, live:true  },
     { id:'territory-rules',   name:'Territory rules engine', desc:'Auto-assign accounts and opportunities to territories on create/update.',                    beta:false, new:false, live:true  },
     { id:'commit-categories', name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Omit forecast buckets on every opportunity.',               beta:false, new:false, live:true  },

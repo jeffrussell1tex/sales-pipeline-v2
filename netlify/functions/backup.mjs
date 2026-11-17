@@ -20,6 +20,7 @@ import { REV_KEYS, revsMinted } from '../../src/utils/settingsRevs.js';
 import { mintRev } from './_settingsRevs.mjs';
 // A deal's stage and close-date histories, kept entry by entry on a restore (state §0.239).
 import { restoredHistories } from '../../src/utils/dealHistory.js';
+import { scoreOrgDeals } from './_dealScore.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -390,6 +391,8 @@ export const handler = async (event) => {
             const ownSettings = (rows) => rows.map(r => {
                 const extra = r?.extra && typeof r.extra === 'object' && !Array.isArray(r.extra) ? { ...r.extra } : {};
                 if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };
+                // The deal model is the server's (AI scoring batch 2A): trained from the org's own deals, never a file's.
+                delete extra.dealModel;
                 delete extra.anthropicApiKey;
                 // Every key a new revision token, never the file's (state §0.224 — J-B13): a tab of this org that loaded
                 // before the restore landed holds none, and its next save is refused once, shown what landed.
@@ -514,6 +517,12 @@ export const handler = async (event) => {
                 if (swept.failed.length) errs.push(`links: not checked on ${swept.failed.join(', ')} — the restore stands, those links as the file had them.`);
                 if (swept.shelfFailed) errs.push('equipment: the units whose holder was cleared could not be marked available — they show as checked out to no one. Set them to Available in Settings → Dispatch → Vehicles & equipment.');
             } catch (e) { errs.push(`links: not checked — ${e?.cause?.message || e?.message}`); }
+
+            // Each deal scored by the server, never the file (AI scoring batch 2A): the restored deals land with none
+            // (restoredHistories), and the org's deals are scored on its model as stored. A failure leaves them for the
+            // nightly pass and says so.
+            try { await scoreOrgDeals(orgId, { train: false }); }
+            catch (e) { errs.push(`deal scores: not worked out — ${e?.cause?.message || e?.message}; the nightly pass will.`); }
 
             // Record a synthetic snapshot entry
             const snapId = generateSnapId() + '_import';

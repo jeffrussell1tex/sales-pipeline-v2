@@ -83,18 +83,18 @@ function TableHeader({ canSeeAll, selectMode }) {
             {/* Revenue sits right, Close left: the gap between them is Close's (state §0.187) */}
             <div style={{ paddingLeft: 16 }}>Close</div>
             <div>AI</div>
-            <div>Health</div>
+            <div>Win %</div>
             <div/>
         </div>
     );
 }
 
 // ── Table row ─────────────────────────────────────────────────
-function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isSelected, onToggleSelect }) {
+function TableRow({ opp, canSeeAll, dealScoreOf, onEdit, selectMode, isSelected, onToggleSelect }) {
     const [hover, setHover] = useState(false);
 
-    const health    = calculateDealHealth(opp);
-    const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
+    // The deal's win chance, the server's (AI scoring batch 2A); none while Deal scoring is off or before it is scored.
+    const win       = dealScoreOf(opp);
     const closeDays = opp.forecastedCloseDate
         ? calendarDays(todayLocal(), opp.forecastedCloseDate)   // signed calendar days: overdue from the next morning (§0.240)
         : null;
@@ -183,10 +183,16 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isS
                 )}
             </div>
 
-            {/* Health */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: hColor, flexShrink: 0 }}/>
-                <span style={{ fontSize: 11, color: T.inkMid, fontVariantNumeric: 'tabular-nums' }}>{health.score}</span>
+            {/* Win chance */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={win ? win.words : undefined}>
+                {win ? (
+                    <>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: T[win.tone], flexShrink: 0 }}/>
+                        <span style={{ fontSize: 11, color: T.inkMid, fontVariantNumeric: 'tabular-nums' }}>{win.percent}</span>
+                    </>
+                ) : (
+                    <span style={{ fontSize: 11, color: T.inkMuted }}>—</span>
+                )}
             </div>
 
             {/* Row action — ⋯ on hover */}
@@ -329,7 +335,7 @@ function StatStrip({ sum, activeGroup, fiscalStart }) {
 // ── ListView — exported component ─────────────────────────────
 // Props passed from PipelineTab, same pattern as KanbanView/FunnelView.
 export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode = false, selectedOpps = [], setSelectedOpps }) {
-    const { canSeeAll, calculateDealHealth, settings } = useApp();
+    const { canSeeAll, dealScoreOf, settings } = useApp();
     const toggleSelect = (id) => setSelectedOpps && setSelectedOpps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
 
@@ -406,7 +412,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
                                     key={opp.id}
                                     opp={opp}
                                     canSeeAll={canSeeAll}
-                                    calculateDealHealth={calculateDealHealth}
+                                    dealScoreOf={dealScoreOf}
                                     onEdit={handleEdit}
                                     selectMode={selectMode}
                                     isSelected={selectedOpps.includes(opp.id)}

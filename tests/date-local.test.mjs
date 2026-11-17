@@ -741,7 +741,10 @@ test('RULE (0.244): the close day reads "today", never "in 0 days"; one day is s
 test('WIRING (0.244): the bell\'s close reminder and the deal health\'s "Closing" say inDaysWords', () => {
     const app = readSrc('src/App.jsx');
     assert.ok(app.includes("message: `${opp.account} closing ${inDaysWords(daysToClose)}`,"), 'the bell');
-    assert.ok(app.includes("reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities');"), 'the deal health');
+    // The deal health's rules are the deal score's start since AI scoring batch 2A (src/utils/dealScore.js healthRules).
+    const score = readSrc('src/utils/dealScore.js');
+    assert.ok(score.includes("reason: 'Closing ' + inDaysWords(daysToClose) + ' with no activities' });"), 'the deal health');
+    assert.ok(!/closing in \$\{daysToClose\}|'Closing in ' \+ daysToClose/.test(score), 'no count said by hand in the score');
     assert.ok(!/closing in \$\{daysToClose\}|'Closing in ' \+ daysToClose/.test(app), 'no count said by hand');
 });
 
@@ -779,8 +782,10 @@ test('RULE (0.244): the deal health\'s last activity — an unreadable day says 
 });
 
 test('WIRING (0.244): the deal health reads activityHealth over daysSince, and takes nothing when it answers null', () => {
-    const app = readSrc('src/App.jsx');
-    assert.ok(app.includes('const activity = activityHealth(daysSince(lastActivity, now));'), 'read through activityHealth');
-    assert.ok(app.includes('if (activity) { score -= activity.penalty; reasons.push(activity.reason); }'), 'null takes nothing');
-    assert.ok(!app.includes("'Recent activity ' +"), 'no activity words in the screen');
+    // The deal score's start since AI scoring batch 2A (src/utils/dealScore.js healthRules); App.jsx works out no health.
+    const score = readSrc('src/utils/dealScore.js');
+    assert.ok(score.includes('const activity = activityHealth(days.length ? daysSince(days[days.length - 1], today) : null);'), 'read through activityHealth');
+    assert.ok(score.includes('if (activity) rules.push(activity);'), 'null takes nothing');
+    assert.ok(!score.includes("'Recent activity ' +"), 'no activity words in the score');
+    assert.ok(!readSrc('src/App.jsx').includes('calculateDealHealth'), 'no health worked out in the screen');
 });

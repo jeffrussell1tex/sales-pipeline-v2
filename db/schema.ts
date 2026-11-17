@@ -207,6 +207,9 @@ export const opportunities = pgTable('opportunities', {
     closeDateHistory:     jsonb('close_date_history'),
     comments:             jsonb('comments').default('[]'),
     aiScore:              jsonb('ai_score'),
+    // A deal's score, its chance of winning (AI scoring batch 2A; db/apply-deal-score.mjs): the server's alone
+    // (netlify/functions/_dealScore.mjs) — no default; never in sanitize (opportunities.mjs), so no body writes it.
+    dealScore:            jsonb('deal_score'),
     // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
     // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
     // any writer -- that is how a rep picks up unowned work. It does NOT mean

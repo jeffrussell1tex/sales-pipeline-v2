@@ -36,6 +36,23 @@ export function stagePalette(openStages) {
     return out;
 }
 
+// The Funnel stages panel's rows (AI scoring batch 2A — Jeff, 17 Nov, Q7: the panel saved `prob`, which nothing reads;
+// every reader — the deal window's default probability, the deal score's start — reads `weight`). Each stored stage
+// as the panel edits it: its weight (an old `prob` read as one, else 30 — the deal score's default), its type (Won and
+// Lost by the close's name, else Open) and its colour (by position, as stagePalette gives it).
+export function funnelRowsOf(list) {
+    const named = (Array.isArray(list) ? list : []).map((s) => (typeof s === 'string' ? { name: s } : s)).filter((s) => s && typeof s.name === 'string' && s.name);
+    let open = 0;
+    return named.map((s) => {
+        const w = Number(s.weight ?? s.prob);
+        const type = s.type === 'Won' || s.type === 'Lost' || s.type === 'Open' ? s.type : s.name === 'Closed Won' ? 'Won' : s.name === 'Closed Lost' ? 'Lost' : 'Open';
+        const color = typeof s.color === 'string' && s.color ? s.color : type === 'Won' ? WON_COLOR : type === 'Lost' ? LOST_COLOR : PALETTE[open % PALETTE.length];
+        if (type === 'Open') open += 1;
+        const { prob: _p, ...rest } = s;
+        return { ...rest, weight: Number.isFinite(w) ? Math.max(0, Math.min(100, Math.round(w))) : 30, type, color };
+    });
+}
+
 /** The last two open stages: a deal there with no forecast category counts as commit. */
 export const commitFallbackStages = (openStages) => (openStages || []).slice(-2);
 /** The stage before those: no forecast category there counts as best case. */

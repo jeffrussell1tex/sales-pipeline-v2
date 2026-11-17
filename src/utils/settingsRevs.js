@@ -11,7 +11,11 @@
 export const COLUMN_KEYS = Object.freeze(['companyName', 'companyLogo', 'fiscalYearStart', 'taskTypes', 'verticalMarkets']);
 
 // Every key a token covers: each key the settings PUT stores (settings.mjs's `const extra = {` — the test reads it)
-// but integrationRequests (the server's own, Q15 — no screen sends it), and the columns.
+// but integrationRequests (the server's own, Q15 — no screen sends it) and dealModel (the server's own, AI scoring
+// batch 2A), and the columns.
+// The keys of `extra` only the server writes: a save keeps them as stored, whatever its body names.
+export const SERVER_KEYS = new Set(['integrationRequests', 'dealModel']);
+
 export const REV_KEYS = Object.freeze([
     'quotaData', 'commissionTiers', 'spiffs', 'pipelines', 'teams', 'territories', 'verticals', 'kpiTolerances',
     'kpiTargets', 'logoUrl', 'kpiConfig', 'commissionPlan', 'products', 'aiScoringEnabled', 'aiReportPromptsEnabled',
@@ -98,13 +102,13 @@ export const staleKeys = (ifRevs, storedRevs, keys) =>
     keys.filter((k) => ((ifRevs || {})[k] ?? null) !== ((storedRevs || {})[k] ?? null));
 
 /**
- * The keys of `extra` this save writes: those it sent (never integrationRequests, Q15; the API key only when it is
- * set, cleared or moved — keyAction), and aiSettings when the stored blob needs its scrub.
+ * The keys of `extra` this save writes: those it sent (never integrationRequests, Q15, or dealModel, AI scoring 2A; the
+ * API key only when it is set, cleared or moved — keyAction), and aiSettings when the stored blob needs its scrub.
  */
 export function writtenKeys(data, storedKeys, { keyAction = null, aiScrubbed = false } = {}) {
     const known = new Set(storedKeys);
     const out = Object.keys(isPlain(data) ? data : {})
-        .filter((k) => known.has(k) && k !== 'integrationRequests' && k !== 'anthropicApiKey');
+        .filter((k) => known.has(k) && !SERVER_KEYS.has(k) && k !== 'anthropicApiKey');
     if (keyAction) out.push('anthropicApiKey');
     if (aiScrubbed && !out.includes('aiSettings')) out.push('aiSettings');
     return out;

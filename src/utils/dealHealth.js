@@ -1,4 +1,5 @@
-// A deal's health, the parts a test can run (state §0.244): App.jsx's calculateDealHealth reads them here.
+// A deal's health, the parts a test can run (state §0.244): the deal score's start reads them (src/utils/dealScore.js
+// healthRules — AI scoring batch 2A; App.jsx worked out the health score before).
 
 // The last-activity part (state §0.240, §0.244): what the days since the deal's last activity cost its score and the
 // reason said. An activity day that does not read (null) says nothing of the days -- no points, no reason -- never

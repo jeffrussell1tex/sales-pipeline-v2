@@ -11,6 +11,9 @@ import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 import { checkLinks } from './_links.mjs';
+// A deal's score moves with the activities on it (AI scoring batch 2A): the deal an activity names is scored again
+// after each write, and the answer hands the score back for the screens to keep.
+import { rescoreDeals } from './_dealScore.mjs';
 
 // The links an activity stores, each a live row of this org when a write names it anew (state §0.199):
 // its account, deal, lead and contacts — contactIds and its first, contactId, one link between them.
@@ -124,7 +127,7 @@ export const handler = async (event) => {
             const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).onConflictDoNothing({ target: activities.id }).returning();
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That activity id is already in use.' }) };
             if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
-            return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted }) };
+            return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted, dealScores: await rescoreDeals(orgId, [inserted.opportunityId]) }) };
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
@@ -176,7 +179,8 @@ export const handler = async (event) => {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) };
             }
             if (upserted.leadId) { try { await rescoreLead(orgId, upserted.leadId); } catch (e) { console.warn('lead rescore (put) failed:', e.message); } }
-            return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted }) };
+            // The deal it names now, and the one it named before when the edit moved it.
+            return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted, dealScores: await rescoreDeals(orgId, [upserted.opportunityId, target.opportunityId]) }) };
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
@@ -209,7 +213,7 @@ export const handler = async (event) => {
             if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await writeAudit(orgId, deletionAudit('activity', deletedRow, { userId }));
             if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, dealScores: await rescoreDeals(orgId, [deletedRow.opportunityId]) }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {

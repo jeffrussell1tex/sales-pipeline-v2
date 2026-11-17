@@ -85,6 +85,7 @@ const ACTIONS = {
     'merge.mjs':                    ['account.merged', 'contact.merged', 'account.merge_undone', 'contact.merge_undone'],
     'lead-intake.mjs':              ['lead.received'],
     'train-lead-model.mjs':         ['lead_model.trained'],
+    'train-deal-model.mjs':         ['deal_model.trained'],   // AI scoring batch 2A — an Admin's Train now
     'dispatch-jobs.mjs':            ['dispatch_job.created', 'dispatch_job.updated', 'dispatch_job.deleted', 'dispatch_job.line_item_added', 'dispatch_job.line_item_removed'],
     'dispatch-technicians.mjs':     ['dispatch_technician.created', 'dispatch_technician.updated', 'dispatch_technician.deleted'],
     'dispatch-vehicles.mjs':        ['dispatch_vehicle.created', 'dispatch_vehicle.updated', 'dispatch_vehicle.deleted'],
@@ -135,7 +136,7 @@ test('saved reports: the schedule event carries the schedule in words; a share i
 
 test('the log’s categories know the new entity types', () => {
     const ui = code(read('src/Tabs/settings/audit/AuditDetail.jsx'));
-    for (const t of ['saved_report', 'report_delivery', 'product', 'document', 'dashboard', 'spiff_claim', 'recommendation', 'dispatch_job', 'dispatch_customer', 'dispatch_technician', 'lead_model']) assert.ok(ui.includes(`${t}:'data'`), `${t} → data`);
+    for (const t of ['saved_report', 'report_delivery', 'product', 'document', 'dashboard', 'spiff_claim', 'recommendation', 'dispatch_job', 'dispatch_customer', 'dispatch_technician', 'lead_model', 'deal_model']) assert.ok(ui.includes(`${t}:'data'`), `${t} → data`);
     for (const t of ['ai_reading', 'dsr', 'export_schedule', 'backup', 'calendar_connection']) assert.ok(ui.includes(`${t}:'security'`), `${t} → security`);
     assert.ok(ui.includes("automation:'admin'"));
 });

@@ -7,7 +7,7 @@ import { readRefusal, failureWords } from './utils/refusalWords.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
-import { activityHealth } from './utils/dealHealth.js';
+import { featureOn, dealScoreView, withDealScores } from './utils/dealScore.js';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
@@ -330,6 +330,7 @@ function App() {
     const _opportunitiesRef = useRef([]);
     const _onDealWonRef = useRef(null);
     const _onLeadConvertedRef = useRef(null);
+    const _adoptDealScoresRef = useRef(null);
     const _deps = {
         get addAudit()            { return _addAuditRef.current; },
         get showConfirm()         { return _showConfirmRef.current; },
@@ -341,6 +342,7 @@ function App() {
         get opportunities()       { return _opportunitiesRef.current; },
         get onDealWon()           { return _onDealWonRef.current; },
         get onLeadConverted()     { return _onLeadConvertedRef.current; },
+        get adoptDealScores()     { return _adoptDealScoresRef.current; },
     };
 
     const {
@@ -350,6 +352,10 @@ function App() {
         loadOpportunities,
         handleDeleteDeals, handleSave, completeLostSave, saveDealNote,
     } = useOpportunities(_deps);
+    // The deal scores an activity's save handed back (AI scoring batch 2A): the server scored the deal again; the deals on
+    // screen take it. The caller has checked its answer is this org's (stillOrg).
+    const adoptDealScores = (scores) => setOpportunities(prev => withDealScores(prev, scores));
+    _adoptDealScoresRef.current = adoptDealScores;
 
     const {
         accounts, setAccounts,
@@ -1316,61 +1322,13 @@ dbFetch('/.netlify/functions/users?me=true')
         setLogFromCalLinkingId(null);
     };
 
-    // Deal Health Calculation
-    const calculateDealHealth = (opportunity) => {
-        if (!opportunity) return { score: 0, status: 'unknown', color: 'gray', reasons: [] };
-        
-        let score = 100;
-        const reasons = [];
-        const now = new Date();
-        
-        // Check last activity
-        const oppActivities = activities.filter(a => a.opportunityId === opportunity.id);
-        if (oppActivities.length > 0) {
-            const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
-            // An activity date that does not read says nothing of the days (state §0.240): activityHealth answers null.
-            const activity = activityHealth(daysSince(lastActivity, now));
-            if (activity) { score -= activity.penalty; reasons.push(activity.reason); }
-        } else {
-            score -= 30;
-            reasons.push('No activities logged for this opportunity');
-        }
-        
-        // Check time in current stage
-        // Calendar days (state §0.240): the stage day was read as UTC midnight -- the evening
-        // before, west of Greenwich -- and the close date the same way, so both ran a day out.
-        const daysInStage = opportunity.stageChangedDate ? daysSince(opportunity.stageChangedDate, now) : null;
-        if (daysInStage != null) {
-            if (daysInStage > 60) { score -= 30; reasons.push('Stuck in current stage for ' + daysInStage + ' days'); }
-            else if (daysInStage > 30) { score -= 15; reasons.push('In current stage for ' + daysInStage + ' days'); }
-            else { reasons.push('In current stage for ' + daysInStage + ' days'); }
-        }
-        
-        // Check close date proximity
-        // Signed: today is 0, overdue only from the next morning.
-        const daysToClose = opportunity.forecastedCloseDate ? calendarDays(now, opportunity.forecastedCloseDate) : null;
-        if (daysToClose != null) {
-            if (daysToClose < 0) { score -= 35; reasons.push('Close date is ' + Math.abs(daysToClose) + ' days overdue'); }
-            // The close day itself reads "today", never "in 0 days" (state §0.240).
-            else if (daysToClose < 7 && oppActivities.length === 0) { score -= 20; reasons.push('Closing ' + inDaysWords(daysToClose) + ' with no activities'); }
-            else if (daysToClose < 14) { reasons.push(daysToClose === 0 ? 'Close date is today' : 'Close date approaching in ' + daysToClose + (daysToClose === 1 ? ' day' : ' days')); }
-        }
-        
-        // Determine status and color
-        let status, color;
-        if (score >= 75) {
-            status = 'Healthy';
-            color = 'var(--accent-success)';
-        } else if (score >= 50) {
-            status = 'At Risk';
-            color = 'var(--accent-warning)';
-        } else {
-            status = 'Critical';
-            color = 'var(--accent-danger)';
-        }
-        
-        return { score, status, color, reasons };
-    };
+    // A deal's score, its chance of winning (AI scoring batch 2A; docs/design/deal-score — Jeff, 17 Nov): the server's,
+    // kept on the deal (opp.dealScore, netlify/functions/_dealScore.mjs), so every member reads one number — the health
+    // score was worked out here from this screen's own activities, which a rep's list holds only in part (OPEN_ITEMS
+    // §4.2). Its rules are src/utils/dealScore.js healthRules. Shown only while the org's "Deal scoring" switch is on
+    // (Q6: the switch made to work — the screens asked an isFeatureEnabled nothing provided, so it answered on).
+    const isFeatureEnabled = (flagId) => featureOn(settings?.featureFlags, flagId);
+    const dealScoreOf = (opportunity) => (isFeatureEnabled('deal-scoring') ? dealScoreView(opportunity) : null);
 
     // Win Probability Helper (used by analytics)
     const getWinProbability = (stage) => {
@@ -1881,7 +1839,7 @@ dbFetch('/.netlify/functions/users?me=true')
         getQuarter,
         getQuarterLabel,
         getStageColor,
-        calculateDealHealth,
+        dealScoreOf, isFeatureEnabled, adoptDealScores,
         exportToCSV,
         showConfirm,
         showPrompt,

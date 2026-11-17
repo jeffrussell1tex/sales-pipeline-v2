@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b129** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b130** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4792,3 +4792,16 @@ THE GUARD: tests/lead-convert.test.mjs — both creates and `markLeadConverted` 
 4. **A change to the grading is proven by a sample graded both ways** — each entry by the full SUITES and by the parts, every verdict the same — before it is used.
 
 THE GUARD: tests/mutate-likely.test.mjs — the parts, the verdict, a run's options and a real run, each suite alone, and both runners line by line.
+
+## 18b130. A Deal's Score Is The Server's, Kept On The Deal — One Number For Every Member; A Model Learns From One Org's Own Closed Deals, Measured As They Were (hard rule)
+
+**Origin (§0.256, 17 Nov 2026 — OPEN_ITEMS §3.1 batch 2; docs/design/deal-score, Jeff: "All recommended").** The health score was worked out in the browser from the activities each screen held, and a rep's list holds only their own and the unassigned, so one deal read differently for its rep and their manager (OPEN_ITEMS §4.2). The plan's model learns from closed deals; a closed deal looks closed, and a model shown the close learns nothing it can use on an open one.
+
+1. **A deal's score is written by the server alone** (netlify/functions/_dealScore.mjs): no sanitize names `dealScore`, no body, file or screen writes it; a restore lands a deal with none and scores the org.
+2. **Every write that can move a score scores its deal again in the same request**, and the answer hands the score back — a deal's create, save and import (the row), an activity's create, edit (the deal it names and the one it named) and delete (`dealScores`, which the screens take). A write that moves only a learned input (a merge, a quote's accept, an automation's field) is left to the nightly pass; say so where one is added.
+3. **The screens read the kept score through one reader** (`dealScoreOf`, App.jsx), behind the org's Deal scoring switch, coloured by its band — never a threshold of their own.
+4. **An org's model learns from that org's closed deals alone**, each measured on its last open day from what is dated strictly before it — never the stage name, won or lost date or loss reason; a deal with nothing known before its close does not teach. The model is `settings.extra.dealModel`, the server's key (`SERVER_KEYS`): the PUT keeps the stored one, a restore drops a file's.
+5. **A model's accuracy is measured on deals held out of its training**, never on the deals it fitted, and Settings says it in those words.
+6. **A kept score is compared key by key, never as text** (`sameDealScore`): the database hands a jsonb object back in its own key order, and a score read as changed is rewritten on every pass. A pass that changed nothing writes nothing; Train now loads the screen's deals again once it lands.
+
+THE GUARD: tests/deal-score.test.mjs (the rule, run; a deal closed won and closed lost measures the same) and tests/deal-score-server.test.mjs (one writer; every write rescored; the model the server's; one reader on screen); tests/integration/deal-score.itest.mjs (another org's model, deals and scores untouched).

@@ -9,20 +9,17 @@ import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+import { funnelRowsOf } from '../../../utils/stageOrder.js';
+import { DEFAULT_SETTINGS } from '../../../utils/settingsDefaults.js';
 
-const DEFAULT_FUNNEL_STAGES = [
-    { name:'Prospecting',  prob:10,  type:'Open', color:'#e07b4a' },
-    { name:'Qualification',prob:25,  type:'Open', color:'#d4a847' },
-    { name:'Discovery',    prob:40,  type:'Open', color:'#8aab5a' },
-    { name:'Proposal',     prob:60,  type:'Open', color:'#4a8abd' },
-    { name:'Negotiation',  prob:80,  type:'Open', color:'#7a5abd' },
-    { name:'Closing',      prob:90,  type:'Open', color:'#4aad8a' },
-    { name:'Closed Won',   prob:100, type:'Won',  color:'#4d6b3d' },
-    { name:'Closed Lost',  prob:0,   type:'Lost', color:'#9c3a2e' },
-];
+// A workspace with no stages saved shows the app's own (Jeff, 17 Nov, Q7): this list named Prospecting, Negotiation and
+// Closing, which no deal can be in.
+const DEFAULT_FUNNEL_STAGES = funnelRowsOf(DEFAULT_SETTINGS.funnelStages);
 
 export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
-    const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
+    // Each stage's weight is what the app reads (Q7): a stored stage holds name and weight; the panel's type and colour are
+    // filled in for it, and saved with it.
+    const saved = settings?.funnelStages?.length ? funnelRowsOf(settings.funnelStages) : DEFAULT_FUNNEL_STAGES;
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
@@ -33,7 +30,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
         setDirty(true);
     };
     const addStage = () => {
-        setStages(prev => [...prev, { name:'New stage', prob:50, type:'Open', color:'#8a8378' }]);
+        setStages(prev => [...prev, { name:'New stage', weight:50, type:'Open', color:'#8a8378' }]);
         setDirty(true);
     };
     const handleCancel = () => { setStages(JSON.parse(JSON.stringify(saved))); setDirty(false); };
@@ -95,7 +92,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                             columns={[
                                 { key:'drag',  label:'',              w:'28px' },
                                 { key:'name',  label:'Stage',         w:'1.4fr' },
-                                { key:'prob',  label:'Default prob.',  w:'140px', align:'right' },
+                                { key:'weight', label:'Default prob.', w:'140px', align:'right' },
                                 { key:'type',  label:'Type',           w:'90px' },
                                 { key:'used',  label:'Used in',        w:'140px' },
                                 { key:'state', label:'State',          w:'80px' },
@@ -108,8 +105,8 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                                         style={{ width:14, height:14, border:'none', borderRadius:'50%', padding:0, cursor:'pointer', flexShrink:0 }}/>
                                     <b style={{ fontFamily:T.sans }}>{s.name}</b>
                                 </span>,
-                                prob: <input type="number" min="0" max="100" value={s.prob}
-                                    onChange={e => update(i,'prob',Math.max(0,Math.min(100,parseInt(e.target.value)||0)))}
+                                weight: <input type="number" min="0" max="100" value={s.weight}
+                                    onChange={e => update(i,'weight',Math.max(0,Math.min(100,parseInt(e.target.value)||0)))}
                                     style={{ width:60, padding:'3px 6px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right' }}/>,
                                 type: <select value={s.type} onChange={e => update(i,'type',e.target.value)}
                                     style={{ fontSize:12, padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer' }}>
@@ -154,7 +151,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                                     <path
                                         d={openStages.map((s,i) => {
                                             const x = 30 + (i/(openStages.length-1))*280;
-                                            const y = 132 - (s.prob/100)*112;
+                                            const y = 132 - (s.weight/100)*112;
                                             return `${i===0?'M':'L'}${x} ${y}`;
                                         }).join(' ')}
                                         stroke={T.goldInk} strokeWidth="2" fill="none"
@@ -162,7 +159,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                                 )}
                                 {openStages.map((s,i) => {
                                     const x = 30 + (i/(Math.max(openStages.length-1,1)))*280;
-                                    const y = 132 - (s.prob/100)*112;
+                                    const y = 132 - (s.weight/100)*112;
                                     return <circle key={i} cx={x} cy={y} r="4" fill={s.color||T.goldInk}/>;
                                 })}
                                 {[0,25,50,75,100].map((v,i) => (
@@ -175,7 +172,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                         </div>
                         <div style={{ padding:'12px 14px', background:'rgba(77,107,61,0.08)', borderTop:`1px solid ${T.border}` }}>
                             <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
-                                <b style={{ color:T.ink }}>Forecast math.</b> A $100k deal at Proposal ({openStages.find(s=>s.name==='Proposal')?.prob||60}%) contributes ${Math.round((openStages.find(s=>s.name==='Proposal')?.prob||60))}k to weighted pipeline.
+                                <b style={{ color:T.ink }}>Forecast math.</b> A $100k deal at Proposal ({openStages.find(s=>s.name==='Proposal')?.weight ?? 60}%) contributes ${Math.round((openStages.find(s=>s.name==='Proposal')?.weight ?? 60))}k to weighted pipeline.
                             </div>
                         </div>
                     </div>

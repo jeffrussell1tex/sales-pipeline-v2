@@ -280,7 +280,7 @@ const CLASSIFIED = {
     // its own check: an approver is an ACTIVE Admin or Manager (state §0.157 — Q14, kept)
     approvalTiers: 'own check', approvalRouting: 'own check',
     // the server's own: never taken from a body
-    integrationRequests: 'server', anthropicApiKey: 'server',
+    integrationRequests: 'server', anthropicApiKey: 'server', dealModel: 'server',
     // lists rows name by an entry's id, with built-in ids every org shares — their own batch, 4b-4 (Q16)
     dispatchSkills: '4b-4', dispatchCerts: '4b-4', dispatchTrades: '4b-4', dispatchBlockTypes: '4b-4',
     dispatchPropertyTypes: '4b-4', buyerPersonas: '4b-4', productTypes: '4b-4',

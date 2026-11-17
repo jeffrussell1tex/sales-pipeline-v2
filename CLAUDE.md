@@ -204,6 +204,13 @@ One commit per verified batch; doc patch in the same commit.
   "Available to" names (`mayUseAi`; before the key and any cached score);
   one audit row each way, never the key; no model id written anywhere
   else (THE GUARD, tests/ai-models.test.mjs; guide §18b121).
+- A deal's score (`deal_score`, its chance of winning) and an org's deal model
+  (`settings.extra.dealModel`) are the server's alone (`_dealScore.mjs`): no body,
+  file or screen writes either; every write that can move a score rescores its
+  deal in the request and hands it back; the screens read it through
+  `dealScoreOf`, behind the Deal scoring switch; a model learns from its own
+  org's closed deals, measured as they were, its accuracy on deals held out
+  (THE GUARD, tests/deal-score-server.test.mjs; guide §18b130).
 - A Sales Rep's quota is a plan per fiscal year (`profile.quotaPlans`):
   `PUT /users?quotas=true` is its one writer; every other save keeps it
   (`storedQuota`, and `keepQuotaPlans` on any write of a member's whole

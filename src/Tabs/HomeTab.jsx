@@ -153,7 +153,7 @@ export default function HomeTab() {
         opportunities, accounts, contacts, tasks, activities, settings,
         currentUser, userRole, canSeeAll, spiffClaims,
         getStageColor,
-        calculateDealHealth, getKpiColor,
+        getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
         calendarEvents, calendarConnected, calendarLoading, calendarError, fetchCalendarEvents, calendarRead,
         setActiveTab, isMobile,

@@ -64,10 +64,12 @@ export function keptEntries(list, isEntry) {
 }
 
 // A deal a restore lands: each history kept entry by entry (Q4). A list that is no list is left out, and the
-// column takes its default (the stage history's []; the close-date history's none).
+// column takes its default (the stage history's []; the close-date history's none). A file's deal score is left out
+// too — the server's alone (AI scoring batch 2A; backup.mjs scores the org after the restore).
 export function restoredHistories(row) {
     if (!row || typeof row !== 'object') return row;
     const out = { ...row };
+    delete out.dealScore;
     for (const [key, isEntry] of [['stageHistory', isStageEntry], ['closeDateHistory', isCloseDateEntry]]) {
         if (!(key in out)) continue;
         if (out[key] == null) { delete out[key]; continue; }

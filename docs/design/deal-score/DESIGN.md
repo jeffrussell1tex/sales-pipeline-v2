@@ -183,6 +183,18 @@ These design choices are made above unless Jeff says otherwise:
 - a server-only settings key for the model (R3);
 - 5-fold held-out accuracy (R1).
 
+## 8. Batch 2A's code map and build (17 Nov)
+
+Read by four read-only mappers (the writers of deals and activities; the settings key and the jobs; the screens that drew the health score), each load-bearing claim re-read before use. What it found that moved the build:
+- The "Deal scoring" switch did nothing: the screens asked an `isFeatureEnabled` the app never provided (PipelineTab.jsx:362-363), so it answered on — Q6.
+- Settings → Funnel stages edited `prob`; every reader reads `weight`; all six orgs hold `weight` (a SELECT, 17 Nov), none has saved the panel — Q7.
+- The screens coloured the health score by three different thresholds (65/45, 70/40, 75/50).
+- A rep's activities GET holds only their own and the unassigned (activities.mjs:95-109) — the health score differed by viewer (F1).
+- A new settings key must be named in the PUT's list or every Admin save drops it; a server-only one joins integrationRequests' treatment (`SERVER_KEYS`).
+- A seventh scheduled job joins `SCHEDULED_JOBS` (jobHealth.js) and netlify.toml.
+
+Q6-Q9 (ANSWERS.md) each the Recommended. Built 17 Nov — state §0.256, guide §18b130.
+
 ## 7. Found while reading (not filed; each for Jeff to decide)
 
 - **F1. One deal's health score can read differently for its rep and for an Admin or Manager.**

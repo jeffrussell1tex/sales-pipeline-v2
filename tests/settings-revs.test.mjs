@@ -85,7 +85,7 @@ test('R2 — every key a token covers is a key the settings PUT stores (but inte
     const block = s.slice(s.indexOf('const extra = {'), s.indexOf('anthropicApiKey:  encryptedApiKey,') + 'anthropicApiKey:'.length);
     const keys = [...block.matchAll(/^\s{16}([A-Za-z]+):/gm)].map((m) => m[1]);
     assert.ok(keys.length >= 80, `the PUT's keys read: ${keys.length}`);
-    assert.deepEqual([...REV_KEYS].sort(), [...keys.filter((k) => k !== 'integrationRequests'), ...COLUMN_KEYS].sort());
+    assert.deepEqual([...REV_KEYS].sort(), [...keys.filter((k) => k !== 'integrationRequests' && k !== 'dealModel'), ...COLUMN_KEYS].sort());
     assert.deepEqual(COLUMN_KEYS, ['companyName', 'companyLogo', 'fiscalYearStart', 'taskTypes', 'verticalMarkets']);
     for (const k of COLUMN_KEYS) assert.match(s, new RegExp(`'${k}'\\s+in data\\s*\\?`), `${k} is a column the PUT writes when sent`);
 });
@@ -206,6 +206,7 @@ const WRITERS = {
     'netlify/functions/settings.mjs': { insert: 1, update: 0, why: 'the PUT: the patch, compared on its tokens in the write (R3, R4)' },
     'netlify/functions/_links.mjs': { insert: 0, update: 2, why: 'removeWithLists and clearSettingsLinks: extraPatched, guarded on what they read (R6)' },
     'netlify/functions/score-leads-batch.mjs': { insert: 0, update: 1, why: 'scoreOrg: the rules alone, guarded on them as read (train-now.test.mjs)' },
+    'netlify/functions/_dealScore.mjs': { insert: 0, update: 1, why: 'scoreOrgDeals: dealModel alone, guarded on it as read; no token — no screen saves the key (deal-score-server.test.mjs)' },
     'netlify/functions/integration-requests.mjs': { insert: 1, update: 1, why: 'one request merged while none is stored; no token — no screen saves the key, Q15 (connected-apps.test.mjs)' },
     'scripts/seed-qa-org.mjs': { insert: 0, update: 1, why: 'the keys it adds, while missing, with tokens (qa-seed.test.mjs)' },
 };

@@ -46,10 +46,10 @@ const CheckIcon = ({ size = 11 }) => (
 // ── KanbanCard — pixel-exact from PV1KanbanCard in mockup ────
 function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities, selectMode }) {
     const [hover, setHover] = React.useState(false);
-    const { calculateDealHealth } = useApp();
+    const { dealScoreOf } = useApp();
 
-    const health = calculateDealHealth(opp);
-    const hColor = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
+    // The deal's win chance, the server's (AI scoring batch 2A); none while Deal scoring is off or before it is scored.
+    const win = dealScoreOf(opp);
 
     const daysInStage = opp.stageChangedDate
         ? daysSince(opp.stageChangedDate)   // calendar days (state §0.240): from the day's noon it ran one low
@@ -154,8 +154,8 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
                 fontSize: 10, color: T.inkMuted,
                 borderTop: `1px solid ${T.border}`, paddingTop: 6,
             }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: hColor, flexShrink: 0 }}
-                    title={`Health: ${health.status} (${health.score}/100)`}/>
+                {win && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T[win.tone], flexShrink: 0 }}
+                    title={win.words}/>}
 
                 {opp.aiScore && (
                     <span style={{

@@ -53,7 +53,8 @@ test('the blues went by role: a primary button is the ink button, a link or bord
     assert.ok(app.includes('<rect width="100" height="100" rx="20" fill={T.ink}/>'), 'the sign-in mark is ink');
     assert.ok(app.includes("background: dbOffline === 'auth' ? T.warn : T.danger"), 'the offline banner');
     const prep = code(read('src/components/layout/MeetingPrepPanel.jsx'));   // cut out of App (§0.185)
-    assert.ok(prep.includes("const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.inkMuted;"), 'the meeting-prep health colour');
+    // The win chance's colour is its band's token since AI scoring batch 2A (never a hex).
+    assert.ok(prep.includes("const healthColor = win ? T[win.tone] : T.inkMuted;"), 'the meeting-prep win-chance colour');
 });
 
 test('LeadImportModal wears CsvImportModal’s chrome: the warm surface, radius 12, a border, the dark drag-handle header', () => {

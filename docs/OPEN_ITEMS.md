@@ -465,7 +465,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    the deal score (a chance of winning, on the server, kept on the deal,
    in the health score's place) and its per-org learner, idle until an org
    has 20 teaching deals (none has today); **2B** Claude explains it. Next:
-   2A's code map, then the build.
+   2A's code map, then the build. **2A built 17 Nov (state §0.256; guide
+   §18b130)** — its own Q6-Q9 answered (ANSWERS.md), the column applied on
+   Jeff's go; its browser check PASSED as Karen and Jeff 17 Nov (two fixes
+   found in it and made). Next: 2B.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1033,6 +1036,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - Jeff's own look on PROD: "ineos" and "arkema" in New Contact → Company and
   New Deal → Account (the pane check used made-up rows, not UKG's).
 
+- **Deals show no win chance until they are scored** (§0.256, 17 Nov — Jeff
+  decides at the ship): a deal is scored when it or an activity on it is
+  saved, by an Admin's Train now (Settings → Sales process → Deal scoring),
+  or by the nightly pass — which runs on prod only, and only once §0.256
+  ships. Until then the dot, the "Win %" column and meeting prep show
+  nothing for that deal (the health score showed for every deal). On dev it
+  is so until each org's Train now. Recommended: at the ship, Train now in
+  each org Jeff uses (UKG, QA), or a one-shot scoring script over every org
+  on his go (it writes only `deal_score` and `dealModel`).
+
 ### 2.3 Before selling
 
 - ~~**A quote shows Accelerep's name to every org** (Escape in the tabs'
@@ -1382,6 +1395,14 @@ worked out on the server and kept on the deal (a new nullable column,
 score's place on every screen; a per-org model on teaching deals measured
 as they were before the close, held-out accuracy, fixed at 20 with the
 plan's curve, nightly and by Train now; **2B**, Claude explains the number.
+**2A built 17 Nov (state §0.256; guide §18b130)**: `opportunities.deal_score`
+applied to both databases on Jeff's go; the win chance in the health score's
+place behind a Deal scoring switch that now works (Q6), Funnel stages saving
+the weight the app reads (Q7), "Win chance" (Q8); Settings → Deal scoring and
+Train now; the nightly pass score-deals-batch. **2B, next:** Claude explains
+the number from the model's strongest factors and the AI Score tab shows it;
+Claude's own 0-100 retires once an org's model has a share (decision 1). The
+deal window shows no win chance yet (the health score never showed there).
 A SELECT-only census (17 Nov): no org has 20 closed deals (most 17, a demo
 org; UKG 0 won, 6 lost; QA 3 and 1), so every org runs on the rules until
 it does.
@@ -2432,7 +2453,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **The Sales Manager's commission and SPIFF saves judge a refusal on words rebuilt from a string** (§0.249, 13 Nov — the last pass's verifier (F4); read in code; contrived bodies): `saveExtra` reads `writeSettings`' answer, whose words `refusalOf` (src/utils/storage.js) has already composed — it tests `body?.error` for truthiness and appends ` (ref <requestId>)` without checking that the error is a string — and `saidOf` (SalesManagerTab.jsx) turns them back into a body for `ownRefusal`. So a 4xx whose error is blank or not a string but which carries a `requestId` reads as the server's own refusal and says "Not saved — …" (400 `{ error: '   ', requestId: 'r1' }` the blank and the ref; 422 `{ error: { message: 'x' }, requestId: 'r1' }` "[object Object] (ref r1)"), where the maybe sentence is the rule. settings.mjs's own 4xx carry no `requestId`, so no answer seen has the shape. Recommended: `refusalOf` takes only a non-blank string error, or `writeSettings` hands back the body as well as the words. Low.
 - **A quiet activity save's thrown failure answers nothing** (§0.249, 13 Nov — Part 12c's builder; read in code; older): useActivities' `saveActivity` (src/hooks/useActivities.js) answers a refusal `{ ok: false, status, error, field }`, but its edit's and create's catches answer `undefined` after `setActivityModalError(failureWords(err))` — and a quiet save (the task rail's completion notes, `QUIET_RAIL`) drops that setter, so the caller has no words of the failure: TaskRail's `said()` falls back to Q4's "The server could not be reached." whatever threw. Recommended: the catches answer `{ ok: false, status: 0, error: failureWords(err) }`. Low.
 - **The outage banner is cleared by the next load that lands** (§0.249, 14 Nov — found in the browser check as Jeff; older — the loaders as at HEAD): each record load sets the banner from its own answer (`setDbOffline(dbStatusOf(r))` in useAccounts, useContacts, useOpportunities, useTasks, useActivities and useDocuments, useQuotes, and App.jsx's `checkOk`), so a load that lands after a failed one sets it back to none — with all six record loads answered 500 in the page on an org switch, "The server returned an error loading your data — changes may not be saving. Refresh the page to try again." stood for one frame and was gone, the failed lists drawn empty beneath nothing. Recommended: the banner holds while any load's latest answer failed (the failed loads kept by name, each cleared by its own next ok), reset on an org switch. Medium.
-- **One deal's health score can read differently for its rep and for an Admin or Manager** (17 Nov — batch 2's design read; read in code): `calculateDealHealth` scores from the activities the screen holds (App.jsx:1327 filters the loaded list), and a rep's activities GET holds only their own and unassigned rows (activities.mjs:95-109), so a manager's call logged on the rep's deal counts for the manager and not for the rep. Recommended: batch 2A's server-kept deal score, which takes the health score's place, ends it (Jeff, 17 Nov, Q4: "All recommended"). Low to medium.
+- **Four writes move a deal's learned inputs without scoring it again** (§0.256, 17 Nov; read in code): a merge (an activity's contact ids, a deal's account), a quote's accept (`arr`, quotes.mjs `syncToOpportunity`), an automation's field update (dispatch-automations.mjs) and an Admin's clear of every activity (activities.mjs `clear=true`) leave the kept score until the nightly pass. Today only the clear changes a rules input; the others matter once an org's model has a share. Recommended: rescore after each, as opportunities.mjs does (guide §18b130 rule 2). Low.
 
 ### 4.3 Settings
 
@@ -3038,6 +3059,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A lead row's Save and Delete say a refusal on the one-slot undo toast** (§0.249, 13 Nov — the round-1 fixer of the Leads group; read in code; older): `saveLead` and `deleteLead` (src/Tabs/LeadsTab.jsx) say `Lead not saved — <words>` / `Lead not deleted — <words>` through `setUndoToast({ error })` — kept until its ✕, but replaced by the next toast, so a later undo or refusal takes the words away unread. The house rule since §0.245 is a press notice kept until its ✕ (`pressNoticeOf`), as the same tab's claim requests now do (`sayClaim`). Both are `dbWrite` paths, outside Part 12's claim-requests scope. Recommended: both say their refusal through `pressNoticeOf`. Low.
 - **A pending member with no email is counted on the Users list but never listed on Pending invites** (§0.249, 14 Nov — found in the browser check as Jeff; older — memberStatus.js unchanged by the batch): the Users list counts every row `memberStatus` reads Invited ("Pending · 1", "1 pending invite"), but the Pending invites page lists through `invitationEntries` (src/Tabs/settings/people/memberStatus.js), which skips a row with no email — Accelerep QA's TEST Profile Rep, an invited test row with no email, is counted pending on the list while the page says "0 invited in the roster · Clerk's list not read" and "No invited member in the roster." Recommended: list an invited row with no email by its name (no Revoke or Resend — a Clerk invitation is by email), or say on the page how many it cannot list. Low.
 - **The lead model's accuracy is measured on the leads it trained on, and a decided lead's features as of today** (17 Nov — batch 2's design read; read in code): `trainLeadModel` scores the rows it fitted (score-lead.mjs:192-197) and `scoreOrg` measures a decided lead's recency with `now` (score-leads-batch.mjs:132), so a lead decided a year ago is measured as if today. The panel says "training accuracy" (LeadScoringDetail.jsx:250), so it does not mislead, but the figure flatters the model. Recommended: held-out accuracy and features as of the decision, from batch 2A's pieces once built. Low.
+- **Funnel stages' other controls do nothing** (§0.256, 17 Nov; read in code — the batch fixed the weight, Q7): the "Probability display" card's Stage default / Rep-adjustable boxes are static ("● ACTIVE" fixed on the first, nothing saved or read); "Used in" is fixed text ("All pipelines" / "New business"), the State chip always "Active", the ⋯ has no handler, and the card's "Disabling a stage removes it from any pipeline that references it" describes no control (FunnelStagesDetail.jsx). Recommended: take out what does nothing, or build it (guide §18b64.1). Low.
 
 ### 4.4 Dispatch
 
@@ -5098,6 +5120,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
 ---
 
 ## 6. Tooling, tests and housekeeping
+
+- **`getWinProbability` in App.jsx has no caller** (§0.256, 17 Nov; read in code): defined, not exported in the context, read nowhere — the deal score's start reads the funnel through `stageWeightOf` (src/utils/dealScore.js). Recommended: remove it. Low.
 
 - **late-answers' org-switch cases answer without checking the request went
   out** (§0.251, 15 Nov — the review's settings-saves / late-answers lens;

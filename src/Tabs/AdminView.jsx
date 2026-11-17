@@ -24,6 +24,7 @@ import { EmailTemplatesDetail } from './settings/salesProcess/EmailTemplatesDeta
 import { BuyerPersonasDetail } from './settings/salesProcess/BuyerPersonasDetail.jsx';
 import { CustomerTypesDetail } from './settings/salesProcess/CustomerTypesDetail.jsx';
 import { LeadScoringDetail } from './settings/salesProcess/LeadScoringDetail.jsx';
+import { DealScoringDetail } from './settings/salesProcess/DealScoringDetail.jsx';
 import { LeadVisibilityDetail } from './settings/salesProcess/LeadVisibilityDetail.jsx';
 import { AccountSegmentsDetail } from './settings/salesProcess/AccountSegmentsDetail.jsx';
 import { IndustriesDetail } from './settings/salesProcess/IndustriesDetail.jsx';
@@ -284,6 +285,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         'email-templates':      'email-templates',
         'customer-types':       'customer-types',
         'lead-scoring':         'lead-scoring',
+        'deal-scoring':         'deal-scoring',
         'lead-visibility':      'lead-visibility',
         'account-segments':     'account-segments',
         'industries':           'industries',
@@ -447,6 +449,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'lead-scoring')    return <LeadScoringDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'deal-scoring')    return <DealScoringDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'lead-visibility') return <LeadVisibilityDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'account-segments') return <AccountSegmentsDetail settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;

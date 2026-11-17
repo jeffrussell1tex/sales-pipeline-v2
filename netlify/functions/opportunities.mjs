@@ -33,6 +33,8 @@ import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
 import { checkLinks, checkBulkLinks } from './_links.mjs';
+// A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
+import { rescoreDeals, withDealScore } from './_dealScore.mjs';
 
 // The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
 // its account is accountLink's, below).
@@ -378,6 +380,8 @@ export const handler = async (event) => {
                 const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
                 result.ambiguousOwners = owned.ambiguousOwners;
                 result.unmatchedOwners = owned.unmatchedOwners;
+                // Each deal written scored (AI scoring batch 2A); the screens reload the deals after an import.
+                await rescoreDeals(orgId, result.insertedIds);
                 return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
@@ -436,7 +440,8 @@ export const handler = async (event) => {
             });
             dispatchAutomations(orgId, 'opportunity.created', dealEventData(inserted)).catch(e => console.warn('auto error:', e.message));
 
-            return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
+            // The new deal scored, and handed back with its score (AI scoring batch 2A).
+            return { statusCode: 201, headers, body: JSON.stringify({ opportunity: withDealScore(inserted, await rescoreDeals(orgId, [inserted.id])) }) };
         }
 
         // ── PUT (update) ──────────────────────────────────────────────────────
@@ -563,6 +568,8 @@ export const handler = async (event) => {
                     // 'stageChanged' switch, never one post per deal. Never throws.
                     await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });
                 }
+                // Each deal written scored again (AI scoring batch 2A); a row refused or not found is not.
+                await rescoreDeals(orgId, keyed.rows.map(r => r.id).filter(id => !unwritten.has(id)));
                 return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
             }
 
@@ -802,7 +809,8 @@ export const handler = async (event) => {
                 dispatchAutomations(orgId, autoEvt, dealEventData(upserted, { from_stage: previousStage, to_stage: upserted.stage })).catch(e => console.warn('auto error:', e.message));
             }
 
-            return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };
+            // The deal scored again, and handed back with its score (AI scoring batch 2A).
+            return { statusCode: 200, headers, body: JSON.stringify({ opportunity: withDealScore(upserted, await rescoreDeals(orgId, [upserted.id])) }) };
         }
 
         // ── DELETE ────────────────────────────────────────────────────────────

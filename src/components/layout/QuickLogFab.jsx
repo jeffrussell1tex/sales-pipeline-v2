@@ -15,7 +15,7 @@ export default function QuickLogFab() {
         quickLogContactResults, setQuickLogContactResults,
         followUpPrompt, setFollowUpPrompt,
         setEditingTask, setTaskRailId, setTaskRailMode, isMobile,
-        setUndoToast,
+        setUndoToast, adoptDealScores,
         escapeBlocked,
     } = useApp();
 
@@ -195,6 +195,8 @@ export default function QuickLogFab() {
                                     setUndoToast({ error: `Activity not logged \u2014 ${rq.error}` });
                                     return;
                                 }
+                                // Its deal's score, moved by the server (AI scoring batch 2A).
+                                if (rq.data?.dealScores && typeof adoptDealScores === 'function') adoptDealScores(rq.data.dealScores);
                                 if (linkedOpp) setFollowUpPrompt({ opportunityId: linkedOpp.id, opportunityName: linkedOpp.opportunityName || linkedOpp.account });
                                 setQuickLogOpen(false);
                                 setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });

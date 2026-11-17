@@ -113,6 +113,7 @@ const SHARED = new Set(['setOpportunities', 'setAccounts', 'setContacts', 'setTa
 const SERVER = /\b(dbFetch|dbWrite|putSettings|writeSettings|addToSettingsList|takeLatestSettings|fetch|postNew|putBulk|saveUser|saveExtra|setMemberActive|revokeInvite|uploadNewDocument|uploadNewVersion|handleSave\w*|handleDelete\w*|handleLog\w*|saveDeal\w*|handleMerge|undoMerge|handleContactMerge|softDelete|load[A-Z]\w*)\s*\(/;
 // What sets a shared list without a request of its own, and why that is right.
 const ALLOWED = [
+    ['src/App.jsx', 'setOpportunities(prev => withDealScores(prev, scores))', 'an activity save\'s answer (AI scoring batch 2A): the deal scores the server worked out and wrote in that request, handed back as `dealScores` — the caller checked the answer is this org\'s'],
     ['src/components/layout/ModalLayer.jsx', 'setLeads(prev => [...(prev||[]), lead])', 'the lead form saved it (LeadModal) and hands back the saved row'],
     ['src/hooks/useCoachingNotes.js', 'setCoachingNotes(prev => (prev.length ? [] : prev))', 'empties the list when there is no org'],
     ['src/Tabs/SalesManagerTab.jsx', 'setSettings(prev => ({...prev, __qbTerrFilter:v}))', 'a screen filter kept on the settings object, never saved'],

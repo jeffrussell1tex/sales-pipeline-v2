@@ -211,7 +211,9 @@ test('integration-requests accepts only the catalogue, is Admin-only, audits, an
     // The "already" answer read in this org (the review): another org's request would be answered as this org's.
     assert.ok(s.includes('const [now] = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId)).limit(1);'), 'REGRESSION: the request re-read from any org');
     // Q15's real guard since §0.224: the PUT writes only the keys a save wrote, never integrationRequests.
-    assert.ok(read('src/utils/settingsRevs.js').includes("&& k !== 'integrationRequests' && k !== 'anthropicApiKey');"), 'the settings PUT never writes integrationRequests');
+    // Since AI scoring batch 2A the server's keys are one set (SERVER_KEYS), integrationRequests in it.
+    const revs = read('src/utils/settingsRevs.js');
+    assert.ok(revs.includes("&& !SERVER_KEYS.has(k) && k !== 'anthropicApiKey');") && revs.includes("export const SERVER_KEYS = new Set(['integrationRequests', 'dealModel']);"), 'the settings PUT never writes integrationRequests');
 });
 
 test('calendar-connections reports provider availability by env NAME presence, never a value', () => {

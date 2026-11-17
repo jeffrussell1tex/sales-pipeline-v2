@@ -283,12 +283,13 @@ function Chip({ label, active, count, onClick, onDelete }) {
 
 // ── Forecast card / lane (module scope — stable identity) ──
 function ForecastCard({ opp, deps }) {
-    const { dealScoringOn, calculateDealHealth, setEditingOpp, setShowModal } = deps;
+    const { dealScoreOf, setEditingOpp, setShowModal } = deps;
     // Signed calendar days (state §0.240): overdue from the next morning.
     const closedays = opp.forecastedCloseDate ? calendarDays(todayLocal(), opp.forecastedCloseDate) : null;
     const overdue   = closedays !== null && closedays < 0;
-    const health    = dealScoringOn ? calculateDealHealth(opp) : null;
-    const hColor    = health ? (health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger) : T.border;
+    // The deal's win chance, the server's (AI scoring batch 2A); none while Deal scoring is off or before it is scored.
+    const win       = dealScoreOf(opp);
+    const hColor    = win ? T[win.tone] : T.border;
     const relDay    = d => {
         if (!d) return '—';
         const diff = calendarDays(todayLocal(), d);   // an unreadable day reads as no day, not "Invalid Date"
@@ -310,7 +311,7 @@ function ForecastCard({ opp, deps }) {
                 <div style={{ fontSize: 10, color: overdue ? T.danger : T.inkMuted, fontWeight: overdue ? 600 : 400 }}>{relDay(opp.forecastedCloseDate)}</div>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.inkMuted, alignItems: 'center' }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }}/>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }} title={win ? win.words : undefined}/>
                 {opp.aiScore && <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>{opp.aiScore.score}</>}
                 <span style={{ flex: 1 }}/><span style={{ color: T.inkMuted }}>{opp.stage}</span>
             </div>
@@ -345,7 +346,7 @@ export default function PipelineTab() {
         stages, exportToCSV, exportingCSV,
         showConfirm, softDelete, addAudit,
         getStageColor, getQuarter, getQuarterLabel,
-        calculateDealHealth,
+        dealScoreOf,
         visibleOpportunities: allVisibleOpportunities, getKpiColor,
         setUndoToast, activePipeline, allPipelines,
         handleDeleteDeals, handleSave, completeLostSave,
@@ -358,9 +359,6 @@ export default function PipelineTab() {
         setActivePipelineId, isMobile,
         activeOrgId,
     } = useApp();
-    // Safe wrapper — defaults to true if AppContext hasn't been updated yet
-    const { isFeatureEnabled: _ife } = useApp();
-    const isFeatureEnabled = (id) => typeof _ife === 'function' ? _ife(id) : true;
 
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
@@ -616,9 +614,9 @@ export default function PipelineTab() {
 
     // ── Export CSV ────────────────────────────────────────────
     const handleExport = () => {
-        const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
+        const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Win %', 'AI Score', 'Days in Stage'];
         const rows = smartFilteredOpps.map(o => {
-            const health     = isFeatureEnabled('deal-scoring') ? calculateDealHealth(o) : { score: '', status: '' };
+            const win        = dealScoreOf(o);   // none while Deal scoring is off (AI scoring batch 2A)
             const daysInStage = o.stageChangedDate ? (daysSince(o.stageChangedDate) ?? '') : '';
             const weightedVal = ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100).toFixed(0);
             return [
@@ -630,7 +628,7 @@ export default function PipelineTab() {
                 weightedVal,
                 o.forecastedCloseDate || '',
                 o.salesRep || '',
-                health.score,
+                win ? win.score : '',
                 o.aiScore?.score || '',
                 daysInStage,
             ];
@@ -890,9 +888,8 @@ export default function PipelineTab() {
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                         {pipelineFilteredOpps.map(opp => {
-                            const dealScoringOn = isFeatureEnabled('deal-scoring');
-                            const health = dealScoringOn ? calculateDealHealth(opp) : null;
-                            const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.border;
+                            const win = dealScoreOf(opp);   // the server's win chance; none while Deal scoring is off
+                            const healthColor = win ? T[win.tone] : T.border;
                             const sc = getStageColor(opp.stage);
                             return (
                                 <div key={opp.id} className="mobile-record-card" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
@@ -905,8 +902,8 @@ export default function PipelineTab() {
                                     </div>
                                     <div className="mobile-card-meta">
                                         <span style={{ background: sc.text + '22', color: sc.text, padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
-                                        {health && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />}
-                                        {health && <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }}>{health.status}</span>}
+                                        {win && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />}
+                                        {win && <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }} title={win.words}>{win.percent} · {win.status}</span>}
                                         {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
                                     </div>
                                 </div>
@@ -993,7 +990,7 @@ export default function PipelineTab() {
                         return prev && new Date(o.forecastedCloseDate) < new Date(prev.date);
                     }).length;
 
-                    const cardCtx = { dealScoringOn: isFeatureEnabled('deal-scoring'), calculateDealHealth, setEditingOpp, setShowModal };
+                    const cardCtx = { dealScoreOf, setEditingOpp, setShowModal };
                     return (
                         <div style={{ paddingBottom: 20 }}>
                             <div style={{ marginBottom: 14 }}>
