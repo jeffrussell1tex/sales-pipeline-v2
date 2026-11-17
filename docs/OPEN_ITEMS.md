@@ -1403,6 +1403,13 @@ Train now; the nightly pass score-deals-batch. **2B, next:** Claude explains
 the number from the model's strongest factors and the AI Score tab shows it;
 Claude's own 0-100 retires once an org's model has a share (decision 1). The
 deal window shows no win chance yet (the health score never showed there).
+**2B designed and answered 17 Nov** (docs/design/deal-score/DESIGN-2B.md;
+ANSWERS.md "Batch 2B" — Q1-Q4 each the Recommended): Claude's own number
+retires now, for every org; Claude explains the win chance; Kanban's ✦, the
+list's AI column and the CSV's AI Score go, reports gain "Win chance"; a moved
+number said, Refresh asks again; "Score all deals" out. **2C, after:** the
+score-drop alert and the public API move to the win chance (an alert on a
+probability needs a band, not a fixed 40).
 A SELECT-only census (17 Nov): no org has 20 closed deals (most 17, a demo
 org; UKG 0 won, 6 lost; QA 3 and 1), so every org runs on the rules until
 it does.

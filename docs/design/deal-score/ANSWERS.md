@@ -23,4 +23,15 @@ Also stand, unless Jeff says otherwise (DESIGN.md §6): one example per closed d
 | Q8 | What the screens call the number | **"Win chance" (Recommended)** — the list's column "Win %", the number "42%"; tooltips and meeting prep "Win chance 42% — At Risk for Proposal"; the bands Healthy / At Risk / Critical stay, read against the stage's usual |
 | Q9 | The column's go: `opportunities.deal_score` (jsonb, nullable, no default) on the test and app databases | **"Yes, both now (Recommended)"** — db/apply-deal-score.mjs, `--test --apply`, then `--apply` on the app database (shared by dev and prod), each read back and verified |
 
+Next: the build. **Built 17 Nov (state §0.256; guide §18b130); committed `3bf18c9`.**
+
+## Batch 2B — Claude explains the number (DESIGN-2B.md §4; asked 17 Nov, each standing on its own)
+
+| Q | Asked | Answer |
+|---|---|---|
+| Q1 | When Claude's own 0-100 AI score retires (decided 9 Nov: once an org has enough history; since 2A every deal also shows a win chance) | **"Now, every org (Recommended)"** — the deal window shows the win chance and Claude explains it (a headline, 3-5 signals tied to its factors, one next action); Claude's earlier scores stay stored, labelled as its own |
+| Q2 | Which other readers of Claude's number move | **"Screens and reports (Recommended)"** — Kanban's ✦, the list's AI column and the CSV's AI Score go; reports gain "Win chance"; the score-drop alert and the public API in a batch 2C, designed then |
+| Q3 | An explanation of a number that has since moved | **"Say so, Refresh asks (Recommended)"** — "Explained at 42% — now 50%"; Refresh asks again; no call to Claude by itself |
+| Q4 | The Pipeline's "Score all deals" | **"Take it out (Recommended)"** — the server scores every deal; explanations asked deal by deal |
+
 Next: the build.
