@@ -14,4 +14,13 @@ The fact the questions stood on (a SELECT-only census of the shared database, co
 
 Also stand, unless Jeff says otherwise (DESIGN.md §6): one example per closed deal, measured on its last open day; only a closed deal with something known before its close teaches; the model in a server-only settings key; accuracy measured on deals held out (5-fold).
 
-Next: batch 2A's code map (DESIGN.md §8), then the build.
+## Batch 2A's own questions (asked 17 Nov from the code map, each standing on its own; DESIGN.md §8)
+
+| Q | Asked | Answer |
+|---|---|---|
+| Q6 | The "Deal scoring" switch does nothing (the screens ask an `isFeatureEnabled` the app never provides — PipelineTab.jsx:362-363 — so it answers on) | **"Make it work (Recommended)"** — off hides the deal score on every screen that shows it (Kanban, list, Pipeline, meeting prep, the CSV); the server keeps scoring; on by default |
+| Q7 | Settings → Funnel stages saves `prob`, every reader reads `weight` (FunnelStagesDetail.jsx; all six orgs hold `weight`, none has saved the panel) | **"Fix it in 2A (Recommended)"** — the panel shows and saves `weight`; its fallback list the app's own stages; an edit moves the deal score's start from the next nightly pass or Train now |
+| Q8 | What the screens call the number | **"Win chance" (Recommended)** — the list's column "Win %", the number "42%"; tooltips and meeting prep "Win chance 42% — At Risk for Proposal"; the bands Healthy / At Risk / Critical stay, read against the stage's usual |
+| Q9 | The column's go: `opportunities.deal_score` (jsonb, nullable, no default) on the test and app databases | **"Yes, both now (Recommended)"** — db/apply-deal-score.mjs, `--test --apply`, then `--apply` on the app database (shared by dev and prod), each read back and verified |
+
+Next: the build.
