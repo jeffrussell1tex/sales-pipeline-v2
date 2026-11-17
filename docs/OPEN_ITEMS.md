@@ -471,7 +471,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    found in it and made). **2B built 17 Nov (state §0.257; guide §18b131)**:
    Claude explains the win chance, its own number retired; its browser check
    PASSED as Jeff and Karen (the explanation itself on dev, after a push).
-   Next: 2C.
+   **2C designed and answered 17 Nov** (docs/design/deal-score/DESIGN-2C.md;
+   ANSWERS.md "Batch 2C" — Q1-Q3 each the Recommended): the alert fires on a
+   fall into Critical, the API adds `win_chance`, a rep's own switch. Next:
+   2C's build.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —

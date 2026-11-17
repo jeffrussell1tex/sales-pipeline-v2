@@ -34,4 +34,14 @@ Next: the build. **Built 17 Nov (state §0.256; guide §18b130); committed `3bf1
 | Q3 | An explanation of a number that has since moved | **"Say so, Refresh asks (Recommended)"** — "Explained at 42% — now 50%"; Refresh asks again; no call to Claude by itself |
 | Q4 | The Pipeline's "Score all deals" | **"Take it out (Recommended)"** — the server scores every deal; explanations asked deal by deal |
 
+Next: the build. **Built 17 Nov (state §0.257; guide §18b131); committed `d4638da`.**
+
+## Batch 2C — the score-drop alert and the public API (DESIGN-2C.md §4; asked 17 Nov, each standing on its own)
+
+| Q | Asked | Answer |
+|---|---|---|
+| Q1 | What fires the alert now the number is the win chance (8 of QA's 21 open deals read Critical; "below 40" was a level, weekly) | **"A fall into Critical (Recommended)"** — the band moves from Healthy or At Risk to Critical, at most once a week per deal; a deal already Critical gets no mail for it; the manager copied below a quarter of the stage's usual |
+| Q2 | The public API's win chance | **"Add win_chance (Recommended)"** — `win_chance: { score, status, stage_weight, scored_at }`, null for a closed or unscored deal; `ai_score` as it is |
+| Q3 | A rep's own switch for the alert (none today — always on) | **"Add the switch (Recommended)"** — "Win chance fell to Critical" in the profile panel's alerts, on by default |
+
 Next: the build.
