@@ -4,8 +4,9 @@
 // full harness's do (scripts/mutate-import.mjs, through scripts/_mutant.mjs), against SUITES — its likely tests first, the
 // rest only if they pass (scripts/_likely.mjs) — after a green baseline, together and each suite alone.
 //
-// 1. The stale check: every entry's anchor parsed against this tree — none may be missing; the batch's own must each be
-//    their file's only match (the harness mutates the first).
+// 1. The stale check: every entry's anchor parsed against this tree — none may be missing, and each must be its file's
+//    only match, the batch's own and every older one (the harness mutates the first: a batch that writes an older
+//    entry's anchor again, a comment too, moves that mutant off its line — state §0.255).
 // 2. The scope: the batch's own entries (any not at the base exactly — new, renamed, re-anchored or a new mutant),
 //    every entry on a file the batch changed, and every entry on a file a SUITES test it edited reads, imports or runs.
 // 3. The baseline, then each entry in scope: CAUGHT / SURVIVED, and the count.
@@ -43,10 +44,9 @@ const scope = scopeOf({ mutations, base, changedFiles, editedTests, testFiles: (
 const text = new Map();
 const src = (f) => { if (!text.has(f)) text.set(f, isFile(f) ? read(f) : null); return text.get(f); };
 const stale = mutations.filter(([, f, from]) => src(f) === null || matchesOf(src(f), from) === 0);
-const own = scope.entries.filter((m) => scope.why.get(m).includes('own'));
-const notUnique = own.filter(([, f, from]) => src(f) !== null && matchesOf(src(f), from) > 1);
+const notUnique = mutations.filter(([, f, from]) => src(f) !== null && matchesOf(src(f), from) > 1);
 console.log(`Base ${BASE}; ${changedFiles.length} files changed; ${editedTests.length} SUITES test(s) edited: ${editedTests.join(', ') || 'none'}`);
-console.log(`Stale check: ${mutations.length} entries; ${stale.length} stale; ${notUnique.length} of the batch's own not their file's only match`);
+console.log(`Stale check: ${mutations.length} entries; ${stale.length} stale; ${notUnique.length} not their file's only match`);
 for (const [n, f] of stale) console.log(`STALE  ${n}\n       anchor not found in ${f}`);
 for (const [n, f] of notUnique) console.log(`NOT UNIQUE  ${n}\n       its anchor matches more than once in ${f}`);
 console.log(`Scope: ${scope.entries.length} entries — ${scope.own} the batch's own, ${scope.changed} on files it changed, ${scope.tested} on the ${scope.testedFiles.size} files its edited tests read, import or run`);

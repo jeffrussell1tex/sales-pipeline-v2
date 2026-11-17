@@ -82,7 +82,9 @@ test('mutate-scope.mjs: the stale check over every entry first, a green baseline
         "const editedTests = changedFiles.filter((f) => suites.includes(f));",
         "const isFile = (p) => { try { return statSync(p).isFile() && realpathSync.native(p).replace(/\\\\/g, '/').endsWith(`/${p}`); } catch { return false; } };",
         "const stale = mutations.filter(([, f, from]) => src(f) === null || matchesOf(src(f), from) === 0);",
-        "const notUnique = own.filter(([, f, from]) => src(f) !== null && matchesOf(src(f), from) > 1);",
+        // Every entry's anchor its file's only match, not only the batch's own: §0.252 wrote "Back to the form" into a
+        // comment above the button an older entry named, and that mutant edited the comment (state §0.255).
+        "const notUnique = mutations.filter(([, f, from]) => src(f) !== null && matchesOf(src(f), from) > 1);",
         "if (stale.length || notUnique.length) { console.log('Repoint those before grading anything.'); process.exit(1); }",
         'const baseline = runSuitesOut(suites);',
         'const solo = soloBaseline(suites);',

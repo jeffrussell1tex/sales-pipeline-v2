@@ -2906,8 +2906,10 @@ wait for the full run.
 - **The scoped run — before each push to dev**, over every batch since the last green scope (`--base` that commit): `node scripts/mutate-scope.mjs` — from a copy of
   the repo when `netlify dev` is up in the repo (its HMR chases the rewrites), with
   `--git <repo>` for git's answers. It parses every entry's anchor first (none may be
-  missing; the batch's own must each be their file's only match, or NOT UNIQUE stops
-  it), then, after a green baseline, runs the batch's own entries (new, or changed in
+  missing, and every one — the batch's own and every older one — must be its file's only
+  match, or NOT UNIQUE stops it: the harness mutates the first match, and §0.252 wrote an
+  older entry's anchor into a comment above its line, so that mutant graded the comment,
+  SURVIVED — §0.255), then, after a green baseline, runs the batch's own entries (new, or changed in
   any part — name, file, anchor or mutant — since the base, `--base`, HEAD by
   default), every entry on a file it changed (one it added, untracked, too), and every
   entry on a file a SUITES test it edited reads, imports or runs (scripts/_scope.mjs;
