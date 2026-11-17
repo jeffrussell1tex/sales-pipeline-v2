@@ -47,7 +47,12 @@ test('templates: the email and the Slack post exist and say when', () => {
 test('recommendation-log: the report never lists the renewal dedupe rows', () => {
     const s = code(read('netlify/functions/recommendation-log.mjs'));
     assert.ok(s.includes("import { eq, and, desc, gte, lte, notLike } from 'drizzle-orm';"));   // lte since AI scoring batch 3 (a next step's window)
-    assert.ok(s.includes("notLike(recommendationLog.actionType, 'renewal%'),"), 'both the per-rep and the org-wide read exclude them');
+    // The GET's own filter, read in its block: since AI scoring batch 3 the outcome pass (judgePending) writes the same
+    // line, and a whole-file match passed with the GET's taken away (the full harness, 17 Nov).
+    const getAt = s.indexOf("if (event.httpMethod === 'GET') {"), baseAt = s.indexOf('const base = [', getAt);
+    assert.ok(getAt > -1 && baseAt > getAt);
+    const base = s.slice(baseAt, s.indexOf('];', baseAt));
+    assert.ok(base.includes("notLike(recommendationLog.actionType, 'renewal%'),"), 'both the per-rep and the org-wide read exclude them');
 });
 
 test('AppHeader: the recipient\'s toggle exists, is labelled, and shows only to Admins and Managers', () => {
