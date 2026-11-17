@@ -567,6 +567,12 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
     const [repPick, setRepPick] = useState(null);
     // Status picker anchor (DOMRect) for the bulk bar; null = closed.
     const [statusPick, setStatusPick] = useState(null);
+    // What the bulk Convert said (state §0.253): one lead converts at a time — each opens its deal window — the rest kept
+    // selected. Said in the bar, beside the control, for the selection it was said of: any change to the selection (a
+    // box, Assign, Change status, Clear) retires it — never a count left standing over another selection.
+    const [bulkNote, setBulkNote] = useState(null);   // { text, forKeys } | null
+    const selectedKeys = Object.keys(selected).filter(id => selected[id]).sort().join('|');
+    const bulkNoteNow = bulkNote && bulkNote.forKeys === selectedKeys ? bulkNote.text : '';
 
     const handleRepPick = (rep) => {
         if (!repPick) return;
@@ -575,7 +581,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                 const lead = leads.find(l => l.id === id);
                 if (lead) saveLead(id, { assignedTo: rep.name, assignee: rep.name });
             });
-            setSelected({});
+            setSelected({}); setBulkNote(null);
         } else if (repPick.leadId) {
             saveLead(repPick.leadId, { assignedTo: rep.name, assignee: rep.name });
         }
@@ -590,7 +596,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
         const clear = { assignedTo: '', assignee: null, ownerId: null };
         if (repPick.mode === 'bulk') {
             Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, clear));
-            setSelected({});
+            setSelected({}); setBulkNote(null);
         } else if (repPick.leadId) {
             saveLead(repPick.leadId, clear);
         }
@@ -693,14 +699,27 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                 }}>Change status</span>
                                 <span style={{ opacity:0.5 }}>·</span>
                                 <span style={{ cursor:'pointer' }} onClick={() => {
-                                    Object.keys(selected).filter(id => selected[id]).forEach(id => {
-                                        const lead = leads.find(l => l.id === id);
-                                        if (lead) convertLead(lead);
-                                    });
-                                    setSelected({});
+                                    // One at a time (state §0.253; Jeff, 16 Nov: "One at a time"): each convert opens its deal window, and one
+                                    // window opens at once — a loop seeded every lead into one window and kept the last. The first in the
+                                    // table's order (shown rows first) converts, a lead already Converted never again; the rest stay
+                                    // selected, and the bar says so.
+                                    const isSel = (l) => !!selected[l.id];
+                                    const shownSel = allForTable.filter(isSel);
+                                    const picked = [...shownSel, ...leads.filter(l => isSel(l) && !shownSel.includes(l))].filter(l => l.status !== 'Converted');
+                                    // None to convert: said as it is — every one in this list Converted, or none in this list (a scope
+                                    // switched, a lead deleted, since it was ticked).
+                                    if (!picked.length) { setBulkNote({ text: leads.some(isSel) ? 'Every lead selected here is Converted already.' : 'No lead selected is in this list.', forKeys: selectedKeys }); return; }
+                                    convertLead(picked[0]);
+                                    // Every other selected id stays selected, one not in this list too — only the lead converted leaves.
+                                    const restSel = Object.fromEntries(Object.keys(selected).filter(id => selected[id] && id !== picked[0].id).map(id => [id, true]));
+                                    setSelected(restSel);
+                                    const kept = Object.keys(restSel).length;
+                                    const others = kept === 1 ? 'the other stays selected; convert it' : `the other ${kept} stay selected; convert each`;
+                                    setBulkNote(kept ? { text: `Opened a deal for 1 of ${picked.length} — ${others} after this one.`, forKeys: Object.keys(restSel).sort().join('|') } : null);
                                 }}>Convert to opportunity</span>
+                                {bulkNoteNow && <span style={{ fontSize:11, opacity:0.85 }}>{bulkNoteNow}</span>}
                                 <div style={{ flex:1 }}/>
-                                <span style={{ opacity:0.6, cursor:'pointer', fontSize:11 }} onClick={() => setSelected({})}>Clear</span>
+                                <span style={{ opacity:0.6, cursor:'pointer', fontSize:11 }} onClick={() => { setSelected({}); setBulkNote(null); }}>Clear</span>
                             </div>
                         )}
 
@@ -725,7 +744,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         {/* The selection feeds only the bulk bar's writes, so a
                                             role that cannot edit gets no checkbox (state §0.191). */}
                                         {canEdit ? (
-                                        <div onClick={e => { e.stopPropagation(); setSelected(s => ({ ...s, [l.id]:!s[l.id] })); }}
+                                        <div onClick={e => { e.stopPropagation(); setSelected(s => ({ ...s, [l.id]:!s[l.id] })); setBulkNote(null); }}
                                             style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${isSel ? T.ink : T.borderStrong}`, background: isSel ? T.ink : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
                                             {isSel && <span style={{ color:T.surface, fontSize:9, fontWeight:800 }}>✓</span>}
                                         </div>
@@ -791,7 +810,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
             {repPick && <RepPickerPopover reps={reps} anchor={repPick.rect} onPick={handleRepPick} onClear={handleRepClear} onClose={() => setRepPick(null)}/>}
             {statusPick && <StatusPickerPopover anchor={statusPick} onPick={(status) => {
                 Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, { status }));
-                setSelected({});
+                setSelected({}); setBulkNote(null);
                 setStatusPick(null);
             }} onClose={() => setStatusPick(null)}/>}
         </div>
@@ -1070,7 +1089,7 @@ export default function LeadsTab() {
         leads: rawLeads, setLeads,
         settings, currentUser, currentUserId, userRole, canSeeAll,
         showConfirm, exportToCSV,
-        setEditingOpp, setShowModal,
+        setEditingOpp, setShowModal, setNewDealSeed,
         setEditingActivity, setShowActivityModal, setActivityInitialContext,
         setActiveTab,
         setShowLeadImportModal,
@@ -1297,14 +1316,14 @@ export default function LeadsTab() {
             salesRep:        normalized.assignee || currentUser || '',
             arr:             normalized.rev || 0,
         };
+        // The window opens on the lead's values, and the lead is marked Converted once the deal lands (state §0.253; Jeff,
+        // 16 Nov: "When the deal saves" — App's markLeadConverted, through useOpportunities). The seed was set as the
+        // deal edited 50 ms after the window opened, and the form, taken as it mounts, never had it — a convert opened
+        // blank — and the lead was marked Converted on this press: a Cancel left a Converted lead with no deal.
         setEditingOpp(null);
+        setNewDealSeed({ ...oppSeed, fromLeadId: normalized.id });
         setShowModal(true);
-        // Pre-fill opp form after modal mounts — in this org only (state §0.175)
-        const askedOrg = requestOrg();
-        setTimeout(() => { if (stillOrg(askedOrg)) setEditingOpp(oppSeed); }, 50);
-        // Mark lead as converted
-        saveLead(normalized.id, { status: 'Converted' });
-    }, [setEditingOpp, setShowModal, currentUser, saveLead]);
+    }, [setEditingOpp, setNewDealSeed, setShowModal, currentUser]);
 
     // ── Open activity modal pre-filled for a lead ─────────────
     const logActivity = useCallback((lead, type) => {

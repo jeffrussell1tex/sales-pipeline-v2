@@ -193,7 +193,10 @@ export function useOpportunities(deps) {
         } else {
             const newId = 'id_' + crypto.randomUUID();
             // No maker sent (state §0.250): who made the deal is the server's, the caller's member name.
-            const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id };
+            // A lead's convert names its lead (state §0.253): kept out of the body, and the lead marked Converted once the
+            // deal lands — never before.
+            const { fromLeadId, ...enrichedNew } = enrichedData;
+            const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {
@@ -207,6 +210,7 @@ export function useOpportunities(deps) {
                         fireMentionSms({ type: 'dealAssigned', recordId: newId });
                     }
                     setShowModal(false); setOppModalError(null);
+                    if (fromLeadId) deps.onLeadConverted?.(fromLeadId);
                 })
                 .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError(failureWords(err)); })
                 .finally(() => setOppModalSaving(false));
@@ -257,7 +261,8 @@ export function useOpportunities(deps) {
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
             const newId = formData.id || ('id_' + crypto.randomUUID());   // given when the dialog opened: a retry is the same deal
-            const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
+            const { fromLeadId, ...enrichedNew } = enriched;   // as the window's create (state §0.253)
+            const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };
             setOpportunities(prev => [...prev, newOpp]);
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
             if (!stillOrg(askedOrg)) return stopped();
@@ -267,6 +272,7 @@ export function useOpportunities(deps) {
             }
             if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
+            if (fromLeadId) deps.onLeadConverted?.(fromLeadId);
         }
         setLostReasonModal(null);
         return { ok: true };

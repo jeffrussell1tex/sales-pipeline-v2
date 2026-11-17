@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b127** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b128** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4767,3 +4767,13 @@ THE GUARD: tests/test-waits.test.mjs — every test module under tests/ parsed (
 5. **A count a window holds comes down from the work itself** — the log's and the batch's own `finally` — so a tab or window closed under it never leaves it held for good; after an org switch the old host's setter changes nothing (tests/late-answers.test.mjs names it).
 
 THE GUARD: tests/window-closes.test.mjs — `topWindow` and the close decision run, the "+ New Rep" case included; every listed window's close paths pinned (the deal window, the lead, user and coaching-note windows, both imports, both merge reviews, the SPIFF claim, the four record rails, Quick Log, the link picker, the document rail); every `useDraggable` window's Escape asks `onTop`; an order check also asserts its strings present (an `indexOf` of -1 passed an order alone — the harness found two, 16 Nov). tests/escape-order.test.mjs holds the deal and user windows as `own` listeners and the coaching note as a layer; App has no draggable or coaching-note case.
+
+## 18b128. A Window Opens On Its Starting Values; What A Save Makes True Elsewhere Follows The Save (hard rule)
+
+**Origin (§0.253, 16 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "When the deal saves", "One at a time").** A lead's Convert set the new deal's values 50 ms after the deal window opened — the form, taken as it mounts, never had them — and marked the lead Converted on the press, before any deal: a Cancel left a Converted lead with no deal. Its bulk form looped every selected lead into the one window.
+
+1. **A window's starting values are handed to it as it opens** — a seed it reads at mount (`newDealSeed`), never a value set after it has mounted; the window clears the seed as it takes it, and whenever one is set while it is open, so the next opens blank. The seed is org-bound.
+2. **What a save makes true of another record follows the save** — the lead is marked Converted once the deal lands, through that record's own endpoint (its rules, its stamps), never on the press and never in the deal's body; a refusal is said, the save kept; an answer after an org switch changes nothing.
+3. **One window, one record** — a bulk action that opens a window acts on one record, in the table's order, never one already done; the rest stay selected, and what it said stands only for the selection it was said of.
+
+THE GUARD: tests/lead-convert.test.mjs — both creates and `markLeadConverted` run; the seed's wiring and the bulk Convert pinned.

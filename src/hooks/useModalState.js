@@ -61,6 +61,10 @@ export function useModalState() {
     const [docLinkPickerContext, setDocLinkPickerContext] = useOrgBoundState(resets, null);
 
     const [editingOpp, setEditingOpp] = useOrgBoundState(resets, null);
+    // A new deal's starting values (state §0.253): a lead's convert opens the deal window on them — the deal window
+    // takes them as it opens, and clears them, so the next new deal opens blank. { opportunityName, account, salesRep,
+    // arr, fromLeadId } | null.
+    const [newDealSeed, setNewDealSeed] = useOrgBoundState(resets, null);
     const [editingUser, setEditingUser] = useOrgBoundState(resets, null);
     const [editingTask, setEditingTask] = useOrgBoundState(resets, null);
     const [editingContact, setEditingContact] = useOrgBoundState(resets, null);
@@ -127,6 +131,7 @@ export function useModalState() {
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         editingOpp, setEditingOpp,
+        newDealSeed, setNewDealSeed,
         editingUser, setEditingUser,
         editingTask, setEditingTask,
         editingContact, setEditingContact,

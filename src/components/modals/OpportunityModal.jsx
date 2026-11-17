@@ -1054,7 +1054,7 @@ export default function OpportunityModal({
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave,
     onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
-    errorMessage, onDismissError, saving, onOpenNestedContact }) {
+    errorMessage, onDismissError, saving, onOpenNestedContact, seed, onSeedTaken }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
     const { escapeBlocked } = useApp();     // the Escape order (state §0.252)
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
@@ -1065,13 +1065,21 @@ export default function OpportunityModal({
 
     // ── Form state ──────────────────────────────────────────
     const [formData, setFormData] = useState(() => {
+        // A new deal opens on its starting values when it has them (state §0.253 — a lead's convert: name, account, rep,
+        // revenue and the lead it came from). They were set 50 ms after the window opened, as the deal it edited, and
+        // the form, taken as it mounts, never had them: a convert opened blank.
+        const seeded = !opportunity && seed ? {
+            opportunityName: seed.opportunityName || '', account: seed.account || '', salesRep: seed.salesRep || '',
+            arr: seed.arr || 0, fromLeadId: seed.fromLeadId || null,
+        } : {};
         const base = opportunity || {
             opportunityName: '', account: '', site: '', salesRep: '',
             painPoints: '', contacts: '', stage: 'Qualification',
             probability: null, arr: 0, implementationCost: 0,
             forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             products: '', unionized: 'No', notes: '', nextSteps: '',
-            pipelineId: activePipelineId || 'default'
+            pipelineId: activePipelineId || 'default',
+            ...seeded,
         };
         return {
             ...base,
@@ -1104,7 +1112,7 @@ export default function OpportunityModal({
 
     const [contactSearch, setContactSearch]             = useState('');
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
-    const [accountSearch, setAccountSearch]             = useState(opportunity?.account || '');
+    const [accountSearch, setAccountSearch]             = useState(opportunity?.account || (!opportunity && seed?.account) || '');
     // What the Account field opened with, taken once (state §0.198): a Save with the field
     // as it opened keeps the deal's link exactly as stored (D1) — never worked out again
     // from the live row, which a note posted from the window replaces.
@@ -1124,7 +1132,7 @@ export default function OpportunityModal({
     // typed (state §0.198; utils/dealAccount.js siteAsAccountTyped).
     const keptSiteRef = useRef(null);
     const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
-    const [repSearch, setRepSearch]                     = useState(opportunity?.salesRep || '');
+    const [repSearch, setRepSearch]                     = useState(opportunity?.salesRep || (!opportunity && seed?.salesRep) || '');
     const [showRepSuggestions, setShowRepSuggestions]   = useState(false);
     const [selectedContacts, setSelectedContacts]       = useState(() => listedContacts(opportunity?.contacts).map((t) => t.raw));
     const [selectedContactIds, setSelectedContactIds]   = useState(opportunity?.contactIds || []);
@@ -1159,6 +1167,10 @@ export default function OpportunityModal({
     const [mentionQuery, setMentionQuery]               = useState(null);
     const [mentionAnchorPos, setMentionAnchorPos]       = useState(0);
     const commentTextareaRef = useRef(null);
+    // The starting values are taken as the window opens, and cleared, so the next new deal opens blank (state §0.253) —
+    // and cleared, too, whenever a seed is set while the window is open (a Convert pressed again by its key behind the
+    // window): the form is taken already, and a seed left would open the next blank new deal on that lead.
+    useEffect(() => { if (seed && onSeedTaken) onSeedTaken(); }, [seed]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // What the window holds that a member typed, as one reading (state §0.252; OPEN_ITEMS §4.1): the form, the
     // Account, Site Name and Sales Rep fields' text, the contacts picked, and a team note being written or edited.

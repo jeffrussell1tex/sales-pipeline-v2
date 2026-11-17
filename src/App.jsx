@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
+import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
 import { readRefusal, failureWords } from './utils/refusalWords.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
@@ -258,6 +259,7 @@ function App() {
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         editingOpp, setEditingOpp,
+        newDealSeed, setNewDealSeed,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
         lastCreatedRepName, setLastCreatedRepName,
@@ -327,6 +329,7 @@ function App() {
     const _showBlockedDeleteRef = useRef(null);
     const _opportunitiesRef = useRef([]);
     const _onDealWonRef = useRef(null);
+    const _onLeadConvertedRef = useRef(null);
     const _deps = {
         get addAudit()            { return _addAuditRef.current; },
         get showConfirm()         { return _showConfirmRef.current; },
@@ -337,6 +340,7 @@ function App() {
         get showBlockedDelete()   { return _showBlockedDeleteRef.current; },
         get opportunities()       { return _opportunitiesRef.current; },
         get onDealWon()           { return _onDealWonRef.current; },
+        get onLeadConverted()     { return _onLeadConvertedRef.current; },
     };
 
     const {
@@ -387,6 +391,19 @@ function App() {
     const documentsHook = useDocuments(_deps);
 
     const [leads, setLeads] = React.useState([]);
+    // A lead becomes Converted once the deal made from it lands (state §0.253; Jeff, 16 Nov: "When the deal saves") —
+    // through the leads endpoint, so its own rules hold (who may change the lead); the server stamps convertedAt. It
+    // was marked on the Convert press, before any deal existed: a Cancel left a Converted lead with no deal. A refusal
+    // is said, the deal kept.
+    const markLeadConverted = async (leadId) => {
+        if (!leadId) return;
+        const askedOrg = requestOrg();
+        const r = await dbWrite(`/.netlify/functions/leads?id=${encodeURIComponent(leadId)}`, { method: 'PUT', body: JSON.stringify({ id: leadId, status: 'Converted' }) });
+        if (!stillOrg(askedOrg)) return;
+        if (!r.ok) { setUndoToast({ error: `The deal was saved; its lead was not marked Converted — ${r.error}` }); return; }
+        const stored = r.data && r.data.lead;
+        setLeads(prev => prev.map(l => (l.id === leadId ? (stored || { ...l, status: 'Converted' }) : l)));
+    };
     const [spiffClaims, setSpiffClaims] = React.useState([]);
 
     // Offer the SPIFF claim modal for a Closed Won deal, but only when there
@@ -482,6 +499,7 @@ function App() {
     _showBlockedDeleteRef.current = showBlockedDelete;
     _opportunitiesRef.current = opportunities;
     _onDealWonRef.current = promptSpiffClaim;
+    _onLeadConvertedRef.current = markLeadConverted;
 
     // Quota & Commission
 
@@ -1960,6 +1978,7 @@ dbFetch('/.netlify/functions/users?me=true')
         // Modal state
         showModal, setShowModal,
         editingOpp, setEditingOpp,
+        newDealSeed, setNewDealSeed,
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
         accountModalError, setAccountModalError,

@@ -86,7 +86,7 @@ export default function ModalLayer() {
     const [spiffClaimError, setSpiffClaimError] = React.useState(null);
     const [spiffClaimBusy, setSpiffClaimBusy] = React.useState(null);
     const {
-        showModal, setShowModal, editingOpp, setEditingOpp,
+        showModal, setShowModal, editingOpp, setEditingOpp, newDealSeed, setNewDealSeed,
         oppModalError, setOppModalError, oppModalSaving, setOppModalSaving,
         accountModalError, setAccountModalError, accountModalSaving, setAccountModalSaving,
         lastCreatedRepName, setLastCreatedRepName,
@@ -192,6 +192,8 @@ export default function ModalLayer() {
             {showModal && (
                 <OpportunityModal
                     opportunity={editingOpp}
+                    seed={editingOpp ? null : newDealSeed}
+                    onSeedTaken={() => setNewDealSeed(null)}
                     accounts={accounts}
                     contacts={contacts}
                     settings={settings}
