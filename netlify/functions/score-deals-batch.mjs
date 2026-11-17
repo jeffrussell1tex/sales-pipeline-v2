@@ -12,11 +12,14 @@ import { db } from '../../db/index.js';
 import { opportunities } from '../../db/schema.js';
 import { withHeartbeat } from './_heartbeat.mjs';
 import { scoreOrgDeals } from './_dealScore.mjs';
+// The recommendation log's outcomes — the alerts' and Claude's next steps' — judged each night, org by org, after the
+// scores (AI scoring batch 3 — Jeff, 17 Nov, Q5: the check was never run; nothing called its PUT).
+import { judgePending } from './recommendation-log.mjs';
 
 // The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
 const run = async () => {
     const started = Date.now();
-    let orgsProcessed = 0, dealsUpdated = 0, modelsTrained = 0, orgsFailed = 0;
+    let orgsProcessed = 0, dealsUpdated = 0, modelsTrained = 0, orgsFailed = 0, judged = 0, judgeFailed = 0;
     try {
         const orgRows = await db.selectDistinct({ orgId: opportunities.orgId }).from(opportunities);
         for (const { orgId } of orgRows) {
@@ -29,9 +32,12 @@ const run = async () => {
                 orgsFailed++;
                 console.error('score-deals-batch: org', orgId, 'failed —', e.message);
             }
+            // After the scores, so a score-drop row reads the band as it now stands.
+            try { judged += (await judgePending(orgId)).length; }
+            catch (e) { judgeFailed++; console.error('score-deals-batch: org', orgId, 'outcomes not judged —', e.message); }
         }
-        console.log(`score-deals-batch: ${orgsProcessed} orgs, ${dealsUpdated} deals, ${modelsTrained} models trained, ${orgsFailed} failed in ${Date.now() - started}ms`);
-        return { statusCode: orgsFailed ? 500 : 200, body: JSON.stringify({ ok: !orgsFailed, orgsProcessed, dealsUpdated, modelsTrained, orgsFailed }) };
+        console.log(`score-deals-batch: ${orgsProcessed} orgs, ${dealsUpdated} deals, ${modelsTrained} models trained, ${judged} outcomes judged, ${orgsFailed + judgeFailed} failed in ${Date.now() - started}ms`);
+        return { statusCode: orgsFailed || judgeFailed ? 500 : 200, body: JSON.stringify({ ok: !orgsFailed && !judgeFailed, orgsProcessed, dealsUpdated, modelsTrained, judged, orgsFailed, judgeFailed }) };
     } catch (err) {
         console.error('score-deals-batch error:', err.message);
         return { statusCode: 500, body: JSON.stringify({ error: 'batch failed' }) };

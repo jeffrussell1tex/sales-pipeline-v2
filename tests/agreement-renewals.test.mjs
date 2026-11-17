@@ -46,7 +46,7 @@ test('templates: the email and the Slack post exist and say when', () => {
 
 test('recommendation-log: the report never lists the renewal dedupe rows', () => {
     const s = code(read('netlify/functions/recommendation-log.mjs'));
-    assert.ok(s.includes("import { eq, and, desc, gte, notLike } from 'drizzle-orm';"));
+    assert.ok(s.includes("import { eq, and, desc, gte, lte, notLike } from 'drizzle-orm';"));   // lte since AI scoring batch 3 (a next step's window)
     assert.ok(s.includes("notLike(recommendationLog.actionType, 'renewal%'),"), 'both the per-rep and the org-wide read exclude them');
 });
 

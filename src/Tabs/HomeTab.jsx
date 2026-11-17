@@ -539,7 +539,8 @@ export default function HomeTab() {
                     id: `velocity-${opp.id}`, priority: 3,
                     category: 'Velocity win', categoryColor: T.ok,
                     title: `${name} moved ${opp.stageHistory?.[opp.stageHistory.length-2]?.stage || 'stage'} → ${opp.stage} in ${createdDays} days`,
-                    body: `Faster than your avg (14d). Keep the pace.`,
+                    // Only what is true (AI scoring batch 3 — Jeff, 17 Nov, Q4): it claimed "your avg (14d)", a fixed 14.
+                    body: `${stageCount} stage moves in its first ${createdDays} ${createdDays === 1 ? 'day' : 'days'}. Keep the pace.`,
                     onClick: () => { setEditingOpp(opp); setShowModal(true); },
                     borderColor: T.ok,
                 });

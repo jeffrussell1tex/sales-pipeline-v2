@@ -206,7 +206,10 @@ One commit per verified batch; doc patch in the same commit.
   else (THE GUARD, tests/ai-models.test.mjs; guide §18b121). Since §0.257 Claude explains a
   deal's win chance and sets no number of its own; its earlier own scores
   stay its own, never read as the deal's (THE GUARD, tests/ai-explain.test.mjs;
-  guide §18b131).
+  guide §18b131). Since §0.259 each next action Claude gives is logged once,
+  fresh, and every logged recommendation is judged by its type's rule each
+  night after the scores (`judgePending`; THE GUARD, tests/next-steps.test.mjs;
+  guide §18b133).
 - A deal's score (`deal_score`, its chance of winning) and an org's deal model
   (`settings.extra.dealModel`) are the server's alone (`_dealScore.mjs`): no body,
   file or screen writes either; every write that can move a score rescores its

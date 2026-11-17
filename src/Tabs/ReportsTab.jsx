@@ -4730,6 +4730,7 @@ function RecommendationReport({ currentUser, canSeeAll, scopedRepNames = null, s
         silent:           'Deal gone silent',
         scoreDrop:        'Win chance fell to Critical',   // AI scoring batch 2C; before 17 Nov, Claude's score below 40
         'score-critical': 'Win chance critical',
+        next_step:        'Claude next step',   // AI scoring batch 3: a next action Claude gave, and whether the deal moved after it
     };
     const outcomeColors = {
         resolved: { bg: 'rgba(77,107,61,0.12)', text: '#2e4a24', label: 'Resolved' },

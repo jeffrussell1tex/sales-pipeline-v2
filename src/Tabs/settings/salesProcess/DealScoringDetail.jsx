@@ -10,7 +10,7 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
-import { standingWords, trainDealWords, featureOn, MIN_TEACHING } from '../../../utils/dealScore.js';
+import { standingWords, trainDealWords, featureOn, MIN_TEACHING, comparisonWords } from '../../../utils/dealScore.js';
 import { funnelRowsOf } from '../../../utils/stageOrder.js';
 
 const RULES = [
@@ -72,6 +72,7 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
                 <CSectionCard title="Where this workspace stands" description={`The model learns from this workspace's own Closed Won and Closed Lost deals — never another's. It starts at ${MIN_TEACHING} closed deals that teach, and its part of each score grows as more close.`}>
                     <div style={{ padding: '10px 12px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.inkMid, lineHeight: 1.55, fontFamily: T.sans }}>
                         {standingWords(model)}
+                        {comparisonWords(model) && <div style={{ marginTop: 6 }}>{comparisonWords(model)}</div>}
                     </div>
                     {isAdmin && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>

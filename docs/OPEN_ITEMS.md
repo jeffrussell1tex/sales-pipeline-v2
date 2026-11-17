@@ -482,7 +482,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    and whether the deal moved, meeting prep shows it, Settings counts won
    deals with history, Home's Velocity win says only what is true; the
    comparisons from wins once an org has 10 won deals with history (none has
-   one today). Next: the first part's build.
+   one today). Q5 answered 17 Nov ("Nightly, alerts + next steps"): the
+   log's outcome check, never run, runs in the nightly deal-scoring pass.
+   **Batch 3's first part built 17 Nov (state §0.259; guide §18b133)**; its
+   browser check (Home) PASSED as Karen — meeting prep's next step on dev,
+   after a push, with Explain. Next: the harness's scoped run and the dev
+   push (Jeff's word); batch 3's comparisons wait on an org's 10th won deal
+   with a history.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
    answers; docs/design/escape-tabs/DESIGN.md and ANSWERS.md): four batches —
@@ -1466,6 +1472,13 @@ it does.
 
 **Batch 3: next-step suggestions from past wins (built on batch 2).**
 
+**First part built 17 Nov (state §0.259; guide §18b133;
+docs/design/deal-score/DESIGN-3.md):** the logging (the fourth point below)
+— each next action Claude gives, judged by an activity or a stage move
+within 14 days — and meeting prep (the last). The comparisons (the first
+three points and the ranking) wait on an org's 10 won deals with a history;
+Settings → Deal scoring counts them. Home's next steps come with them.
+
 - Compare an open deal with the org's won deals at the same stage, and find
   where it falls furthest short.
 - Find activity patterns that came before wins (e.g. a demo, then a proposal
@@ -2348,6 +2361,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   leaving the reminder rows out as it does the renewal rows. §0.191 (9 Oct).
   Its 'coverage' resolution branch has no writer (Home's Missing stakeholder
   is client-side); its comment is corrected, the branch kept. §0.192.
+  **The sweep fixed in §0.259 (17 Nov; guide §18b133):** `judgePending`
+  runs each night in score-deals-batch.mjs after the scores, and the PUT runs
+  the same pass; a score drop and a next step have rules of their own. Still
+  open: the GET's reminder rows (not read in §0.259).
 - **A delete's Undo of a record that links a record deleted since is
   refused, and the record stays deleted** (§0.199; a deal's account since
   §0.198). An Undo re-posts the row as the list read it, and a create asks

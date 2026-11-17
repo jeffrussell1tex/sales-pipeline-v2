@@ -11,6 +11,7 @@ import { useApp } from '../../AppContext';
 import { T } from '../../tokens.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { unarchived } from '../../utils/pickLink.js';
+import { isExplanation } from '../../utils/aiScore.js';
 
 export default function MeetingPrepPanel() {
     const {
@@ -128,6 +129,18 @@ export default function MeetingPrepPanel() {
                                 {win.factors.slice(0, 2).map((f, i) => (
                                     <div key={i} style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '0.25rem' }}>· {f.text}</div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Claude's next step (AI scoring batch 3 — Jeff, 17 Nov, Q3): where the rep is about to talk to the
+                        customer, the next action Claude gave when it explained the deal's win chance. */}
+                    {isExplanation(matchedOpp?.aiScore) && matchedOpp.aiScore.recommendation && (
+                        <div>
+                            <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Next step</div>
+                            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                                <div style={{ fontSize: '0.8125rem', color: T.ink, fontWeight: '500', lineHeight: 1.5 }}>{matchedOpp.aiScore.recommendation}</div>
+                                <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '0.375rem' }}>Suggested by Claude when it explained the win chance{matchedOpp.aiScore.explains ? ` (${matchedOpp.aiScore.explains.score}%)` : ''}.</div>
                             </div>
                         </div>
                     )}

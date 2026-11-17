@@ -1,8 +1,10 @@
 import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
-import { eq, and, desc, gte, notLike } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, notLike } from 'drizzle-orm';
 import { verifyAuth, requireWrite, canSeeAll } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+// A next step's window, an alert's wait, a stage day within a window (AI scoring batch 3 — src/utils/nextSteps.js).
+import { NEXT_STEP_DAYS, ALERT_WAIT_DAYS, stageMovedWithin } from '../../src/utils/nextSteps.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -79,6 +81,30 @@ async function checkResolved(log, orgId) {
                     .where(and(eq(opportunities.id, oppId), eq(opportunities.orgId, orgId)));
                 return opp?.stageChangedDate && new Date(opp.stageChangedDate + 'T12:00:00') >= new Date(since);
             }
+            case 'next_step': {
+                // Claude's next action (AI scoring batch 3 — Jeff, 17 Nov, Q2): acted on when an activity is logged on the
+                // deal, or its stage moves, within NEXT_STEP_DAYS of it. Nothing for the rep to press.
+                if (!oppId) return false;
+                const until = new Date(new Date(since).getTime() + NEXT_STEP_DAYS * 86400000);
+                const acts = await db.select({ id: activities.id })
+                    .from(activities)
+                    .where(and(eq(activities.opportunityId, oppId), eq(activities.orgId, orgId), gte(activities.createdAt, since), lte(activities.createdAt, until)))
+                    .limit(1);
+                if (acts.length) return true;
+                const [opp] = await db.select({ stageChangedDate: opportunities.stageChangedDate })
+                    .from(opportunities)
+                    .where(and(eq(opportunities.id, oppId), eq(opportunities.orgId, orgId)));
+                return stageMovedWithin(opp?.stageChangedDate, since, until);
+            }
+            case 'scoreDrop': {
+                // The win chance's fall into Critical (AI scoring batch 2C): resolved once the deal is out of Critical or closed.
+                if (!oppId) return false;
+                const [opp] = await db.select({ stage: opportunities.stage, win: opportunities.dealScore })
+                    .from(opportunities)
+                    .where(and(eq(opportunities.id, oppId), eq(opportunities.orgId, orgId)));
+                if (!opp) return false;
+                return ['Closed Won', 'Closed Lost'].includes(opp.stage) || (!!opp.win?.status && opp.win.status !== 'Critical');
+            }
             case 'task': {
                 // Resolved if the task is now completed
                 const taskId = log.opportunityId; // we store taskId in opportunityId for task actions
@@ -95,6 +121,41 @@ async function checkResolved(log, orgId) {
         console.error('checkResolved error:', err.message);
         return false;
     }
+}
+
+// One row's verdict now: 'resolved' | 'ignored', or null when it is not yet time to judge. A next step is resolved the
+// moment the deal moves and ignored only when its window has passed; an alert is judged once it is ALERT_WAIT_DAYS old.
+export async function verdictOf(log, orgId, now = new Date()) {
+    const ageDays = (now.getTime() - new Date(log.dismissedAt).getTime()) / 86400000;
+    if (log.actionType === 'next_step') {
+        if (await checkResolved(log, orgId)) return 'resolved';
+        return ageDays >= NEXT_STEP_DAYS ? 'ignored' : null;
+    }
+    if (ageDays < ALERT_WAIT_DAYS) return null;
+    return (await checkResolved(log, orgId)) ? 'resolved' : 'ignored';
+}
+
+// Judge the org's pending rows of the last 30 days — one rep's, or every rep's — and keep each verdict. The renewal
+// ledger's rows are not recommendations (the GET leaves them out) and are left as they are. → [{ id, outcome }]
+export async function judgePending(orgId, repName = null, now = new Date()) {
+    const pending = await db.select().from(recommendationLog).where(and(
+        eq(recommendationLog.orgId, orgId),
+        ...(repName ? [eq(recommendationLog.repName, repName)] : []),
+        eq(recommendationLog.outcome, 'pending'),
+        notLike(recommendationLog.actionType, 'renewal%'),
+        gte(recommendationLog.dismissedAt, new Date(now.getTime() - 30 * 86400000)),
+    ));
+    const updates = await Promise.allSettled(pending.map(async (log) => {
+        const outcome = await verdictOf(log, orgId, now);
+        if (!outcome) return null;
+        const resolved = outcome === 'resolved';
+        const daysToResolve = resolved ? Math.floor((now.getTime() - new Date(log.dismissedAt).getTime()) / 86400000) : null;
+        await db.update(recommendationLog)
+            .set({ outcome, resolvedAt: resolved ? now : null, daysToResolve })
+            .where(and(eq(recommendationLog.id, log.id), eq(recommendationLog.orgId, orgId)));
+        return { id: log.id, outcome };
+    }));
+    return updates.filter((r) => r.status === 'fulfilled' && r.value).map((r) => r.value);
 }
 
 export const handler = async (event) => {
@@ -186,38 +247,8 @@ export const handler = async (event) => {
             const scope   = await repScopeOf(auth, event.queryStringParameters?.rep);
             if (scope.none) return { statusCode: 200, headers, body: JSON.stringify({ evaluated: [] }) };
             const repName = scope.repName;
-            const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-
-            const pendingQuery = repName
-                ? db.select().from(recommendationLog).where(and(
-                    eq(recommendationLog.orgId, orgId),
-                    eq(recommendationLog.repName, repName),
-                    eq(recommendationLog.outcome, 'pending'),
-                    gte(recommendationLog.dismissedAt, new Date(Date.now() - 30 * 86400000)) // last 30 days only
-                  ))
-                : db.select().from(recommendationLog).where(and(
-                    eq(recommendationLog.orgId, orgId),
-                    eq(recommendationLog.outcome, 'pending'),
-                    gte(recommendationLog.dismissedAt, new Date(Date.now() - 30 * 86400000))
-                  ));
-
-            const pending = await pendingQuery;
-            // Only evaluate items that have been pending for at least 3 days
-            const evaluatable = pending.filter(l => new Date(l.dismissedAt) <= threeDaysAgo);
-
-            const updates = await Promise.allSettled(evaluatable.map(async (log) => {
-                const resolved = await checkResolved(log, orgId);
-                const daysToResolve = resolved
-                    ? Math.floor((Date.now() - new Date(log.dismissedAt).getTime()) / 86400000)
-                    : null;
-                const outcome = resolved ? 'resolved' : 'ignored';
-                await db.update(recommendationLog)
-                    .set({ outcome, resolvedAt: resolved ? new Date() : null, daysToResolve })
-                    .where(and(eq(recommendationLog.id, log.id), eq(recommendationLog.orgId, orgId)));
-                return { id: log.id, outcome };
-            }));
-
-            const evaluated = updates.filter(r => r.status === 'fulfilled').map(r => r.value);
+            // The pass (judgePending, above) — the same the nightly deal-scoring pass runs for each org (AI scoring batch 3, Q5).
+            const evaluated = await judgePending(orgId, repName);
             return { statusCode: 200, headers, body: JSON.stringify({ evaluated }) };
         }
 

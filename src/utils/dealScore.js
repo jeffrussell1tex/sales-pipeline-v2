@@ -27,6 +27,8 @@ const isClosed = (stage) => stage === WON || stage === LOST;
 export const MIN_TEACHING = 20;
 export const SHARE_HALF = 30;
 export const DEFAULT_STAGE_WEIGHT = 30;
+// Won deals with a history an org needs before next steps compare a deal with its wins (AI scoring batch 3, Q1).
+export const COMPARE_WINS = 10;
 
 // The learned model's share of the score, for n teaching deals.
 export function learnedShare(n) {
@@ -138,6 +140,16 @@ export function standingWords(model, at = (iso) => new Date(iso).toLocaleDateStr
     const a = model.accuracy || {};
     const share = Math.round(learnedShare(n) * 100);
     return `Trained on ${plural(n, 'closed deal', 'closed deals')} · right on ${a.correct ?? 0} of ${a.total ?? 0} it did not train on · the model makes ${share}% of each score, the stage and health rules the rest${model.trainedAt ? ` · last trained ${at(model.trainedAt)}` : ''}.${leftWords}`;
+}
+
+// Toward next steps compared with this workspace's wins (AI scoring batch 3, Q1) — none before the first nightly pass
+// or Train now that counts them.
+export function comparisonWords(model) {
+    if (!model || typeof model !== 'object' || !Number.isFinite(Number(model.wonTeaching))) return null;
+    const w = Number(model.wonTeaching);
+    return w >= COMPARE_WINS
+        ? `${plural(w, 'won deal', 'won deals')} with a history — enough for Claude's next steps to compare a deal with this workspace's wins.`
+        : `${w} of ${COMPARE_WINS} won deals with a history so far — once there are ${COMPARE_WINS}, Claude's next steps compare a deal with this workspace's wins.`;
 }
 
 // What Train now said (train-deal-model.mjs's answer).
@@ -349,7 +361,8 @@ export function trainDealModel(deals, activitiesByDeal, funnelStages, now = new 
     const teaching = closed.filter((d) => teaches(d, activitiesByDeal[d.id] || []));
     const usual = orgUsual(deals);
     const at = now.toISOString();
-    const base = { n: teaching.length, leftOut: closed.length - teaching.length, trained: false, usual, checkedAt: at };
+    // Won deals with a history (AI scoring batch 3, Q1): the comparisons from wins come once an org has COMPARE_WINS.
+    const base = { n: teaching.length, leftOut: closed.length - teaching.length, wonTeaching: teaching.filter((d) => d.stage === WON).length, trained: false, usual, checkedAt: at };
     if (teaching.length < MIN_TEACHING) return base;
     const rows = teaching.map((d) => ({ id: d.id, features: dealFeatures(d, activitiesByDeal[d.id] || [], lastOpenDay(d), usual, funnelStages), label: d.stage === WON ? 1 : 0 }));
     const fit = fitLogistic(rows);

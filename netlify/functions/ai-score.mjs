@@ -48,6 +48,9 @@ import { activityContactIds, dealCommittee, engagedContacts, engagedLabel, perso
 // The number is the deal's win chance, the server's (AI scoring batch 2B, state §0.257 — Jeff, 17 Nov, Q1: Claude's own
 // number retires now); Claude explains it. It is worked out again here, so Claude explains the number as it stands.
 import { rescoreDeals } from './_dealScore.mjs';
+// Each next action Claude gives is logged, and the nightly pass judges whether the deal moved after it (AI scoring
+// batch 3 — Jeff, 17 Nov, Q1, Q2; recommendation-log.mjs judgePending).
+import { recommendationLog } from '../../db/schema.js';
 import { isExplanation } from '../../src/utils/aiScore.js';
 
 const headers = {
@@ -300,6 +303,19 @@ Provide 3-5 signals, each tied to a factor above. Be specific — reference actu
             action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName,
             detail: `${kept.model} · ${keyWords} · explained ${scoreData.explains.score}% (${scoreData.explains.status})${fellBack}${noAction}`,
         });
+        // The next action Claude gave, logged once for this explanation (a cached answer gives none): the deal's rep, its stage,
+        // the words and the win chance then. A failure to log leaves the explanation standing.
+        if (kept.outcome.ok && scoreData.recommendation) {
+            try {
+                await db.insert(recommendationLog).values({
+                    id: `nxs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, orgId,
+                    repName: opp.salesRep || 'Unassigned', actionType: 'next_step', opportunityId, dealName: entityName,
+                    arrAtRisk: opp.arr ?? null, stage: opp.stage, signal: `${scoreData.recommendation} (win chance ${scoreData.explains.score}%)`,
+                    outcome: 'pending', dismissedAt: new Date(),
+                });
+            } catch (e) { console.warn('ai-score: next step not logged —', e.message); }
+        }
+
         // The win chance it explained rides along (a transport field, never kept in aiScore): the deal on screen takes it.
         return { statusCode: 200, headers, body: JSON.stringify({ ...stored, usingOrgKey, winChance: win }) };
 

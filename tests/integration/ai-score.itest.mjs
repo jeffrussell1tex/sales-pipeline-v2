@@ -91,7 +91,7 @@ const FN = {
 };
 const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
-const { settings, users, opportunities, auditLog, activities, contacts } = await import('../../db/schema.js');
+const { settings, users, opportunities, auditLog, activities, contacts, recommendationLog } = await import('../../db/schema.js');
 const { eq, and, inArray } = await import('drizzle-orm');
 
 // ORG NAMESPACE: this file owns 'itest_aiscore_*' (rows, ids, Clerk ids, emails).
@@ -138,7 +138,7 @@ const withoutFlags = ({ fromCache: _c, usingOrgKey: _k, winChance: _w, ...score 
 const explainedRow = (model, win, tail = '') => `${model} · the site key · explained ${win.score}% (${win.status})${tail}`;
 
 const cleanup = async () => {
-    for (const t of [activities, contacts, opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
+    for (const t of [recommendationLog, activities, contacts, opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
 };
 
 before(async () => {
@@ -495,4 +495,27 @@ test("the key check: an Admin's; the models of the list this org's key lists —
     assert.ok(!JSON.stringify(r.body).includes('itest-aiscore-site-key'), 'never the key');
     assert.equal((await call(FN.models, WHO.rep, 'GET')).status, 403, "a rep's is not to ask");
     assert.equal(MODEL.listCalls.length, 1);
+});
+
+// ── AI scoring batch 3: each next action Claude gives is logged ─────────────────────────────────────────────────
+
+test('each next action Claude gives is logged once, in its org — a fresh explanation one row, a cached answer none (batch 3, Q1)', async () => {
+    await setAi({ model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5' });
+    const rows = async () => db.select().from(recommendationLog).where(and(eq(recommendationLog.orgId, A), eq(recommendationLog.opportunityId, DEAL), eq(recommendationLog.actionType, 'next_step')));
+    const before = (await rows()).length;
+    MODEL.calls.length = 0; MODEL.plan = [];
+    MODEL.reply = reply('next step');
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const after = await rows();
+    assert.equal(after.length, before + 1, 'one row for the next action given');
+    const row = after.find((x) => x.signal === `Book the walkthrough (win chance ${r.body.winChance.score}%)`);
+    assert.ok(row, 'its words and the win chance then');
+    assert.equal(row.repName, 'Rhea Aiscore', "the deal's rep");
+    assert.equal(row.outcome, 'pending');
+    // The cached answer gives no new next action.
+    const cached = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL });
+    assert.equal(cached.body.fromCache, true);
+    assert.equal((await rows()).length, before + 1, 'REGRESSION: a cached answer logged as a new next step');
+    assert.equal((await db.select().from(recommendationLog).where(eq(recommendationLog.orgId, B))).length, 0, 'nothing in org B');
 });

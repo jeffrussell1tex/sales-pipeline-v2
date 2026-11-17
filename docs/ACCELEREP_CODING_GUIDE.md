@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** November 4, 2026 · rules current through **§18b132** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** November 4, 2026 · rules current through **§18b133** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4827,3 +4827,14 @@ THE GUARD: tests/ai-explain.test.mjs (the shape, the moved words, the scorer's o
 4. **Every alert a member receives has a switch in their profile panel**, on by default as the server's default; the company's own post (Slack, the log, an automation) is not the member's to switch.
 
 THE GUARD: tests/win-alert.test.mjs (the notes, the fall, the words, the switch); tests/integration/win-alert.itest.mjs (the hourly pass: a fall alerted once, a level not, a switched-off rep's email not, org B's apart).
+
+## 18b133. Every Logged Recommendation Gets A Verdict — Each Type Its Own Rule, Judged By A Pass That Runs (hard rule)
+
+**Origin (§0.259, 17 Nov 2026 — OPEN_ITEMS §3.1 batch 3; docs/design/deal-score/DESIGN-3.md, Jeff: Q1-Q5 the Recommended).** The recommendation log was built to say whether a deal moved after an alert — its PUT judged each row — and nothing ever called the PUT: every alert stayed "pending", and Reports' resolve rate counted nothing. The score-drop row had no rule, so it would have read "ignored" whatever happened.
+
+1. **A writer of a new log type names its rule** in recommendation-log.mjs `checkResolved` — what on the deal resolves it, and in what window — and `verdictOf` when it is judged; a type with no rule is a type no one can learn from.
+2. **The pass runs**: each night after the scores (score-deals-batch.mjs `judgePending`, org by org); the PUT runs the same pass for its caller's scope. A pass no caller reaches is a finding, not a feature.
+3. **A next action Claude gives is logged once, when it is given** — a fresh explanation with words, never a cached one — and resolved by what happens on the deal within 14 days (an activity, a stage move), never by a button.
+4. **Rows that are not recommendations** (the renewal ledger) and rows past 30 days are left as they are.
+
+THE GUARD: tests/next-steps.test.mjs (the window, the pass and where it runs, the logging); tests/integration/next-steps.itest.mjs (every rule against the database, org B apart).
