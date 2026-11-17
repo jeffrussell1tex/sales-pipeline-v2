@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { topWindow } from '../utils/draggableOrder';
 
 /**
  * useDraggable — drag-to-move hook for modals and panels.
@@ -24,6 +25,22 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 let _globalZ = 10000;
 function nextZ() { return ++_globalZ; }
 
+// The draggable windows open now, each by its container (state §0.252): an Escape is the one drawn on top's —
+// highest z, else later in the page (src/utils/draggableOrder.js) — read at key time, never a render's copy: a
+// press on another window's header raises it without rendering this one.
+const OPEN_WINDOWS = new Set();
+const zOf = (el) => {
+    const z = Number(el.style && el.style.zIndex);
+    return Number.isFinite(z) ? z : 0;
+};
+const follows = (a, b) => !!(b.compareDocumentPosition(a) & 4);   // Node.DOCUMENT_POSITION_FOLLOWING
+export function windowOnTop(containerRef) {
+    const el = containerRef && containerRef.current;
+    if (!el) return false;
+    const open = [...OPEN_WINDOWS].map((r) => r.current).filter((e) => e && e.isConnected).map((e) => ({ el: e, z: zOf(e) }));
+    return topWindow(open, follows) === el;
+}
+
 function isMobileViewport() {
     return window.innerWidth <= 640;
 }
@@ -37,6 +54,17 @@ export function useDraggable({ transparent = false } = {}) {
     const dragState    = useRef({ startClient: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
     const containerRef = useRef(null);
     const posRef       = useRef(null);
+
+    // This window among the draggables open (state §0.252), while it is mounted; `onTop` asks, at key time, whether
+    // it is the one drawn on top — the one an Escape is for.
+    useEffect(() => {
+        // A window opened while another is open starts above it: every window started at 10000, so one opened after
+        // another was raised (its header pressed) drew under it — "+ New Rep"'s user window, under its deal window.
+        if (OPEN_WINDOWS.size > 0) setZIndex(nextZ());
+        OPEN_WINDOWS.add(containerRef);
+        return () => { OPEN_WINDOWS.delete(containerRef); };
+    }, []);
+    const onTop = useCallback(() => windowOnTop(containerRef), []);
 
     // Track viewport resize (e.g. device rotation)
     useEffect(() => {
@@ -260,6 +288,7 @@ export function useDraggable({ transparent = false } = {}) {
         bringToFront,
         containerRef,
         zIndex,
+        onTop,
     };
 }
 

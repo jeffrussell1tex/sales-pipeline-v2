@@ -268,8 +268,12 @@ test('a refused version history throws the server\'s words, else its status; the
 test('the link picker stays open on a refused link; a record\'s Link existing stops at one', () => {
     const picker = read('src/components/documents/DocumentLinkPicker.jsx');
     const done = between(picker, 'const done = async () => {', '\n    };');
-    assert.ok(done.includes('if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) return;'));
-    assert.ok(done.includes('if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) return;'));
+    // Since §0.252 the writes go out held (no close, no second Done, while they are out); a refusal still stops it open.
+    assert.ok(done.includes('if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) landed = false;'));
+    assert.ok(done.includes('if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) landed = false;'));
+    assert.ok(done.includes('                    if (!landed) break;'), 'no unlink after a refusal');
+    const held = done.indexOf('} finally { busyRef.current = false; setBusy(false); }');
+    assert.ok(held > 0 && done.indexOf('            if (!landed) return;') > held, 'let go of the hold, then stop open on a refusal');
     assert.ok(!done.includes('console.error'), 'a refusal is not left in the console');
     assert.ok(done.trimEnd().endsWith('close();\n    };'), 'it closes once every change has landed');
     const record = read('src/components/documents/RecordDocuments.jsx');

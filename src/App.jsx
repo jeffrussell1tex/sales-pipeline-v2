@@ -613,17 +613,12 @@ dbFetch('/.netlify/functions/users?me=true')
                 // after the form's on document — closed it 2 ms later, in the same keypress.
                 if (e.defaultPrevented) return;
                 switch (topLayer(openLayersRef.current || {})) {
-                    case 'coachingNote': setCoachingNoteModal(null); return;
+                    // The coaching note and the draggable windows — the deal and user windows, the imports, the lost
+                    // reason — take their own (state §0.252): App closed the coaching note, and the deal and user
+                    // windows, while their saves were out, and the deal window under "+ New Rep"'s user window.
                     case 'prompt': setPromptModal(null); return;
                     case 'confirm': setConfirmModal(null); return;
                     case 'activityDetail': setViewingActivity(null); return;
-                    case 'draggable':   // the deal and user windows; an import or the lost reason takes its own
-                        // A refused save showing over the deal window: Escape dismisses it, not the
-                        // window and its form (state §0.193).
-                        if (showModal && oppModalError) { setOppModalError(null); return; }
-                        if (showModal) { setShowModal(false); setEditingOpp(null); setOppModalError(null); setOppModalSaving(false); return; }
-                        if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
-                        return;
                     case 'shortcuts': setShowShortcuts(false); return;
                     case 'notes': setNotesPopover(null); return;
                     case 'search': setShowSearchResults(false); setGlobalSearch(''); return;
@@ -716,7 +711,7 @@ dbFetch('/.netlify/functions/users?me=true')
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showModal, showUserModal, showActivityModal, viewingActivity, lostReasonModal, oppModalError,
+    }, [showActivityModal, viewingActivity, lostReasonModal,
         confirmModal, promptModal, coachingNoteModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 

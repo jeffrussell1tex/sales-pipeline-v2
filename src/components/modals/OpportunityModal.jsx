@@ -7,6 +7,7 @@ import { useApp } from '../../AppContext';
 import AccountPicker from '../rails/AccountPicker';
 import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import { useCloseRequest } from '../../hooks/useCloseRequest';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 import { capMatches } from '../../utils/searchMatch.js';
@@ -248,7 +249,7 @@ function CloseDateMoves({ deal }) {
     );
 }
 
-function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
+function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate, onDraft }) {
     const { setViewingActivity } = useApp();   // a history row opens the read-only viewer (§0.93)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
     const [newActivity, setNewActivity] = React.useState({
@@ -273,6 +274,14 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
         setLogWith([]);
         setShowLogActivity(false);
     };
+    // What the window's close reads of this tab (state §0.252): an activity typed here — its notes, or the people it
+    // was with. Gone when the tab closes, as its draft is. One being logged the window holds itself (its
+    // onSaveActivity), so leaving the tab mid-log never lets go of it (the review, 16 Nov).
+    React.useEffect(() => {
+        if (!onDraft) return undefined;
+        onDraft({ typed: showLogActivity && (newActivity.notes.trim() !== '' || logWith.length > 0) });
+        return () => onDraft({ typed: false });
+    }, [onDraft, showLogActivity, newActivity.notes, logWith.length]);
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
 
     const stageHistory = opportunity.stageHistory || [];
@@ -558,7 +567,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
                 <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
+                <PrimaryBtn type="button" disabled={logState.saving} onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
             </div>
         </div>
     );
@@ -836,10 +845,14 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
         'Accepted':         { bg: 'rgba(77,107,61,0.16)',  color: T.ok      },
         'Rejected / Lost':  { bg: 'rgba(156,58,46,0.1)',   color: T.danger  },
     };
+    // To the deal's quotes once the window has closed — never while its save is out, and with typed work only on
+    // "Discard" (state §0.252): the tab switched under the window, then the window closed over its form.
     const handleNavigate = () => {
-        if (setQuotesDeepLinkOppId) setQuotesDeepLinkOppId(opportunity?.id);
-        if (setActiveTab) setActiveTab('quotes');
-        if (onClose) onClose();
+        const go = () => {
+            if (setQuotesDeepLinkOppId) setQuotesDeepLinkOppId(opportunity?.id);
+            if (setActiveTab) setActiveTab('quotes');
+        };
+        if (onClose) onClose(go); else go();
     };
     // The deal's first person, by id (state §0.192): it matched the first name in the text
     // to the contacts in exact case.
@@ -1043,6 +1056,7 @@ export default function OpportunityModal({
     onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
     errorMessage, onDismissError, saving, onOpenNestedContact }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
+    const { escapeBlocked } = useApp();     // the Escape order (state §0.252)
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
         : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
@@ -1146,6 +1160,23 @@ export default function OpportunityModal({
     const [mentionAnchorPos, setMentionAnchorPos]       = useState(0);
     const commentTextareaRef = useRef(null);
 
+    // What the window holds that a member typed, as one reading (state §0.252; OPEN_ITEMS §4.1): the form, the
+    // Account, Site Name and Sales Rep fields' text, the contacts picked, and a team note being written or edited.
+    // Typed work is measured against what the window opened with — taken the render it opens, as a tab's layer's is
+    // (guide §18b116 rule 3) — never the `opportunity` prop, which a note posted from the window replaces.
+    // A note's Edit opened and left as it opened is no typed work — measured against the text it opened with, never the
+    // note as it stands now, which another member's edit or delete changes (the review, 16 Nov).
+    const editBaseRef = useRef('');
+    const editedNote = () => {
+        if (!editingCommentId) return '';
+        // A note gone since (another member's delete) is no longer drawn: nothing typed in it can be seen or kept.
+        if (!(opportunity?.comments || []).some((c) => c.id === editingCommentId)) return '';
+        return editingCommentText === editBaseRef.current ? '' : editingCommentText;
+    };
+    const typedNow = () => JSON.stringify([formData, accountSearch, siteSearch, repSearch, selectedContacts, selectedContactIds, commentDraft, editedNote()]);
+    const openedWith = useRef(null);
+    if (openedWith.current === null) openedWith.current = typedNow();
+
     const comments = (opportunity?.comments || []).slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const teamMembers = (settings?.users || []).map(u => u.name).filter(Boolean).sort();
 
@@ -1222,6 +1253,12 @@ export default function OpportunityModal({
     // AI Score tabs' Save submitted #opp-form, which a detail tab unmounts, so it did
     // nothing. A field missing opens the form, where its error shows.
     const saveDeal = () => {
+        // A second press while the save is out sends nothing (state §0.252): the detail tabs' Saves are not disabled
+        // mid-save, and a new deal's second POST was a second deal.
+        if (saving) return;
+        // Nor while a note, an activity or a documents batch is out (state §0.252): the deal's landed save closes the
+        // window, and their answers — said in it — went nowhere.
+        if (noteState.saving || activitiesOut > 0 || docsOut > 0) return;
         const errors = {};
         if (!formData.opportunityName || !formData.opportunityName.trim()) errors.opportunityName = 'Opportunity name is required';
         // The account is the record picked, never the first of its name (state §0.198;
@@ -1308,8 +1345,51 @@ export default function OpportunityModal({
     const activityTypeIcon = { Call: '📞', Email: '✉️', Meeting: '🤝', Demo: '🖥️', 'Proposal Sent': '📄', 'Follow-up': '🔄', Other: '📝' };
 
     // ── Drag + resize (unchanged) ─────────────────────────────
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(1100, 780, 760, 540);
+
+    // ── Closing (state §0.252; OPEN_ITEMS §4.1; Jeff, 16 Nov: "Deal + lead") ──
+    // One close for the ×, the Cancels (the form's and each detail tab's), a move to the deal's quotes and Escape:
+    // nothing while the save is out (guide §18b80 rule 4); with typed work, "Discard changes?"; else the window's
+    // own close. A new deal with its name, account and rep filled closed at once on Cancel, and Escape closed the
+    // window — App's handler, which never read the save — while its save was out.
+    // The History tab's activity — typed, or being logged — as the tab reports it (DealHistoryTab's onDraft).
+    const historyDraft = useRef({ typed: false });
+    // The History tab's activities being logged, counted by the window — the tab may close before an answer lands.
+    const [activitiesOut, setActivitiesOut] = useState(0);
+    // A documents batch sending from the Documents tab (RecordDocuments' onBusy), counted the same way.
+    const [docsOut, setDocsOut] = useState(0);
+    const onDocsBusy = React.useCallback((b) => setDocsOut((n) => n + (b ? 1 : -1)), []);
+    // The header's tabs stay put while a History log or a documents batch is out: their answers are said in the tab.
+    const pickTab = (t) => { if (activitiesOut > 0 || docsOut > 0) return; setDetailTab(t); };
+    const saveActivityHeld = React.useCallback(async (data) => {
+        setActivitiesOut((n) => n + 1);
+        try { return await onSaveActivity(data); } finally { setActivitiesOut((n) => n - 1); }
+    }, [onSaveActivity]);
+    const onHistoryDraft = React.useCallback((d) => { historyDraft.current = d; }, []);
+    const closeDeal = useCloseRequest({
+        onClose,
+        dirty: () => typedNow() !== openedWith.current || historyDraft.current.typed,
+        // The deal's save, a team note being posted or edited, the History tab's activity being logged: each is a save
+        // the window shows the answer to.
+        busy: () => saving || noteState.saving || activitiesOut > 0 || docsOut > 0,
+    });
+    // The window's Escape: on document, after the form's own (the @mention list marks the one it takes), while no
+    // layer above the windows is open and no window is drawn over this one — "+ New Rep"'s user window, which one
+    // Escape left open as it closed this one (guide §18b80 rule 5).
+    const escapeHeld = escapeBlocked('draggable');
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
+            if (!onTop()) return;   // the window drawn over this one takes it
+            e.preventDefault();
+            // A refused save showing over the window: Escape dismisses it, not the window and its form (state §0.193).
+            if (errorMessage) { onDismissError(); return; }
+            closeDeal();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [escapeHeld, errorMessage, onDismissError, onTop, closeDeal]);
 
     // ── Deal age metadata ─────────────────────────────────────
     const dealAgeInfo = opportunity ? (() => {
@@ -1369,10 +1449,14 @@ export default function OpportunityModal({
         setNoteState({ saving: false, error: null });
         setEditingCommentId(null);
     };
+    // A delete asks first and is out only once confirmed (ModalLayer calls `sending` then): from there the window holds
+    // as for a post (state §0.252) — a cancel never answers, so nothing is held for it.
     const deleteNote = async (commentId) => {
         if (!onDeleteComment || noteState.saving) return;
-        const r = await onDeleteComment(opportunity.id, commentId);
+        let sent = false;
+        const r = await onDeleteComment(opportunity.id, commentId, () => { sent = true; setNoteState({ saving: true, error: null }); });
         if (r && !r.ok) setNoteState({ saving: false, error: r.error || 'The note was not deleted.' });
+        else if (sent) setNoteState({ saving: false, error: null });
     };
 
     return (
@@ -1453,7 +1537,7 @@ export default function OpportunityModal({
                         {opportunity && (
                             <div style={{ display: 'flex', gap: 2 }}>
                                 {/* Opp — always visible, navigates back to main deal view */}
-                                <button type="button" onClick={() => setDetailTab(null)}
+                                <button type="button" onClick={() => pickTab(null)}
                                     style={{ padding: '3px 10px', fontSize: 11, fontWeight: !detailTab ? 700 : 500, fontFamily: T.sans,
                                         cursor: 'pointer', border: 'none',
                                         borderBottom: !detailTab ? `2px solid ${T.gold}` : '2px solid transparent',
@@ -1469,7 +1553,7 @@ export default function OpportunityModal({
                                     { id: 'quotes',    label: 'Quotes'    },
                                     { id: 'documents', label: 'Documents' },
                                 ].map(tab => (
-                                    <button key={tab.id} type="button" onClick={() => setDetailTab(detailTab === tab.id ? null : tab.id)}
+                                    <button key={tab.id} type="button" onClick={() => pickTab(detailTab === tab.id ? null : tab.id)}
                                         style={{ padding: '3px 10px', fontSize: 11, fontWeight: detailTab === tab.id ? 700 : 500, fontFamily: T.sans,
                                             cursor: 'pointer', border: 'none',
                                             borderBottom: detailTab === tab.id ? `2px solid ${T.gold}` : '2px solid transparent',
@@ -1489,7 +1573,7 @@ export default function OpportunityModal({
                                 📋 Prep
                             </button>
                         )}
-                        <button type="button" onClick={onClose}
+                        <button type="button" onClick={closeDeal}
                             style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: T.r, color: T.surfaceInkFg, cursor: 'pointer', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 4 }}>
                             <Icon name="x" size={14} color={T.surfaceInkFg} sw={2}/>
                         </button>
@@ -1504,13 +1588,13 @@ export default function OpportunityModal({
                         <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
                             {detailTab === 'history' && (
                                 <DealHistoryTab opportunity={opportunity} oppActivities={oppActivities} oppTasks={oppTasks} stages={stages} settings={settings} contacts={contacts}
-                                    activityTypeIcon={activityTypeIcon} onSaveActivity={onSaveActivity} onDeleteActivity={onDeleteActivity}
-                                    currentUser={currentUser} onClose={onClose} saving={saving}
+                                    activityTypeIcon={activityTypeIcon} onSaveActivity={saveActivityHeld} onDeleteActivity={onDeleteActivity}
+                                    currentUser={currentUser} onClose={closeDeal} saving={saving} onDraft={onHistoryDraft}
                                     onUpdate={saveDeal}/>
                             )}
                             {detailTab === 'contacts' && (
                                 <ContactEngagementTab opportunity={opportunity} oppActivities={oppActivities} contacts={contacts}
-                                    onClose={onClose} saving={saving}
+                                    onClose={closeDeal} saving={saving}
                                     selectedContacts={selectedContacts} selectedContactIds={selectedContactIds}
                                     setSelectedContacts={setSelectedContacts} setSelectedContactIds={setSelectedContactIds}
                                     handleChange={handleChange}
@@ -1520,14 +1604,14 @@ export default function OpportunityModal({
                                 <AiScoreTab opportunity={opportunity} aiScore={aiScore}
                                     askWords={aiAsk ? null : aiAccessWords(settings?.aiSettings)}
                                     onScored={(score) => setScoredNow({ id: opportunity.id, score })}
-                                    onClose={onClose}
+                                    onClose={closeDeal}
                                     onUpdate={saveDeal}/>
                             )}
                             {detailTab === 'quotes' && (
-                                <OppQuotesPanel opportunity={opportunity} contacts={contacts} onClose={onClose}/>
+                                <OppQuotesPanel opportunity={opportunity} contacts={contacts} onClose={closeDeal}/>
                             )}
                             {detailTab === 'documents' && (
-                                <RecordDocuments recordType="opportunity" recordId={opportunity.id} recordName={opportunity.opportunityName || opportunity.account} recordSub={opportunity.stage} />
+                                <RecordDocuments onBusy={onDocsBusy} recordType="opportunity" recordId={opportunity.id} recordName={opportunity.opportunityName || opportunity.account} recordSub={opportunity.stage} />
                             )}
                         </div>
                     )}
@@ -2217,7 +2301,7 @@ export default function OpportunityModal({
                                                                 </div>
                                                                 {isOwn && !isEditing && (
                                                                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                                                                        <button type="button" onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text); }} title="Edit"
+                                                                        <button type="button" onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text); editBaseRef.current = c.text; }} title="Edit"
                                                                             style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '0.75rem', padding: '2px 4px', lineHeight: 1, borderRadius: T.r }}
                                                                             onMouseEnter={e => e.currentTarget.style.color = T.info}
                                                                             onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>✏️</button>
@@ -2244,8 +2328,9 @@ export default function OpportunityModal({
 
                                     {/* ── Footer actions ── */}
                                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
-                                        <GhostBtn type="button" onClick={onClose} disabled={saving}>Cancel</GhostBtn>
-                                        <PrimaryBtn saving={saving}>
+                                        <GhostBtn type="button" onClick={closeDeal} disabled={saving}>Cancel</GhostBtn>
+                                        {/* Waits, too, while a team note is out: the deal's landed save closes the window (state §0.252). */}
+                                        <PrimaryBtn saving={saving} disabled={noteState.saving}>
                                             {saving ? 'Saving…' : opportunity ? 'Save' : 'Create'}
                                         </PrimaryBtn>
                                     </div>

@@ -409,7 +409,10 @@ export default function AccountRail() {
         });
     };
 
+    // Nothing while the save is out (state §0.252; guide §18b80 rule 4): a Discard then closed a new record's rail, or
+    // put an edit back to view, under a save that then landed.
     const handleDiscard = () => {
+        if (accountModalSaving) return;
         if (isNew) {
             closeRail();
         } else {
@@ -429,6 +432,13 @@ export default function AccountRail() {
         }
     };
 
+    // The ×, as a member asks for it: nothing while the save is out (state §0.252); a save that lands closes through closeRail.
+    // A documents batch sending from the rail's Documents tab (RecordDocuments' onBusy, state §0.252), counted here: the
+    // rail holds its closes and its moves while one is out, as while its save is — its words are said in that tab.
+    const [docsOut, setDocsOut] = useState(0);
+    const onDocsBusy = useCallback((b) => setDocsOut((n) => n + (b ? 1 : -1)), []);
+    const railHeld = () => accountModalSaving || docsOut > 0;
+    const leaveRail = () => { if (!railHeld()) closeRail(); };
     const closeRail = () => {
         if (railStack.length > 0) {
             const prev = railStack[railStack.length - 1];
@@ -452,7 +462,10 @@ export default function AccountRail() {
         }
     };
 
+    // Back, too, never while the save is out (state §0.252): the rail moved on, and the save's answer landed on the
+    // record moved to.
     const handleBack = () => {
+        if (railHeld()) return;
         const prev = railStack[railStack.length - 1];
         if (!prev) return;
         setRailStack(s => s.slice(0, -1));
@@ -482,14 +495,15 @@ export default function AccountRail() {
         const onKey = (e) => {
             if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
             e.preventDefault();
-            if (!isEditing) closeRail();
+            if (!isEditing) leaveRail();
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing, escapeHeld]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, escapeHeld, accountModalSaving, docsOut]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Open contact from the account rail
     const handleOpenContactRail = (contactId) => {
+        if (railHeld()) return;   // never while the save or a documents batch is out (state §0.252)
         setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]);
         setAccountRailId(null);
         setContactRailId(contactId);
@@ -498,6 +512,7 @@ export default function AccountRail() {
 
     // Open a sub-account from the parent's rail (stacked, so ← Back returns here)
     const handleOpenSubAccount = (subId) => {
+        if (railHeld()) return;   // never while the save or a documents batch is out (state §0.252)
         setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]);
         setAccountRailId(subId);
         setAccountRailMode('view');
@@ -508,9 +523,10 @@ export default function AccountRail() {
     const bg = avatarBg(account?.name || '');
     const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' };
 
+    // A tab is changed only while no documents batch is out: the Documents tab stays, its words with it (state §0.252).
     const tabBtn = (id, label) => (
         <button
-            onClick={() => setActiveTab(id)}
+            onClick={() => { if (docsOut > 0) return; setActiveTab(id); }}
             style={{
                 background: 'none', border: 'none',
                 borderBottom: activeTab === id ? `2px solid ${T.ink}` : '2px solid transparent',
@@ -529,7 +545,7 @@ export default function AccountRail() {
         <>
         {/* Click-catcher */}
         <div
-            onClick={!isEditing ? closeRail : undefined}
+            onClick={!isEditing ? leaveRail : undefined}
             style={{ position: 'fixed', inset: 0, zIndex: 10998, background: 'rgba(42,38,34,0.25)' }}
         />
 
@@ -573,7 +589,7 @@ export default function AccountRail() {
                     </span>
                 )}
 
-                <button onClick={closeRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                <button onClick={leaveRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
 
             {/* ── Quick stats bar (view mode only) ──────────────────────────── */}
@@ -604,7 +620,7 @@ export default function AccountRail() {
                                 📋 Prep{openOpps.length > 1 ? ' ▾' : ''}
                             </button>
                         )}
-                        <button onClick={() => setAccountRailMode('edit')}
+                        <button onClick={() => { if (docsOut > 0) return; setAccountRailMode('edit'); }} disabled={docsOut > 0}
                             style={{ padding: '6px 14px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                             Edit
                         </button>
@@ -970,7 +986,7 @@ export default function AccountRail() {
 
                 {/* ════════ TAB: Activity ════════ */}
                 {activeTab === 'documents' && !isNew && account && (
-                    <RecordDocuments recordType="account" recordId={account.id} recordName={account.name} recordSub={account?.verticalMarket || account?.industry} />
+                    <RecordDocuments onBusy={onDocsBusy} recordType="account" recordId={account.id} recordName={account.name} recordSub={account?.verticalMarket || account?.industry} />
                 )}
 
                 {activeTab === 'activity' && !isNew && (
@@ -1035,7 +1051,7 @@ export default function AccountRail() {
             {isEditing && (
                 <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
                     {dirty && <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>}
-                    <button onClick={handleDiscard}
+                    <button onClick={handleDiscard} disabled={accountModalSaving}
                         style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>

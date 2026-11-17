@@ -177,7 +177,7 @@ test('THE GUARD reads what is sent: a list or history key, a spread row and a ba
     assert.equal(one('dealBody(sentBody(row))'), null);
     assert.equal(one('{ id, stage, stageChangedDate }'), null);
     assert.equal(dealPutsIn("dbWrite(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' });").length, 0, 'a DELETE is no PUT');
-    assert.equal(dealPutsIn("dbFetch('/.netlify/functions/opportunities', { method: 'POST', body: JSON.stringify(row) });").length, 0, 'a create is a new row — its lists are its own');
+    assert.equal(dealPutsIn("dbFetch('/.netlify/functions/opportunities', { method: 'POST', body: JSON.stringify(row) });").length, 0, 'a create is no PUT — the POSTs refuse a list with anything in it (state §0.252, tests/deal-create.test.mjs)');
     assert.equal(dealPutsIn("dbFetch('/.netlify/functions/contacts', { method: 'PUT', body: JSON.stringify(row) });").length, 0, 'another endpoint');
 });
 

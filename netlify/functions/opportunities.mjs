@@ -23,6 +23,8 @@ import { applyStageChanges, moveDayOf, stageMoveOf } from './_stage.mjs';
 import { noteOpOf, applyNoteOp, notesOf, NOTE_WORDS } from '../../src/utils/dealNotes.js';
 // A deal's close-date history (state §0.239): the words a refusal says, and a move's from → to.
 import { HISTORY_WORDS, moveWords, isDay } from '../../src/utils/dealHistory.js';
+// What a create may name of those lists (state §0.252): none with anything in it.
+import { createListRefused } from '../../src/utils/dealCreate.js';
 
 // A deal's created date is the server's once the deal exists (state §0.240, finding 5; Jeff, 10 Nov: "Server-owned"):
 // a create keeps a real day it names — the member's, or an import's own Created Date — else the server's day; no
@@ -350,6 +352,12 @@ export const handler = async (event) => {
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
                 // One row per deal: a row sent twice could land either copy (state §0.216, as the accounts bulk create).
                 if (new Set(data.map(d => d.id)).size !== data.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.' }) };
+                // A new deal's lists start empty (state §0.252; guide §18b119 rule 2): a row naming an entry in its notes,
+                // stage history or close-date history refuses the batch, before any read — the import sends them empty. The
+                // answer names the first such list, in its words, and every row naming that one — whatever else it names.
+                const listRows = data.filter(d => createListRefused(d));
+                const firstList = listRows.length ? createListRefused(listRows[0]) : null;
+                if (firstList) return { statusCode: 400, headers, body: JSON.stringify({ ...firstList, ids: listRows.filter(d => createListRefused({ [firstList.field]: d[firstList.field] })).map(d => d.id) }) };
                 // Each row's account by the single save's rule (bulkDealLinks, above): its own name with it.
                 const linked = await bulkDealLinks(data, orgId);
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
@@ -376,6 +384,9 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
+            // Nor a single create (state §0.252): the deal window and the Closed Lost dialog send the lists empty.
+            const listNamed = createListRefused(data);
+            if (listNamed) return { statusCode: 400, headers, body: JSON.stringify(listNamed) };
             const link = await accountLink(data, null, orgId);
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             const people = await checkLinks(DEAL_LINKS, data, null, orgId);

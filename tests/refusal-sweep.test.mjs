@@ -6793,7 +6793,7 @@ test('Part 12 fixes (D): the upload rail — a document made whose answer cannot
 const p12fxdAttach = async (answers) => {
     const did = { errors: [], notices: [], busy: [], sent: [] };
     const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
-        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld', 'onBusy'], 'attachFiles')(
         // Moved in §0.249 (review fixes, round 2, D2): setError applies an updater to the last error, as React's does.
         () => null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
         async (f) => { did.sent.push(f.name); const a = answers[f.name]; if (a instanceof Error) throw a; return a; },
@@ -8720,7 +8720,7 @@ test('Part 12 fixes (U3): the invite page\'s notice — the warning tint when it
 const p12fxd3Attach = async (answers, invalid = {}) => {
     const did = { errors: [], notices: [], busy: [], sent: [] };
     const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
-        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld', 'onBusy'], 'attachFiles')(
         (f) => invalid[f.name] || null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
         async (f) => { did.sent.push(f.name); const a = answers[f.name]; if (a instanceof Error) throw a; return a; },
         // Moved in §0.249 (review fixes, round 4, D4): the batch's sending mark and the held drop's names.
@@ -9590,7 +9590,7 @@ const p12fxD4Make = (invalid = {}) => {
     const sending = { current: false };
     const answers = {};
     const attach = p12aFn(P12FXD_RECORD, '    const attachFiles = async (fileList) => {', '\n    };', '\n    };',
-        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld'], 'attachFiles')(
+        ['validateFile', 'setError', 'setNotice', 'setBusy', 'createDocument', 'baseName', 'recordLink', 'failureWords', 'sending', 'setHeld', 'onBusy'], 'attachFiles')(
         (f) => invalid[f.name] || null, (v) => did.errors.push(typeof v === 'function' ? v(did.errors.at(-1) ?? null) : v), (v) => did.notices.push(v), (v) => did.busy.push(v),
         async (f) => { did.sent.push(f.name); const a = await answers[f.name]; if (a instanceof Error) throw a; return a; },
         (n) => n.replace(/\.[^.]+$/, ''), { type: 'account', recordId: 'acc_1' }, failureWords,

@@ -1719,39 +1719,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
   shortcuts, notes, search, profile and notification panels do not close on
   Escape meanwhile. Recommended: hold both checkers while the boundary shows
   its notice.
-- **The deal window closes over typed work without asking, and on Escape
-  even mid-save** (seen 16 Nov in the dev check as Karen, state §0.251;
-  the rest read in code, not run). A new deal with its name, account and
-  rep filled closed at once on Cancel — no "Discard changes?". Cancel
-  (OpportunityModal.jsx:2247) and the header × (:1492) call `onClose`, and
-  ModalLayer's (:215) just closes; App's Escape (App.jsx:624) closes it
-  too, and does not read `oppModalSaving` — so Escape closes the window
-  while its save is out, which guide §18b80 rule 4 refuses ("Nothing
-  mid-save closes on Escape"); Cancel is disabled while saving. The deal
-  window is an app window: Escape in the tabs (§0.230-§0.233;
-  docs/design/escape-tabs/) asked "Discard?" for layers inside the tabs
-  only (`useLocalLayer`); the lead window asks "Discard this lead?"
-  (LeadModal.jsx:346). Recommended: the mid-save Escape held as rule 4
-  says; Jeff decides whether the app's windows ask "Discard?" too. Low.
+- **A raised draggable window draws over the task reminders** (§0.252's round-4 review, 16 Nov; read in code, not run; older): every draggable starts at z 10000 and a press on its header raises it (`nextZ`, useDraggable.js), so a window clicked once draws above the due popup (10001) and the reminder (10000) — and since §0.252 a window opened over another starts above it without a click. ESCAPE_ORDER still ranks both popups above 'draggable', so the window's Escape is held and goes to a popup hidden under it. Recommended: the popups drawn above a band the draggables stay within (escape-order.test.mjs pins each z). Jeff decides. Low.
+- **The account rail's Escape reads the rail stack of an older render** (§0.252's round-4 review, 16 Nov; read in code; older — the deps were `[isOpen, isEditing, escapeHeld]` at HEAD): after a sub-account opens over an account, the listener's `closeRail` can read the stack it was made with. §0.252 added the save flag and `docsOut` to the deps, not the stack. Low.
+- **Quick Log's fields stay editable while a log is out** (§0.252's round-2 review, 16 Nov; read in code; older): the log sends what was typed when Log was pressed; a correction typed while it is out is cleared when it lands, unsaid. Low.
 
 ### 4.2 Deals, activities and pipeline
 
-- **A deal create stores a body's notes and stage history** (read in code
-  16 Nov, state §0.251's dev check; not run). `sanitize`
-  (opportunities.mjs:172-173) keeps `data.stageHistory` and
-  `data.comments`; neither the single POST (:375-392) nor the bulk POST
-  (:348-374) refuses or drops them, while the bulk PUT refuses both
-  (:445) and the single PUT refuses `comments` (:619) and drops
-  `stageHistory` (:628). Guide §18b119 rule 2 says a whole list in a body
-  is refused "single or bulk", and rule 5 makes who wrote an entry the
-  server's — only the PUTs hold to it. A create can so carry notes under
-  any author and time, and any stage history. Every caller found sends
-  both empty: the deal window and the Closed Lost dialog
-  (useOpportunities.js:130-133, :231-232), the import (importRows.js:138-
-  139, bulk); a restore and a merge write directly. A fix must not refuse
-  the empty lists those send (a key check as at :445 would refuse every
-  create): drop the keys, or refuse only entries. Low.
-
+- **A lead's Convert opens the deal window blank** (§0.252's map, 16 Nov; read in code, not run): LeadsTab.jsx's convertLead opens the window with `editingOpp` null and sets the seed 50 ms later; OpportunityModal takes its form once, at mount, and ModalLayer gives it no `key` — so the seed's name, account, rep and revenue never reach the form, while the header reads the seed's name. The lead is marked Converted at once (LeadsTab.jsx:1306), before any deal is saved: a Cancel leaves a Converted lead with no deal. Recommended: open the window with the seed (or key it), and mark Converted when the deal lands. Jeff decides. Medium.
+- **The deal window's Contacts "add new" opens nothing** (§0.252's map, 16 Nov; read in code): ModalLayer passes no `onOpenNestedContact`, so the press falls to `setNestedModal`, which nothing draws — the contact search is cleared and nothing opens. Low.
+- **A backup restore puts a deal's team notes back unchecked** (§0.252's map, 16 Nov; read in code): backup.mjs runs `restoredHistories` over the two histories only; the notes go back as the file has them. Low.
+- **A create takes a body's stage date and won date as sent** (§0.252's map, 16 Nov; read in code): sanitize keeps `stageChangedDate` and `wonDate`; the import's days-in-stage backdate relies on the first. Noted, not judged — Jeff's call whether a create's are the server's.
+- **The History tab drops a typed activity when another tab is picked** (§0.252, 16 Nov; read in code; older): the tab's draft is its own and goes with it; the window holds a tab switch only while a log or a Documents batch is out. Low.
 - **Reports' "Contacts on this deal" keeps its adds and removes to itself**
   (the cleanup batch's design, 18 Oct, P37; re-read 23 Oct; read in code,
   not run). A save that lands sets the tab's own ids
@@ -2438,6 +2416,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.3 Settings
 
+- **API keys' examples call the CRM endpoint with a key it does not take** (§0.252's map, 16 Nov; read in code): ApiKeysDetail.jsx's snippets send an `spt_live_` key to /.netlify/functions/opportunities, which takes only a member's sign-in (auth.mjs); only public-api.mjs reads keys. Low.
 - **Company profile's own live preview names the org differently from
   its quotes** (§0.234's browser check, 9 Nov; read in code,
   CompanyProfileDetail.jsx:136-147): with no display name it shows "Your
@@ -5442,3 +5421,4 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **An older harness entry's anchor matches twice** (§0.248, 12 Nov — the Part 10 fixer's parse check): "deal window: an unnamed row on the deal is blank" (`{c.name || UNLISTED_CONTACT}`, OpportunityModal.jsx) matches twice, the same at HEAD; the harness mutates the first, and the stale check asks only that an anchor be present. A uniqueness check in the stale check would catch the class. Low. Since §0.250 (14 Nov — the deals builder; read in code; older): a second, "deals endpoint (G2): the walk reads no parent" (`accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,`, netlify/functions/opportunities.mjs), whose anchor occurs twice, the same at HEAD.
 - **Harness labels and test messages that name older counts** (§0.249, 13 Nov — the review rounds' verifiers (G2, G3, G5); cosmetic): a label is its entry's name, kept as the rounds moved its anchor, so a few name counts the guard has moved past — "four-fifths of its 187 catch clauses", "178 of 187 seen", "84 of 187 seen", "the measured 185 body reads" (scan (iv) reads 188 catch clauses, scan (iii) 192 reads); and the last pass changed only the number of each source-walk floor it set, so some messages beside them still name the old count (tests/itest-targets-test-db.test.mjs: "expected the nineteen suites" beside a floor of 65). Recommended: each message says its count, or none; the labels stay. Low.
 - **The QA seed writes a quote's maker as the deal's rep** (§0.250, 14 Nov — the quotes builder; read in code; older; a script, not the app): scripts/qa-seed-plan.mjs:292 plans each seed quote with `createdBy: o.salesRep || admin?.name || null`, inserted by `--apply` and put back by `--reset` (scripts/seed-qa-org.mjs) — so Accelerep QA's seed quotes name their deal's rep as their maker, which the app since §0.250 never does (the maker is who made it). Harmless for testing; it can mislead a check of the rule in that org. Recommended: the seed's admin name, or none. Low.
+- **Two copies of a window's close** (§0.252, 16 Nov): `useLocalLayer`'s close and `useCloseRequest` each hold the decision's body (closeDecision, the confirm, the re-check) — the second left the tabs' hook untouched to keep its pins. Fold one into the other. Low.

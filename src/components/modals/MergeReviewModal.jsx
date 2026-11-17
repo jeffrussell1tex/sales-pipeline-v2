@@ -173,7 +173,7 @@ export default function MergeReviewModal() {
                 {/* Header */}
                 <div style={{ background: C.headerBg, color: C.onDark, padding: '0.85rem 1.25rem', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>Review &amp; merge accounts</div>
-                    <button onClick={close} aria-label="Close" style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.onDark, fontSize: 20, lineHeight: 1, cursor: 'pointer', opacity: 0.85 }}>×</button>
+                    <button onClick={close} disabled={mergeSaving} aria-label="Close" style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.onDark, fontSize: 20, lineHeight: 1, cursor: 'pointer', opacity: 0.85 }}>×</button>
                 </div>
 
                 <div style={{ padding: '1.1rem 1.25rem 0.5rem' }}>

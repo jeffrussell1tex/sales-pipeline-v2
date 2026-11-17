@@ -59,7 +59,10 @@ export default function DocumentRail() {
     const [choosing, setChoosing] = useState(false);
     const [picked, setPicked] = useState([]);
 
-    const close = useCallback(() => setDocumentRailId && setDocumentRailId(null), [setDocumentRailId]);
+    // The people chosen being saved (state §0.252; guide §18b80 rule 4): nothing closes the rail while that PUT is out — its
+    // ×, backdrop and Escape closed it, the choice kept for a retry with it — and a second Share sends nothing.
+    const peopleOut = React.useRef(false);
+    const close = useCallback(() => { if (peopleOut.current) return; if (setDocumentRailId) setDocumentRailId(null); }, [setDocumentRailId]);
 
     // Seed the editable note, and empty the last document's history, when a document opens.
     useEffect(() => {
@@ -131,8 +134,12 @@ export default function DocumentRail() {
         updateDocument && updateDocument(doc.id, { visibility: v });
     };
     const savePeople = async () => {
-        const r = updateDocument && await updateDocument(doc.id, { visibility: 'specific', visibilityUserIds: picked });
-        if (r && r.ok) setChoosing(false);   // a refusal says so in the app's message, the choice kept
+        if (peopleOut.current) return;
+        peopleOut.current = true;
+        try {
+            const r = updateDocument && await updateDocument(doc.id, { visibility: 'specific', visibilityUserIds: picked });
+            if (r && r.ok) setChoosing(false);   // a refusal says so in the app's message, the choice kept
+        } finally { peopleOut.current = false; }
     };
     // The delete is confirmed, then sent; the rail closes when the document leaves the
     // library (the effect above), so a refused one leaves it open and the app's message

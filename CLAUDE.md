@@ -175,7 +175,11 @@ One commit per verified batch; doc patch in the same commit.
   the author and time the server's, only the author editing or deleting; a
   body naming `comments` is refused; a stage move is appended to the stored
   history in the write (`_stage.mjs` stageMoveOf); a deal's save sends
-  `dealBody(...)` (THE GUARD, tests/deal-data.test.mjs). A delete's Undo
+  `dealBody(...)` (THE GUARD, tests/deal-data.test.mjs). Since §0.252 a
+  create too: a deal create, single or bulk, naming an entry in its notes,
+  stage history or close-date history is refused (400, nothing written; a
+  batch whole, naming its rows) — an empty list, as every screen sends, is
+  taken (`createListRefused`, src/utils/dealCreate.js). A delete's Undo
   keeps the stored owner by id (`restoredOwner`), never the caller.
   Since §0.239 a deal's close-date moves too (guide §18b122): each move
   decided and appended in the write's own SQL from the date as stored
@@ -371,6 +375,19 @@ One commit per verified batch; doc patch in the same commit.
   `.table-container` clip, and each use holds a box that scrolls (guide
   §18b103, state §0.213; tests/rounded-scrollers.test.mjs). Under 6 px the
   corner stands.
+- An app window closes by one close (guide §18b127): nothing closes it — its
+  ×, Cancel, backdrop, Escape, Back, a move to another record or a tab that
+  holds the answer — while a save, import, upload or submit of its own is out
+  (the deal window's own save, its team notes, its History tab's logs and its
+  Documents batches; the rails' saves and Documents batches — but the task
+  rail's Escape and backdrop still close while a Complete press is out, Jeff's
+  13 Oct "Let it close"); a second press
+  sends nothing. The deal and lead windows ask "Discard changes?" (Discard /
+  Keep editing) before dropping typed work, measured against what they opened
+  with (`useCloseRequest`). Among the draggable windows an Escape is the one
+  drawn on top's (`onTop` in useDraggable.js, over `topWindow` in
+  src/utils/draggableOrder.js), and a window opened
+  over another starts above it (THE GUARD, tests/window-closes.test.mjs).
 - A task alert (a popup, the bell) interrupts only the member it is for:
   their own task or one nobody owns, by owner id, once the profile is known,
   from the active org's lists (`src/utils/taskAlerts.js`, guide §18b93).

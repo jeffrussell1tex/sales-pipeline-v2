@@ -19,9 +19,14 @@ export default function QuickLogFab() {
         escapeBlocked,
     } = useApp();
 
+    // The log being sent (state §0.252): nothing closes the panel while it is out, and a second press sends nothing —
+    // the panel closed on Escape, its backdrop or Cancel mid-send (Cancel emptying the draft), and each press minted a
+    // new id, so two presses logged two activities. The ref holds two presses in one tick; the state draws the wait.
+    const [logging, setLogging] = React.useState(false);
+    const loggingRef = React.useRef(false);
     // Escape closes the panel as its backdrop does, the draft kept, and the follow-up as
-    // its × does (state §0.186) — each while no layer above it is open.
-    useEscapeLayer(quickLogOpen, () => setQuickLogOpen(false), escapeBlocked('quickLog'));
+    // its × does (state §0.186) — each while no layer above it is open; the panel never mid-send.
+    useEscapeLayer(quickLogOpen, () => { if (!loggingRef.current) setQuickLogOpen(false); }, escapeBlocked('quickLog'));
     useEscapeLayer(!!followUpPrompt, () => setFollowUpPrompt(null), escapeBlocked('followUp'));
     // A click outside the follow-up is its Skip (state §0.230; Jeff, 4 Nov: "Close on outside
     // click"): it never closed by itself, and while it shows no shortcut fires.
@@ -49,7 +54,7 @@ export default function QuickLogFab() {
     return (
         <>
             {quickLogOpen && (
-                <div style={{ position: 'fixed', bottom: 0, right: 0, top: 0, left: 0, zIndex: 9989 }} onClick={() => setQuickLogOpen(false)} />
+                <div style={{ position: 'fixed', bottom: 0, right: 0, top: 0, left: 0, zIndex: 9989 }} onClick={() => { if (!loggingRef.current) setQuickLogOpen(false); }} />
             )}
             {quickLogOpen && (
                 <div style={{ position: 'fixed', top: '4.5rem', right: '1.5rem', zIndex: 9990 }}>
@@ -151,11 +156,14 @@ export default function QuickLogFab() {
 
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '0.625rem', paddingTop: '0.25rem' }}>
-                            <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
+                            <button disabled={logging} onClick={() => { if (loggingRef.current) return; setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
                                 style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: T.inkMid, fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 Cancel
                             </button>
-                            <button onClick={async () => {
+                            <button disabled={logging} onClick={async () => {
+                                if (loggingRef.current) return;
+                                loggingRef.current = true; setLogging(true);
+                                try {
                                 const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
                                 const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                 const newActivity = {
@@ -191,8 +199,9 @@ export default function QuickLogFab() {
                                 setQuickLogOpen(false);
                                 setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
                                 setQuickLogContactResults([]);
+                                } finally { loggingRef.current = false; setLogging(false); }
                             }} style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: 'none', background: '#1c1917', color: '#f5f1eb', fontSize: '0.875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                Log Activity
+                                {logging ? 'Logging…' : 'Log Activity'}
                             </button>
                         </div>
                     </div>

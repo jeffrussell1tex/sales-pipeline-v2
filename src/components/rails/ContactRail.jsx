@@ -212,6 +212,11 @@ export default function ContactRail() {
     const [personaSearch,   setPersonaSearch]   = useState('');
     const [activeTab,       setActiveTab]       = useState('primary');
     const [dupWarning,      setDupWarning]      = useState(null);
+    // A new contact's save begins with its duplicate check, before the app's save flag is set (state §0.252): the
+    // rail holds through it too — its ×, Discard and Back closed it while the check was out and the contact was made
+    // after, and a second Create sent a second one. The ref holds two presses in one tick; the state draws the wait.
+    const [checkingDup,     setCheckingDup]     = useState(false);
+    const checkingDupRef = useRef(false);
     const [dirty,           setDirty]           = useState(false);
     const [saveError,       setSaveError]       = useState(null);
     // Snapshot of an in-progress NEW contact, stashed when the user jumps to an
@@ -327,6 +332,7 @@ export default function ContactRail() {
     };
 
     const handleSave = async () => {
+        if (contactModalSaving || checkingDupRef.current) return;
         setSaveError(null);
         setContactModalError?.(null); // the last save's server error never hides this Save's own refusal (§0.198)
         // A pick is saved as the record picked (state §0.198). Company saves what it shows: the
@@ -349,7 +355,9 @@ export default function ContactRail() {
 
         // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
-            const dups = await checkDuplicate(saveData);
+            checkingDupRef.current = true; setCheckingDup(true);
+            let dups;
+            try { dups = await checkDuplicate(saveData); } finally { checkingDupRef.current = false; setCheckingDup(false); }
             if (dups) { setDupWarning(dups); return; }
         }
 
@@ -370,7 +378,10 @@ export default function ContactRail() {
         });
     };
 
+    // Nothing while the save is out (state §0.252; guide §18b80 rule 4): a Discard then closed a new record's rail, or
+    // put an edit back to view, under a save that then landed.
     const handleDiscard = () => {
+        if (contactModalSaving || checkingDupRef.current) return;
         if (isNew) {
             closeRail();
         } else {
@@ -386,6 +397,13 @@ export default function ContactRail() {
         }
     };
 
+    // The ×, as a member asks for it: nothing while the save is out (state §0.252); a save that lands closes through closeRail.
+    // A documents batch sending from the rail's Documents tab (RecordDocuments' onBusy, state §0.252), counted here: the
+    // rail holds its closes and its moves while one is out, as while its save is — its words are said in that tab.
+    const [docsOut, setDocsOut] = useState(0);
+    const onDocsBusy = useCallback((b) => setDocsOut((n) => n + (b ? 1 : -1)), []);
+    const railHeld = () => contactModalSaving || checkingDupRef.current || docsOut > 0;
+    const leaveRail = () => { if (!railHeld()) closeRail(); };
     const closeRail = () => {
         setContactRailId(null);
         setContactRailMode('view');
@@ -396,6 +414,7 @@ export default function ContactRail() {
     // account the contact is linked to, by id; a contact with no link, the one account its
     // company names — never the first of two (state §0.198, utils/railLinks.js).
     const handleOpenAccountRail = () => {
+        if (railHeld()) return;   // never while the save or a documents batch is out (state §0.252)
         const acc = linkedAccount(formData, accounts);
         if (!acc) return;
         setRailStack(prev => [...prev, { type: 'contact', id: contactRailId, mode: contactRailMode }]);
@@ -404,7 +423,10 @@ export default function ContactRail() {
     };
 
     // Back: pop the stack, restore previous rail
+    // Back, too, never while the save is out (state §0.252): the rail moved on, and the save's answer landed on the
+    // record moved to.
     const handleBack = () => {
+        if (railHeld()) return;
         const prev = railStack[railStack.length - 1];
         if (!prev) return;
         setRailStack(s => s.slice(0, -1));
@@ -457,11 +479,11 @@ export default function ContactRail() {
         const onKey = (e) => {
             if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
             e.preventDefault();
-            if (!isEditing) closeRail();
+            if (!isEditing) leaveRail();
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing, escapeHeld]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, escapeHeld, contactModalSaving, docsOut]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 
@@ -475,9 +497,10 @@ export default function ContactRail() {
     const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' };
 
     // ── Tab button ────────────────────────────────────────────────────────────
+    // A tab is changed only while no documents batch is out: the Documents tab stays, its words with it (state §0.252).
     const tabBtn = (id, label) => (
         <button
-            onClick={() => setActiveTab(id)}
+            onClick={() => { if (docsOut > 0) return; setActiveTab(id); }}
             style={{
                 background: 'none', border: 'none', borderBottom: activeTab === id ? `2px solid ${T.ink}` : '2px solid transparent',
                 color: activeTab === id ? T.ink : T.inkMuted, fontWeight: activeTab === id ? 700 : 500,
@@ -492,7 +515,7 @@ export default function ContactRail() {
         <>
         {/* Click-catcher: blocks background interaction */}
         <div
-            onClick={!isEditing ? closeRail : undefined}
+            onClick={!isEditing ? leaveRail : undefined}
             style={{ position: 'fixed', inset: 0, zIndex: 10998, background: 'rgba(42,38,34,0.25)' }}
         />
 
@@ -538,7 +561,7 @@ export default function ContactRail() {
                     </span>
                 )}
 
-                <button onClick={closeRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                <button onClick={leaveRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
 
             {/* ── Quick-action bar (view mode only) ─────────────────────────── */}
@@ -581,7 +604,7 @@ export default function ContactRail() {
                         </button>
                     )}
                     <button
-                        onClick={() => setContactRailMode('edit')}
+                        onClick={() => { if (docsOut > 0) return; setContactRailMode('edit'); }} disabled={docsOut > 0}
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.ink, border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, color: '#f5f1eb', cursor: 'pointer', fontFamily: T.sans }}>
                         Edit
                     </button>
@@ -954,7 +977,7 @@ export default function ContactRail() {
 
                 {/* ════════ TAB: Activity (view only) ════════ */}
                 {activeTab === 'documents' && !isNew && contact && (
-                    <RecordDocuments recordType="contact" recordId={contact.id} recordName={fullName} recordSub={contact?.title} />
+                    <RecordDocuments onBusy={onDocsBusy} recordType="contact" recordId={contact.id} recordName={fullName} recordSub={contact?.title} />
                 )}
 
                 {activeTab === 'activity' && !isNew && (
@@ -1022,14 +1045,14 @@ export default function ContactRail() {
                     {dirty && (
                         <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>
                     )}
-                    <button onClick={handleDiscard}
+                    <button onClick={handleDiscard} disabled={contactModalSaving || checkingDup}
                         style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>
-                    <button onClick={handleSave} disabled={contactModalSaving}
-                        style={{ padding: '8px 20px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 700, cursor: contactModalSaving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: contactModalSaving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {contactModalSaving && <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-                        {contactModalSaving ? 'Saving…' : isNew ? 'Create Contact' : 'Save Changes'}
+                    <button onClick={handleSave} disabled={contactModalSaving || checkingDup}
+                        style={{ padding: '8px 20px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 700, cursor: (contactModalSaving || checkingDup) ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: (contactModalSaving || checkingDup) ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {(contactModalSaving || checkingDup) && <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                        {contactModalSaving ? 'Saving…' : checkingDup ? 'Checking…' : isNew ? 'Create Contact' : 'Save Changes'}
                     </button>
                 </div>
             )}

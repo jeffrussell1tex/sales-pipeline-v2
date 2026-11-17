@@ -253,8 +253,10 @@ test('App says which layers are open, by every name in the order and no other, e
 //   useEscapeLayer (document, capture). Each decides by the order (state §0.189).
 const LAYERS = {
     // ModalLayer
-    showModal: { name: 'draggable', app: 'showModal' },
-    showUserModal: { name: 'draggable', app: 'showUserModal' },
+    // The deal and user windows take their own Escape since §0.252 (App's closed both mid-save, and the deal window
+    // under "+ New Rep"'s user window): on document, after the form's own, while no other window is drawn over them.
+    showModal: { name: 'draggable', own: 'src/components/modals/OpportunityModal.jsx' },
+    showUserModal: { name: 'draggable', own: 'src/components/modals/UserModal.jsx' },
     showShortcuts: { name: 'shortcuts', app: 'showShortcuts' },
     undoToast: { name: null, app: 'undoToast' },   // a toast, not a layer over the page: App closes it last
     pressNotices: { name: null, notice: true },   // a task completion's notices (§0.199): not a layer, and no Escape — each holds notes refused until its own ✕
@@ -278,7 +280,7 @@ const LAYERS = {
     DocumentLinkPicker: { name: 'linkPicker', layer: 'src/components/documents/DocumentLinkPicker.jsx' },
     MergeReviewModal: { name: 'merge', layer: 'src/components/modals/MergeReviewModal.jsx' },
     ContactMergeReviewModal: { name: 'merge', layer: 'src/components/modals/ContactMergeReviewModal.jsx' },
-    CoachingNoteDialogHost: { name: 'coachingNote', app: 'coachingNoteModal' },
+    CoachingNoteDialogHost: { name: 'coachingNote', layer: 'src/components/modals/CoachingNoteDialog.jsx' },   // its own since §0.252: App closed it mid-save
     ActivityDetailDialogHost: { name: 'activityDetail', app: 'viewingActivity' },
     // the quick log
     quickLogOpen: { name: 'quickLog', layer: 'src/components/layout/QuickLogFab.jsx' },
@@ -397,7 +399,12 @@ test('App\'s Escape closes the layer on top when it is App\'s, and leaves the Es
     assert.deepEqual([...cases].sort(), [...appNames].sort(), 'a case for each of App\'s layers, and for no other');
     assert.ok(appEscape.includes('                    case null: break;   // nothing is drawn over the page'), 'nothing on top: the toast and the stray flags');
     assert.ok(appEscape.includes('                    default: return;    // the layer on top takes its own Escape'), 'a layer that takes its own: App leaves it');
-    assert.ok(appEscape.includes('                        if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }\n                        return;'), 'a draggable that takes its own — an import, the lost reason: App leaves it, the toast too');
+    // Every draggable window and the coaching note take their own since §0.252: App has no case for them — the
+    // default leaves the Escape to the one on top, the toast too.
+    assert.ok(!appEscape.includes("case 'draggable'") && !appEscape.includes("case 'coachingNote'"), 'the windows and the coaching note: App leaves them');
+    for (const flag of ['setShowModal(false)', 'setShowUserModal(false)', 'setCoachingNoteModal(null)']) {
+        assert.ok(!between(appEscape, 'switch (topLayer(', '\n                }').includes(flag), `${flag}: App's Escape closes it no more (state §0.252)`);
+    }
     assert.ok(appEscape.indexOf('if (undoToast)') > appEscape.indexOf('default: return;'), 'the undo toast once nothing is drawn over the page');
     for (const flag of ['showAccountModal', 'showContactModal', 'showTaskModal', 'showActivityModal', 'taskRailId']) {
         assert.ok(!between(appEscape, 'switch (topLayer(', '\n                }').includes(flag), `${flag}: not a layer App closes`);
@@ -410,7 +417,7 @@ test('App\'s Escape closes the layer on top when it is App\'s, and leaves the Es
 
 test('THE GUARD: a layer\'s own listener decides by the order — escapeBlocked(its name), never a list of its own — and marks the Escape it takes', () => {
     const own = Object.entries(LAYERS).filter(([, h]) => h.own);
-    assert.deepEqual(own.map(([k]) => k).sort(), ['AccountRail', 'ActivityRail', 'ContactRail', 'TaskRail', 'showLeadModal']);
+    assert.deepEqual(own.map(([k]) => k).sort(), ['AccountRail', 'ActivityRail', 'ContactRail', 'TaskRail', 'showLeadModal', 'showModal', 'showUserModal']);
     for (const [key, how] of own) {
         const src = read(how.own);
         const held = `    const escapeHeld = escapeBlocked('${how.name}');`;
@@ -424,8 +431,10 @@ test('THE GUARD: a layer\'s own listener decides by the order — escapeBlocked(
         assert.ok(deps && /\bescapeHeld\b/.test(deps[1]), `${key}: its listener reads the hold of the render it was made in`);
     }
     // The rails keep a draft: editing, the Escape is the rail's and the rail stays.
-    for (const f of ['ContactRail', 'AccountRail', 'TaskRail']) {
-        assert.ok(read(`src/components/rails/${f}.jsx`).includes('            e.preventDefault();\n            if (!isEditing) closeRail();'), `${f}: marked, editing or not`);
+    // Not editing, the contact and account rails close by their held close (state §0.252: never while a save or a
+    // documents batch is out); the task rail as before (Jeff, 13 Oct: "Let it close" — a completion's press).
+    for (const [f, close] of [['ContactRail', 'leaveRail'], ['AccountRail', 'leaveRail'], ['TaskRail', 'closeRail']]) {
+        assert.ok(read(`src/components/rails/${f}.jsx`).includes(`            e.preventDefault();\n            if (!isEditing) ${close}();`), `${f}: marked, editing or not`);
     }
     // The header's search box closes the results itself — while nothing is open above them.
     // and leaves a marked one alone (§0.230: a tab's layer took it, and React ran the box's after)
@@ -521,7 +530,8 @@ test('each new Escape does what the layer\'s own close does, and nothing mid-sav
     assert.equal(ml.split('onClick={dismissDueAlert}').length - 1, 2, 'the backdrop and Dismiss: one dismissal, the Escape\'s');
     assert.equal(ml.split('const closeClaimModal = () =>').length - 1, 1, 'one close for the claim, the Escape\'s and the buttons\'');
     const ql = read('src/components/layout/QuickLogFab.jsx');
-    assert.ok(ql.includes("    useEscapeLayer(quickLogOpen, () => setQuickLogOpen(false), escapeBlocked('quickLog'));"), 'the panel closes as its backdrop does, the draft kept');
+    // ... never while its log is being sent (state §0.252).
+    assert.ok(ql.includes("    useEscapeLayer(quickLogOpen, () => { if (!loggingRef.current) setQuickLogOpen(false); }, escapeBlocked('quickLog'));"), 'the panel closes as its backdrop does, the draft kept');
     assert.ok(ql.includes("    useEscapeLayer(!!followUpPrompt, () => setFollowUpPrompt(null), escapeBlocked('followUp'));"));
     assert.ok(read('src/components/layout/MeetingPrepPanel.jsx').includes("    useEscapeLayer(!!(meetingPrepOpen && meetingPrepEvent), () => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }, escapeBlocked('meetingPrep'));"));
     const lg = read('src/Tabs/settings/shared/LeaveGuardModal.jsx');
@@ -529,8 +539,12 @@ test('each new Escape does what the layer\'s own close does, and nothing mid-sav
     // Settings' own guard (AdminView's, `inTab`) stands at the same place through the tabs' stack, portaled above the rails (§0.232).
     assert.ok(lg.includes("    useLocalLayer(inTab, { onClose: onStay, busy: saving, place: 'leaveGuard' });") && lg.includes('    return inTab ? createPortal(node, document.body) : node;'), 'Stay — never while a save is out, and drawn over the rails');
     for (const f of ['src/components/modals/CsvImportModal.jsx', 'src/components/modals/LeadImportModal.jsx']) {
-        assert.ok(read(f).includes("    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));"), `${f}: never mid-import`);
+        // Held, too, while another window is drawn over it (state §0.252) — and its × never mid-import, as its Escape.
+        assert.ok(read(f).includes("    useEscapeLayer(true, () => { if (!importing) onClose(); }, () => escapeBlocked('draggable') || !onTop());"), `${f}: never mid-import`);
+        assert.ok(read(f).includes('onClick={() => { if (!importing) onClose(); }} disabled={importing}'), `${f}: its × never mid-import`);
     }
+    // The coaching note: as its Cancel and backdrop — nothing while the note is being sent (state §0.252).
+    assert.ok(read('src/components/modals/CoachingNoteDialog.jsx').includes("    useEscapeLayer(true, () => { if (!saving) onClose(); }, app && app.escapeBlocked ? app.escapeBlocked('coachingNote') : false);"), 'never mid-save');
     assert.ok(read('src/components/modals/MergeReviewModal.jsx').includes("    useEscapeLayer(!!mergeModal, () => { if (!mergeSaving) { setMergeError?.(null); setMergeModal(null); } }, escapeBlocked('merge'));"), 'never mid-merge');
     assert.ok(read('src/components/modals/ContactMergeReviewModal.jsx').includes("    useEscapeLayer(!!contactMergeModal, () => { if (!mergeSaving) { setMergeError?.(null); setContactMergeModal(null); } }, escapeBlocked('merge'));"));
 });

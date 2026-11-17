@@ -63,7 +63,8 @@ test('email-inbound stores through the pure module, and the rails give the viewe
         // The viewer sits above every record rail (its z — escape-order.test.mjs), and since
         // §0.189 a rail's Escape is held while any layer above it is open (one-delete-path.test.mjs).
         assert.ok(r.includes(`const escapeHeld = escapeBlocked('${name}');`), f + ': the rail yields Escape to the viewer');
-        assert.ok(r.includes('}, [isOpen, isEditing, escapeHeld]);'), f + ': and re-binds when the viewer opens or closes');
+        // The contact and account rails also re-bind on their save and their documents batches (state §0.252).
+        assert.ok(r.includes('}, [isOpen, isEditing, escapeHeld]);') || r.includes('}, [isOpen, isEditing, escapeHeld, contactModalSaving, docsOut]);') || r.includes('}, [isOpen, isEditing, escapeHeld, accountModalSaving, docsOut]);'), f + ': and re-binds when the viewer opens or closes');
         assert.ok(layersAbove(name, { activityDetail: true }), f + ': the viewer is above it');
     }
 });

@@ -225,6 +225,9 @@ export default function ActivityRail() {
         setCompanyId(next.id);
     };
 
+    // The rail's close as a member asks for it — its Escape, backdrop, × and Cancel: nothing while its save is out
+    // (state §0.252; guide §18b80 rule 4). A save that lands closes it through closeRail itself.
+    const leaveRail = () => { if (!activityModalSaving) closeRail(); };
     const closeRail = () => {
         setShowActivityModal(false);
         setEditingActivity(null);
@@ -287,11 +290,11 @@ export default function ActivityRail() {
         const onKey = (e) => {
             if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
             e.preventDefault();
-            closeRail();
+            leaveRail();
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, escapeHeld]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, escapeHeld, activityModalSaving]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 
@@ -300,7 +303,7 @@ export default function ActivityRail() {
     return (
         <>
         {/* Click-catcher */}
-        <div onClick={closeRail}
+        <div onClick={leaveRail}
             style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(42,38,34,0.25)' }}
         />
 
@@ -323,7 +326,7 @@ export default function ActivityRail() {
                         What happened?
                     </div>
                 </div>
-                <button onClick={closeRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                <button onClick={leaveRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
 
             {/* ── Scrollable body ────────────────────────────────────────────── */}
@@ -386,7 +389,7 @@ export default function ActivityRail() {
 
             {/* ── Footer ────────────────────────────────────────────────────── */}
             <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={closeRail}
+                <button onClick={leaveRail}
                     style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                     Cancel
                 </button>

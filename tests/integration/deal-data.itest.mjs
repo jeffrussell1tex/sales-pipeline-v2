@@ -9,6 +9,9 @@
 //   RESTORE  a contact's Undo keeps the stored owner by id — unassigned stays unassigned, another member's stays
 //            theirs, an owner gone since is none — never the caller; a create still stamps the caller
 //   ISOLATION org A's note on org B's deal is a 404, B's deal untouched
+//   CREATE   a create, single or bulk, naming an entry in its notes, stage history or close-date history is a 400,
+//            nothing written (the whole batch); empty lists — as every screen sends — are taken, the deal starts with
+//            none (state §0.252)
 //
 // The auth mock fakes the SIGN-IN only and re-exports the REAL gate and predicates; the mailers, webhooks and
 // automations are stubbed (no outbound calls).
@@ -57,6 +60,7 @@ const { eq, and } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 const { NOTE_WORDS } = await import('../../src/utils/dealNotes.js');
+const { CREATE_LIST_WORDS } = await import('../../src/utils/dealCreate.js');
 
 // ORG NAMESPACE: this file owns 'itest_dealdata_*', and only this file writes to it.
 const A = 'itest_dealdata_A', B = 'itest_dealdata_B';
@@ -212,6 +216,62 @@ test('HISTORY: moves at once are each recorded — appended to what is stored, i
     const recorded = h.slice(1).map((e) => e.stage);
     for (const s of STAGES) assert.ok(recorded.includes(s), `REGRESSION (Q3): the move to ${s} dropped — recorded ${JSON.stringify(recorded)}`);
     assert.equal(recorded.length, STAGES.length, 'each once');
+});
+
+// ── CREATE ───────────────────────────────────────────────────────────────────
+
+const post = (who, body, role = 'Admin') => dealsFn(ev(A, who, 'POST', body, role));
+const newDeal = (id, extra = {}) => ({ id, opportunityName: id, salesRep: KAREN.name, stage: 'Proposal', forecastedCloseDate: '2027-03-31', ...extra });
+
+test('CREATE: a create naming a note, a stage history or a close-date history with anything in it is a 400, nothing written', async () => {
+    const forged = {
+        comments:         [{ ...OLD_NOTE, author: 'Somebody Else', timestamp: '2020-01-01T00:00:00.000Z' }],
+        stageHistory:     [H1],
+        closeDateHistory: [{ from: '2026-01-01', to: '2027-03-31', date: '2026-01-01', author: 'x' }],
+    };
+    for (const [field, list] of Object.entries(forged)) {
+        const id = `opp_itest_dd_new_${field}`;
+        const r = await post(KAREN, newDeal(id, { [field]: list }), 'User');
+        assert.equal(r.statusCode, 400, `REGRESSION (OPEN_ITEMS §4.2): a create stored a body's ${field}`);
+        assert.deepEqual(json(r), { field, error: CREATE_LIST_WORDS[field] });
+        assert.equal(await dealOf(id), undefined, 'nothing written');
+    }
+    // Not a list at all — stored as sent until §0.252.
+    const s = await post(KAREN, newDeal('opp_itest_dd_new_str', { comments: 'a note' }), 'User');
+    assert.equal(s.statusCode, 400);
+    assert.equal(await dealOf('opp_itest_dd_new_str'), undefined);
+});
+
+test('CREATE: an import batch with one such row is refused whole, naming its rows; nothing of it written', async () => {
+    const r = await post(BOB, [
+        newDeal('opp_itest_dd_bulk_ok', { comments: [], stageHistory: [] }),
+        newDeal('opp_itest_dd_bulk_bad', { stageHistory: [H1] }),
+        newDeal('opp_itest_dd_bulk_note', { comments: [OLD_NOTE] }),
+        newDeal('opp_itest_dd_bulk_bad2', { stageHistory: [H1] }),
+        newDeal('opp_itest_dd_bulk_both', { comments: [OLD_NOTE], stageHistory: [H1] }),
+    ]);
+    assert.equal(r.statusCode, 400, r.body);
+    // The first such list, in its words, and every row naming that one, whatever else it names — a row refused only
+    // for another list is not named under these words (the reviews, 16 Nov).
+    assert.deepEqual(json(r), { field: 'stageHistory', error: CREATE_LIST_WORDS.stageHistory, ids: ['opp_itest_dd_bulk_bad', 'opp_itest_dd_bulk_bad2', 'opp_itest_dd_bulk_both'] });
+    for (const id of ['opp_itest_dd_bulk_ok', 'opp_itest_dd_bulk_bad', 'opp_itest_dd_bulk_note', 'opp_itest_dd_bulk_bad2', 'opp_itest_dd_bulk_both']) {
+        assert.equal(await dealOf(id), undefined, `the batch writes nothing — ${id}`);
+    }
+});
+
+test('CREATE: empty lists, as every screen sends, are taken — the deal starts with none, single or bulk', async () => {
+    const one = await post(KAREN, newDeal('opp_itest_dd_new_empty', { comments: [], stageHistory: [], closeDateHistory: [] }), 'User');
+    assert.equal(one.statusCode, 201, one.body);
+    const d = await dealOf('opp_itest_dd_new_empty');
+    assert.deepEqual([d.comments, d.stageHistory, d.closeDateHistory], [[], [], null]);
+    const nul = await post(KAREN, newDeal('opp_itest_dd_new_null', { comments: null, stageHistory: null }), 'User');
+    assert.equal(nul.statusCode, 201, nul.body);
+    const bulk = await post(BOB, [newDeal('opp_itest_dd_bulk_e1', { comments: [], stageHistory: [] }), newDeal('opp_itest_dd_bulk_e2')]);
+    assert.equal(bulk.statusCode, 201, bulk.body);
+    for (const id of ['opp_itest_dd_bulk_e1', 'opp_itest_dd_bulk_e2']) {
+        const b = await dealOf(id);
+        assert.deepEqual([b.comments, b.stageHistory], [[], []], id);
+    }
 });
 
 // ── ISOLATION ────────────────────────────────────────────────────────────────

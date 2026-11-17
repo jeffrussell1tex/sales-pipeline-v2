@@ -423,7 +423,10 @@ test("a Save's refusal is never hidden behind the last save's server error: each
     ]) {
         const src = read(`src/components/rails/${file}.jsx`);
         assert.ok(src.includes(`{(${shown} || saveError) && (`), `${file}: the banner draws the server error first`);
-        const head = between(src, 'const handleSave = async () => {', '\n    };').split('\n').slice(0, 3).join('\n');
+        // The contact rail's held press comes first (state §0.252: a second Create during its duplicate check sends
+        // nothing); past it, the same first three lines.
+        const head = between(src, 'const handleSave = async () => {', '\n    };').split('\n')
+            .filter((l) => l.trim() !== 'if (contactModalSaving || checkingDupRef.current) return;').slice(0, 3).join('\n');
         assert.ok(head.includes('setSaveError(null);'), `${file}: Save clears its own refusal first`);
         assert.ok(head.includes(`${setter}?.(null);`), `${file}: Save clears the last server error first`);
     }

@@ -6,6 +6,7 @@
 // never typed, so a note always reaches a real roster row or a real team.
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { newNotePayload } from '../../utils/coachingNotes';
 import { T } from '../../tokens.js';
 
@@ -42,6 +43,10 @@ export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onCl
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    // Its Escape does what its Cancel and backdrop do — nothing while the note is being sent (state §0.252; guide
+    // §18b80 rule 4) — while no layer above it is open. App closed it, mid-save too: it could not see the save.
+    const app = useApp();
+    useEscapeLayer(true, () => { if (!saving) onClose(); }, app && app.escapeBlocked ? app.escapeBlocked('coachingNote') : false);
 
     const q = query.trim().toLowerCase();
     const shown = useMemo(() => (q ? reps.filter(r => (r.name || '').toLowerCase().includes(q)) : reps), [reps, q]);

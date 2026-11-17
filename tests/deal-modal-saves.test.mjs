@@ -32,7 +32,7 @@ test('ModalLayer: the deal modal logs, deletes and notes through the hooks — n
     // Since §0.236 each is one operation the server applies (tests/deal-data.test.mjs holds the rule).
     assert.ok(props.includes("onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}"));
     assert.ok(props.includes("onEditComment={(oppId, commentId, newText) => saveNotes(oppId, { op: 'edit', id: commentId, text: newText })}"));
-    assert.ok(props.includes("showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });"));
+    assert.ok(props.includes("showConfirm('Delete this note? It cannot be undone.', () => { if (sending) sending(); saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });"));
     for (const setter of ['setActivities(', 'setOpportunities(']) assert.ok(!props.includes(setter), `${setter} in the deal modal's props`);
     const notes = between(src, 'const saveNotes = async (oppId, note) => {', 'return (');
     assert.ok(notes.includes('const r = await saveDealNote(oppId, note);'));

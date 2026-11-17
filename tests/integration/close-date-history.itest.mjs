@@ -57,6 +57,7 @@ const { eq, and } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 const { HISTORY_WORDS, isCloseDateEntry, isStageEntry } = await import('../../src/utils/dealHistory.js');
+const { CREATE_LIST_WORDS } = await import('../../src/utils/dealCreate.js');
 
 // ORG NAMESPACE: this file owns 'itest_cdh_*', and only this file writes to it.
 const A = 'itest_cdh_A', B = 'itest_cdh_B';
@@ -170,7 +171,7 @@ test('RACE: four saves at once each record the date they replaced — every entr
 
 // ── REFUSED ──────────────────────────────────────────────────────────────────
 
-test('REFUSED: a save or an import row naming the list is a 400, nothing written; a create writes none of a body\'s', async () => {
+test('REFUSED: a save or an import row naming the list is a 400, nothing written; a create naming an entry is refused, an empty list taken', async () => {
     const forged = [{ from: '2026-01-01', to: '2026-12-31', date: '2026-01-01', timestamp: '2026-01-01T00:00:00.000Z', author: 'x', authorId: null, source: 'deal' }];
     const r = await put(A, BOB, { id: D('refused'), forecastedCloseDate: '2027-06-01', closeDateHistory: forged });
     assert.equal(r.statusCode, 400);
@@ -180,9 +181,16 @@ test('REFUSED: a save or an import row naming the list is a 400, nothing written
     assert.equal(d.closeDateHistory, null);
     const rb = await put(A, BOB, [{ id: D('refused'), closeDateHistory: forged }]);
     assert.equal(rb.statusCode, 400, 'an import row');
+    // A create naming an entry is refused, nothing written (state §0.252; Jeff, 16 Nov: "Refuse non-empty, all 3") —
+    // until then it was taken and the list dropped.
     const c = await dealsFn(ev(A, BOB, 'POST', { id: D('created'), opportunityName: 'New', account: 'Itest CDH Co', stage: 'Proposal', forecastedCloseDate: '2027-01-01', closeDateHistory: forged }));
-    assert.equal(c.statusCode, 201, c.body);
-    assert.equal((await dealOf(D('created'))).closeDateHistory, null, 'R5: a create makes no entry, and writes none of the body\'s');
+    assert.equal(c.statusCode, 400, c.body);
+    assert.deepEqual(JSON.parse(c.body), { field: 'closeDateHistory', error: CREATE_LIST_WORDS.closeDateHistory });
+    assert.equal(await dealOf(D('created')), undefined, 'nothing written');
+    // An empty one is taken, and the deal starts with none (R5: a create makes no entry).
+    const e = await dealsFn(ev(A, BOB, 'POST', { id: D('created'), opportunityName: 'New', account: 'Itest CDH Co', stage: 'Proposal', forecastedCloseDate: '2027-01-01', closeDateHistory: [] }));
+    assert.equal(e.statusCode, 201, e.body);
+    assert.equal((await dealOf(D('created'))).closeDateHistory, null, 'R5: a create makes no entry');
 });
 
 // ── IMPORT ───────────────────────────────────────────────────────────────────

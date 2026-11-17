@@ -36,7 +36,8 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
     // Escape closes it, as its × does — never mid-import (state §0.186) — while no layer
     // above the draggable windows is open.
     const { escapeBlocked } = useApp();
-    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));
+    // Held, too, while another window is drawn over this one (state §0.252; guide §18b80 rule 5) — read at key time.
+    useEscapeLayer(true, () => { if (!importing) onClose(); }, () => escapeBlocked('draggable') || !onTop());
     const fileRef = useRef();
 
     // ── CSV parser ────────────────────────────────────────────────────────────
@@ -176,7 +177,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
 
     // ── Shared styles ─────────────────────────────────────────────────────────
     const overlay  = { position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'1rem' };
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(680, 540, 480, 360);
     // The shell CsvImportModal wears (state §0.136): the warm surface, radius 12, a border, the dark drag-handle header.
     const modal    = { background:T.surface, borderRadius:'12px', border:`1px solid ${T.border}`, width:'96vw', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', overflow:'hidden' };
@@ -205,7 +206,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                         <h3 style={{ fontSize:'15px', fontWeight:'600', color:T.surface, margin:0 }}>Import Leads from CSV</h3>
                         <p style={{ fontSize:'0.75rem', color:T.surfaceInkFg, margin:'0.125rem 0 0' }}>Upload a CSV file to bulk-import leads</p>
                     </div>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.25rem', cursor:'pointer', color:T.surfaceInkFg, lineHeight:1 }}>×</button>
+                    <button onClick={() => { if (!importing) onClose(); }} disabled={importing} style={{ background:'none', border:'none', fontSize:'1.25rem', cursor:'pointer', color:T.surfaceInkFg, lineHeight:1 }}>×</button>
                 </div>
 
                 {/* Step indicators */}

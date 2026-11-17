@@ -15,7 +15,7 @@ const KNOWN_ROLES = ROLE_OPTIONS.map(o => o.value);
 
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
     // Always use context settings to ensure territories/teams/verticals are current
-    const { settings: contextSettings } = useApp();
+    const { settings: contextSettings, escapeBlocked } = useApp();
     const settings = contextSettings || settingsProp;
     const [formData, setFormData] = useState(user || {
         prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
@@ -34,8 +34,26 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
     const [activeUserTab, setActiveUserTab] = useState('primary');
     // The Notes box clips its textarea, so the textarea's own focus ring (index.css .form-group) would be cut off: the box draws it.
     const [notesFocused, setNotesFocused] = useState(false);
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
+
+    // The window's Escape (state §0.252): it does what its Cancel does — nothing while the save is out (guide §18b80
+    // rule 4), as the Cancel is disabled; a refused save showing, "Back to the form" — while no layer above the
+    // windows is open and no window is drawn over this one. App closed it, mid-save too, and closed the deal window
+    // under it first when "+ New Rep" had opened it over one.
+    const escapeHeld = escapeBlocked('draggable');
+    React.useEffect(() => {
+        const onKey = (e) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
+            if (!onTop()) return;   // the window drawn over this one takes it
+            e.preventDefault();
+            if (saving) return;
+            if (errorMessage) { onDismissError(); return; }
+            onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [escapeHeld, onTop, saving, errorMessage, onDismissError, onClose]);
 
     // Auto-switch to the tab containing the email field when an error arrives
     React.useEffect(() => {

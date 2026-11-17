@@ -11,7 +11,7 @@ export default function LostReasonModal({ oppName, onSave, onSkip, onCancel }) {
     const lostCategories = ['Pricing / Budget', 'Competitor', 'No Decision / Stalled', 'Product Fit', 'Timing', 'Relationship / Trust', 'Internal Priority Change', 'Other'];
     const [category, setCategory] = useState('');
     const [notes, setNotes] = useState('');
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(480, 460, 380, 340);
 
     // A refused save is shown HERE, and the choice kept (state §0.193). onSave and onSkip
@@ -38,7 +38,8 @@ export default function LostReasonModal({ oppName, onSave, onSkip, onCancel }) {
     // Escape (state §0.189). On window it ran after App's own handler whenever App's was
     // added first, and took the Escape whatever was open above it.
     const { escapeBlocked } = useApp();
-    useEscapeLayer(true, leave, escapeBlocked('draggable'));
+    // Held, too, while another window is drawn over this one (state §0.252; guide §18b80 rule 5) — read at key time.
+    useEscapeLayer(true, leave, () => escapeBlocked('draggable') || !onTop());
 
     return (
         <>

@@ -76,7 +76,7 @@ test('viewingActivity is wired: state, App destructure, context, Escape, body lo
     // viewingTask, which drew the Tasks tab's task view nothing opened).
     assert.ok(app.includes('            confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||\n            viewingActivity ||\n'), 'the body scroll lock');
     assert.ok(app.includes('        confirmModal, blockedDeleteModal, lostReasonModal,\n        viewingActivity,\n'), 'and its deps');
-    assert.ok(app.includes('    }, [showModal, showUserModal, showActivityModal, viewingActivity,'), 'the key handler re-binds when it changes');
+    assert.ok(app.includes('    }, [showActivityModal, viewingActivity,'), 'the key handler re-binds when it changes');
 });
 
 test('the host is rendered once, from ModalLayer, and decides Edit through canEditActivity', () => {

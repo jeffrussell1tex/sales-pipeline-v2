@@ -317,7 +317,10 @@ export default function TaskRail() {
         });
     };
 
+    // Nothing while the save is out (state §0.252; guide §18b80 rule 4): a Discard then closed a new record's rail, or
+    // put an edit back to view, under a save that then landed.
     const handleDiscard = () => {
+        if (taskModalSaving) return;
         if (isNew) {
             closeRail();
         } else {
@@ -329,6 +332,8 @@ export default function TaskRail() {
         }
     };
 
+    // The ×, as a member asks for it: nothing while the save is out (state §0.252); a save that lands closes through closeRail.
+    const leaveRail = () => { if (!taskModalSaving) closeRail(); };
     const closeRail = () => {
         setTaskRailId(null);
         setTaskRailMode('view');
@@ -526,7 +531,7 @@ export default function TaskRail() {
                     </span>
                 )}
 
-                <button onClick={closeRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                <button onClick={leaveRail} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
 
             {/* ── Quick-action bar (view mode) ──────────────────────────────── */}
@@ -836,7 +841,7 @@ export default function TaskRail() {
             {isEditing && (
                 <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
                     {dirty && <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>}
-                    <button onClick={handleDiscard}
+                    <button onClick={handleDiscard} disabled={taskModalSaving}
                         style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>

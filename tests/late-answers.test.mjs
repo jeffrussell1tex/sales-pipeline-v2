@@ -193,9 +193,14 @@ export const scanText = (file, src, shared = sharedSetters()) => {
 };
 
 // Late points that are not an action's answer — each read here, with why, as
-// { file, line: a substring of the point's line, why }. None today: even a
-// click's short handoff to the tab it opens checks the org.
-const ALLOWED = [];
+// { file, line: a substring of the point's line, why }. A click's short handoff to the tab it opens checks the org.
+const ALLOWED = [
+    // A documents batch tells its host it has ended (state §0.252): the host — the deal window or a rail of the org
+    // the batch began in — holds its closes while the count is up. It must come down whatever the org: after a switch
+    // ModalLayer is keyed by the org and remounts, so the old host's setter changes nothing, and nothing of the new
+    // org's screen is set; a count left up would hold that host for good.
+    { file: 'src/components/documents/RecordDocuments.jsx', line: 'if (onBusy) onBusy(false);', why: 'releases the host\'s count of batches out; the host is the one org\'s' },
+];
 
 test('after an await or in an async callback, the org is checked before shared state is set or a write is sent', () => {
     const misses = scan().filter((v) => !ALLOWED.some((a) => a.file === v.file && v.line.includes(a.line)));

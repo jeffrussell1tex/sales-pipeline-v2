@@ -88,7 +88,7 @@ const recordLabel = (rec, importType) => {
 export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
     // steps: upload → mapping → preview → conflicts (if any) → results
     const [step, setStep] = useState('upload');
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(800, 580, 520, 380);
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
@@ -115,7 +115,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // Escape closes it, as its × does — never mid-import (state §0.186) — while no layer
     // above the draggable windows is open.
     const { escapeBlocked } = useApp();
-    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));
+    // Held, too, while another window is drawn over this one (state §0.252; guide §18b80 rule 5) — read at key time.
+    useEscapeLayer(true, () => { if (!importing) onClose(); }, () => escapeBlocked('draggable') || !onTop());
     const [importProgress, setImportProgress] = useState(0);
 
     // conflicts: array of { incomingIndex, incoming, existing, matchReason, action }
@@ -569,7 +570,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             }}>
                 Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : isUsers ? 'Team Members' : 'Accounts'} from CSV
                 <button
-                    onClick={onClose}
+                    onClick={() => { if (!importing) onClose(); }} disabled={importing}
                     style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: T.surface, borderRadius: '6px', width: '28px', height: '28px', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
                 >×</button>
             </h2>

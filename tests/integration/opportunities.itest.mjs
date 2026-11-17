@@ -131,14 +131,19 @@ test('cross-tenant write — A cannot overwrite B\'s opportunity via PUT with B\
 // exactly how the leads bug detonated.
 
 test('REGRESSION — a partial PUT updates its fields and preserves the rest', async () => {
-    await handler(ev(A, 'POST', {
+    const made = await handler(ev(A, 'POST', {
         id: 'opp_A_merge1', opportunityName: 'Precious Deal', account: 'Keep Corp',
         site: 'HQ', salesRep: 'Itest Opp Rep', stage: 'Discovery', arr: 250000,
         notes: 'precious notes', nextSteps: 'call Tuesday', pipelineId: 'pipe_custom',
-        stageHistory: [{ stage: 'Discovery', date: '2026-08-01', author: 'seed' }],
-        comments: [{ id: 'c1', text: 'a Team Note', timestamp: '2026-08-02T00:00:00Z' }],
         contactIds: ['itest_opps_ct_1'],
     }));
+    assert.equal(made.statusCode, 201);
+    // A create names no list with an entry in it (state §0.252): the history and the note a deal grows are seeded
+    // straight into the row, as the server's writes would leave them.
+    await db.update(opportunities).set({
+        stageHistory: [{ stage: 'Discovery', date: '2026-08-01', author: 'seed' }],
+        comments: [{ id: 'c1', text: 'a Team Note', timestamp: '2026-08-02T00:00:00Z' }],
+    }).where(eq(opportunities.id, 'opp_A_merge1'));
     const res = await handler(ev(A, 'PUT', { id: 'opp_A_merge1', stage: 'Proposal' }));
     assert.equal(res.statusCode, 200);
     const row = await rowOf('opp_A_merge1');

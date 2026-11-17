@@ -9,7 +9,7 @@
 //                chosen links back via onApply (used by the upload rail, where
 //                the document doesn't exist yet).
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtDate, EntityGlyph, ENTITY_META } from './atoms';
@@ -128,7 +128,12 @@ export default function DocumentLinkPicker() {
         return ORDER.filter((t) => g[t] && g[t].length).map((t) => [t, g[t]]);
     }, [filtered]);
 
-    const close = () => { setShowDocLinkPicker(false); setDocLinkPickerContext && setDocLinkPickerContext(null); };
+    // A Done being sent (state §0.252; guide §18b80 rule 4): nothing closes the picker while its link and unlink writes
+    // are out — its ×, backdrop and Escape closed it, the choice kept for a retry with it — and a second Done sends
+    // nothing. The ref holds two presses in one tick; the state draws the wait.
+    const [busy, setBusy] = useState(false);
+    const busyRef = useRef(false);
+    const close = () => { if (busyRef.current) return; setShowDocLinkPicker(false); setDocLinkPickerContext && setDocLinkPickerContext(null); };
 
     // Escape closes the picker as its backdrop does, the links left as they were (state
     // §0.180) — while no layer above it is open: the one order (escapeBlocked, state
@@ -146,6 +151,7 @@ export default function DocumentLinkPicker() {
     });
 
     const done = async () => {
+        if (busyRef.current) return;
         const chosen = Object.values(selected);
         if (ctx.onApply) {
             ctx.onApply(chosen);
@@ -157,10 +163,16 @@ export default function DocumentLinkPicker() {
             // A refused link or unlink says so in the app's message (useDocuments) and leaves
             // the picker open with the choice, to try again or close (state §0.181). It was
             // logged to the console, and the picker closed as if it had saved.
-            if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) return;
-            for (const r of removed) {
-                if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) return;
-            }
+            busyRef.current = true; setBusy(true);
+            let landed = true;
+            try {
+                if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) landed = false;
+                for (const r of removed) {
+                    if (!landed) break;
+                    if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) landed = false;
+                }
+            } finally { busyRef.current = false; setBusy(false); }
+            if (!landed) return;
         }
         close();
     };
@@ -222,7 +234,7 @@ export default function DocumentLinkPicker() {
                 {/* Footer */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${T.border}`, background: T.surface2, flexShrink: 0 }}>
                     <span style={{ fontSize: 11, color: T.inkMuted }}>One document can link to any number of records.</span>
-                    <button onClick={done} style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Done</button>
+                    <button onClick={done} disabled={busy} style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Done</button>
                 </div>
             </div>
         </>

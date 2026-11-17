@@ -63,7 +63,9 @@ test('useEscapeLayer listens on document in the capture phase, while the layer i
     assert.ok(src.includes('if (!open) return undefined;'));
     assert.ok(src.includes("document.addEventListener('keydown', onKey, true);"), 'before every listener on document and window');
     assert.ok(src.includes("return () => document.removeEventListener('keydown', onKey, true);"));
-    assert.ok(src.includes('const onKey = (e) => { takeEscape(e, blocked, onEscape); };'));
+    // A hold may be a function, read when an Escape comes — and only then (state §0.252: a draggable window is held
+    // while another drawn over it is open, which a press on that window's header changes without rendering this one).
+    assert.ok(src.includes("const onKey = (e) => { takeEscape(e, typeof blocked === 'function' ? (e.key === 'Escape' && !e.defaultPrevented && !!blocked()) : blocked, onEscape); };"));
 });
 
 test('the four document layers each take their Escape, before their early return, held by the layers above them', () => {

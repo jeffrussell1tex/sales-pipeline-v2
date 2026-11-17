@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { readRefusal, failureWords } from '../../utils/refusalWords.js';
 import { T } from '../../tokens.js';
+import { useCloseRequest } from '../../hooks/useCloseRequest';
 
 // ── Design tokens ─────────────────────────────────────────────
 
@@ -332,25 +333,28 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
         return () => document.removeEventListener('mousedown', handler);
     }, [showAssigneePicker]);
 
+    // ── Closing (state §0.252; OPEN_ITEMS §4.1; Jeff, 16 Nov: "Deal + lead") ──
+    // One close for the ×, Cancel, the backdrop and Escape: nothing while a save is out (guide §18b80 rule 4); with
+    // anything typed, "Discard changes?" — Discard / Keep editing, as the deal window and the tabs ask; else the form
+    // closes. It asked "Discard this lead?" — under a red Delete — on Escape and the backdrop only, even mid-save,
+    // and its × and Cancel closed over typed work at once. The form always opens blank: typed work is any field filled,
+    // or an owner picked (none, as "Leave unassigned", too).
+    const closeLead = useCloseRequest({ onClose, dirty: () => Object.values(form).some(v => v !== '') || manualAssignee !== null, busy: saving });
+
     // ── Esc key ─────────────────────────────────────────────────
     // The form's Escape while no layer above it is open (state §0.189): the shortcuts and
     // the deal window draw over it and take no Escape of their own, so the form closed — or
     // asked to discard — under them, and they stayed open.
     const escapeHeld = escapeBlocked('leadModal');
     useEffect(() => {
-        const isDirty = Object.values(form).some(v => v !== '');
         const handler = e => {
             if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;   // one a layer above took, or holds, is theirs (§0.180, §0.189)
             e.preventDefault();   // handled here — App's Escape leaves it alone (state §0.177)
-            if (isDirty) {
-                showConfirm('Discard this lead?', onClose);
-            } else {
-                onClose();
-            }
+            closeLead();
         };
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
-    }, [form, onClose, showConfirm, escapeHeld]);
+    }, [closeLead, escapeHeld]);
 
     // ── Validation ───────────────────────────────────────────────
     const validate = () => {
@@ -438,11 +442,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     };
 
     const handleBackdrop = (e) => {
-        if (e.target === e.currentTarget) {
-            const isDirty = Object.values(form).some(v => v !== '');
-            if (isDirty) showConfirm('Discard this lead?', onClose);
-            else onClose();
-        }
+        if (e.target === e.currentTarget) closeLead();
     };
 
     return (
@@ -459,7 +459,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                     {enriched && (
                         <span style={{ padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, background:'rgba(77,107,61,0.12)', color:T.ok, letterSpacing:0.5, textTransform:'uppercase' }}>✓ Enriched</span>
                     )}
-                    <button onClick={onClose} style={{ background:'rgba(0,0,0,0.08)', border:'none', cursor:'pointer', borderRadius:4, width:26, height:26, fontSize:15, display:'flex', alignItems:'center', justifyContent:'center', color:T.ink }}>✕</button>
+                    <button onClick={closeLead} style={{ background:'rgba(0,0,0,0.08)', border:'none', cursor:'pointer', borderRadius:4, width:26, height:26, fontSize:15, display:'flex', alignItems:'center', justifyContent:'center', color:T.ink }}>✕</button>
                 </div>
 
                 {/* ── Body: two-pane ── */}
@@ -673,7 +673,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                         <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>✓ {savedCount} lead{savedCount > 1 ? 's' : ''} added</span>
                     )}
                     <div style={{ flex:1 }}/>
-                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={closeLead} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     <button onClick={handleSaveAnother} disabled={saving} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:saving?'wait':'pointer', fontFamily:T.sans, opacity:saving?0.6:1 }}>
                         Save &amp; add another
                     </button>

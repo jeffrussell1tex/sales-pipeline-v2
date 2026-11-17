@@ -208,9 +208,10 @@ export default function ModalLayer() {
                     currentUserId={currentUserId}
                     onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}
                     onEditComment={(oppId, commentId, newText) => saveNotes(oppId, { op: 'edit', id: commentId, text: newText })}
-                    onDeleteComment={(oppId, commentId) => new Promise((answer) => {
-                        // Asked first — a cancel never answers, and the modal shows nothing.
-                        showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });
+                    onDeleteComment={(oppId, commentId, sending) => new Promise((answer) => {
+                        // Asked first — a cancel never answers, and the modal shows nothing; once confirmed, the window is
+                        // told the delete is out (`sending`, state §0.252), so it holds its close until the answer.
+                        showConfirm('Delete this note? It cannot be undone.', () => { if (sending) sending(); saveNotes(oppId, { op: 'delete', id: commentId }).then(answer); });
                     })}
                     onClose={() => { document.activeElement?.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
@@ -1215,7 +1216,7 @@ export default function ModalLayer() {
                 };
                 return (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
-                    onClick={closeClaimModal}>
+                    onClick={() => { if (!spiffClaimBusy) closeClaimModal(); }}>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius: isMobile ? '12px 12px 0 0' : '12px', padding:'1.25rem 1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 12px 40px rgba(0,0,0,0.15)', fontFamily:"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
@@ -1226,7 +1227,7 @@ export default function ModalLayer() {
                                 </div>
                                 <div style={{ fontSize:'0.75rem', color:T.inkMuted, marginTop:'3px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
                             </div>
-                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:T.inkMuted, cursor:'pointer', lineHeight:1, fontFamily:'inherit' }}>×</button>
+                            <button onClick={() => { if (!spiffClaimBusy) closeClaimModal(); }} style={{ background:'none', border:'none', fontSize:'1.25rem', color:T.inkMuted, cursor:'pointer', lineHeight:1, fontFamily:'inherit' }}>×</button>
                         </div>
 
                         {existingClaims.length > 0 && (
@@ -1281,6 +1282,9 @@ export default function ModalLayer() {
                                                     {spiff.condition && <span> · {spiff.condition}</span>}
                                                 </div>
                                                 <button onClick={async () => {
+                                                    // One claim at a time (state §0.252): a second while the first was out
+                                                    // took the busy mark, and the first's answer cleared it under the second.
+                                                    if (spiffClaimBusy) return;
                                                     const newClaim = {
                                                         id: 'claim_' + crypto.randomUUID(),
                                                         spiffId: spiff.id,
@@ -1331,8 +1335,8 @@ export default function ModalLayer() {
                                                         setSpiffClaimBusy(null);
                                                     }
                                                 }}
-                                                disabled={spiffClaimBusy === spiff.id}
-                                                style={{ width:'100%', padding:'0.4rem 0.875rem', background: spiffClaimBusy === spiff.id ? T.inkMid : '#1c1917', color:T.surface, border:'none', borderRadius:'8px', fontSize:'0.75rem', fontWeight:'500', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+                                                disabled={!!spiffClaimBusy}
+                                                style={{ width:'100%', padding:'0.4rem 0.875rem', background: spiffClaimBusy === spiff.id ? T.inkMid : '#1c1917', color:T.surface, border:'none', borderRadius:'8px', fontSize:'0.75rem', fontWeight:'500', cursor: spiffClaimBusy === spiff.id ? 'wait' : spiffClaimBusy ? 'not-allowed' : 'pointer', opacity: spiffClaimBusy && spiffClaimBusy !== spiff.id ? 0.5 : 1, fontFamily:'inherit' }}>
                                                     {spiffClaimBusy === spiff.id ? 'Submitting…' : 'Submit Claim'}
                                                 </button>
                                             </div>

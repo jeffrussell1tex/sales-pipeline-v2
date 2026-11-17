@@ -18,7 +18,9 @@ import { failureWords } from '../../utils/refusalWords.js';
 // again (§0.249, the review, round 4; last pass: a file the check would refuse was invited back, refused when dropped).
 const heldWords = (held, busy) => [...held.filter((h) => h[1]).map(([n, w]) => `${n}: ${w}`), ...(held.some((h) => !h[1]) ? [`Not sent: ${held.filter((h) => !h[1]).map((h) => h[0]).join(', ')} — ${busy ? 'wait for the current upload to finish, then drop them again' : 'drop them again'}.`] : [])].join('\n');
 
-export default function RecordDocuments({ recordType, recordId, recordName, recordSub }) {
+// `onBusy(true)` as a batch starts sending and `onBusy(false)` as it ends — from the batch itself, so it ends even when
+// this has closed (state §0.252): its host holds its closes and its tab while one is out — the batch's words are said here.
+export default function RecordDocuments({ recordType, recordId, recordName, recordSub, onBusy }) {
     const {
         documents = [],
         createDocument, linkDocument, unlinkDocument,
@@ -90,6 +92,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             return;
         }
         sending.current = true;
+        if (onBusy) onBusy(true);
         setBusy(true); setError(null); setNotice(null);
         setHeld(null);
         // A file made whose answer cannot be read (documentsStorage's `landed`) is made, not failed: the next file goes, and
@@ -118,6 +121,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             if (maybe.length) setError((stop) => [...maybe, ...(stop ? [stop] : [])].join('\n'));
             setBusy(false);
             sending.current = false;
+            if (onBusy) onBusy(false);
         }
     };
 

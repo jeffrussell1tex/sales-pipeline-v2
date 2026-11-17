@@ -168,7 +168,8 @@ test('DIALOG: the reason dialog shows the refusal, keeps the choice, sends one s
     assert.ok(m.includes('if (r && !r.ok) { inFlight.current = false; setRefusal(r.error); setBusy(false); }'));
     assert.ok(m.includes('const skip = () => send(() => onSkip());'), 'Skip, × and Escape go through the lock and the refusal');
     assert.ok(m.includes('const leave = () => { if (inFlight.current) return; if (refusal) onCancel(); else skip(); };'));
-    assert.ok(m.includes("useEscapeLayer(true, leave, escapeBlocked('draggable'));"));
+    // Held, too, while another window is drawn over it (state §0.252).
+    assert.ok(m.includes("useEscapeLayer(true, leave, () => escapeBlocked('draggable') || !onTop());"));
     assert.ok(m.includes('<button type="button" onClick={leave} aria-label="Close"'));
     const banner = between(m, '{refusal && (', '{/* Footer actions');
     assert.ok(banner.includes('role="alert"') && banner.includes('{refusal}') && banner.includes('onClick={onCancel}') && banner.includes('Close without saving'));
@@ -193,11 +194,16 @@ test('DEAL WINDOW: a refused save is drawn inside the window, over it — and th
     assert.equal(count(m, '{/* Modal container */}'), 1);
     const h = read('src/hooks/useOpportunities.js');
     assert.ok(h.includes("            setOppModalError(null); setOppModalSaving(false);   // the deal window closes clean, as its onClose does\n            setShowModal(false);"));
-    // Escape over the message dismisses it, not the window and its form; the handler sees the error.
+    // Escape over the message dismisses it, not the window and its form; the handler sees the error. Since §0.252
+    // the window takes its own Escape (it was App's, which closed it mid-save): the message first, then the close.
+    const esc = between(m, "    const escapeHeld = escapeBlocked('draggable');", 'document.addEventListener');
+    assert.ok(esc.includes('if (errorMessage) { onDismissError(); return; }'));
+    assert.ok(esc.indexOf('if (errorMessage) { onDismissError(); return; }') < esc.indexOf('closeDeal();'), 'the message, before the window');
+    assert.ok(m.includes('    }, [escapeHeld, errorMessage, onDismissError, onTop, closeDeal]);'), 'the listener reads the message of its render');
     const a = read('src/App.jsx');
-    assert.ok(a.includes('if (showModal && oppModalError) { setOppModalError(null); return; }'));
-    assert.ok(a.indexOf('if (showModal && oppModalError) { setOppModalError(null); return; }') < a.indexOf('if (showModal) { setShowModal(false); setEditingOpp(null); setOppModalError(null); setOppModalSaving(false); return; }'));
-    assert.ok(a.includes('}, [showModal, showUserModal, showActivityModal, viewingActivity, lostReasonModal, oppModalError,'));
+    assert.ok(!a.includes('if (showModal && oppModalError)') && !a.includes('if (showModal) { setShowModal(false);'), 'App closes the deal window no more');
+    // Nor does App's handler read the deal or user window's flags, or the deal's error, since §0.252: none in its deps.
+    assert.ok(a.includes('    }, [showActivityModal, viewingActivity, lostReasonModal,\n'));
 });
 
 test('DEAL WINDOW: a new rep\'s name is put in once — not in every deal window opened after', () => {
@@ -253,7 +259,7 @@ test('DIALOG: the number and letter shortcuts wait while the dialog is open', ()
     // Since §0.230 every layer holds them — the dialog is the deal window's ('draggable' in the order),
     // read at key time (tests/tab-layers.test.mjs runs the rule).
     assert.ok(a.includes('            const anyModalOpen = anyLayerOpen();'));
-    assert.ok(a.includes('}, [showModal, showUserModal, showActivityModal, viewingActivity, lostReasonModal,'), 'and the handler sees it change');
+    assert.ok(a.includes('}, [showActivityModal, viewingActivity, lostReasonModal,'), 'and the handler sees it change');
 });
 
 test('the suites: this file is graded by the harness; the endpoints\' integration test runs', () => {
