@@ -56,6 +56,7 @@ A SELECT (17 Nov): no org has a won deal with a stage path — the demo org's 10
 | Q2 | What counts as acting on a next step | **"What happens on the deal (Recommended)"** — an activity logged or a stage moved within 14 days, checked as the alerts are; nothing to press |
 | Q3 | Where the next action shows | **"Deal window + meeting prep (Recommended)"** — Home waits for the comparisons |
 | Q4 | Home's "Velocity win" claims an average it never measured | **"Fix it (Recommended)"** — say only what is true |
+| Q5 | Found in the build: the log's outcome check ("did the deal move after the alert?") is never run — nothing calls recommendation-log.mjs's PUT, so every logged alert stays pending and Reports' resolve rate counts nothing; next steps need it | **"Nightly, alerts + next steps (Recommended)"** — the nightly deal-scoring pass judges each org's pending rows; existing alert rows from the last 30 days get outcomes too (every org's log, UKG included; no row deleted); prod only, after the ship |
 
 The answer to Q1 reads "each next action Claude gives": the row is written when Claude gives it (ai-score.mjs, on the server), not when a screen shows it — DESIGN-3.md R1 says so since.
 
