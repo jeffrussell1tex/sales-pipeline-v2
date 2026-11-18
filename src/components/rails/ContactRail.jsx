@@ -247,7 +247,9 @@ export default function ContactRail() {
             return;
         }
         const src = contact || EMPTY_CONTACT;
-        setFormData({ ...EMPTY_CONTACT, ...src });
+        // A new contact's id is given here, once per open (state §0.261, the unknown-save rule's Part 6): a second Save after
+        // an answer that proved nothing sends the same contact, so a first that landed is never made twice.
+        setFormData({ ...EMPTY_CONTACT, ...src, ...(contact ? {} : { id: 'id_' + crypto.randomUUID() }) });
         setCompanySearch(src.company || '');
         companySeed.current = contactSeed(contact);
         setRepSearch(src.assignedRep || '');

@@ -14,6 +14,7 @@ import {
     serverErrorBody, writeAudit, auditAs, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
     resolveCaller, memberNamesOf,
+    ownIdTaken,
 } from './_lib.mjs';
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -404,6 +405,9 @@ export const handler = async (event) => {
             Object.assign(newRow, { createdBy: creatorName || null });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(opportunities, newRow.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That deal id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That deal id is already in use.' }) };
 
             // Email: new opportunity created — notify the assigned rep only if

@@ -3,6 +3,7 @@ import { exportSchedules } from '../../db/schema.js';
 import { eq, and, desc }   from 'drizzle-orm';
 import { verifyAuth }      from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -63,7 +64,10 @@ export const handler = async (event) => {
             const [inserted] = await db
                 .insert(exportSchedules)
                 .values({ ...sanitize(data), orgId, createdBy: userId })
+                // A taken id writes nothing and is answered 409 (state §0.261, Part 6): it was a primary-key 500.
+                .onConflictDoNothing({ target: exportSchedules.id })
                 .returning();
+            if (!inserted) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That schedule id is already in use.', ...(await ownIdTaken(exportSchedules, data.id, orgId) ? { code: 'idInUse' } : {}) }) };
             await auditAs(orgId, userId, { action: 'export_schedule.created', entityType: 'export_schedule', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.scope} · ${inserted.format || 'CSV'} · ${inserted.cadence || 'scheduled'}` });
             return { statusCode: 201, headers: HEADERS, body: JSON.stringify({ schedule: inserted }) };
         }

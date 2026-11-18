@@ -163,7 +163,9 @@ test('the handler sends through the invite path, ten to a request, and counts wh
     assert.ok(h.includes("body: JSON.stringify({ action: 'invite', invites: chunk }),"));
     assert.ok(h.includes('receipt.created += sent.length;'));
     assert.ok(h.includes('receipt.failed += chunk.length - sent.length;'));
-    assert.ok(/if \(!answered\) \{\s*receipt\.failed \+= invites\.length - i;/.test(h), 'a request answered any other way stops the run, the rest counted as not sent');
+    // Moved in §0.261 (the unknown-save rule): the stopping request's own invitations, its answer proving nothing, may have been
+    // sent — counted maybe; the rest never sent.
+    assert.ok(/if \(!answered\) \{[\s\S]*?receipt\.maybe \+= unsureHere;\s*receipt\.failed \+= invites\.length - i - unsureHere;/.test(h), 'a request answered any other way stops the run, the rest counted as not sent');
     assert.ok(/receipt\.error = [^\n]*;\s*break;\s*\}/.test(h), 'and stops — the next request would only meet the same failure');
     assert.ok(l.includes('users={settings.users || []}'));
 });

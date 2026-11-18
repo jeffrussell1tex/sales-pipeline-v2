@@ -1123,7 +1123,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         </h3>
                         <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
                             {isUsers
-                                ? describeReceipt(r, 'invitation', { created: 'sent', failed: 'not sent', skipped: 'skipped', none: 'No invitation was sent' })
+                                ? describeReceipt(r, 'invitation', { created: 'sent', failed: 'not sent', skipped: 'skipped', none: 'No invitation was sent', maybe: 'may have been sent — reload the page to see whether they were' })
                                 : describeReceipt(r, importType === 'contacts' ? 'contact' : importType === 'accounts' ? 'account' : 'opportunity')}
                             {importType === 'contacts' && r.companies > 0 && ` ${r.companies} new compan${r.companies === 1 ? 'y was' : 'ies were'} added to your Accounts list.`}
                         </p>
@@ -1191,7 +1191,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         )}
 
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                            {!clean && <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>}
+                            {/* No second Import over rows that may have saved (state §0.261): their ids were this run's — Close and reload. */}
+                            {!clean && !r.maybe && <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>}
                             <button style={priBtn} onClick={onClose}>{clean ? 'Done' : 'Close'}</button>
                         </div>
                     </div>

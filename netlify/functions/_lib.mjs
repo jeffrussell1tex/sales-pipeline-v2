@@ -30,6 +30,16 @@ export function allowOrigin(event) {
     return ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
 }
 
+// A create's id already held in THIS org (state §0.261, docs/design/unknown-save Part 6): the record is stored — an
+// earlier press of the same create landed, its answer lost — so the create's 409 says `code: 'idInUse'` beside its
+// words and the screen reads it as landed (src/utils/refusalWords.js landedBefore). Asked only after the insert wrote
+// nothing; another org's id gets the words alone, nothing of that row. Reads; never writes.
+export async function ownIdTaken(table, id, orgId) {
+    if (typeof id !== 'string' || !id || !orgId) return false;
+    const [row] = await db.select({ id: table.id }).from(table).where(and(eq(table.id, id), eq(table.orgId, orgId))).limit(1);
+    return !!row;
+}
+
 // Standardized 500 body: logs the real error server-side with a correlation id
 // and returns ONLY a generic message + that id to the client, so DB driver text
 // and stack traces never leak. Returns the JSON string for use as a 500 body.

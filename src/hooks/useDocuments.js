@@ -11,8 +11,8 @@
 
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus.js';
-import { dbFetch, waitForToken, requestOrg, stillOrg, refusalOf, NETWORK_ERROR } from '../utils/storage.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { dbFetch, waitForToken, requestOrg, stillOrg, refusalFrom, NETWORK_ERROR } from '../utils/storage.js';
+import { readRefusal, failureWords, heardRefusal, maybeSaid } from '../utils/refusalWords.js';
 import {
     uploadNewDocument,
     uploadNewVersion,
@@ -28,8 +28,13 @@ const DOCS_FN = '/.netlify/functions/documents';
 // read them. Never throws.
 async function answerOf(request) {
     let res;
-    try { res = await request; } catch { return { ok: false, error: NETWORK_ERROR }; }
-    if (!res.ok) return { ok: false, error: await refusalOf(res) };
+    // unknown since §0.261: anything but the server's own 4xx proves nothing — the edit may have landed. Its body read once:
+    // its words as refusalOf says them (refusalFrom) and whether the server itself refused.
+    try { res = await request; } catch { return { ok: false, error: NETWORK_ERROR, unknown: true }; }
+    if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        return { ok: false, error: refusalFrom(res, body), unknown: !heardRefusal(res.status, body) };
+    }
     try { return { ok: true, data: (await res.json()) || {} }; } catch { return { ok: true, data: {} }; }   // an empty body
 }
 
@@ -136,7 +141,7 @@ export function useDocuments(_deps = {}) {
     const updateDocument = useCallback(async (id, patch) => {
         const askedOrg = requestOrg();
         const r = await answerOf(dbFetch(DOCS_FN, { method: 'PUT', body: JSON.stringify({ id, ...patch }) }));
-        if (!r.ok) { report(_deps, askedOrg, `${editLabelOf(patch)} not saved — ${r.error}`); return r; }
+        if (!r.ok) { report(_deps, askedOrg, r.unknown ? maybeSaid(editLabelOf(patch), 'saved', r.error) : `${editLabelOf(patch)} not saved — ${r.error}`); return r; }   // (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
         const updated = r.data.document || {};
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updated } : d)));
         return { ok: true, document: updated };
@@ -145,7 +150,7 @@ export function useDocuments(_deps = {}) {
     const removeDocument = useCallback(async (id) => {
         const askedOrg = requestOrg();
         const r = await answerOf(dbFetch(`${DOCS_FN}?id=${encodeURIComponent(id)}`, { method: 'DELETE' }));
-        if (!r.ok) { report(_deps, askedOrg, `Document not deleted — ${r.error}`); return r; }
+        if (!r.ok) { report(_deps, askedOrg, r.unknown ? maybeSaid('The document', 'deleted', r.error) : `Document not deleted — ${r.error}`); return r; }
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.filter((d) => d.id !== id));
         return { ok: true };
     }, []);
@@ -155,7 +160,7 @@ export function useDocuments(_deps = {}) {
         const r = await answerOf(dbFetch(`${DOCS_FN}?action=restore-version`, {
             method: 'POST', body: JSON.stringify({ id, v }),
         }));
-        if (!r.ok) { report(_deps, askedOrg, `Version ${v} not restored — ${r.error}`); return r; }
+        if (!r.ok) { report(_deps, askedOrg, r.unknown ? maybeSaid(`Version ${v}`, 'restored', r.error) : `Version ${v} not restored — ${r.error}`); return r; }
         // The document as the restore left it — its size and file the restored version's
         // (state §0.183); the version and the time alone kept the size restored over.
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
@@ -170,7 +175,7 @@ export function useDocuments(_deps = {}) {
         const r = await answerOf(dbFetch(`${DOCS_FN}?action=link`, {
             method: 'POST', body: JSON.stringify({ id, links }),
         }));
-        if (!r.ok) { report(_deps, askedOrg, `${(links || []).length === 1 ? 'Link' : 'Links'} not added — ${r.error}`); return r; }
+        if (!r.ok) { const one = (links || []).length === 1; report(_deps, askedOrg, r.unknown ? maybeSaid(one ? 'The link' : 'The links', 'added', r.error, !one) : `${one ? 'Link' : 'Links'} not added — ${r.error}`); return r; }
         const added = Array.isArray(r.data.links) ? r.data.links : [];
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === id ? { ...d, links: [...(d.links || []), ...added] } : d));
@@ -180,7 +185,7 @@ export function useDocuments(_deps = {}) {
     const unlinkDocument = useCallback(async (id, linkId) => {
         const askedOrg = requestOrg();
         const r = await answerOf(dbFetch(`${DOCS_FN}?action=link&linkId=${encodeURIComponent(linkId)}`, { method: 'DELETE' }));
-        if (!r.ok) { report(_deps, askedOrg, `Link not removed — ${r.error}`); return r; }
+        if (!r.ok) { report(_deps, askedOrg, r.unknown ? maybeSaid('The link', 'removed', r.error) : `Link not removed — ${r.error}`); return r; }
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === id ? { ...d, links: (d.links || []).filter((l) => l.id !== linkId) } : d));
         return { ok: true };

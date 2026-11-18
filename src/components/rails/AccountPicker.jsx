@@ -11,7 +11,7 @@
 // Create failures are reported via onError so the host can notify.
 import React, { useState, useMemo } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
-import { readRefusal, failureWords } from '../../utils/refusalWords.js';
+import { failureWords, landedBefore, writeRefusal } from '../../utils/refusalWords.js';
 import { useApp } from '../../AppContext';
 import { pickerRows, searchKey } from '../../utils/searchMatch.js';
 import { unarchived, parentLabel, siteLine, linkRefusal, resolveLink } from '../../utils/pickLink.js';
@@ -29,7 +29,10 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onSele
     // accounts + setAccounts come from context so this drops into any component under
     // AppProvider (rails AND prop-driven modals) with no prop-threading, and stays a
     // single source of truth — a newly created account appears everywhere at once.
-    const { accounts, setAccounts } = useApp();
+    const { accounts, setAccounts, loadAccounts } = useApp();
+    // The new account's id per name typed (state §0.261, the unknown-save rule's Part 6): a second press for the same name
+    // after an answer that proved nothing is the same account — answered already stored if the first landed.
+    const madeIds = React.useRef({});
     const [open, setOpen] = useState(false);
     const [creating, setCreating] = useState(false);
 
@@ -71,13 +74,22 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onSele
         onError && onError(null);
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
-            const newAccount = { id: 'id_' + crypto.randomUUID(), name, accountTier: 'account' };
+            const newAccount = { id: madeIds.current[name] || (madeIds.current[name] = 'id_' + crypto.randomUUID()), name, accountTier: 'account' };
             const res = await dbFetch('/.netlify/functions/accounts', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAccount),
             });
             // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10) — never "HTTP N". A
             // refusal after an org switch is dropped by the catch's own check.
-            if (!res.ok) throw new Error(await readRefusal(res));
+            // Only a 4xx in the server's words made nothing; any other refused answer may have (§0.261). Already stored:
+            // an earlier press made it — the list read again, the account picked.
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                if (landedBefore(res.status, body)) { loadAccounts && loadAccounts(() => {}); pick(newAccount); return; }
+                const w = writeRefusal(res, body, `The account "${name}"`, 'created');
+                onError && onError(w.unknown ? w.words : `Couldn't create account "${name}". ${w.words}`);
+                return;
+            }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
             const saved = data.account || newAccount;
@@ -85,7 +97,7 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onSele
             pick(saved);
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            onError && onError(`Couldn't create account "${name}". ${failureWords(e)}`);
+            onError && onError(`The account "${name}" may have been created — reload the page to see whether it was: ${failureWords(e)}`);   // a throw proves nothing (§0.261)
         } finally {
             setCreating(false);
         }

@@ -3,6 +3,7 @@ import { products } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 
 const headers = {
     'Content-Type': 'application/json',
@@ -114,6 +115,9 @@ export const handler = async (event) => {
             // A taken id — this org's or another's — writes nothing and is answered 409 (state §0.242, as accounts
             // §0.199): it was a primary-key 500.
             const [inserted] = await db.insert(products).values(payload).onConflictDoNothing({ target: products.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(products, payload.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That id is already in use.' }) };
             await auditAs(orgId, auth.userId, { action: 'product.created', entityType: 'product', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.category || 'uncategorised'} · list $${Number(inserted.listPrice || 0).toLocaleString()}` });
             return { statusCode: 201, headers, body: JSON.stringify({ product: inserted }) };

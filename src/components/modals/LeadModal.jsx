@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
-import { readRefusal, failureWords } from '../../utils/refusalWords.js';
+import { readRefusal, failureWords, landedBefore, maybeSaid, writeRefusal } from '../../utils/refusalWords.js';
 import { T } from '../../tokens.js';
 import { useCloseRequest } from '../../hooks/useCloseRequest';
 
@@ -370,10 +370,13 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     };
 
     // ── Save ─────────────────────────────────────────────────────
+    // The lead's id, given at its first Save and kept until it lands (state §0.261, the unknown-save rule's Part 6): a second
+    // press after an answer that proved nothing is the same lead — answered already stored if the first landed.
+    const leadIdRef = useRef(null);
     const buildPayload = () => {
         const revNum = parseFloat((form.rev || '').replace(/[^0-9.]/g, '')) || 0;
         return {
-            id:          'id_' + crypto.randomUUID(),
+            id:          leadIdRef.current || (leadIdRef.current = 'id_' + crypto.randomUUID()),
             firstName:   form.firstName.trim(),
             lastName:    form.lastName.trim(),
             name:        form.firstName.trim() + ' ' + form.lastName.trim(),
@@ -406,11 +409,19 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
             });
             // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10): a 502's page said
             // "Unexpected token '<'".
-            if (!res.ok) throw new Error(await readRefusal(res));
+            // Only a 4xx in the server's words wrote nothing; any other refused answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing is said as maybe). Already stored: the
+            // earlier press landed — the copy sent shown, its stored row the next load's.
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                if (landedBefore(res.status, body)) { leadIdRef.current = null; return payload; }
+                setErrors({ _server: writeRefusal(res, body, 'The lead').words });
+                return null;
+            }
             const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent
+            leadIdRef.current = null;   // saved: a Save another is another lead
             return data.lead || payload;
         } catch (err) {
-            setErrors({ _server: failureWords(err) });
+            setErrors({ _server: maybeSaid('The lead', 'saved', failureWords(err)) });   // a throw proves nothing (§0.261)
             return null;
         } finally {
             setSaving(false);

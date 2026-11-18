@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
-import { readRefusal, failureWords } from '../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusal } from '../../utils/refusalWords.js';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
@@ -228,11 +228,15 @@ export default function AppHeader({
             });
             // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a refusal in the server's words with
             // their ref, else "The server returned N."; a landed answer that cannot be read keeps the change as sent.
+            // Only a 4xx in the server's words wrote nothing — put back; any other answer may have saved: kept as typed,
+            // said as maybe (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
             if (!res.ok) {
-                const why = await readRefusal(res);
+                const body = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
+                const w = writeRefusal(res, body, 'Your profile');
+                if (w.unknown) { setProfileError(w.words); return; }
                 setMyProfile(prev => ({ ...(prev||{}), ...undo }));
-                setProfileError(`Not saved — ${why}`);
+                setProfileError(`Not saved — ${w.words}`);
                 return;
             }
             const data = await res.json().catch(() => ({}));
@@ -243,8 +247,7 @@ export default function AppHeader({
             }
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
-            setMyProfile(prev => ({ ...(prev||{}), ...undo }));
-            setProfileError(`Not saved — ${failureWords(err)}`);
+            setProfileError(maybeSaid('Your profile', 'saved', failureWords(err)));   // a throw proves nothing: kept as typed (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
         } finally {
             setProfileSaving(false);
         }
@@ -374,12 +377,20 @@ export default function AppHeader({
         const askedOrg = requestOrg();
         setDisconnecting(true);
         setCalActionError('');
+        let gone = false;   // the DELETE landed: what fails after it is no reason to say it may not have
         try {
             const res = await dbFetch(
                 `/.netlify/functions/calendar-connections?id=${encodeURIComponent(calConn.id)}&scope=user`,
                 { method: 'DELETE' });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            // Only a 4xx in the server's words disconnected nothing; any other answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                const w = writeRefusal(res, body, 'The calendar', 'disconnected');
+                if (stillOrg(askedOrg)) setCalActionError(w.unknown ? w.words : `Not disconnected — ${w.words}`);
+                return;
+            }
             if (!stillOrg(askedOrg)) return;
+            gone = true;
             setCalConn(null);
             // No read sent before the DELETE lands after it (round 3): its answer — connected, the deleted connection's
             // events — is dropped, and the re-read below is the one kept.
@@ -394,7 +405,7 @@ export default function AppHeader({
             // server's word together.
             if (fetchCalendarEvents) await fetchCalendarEvents();
         } catch (e) {
-            if (stillOrg(askedOrg)) setCalActionError(`Not disconnected — ${failureWords(e)}`);
+            if (stillOrg(askedOrg) && !gone) setCalActionError(maybeSaid('The calendar', 'disconnected', failureWords(e)));   // a throw proves nothing (§0.261)
         } finally {
             setDisconnecting(false);
         }

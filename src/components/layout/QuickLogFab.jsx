@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../utils/storage';
+import { maybeSaid } from '../../utils/refusalWords.js';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
 import { rankMatches, capMatches, searchKey } from '../../utils/searchMatch.js';
@@ -15,7 +16,7 @@ export default function QuickLogFab() {
         quickLogContactResults, setQuickLogContactResults,
         followUpPrompt, setFollowUpPrompt,
         setEditingTask, setTaskRailId, setTaskRailMode, isMobile,
-        setUndoToast, adoptDealScores,
+        setUndoToast, adoptDealScores, loadActivities,
         escapeBlocked,
     } = useApp();
 
@@ -24,6 +25,8 @@ export default function QuickLogFab() {
     // new id, so two presses logged two activities. The ref holds two presses in one tick; the state draws the wait.
     const [logging, setLogging] = React.useState(false);
     const loggingRef = React.useRef(false);
+    // The draft's activity id (state §0.261, Part 6): given at its first press, kept until it logs or is cancelled.
+    const draftIdRef = React.useRef(null);
     // Escape closes the panel as its backdrop does, the draft kept, and the follow-up as
     // its × does (state §0.186) — each while no layer above it is open; the panel never mid-send.
     useEscapeLayer(quickLogOpen, () => { if (!loggingRef.current) setQuickLogOpen(false); }, escapeBlocked('quickLog'));
@@ -156,7 +159,7 @@ export default function QuickLogFab() {
 
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '0.625rem', paddingTop: '0.25rem' }}>
-                            <button disabled={logging} onClick={() => { if (loggingRef.current) return; setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
+                            <button disabled={logging} onClick={() => { if (loggingRef.current) return; draftIdRef.current = null; setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
                                 style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: T.inkMid, fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 Cancel
                             </button>
@@ -171,7 +174,9 @@ export default function QuickLogFab() {
                                     // keys across every org, and 'act_' + Date.now() was the
                                     // same for two logs in one millisecond — the second refused
                                     // as an id another record holds (§0.166).
-                                    id: 'id_' + crypto.randomUUID(),
+                                    // One per draft, kept until it logs (state §0.261, Part 6): a second press after an answer that
+                                    // proved nothing is the same activity — answered already stored, it landed with the first.
+                                    id: draftIdRef.current || (draftIdRef.current = 'id_' + crypto.randomUUID()),
                                     type: quickLogForm.type,
                                     notes: quickLogForm.notes,
                                     date: today,
@@ -190,7 +195,11 @@ export default function QuickLogFab() {
                                 // gone on reload.
                                 const rq = await dbWrite('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
                                 if (!stillOrg(askedOrg)) return;
-                                if (!rq.ok) {
+                                // Already stored: an earlier press landed — the list read again, the log done. One whose answer
+                                // proves nothing may be in (§0.261, Jeff's Q2): kept, said as maybe, the panel and its id kept.
+                                if (!rq.ok && rq.landed) { setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id)); loadActivities?.(() => {}); }
+                                else if (!rq.ok && rq.unknown) { setUndoToast({ error: maybeSaid('The activity', 'logged', rq.error) }); return; }
+                                else if (!rq.ok) {
                                     setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id));
                                     setUndoToast({ error: `Activity not logged \u2014 ${rq.error}` });
                                     return;
@@ -198,6 +207,7 @@ export default function QuickLogFab() {
                                 // Its deal's score, moved by the server (AI scoring batch 2A).
                                 if (rq.data?.dealScores && typeof adoptDealScores === 'function') adoptDealScores(rq.data.dealScores);
                                 if (linkedOpp) setFollowUpPrompt({ opportunityId: linkedOpp.id, opportunityName: linkedOpp.opportunityName || linkedOpp.account });
+                                draftIdRef.current = null;   // logged: the next draft is another activity
                                 setQuickLogOpen(false);
                                 setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
                                 setQuickLogContactResults([]);

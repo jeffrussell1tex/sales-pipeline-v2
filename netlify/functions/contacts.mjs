@@ -7,6 +7,7 @@ import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
     rosterUserById,
+    ownIdTaken,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor } from './_ownership.mjs';
 import { restoredOwner } from '../../src/utils/restoreOwner.js';
@@ -150,6 +151,9 @@ export const handler = async (event) => {
                 : await stampOwnerId(sanitize({ ...data, ...linked.set }), 'contact', { clerkUserId: userId, orgId });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(contacts).values({ ...newRow, orgId }).onConflictDoNothing({ target: contacts.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(contacts, newRow.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That contact id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That contact id is already in use.' }) };
             return { statusCode: 201, headers, body: JSON.stringify({ contact: inserted }) };
         }

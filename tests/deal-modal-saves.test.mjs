@@ -27,7 +27,8 @@ const between = (src, from, to) => { const a = src.indexOf(from); assert.ok(a >=
 test('ModalLayer: the deal modal logs, deletes and notes through the hooks — nothing set on screen alone', () => {
     const src = read('src/components/layout/ModalLayer.jsx');
     const props = between(src, '<OpportunityModal', 'onClose={() => {');
-    assert.ok(props.includes("onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: 'id_' + crypto.randomUUID(), createdAt: new Date().toISOString(), author: currentUser || '' })}"));
+    // Moved in §0.261 (Part 6): the form's id, kept across its presses.
+    assert.ok(props.includes("onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: activityData.id || ('id_' + crypto.randomUUID()), createdAt: new Date().toISOString(), author: currentUser || '' })}"));
     assert.ok(props.includes('onDeleteActivity={(activityId) => handleDeleteActivity(activityId)}'));
     // Since §0.236 each is one operation the server applies (tests/deal-data.test.mjs holds the rule).
     assert.ok(props.includes("onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}"));
@@ -42,11 +43,14 @@ test('ModalLayer: the deal modal logs, deletes and notes through the hooks — n
 
 test('useActivities: a logged activity is POSTed and shown only once the server has it', () => {
     const src = read('src/hooks/useActivities.js');
-    const log = between(src, 'const handleLogActivity = async (activity) => {', 'return { ok: true };');
+    const log = between(src, 'const handleLogActivity = async (activity) => {', 'adoptScores(r.data);');   // §0.261: a landed-before answer returns ok first
     assert.ok(log.includes("const r = await dbWrite('/.netlify/functions/activities', {"));
     assert.ok(log.includes("method: 'POST',"));
-    assert.ok(log.includes('if (!r.ok) return { ok: false, error: r.error };'), 'a refused POST answers its error');
-    assert.ok(log.indexOf('if (!r.ok) return { ok: false, error: r.error };') < log.indexOf('setActivities(prev => [...prev, activity]);'), 'shown only after the POST landed');
+    // Moved in §0.261: an answer that proves nothing is said as maybe; one saying it is already stored landed with an earlier press.
+    const refusedAt = log.indexOf("if (!r.ok) return { ok: false, error: r.unknown ? maybeSaid('The activity', 'saved', r.error) : r.error, unknown: r.unknown };");
+    assert.ok(refusedAt > 0, 'a refused POST answers its error');
+    assert.ok(log.indexOf('if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }') > 0 && log.indexOf('if (!r.ok && r.landed)') < refusedAt, 'already stored: landed, the list read again');
+    assert.ok(refusedAt < log.indexOf('setActivities(prev => [...prev, activity]);'), 'shown only after the POST landed');
     assert.ok(src.includes('handleLogActivity,'), 'returned');
 });
 
@@ -95,7 +99,9 @@ test('OpportunityModal: the History tab and the notes wait for the save — a fa
     const edit = between(src, 'const saveNoteEdit = async (commentId) => {', 'const deleteNote');
     assert.ok(edit.includes("if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }"), 'a failed edit stays open');
     assert.ok(edit.indexOf('return; }') < edit.indexOf('setEditingCommentId(null);'), 'the edit closes only after a save');
-    assert.ok(src.includes('<PrimaryBtn type="button" saving={noteState.saving} onClick={postNote}>Post Note</PrimaryBtn>'));
+    // Moved in §0.261: a post whose answer proved nothing holds Post — its note id is the server's, never a second note.
+    assert.ok(src.includes('<PrimaryBtn type="button" saving={noteState.saving} disabled={notePostHeld} onClick={postNote}>Post Note</PrimaryBtn>'));
+    assert.ok(post.includes('if (!text || noteState.saving || notePostHeld || !onSaveComment) return;') && post.indexOf('if (r?.unknown) setNotePostHeld(true);') < post.indexOf("if (!r?.ok) { setNoteState("), 'held before the error is said');
     assert.ok(src.includes('<PrimaryBtn type="button" saving={noteState.saving} onClick={() => saveNoteEdit(c.id)}>Save</PrimaryBtn>'));
     assert.ok(src.includes('<button type="button" onClick={() => deleteNote(c.id)} title="Delete"'));
     assert.ok(src.includes('{noteState.error && ('));

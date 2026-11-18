@@ -108,7 +108,8 @@ export const handler = async (event) => {
             return reply(422, { error: `Only an accepted quote becomes a job — this one is ${quote.status || 'Draft'}.` });
         }
         const existing = await linkedJob(orgId, quoteId);
-        if (existing) return reply(409, { error: `${existing.jobNumber || 'A job'} already exists for this quote.`, job: existing });
+        // An earlier press made it (state §0.261, Part 6): code 'already' — the screen reads it as landed.
+        if (existing) return reply(409, { error: `${existing.jobNumber || 'A job'} already exists for this quote.`, code: 'already', job: existing });
 
         const [opp] = quote.opportunityId
             ? await db.select().from(opportunities).where(and(eq(opportunities.id, quote.opportunityId), eq(opportunities.orgId, orgId))).limit(1)

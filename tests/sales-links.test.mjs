@@ -444,7 +444,9 @@ test("export-runs POST: a run names no schedule, whatever the body says; an id a
         ind(16, '.onConflictDoNothing({ target: exportRuns.id })'),
         ind(16, '.returning();'),
         ind(12, "if (!run) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.' }) };"));
+    // Moved in §0.261: this org's own id first, said 'idInUse' (an earlier press landed — the unknown-save rule's Part 6), then another org's.
     assert.ok(post.includes(ind(16, '.onConflictDoNothing({ target: exportRuns.id })\n') + ind(16, '.returning();\n')
+        + ind(12, "if (!run && await ownIdTaken(exportRuns, data.id, orgId)) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.', code: 'idInUse' }) };\n")
         + ind(12, "if (!run) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.' }) };\n")), 'the 409 straight after the insert');
     before(post, "if (!run) return { statusCode: 409,", "action: 'export.run'", 'answered before the audit and the file');
 });

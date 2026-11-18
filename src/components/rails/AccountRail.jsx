@@ -213,7 +213,9 @@ export default function AccountRail() {
             return;
         }
         const src = account || EMPTY_ACCOUNT;
-        setFormData({ ...EMPTY_ACCOUNT, ...src });
+        // A new account's id is given here, once per open (state §0.261, the unknown-save rule's Part 6): a second Save after
+        // an answer that proved nothing sends the same account, so a first that landed is never made twice.
+        setFormData({ ...EMPTY_ACCOUNT, ...src, ...(account ? {} : { id: 'id_' + crypto.randomUUID() }) });
         setVerticalSearch(src.verticalMarket || src.industry || '');
         setRepSearch(src.assignedRep || '');
         setTerritorySearch(src.assignedTerritory || '');

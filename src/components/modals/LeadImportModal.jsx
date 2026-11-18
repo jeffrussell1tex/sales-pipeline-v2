@@ -164,7 +164,8 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
             // house words (describeReceipt) and offer no second Import — Preview's Import re-sent the leads that had
             // landed. Nothing landed: Preview says why and Import may try again. No receipt: a failure in plain words.
             const receipt = receiptFromError(err);
-            if (receipt && receipt.created > 0) {
+            // Rows that may have saved (state §0.261) are said on the Results too — no second Import over them.
+            if (receipt && (receipt.created > 0 || receipt.maybe > 0)) {
                 setImportStats({ added: receipt.created, failed: receipt.failed, said: describeReceipt(receipt, 'lead'), skipped: preview.skipped, errors: preview.errors, owners: describeOwners(receipt) });
                 setStep('results');
             } else {

@@ -6,6 +6,7 @@ import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
+    ownIdTaken,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -125,6 +126,9 @@ export const handler = async (event) => {
             const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'activity', { clerkUserId: userId, orgId });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).onConflictDoNothing({ target: activities.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(activities, newRow.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That activity id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That activity id is already in use.' }) };
             if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
             return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted, dealScores: await rescoreDeals(orgId, [inserted.opportunityId]) }) };

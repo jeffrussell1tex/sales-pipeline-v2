@@ -4840,3 +4840,15 @@ THE GUARD: tests/win-alert.test.mjs (the notes, the fall, the words, the switch)
 4. **Rows that are not recommendations** (the renewal ledger) and rows past 30 days are left as they are.
 
 THE GUARD: tests/next-steps.test.mjs (the window, the pass and where it runs, the logging); tests/integration/next-steps.itest.mjs (every rule against the database, org B apart).
+
+## 18b134. A Write Whose Answer Proves Nothing Says It May Have Been Saved — Only The Server's Own 4xx Is "Not Saved"; A Create Keeps One Id (hard rule)
+
+Origin: §0.261 (18 Nov 2026; Jeff, 16 Nov: "A"; 18 Nov: Q1-Q4 "Recommended" — docs/design/unknown-save). The app said "Not saved" over a thrown request, a 5xx and a gateway's page — but every function's 500 carries words ("Internal server error") and about 40 write paths can answer it after they committed, and a connection can drop after the server wrote. A second press after a lost answer then made a second record.
+
+1. **Only a 4xx whose body says why in the server's own words proves nothing was written** (`heardRefusal`, src/utils/refusalWords.js). Anything else — a throw, any 5xx, a page, a wordless 4xx — may have landed: dbWrite, taskWriteAnswer and the hooks' readers answer `unknown`.
+2. **An answer that proves nothing keeps the change on screen** — a card where it was dropped, a row ticked, a form open with its typing, a deleted row off the list — **and says it may have been saved** (`maybeSaid` / `writeRefusal`: "<X> may have been <done> — reload the page to see whether it was: <words>"), kept until closed. The server's own refusal keeps its "Not …" and its put-back.
+3. **A create keeps one id across its presses** — given when its form opens, or at its first press, kept until it lands. **A 409 with `code: 'idInUse'` is an earlier press that landed** (`landedBefore`): the screen reads the list again and closes as saved. The server says `idInUse` only for an id its OWN org holds (`ownIdTaken`, _lib.mjs: by id and org, a yes or no) — another org's id gets the words alone; an action already done says `already`. A create whose id is the server's holds its button after an answer that proves nothing (a deal's team note), or rests on a uniqueness the server refuses (a member's email).
+4. **Rows a bulk write may have saved are `maybe`, never "did not save"**, and no second run is offered over them (their ids were that run's).
+5. **A refusal never hands the member a raw error's text** (Q4): an invitation's failure is Clerk's own words or "The server could not finish this invitation (ref …)".
+
+THE GUARD: tests/unknown-save.test.mjs (the test and its words RUN; every create's idInUse by this org; every file under src/ that writes swept, or named with its Part — Parts 3-5 to build — or exempt with its reason; each create's kept id); tests/integration/link-ids.itest.mjs (idInUse in this org, the words alone for another's).

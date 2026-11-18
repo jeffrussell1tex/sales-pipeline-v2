@@ -40,6 +40,7 @@ import { documents, documentLinks, documentVersions, users, accounts, contacts, 
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, allowOrigin, auditAs, getCallerName, getCallerId } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { isAdmin, crmReadScope, dealVisibleTo } from '../../src/utils/roles.js';
 import { dealReadContext } from './_dealAccess.mjs';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -359,6 +360,9 @@ export const handler = async (event) => {
         const [created] = await db.insert(documents).values(row)
           .onConflictDoNothing({ target: documents.id })
           .returning({ id: documents.id });
+        // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+        // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+        if (!created && await ownIdTaken(documents, row.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.', code: 'idInUse' }) };
         if (!created) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };
 
         // version 1

@@ -634,7 +634,8 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     const del = between(src, 'const handleDeleteAccounts = (ids, opts = {}) => {', 'const handleSaveAccount');
     assert.ok(del.includes('const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id) && !isMergeArchived(a));'), "the screen's live sub-accounts: the confirm counts them (state §0.210)");
     assert.ok(!/children\.(filter|map|find|some)\(/.test(del), "the screen's copies are never what the Undo re-sends (H2)");
-    assert.ok(del.includes('if (!r.ok) failed.push({ a, error: r.error });\n                else lifted.push(...(r.data?.retiered || []));'), 'the tiers the server gave what it lifted (D18)');
+    // Moved in §0.261: a failure carries whether its answer proved nothing (the unknown-save rule).
+    assert.ok(del.includes('if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown });\n                else lifted.push(...(r.data?.retiered || []));'), 'the tiers the server gave what it lifted (D18)');
     assert.ok(del.includes('                if (r.ok) answers.push(r.data || {});\n'), 'what each delete answered: the row and its sub-accounts as stored');
     assert.ok(del.includes('const { deleted, promoted } = undoOfDeletes(answers);'), 'H2: the Undo re-sends what the server answered');
     assert.ok(del.indexOf('setAccounts(prev => withTiers(prev, lifted));') > del.indexOf('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'));
@@ -648,8 +649,10 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(back > del.indexOf("method: 'PUT',") && back < del.indexOf('if (notRestored.length) {'), 'once the Undo has run, before what did not take is reloaded');
     const rows = del.indexOf('                    setAccounts(prev => withRows(prev, answered));\n');
     assert.ok(rows > back && rows < del.indexOf('if (notRestored.length) {'), 'L5: each account posted back shown as the server wrote it — an owner the restore dropped shows dropped, without a reload');
-    assert.ok(del.includes("if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error });"), "L4: a refused re-save's toast names the account refused — its name the screen's row's — not the parent put back");
-    assert.ok(del.includes('setUndoToast({ error: `Could not restore ${notRestored[0].a.name} — ${notRestored[0].error}` });\n                        loadAccounts(() => {});'), 'a refusal says so, and the list is read again: the Undo may have taken in part');
+    // Moved in §0.261 (the unknown-save rule): a failure carries whether its answer proved nothing; one that did is said as maybe.
+    assert.ok(del.includes("if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error, unknown: rp.unknown });"), "L4: a refused re-save's toast names the account refused — its name the screen's row's — not the parent put back");
+    assert.ok(del.includes("setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });"), 'a refusal says so');
+    assert.ok(del.includes('if (notRestored.length || reread) loadAccounts(() => {});'), 'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
 });
 
 test("accounts.mjs: a parent is checked against THIS org's rows when a create names one and when a save moves it — after the ownership check, before the write; the tiers fit, written to this org's rows only and handed back; a save that leaves the parent keeps the stored tier", () => {

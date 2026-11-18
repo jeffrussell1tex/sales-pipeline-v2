@@ -26,6 +26,7 @@ import { leadClaimRequests, leads, users } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, requireRole, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerId } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 
 const headers = {
     'Content-Type': 'application/json',
@@ -81,8 +82,9 @@ export const handler = async (event) => {
                     eq(leadClaimRequests.leadId, data.leadId),
                     eq(leadClaimRequests.status, 'pending'),
                 ));
+            // This request itself, sent again (state §0.261, Part 6): an earlier press landed — code 'already'.
             if (existing.some(r => r.requesterId === callerId)) {
-                return { statusCode: 409, headers, body: JSON.stringify({ error: 'You have already requested this lead.' }) };
+                return { statusCode: 409, headers, body: JSON.stringify({ error: 'You have already requested this lead.', ...(existing.some(r => r.id === data.id) ? { code: 'already' } : {}) }) };
             }
             const [inserted] = await db.insert(leadClaimRequests).values({
                 id:          data.id,
@@ -91,7 +93,9 @@ export const handler = async (event) => {
                 requesterId: callerId,                        // server-stamped, never taken from the payload
                 status:      'pending',
                 note:        data.note || null,
-            }).returning();
+            // A taken id writes nothing and is answered 409 (state §0.261, Part 6): it was a primary-key 500.
+            }).onConflictDoNothing({ target: leadClaimRequests.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That request id is already in use.', ...(await ownIdTaken(leadClaimRequests, data.id, orgId) ? { code: 'idInUse' } : {}) }) };
             await writeAudit(orgId, {
                 action: 'lead.claim_requested', entityType: 'lead', entityId: lead.id,
                 entityName: [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || lead.id,
@@ -113,7 +117,9 @@ export const handler = async (event) => {
                 .where(and(eq(leadClaimRequests.id, data.id), eq(leadClaimRequests.orgId, orgId)));
             if (!request) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Request not found' }) };
             if (request.status !== 'pending') {
-                return { statusCode: 409, headers, body: JSON.stringify({ error: `This request was already ${request.status}.` }) };
+                // The same answer sent again — an earlier press landed (state §0.261, Part 6): code 'already'.
+                const again = (data.action === 'approve' && request.status === 'approved') || (data.action === 'deny' && request.status === 'denied');
+                return { statusCode: 409, headers, body: JSON.stringify({ error: `This request was already ${request.status}.`, ...(again ? { code: 'already' } : {}) }) };
             }
             const resolverId = await getCallerId(userId, orgId);
             const resolution = { resolvedBy: resolverId, resolvedAt: new Date(), updatedAt: new Date() };

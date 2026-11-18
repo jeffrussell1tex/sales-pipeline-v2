@@ -5,6 +5,7 @@ import { exportRuns,
 import { eq, desc }                                                   from 'drizzle-orm';
 import { verifyAuth, requireRole }                                    from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -136,6 +137,9 @@ export const handler = async (event) => {
                 })
                 .onConflictDoNothing({ target: exportRuns.id })
                 .returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!run && await ownIdTaken(exportRuns, data.id, orgId)) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.', code: 'idInUse' }) };
             if (!run) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That export run id is already in use.' }) };
             // A whole table left the app as a file — the log says which, how big, by whom (§0.143).
             await auditAs(orgId, userId, { action: 'export.run', entityType: 'export', entityId: run.id, entityName: name, detail: `${data.scope} · ${format} · ${rows.length} rows · ${Math.round(sizeBytes / 1024)} KB` });

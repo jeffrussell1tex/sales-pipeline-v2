@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { pressNoticeOf } from '../utils/pressNotice.js';
+import { maybeSaid } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 
@@ -226,6 +227,11 @@ export default function KanbanView({
             body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate }),
         }).then(r => {
             if (!stillOrg(askedOrg)) return;
+            // An answer that proves nothing keeps the card where it was dropped (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+            if (!r.ok && r.unknown) {
+                setPressNotices(list => [...list, pressNoticeOf(updatedOpp.opportunityName || updatedOpp.account || 'A deal', maybeSaid('It', `moved to ${toStage}`, r.error))]);
+                return;
+            }
             if (!r.ok) {
                 const base = dragBase.get(newOpp);   // the copy this chain of drags began from
                 setOpportunities(prev => prev.map(o => (o === newOpp ? base : o)));   // this drag's copy only

@@ -25,6 +25,7 @@ import { coachingNotes, users, settings } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireRole, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { noteVisibleTo, canDeleteNote, audienceOf, isDay } from './_coaching.mjs';
 import { checkLinks } from './_links.mjs';
 
@@ -117,7 +118,10 @@ export const handler = async (event) => {
                 teamId:       audience.teamId,
                 readBy:       {},
             };
-            const [inserted] = await db.insert(coachingNotes).values(values).returning();
+            // A taken id writes nothing and is answered 409 (state §0.261, the unknown-save rule's Part 6): it was a primary-key
+            // 500. Held in THIS org — an earlier press of this create landed — it says code 'idInUse', read by the screen as landed.
+            const [inserted] = await db.insert(coachingNotes).values(values).onConflictDoNothing({ target: coachingNotes.id }).returning();
+            if (!inserted) return reply(409, { error: 'That note id is already in use.', ...(await ownIdTaken(coachingNotes, values.id, orgId) ? { code: 'idInUse' } : {}) });
             await writeAudit(orgId, {
                 action: 'coaching_note.created', entityType: 'coaching_note', entityId: inserted.id,
                 entityName: audience.teamId ? `team ${audience.teamId}` : `${audience.recipientIds.length} recipient(s)`,

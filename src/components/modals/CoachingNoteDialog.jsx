@@ -4,10 +4,10 @@
 //
 // Replaces the "Rep name: note" text prompt (§0.79): the audience is picked,
 // never typed, so a note always reaches a real roster row or a real team.
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
-import { newNotePayload } from '../../utils/coachingNotes';
+import { newNotePayload, newNoteId } from '../../utils/coachingNotes';
 import { T } from '../../tokens.js';
 
 
@@ -53,12 +53,16 @@ export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onCl
     const toggle = (id) => setPicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
     const ready = text.trim() && (mode === 'team' ? !!teamId : picked.size > 0);
 
+    // The note's id, given once per dialog (state §0.261, the unknown-save rule's Part 6): a second Send after an answer that
+    // proved nothing is the same note — answered already stored if the first landed — never a second.
+    const noteIdRef = useRef(null);
+    if (!noteIdRef.current) noteIdRef.current = newNoteId();
     const submit = async () => {
         if (!ready || saving) return;
         setSaving(true); setError('');
         const result = await onSave(mode === 'team'
-            ? { recipientIds: [], teamId, text: text.trim() }
-            : { recipientIds: [...picked], teamId: null, text: text.trim() });
+            ? { recipientIds: [], teamId, text: text.trim(), id: noteIdRef.current }
+            : { recipientIds: [...picked], teamId: null, text: text.trim(), id: noteIdRef.current });
         setSaving(false);
         if (result?.ok) onClose();
         else setError(result?.error || 'Not saved — the server refused the note.');
@@ -152,8 +156,8 @@ export function CoachingNoteDialogHost() {
         .filter(u => u.id && u.name && u.userType === 'User' && u.active !== false)
         .filter(u => userRole === 'Admin' || (u.teamId && teamIds.has(u.teamId)))
         .map(u => ({ id: u.id, name: u.name, team: u.team || '' }));
-    const onSave = async ({ recipientIds, teamId, text }) => {
-        const payload = newNotePayload({ text, recipientIds, teamId });
+    const onSave = async ({ recipientIds, teamId, text, id }) => {
+        const payload = newNotePayload({ text, recipientIds, teamId, ...(id ? { id } : {}) });   // the dialog's id (§0.261)
         if (!payload) return { ok: false, error: 'Address the note and write something.' };
         return addCoachingNote(payload);
     };

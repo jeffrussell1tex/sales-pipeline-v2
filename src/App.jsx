@@ -3,7 +3,7 @@ import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
-import { readRefusal, failureWords } from './utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid } from './utils/refusalWords.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
@@ -406,7 +406,8 @@ function App() {
         const askedOrg = requestOrg();
         const r = await dbWrite(`/.netlify/functions/leads?id=${encodeURIComponent(leadId)}`, { method: 'PUT', body: JSON.stringify({ id: leadId, status: 'Converted' }) });
         if (!stillOrg(askedOrg)) return;
-        if (!r.ok) { setUndoToast({ error: `The deal was saved; its lead was not marked Converted — ${r.error}` }); return; }
+        // An answer that proves nothing may have marked it (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+        if (!r.ok) { setUndoToast({ error: r.unknown ? `The deal was saved; ${maybeSaid('its lead', 'marked Converted', r.error)}` : `The deal was saved; its lead was not marked Converted — ${r.error}` }); return; }
         const stored = r.data && r.data.lead;
         setLeads(prev => prev.map(l => (l.id === leadId ? (stored || { ...l, status: 'Converted' }) : l)));
     };

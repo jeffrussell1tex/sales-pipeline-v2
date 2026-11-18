@@ -37,3 +37,26 @@ export const failureWords = (e) => {
     const said = plain && typeof e.message === 'string' ? e.message.trim() : '';
     return said || 'Its answer could not be read.';
 };
+
+// The unknown-save rule (state §0.261, docs/design/unknown-save — Jeff, 16 Nov: "A"; 18 Nov, Q1: "Only a 4xx in words"):
+// only a 4xx whose body says why in the server's own words proves a write wrote nothing. A 5xx says "Internal server
+// error" (serverErrorBody) and about 40 write paths can answer it after they committed (census-D §2C); a gateway's page,
+// a wordless answer and a request that threw prove nothing either. `body` is the answer's JSON, null when it was not.
+export const heardRefusal = (status, body) => status >= 400 && status < 500
+    && !!body && typeof body.error === 'string' && !!body.error.trim();
+// A create sent again with its id, answered that the id is already in use in THIS org (`code: 'idInUse'`), or an action
+// answered as already done (`code: 'already'`): it is stored — an earlier press landed (Part 6). The server sends the code
+// only for its own org's row, never for another org's id.
+export const landedBefore = (status, body) => status === 409 && !!body && (body.code === 'idInUse' || body.code === 'already');
+// The words for a write whose answer proves nothing (Q2: the screen keeps the change and says this, kept until closed).
+export const maybeSaid = (subject, verb, words, plural = false) =>
+    `${subject} may have been ${verb} — reload the page to see whether ${plural ? 'they were' : 'it was'}${words ? `: ${words}` : '.'}`;
+// A refused write's words, its body read (null when not JSON): the server's own 4xx in its words — nothing written — or,
+// for any other answer, the maybe sentence about `subject`. `unknown` tells the screen to keep the change.
+export const writeRefusal = (res, body, subject, verb = 'saved') => {
+    const heard = heardRefusal(res && res.status, body);
+    const words = refusalWords(res, body);
+    return { words: heard ? words : maybeSaid(subject, verb, words), unknown: !heard };
+};
+// …and for a press an earlier press had already landed: the record as stored is what the screen shows.
+export const alreadySaid = (subject, verb) => `${subject} was already ${verb} by an earlier press — shown as stored.`;

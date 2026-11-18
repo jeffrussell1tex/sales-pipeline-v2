@@ -22,6 +22,7 @@ import { savedReports, users } from '../../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isAdmin } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { cleanDelivery, deliverySummary } from '../../src/utils/reportDelivery.js';
 import { namedByMaker } from '../../src/utils/reportMaker.js';
 import { deliverReport } from './report-deliveries.mjs';
@@ -156,6 +157,9 @@ export const handler = async (event) => {
             });
             // A taken id — this org's or another's — writes nothing and is answered 409 (state §0.250, as products §0.242).
             const [inserted] = await db.insert(savedReports).values(payload).onConflictDoNothing({ target: savedReports.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(savedReports, payload.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That report id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That report id is already in use.' }) };
             await auditAs(orgId, userId, {
                 action: 'saved_report.created', entityType: 'saved_report', entityId: inserted.id, entityName: inserted.name,

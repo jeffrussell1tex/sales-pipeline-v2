@@ -4,6 +4,7 @@ import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { taskWriteAnswer } from '../utils/taskWrite.js';
+import { maybeSaid } from '../utils/refusalWords.js';
 import { pressNoticeOf } from '../utils/pressNotice.js';
 import { isoLocal, shortDayLabel } from '../utils/dateLocal';
 import { T } from '../tokens.js';
@@ -183,7 +184,8 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         try {
             const done = await handleCompleteTask(task.id, 'Completed');
             if (!stillOrg(askedOrg)) return;
-            if (done && !done.ok) onRefused(task, `Not completed: ${done.error}`);
+            // An answer that proves nothing left it ticked (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+            if (done && !done.ok) onRefused(task, done.unknown ? maybeSaid('It', 'completed', done.error) : `Not completed: ${done.error}`);
         } finally { setCompleting(false); }
     };
 
@@ -198,6 +200,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         // put the row back without a word. The rollback puts back only this press's own copy, by identity.
         const answer = await taskWriteAnswer(() => dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }));
         if (!stillOrg(askedOrg)) return;
+        if (!answer.ok && answer.unknown) { onRefused(task, maybeSaid('It', 'snoozed', answer.error)); return; }   // kept (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
         if (!answer.ok) {
             setTasks(prev => prev.map(t => (t === updated ? row : t)));
             onRefused(task, `Not snoozed: ${answer.error}`);

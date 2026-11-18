@@ -299,9 +299,10 @@ const serverSaid = (r) => (r.error && !/^The server returned \d+\.$/.test(r.erro
 
 // A merge's refusal, in its window. A refusal (4xx) is the server's own words: nothing was merged. A server
 // error or no answer may have landed (guide §18b97 rule 6): the merge, if made, is under Past merges.
+// Since §0.261 (the unknown-save rule) a 4xx with no words of the server's proves nothing either (dbWrite's unknown).
 export function mergeWords(r) {
     if (r.status === 0) return 'No answer from the server — the merge may have been made. Close this window and look under Past merges on this page.';
-    if (r.status >= 500) return `The server returned ${r.status}${serverSaid(r)}. The merge may have been made — close this window and look under Past merges on this page.`;
+    if (r.status >= 500 || r.unknown) return `The server returned ${r.status}${serverSaid(r)}. The merge may have been made — close this window and look under Past merges on this page.`;
     return r.error || `The server returned ${r.status}.`;
 }
 
@@ -326,7 +327,7 @@ export function undoWords(r, name) {
         return `Merge undone${who ? ` — “${who}” is its own record again.` : '.'}${kept ? ` ${kept} ${kept === 1 ? 'record was left as it is now.' : 'records were left as they are now.'}` : ''}`;
     }
     if (r.status === 0) return 'No answer from the server — reload the page to see whether the merge was undone.';
-    if (r.status >= 500) return `The server returned ${r.status}${serverSaid(r)}. Reload the page to see whether the merge was undone.`;
+    if (r.status >= 500 || r.unknown) return `The server returned ${r.status}${serverSaid(r)}. Reload the page to see whether the merge was undone.`;
     return `Merge not undone — ${r.error}`;
 }
 

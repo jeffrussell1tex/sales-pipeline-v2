@@ -9,6 +9,7 @@ import { leadEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, resolveOwnerId, ambiguousOwnerResponse,
+    ownIdTaken,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
@@ -193,7 +194,10 @@ export const handler = async (event) => {
             const newRow = explicitlyUnassigned
                 ? { ...cleanPost, ...scoredPost, assignedTo: null, ownerId: null }
                 : await stampOwnerId({ ...cleanPost, ...scoredPost }, 'lead', { clerkUserId: userId, orgId });
-            const [inserted] = await db.insert(leads).values({ ...newRow, orgId }).returning();
+            // A taken id writes nothing and is answered 409 (state §0.261, the unknown-save rule's Part 6): it was a primary-key
+            // 500. Held in THIS org — an earlier press of this create landed — it says code 'idInUse', read by the screen as landed.
+            const [inserted] = await db.insert(leads).values({ ...newRow, orgId }).onConflictDoNothing({ target: leads.id }).returning();
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That lead id is already in use.', ...(await ownIdTaken(leads, newRow.id, orgId) ? { code: 'idInUse' } : {}) }) };
 
             // Webhook: lead.created
             await dispatchWebhook(orgId, 'lead.created', {

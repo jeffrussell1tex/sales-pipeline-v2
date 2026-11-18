@@ -75,8 +75,9 @@ export function useMerge(deps) {
             body: JSON.stringify({ reverse: true, mergeLogId }),
         });
         if (!stillOrg(askedOrg)) return { ok: false, words: null };
-        // A refusal moved nothing; a server error or no answer may have landed (guide §18b97 rule 6).
-        if (r.ok || r.status === 0 || r.status >= 500) refreshAfter(entityType);
+        // A refusal moved nothing; a server error or no answer may have landed (guide §18b97 rule 6) — since §0.261 any answer
+        // but the server's own 4xx (dbWrite's unknown).
+        if (r.ok || r.status === 0 || r.status >= 500 || r.unknown) refreshAfter(entityType);
         return { ok: r.ok, words: undoWords(r, name) };
     };
 
@@ -128,7 +129,7 @@ export function useMerge(deps) {
                 setMergeError(mergeWords(r));
                 // A server error or no answer may have landed (guide §18b97 rule 6): the lists read again show it
                 // merged away — and Past merges, where the words send the user, reads its list again with them.
-                if (r.status === 0 || r.status >= 500) refreshAfter('account');
+                if (r.status === 0 || r.status >= 500 || r.unknown) refreshAfter('account');   // §0.261
                 return null; // modal stays open so the user sees the error
             }
             const data = r.data || {};
@@ -171,7 +172,7 @@ export function useMerge(deps) {
             if (!r.ok) {
                 setMergeError(mergeWords(r));
                 // A server error or no answer may have landed: the lists, and Past merges with them, read again.
-                if (r.status === 0 || r.status >= 500) refreshAfter('contact');
+                if (r.status === 0 || r.status >= 500 || r.unknown) refreshAfter('contact');   // §0.261
                 return null;
             }
             const data = r.data || {};

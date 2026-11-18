@@ -47,6 +47,7 @@ export const emptyReceipt = () => ({
     updated:     0,      // server confirmed these were updated
     failed:      0,      // sent (or queued) and did not land — total shortfall
     unread:      0,      // sent and landed (a 201), its answer unreadable — never failed (state §0.249)
+    maybe:       0,      // sent, its answer proving nothing — may have saved, never failed (state §0.261, the unknown-save rule)
     onRoster:    0,      // of unread: on the roster read again — invited by this import or before it (reason; §0.249 round 4)
     notFound:    0,      // overwrite target no longer exists (reason)
     forbidden:   0,      // owned by another rep (reason)
@@ -54,7 +55,7 @@ export const emptyReceipt = () => ({
     skipped:     0,      // user chose skip at the conflicts step — never sent
     dropped:     0,      // mapper discarded before the request — never sent
     refused:     0,      // a name in the row is no one record (state §0.215) — refused at Preview, never sent
-    attempted:   0,      // created + updated + failed + unread
+    attempted:   0,      // created + updated + failed + unread + maybe
     error:       null,   // fatal transport/server message, if any
     // Outside the invariant too (state §0.216). `companies`: the new accounts the contact import made for its rows'
     // Companies — accounts, never counted as contacts (they were summed into `created`, and a 5-contact import that
@@ -97,12 +98,14 @@ export const mergeReceipts = (...parts) => {
 // sent at all — and the old code reported only failed.length, which silently
 // omitted them. On a 1,500-row import failing at chunk 2, that is the difference
 // between "400 failed" and the truth, which is 1,100.
-export const receiptFromInsert = ({ attempted = 0, landed = [], error = null, ambiguousOwners = [], unmatchedOwners = [] } = {}) => {
+export const receiptFromInsert = ({ attempted = 0, landed = [], error = null, unsure = 0, ambiguousOwners = [], unmatchedOwners = [] } = {}) => {
     const created = landed.length;
+    const maybe = Math.min(unsure || 0, Math.max(0, attempted - created));   // a chunk whose answer proved nothing (§0.261)
     return {
         ...emptyReceipt(),
         created,
-        failed: Math.max(0, attempted - created),
+        maybe,
+        failed: Math.max(0, attempted - created - maybe),
         attempted,
         error: error || null,
         ambiguousOwners, unmatchedOwners,
@@ -115,12 +118,13 @@ export const receiptFromInsert = ({ attempted = 0, landed = [], error = null, am
 // counts here because the receipt is a reporting value, not a work list. The ids
 // stay in the transport result for the caller that needs them (state application).
 export const receiptFromUpdate = ({
-    attempted = 0, updated = 0, notFound = [], forbidden = [], discrepancy = 0, error = null,
+    attempted = 0, updated = 0, notFound = [], forbidden = [], discrepancy = 0, error = null, unsure = 0,
     ambiguousOwners = [], unmatchedOwners = [],
 } = {}) => ({
     ...emptyReceipt(),
     updated,
-    failed: Math.max(0, attempted - updated),
+    maybe: Math.min(unsure || 0, Math.max(0, attempted - updated)),   // as receiptFromInsert's (§0.261)
+    failed: Math.max(0, attempted - updated - Math.min(unsure || 0, Math.max(0, attempted - updated))),
     notFound: notFound.length,
     forbidden: forbidden.length,
     discrepancy,
@@ -178,7 +182,7 @@ export const receiptFromPreflight = ({ skipped = 0, dropped = 0, refused = 0 } =
 // Everything the user asked to save, saved. `dropped` counts against this: an
 // import that discarded six rows before sending them is not a clean import, and
 // treating it as one is exactly how "Import Complete! · 0 imported" happened.
-export const isClean = (r) => !r.error && r.failed === 0 && r.dropped === 0 && !r.refused && !r.unread;
+export const isClean = (r) => !r.error && r.failed === 0 && r.dropped === 0 && !r.refused && !r.unread && !r.maybe;
 
 // Something landed AND something did not.
 // Sent unread (state §0.249) is something that landed.
@@ -208,6 +212,7 @@ const plural = (n, one, many = pluralise(one)) => `${n} ${n === 1 ? one : many}`
 // words are said only over a roster read that failed. The ones it found are said as what it shows (`onRoster`, round
 // 4): on the roster — invited by this import or before it; never as sent by this import, never "up to".
 const SAVE_WORDS = Object.freeze({ created: 'created', failed: 'did not save', skipped: 'skipped as duplicates', none: 'Nothing was saved',
+    maybe: 'may have saved — reload the page to see whether they did',   // §0.261: sent, the answer proving nothing
     unread: 'sent — the answer could not be read; some may have been refused', unreadOne: 'sent — the answer could not be read',
     onRoster: 'on the roster — invited by this import or before it' });
 export const describeReceipt = (r, noun = 'record', words = {}) => {
@@ -237,6 +242,7 @@ export const describeReceipt = (r, noun = 'record', words = {}) => {
             ? `${r.failed} ${w.failed} (${reasons.join('; ')})`
             : `${r.failed} ${w.failed}`);
     }
+    if (r.maybe) tail.push(`${r.maybe} ${w.maybe}`);
     if (r.dropped) tail.push(`${plural(r.dropped, 'row')} skipped before sending — required fields were empty`);
     if (r.refused) tail.push(`${plural(r.refused, 'row')} refused — each is listed below with why`);
     if (r.skipped) tail.push(`${r.skipped} ${w.skipped}`);

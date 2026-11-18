@@ -3,6 +3,7 @@ import { dsrQueue }   from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -96,7 +97,10 @@ export const handler = async (event) => {
                     slaDeadline,
                     createdBy: userId,
                 })
+                // A taken id writes nothing and is answered 409 (state §0.261, Part 6): it was a primary-key 500.
+                .onConflictDoNothing({ target: dsrQueue.id })
                 .returning();
+            if (!inserted) return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'That request id is already in use.', ...(await ownIdTaken(dsrQueue, data.id, orgId) ? { code: 'idInUse' } : {}) }) };
             await auditAs(orgId, userId, { action: 'dsr.created', entityType: 'dsr', entityId: inserted.id, entityName: inserted.subject, detail: `${inserted.type} · due ${slaLabel(inserted.slaDeadline)}` });
 
             return {

@@ -438,7 +438,8 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     const t = code(read('src/components/rails/TaskRail.jsx'));
     assert.ok(t.includes("if (handleCompleteTask && !task.completed) {\n            const done = await handleCompleteTask(task.id, 'Completed');\n"),
         'Completed, not toggled — and once, by what the bar reads: a second press saves the notes alone (the fix review, screens F5), and a task set to Completed in its Status is completed (the re-check, code R1)');
-    assert.ok(t.includes("            if (!done?.ok) notDone = done?.error || '';\n"),
+    // Moved in §0.261: whether its answer proved nothing is kept with its words (the unknown-save rule).
+    assert.ok(t.includes("            if (!done?.ok) { notDone = done?.error || ''; doneUnknown = !!done?.unknown; }\n"),
         'a completion that does not land is kept to be said (the re-check, code R2) — and the notes go on to be saved (Jeff, 13 Oct: "Save them anyway")');
     // Moved pin (§0.249, docs/design/refusal-sweep Q4): nothing answered says the house words — it said "check your
     // connection and try again".
@@ -450,15 +451,21 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
         'an org switch stops it before the notes are sent, and before each send again: never saved in the org switched to (the fix review, screens F1)');
     assert.ok(t.includes("}) : undefined), activityData, ['opportunityId', 'contactId', 'accountId']);"), "the task's links, each dropped once if refused");
     assert.ok(inOrder(t, "}) : undefined), activityData, ['opportunityId', 'contactId', 'accountId']);\n                if (!stillOrg(askedOrg)) return;\n",
-        '                if (!answer?.ok) {\n                    say(notDone !== null\n' +
-        '                        ? `The task was not completed: ${said(notDone)}. Its notes were not saved: ${said(answer?.error)}.`\n' +
-        '                        : `The task is completed — its notes were not saved: ${said(answer?.error)}.`,\n' +
-        "                        { type: sent.type, notes: sent.notes, opportunityId: sent.opportunityId || '', contactId: sent.contactId || '', accountId: sent.accountId || '' });\n" +
+        // Moved in §0.261: notes or a completion whose answer proved nothing are said as maybe; such notes are offered no
+        // second log from the notice (the prompt's own press sends the same activity, its id kept).
+        '                if (!answer?.ok) {\n',
+        '                    const notesWords = answer?.unknown\n' +
+        '                        ? `Its notes may have been saved — reload the page to see whether they were: ${said(answer?.error)}.`\n' +
+        '                        : `Its notes were not saved: ${said(answer?.error)}.`;\n' +
+        '                    say(notDone !== null\n' +
+        '                        ? `${doneWords(doneUnknown, notDone)} ${notesWords}`\n' +
+        '                        : `The task is completed — ${notesWords.charAt(0).toLowerCase()}${notesWords.slice(1)}`,\n' +
+        "                        answer?.unknown ? null : { type: sent.type, notes: sent.notes, opportunityId: sent.opportunityId || '', contactId: sent.contactId || '', accountId: sent.accountId || '' });\n" +
         '                    return;\n                }\n                notesSaved = true;\n',
-        '        if (notDone !== null) {\n', "            if (notesSaved && here()) setCompletionNotes('');\n",
-        '            say(notesSaved\n                ? `Its notes were saved, but the task was not completed: ${said(notDone)}.`\n' +
-        '                : `The task was not completed: ${said(notDone)}.`);\n            return;\n        }\n',
-        "        if (!here()) return;\n        setCompletionPrompt(false);\n        setCompletionNotes('');\n        closeRail();\n"),
+        '        if (notDone !== null) {\n', "            if (notesSaved && here()) { setCompletionNotes(''); notesIdRef.current = null; }\n",
+        '            say(notesSaved\n                ? (doneUnknown ? `Its notes were saved. ${doneWords(true, notDone)}` : `Its notes were saved, but the task was not completed: ${said(notDone)}.`)\n' +
+        '                : doneWords(doneUnknown, notDone));\n            return;\n        }\n',
+        "        if (!here()) return;\n        setCompletionPrompt(false);\n        setCompletionNotes('');\n        notesIdRef.current = null;\n        closeRail();\n"),
         'a refused notes save keeps the prompt, its notes and the error, and says whether the task is completed — or, the rail moved on, its notice carries the notes and the links last sent (Jeff, 13 Oct: "Show them in the toast"; the fifth re-check, code C1); a completion that did not land is said after the notes are saved, and the notes, saved, leave the prompt; each on the rail the press began on, or in its notice');
     assert.ok(inOrder(t, "        setCompletionError('');\n        let notDone = null;", "\n        let notesSaved = false;\n        if (handleCompleteTask && !task.completed) {\n"),
         'a press starts as landed, nothing saved (the third re-check, proof P1)');
@@ -487,19 +494,26 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     // (§0.245 moved: the completion reads its answer through taskWriteAnswer — the ok check first, the server's words with
     // their ref (docs/design/refusal-sweep 2b); RUN in tests/refusal-sweep.test.mjs.)
     assert.ok(k.includes("const answer = await taskWriteAnswer(() => dbFetch('/.netlify/functions/tasks', {"), "the completion keeps the server's words");
-    assert.ok(inOrder(k, '        if (!stillOrg(askedOrg)) return;\n        if (!answer.ok) {\n',
+    // Moved in §0.261: an answer that proves nothing is answered unknown, the row left ticked (the unknown-save rule).
+    assert.ok(inOrder(k, '        if (!stillOrg(askedOrg)) return;\n',
+        '        if (!answer.ok && answer.unknown) return { ok: false, error: answer.error, unknown: true };\n        if (!answer.ok) {\n',
         '            setTasks(prev => prev.map(t => (t === next ? current : t)));\n            return { ok: false, error: answer.error };\n        }\n',
         "addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');",
         '        return { ok: true };\n    };'),
         'and answers whether it landed (the re-check, code R2)');
-    assert.ok(t.includes("        setTaskModalError?.(null);\n        setCompletionPrompt(false);\n        setCompletionNotes('');\n        setCompletionError('');\n"),
+    // Moved in §0.261: the last notes' activity id let go with them (the unknown-save rule's Part 6).
+    assert.ok(t.includes("        setTaskModalError?.(null);\n        setCompletionPrompt(false);\n        setCompletionNotes('');\n        notesIdRef.current = null;\n        setCompletionError('');\n"),
         'a prompt left by the last task never opens on this one (the fix review, screens F4)');
     assert.ok(t.includes('{completionError && ('), 'the error is shown in the prompt');
     const h = code(read('src/hooks/useActivities.js'));
     // Moved pin (§0.248, docs/design/refusal-sweep Part 10): the ok check first, the refusal's body read once — its words
     // (refusalWords: the server's with their ref, else the status) and its field.
-    assert.equal(count(h, "if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }"), 2,
-        "the save answers the server's refusal — its field too — on an update and a create");
+    // Moved in §0.261 (the unknown-save rule): the server's own 4xx in its words, any other answer said as maybe — and whether
+    // it proved nothing answered beside the field.
+    assert.equal(count(h, "if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const heard = heardRefusal(res.status, body); const error = heard ? refusalWords(res, body) : maybeSaid('The activity', 'saved', refusalWords(res, body)); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field, unknown: !heard }; }"), 1,
+        "the update answers the server's refusal — its field too");
+    assert.equal(count(h, "else { const heard = heardRefusal(res.status, body); const error = heard ? refusalWords(res, body) : maybeSaid('The activity', 'saved', refusalWords(res, body)); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field, unknown: !heard }; }"), 1,
+        "and the create — after an answer saying it is already stored (an earlier press landed)");
     assert.ok(h.includes('        setQuickLogContactResults([]);\n        return { ok: true };\n'), 'and that it saved');
     const d = code(read('src/Tabs/DispatchTab.jsx'));
     assert.ok(d.includes("}, payload, newJobForm.opportunityCopied ? ['accountId', 'opportunityId'] : ['accountId']);"),

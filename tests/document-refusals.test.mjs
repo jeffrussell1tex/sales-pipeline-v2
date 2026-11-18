@@ -55,15 +55,17 @@ setRequestOrg('org_qa');
 
 const DOCS = '/.netlify/functions/documents';
 // Each edit: what it sends, and what its refusal says was not done.
+// Since §0.261 (the unknown-save rule — Jeff's Q1): an answer that proves nothing — a 5xx, a page, a request that never left —
+// says the edit may have been done (the fifth column), never "not".
 const EDITS = [
-    ['the description', () => docs.updateDocument('doc_1', { note: 'typed' }), `PUT ${DOCS}`, 'Description not saved'],
-    ['the category', () => docs.updateDocument('doc_1', { category: 'Contract' }), `PUT ${DOCS}`, 'Category not saved'],
-    ['the visibility', () => docs.updateDocument('doc_1', { visibility: 'private' }), `PUT ${DOCS}`, 'Visibility not saved'],
-    ['a delete', () => docs.removeDocument('doc_1'), `DELETE ${DOCS}?id=doc_1`, 'Document not deleted'],
-    ['a restore', () => docs.restoreVersion('doc_1', 2), `POST ${DOCS}?action=restore-version`, 'Version 2 not restored'],
-    ['a link', () => docs.linkDocument('doc_1', [{ type: 'task', recordId: 'tsk_1', name: 'Call' }]), `POST ${DOCS}?action=link`, 'Link not added'],
-    ['two links', () => docs.linkDocument('doc_1', [{ type: 'task', recordId: 'tsk_1' }, { type: 'contact', recordId: 'ctc_1' }]), `POST ${DOCS}?action=link`, 'Links not added'],
-    ['an unlink', () => docs.unlinkDocument('doc_1', 'dlk_1'), `DELETE ${DOCS}?action=link&linkId=dlk_1`, 'Link not removed'],
+    ['the description', () => docs.updateDocument('doc_1', { note: 'typed' }), `PUT ${DOCS}`, 'Description not saved', 'Description may have been saved — reload the page to see whether it was'],
+    ['the category', () => docs.updateDocument('doc_1', { category: 'Contract' }), `PUT ${DOCS}`, 'Category not saved', 'Category may have been saved — reload the page to see whether it was'],
+    ['the visibility', () => docs.updateDocument('doc_1', { visibility: 'private' }), `PUT ${DOCS}`, 'Visibility not saved', 'Visibility may have been saved — reload the page to see whether it was'],
+    ['a delete', () => docs.removeDocument('doc_1'), `DELETE ${DOCS}?id=doc_1`, 'Document not deleted', 'The document may have been deleted — reload the page to see whether it was'],
+    ['a restore', () => docs.restoreVersion('doc_1', 2), `POST ${DOCS}?action=restore-version`, 'Version 2 not restored', 'Version 2 may have been restored — reload the page to see whether it was'],
+    ['a link', () => docs.linkDocument('doc_1', [{ type: 'task', recordId: 'tsk_1', name: 'Call' }]), `POST ${DOCS}?action=link`, 'Link not added', 'The link may have been added — reload the page to see whether it was'],
+    ['two links', () => docs.linkDocument('doc_1', [{ type: 'task', recordId: 'tsk_1' }, { type: 'contact', recordId: 'ctc_1' }]), `POST ${DOCS}?action=link`, 'Links not added', 'The links may have been added — reload the page to see whether they were'],
+    ['an unlink', () => docs.unlinkDocument('doc_1', 'dlk_1'), `DELETE ${DOCS}?action=link&linkId=dlk_1`, 'Link not removed', 'The link may have been removed — reload the page to see whether it was'],
 ];
 // How a refusal reads: dbWrite's words (storage.js refusalOf).
 const REFUSALS = [
@@ -74,27 +76,27 @@ const REFUSALS = [
 ];
 
 test('each edit, refused, resolves { ok: false } and says what was not done, in the server\'s words', async () => {
-    for (const [what, run, request, said] of EDITS) {
+    for (const [what, run, request, said, maybe] of EDITS) {
         for (const [status, body, words] of REFUSALS) {
             messages.length = 0; sent.length = 0;
             answer = () => respond(status, body);
             const r = await run();
             assert.equal(r.ok, false, `${what}, ${status}`);
             assert.deepEqual(sent, [request], `${what}: the request is as it was`);
-            assert.deepEqual(messages, [{ error: `${said} — ${words}` }], `${what}, ${status}`);
+            assert.deepEqual(messages, [{ error: status < 500 ? `${said} — ${words}` : `${maybe}: ${words}` }], `${what}, ${status}`);
         }
     }
 });
 
 test('a network failure resolves too, and says so', async () => {
-    for (const [what, run, , said] of EDITS) {
+    for (const [what, run, , , maybe] of EDITS) {
         messages.length = 0;
         answer = () => { throw new TypeError('Failed to fetch'); };
         const r = await run();
         assert.equal(r.ok, false, what);
         // Moved pin (§0.249, docs/design/refusal-sweep Q4): NETWORK_ERROR is the house words — it said "Network error —
-        // the change was not saved."
-        assert.deepEqual(messages, [{ error: `${said} — The server could not be reached.` }], what);
+        // the change was not saved." Moved in §0.261: a request that threw proves nothing — said as maybe.
+        assert.deepEqual(messages, [{ error: `${maybe}: The server could not be reached.` }], what);
     }
 });
 

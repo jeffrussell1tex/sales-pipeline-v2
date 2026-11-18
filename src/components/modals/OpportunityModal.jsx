@@ -252,11 +252,14 @@ function CloseDateMoves({ deal }) {
 function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate, onDraft }) {
     const { setViewingActivity } = useApp();   // a history row opens the read-only viewer (§0.93)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
-    const [newActivity, setNewActivity] = React.useState({
+    // Its id is given with the form, kept until it saves (state §0.261, the unknown-save rule's Part 6): a second press after
+    // an answer that proved nothing is the same activity, never a second.
+    const [newActivity, setNewActivity] = React.useState(() => ({
         type: 'Call',
         date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
-        notes: ''
-    });
+        notes: '',
+        id: 'id_' + crypto.randomUUID(),
+    }));
     // The activity is saved, not only shown (state §0.177): it set the list on
     // screen and was gone on reload. A failed save keeps the form and says why.
     const [logState, setLogState] = React.useState({ saving: false, error: null });
@@ -270,7 +273,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
         const r = await onSaveActivity({ ...newActivity, opportunityId: opportunity.id, contactIds: logWith });
         if (!r?.ok) { setLogState({ saving: false, error: r?.error || 'The activity was not saved.' }); return; }
         setLogState({ saving: false, error: null });
-        setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
+        setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '', id: 'id_' + crypto.randomUUID() });
         setLogWith([]);
         setShowLogActivity(false);
     };
@@ -1088,6 +1091,9 @@ export default function OpportunityModal({
             forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             products: '', unionized: 'No', notes: '', nextSteps: '',
             pipelineId: activePipelineId || 'default',
+            // A new deal's id is given here, once per window (state §0.261, the unknown-save rule's Part 6): a second Save
+            // after an answer that proved nothing sends the same deal, never a second.
+            id: 'id_' + crypto.randomUUID(),
             ...seeded,
         };
         return {
@@ -1173,6 +1179,9 @@ export default function OpportunityModal({
     const [editingCommentId, setEditingCommentId]       = useState(null);
     const [editingCommentText, setEditingCommentText]   = useState('');
     const [noteState, setNoteState]                     = useState({ saving: false, error: null });   // state §0.177
+    // A post whose answer proved nothing may have made the note (state §0.261): its id is the server's, so Post is held —
+    // the window says to reload — never a second note.
+    const [notePostHeld, setNotePostHeld]               = useState(false);
     const [mentionQuery, setMentionQuery]               = useState(null);
     const [mentionAnchorPos, setMentionAnchorPos]       = useState(0);
     const commentTextareaRef = useRef(null);
@@ -1454,9 +1463,10 @@ export default function OpportunityModal({
     // The text alone goes (state §0.236): the server writes the author, the time, the id and the mentions.
     const postNote = async () => {
         const text = commentDraft.trim();
-        if (!text || noteState.saving || !onSaveComment) return;
+        if (!text || noteState.saving || notePostHeld || !onSaveComment) return;
         setNoteState({ saving: true, error: null });
         const r = await onSaveComment(opportunity.id, text);
+        if (r?.unknown) setNotePostHeld(true);
         if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }
         setNoteState({ saving: false, error: null });
         setCommentDraft(''); setMentionQuery(null);
@@ -2274,7 +2284,7 @@ export default function OpportunityModal({
                                                     {commentDraft.trim() && (
                                                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 6 }}>
                                                             <GhostBtn onClick={() => { setCommentDraft(''); setMentionQuery(null); }}>Discard</GhostBtn>
-                                                            <PrimaryBtn type="button" saving={noteState.saving} onClick={postNote}>Post Note</PrimaryBtn>
+                                                            <PrimaryBtn type="button" saving={noteState.saving} disabled={notePostHeld} onClick={postNote}>Post Note</PrimaryBtn>
                                                         </div>
                                                     )}
                                                     {noteState.error && (

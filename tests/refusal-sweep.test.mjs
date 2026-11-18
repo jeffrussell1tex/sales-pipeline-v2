@@ -86,7 +86,7 @@ import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
 import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
 import { esc } from '../src/utils/customerNotifications.js';
 import { T } from '../src/tokens.js';
-import { readRefusal, failureWords, refusalWords } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusal } from '../src/utils/refusalWords.js';
 import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
 import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
@@ -142,7 +142,7 @@ const kanbanDrop = () => builtDrop || (builtDrop = (() => {
     const fn = between(code(read('src/components/KanbanView.jsx')), '    const handleKanbanDrop = (toStage) => {', '\n    };') + '\n    };';
     return new Function('kanbanDragging', 'setKanbanDragging', 'setKanbanDragOver', 'todayLocal', 'opportunities', 'currentUser',
         'setOpportunities', 'requestOrg', 'dbWrite', 'stillOrg', 'setPressNotices', 'pressNoticeOf', 'promptSpiffClaim', 'console',
-        'dragBase', `${fn}\nreturn handleKanbanDrop;`);
+        'dragBase', 'maybeSaid', `${fn}\nreturn handleKanbanDrop;`);   // maybeSaid: §0.261
 })());
 // The module's dragBase (KanbanView.jsx): one map across every drag, as at module scope.
 const DRAG_BASE = new WeakMap();
@@ -156,7 +156,7 @@ const drag = async ({ toStage = 'Proposal', answer, list = [DEAL, OTHER], oppId 
     const drop = kanbanDrop()({ oppId, fromStage: 'Qualification' }, (v) => did.dragging.push(v), (v) => did.dragOver.push(v),
         () => '2026-01-02', list, 'Karen Rep', opps.set, () => 'org_a',
         (url, opts) => { did.sent.push([url, opts.method, JSON.parse(opts.body)]); return answered; },
-        (o) => o === org, notices.set, pressNoticeOf, (d) => did.spiff.push(d), quiet, DRAG_BASE);
+        (o) => o === org, notices.set, pressNoticeOf, (d) => did.spiff.push(d), quiet, DRAG_BASE, maybeSaid);
     drop(toStage);
     const shown = opps.value;
     if (meanwhile) meanwhile(opps);
@@ -194,10 +194,18 @@ test('Part 1a: a refused drag is put back — the same row it was — and said i
     assert.equal(bare.notices[0].title, 'A deal');
 });
 
-test('Part 1a: a drag that never left is put back and said — RUN', async () => {
-    const r = await drag({ answer: { ok: false, status: 0, error: NETWORK_ERROR } });
-    assert.equal(r.list[0], DEAL);
-    assert.deepEqual(r.notices.map((n) => n.words), [`Not moved to Proposal: ${NETWORK_ERROR}`]);
+// Moved in §0.261 (the unknown-save rule — Jeff's Q2): a drag whose answer proves nothing — one that never came back, a 5xx, a
+// page — may have moved the deal: the card stays where it was dropped and the notice says so; only the server's own refusal
+// (above) puts it back. dbWrite answers such a drag unknown (tests/unknown-save.test.mjs).
+test('Part 1a: a drag whose answer proves nothing stays where it was dropped and is said as maybe — RUN', async () => {
+    for (const answer of [{ ok: false, status: 0, error: NETWORK_ERROR, unknown: true, landed: false },
+        { ok: false, status: 502, error: 'The server returned 502.', unknown: true, landed: false }]) {
+        const r = await drag({ answer });
+        assert.equal(r.list[0], r.shown[0], 'REGRESSION: a move that may have landed put back');
+        assert.equal(r.list[0].stage, 'Proposal');
+        assert.deepEqual(r.notices.map((n) => n.words), [`It may have been moved to Proposal — reload the page to see whether it was: ${answer.error}`]);
+        assert.deepEqual(r.spiff, [], 'no SPIFF offered over a move not known');
+    }
 });
 
 test('Part 1a: a landed drag takes the deal as stored and says nothing; Closed Won offers the stored deal — RUN', async () => {
@@ -339,6 +347,7 @@ const dealSave = () => builtSave || (builtSave = (() => {
     const fn = between(hook, '    const handleSave = (formData, editingOpp, activePipeline, currentUser,', '\n    };\n\n    const completeLostSave') + '\n    };';
     return new Function('opportunities', 'setOpportunities', 'setOppModalError', 'setOppModalSaving', 'requestOrg', 'stillOrg', 'dbFetch',
         'dealBody', 'sentBody', 'shownRow', 'readRefusal', 'failureWords', 'addAudit', 'fireMentionSms', 'deps', 'console',
+        'maybeSaid', 'landedBefore', 'writeRefusal', 'loadOpportunities',   // §0.261
         `${fn}\nreturn handleSave;`);
 })());
 const STORED = Object.freeze({ id: 'd1', opportunityName: 'Acme renewal', account: 'Acme', stage: 'Proposal', createdDate: '2026-01-01', stageChangedDate: '2026-01-01' });
@@ -349,7 +358,8 @@ const save = async ({ answer, create = false, switchOrg = false }) => {
     let org = 'org_a';
     const handleSave = dealSave()([STORED], opps.set, (v) => did.errors.push(v), (v) => did.saving.push(v), () => 'org_a', (o) => o === org,
         async (url, opts) => { did.sent.push(opts.method); if (switchOrg) org = 'org_b'; if (answer instanceof Error) throw answer; return answer; },
-        dealBody, sentBody, shownRow, readRefusal, failureWords, (...a) => did.audits.push(a), () => {}, {}, quiet);
+        dealBody, sentBody, shownRow, readRefusal, failureWords, (...a) => did.audits.push(a), () => {}, {}, quiet,
+        maybeSaid, landedBefore, writeRefusal, () => {});
     const formData = { opportunityName: 'Acme renewal', account: 'Acme', stage: 'Proposal', salesRep: '' };
     handleSave(formData, create ? null : { id: 'd1' }, { id: 'pl_1' }, 'Karen Rep', (v) => did.closed.push(v), () => {});
     await settle();
@@ -366,10 +376,12 @@ test('Part 1c: the deal window says a refused save in the house words, the list 
         [PAGE_502(), 'The server returned 502.'],
         [new TypeError('Failed to fetch'), 'The server could not be reached.'],
     ];
-    for (const [answer, words] of cases) {
+    for (const [answer, words, i] of cases.map((p, n) => [...p, n])) {
         const r = await save({ answer });
         assert.deepEqual(r.sent, ['PUT']);
-        assert.equal(r.said, words, `REGRESSION: ${words}`);
+        // Moved in §0.261 (the unknown-save rule): only the server's own 4xx is "not"; any other answer may have saved.
+        const said = i === 0 ? words : maybeSaid('"Acme renewal"', 'saved', words);
+        assert.equal(r.said, said, `REGRESSION: ${said}`);
         assert.ok(r.same, 'the list unchanged');
         assert.deepEqual([r.audits, r.closed], [[], []], 'no audit; the window stays open');
         assert.equal(r.saving[r.saving.length - 1], false, 'the Save button back');
@@ -386,7 +398,8 @@ test('Part 1c: the deal window says a refused save in the house words, the list 
 });
 
 test('Part 1c: a new deal\'s refused or unsent save says the house words, appends nothing — RUN', async () => {
-    for (const [answer, words] of [[PAGE_502(), 'The server returned 502.'], [new TypeError('Failed to fetch'), 'The server could not be reached.'],
+    // Moved in §0.261: a page and a request that never left may have saved — said as maybe.
+    for (const [answer, words] of [[PAGE_502(), maybeSaid('"Acme renewal"', 'saved', 'The server returned 502.')], [new TypeError('Failed to fetch'), maybeSaid('"Acme renewal"', 'saved', 'The server could not be reached.')],
         [answerOf(409, { error: 'A deal with this name exists', requestId: 'r2' }), 'A deal with this name exists (ref r2)']]) {
         const r = await save({ answer, create: true });
         assert.deepEqual(r.sent, ['POST']);
@@ -413,12 +426,14 @@ test('Part 1c: an answer after an org switch says nothing and writes nothing —
 
 test('Part 1c: WIRING — the deal window reads the ok check first; no old sentence left', () => {
     const hook = code(read('src/hooks/useOpportunities.js'));
-    assert.ok(hook.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
-    assert.equal(count(hook, 'if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setOppModalError(why); return; }'), 2, 'the edit and the create');
-    assert.equal(count(hook, 'const data = await res.json().catch(() => ({}));'), 2);
+    // Moved in §0.261 (the unknown-save rule): the refusal's body read once, said by writeRefusal — the server's own 4xx, else maybe.
+    assert.ok(hook.includes("import { failureWords, heardRefusal, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';"));
+    assert.equal(count(hook, 'setOppModalError(writeRefusal(res, body, `"${dealName}"`).words); return; }'), 2, 'the edit and the create');
+    assert.equal(count(hook, 'const data = await res.json().catch(() => ({}));'), 1);
+    assert.equal(count(hook, '} else data = await res.json().catch(() => ({}));'), 1, 'the create, after an answer saying it is already stored');
     assert.ok(!hook.includes('Please check your connection'), 'REGRESSION: "check your connection" when the server answered');
     assert.ok(!hook.includes("data.error || 'Failed to save opportunity"), 'REGRESSION: a refusal with no words said as a fallback, not the status');
-    assert.equal(count(hook, 'setOppModalError(failureWords(err));'), 2);
+    assert.equal(count(hook, "setOppModalError(maybeSaid(`\"${dealName}\"`, 'saved', failureWords(err)));"), 2, 'a throw proves nothing (§0.261)');
 });
 
 // completeLostSave (1e), extracted and run: a refused Closed Lost puts back only the copy it showed, by identity.
@@ -462,14 +477,16 @@ const TASK_REFUSALS = () => [
 
 // taskWriteAnswer (2a): the ok check first; the house words; a landed answer that is not JSON is landed; never throws.
 test('Part 2a: taskWriteAnswer — a refusal in the server\'s words with their ref, else the status; unsent, the plain words; a landed page not JSON is landed — RUN', async () => {
-    for (const [answer, words] of TASK_REFUSALS()) {
+    // Moved in §0.261 (the unknown-save rule — Jeff's Q1, Q2): only a 4xx in the server's words wrote nothing; any other answer
+    // may have saved — said so, the change kept.
+    for (const [answer, words, i] of TASK_REFUSALS().map((p, n) => [...p, n])) {
         const got = await taskWriteAnswer(async () => { if (answer instanceof Error) throw answer; return answer; });
-        assert.deepEqual(got, { ok: false, error: words }, `REGRESSION: ${words}`);
+        assert.deepEqual(got, { ok: false, error: words, unknown: i !== 0 }, `REGRESSION: ${words}`);
     }
     // A refused answer's body is read once, after the ok check — never before it.
     let reads = 0;
     const refused = { ok: false, status: 409, json: async () => { reads += 1; return { error: 'Changed since', requestId: 'r9' }; } };
-    assert.deepEqual(await taskWriteAnswer(async () => refused), { ok: false, error: 'Changed since (ref r9)' });
+    assert.deepEqual(await taskWriteAnswer(async () => refused), { ok: false, error: 'Changed since (ref r9)', unknown: false });
     assert.equal(reads, 1);
     // Landed: the task as stored; a body with none, or no JSON at all, is still landed — the screen keeps its copy.
     const stored = { id: 't1', title: 'Call Dana', status: 'Completed' };
@@ -478,10 +495,10 @@ test('Part 2a: taskWriteAnswer — a refusal in the server\'s words with their r
     assert.deepEqual(await taskWriteAnswer(async () => answerOf(200, new SyntaxError('Unexpected end of JSON input'))), { ok: true, task: null },
         'REGRESSION: a completion the server saved rolled back because its answer was not JSON');
     // A send that throws a non-network failure says its answer could not be read — never the error's own words.
-    assert.deepEqual(await taskWriteAnswer(async () => { throw new SyntaxError("Unexpected token '<'"); }), { ok: false, error: 'Its answer could not be read.' });
+    assert.deepEqual(await taskWriteAnswer(async () => { throw new SyntaxError("Unexpected token '<'"); }), { ok: false, error: 'Its answer could not be read.', unknown: true });
     const src = code(read('src/utils/taskWrite.js'));
-    assert.ok(src.includes("import { readRefusal, failureWords } from './refusalWords.js';"));
-    order(src, 'if (!res.ok) return { ok: false, error: await readRefusal(res) };', 'const data = await res.json().catch(() => null);');
+    assert.ok(src.includes("import { refusalWords, failureWords, heardRefusal } from './refusalWords.js';"));
+    order(src, "if (!res.ok) { const body = await res.json().catch(() => null); return { ok: false, error: refusalWords(res, body), unknown: !heardRefusal(res.status, body) }; }", 'const data = await res.json().catch(() => null);');
 });
 
 // handleCompleteTask (2b), extracted and run over the real taskWriteAnswer: a refused or unsent completion is put back —
@@ -512,12 +529,20 @@ const complete = async ({ answer, list = [TASK, TASK_2], taskId = 't1', meanwhil
     return { said: await out, list: tasks.value, shown, ...did };
 };
 
+// Moved in §0.261 (the unknown-save rule — Jeff's Q2): only the server's own 4xx is put back; any other answer may have landed —
+// the row left ticked, answered unknown for the caller to say as maybe.
 test('Part 2b: a refused or unsent completion is put back — the same row it was — and answers the house words — RUN', async () => {
-    for (const [answer, words] of TASK_REFUSALS()) {
+    for (const [answer, words, i] of TASK_REFUSALS().map((p, n) => [...p, n])) {
         const r = await complete({ answer });
         assert.equal(r.sent.length, 1);
         assert.deepEqual([r.sent[0][0], r.sent[0][1], r.sent[0][2].id, r.sent[0][2].status, r.sent[0][2].completed], ['/.netlify/functions/tasks', 'PUT', 't1', 'Completed', true]);
         assert.equal(r.shown[0].status, 'Completed', 'shown at once');
+        if (i !== 0) {
+            assert.deepEqual(r.said, { ok: false, error: words, unknown: true }, `REGRESSION: ${words}`);
+            assert.equal(r.list[0], r.shown[0], 'REGRESSION: a completion that may have landed was un-ticked');
+            assert.deepEqual(r.audits, [], 'no audit row for a completion not known');
+            continue;
+        }
         assert.deepEqual(r.said, { ok: false, error: words }, `REGRESSION: ${words}`);
         assert.equal(r.list[0], TASK, 'REGRESSION: a refused completion left ticked on screen');
         assert.equal(r.list[1], TASK_2, 'nothing else is touched');
@@ -571,7 +596,7 @@ const qRowHandlers = () => builtRow || (builtRow = (() => {
     const say = between(t, '    const sayRefused = (task, words) =>', '\n');
     return {
         row: new Function('task', 'canEdit', 'completing', 'setCompleting', 'handleCompleteTask', 'onRefused', 'setSnoozeOpen', 'setTasks',
-            'requestOrg', 'stillOrg', 'dbFetch', 'taskWriteAnswer', `${fn}\nreturn { handleComplete, handleSnooze };`),
+            'requestOrg', 'stillOrg', 'dbFetch', 'taskWriteAnswer', 'maybeSaid', `${fn}\nreturn { handleComplete, handleSnooze };`),
         say: new Function('setPressNotices', 'pressNoticeOf', `${say}\nreturn sayRefused;`),
     };
 })());
@@ -587,7 +612,7 @@ const rowPress = ({ task = FEED_ITEM, canEdit = true, done, answer, list = [TASK
         async (...a) => { did.asked.push(a); if (switchOrg) org = 'org_b'; return done; }, sayRefused, (v) => did.snoozeOpen.push(v), tasks.set,
         () => 'org_a', (o) => o === org,
         (url, opts) => { did.sent.push([url, opts.method, JSON.parse(opts.body)]); return answered.then((a) => { if (a instanceof Error) throw a; return a; }); },
-        taskWriteAnswer);
+        taskWriteAnswer, maybeSaid);
     return {
         tick: async () => { await handlers.handleComplete({ stopPropagation: () => { did.stopped += 1; } }); return { notices: notices.value, ...did }; },
         snooze: async (newDate) => {
@@ -614,6 +639,9 @@ test('Part 2c: a refused ✓ is said in a press notice — "Not completed: <why>
     assert.ok(r.notices[0].id.startsWith('press_'));
     const unsent = await rowPress({ done: { ok: false, error: 'The server could not be reached.' } }).tick();
     assert.equal(unsent.notices[0].words, 'Not completed: The server could not be reached.');
+    // §0.261: one whose answer proved nothing (the hook's unknown) may have landed — said so, never "Not completed".
+    const maybe = await rowPress({ done: { ok: false, error: 'The server could not be reached.', unknown: true } }).tick();
+    assert.equal(maybe.notices[0].words, 'It may have been completed — reload the page to see whether it was: The server could not be reached.');
     const untitled = await rowPress({ task: { ...FEED_ITEM, title: '' }, done: { ok: false, error: FORBIDDEN } }).tick();
     assert.equal(untitled.notices[0].title, 'A task');
     for (const done of [undefined, { ok: true }]) {
@@ -630,7 +658,7 @@ test('Part 2c: a refused ✓ is said in a press notice — "Not completed: <why>
 });
 
 test('Part 2c: a refused or unsent Snooze is put back — the row without the feed\'s keys — and said in a press notice — RUN', async () => {
-    for (const [answer, words] of TASK_REFUSALS()) {
+    for (const [answer, words, i] of TASK_REFUSALS().map((p, n) => [...p, n])) {
         const r = await rowPress({ answer }).snooze('2026-11-12');
         assert.deepEqual(r.snoozeOpen, [false]);
         assert.equal(r.sent.length, 1);
@@ -638,6 +666,13 @@ test('Part 2c: a refused or unsent Snooze is put back — the row without the fe
         assert.deepEqual([url, method], ['/.netlify/functions/tasks', 'PUT']);
         assert.deepEqual(body, { ...TASK, dueDate: '2026-11-12', status: 'Open', completed: false }, 'the feed\'s source and when never sent');
         assert.equal(r.shown[0].dueDate, '2026-11-12', 'shown at once');
+        // Moved in §0.261 (the unknown-save rule — Jeff's Q1, Q2): only a 4xx in the server's words wrote nothing; any other answer
+    // may have saved — said so, the change kept.
+        if (i !== 0) {
+            assert.equal(r.list[0], r.shown[0], 'REGRESSION: a Snooze that may have landed put back');
+            assert.deepEqual(r.notices.map((n) => [n.title, n.words]), [['Call Dana', `It may have been snoozed — reload the page to see whether it was: ${words}`]], `REGRESSION: ${words}`);
+            continue;
+        }
         assert.deepEqual(r.list[0], TASK, 'REGRESSION: a refused Snooze left on screen');
         assert.ok(!('source' in r.list[0]) && !('when' in r.list[0]), 'REGRESSION: the feed\'s keys put back into the list');
         assert.equal(r.list[1], TASK_2);
@@ -1738,6 +1773,7 @@ const coachingHook = () => builtCoaching || (builtCoaching = (() => {
     const s = code(read('src/hooks/useCoachingNotes.js'));
     const body = s.slice(s.indexOf("const URL = '/.netlify/functions/coaching-notes';")).replace('export function useCoachingNotes', 'function useCoachingNotes');
     return new Function('useState', 'useEffect', 'useCallback', 'dbFetch', 'requestOrg', 'stillOrg', 'readRefusal', 'failureWords', 'console',
+        'refusalWords', 'heardRefusal', 'landedBefore',   // §0.261
         `${body}\nreturn useCoachingNotes;`);
 })());
 const NOTE = Object.freeze({ id: 'cn_1', text: 'Strong call', readBy: [] });
@@ -1757,7 +1793,7 @@ const coaching = async ({ answers = [], orgId = 'org_a', switchOrg = null, initi
             if (a instanceof Error) throw a;
             return a;
         },
-        () => org, (o) => o === org, readRefusal, failureWords, quiet)({ orgId, waitForToken: async () => {} });
+        () => org, (o) => o === org, readRefusal, failureWords, quiet, refusalWords, heardRefusal, landedBefore)({ orgId, waitForToken: async () => {} });
     await settle();
     const [notes, , error] = cells;
     if (initial && !switchOrg) notes.set(initial);
@@ -1804,16 +1840,25 @@ test('Part 7b: add, mark read and delete never reject — each refusal answers {
             let r, threw = null;
             try { r = await run(st.hook); } catch (e) { threw = e; }
             assert.equal(threw, null, `REGRESSION: ${what} rejected — the dialog stayed "Saving…" for good (${words})`);
-            assert.deepEqual(r, status === null ? { ok: false, error: words } : { ok: false, status, error: words }, `${what}: ${words}`);
+            // Moved in §0.261 (the unknown-save rule): whether the answer proved nothing beside its words; an add's said as maybe.
+            const unknown = status !== 403;
+            const said = what === 'add' && unknown ? `The note may have been saved — reload the page to see whether it was: ${words}` : words;
+            assert.deepEqual(r, status === null ? { ok: false, error: said, unknown: true } : { ok: false, status, error: said, unknown, landed: false }, `${what}: ${words}`);
             assert.equal(st.sent[1][1], method);
             assert.deepEqual(st.notes.value, [NOTE], `${what}: the list unchanged`);
         }
     }
-    // A landed add or mark read whose answer cannot be read says so; a delete reads no body, so it landed.
+    // Moved in §0.261: a landed add or mark read whose answer cannot be read is landed — never a parse error's words, never
+    // "not saved" over a note that is in; a delete reads no body, so it landed.
     for (const [what, run] of WRITES.slice(0, 2)) {
         const st = await coaching({ answers: [LOAD_OK(), answerOf(200, new SyntaxError("Unexpected token '<'"))] });
-        assert.deepEqual(await run(st.hook), { ok: false, error: 'Its answer could not be read.' }, `${what}: never a parse error's words`);
+        assert.equal((await run(st.hook)).ok, true, `${what}: landed`);
     }
+    // §0.261 (Part 6): an add answered that its id is already stored landed with an earlier press — the list read again.
+    const again = await coaching({ answers: [LOAD_OK(), answerOf(409, { error: 'That note id is already in use.', code: 'idInUse' }), LOAD_OK()] });
+    assert.deepEqual(await again.hook.addCoachingNote({ id: 'cn_x', text: 'x' }), { ok: true, note: null, created: false });
+    await settle();
+    assert.deepEqual(again.sent.map((s) => s[1]), ['GET', 'POST', 'GET'], 'the list read again');
     const del = await coaching({ answers: [LOAD_OK(), answerOf(200, new SyntaxError("Unexpected token '<'"))] });
     assert.deepEqual(await del.hook.deleteCoachingNote('cn_1'), { ok: true });
     assert.deepEqual(del.notes.value, []);
@@ -1867,11 +1912,12 @@ test('Part 7b: Home\'s "Mark read" says a refusal in a press notice — "Not mar
 test('Part 7b: WIRING — the hook reads ok first and never rejects; App hands out coachingNotesError; Home and Sales Manager say a failed load; TeamTab\'s banner has a Close', () => {
     const hook = code(read('src/hooks/useCoachingNotes.js'));
     assert.ok(hook.includes("import { dbFetch, requestOrg, stillOrg } from '../utils/storage.js';"));
-    assert.ok(hook.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
+    assert.ok(hook.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore } from '../utils/refusalWords.js';"));   // §0.261
     assert.ok(!hook.includes('errorOf'), 'REGRESSION: the old reader — the ref dropped, the body read before the ok check');
     const answered = between(hook, 'const answered = async (send, { body = true } = {}) => {', '\n};');
     // Moved in §0.249 (review fixes, last pass, F4): the refusal's status beside its words.
-    order(answered, 'const res = await send();', 'if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };', 'await res.json()', '} catch (e) { return { ok: false, error: failureWords(e) }; }');
+    // Moved in §0.261: the refusal's body read once — its words, whether it proved nothing, whether it says already stored.
+    order(answered, 'const res = await send();', "if (!res.ok) { const refused = await res.json().catch(() => null); return { ok: false, status: res.status, error: refusalWords(res, refused), unknown: !heardRefusal(res.status, refused), landed: landedBefore(res.status, refused) }; }", 'await res.json()', '} catch (e) { return { ok: false, error: failureWords(e), unknown: true }; }');
     assert.equal(count(hook, 'await answered('), 3, 'each write through the one reader');
     assert.equal(count(hook, 'await dbFetch('), 1, 'the load alone sends by itself');
     const effect = between(hook, '    useEffect(() => {', '    }, [enabled, orgId, waitForToken, reload]);');
@@ -3387,40 +3433,58 @@ const p10Fn = (file, start, end, params, name, tail = end) => {
 // A dbFetch that answers `answer` (a thrown Error throws), switching the org first when asked.
 const p10Fetch = (did, answer, org, switchOrg) => async (url, opts = {}) => {
     did.sent.push(opts.method || 'GET');
+    if (did.bodies && typeof opts.body === 'string') did.bodies.push(JSON.parse(opts.body));
     if (switchOrg) org.now = 'org_b';
     if (answer instanceof Error) throw answer;
     return answer;
 };
 
 const ACME = Object.freeze({ id: 'a1', name: 'Acme', industry: 'Steel', accountTier: 'account' });
-const saveAccount = async ({ answer, create = false, switchOrg = false }) => {
+const saveAccount = async ({ answer, create = false, switchOrg = false, formId = null }) => {
     const list = [ACME];
     const accts = stateOf(list);
-    const did = { errors: [], saving: [], audits: [], closed: [], sent: [] };
+    const did = { errors: [], saving: [], audits: [], closed: [], sent: [], reloads: [], bodies: [] };
     const org = { now: 'org_a' };
     const handleSaveAccount = p10Fn('src/hooks/useAccounts.js', '    const handleSaveAccount = async (', '\n    };\n',
-        ['accounts', 'setAccounts', 'setAccountModalError', 'setAccountModalSaving', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords',
+        ['accounts', 'setAccounts', 'setAccountModalError', 'setAccountModalSaving', 'requestOrg', 'stillOrg', 'dbFetch', 'refusalWords', 'failureWords',
+            'heardRefusal', 'landedBefore', 'maybeSaid', 'loadAccounts',
             'addAudit', 'branchTiers', 'parentRefusal', 'tierUnder', 'byIdOf', 'withTiers', 'console'], 'handleSaveAccount', '\n    };')(
         list, accts.set, (v) => did.errors.push(v), (v) => did.saving.push(v), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg),
-        readRefusal, failureWords, (...a) => did.audits.push(a), () => ({ tiers: new Map() }), () => 'refused', () => 'account',
+        refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid, () => did.reloads.push(1),
+        (...a) => did.audits.push(a), () => ({ tiers: new Map() }), () => 'refused', () => 'account',
         (l) => new Map(l.map((a) => [a.id, a])), withTiers, quiet);
-    await handleSaveAccount({ name: 'Acme', industry: 'Glass' }, { editingAccount: create ? null : ACME, editingSubAccount: null, parentAccountForSub: null,
+    await handleSaveAccount({ name: 'Acme', industry: 'Glass', ...(formId ? { id: formId } : {}) }, { editingAccount: create ? null : ACME, editingSubAccount: null, parentAccountForSub: null,
         setShowAccountModal: (v) => did.closed.push(v), setOpportunities: () => {}, setContacts: () => {} });
     return { ...did, list: accts.value, same: accts.value === list, said: did.errors[did.errors.length - 1] };
 };
 
+// Moved in §0.261 (the unknown-save rule — Jeff's Q1: only a 4xx in the server's words wrote nothing): a 5xx, a wordless 4xx, a
+// page and a request that never left may have saved — said so, the window kept for a second press.
 test('Part 10: handleSaveAccount — the five answers: each refusal in the house words, the list unchanged, the window open — RUN', async () => {
     for (const create of [false, true]) {
-        for (const [answer, words] of P10_REFUSED()) {
+        for (const [answer, words, i] of P10_REFUSED().map((p, n) => [...p, n])) {
             const r = await saveAccount({ answer, create });
             assert.deepEqual(r.sent, [create ? 'POST' : 'PUT']);
-            assert.equal(r.said, words, `${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+            const said = i === 0 ? words : `"Acme" may have been saved — reload the page to see whether it was: ${words}`;
+            assert.equal(r.said, said, `${create ? 'create' : 'edit'}: REGRESSION — ${said}`);
             assert.ok(r.same, 'the list unchanged');
             assert.deepEqual([r.audits, r.closed], [[], []], 'no audit; the window stays open');
             assert.equal(r.saving[r.saving.length - 1], false, 'the Save button back');
             assert.ok(!/check your connection|Unexpected token|HTTP \d/.test(r.said), 'never the old words');
         }
     }
+});
+
+test('§0.261 Part 6: handleSaveAccount — a new account sends the id its rail gave it; a second press answered that the id is already stored here landed: the list read again, the window closed, the audit once — RUN', async () => {
+    const sent = await saveAccount({ answer: answerOf(201, { account: { id: 'id_rail', name: 'Acme' } }), create: true, formId: 'id_rail' });
+    assert.equal(sent.bodies[0].id, 'id_rail', 'REGRESSION: a fresh id per press — a second press after a lost answer made a second account');
+    const again = await saveAccount({ answer: answerOf(409, { error: 'That account id is already in use.', code: 'idInUse' }), create: true, formId: 'id_rail' });
+    assert.deepEqual([again.said, again.closed, again.audits.length, again.reloads.length], [null, [false], 1, 1], 'REGRESSION: an earlier press that landed said "Not saved"');
+    assert.ok(again.same, 'the list as read again, never the copy sent');
+    const other = await saveAccount({ answer: answerOf(409, { error: 'That account id is already in use.' }), create: true, formId: 'id_rail' });
+    assert.deepEqual([other.said, other.closed, other.reloads.length], ['That account id is already in use.', [], 0], 'another org\'s id: refused, in its words');
+    const edit = await saveAccount({ answer: answerOf(409, { error: 'x', code: 'idInUse' }) });
+    assert.deepEqual([edit.said, edit.closed], ['x', []], 'only a create reads it as landed');
 });
 
 test('Part 10: handleSaveAccount — landed, the account as stored; a landed answer that cannot be read, the copy sent — RUN', async () => {
@@ -3467,19 +3531,25 @@ const P10_HOOKS = {
 const P10_HOOK_PARAMS = ['setRows', 'setContactModalError', 'setContactModalSaving', 'setTaskModalError', 'setTaskModalSaving', 'requestOrg', 'stillOrg', 'dbFetch',
     'sentBody', 'shownRow', 'readRefusal', 'refusalWords', 'failureWords', 'addAudit', 'console', 'fireMentionSms',
     // The activity save hands its answer's deal scores to the app's deals (AI scoring batch 2A) — the hook's own helper.
-    'adoptScores'];
+    'adoptScores',
+    // §0.261 (the unknown-save rule): the words of an answer that proves nothing, and the list read again after a create an
+    // earlier press landed.
+    'heardRefusal', 'landedBefore', 'maybeSaid', 'writeRefusal', 'loadContacts', 'loadTasks', 'loadActivities'];
+// What each window's maybe sentence names (§0.261).
+const P10_SUBJECT = { contact: '"Lee Ng"', task: '"Call back"', activity: 'The activity' };
 const ROW_C1 = Object.freeze({ id: 'c1', name: 'as loaded' });
 const saveRecord = async (kind, { answer, create = false, switchOrg = false }) => {
     const k = P10_HOOKS[kind];
     const list = [ROW_C1];
     const rows = stateOf(list);
-    const did = { errors: [], saving: [], audits: [], closed: [], sent: [] };
+    const did = { errors: [], saving: [], audits: [], closed: [], sent: [], reloads: [], bodies: [] };
     const org = { now: 'org_a' };
     const setError = (v) => did.errors.push(v), setSaving = (v) => did.saving.push(v);
     const setter = { contact: 'setContacts', task: 'setTasks', activity: 'setActivities' }[kind];
     const params = P10_HOOK_PARAMS.map((p) => (p === 'setRows' ? setter : p));
     const h = p10Fn(k.file, k.start, '\n    };\n', params, k.name, '\n    };')(rows.set, setError, setSaving, setError, setSaving, () => 'org_a', (o) => o === org.now,
-        p10Fetch(did, answer, org, switchOrg), sentBody, shownRow, readRefusal, refusalWords, failureWords, (...a) => did.audits.push(a), quiet, () => {}, () => {});
+        p10Fetch(did, answer, org, switchOrg), sentBody, shownRow, readRefusal, refusalWords, failureWords, (...a) => did.audits.push(a), quiet, () => {}, () => {},
+        heardRefusal, landedBefore, maybeSaid, writeRefusal, ...[0, 0, 0].map(() => () => did.reloads.push(kind)));
     const answered = await k.call(h, did, create, { setActivityModalError: setError, setActivityModalSaving: setSaving });
     return { ...did, answered, list: rows.value, same: rows.value === list, said: did.errors[did.errors.length - 1] };
 };
@@ -3487,9 +3557,11 @@ const saveRecord = async (kind, { answer, create = false, switchOrg = false }) =
 test('Part 10: the contact, task and activity windows — each refusal in the house words, the list unchanged; landed, the row as stored — RUN', async () => {
     for (const kind of Object.keys(P10_HOOKS)) {
         for (const create of [false, true]) {
-            for (const [answer, words] of P10_REFUSED()) {
+            for (const [answer, words, i] of P10_REFUSED().map((p, n) => [...p, n])) {
                 const r = await saveRecord(kind, { answer, create });
-                assert.equal(r.said, words, `${kind} ${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+                // Moved in §0.261: only the server's own 4xx is "not"; any other answer may have saved.
+                const said = i === 0 ? words : maybeSaid(P10_SUBJECT[kind], 'saved', words);
+                assert.equal(r.said, said, `${kind} ${create ? 'create' : 'edit'}: REGRESSION — ${said}`);
                 assert.ok(r.same, `${kind}: the list unchanged`);
                 assert.deepEqual([r.audits, r.closed], [[], []], `${kind}: no audit; the window stays open`);
                 assert.equal(r.saving[r.saving.length - 1], false, `${kind}: the Save button back`);
@@ -3520,11 +3592,12 @@ test('Part 10: the contact, task and activity windows — an answer after an org
 test('Part 10: the activity save answers a refusal with its words and the field it names — the task rail\'s notes drop a refused link (saveDroppingRefused) — RUN', async () => {
     for (const create of [false, true]) {
         const r = await saveRecord('activity', { answer: answerOf(404, { error: 'That contact no longer exists', field: 'contactId', requestId: 'r4' }), create });
-        assert.deepEqual(r.answered, { ok: false, status: 404, error: 'That contact no longer exists (ref r4)', field: 'contactId' },
+        assert.deepEqual(r.answered, { ok: false, status: 404, error: 'That contact no longer exists (ref r4)', field: 'contactId', unknown: false },
             `${create ? 'create' : 'edit'}: REGRESSION — the refusal's field lost, or its words`);
+        // Moved in §0.261: a page and a request that never left may have saved — answered unknown, said as maybe.
         const page = await saveRecord('activity', { answer: PAGE_502(), create });
-        assert.deepEqual(page.answered, { ok: false, status: 502, error: 'The server returned 502.', field: undefined });
-        assert.equal((await saveRecord('activity', { answer: UNSENT(), create })).answered, undefined, 'unsent: no answer, the error shown');
+        assert.deepEqual(page.answered, { ok: false, status: 502, error: maybeSaid('The activity', 'saved', 'The server returned 502.'), field: undefined, unknown: true });
+        assert.deepEqual((await saveRecord('activity', { answer: UNSENT(), create })).answered, { ok: false, error: maybeSaid('The activity', 'saved', 'The server could not be reached.'), unknown: true }, 'unsent: answered as maybe, the error shown');
         assert.deepEqual((await saveRecord('activity', { answer: answerOf(200, P10_HOOKS.activity.landed), create })).answered, { ok: true });
     }
 });
@@ -3537,18 +3610,20 @@ const saveMember = async ({ answer, create = false, switchOrg = false }) => {
     const org = { now: 'org_a' };
     const h = p10Fn('src/hooks/useUserHandlers.js', '    const handleSaveUser = async (userData) => {', '\n    };\n',
         ['editingUser', 'setUserModalError', 'setUserModalSaving', 'setSettings', 'setShowUserModal', 'setEditingUser', 'showModal', 'setLastCreatedRepName',
-            'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'console'], 'handleSaveUser', '\n    };')(
+            'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'console', 'maybeSaid', 'writeRefusal'], 'handleSaveUser', '\n    };')(
         create ? null : { id: 'usr_1', email: 'k@x.test' }, (v) => did.errors.push(v), (v) => did.saving.push(v), settings.set, (v) => did.closed.push(v), () => {},
-        true, (n) => did.created.push(n), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, quiet);
+        true, (n) => did.created.push(n), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, quiet, maybeSaid, writeRefusal);
     await h({ name: 'Karen Rep', email: 'k@x.test', role: 'User' });
     return { ...did, same: settings.value === before, users: settings.value.users, said: did.errors[did.errors.length - 1] };
 };
 
 test('Part 10: the member window — each refusal in the house words, nothing listed; landed, the member as stored; after a switch nothing — RUN', async () => {
     for (const create of [false, true]) {
-        for (const [answer, words] of P10_REFUSED()) {
+        for (const [answer, words, i] of P10_REFUSED().map((p, n) => [...p, n])) {
             const r = await saveMember({ answer, create });
-            assert.equal(r.said, words, `${create ? 'create' : 'edit'}: REGRESSION — ${words}`);
+            // Moved in §0.261 (the unknown-save rule): only the server's own 4xx is "not"; any other answer may have saved.
+            const said = i === 0 ? words : maybeSaid('The member', 'saved', words);
+            assert.equal(r.said, said, `${create ? 'create' : 'edit'}: REGRESSION — ${said}`);
             assert.ok(r.same, 'nothing listed');
             assert.deepEqual(r.closed, [], 'the window stays open');
             assert.equal(r.saving[r.saving.length - 1], false);
@@ -3564,7 +3639,7 @@ test('Part 10: the member window — each refusal in the house words, nothing li
     }
     // A new member whose landed answer cannot be read: the server minted the id — said, never "not saved", nothing listed.
     const unread = await saveMember({ answer: answerOf(201, new SyntaxError("Unexpected token '<'")), create: true });
-    assert.equal(unread.said, 'Its answer could not be read.');
+    assert.equal(unread.said, maybeSaid('The member', 'saved', 'Its answer could not be read.'));   // §0.261: said as maybe
     assert.ok(unread.same);
     // An edit's: saved, the window closed, the list as it was.
     const edited = await saveMember({ answer: answerOf(200, new SyntaxError("Unexpected token '<'")) });
@@ -3617,21 +3692,25 @@ test('Part 10: the quote window and the Price Book — each refusal in the house
 const saveLead = async ({ answer }) => {
     const did = { errors: [], saving: [], sent: [] };
     const doSave = p10Fn('src/components/modals/LeadModal.jsx', '    const doSave = async () => {', '\n    };', ['validate', 'setSaving', 'buildPayload', 'dbFetch',
-        'readRefusal', 'failureWords', 'setErrors'], 'doSave')(() => true, (v) => did.saving.push(v), () => ({ id: 'id_l1', name: 'Lee Ng' }),
-        p10Fetch(did, answer, { now: 'org_a' }, false), readRefusal, failureWords, (v) => did.errors.push(v));
+        'readRefusal', 'failureWords', 'setErrors', 'landedBefore', 'maybeSaid', 'writeRefusal', 'leadIdRef'], 'doSave')(() => true, (v) => did.saving.push(v), () => ({ id: 'id_l1', name: 'Lee Ng' }),
+        p10Fetch(did, answer, { now: 'org_a' }, false), readRefusal, failureWords, (v) => did.errors.push(v), landedBefore, maybeSaid, writeRefusal, { current: 'id_l1' });
     return { ...did, saved: await doSave() };
 };
 
 test('Part 10: the lead window — a refusal in the house words, never "Unexpected token \'<\'"; landed, the lead as stored — RUN', async () => {
-    for (const [answer, words] of P10_REFUSED()) {
+    for (const [answer, words, i] of P10_REFUSED().map((p, n) => [...p, n])) {
         const r = await saveLead({ answer });
         assert.equal(r.saved, null, 'nothing saved');
-        assert.deepEqual(r.errors, [{ _server: words }], `REGRESSION: ${words}`);
+        // Moved in §0.261: only the server's own 4xx is "not"; any other answer may have saved.
+        assert.deepEqual(r.errors, [{ _server: i === 0 ? words : maybeSaid('The lead', 'saved', words) }], `REGRESSION: ${words}`);
         assert.equal(r.saving[r.saving.length - 1], false);
     }
     assert.deepEqual((await saveLead({ answer: answerOf(201, { lead: { id: 'id_l1', stored: true } }) })).saved, { id: 'id_l1', stored: true });
     const unread = await saveLead({ answer: answerOf(201, new SyntaxError("Unexpected token '<'")) });
     assert.deepEqual([unread.saved, unread.errors], [{ id: 'id_l1', name: 'Lee Ng' }, []], 'a landed answer that cannot be read: saved, the copy sent');
+    // §0.261 (Part 6): a second press answered that the lead is already stored landed with the first — saved, nothing said.
+    const again = await saveLead({ answer: answerOf(409, { error: 'That lead id is already in use.', code: 'idInUse' }) });
+    assert.deepEqual([again.saved, again.errors], [{ id: 'id_l1', name: 'Lee Ng' }, []]);
 });
 
 // The account picker's Create (a deal's, a contact's Company): its words on the screen's onError, the name named.
@@ -3640,17 +3719,18 @@ const createPicked = async ({ answer, switchOrg = false }) => {
     const did = { said: [], sent: [], picked: [], creating: [] };
     const org = { now: 'org_a' };
     const createAccount = p10Fn('src/components/rails/AccountPicker.jsx', '    const createAccount = async () => {', '\n    };', ['value', 'creating', 'setCreating',
-        'onError', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setAccounts', 'pick'], 'createAccount')(
+        'onError', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setAccounts', 'pick', 'landedBefore', 'writeRefusal', 'loadAccounts', 'madeIds'], 'createAccount')(
         'Beta Corp', false, (v) => did.creating.push(v), (v) => did.said.push(v), () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg),
-        readRefusal, failureWords, accounts.set, (a) => did.picked.push(a));
+        readRefusal, failureWords, accounts.set, (a) => did.picked.push(a), landedBefore, writeRefusal, () => { did.reloads = (did.reloads || 0) + 1; }, { current: {} });
     await createAccount();
     return { ...did, list: accounts.value };
 };
 
 test('Part 10: the account picker\'s Create — a refusal in the house words, never "HTTP N"; landed, picked; after a switch nothing — RUN', async () => {
-    for (const [answer, words] of P10_REFUSED()) {
+    for (const [answer, words, i] of P10_REFUSED().map((p, n) => [...p, n])) {
         const r = await createPicked({ answer });
-        assert.deepEqual(r.said, [null, `Couldn't create account "Beta Corp". ${words}`], `REGRESSION: ${words}`);
+        // Moved in §0.261: only the server's own 4xx is "Couldn't create"; any other answer may have created it.
+        assert.deepEqual(r.said, [null, i === 0 ? `Couldn't create account "Beta Corp". ${words}` : `The account "Beta Corp" may have been created — reload the page to see whether it was: ${words}`], `REGRESSION: ${words}`);
         assert.deepEqual([r.picked, r.list.length], [[], 1], 'nothing made, nothing picked');
         assert.equal(r.creating[r.creating.length - 1], false);
     }
@@ -3772,7 +3852,8 @@ test('Part 10: WIRING — every window reads the ok check first and says the hou
         order(s, "if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })", `.catch(err => console.error('Failed to load ${list}:', err));`);
     }
     for (const f of FILES.slice(4)) assert.ok(!code(read(f)).includes("'HTTP '"), `${f}: REGRESSION — "HTTP N" said`);
-    assert.ok(code(read('src/components/rails/AccountPicker.jsx')).includes('onError && onError(`Couldn\'t create account "${name}". ${failureWords(e)}`);'));
+    // Moved in §0.261: a throw proves nothing — said as maybe.
+    assert.ok(code(read('src/components/rails/AccountPicker.jsx')).includes('onError && onError(`The account "${name}" may have been created — reload the page to see whether it was: ${failureWords(e)}`);'));
     assert.ok(code(read('src/Tabs/PastMerges.jsx')).includes('setError(`Past merges did not load — ${failureWords(e)}`)'));
 });
 
@@ -5875,16 +5956,18 @@ const p12bProfileSave = async ({ answer, switchOrg = false }) => {
     const did = { sent: [], errors: [], saving: [] };
     const org = { now: 'org_a' };
     const h = p12aFn(P12B_HEADER, '    const saveProfile = async (updates) => {', '\n    };', '\n    };',
-        ['myProfile', 'setProfileError', 'requestOrg', 'setProfileSaving', 'setMyProfile', 'dbFetch', 'readRefusal', 'failureWords', 'stillOrg', 'setSettings'], 'saveProfile')(
-        me.value, (v) => did.errors.push(v), () => 'org_a', (v) => did.saving.push(v), me.set, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, (o) => o === org.now, settings.set);
+        ['myProfile', 'setProfileError', 'requestOrg', 'setProfileSaving', 'setMyProfile', 'dbFetch', 'readRefusal', 'failureWords', 'stillOrg', 'setSettings', 'maybeSaid', 'writeRefusal'], 'saveProfile')(
+        me.value, (v) => did.errors.push(v), () => 'org_a', (v) => did.saving.push(v), me.set, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords, (o) => o === org.now, settings.set, maybeSaid, writeRefusal);
     await h({ timezone: 'Europe/London' });
     return { ...did, said: did.errors.filter(Boolean), tz: me.value.timezone, roster: settings.value.users.map((u) => u.name) };
 };
 
 test('Part 12b: the profile panel\'s save — a refusal in the house words, the change put back; landed, the stored row; an answer that cannot be read keeps the change; after an org switch nothing — RUN', async () => {
-    for (const [answer, words] of p12bRefused()) {
+    // Moved in §0.261 (the unknown-save rule): only the server's own 4xx is put back; any other answer keeps it, said as maybe.
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const r = await p12bProfileSave({ answer });
-        assert.deepEqual([r.said, r.tz, r.saving], [[`Not saved — ${words}`], 'America/Chicago', [true, false]], `REGRESSION: ${words}`);
+        const expected = i === 0 ? [[`Not saved — ${words}`], 'America/Chicago'] : [[maybeSaid('Your profile', 'saved', words)], 'Europe/London'];
+        assert.deepEqual([r.said, r.tz, r.saving], [...expected, [true, false]], `REGRESSION: ${words}`);
     }
     const landed = await p12bProfileSave({ answer: onceOf(200, { user: { id: 'usr_1', name: 'Karen Lee', timezone: 'Europe/London' } }) });
     assert.deepEqual([landed.said, landed.tz, landed.roster], [[], 'Europe/London', ['Karen Lee']]);
@@ -5914,11 +5997,11 @@ const p12bHeaderDisconnect = async ({ answer, switchOrg = false, refetch = null,
     const org = { now: 'org_a' };
     const h = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
         ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
-            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'], 'disconnectCalendar')(
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal'], 'disconnectCalendar')(
         { id: 'cc_1' }, () => 'org_a', (o) => o === org.now, (v) => did.busy.push(v), (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
         (v) => did.conn.push(v), async () => { did.refetched++; did.steps.push('refetch'); if (refetch) await refetch(); },
         (v) => { did.connected.push(v); did.steps.push(`connected:${v}`); }, (v) => { did.events.push(v); did.steps.push('events'); },
-        (v) => { did.disconnected.push(v); did.steps.push(`disconnected:${v}`); }, () => { did.dropAt.push(did.steps.length); }, loading);
+        (v) => { did.disconnected.push(v); did.steps.push(`disconnected:${v}`); }, () => { did.dropAt.push(did.steps.length); }, loading, maybeSaid, writeRefusal);
     await h();
     return { ...did, said: did.errors.filter(Boolean) };
 };
@@ -5936,9 +6019,10 @@ test('Part 12b: the profile panel\'s email-logging address and calendar Disconne
         const r = await p12bBcc({ answer, switchOrg: true });
         assert.deepEqual([r.bcc, r.loaded], [[], []], 'REGRESSION: the last org\'s address shown after a switch');
     }
-    for (const [answer, words] of p12bRefused()) {
+    // Moved in §0.261: only the server's own 4xx is "Not disconnected"; any other answer may have disconnected it.
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const r = await p12bHeaderDisconnect({ answer });
-        assert.deepEqual([r.said, r.conn, r.refetched, r.busy], [[`Not disconnected — ${words}`], [], 0, [true, false]], `REGRESSION: ${words}`);
+        assert.deepEqual([r.said, r.conn, r.refetched, r.busy], [[i === 0 ? `Not disconnected — ${words}` : maybeSaid('The calendar', 'disconnected', words)], [], 0, [true, false]], `REGRESSION: ${words}`);
     }
     for (const answer of [onceOf(200, { ok: true }), P11_UNREADABLE()]) {
         const r = await p12bHeaderDisconnect({ answer });
@@ -5959,16 +6043,17 @@ const p12bInvite = async (answer) => {
     const fn = between(s, START, '\n                    }}\n                />').slice(START.length);
     const did = { sent: [] };
     const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'setSettings', 'onProgress', 'addToSettingsList',
-        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', `return async (invites) => {${fn}\n};`)(
+        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'heardRefusal', `return async (invites) => {${fn}\n};`)(
         () => 'org_a', () => true, () => 'stopped', emptyReceipt, p10Fetch(did, answer, { now: 'org_a' }, false), failureWords, refusalWords, () => {}, () => {},
-        async () => ({ ok: true }), (l) => l, { teams: [], revs: {} }, 'twice');
+        async () => ({ ok: true }), (l) => l, { teams: [], revs: {} }, 'twice', heardRefusal);
     return run([{ email: 'a@x.test' }, { email: 'b@x.test' }]);
 };
 
 test('Part 12b: the invitation import — a request that stops the run is said in the house words (its ref kept), never "HTTP N" or a raw message; the per-invite refusals still read — RUN', async () => {
-    for (const [answer, words] of p12bRefused()) {
+    // Moved in §0.261: a request whose answer proves nothing may have sent its invitations — counted maybe, never "not sent".
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const { receipt } = await p12bInvite(answer);
-        assert.deepEqual([receipt.error, receipt.failed, receipt.created], [`Sending stopped: ${words}`, 2, 0], `REGRESSION: ${words}`);
+        assert.deepEqual([receipt.error, receipt.failed, receipt.maybe, receipt.created], [`Sending stopped: ${words}`, i === 0 ? 2 : 0, i === 0 ? 0 : 2, 0], `REGRESSION: ${words}`);
     }
     const part = await p12bInvite(onceOf(201, { invited: [{ id: 'usr_9', email: 'a@x.test' }], errors: [{ email: 'b@x.test', error: 'Already a member.' }] }));
     assert.deepEqual([part.receipt.error, part.receipt.created, part.receipt.failed, part.refusals], [null, 1, 1, [{ email: 'b@x.test', error: 'Already a member.' }]]);
@@ -5984,17 +6069,19 @@ const p12bClaimSubmit = async ({ answer, switchOrg = false }) => {
     const did = { sent: [], errors: [], busy: [] };
     const org = { now: 'org_a' };
     const run = new Function('setSpiffClaimBusy', 'spiff', 'requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setSpiffClaimError', 'setSpiffClaims', 'newClaim', 'console',
+        'refusalWords', 'heardRefusal', 'landedBefore', 'maybeSaid',
         `return async () => {\n${body}\n};`)(
         (v) => did.busy.push(v), { id: 'sp_1' }, () => 'org_a', (o) => o === org.now, p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
-        (v) => did.errors.push(v), claims.set, P12B_NEW_CLAIM, quiet);
+        (v) => did.errors.push(v), claims.set, P12B_NEW_CLAIM, quiet, refusalWords, heardRefusal, landedBefore, maybeSaid);
     await run();
     return { ...did, said: did.errors.filter(Boolean), claims: claims.value };
 };
 
 test('Part 12b: the SPIFF claim — a refusal in the house words with its ref, never "network error. Nothing was saved."; filed with an answer that cannot be read, the claim as sent; after an org switch nothing — RUN', async () => {
-    for (const [answer, words] of p12bRefused()) {
+    // Moved in §0.261: only the server's own 4xx is "not submitted"; any other answer may have filed it.
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const r = await p12bClaimSubmit({ answer });
-        assert.deepEqual([r.said, r.claims, r.busy], [[`Claim not submitted — ${words}`], [], ['sp_1', null]], `REGRESSION: ${words}`);
+        assert.deepEqual([r.said, r.claims, r.busy], [[i === 0 ? `Claim not submitted — ${words}` : maybeSaid('The claim', 'submitted', words)], [], ['sp_1', null]], `REGRESSION: ${words}`);
     }
     const FILED = { ...P12B_NEW_CLAIM, id: 'claim_srv' };
     assert.deepEqual((await p12bClaimSubmit({ answer: onceOf(201, { spiffClaim: FILED }) })).claims, [FILED]);
@@ -6007,7 +6094,7 @@ test('Part 12b: the SPIFF claim — a refusal in the house words with its ref, n
 
 test('Part 12b: WIRING — the profile panel and the layer: no "HTTP N", no raw e.message; the per-invite read kept (named for the guard), its stop in refusalWords\' words', () => {
     const h = code(read(P12B_HEADER));
-    assert.ok(h.includes("import { readRefusal, failureWords } from '../../utils/refusalWords.js';"));
+    assert.ok(h.includes("import { readRefusal, failureWords, maybeSaid, writeRefusal } from '../../utils/refusalWords.js';"));   // §0.261
     assert.ok(!/HTTP \$\{|'HTTP '/.test(h) && !P12B_NO_RAW.test(h), 'REGRESSION: "HTTP N" or a raw e.message in the profile panel');
     assert.ok(!h.includes('the change did not reach the server'), 'the old offline words');
     const m = code(read(P12B_LAYER));
@@ -6282,7 +6369,8 @@ test('Part 12c: Q4 — one sentence for a request that never left: NETWORK_ERROR
     globalThis.window = {};
     globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
     try {
-        assert.deepEqual(await p12cDbWrite('/x', { method: 'PUT' }), { ok: false, status: 0, error: 'The server could not be reached.' });
+        // §0.261: its answer proves nothing — unknown, never landed.
+        assert.deepEqual(await p12cDbWrite('/x', { method: 'PUT' }), { ok: false, status: 0, error: 'The server could not be reached.', unknown: true, landed: false });
     } finally {
         globalThis.fetch = hadFetch;
         if (hadWindow === undefined) delete globalThis.window; else globalThis.window = hadWindow;
@@ -6848,14 +6936,15 @@ const p12fxIImport = async ({ invites, answers, teamsSave = { ok: true },
     };
     const addToSettingsList = async (key, update) => { did.teams = update(P12FXI_TEAMS).teams; return teamsSave; };
     const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'readRefusal', 'setSettings', 'onProgress', 'addToSettingsList',
-        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', `return async (invites) => {${fn}\n};`)(
+        'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', 'heardRefusal', `return async (invites) => {${fn}\n};`)(
         () => 'org_a', () => true, () => 'stopped', emptyReceipt, dbFetch, failureWords, refusalWords, readRefusal, settingsState.set, (a, b) => did.progress.push([a, b]),
-        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster);
+        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster, heardRefusal);
     const out = await run(invites);
     return { ...out, ...did, users: settingsState.value.users };
 };
 const p12fxIPeople = (n, teamEvery = 0) => Array.from({ length: n }, (_, i) => ({ email: `p${i}@x.test`, ...(teamEvery && i % teamEvery === 0 ? { team: 'East', teamId: 't1' } : {}) }));
-const p12fxIInvariant = (r) => assert.equal(r.attempted, r.created + r.updated + r.failed + r.unread, 'attempted === created + updated + failed + unread');
+// + maybe since §0.261 (the unknown-save rule): sent, its answer proving nothing — may have been sent, never failed.
+const p12fxIInvariant = (r) => assert.equal(r.attempted, r.created + r.updated + r.failed + r.unread + (r.maybe || 0), 'attempted === created + updated + failed + unread + maybe');
 
 test('Part 12 fix I: the invitation import — a 201 whose answer cannot be read is counted as sent unread, never as not sent; the run goes on; the next request still counted — RUN', async () => {
     const people = p12fxIPeople(12, 4);   // p0, p4, p8 name East (the first request)
@@ -6890,10 +6979,12 @@ test('Part 12 fix I: the invitation import — a 201 whose answer cannot be read
     assert.equal(both.warning, 'The invitations went out, but the team list was not updated — Forbidden '
         // Moved in §0.249 (review fixes, last pass, F2): the team sentence asks the Admin to check the Teams page — no roster row proves who is on no list.
         + "2 whose answers could not be read named a team — check on the Teams page that they are on their teams' lists.");
-    // A request that never landed still stops the run, the rest counted as not sent — never as unread.
-    for (const [answer, words] of p12bRefused()) {
+    // A request that never landed still stops the run, the rest counted as not sent — never as unread. Moved in §0.261: the
+    // stopping request's own, its answer proving nothing (anything but the server's own 4xx), may have been sent — maybe.
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const stop = await p12fxIImport({ invites: p12fxIPeople(2), answers: [answer] });
-        assert.deepEqual([stop.receipt.failed, stop.receipt.unread, stop.receipt.error], [2, 0, `Sending stopped: ${words}`], `REGRESSION: ${words}`);
+        assert.deepEqual([stop.receipt.failed, stop.receipt.maybe, stop.receipt.unread, stop.receipt.error], [i === 0 ? 2 : 0, i === 0 ? 0 : 2, 0, `Sending stopped: ${words}`], `REGRESSION: ${words}`);
+        p12fxIInvariant(stop.receipt);
     }
 });
 
@@ -7192,8 +7283,10 @@ test('Part 12 fixes (L): WIRING — the Settings load and the bulk importer say 
     assert.ok(st.includes('if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));'));
     assert.ok(!/'HTTP '|err\?\.message|the request failed/.test(st), 'REGRESSION: "HTTP N" or a raw message');
     const bk = code(read(P12FXL_BULK));
-    assert.ok(bk.includes("import { failureWords, refusalWords } from './refusalWords.js';"));
-    assert.equal(count(bk, 'if (!r.ok) { error = refusalWords(r, body); break; }'), 2, 'the POST and the PUT');
+    // Moved in §0.261 (the unknown-save rule): a refused chunk whose answer proved nothing counts its rows unsure, never failed.
+    assert.ok(bk.includes("import { failureWords, refusalWords, heardRefusal } from './refusalWords.js';"));
+    assert.equal(count(bk, 'if (!r.ok) { error = refusalWords(r, body); if (!heardRefusal(r.status, body)) unsure = chunk.length; break; }'), 2, 'the POST and the PUT');
+    assert.equal(count(bk, '} catch (e) { error = failureWords(e); unsure = chunk.length; break; }'), 2, 'a chunk that threw, both');
     assert.ok(!/errorFrom|Bulk (import|update) failed/.test(bk), 'REGRESSION: the importer\'s own words');
 });
 
@@ -7788,9 +7881,9 @@ const p12fxI2Import = async ({ invites, posts, roster, switchAt = null, teamsSav
     };
     const addToSettingsList = async (key, update) => { did.teams = update(P12FXI_TEAMS).teams; return teamsSave; };
     const run = new Function('requestOrg', 'stillOrg', 'stopped', 'emptyReceipt', 'dbFetch', 'failureWords', 'refusalWords', 'readRefusal', 'setSettings', 'onProgress',
-        'addToSettingsList', 'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', `return async (invites) => {${fn}\n};`)(
+        'addToSettingsList', 'teamsWithMembers', 'settings', 'TEAMS_CHANGED_TWICE', 'unreadOnRoster', 'heardRefusal', `return async (invites) => {${fn}\n};`)(
         () => 'org_a', (o) => o === org.now, () => 'stopped', emptyReceipt, dbFetch, failureWords, refusalWords, readRefusal, settingsState.set, () => {},
-        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster);
+        addToSettingsList, teamsWithMembers, { teams: P12FXI_TEAMS, revs: {} }, 'twice', unreadOnRoster, heardRefusal);
     const out = await run(invites);
     return { out, ...did, users: settingsState.value.users };
 };
@@ -7819,8 +7912,9 @@ test('Part 12 fix I2: the invitation import — after a request answered unread 
         posts: [p12fxIUnreadable(), onceOf(500, { error: 'Internal server error', requestId: 'r2' })] });
     // Moved in round 3 (I3): the roster read again counts the first request exactly — 2 sent, 8 not, then the 2 never sent.
     // Moved in round 4 (I4): the 2 on the roster are on it — invited by this import or before it — not proven sent.
-    assert.deepEqual([stop.out.receipt.unread, stop.out.receipt.onRoster, stop.out.receipt.created, stop.out.receipt.failed, stop.out.receipt.error, stop.reads.length, stop.users],
-        [2, 2, 0, 10, 'Sending stopped: Internal server error (ref r2)', 1, P12FXI2_ROSTER]);
+    // Moved in §0.261: the stopping request's 2, its 500 proving nothing, may have been sent — maybe, not failed.
+    assert.deepEqual([stop.out.receipt.unread, stop.out.receipt.onRoster, stop.out.receipt.created, stop.out.receipt.failed, stop.out.receipt.maybe, stop.out.receipt.error, stop.reads.length, stop.users],
+        [2, 2, 0, 8, 2, 'Sending stopped: Internal server error (ref r2)', 1, P12FXI2_ROSTER]);
     // No request answered unread: no roster read; the rows the server named join the roster as before.
     const read2 = await p12fxI2Import({ invites: p12fxIPeople(2), roster: onceOf(200, { users: [] }),
         posts: [onceOf(201, { invited: [{ id: 'usr_x', email: 'p0@x.test' }, { id: 'usr_y', email: 'p1@x.test' }], errors: [] })] });
@@ -7903,7 +7997,7 @@ test('Part 12 fix I2: WIRING — the roster read again after the last request, o
     assert.equal(count(h, "dbFetch('/.netlify/functions/users')"), 1, 'one roster read');
     assert.ok(l.includes('users={settings.users || []}'), 'the duplicate check reads the roster set here');
     const rc = read('src/utils/importReceipt.js');
-    assert.ok(rc.includes('    attempted:   0,      // created + updated + failed + unread\n'), 'REGRESSION: the field comment leaves out unread');
+    assert.ok(rc.includes('    attempted:   0,      // created + updated + failed + unread + maybe\n'), 'REGRESSION: the field comment leaves out unread');   // + maybe since §0.261
     assert.ok(rc.includes('//     attempted === created + updated + failed + unread'));
 });
 
@@ -7931,9 +8025,9 @@ const p12fxC2Flow = async ({ deleteAnswer, readAnswer, switchOrg = false }) => {
         (v) => { st.connected = v; }, (v) => { st.events = v; }, gen, (v) => { st.read = v; });
     const disconnect = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
         ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
-            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'], 'disconnectCalendar')(
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal'], 'disconnectCalendar')(
         st.conn, () => 'org_a', (o) => o === org.now, () => {}, (v) => { if (v) st.said.push(v); }, p10Fetch(st, deleteAnswer, org, switchOrg), readRefusal, failureWords,
-        (v) => { st.conn = v; }, fetchCal, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; }, () => { gen.current += 1; }, false);
+        (v) => { st.conn = v; }, fetchCal, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; }, () => { gen.current += 1; }, false, maybeSaid, writeRefusal);
     await disconnect();
     const panel = p12fxCPanel({ loading: st.loading, error: st.error, connected: st.connected, conn: st.conn, disconnected: st.disconnected, read: st.read });
     return { ...st, panel };
@@ -7944,9 +8038,10 @@ test('Part 12 fix C2: a Disconnect that landed sets calendarConnected false, its
     assert.deepEqual([landed.connected, landed.events, landed.disconnected], [[false], [[]], [true]],
         'REGRESSION: a landed Disconnect left calendarConnected to the re-read — a failed one kept "Connected · syncing"');
     assert.deepEqual(landed.steps, ['connected:false', 'events', 'disconnected:true', 'refetch'], 'known at once, before the re-read');
-    for (const [answer, words] of p12bRefused()) {
+    // Moved in §0.261: an answer that proves nothing is said as maybe — still never taken as landed.
+    for (const [answer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const r = await p12bHeaderDisconnect({ answer });
-        assert.deepEqual([r.said, r.connected, r.events, r.disconnected], [[`Not disconnected — ${words}`], [], [], []], `REGRESSION: a refused Disconnect taken as landed — ${words}`);
+        assert.deepEqual([r.said, r.connected, r.events, r.disconnected], [[i === 0 ? `Not disconnected — ${words}` : maybeSaid('The calendar', 'disconnected', words)], [], [], []], `REGRESSION: a refused Disconnect taken as landed — ${words}`);
     }
     for (const answer of [onceOf(200, { ok: true }), UNSENT()]) {
         const r = await p12bHeaderDisconnect({ answer, switchOrg: true });
@@ -7963,9 +8058,10 @@ test('Part 12 fix C2: a landed Disconnect whose re-read fails says "Disconnected
     }
     const reread = await p12fxC2Flow({ deleteAnswer: onceOf(200, { ok: true }), readAnswer: onceOf(200, { events: [], connected: false }) });
     assert.deepEqual([reread.connected, reread.error, reread.panel.status, reread.panel.pill], [false, null, 'Disconnected', 'OFF']);
-    for (const [deleteAnswer, words] of p12bRefused()) {
+    // Moved in §0.261: an answer that proves nothing is said as maybe — the connection still drawn as read, nothing re-read.
+    for (const [deleteAnswer, words, i] of p12bRefused().map((p, n) => [...p, n])) {
         const r = await p12fxC2Flow({ deleteAnswer, readAnswer: onceOf(200, { events: [p12fxC2Ev], connected: true }) });
-        assert.deepEqual([r.said, r.connected, r.events, r.disconnected, r.sent], [[`Not disconnected — ${words}`], true, [p12fxC2Ev], false, ['DELETE']], `REGRESSION: ${words}`);
+        assert.deepEqual([r.said, r.connected, r.events, r.disconnected, r.sent], [[i === 0 ? `Not disconnected — ${words}` : maybeSaid('The calendar', 'disconnected', words)], true, [p12fxC2Ev], false, ['DELETE']], `REGRESSION: ${words}`);
     }
 });
 
@@ -8259,13 +8355,14 @@ const p12fxL2DoImport = async (onImport, leads = p12fxL2Leads(3)) => {
     await doImport();
     return did;
 };
-const P12FXL2_PARTIAL = '400 leads created. 500 did not save. The server returned 502.';
+// Moved in §0.261 (the unknown-save rule): the refused chunk's 400 may have saved (a page proves nothing); the 100 never sent did not.
+const P12FXL2_PARTIAL = '400 leads created. 100 did not save. 400 may have saved — reload the page to see whether they did. The server returned 502.';
 
 test('Part 12 fixes, round 2 (L2): the lead import — a chunk refused after earlier ones landed ends on the receipt: the landed leads listed, how many saved in the house words; clean, the receipt — RUN', async () => {
     const partial = p12fxL2Handler({ answers: ['ok', P11_PAGE()] });
     const thrown = await partial.onImport(p12fxL2Leads(900)).then(() => null, (e) => e);
     assert.ok(thrown instanceof P12FXL2_IMPORT_ERROR, 'REGRESSION: the words alone thrown — no count of the leads that landed');
-    assert.deepEqual([thrown.receipt.created, thrown.receipt.failed, thrown.receipt.attempted, thrown.receipt.error], [400, 500, 900, 'The server returned 502.']);
+    assert.deepEqual([thrown.receipt.created, thrown.receipt.failed, thrown.receipt.maybe, thrown.receipt.attempted, thrown.receipt.error], [400, 100, 400, 900, 'The server returned 502.']);
     assert.equal(p12fxL2Describe(thrown.receipt, 'lead'), P12FXL2_PARTIAL);
     assert.deepEqual(partial.did.sent.map((x) => x[2]), [400, 400], 'the third chunk is never sent');
     assert.equal(partial.did.leads.value.length, 400, 'the leads that landed reach the list before the failure is said');
@@ -8274,7 +8371,7 @@ test('Part 12 fixes, round 2 (L2): the lead import — a chunk refused after ear
         assert.deepEqual([e?.receipt?.created, e?.receipt?.error], [400, words]);
     }
     const first = await p12fxL2Handler({ answers: [onceOf(500, { error: 'Internal server error', requestId: 'r1' })] }).onImport(p12fxL2Leads(3)).then(() => null, (x) => x);
-    assert.deepEqual([first?.receipt?.created, first?.receipt?.failed], [0, 3], 'nothing landed: a receipt of none');
+    assert.deepEqual([first?.receipt?.created, first?.receipt?.failed, first?.receipt?.maybe], [0, 0, 3], 'nothing known landed: a receipt of none — the 3 may have saved (§0.261)');
     const clean = p12fxL2Handler({ answers: ['ok', 'ok', 'ok'] });
     const receipt = await clean.onImport(p12fxL2Leads(900));
     assert.deepEqual([receipt.created, receipt.failed, receipt.error, clean.did.leads.value.length], [900, 0, null, 900], 'clean: the receipt is the answer');
@@ -8287,11 +8384,15 @@ test('Part 12 fixes, round 2 (L2): the lead import — a chunk refused after ear
 test('Part 12 fixes, round 2 (L2): the lead import modal — once any lead landed the Results say how many, and no second Import re-sends them; nothing landed, Preview says why; a failure in plain words — RUN', async () => {
     const run = await p12fxL2DoImport(p12fxL2Handler({ answers: ['ok', P11_PAGE()] }).onImport, p12fxL2Leads(900));
     assert.deepEqual(run.steps, ['results'], 'REGRESSION: stayed on Preview — its Import re-sends the 400 leads that landed');
-    assert.deepEqual(run.stats, [{ added: 400, failed: 500, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: null }]);
+    assert.deepEqual(run.stats, [{ added: 400, failed: 100, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: null }]);
     assert.deepEqual([run.errors, run.importing], [[''], [true, false]]);
+    // Moved in §0.261: a page proves nothing — the 3 may have saved, said on the Results, and no second Import re-sends them.
     const none = await p12fxL2DoImport(p12fxL2Handler({ answers: [P11_PAGE()] }).onImport);
-    assert.deepEqual([none.steps, none.stats, none.errors], [[], [], ['', 'Import failed — Nothing was saved. 3 did not save. The server returned 502.']],
-        'nothing landed: Preview says it, and Import may try again');
+    assert.deepEqual([none.steps, none.stats, none.errors], [['results'], [{ added: 0, failed: 0, said: 'Nothing was saved. 3 may have saved — reload the page to see whether they did. The server returned 502.', skipped: 1, errors: ['Row 5: missing first and last name'], owners: null }], ['']],
+        'nothing known landed, but may have: the Results say it, no Import again');
+    const refusedFirst = await p12fxL2DoImport(p12fxL2Handler({ answers: [onceOf(400, { error: 'Bad rows' })] }).onImport);
+    assert.deepEqual([refusedFirst.steps, refusedFirst.errors], [[], ['', 'Import failed — Nothing was saved. 3 did not save. Bad rows']],
+        'the server\'s own refusal: Preview says it, and Import may try again');
     for (const [thrown, words] of [[UNSENT(), 'The server could not be reached.'], [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.'],
         [new Error('Internal server error (ref r1)'), 'Internal server error (ref r1)']]) {
         const r = await p12fxL2DoImport(async () => { throw thrown; });
@@ -8897,7 +8998,7 @@ const p12fxC3Ev = { id: 'ev_9', summary: 'Old connection meeting' };
 const P12FXC3_FETCH_PARAMS = ['requestOrg', 'stillOrg', 'setCalendarLoading', 'setCalendarError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords',
     'setCalendarConnected', 'setCalendarEvents', 'calendarReadGen', 'setCalendarRead'];
 const P12FXC3_DISCONNECT_PARAMS = ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn',
-    'fetchCalendarEvents', 'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading'];
+    'fetchCalendarEvents', 'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal'];
 // App's dropCalendarReads, built from its own source over the sequence handed in.
 const p12fxC3Drop = (gen) => new Function('calendarReadGen',
     `${between(code(read(P12FXC3_APP)), '    const dropCalendarReads = ', ';\n')};\nreturn dropCalendarReads;`)(gen);
@@ -8985,7 +9086,7 @@ test('Part 12 fix C3: a landed Disconnect moves App\'s read sequence on — a re
         const disconnect = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };', P12FXC3_DISCONNECT_PARAMS, 'disconnectCalendar')(
             st.conn, () => 'org_a', () => true, () => {}, (v) => { if (v) st.said.push(v); }, dbFetch, readRefusal, failureWords,
             (v) => { st.conn = v; }, refetch ? fetchCal : null, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; },
-            p12fxC3Drop(gen), false);
+            p12fxC3Drop(gen), false, maybeSaid, writeRefusal);
         const pressed = disconnect();        // pressed with no read in flight
         await settle();
         const stale = fetchCal();            // a Refresh while the DELETE is out
@@ -9317,7 +9418,7 @@ test('Part 12 fixes, round 3 (L3): the lead import\'s Results say the owner name
     // Owner names kept across the chunks, each once, then a later chunk refused: partial, with its lines.
     const partial = await p12fxL2DoImport(p12fxL2Handler({ answers: [p12fxL3Answer(p12fxL3Ids(0, 400), { unmatchedOwners: ['Jon Smith'] }), P11_PAGE()] }).onImport,
         p12fxL2Leads(900));
-    assert.deepEqual(partial.stats, [{ added: 400, failed: 500, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: [P12FXL3_NO_MEMBER] }],
+    assert.deepEqual(partial.stats, [{ added: 400, failed: 100, said: P12FXL2_PARTIAL, skipped: 1, errors: ['Row 5: missing first and last name'], owners: [P12FXL3_NO_MEMBER] }],
         'REGRESSION: a partial import drops the owner names of the leads that landed');
     const none = await p12fxL2DoImport(p12fxL2Handler({ answers: ['ok'] }).onImport);
     assert.equal(none.stats[0].owners, null, 'no owner names: no lines');
@@ -10663,7 +10764,8 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
     assert.equal(count(s, 'noteNotDeleted(r)'), 1, 'the Delete\'s banner says it');
     assert.ok(!s.includes('`Not deleted — ${r.error}` }'), 'REGRESSION: the Delete\'s own "Not deleted" over every refusal');
     const hook = code(read('src/hooks/useCoachingNotes.js'));
-    assert.ok(hook.includes('if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };'), 'the hook hands the status beside the words');
+    // Moved in §0.261: beside them, whether the answer proved nothing and whether it says already stored.
+    assert.ok(hook.includes('if (!res.ok) { const refused = await res.json().catch(() => null); return { ok: false, status: res.status, error: refusalWords(res, refused), unknown: !heardRefusal(res.status, refused), landed: landedBefore(res.status, refused) }; }'), 'the hook hands the status beside the words');
     // The dash is the character, never its escape (a backslash and "u2014" built here so no escape is typed).
     const added = [between(s, P12FXF4_OWN, '\nconst claimUnanswered'), note, quotas, upd, user, extra].join('\n');
     assert.ok(!added.includes(`${String.fromCharCode(92)}u2014`), 'an escaped dash in the lines this pass wrote');

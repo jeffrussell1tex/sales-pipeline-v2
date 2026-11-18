@@ -457,7 +457,13 @@ One commit per verified batch; doc patch in the same commit.
   forecast call, commission or SPIFF save or coaching-note Delete says
   "Not"); every other save still says "Not saved" and readRefusal's words
   for any refused answer, a thrown one "The server could not be reached."
-  — one rule decided 16 Nov (Jeff: "A"), to build, OPEN_ITEMS §4.8; a message names who acted
+  — one rule decided 16 Nov (Jeff: "A"): since §0.261 every save of the CRM core
+  too — only a 4xx in the server's words (`heardRefusal`) is "Not saved"; any
+  other answer keeps the change and says it may have been (`maybeSaid`); a
+  create keeps one id, and a 409 `code: 'idInUse'` (this org only,
+  `ownIdTaken`) is an earlier press that landed (THE GUARD,
+  tests/unknown-save.test.mjs; guide §18b134); Leads, Quotes, Reports, the
+  Sales Manager, Dispatch and Settings to build (Parts 3-5, OPEN_ITEMS §4.8); a message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the

@@ -896,8 +896,17 @@ export const handler = async (event) => {
                     } catch (err) {
                         // Clerk throws if the email already belongs to a signed-up member
                         // (no invitation needed) — surface that message per-email.
-                        const clerkMsg = err?.errors?.[0]?.message || err.message || 'Invite failed';
-                        errors.push({ email, error: clerkMsg });
+                        // Never a raw failure's text (state §0.261, docs/design/unknown-save Q4): a database or code error's
+                        // message could carry driver text to the member. Clerk's own refusal words pass; anything else is
+                        // logged with a ref, said as one sentence with that ref.
+                        const clerkMsg = err?.errors?.[0]?.message;
+                        let said = typeof clerkMsg === 'string' && clerkMsg.trim() ? clerkMsg : '';
+                        if (!said) {
+                            const ref = randomUUID();
+                            console.error(`[users invite] error ${ref}:`, err?.message, err?.stack);
+                            said = `The server could not finish this invitation (ref ${ref}).`;
+                        }
+                        errors.push({ email, error: said });
                     }
                 }
 

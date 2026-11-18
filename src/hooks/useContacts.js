@@ -3,7 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { failureWords, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
 
 export function useContacts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
@@ -66,26 +66,30 @@ export function useContacts(deps) {
             if (opts.admin && !kept.length && goingIds.length === contacts.length) {
                 const r = await dbWrite('/.netlify/functions/contacts?clear=true', { method: 'DELETE' });
                 if (!stillOrg(askedOrg)) return;
-                if (!r.ok) failed.push(...going.map(c => ({ c, error: r.error })));
+                if (!r.ok) failed.push(...going.map(c => ({ c, error: r.error, unknown: r.unknown })));
             } else {
                 for (const c of going) {
                     if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
                     const r = await dbWrite(`/.netlify/functions/contacts?id=${c.id}`, { method: 'DELETE' });
-                    if (!r.ok) failed.push({ c, error: r.error });
+                    if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown });
                 }
                 if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             }
             let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
-                // What did not delete is put back, and the first refusal is shown — the server's
-                // open-deal refusal names the deal.
+                // What the server refused is put back, and the first refusal is shown — the server's open-deal refusal
+                // names the deal. One whose answer proves nothing may be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe.
+                const refused = failed.filter(f => !f.unknown), unsure = failed.filter(f => f.unknown);
                 setContacts(prev => {
                     const have = new Set(prev.map(c => c.id));
-                    return [...prev, ...failed.map(f => f.c).filter(c => !have.has(c.id))];
+                    return [...prev, ...refused.map(f => f.c).filter(c => !have.has(c.id))];
                 });
-                failNote = going.length === 1
-                    ? `Contact not deleted — ${failed[0].error}`
-                    : `${failed.length} of ${going.length} contacts not deleted — ${failed[0].error}`;
+                failNote = [
+                    refused.length ? (going.length === 1 ? `Contact not deleted — ${refused[0].error}`
+                        : `${refused.length} of ${going.length} contacts not deleted — ${refused[0].error}`) : '',
+                    unsure.length ? (going.length === 1 ? maybeSaid('The contact', 'deleted', unsure[0].error)
+                        : maybeSaid(`${unsure.length} of ${going.length} contacts`, 'deleted', unsure[0].error, true)) : '',
+                ].filter(Boolean).join(' ');
                 setUndoToast({ error: failNote });
                 if (failed.length === going.length) return;   // nothing deleted, nothing to undo
             }
@@ -110,15 +114,20 @@ export function useContacts(deps) {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ ...c, restore: true }),
                         });
-                        if (!rr.ok) notRestored.push({ c, error: rr.error });
+                        // Already stored (a 409 'idInUse') is back (§0.261).
+                        if (!rr.ok && !rr.landed) notRestored.push({ c, error: rr.error, unknown: rr.unknown });
                     }
                     if (!stillOrg(askedOrg)) return;
                     if (notRestored.length) {
-                        const gone = notRestored.map(n => n.c.id);
+                        // One whose answer proves nothing may be back (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept, said as maybe.
+                        const gone = notRestored.filter(n => !n.unknown).map(n => n.c.id);
                         setContacts(prev => prev.filter(c => !gone.includes(c.id)));   // undo did not take
-                        setUndoToast({ error: notRestored.length === 1
-                            ? `Could not restore ${nameOf(notRestored[0].c)} — ${notRestored[0].error}`
-                            : `${notRestored.length} contacts could not be restored — ${notRestored[0].error}` });
+                        const first = notRestored[0];
+                        setUndoToast({ error: first.unknown
+                            ? maybeSaid(notRestored.length === 1 ? nameOf(first.c) : `${notRestored.length} contacts`, 'restored', first.error, notRestored.length > 1)
+                            : notRestored.length === 1
+                                ? `Could not restore ${nameOf(first.c)} — ${first.error}`
+                                : `${notRestored.length} contacts could not be restored — ${first.error}` });
                     }
                 }
             );
@@ -136,7 +145,8 @@ export function useContacts(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the Company nobody touched left out (§0.198)
                 // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
-                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setContactModalError(why); setContactModalSaving(false); return; }
+                // Only a 4xx in the server's words wrote nothing; any other refused answer may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; setContactModalError(writeRefusal(res, body, `"${fullName || 'The contact'}"`).words); setContactModalSaving(false); return; }
                 const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
                 setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || shownRow(payload)) : c));
@@ -145,23 +155,30 @@ export function useContacts(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update contact:', err);
-                setContactModalError(failureWords(err));
+                setContactModalError(maybeSaid(`"${fullName || 'The contact'}"`, 'saved', failureWords(err)));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
             } finally { setContactModalSaving(false); }
         } else {
-            const newId = 'id_' + crypto.randomUUID();
+            // The rail's id, given when it opened (state §0.261, Part 6): a second press after an answer that proved nothing
+            // is the same contact — answered already stored if the first landed.
+            const newId = contactData.id || ('id_' + crypto.randomUUID());
             const newContact = { ...contactData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
-                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setContactModalError(why); setContactModalSaving(false); return; }   // as the edit's (§0.248)
-                const data = await res.json().catch(() => ({}));
+                // As the edit's (§0.248, §0.261); a second press answered already stored landed with the first: the list read again.
+                let data = null;
+                if (!res.ok) {
+                    const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
+                    if (!landedBefore(res.status, body)) { setContactModalError(writeRefusal(res, body, `"${fullName || 'The contact'}"`).words); setContactModalSaving(false); return; }
+                    loadContacts(() => {});
+                } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                setContacts(prev => [...prev, data.contact || newContact]);
+                if (data) setContacts(prev => [...prev, data.contact || newContact]);
                 addAudit('create', 'contact', newId, fullName || newId, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save contact:', err);
-                setContactModalError(failureWords(err));
+                setContactModalError(maybeSaid(`"${fullName || 'The contact'}"`, 'saved', failureWords(err)));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
             } finally { setContactModalSaving(false); }
         }
     };

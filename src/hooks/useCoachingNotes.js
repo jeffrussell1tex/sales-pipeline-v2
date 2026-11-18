@@ -14,7 +14,7 @@
 // from your manager" — it read as no notes.
 import { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore } from '../utils/refusalWords.js';
 
 const URL = '/.netlify/functions/coaching-notes';
 
@@ -26,9 +26,11 @@ const answered = async (send, { body = true } = {}) => {
         const res = await send();
         // The status beside the words (§0.249, the review's fixes, last pass): a screen tells the server's own refusal (a
         // 4xx in its words — nothing written) from an answer that may have written it (Sales Manager's noteNotDeleted).
-        if (!res.ok) return { ok: false, status: res.status, error: await readRefusal(res) };
-        return { ok: true, data: body ? await res.json() : null, status: res.status };
-    } catch (e) { return { ok: false, error: failureWords(e) }; }
+        // Since §0.261 (the unknown-save rule) whether the answer proves nothing — anything but the server's own 4xx — and
+        // whether it says the note is already stored (an earlier press landed). A landed answer that cannot be read is landed.
+        if (!res.ok) { const refused = await res.json().catch(() => null); return { ok: false, status: res.status, error: refusalWords(res, refused), unknown: !heardRefusal(res.status, refused), landed: landedBefore(res.status, refused) }; }
+        return { ok: true, data: body ? await res.json().catch(() => null) : null, status: res.status };
+    } catch (e) { return { ok: false, error: failureWords(e), unknown: true }; }
 };
 
 export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } = {}) {
@@ -80,6 +82,10 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
     const addCoachingNote = useCallback(async (payload) => {
         const askedOrg = requestOrg();
         const r = await answered(() => dbFetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }));
+        // Its id is the dialog's (Part 6): already stored, an earlier press landed — the list read again. One whose answer
+        // proves nothing may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): said so, the dialog kept for the same note.
+        if (!r.ok && r.landed) { if (stillOrg(askedOrg)) reload().catch(() => {}); return { ok: true, note: null, created: false }; }
+        if (!r.ok && r.unknown) return { ...r, error: `The note may have been saved — reload the page to see whether it was: ${r.error}` };
         if (!r.ok) return r;
         const note = r.data?.coachingNote;
         if (note && stillOrg(askedOrg)) setCoachingNotes(prev => [note, ...prev.filter(n => n.id !== note.id)]);

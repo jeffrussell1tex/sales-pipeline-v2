@@ -10,6 +10,7 @@ import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coac
 import { T } from '../tokens.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { pressNoticeOf } from '../utils/pressNotice.js';
+import { maybeSaid } from '../utils/refusalWords.js';
 import { startCalendarConnect } from '../utils/calendarConnect.js';
 // Pinned saved reports (state §0.135): the same engine and chart the Reports tab uses.
 import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
@@ -263,7 +264,8 @@ export default function HomeTab() {
     const markNoteRead = async (n) => {
         const askedOrg = requestOrg();
         const r = await markCoachingNoteRead(n.id);
-        if (!r.ok && stillOrg(askedOrg)) setPressNotices(list => [...list, pressNoticeOf('Coaching note', `Not marked read: ${r.error}`)]);
+        // An answer that proves nothing may have marked it (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+        if (!r.ok && stillOrg(askedOrg)) setPressNotices(list => [...list, pressNoticeOf('Coaching note', r.unknown ? maybeSaid('It', 'marked read', r.error) : `Not marked read: ${r.error}`)]);
     };
 
     // ── Task / calendar data ──────────────────────────────────

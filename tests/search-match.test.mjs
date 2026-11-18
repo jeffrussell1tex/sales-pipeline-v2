@@ -416,7 +416,8 @@ test("the account picker draws pickerRows: the deal window's filter and its site
     assert.ok(p.includes("import { T } from '../../tokens.js';"));
     // Moved pin (§0.248, docs/design/refusal-sweep Part 10): the ok check first in readRefusal's words, never "HTTP N";
     // the org check before the landed answer is written.
-    assert.ok(p.includes("            if (!res.ok) throw new Error(await readRefusal(res));\n            const data = await res.json().catch(() => ({}));\n            if (!stillOrg(askedOrg)) return;\n            const saved = data.account || newAccount;"));
+    // Moved in §0.261 (the unknown-save rule): the refusal's body read once — the server's own 4xx, else maybe; already stored, landed.
+    assert.ok(p.includes("                if (landedBefore(res.status, body)) { loadAccounts && loadAccounts(() => {}); pick(newAccount); return; }\n") && p.includes("            const data = await res.json().catch(() => ({}));\n            if (!stillOrg(askedOrg)) return;\n            const saved = data.account || newAccount;"));
 });
 
 test('the deal window: a site row fills Account with its parent and Site Name with itself; a site is still never the account', () => {

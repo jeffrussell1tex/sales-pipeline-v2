@@ -167,7 +167,8 @@ test('Pipeline\'s saved views are kept per org', () => {
 
 test('QuickLog mints a UUID, as every other record create does', () => {
     const s = code(read('src/components/layout/QuickLogFab.jsx'));
-    assert.ok(s.includes("id: 'id_' + crypto.randomUUID(),"));
+    // Moved in §0.261 (Part 6): one per draft, kept until it logs — a second press after a lost answer is the same activity.
+    assert.ok(s.includes("id: draftIdRef.current || (draftIdRef.current = 'id_' + crypto.randomUUID()),"));
     assert.ok(!/'act_' \+ Date\.now\(\)/.test(s), 'REGRESSION: an id two logs in one millisecond share');
 });
 

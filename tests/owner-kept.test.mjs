@@ -134,7 +134,8 @@ test('WORDS: the ambiguous-owner 409 says what to do, and carries no member\'s e
 
 test('DIALOG: the Closed Lost save answers the dialog — refused, it says why and rolls back only its deal; a new deal keeps one id', () => {
     const h = read('src/hooks/useOpportunities.js');
-    assert.ok(h.includes("setLostReasonModal({ pendingFormData: (editingOpp && editingOpp.id) ? enrichedData : { ...enrichedData, id: 'id_' + crypto.randomUUID() }, editingOpp });"), 'the id given once, when the dialog opens');
+    // Moved in §0.261: the deal window's own id (given when it opened, Part 6), else one given here.
+    assert.ok(h.includes("setLostReasonModal({ pendingFormData: (editingOpp && editingOpp.id) ? enrichedData : { ...enrichedData, id: enrichedData.id || ('id_' + crypto.randomUUID()) }, editingOpp });"), 'the id given once, when the dialog opens');
     const fn = between(h, 'const completeLostSave = async (', '\n    };\n');
     assert.ok(!fn.includes('setOppModalError('), 'never to the closed deal window');
     assert.ok(fn.includes('if (editingOppRef && editingOppRef.id) {'), 'a seeded deal with no id is new');

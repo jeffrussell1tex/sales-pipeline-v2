@@ -3,6 +3,7 @@ import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { checkLinks } from './_links.mjs';
 
 // A claim's deal and its SPIFF (state §0.204 — Jeff, 15 Oct: "Any of this org's, refuse"): a deal of this org,
@@ -111,6 +112,9 @@ export const handler = async (event) => {
             const [inserted] = await db.insert(spiffClaims)
                 .values({ ...claim, orgId })
                 .onConflictDoNothing({ target: spiffClaims.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(spiffClaims, claim.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.' }) };
             await auditAs(orgId, auth.userId, { action: 'spiff_claim.submitted', entityType: 'spiff_claim', entityId: inserted.id, entityName: `${inserted.repName} · ${inserted.spiffName || inserted.spiffId}`, detail: `${inserted.account || inserted.opportunityName || ''}${inserted.amount != null ? ` · $${Number(inserted.amount).toLocaleString()}` : ''}`.trim() || null });
             return { statusCode: 201, headers, body: JSON.stringify({ spiffClaim: inserted }) };

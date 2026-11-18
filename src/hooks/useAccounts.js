@@ -4,7 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
 import { tierUnder, branchTiers, parentRefusal, withTiers, withRows, parentsFirst, undoOfDeletes } from '../utils/accountParent.js';
 import { isMergeArchived } from '../utils/pickLink.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 
 // The accounts by id, as the tier rule reads them.
 const byIdOf = (list) => new Map((list || []).map(a => [a.id, a]));
@@ -90,7 +90,7 @@ export function useAccounts(deps) {
             for (const a of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
                 const r = await dbWrite(`/.netlify/functions/accounts?id=${a.id}`, { method: 'DELETE' });
-                if (!r.ok) failed.push({ a, error: r.error });
+                if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown });
                 else lifted.push(...(r.data?.retiered || []));
                 if (r.ok) answers.push(r.data || {});
             }
@@ -105,15 +105,20 @@ export function useAccounts(deps) {
             setAccounts(prev => withTiers(prev, lifted));
             let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
-                // What did not delete is put back, and the first refusal is shown — the
-                // server's open-deal refusal names the deal.
+                // What the server refused is put back, and the first refusal is shown — the server's open-deal refusal
+                // names the deal. One whose answer proves nothing may be gone (state §0.261, the unknown-save rule —
+                // Jeff's Q2: kept as done, said): it stays off the list, said as maybe; a reload shows it if it stayed.
+                const refused = failed.filter(f => !f.unknown), unsure = failed.filter(f => f.unknown);
                 setAccounts(prev => {
                     const have = new Set(prev.map(a => a.id));
-                    return [...prev, ...failed.map(f => f.a).filter(a => !have.has(a.id))];
+                    return [...prev, ...refused.map(f => f.a).filter(a => !have.has(a.id))];
                 });
-                failNote = going.length === 1
-                    ? `Account not deleted — ${failed[0].error}`
-                    : `${failed.length} of ${going.length} accounts not deleted — ${failed[0].error}`;
+                failNote = [
+                    refused.length ? (going.length === 1 ? `Account not deleted — ${refused[0].error}`
+                        : `${refused.length} of ${going.length} accounts not deleted — ${refused[0].error}`) : '',
+                    unsure.length ? (going.length === 1 ? maybeSaid('The account', 'deleted', unsure[0].error)
+                        : maybeSaid(`${unsure.length} of ${going.length} accounts`, 'deleted', unsure[0].error, true)) : '',
+                ].filter(Boolean).join(' ');
                 setUndoToast({ error: failNote });
                 if (!deleted.length) return;   // nothing deleted, nothing to undo
             }
@@ -146,6 +151,7 @@ export function useAccounts(deps) {
                     const notRestored = [];
                     const restored = [];   // the tiers the server gave back (D18, D21)
                     const answered = [];   // each account posted back, as the server wrote it
+                    let reread = false;    // one stored already (state §0.261: a 409 'idInUse' — it is there): the list read again
                     // Parents first: an account deleted with its own sub-account is posted back
                     // before it, since accounts.mjs now checks that a parent exists (state §0.198).
                     for (const a of parentsFirst(deleted)) {
@@ -155,7 +161,10 @@ export function useAccounts(deps) {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ ...a, restore: true }),
                         });
-                        if (!rr.ok) { notRestored.push({ a, error: rr.error }); continue; }
+                        // A restore answered that the account is already stored (landed) is back — read again below. One
+                        // whose answer proves nothing may be back (state §0.261): said as maybe, the list read again.
+                        if (!rr.ok && rr.landed) reread = true;
+                        else if (!rr.ok) { notRestored.push({ a, error: rr.error, unknown: rr.unknown }); continue; }
                         if (rr.data?.account) answered.push(rr.data.account);
                         for (const c of promoted.filter(p => p.parentId === a.id)) {
                             if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
@@ -164,7 +173,7 @@ export function useAccounts(deps) {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ id: c.id, parentAccountId: c.parentId, accountTier: c.tier, restore: true }),
                             });
-                            if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error });
+                            if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error, unknown: rp.unknown });
                             else restored.push(...(rp.data?.account ? [rp.data.account] : []), ...(rp.data?.retiered || []));
                         }
                     }
@@ -173,10 +182,11 @@ export function useAccounts(deps) {
                     setAccounts(prev => withRows(prev, answered));
                     if (notRestored.length) {
                         // Undo did not take, or took in part: say so, and show the list as the
-                        // server has it rather than a guess at it.
-                        setUndoToast({ error: `Could not restore ${notRestored[0].a.name} — ${notRestored[0].error}` });
-                        loadAccounts(() => {});
+                        // server has it rather than a guess at it. An answer that proves nothing is said as maybe (§0.261).
+                        const first = notRestored[0];
+                        setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });
                     }
+                    if (notRestored.length || reread) loadAccounts(() => {});
                 }
             );
             if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
@@ -219,7 +229,9 @@ export function useAccounts(deps) {
                 method = 'PUT'; auditAction = 'update'; auditId = editingSubAccount.id;
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
-                const newId = 'id_' + crypto.randomUUID();
+                // The rail's id, given when it opened (state §0.261, Part 6): a second press after an answer that proved
+                // nothing is the same account — the server answers 'idInUse' if the first landed.
+                const newId = formData.id || ('id_' + crypto.randomUUID());
                 // Its tier is the lowest above its parent's (D3, D21): a business unit under an
                 // account, a site under a business unit — the rule accounts.mjs applies too.
                 const tier = tierUnder(parentAccountForSub.id, byIdOf(accounts));
@@ -227,7 +239,7 @@ export function useAccounts(deps) {
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = 'Sub-account of ' + parentAccountForSub.name;
             } else {
-                const newId = 'id_' + crypto.randomUUID();
+                const newId = formData.id || ('id_' + crypto.randomUUID());   // as a sub-account's (§0.261)
                 payload = { ...formData, id: newId };
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = formData.industry || '';
@@ -235,8 +247,23 @@ export function useAccounts(deps) {
             const res = await dbFetch('/.netlify/functions/accounts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3): the server's
             // words with their ref, else "The server returned N." — a 502's page was said as a lost connection.
-            if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setAccountModalError(why); setAccountModalSaving(false); return; }
-            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
+            // The unknown-save rule (state §0.261; Jeff's Q1, Q2): only a 4xx in the server's words wrote nothing — any other
+            // refused answer may have saved, said so with the rail kept open; a create's second press answered that its id
+            // is already stored here (landedBefore) landed with the first: the list read again, the rail closed as saved.
+            let data;
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return;
+                if (method === 'POST' && landedBefore(res.status, body)) {
+                    loadAccounts(() => {});
+                    addAudit(auditAction, 'account', auditId, auditName, auditDetail);
+                    setShowAccountModal(false); setAccountModalError(null);
+                    return;
+                }
+                const why = refusalWords(res, body);
+                setAccountModalError(heardRefusal(res.status, body) ? why : maybeSaid(`"${auditName}"`, 'saved', why)); setAccountModalSaving(false); return;
+            }
+            data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
             if (!stillOrg(askedOrg)) return;
             const saved = data.account || payload;
             if (method === 'PUT') {
@@ -261,7 +288,8 @@ export function useAccounts(deps) {
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
             console.error('Failed to save account:', err);
-            setAccountModalError(failureWords(err));
+            // A throw proves nothing (state §0.261): the save may have landed — the rail kept, its id kept for a second press.
+            setAccountModalError(maybeSaid(`"${formData.name || 'The account'}"`, 'saved', failureWords(err)));
         } finally {
             setAccountModalSaving(false);
         }

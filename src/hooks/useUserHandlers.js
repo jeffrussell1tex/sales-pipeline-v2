@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 // A removal's answer (state §0.222): the member off the roster and the lists as the server wrote them.
 import { settingsAfterRemoval, removalNote } from '../utils/teamMembership.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
 
 export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal }) {
     const [userModalError, setUserModalError] = useState(null);
@@ -57,10 +57,11 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     body: JSON.stringify(payload),
                 });
                 // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
+                // Only a 4xx in the server's words wrote nothing; any other refused answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing is said as maybe).
                 if (!res.ok) {
-                    const why = await readRefusal(res);
+                    const body = await res.json().catch(() => null);
                     if (!stillOrg(askedOrg)) return;
-                    setUserModalError(why);
+                    setUserModalError(writeRefusal(res, body, 'The member').words);
                     setUserModalSaving(false);
                     return;
                 }
@@ -78,7 +79,7 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update user:', err);
-                setUserModalError(failureWords(err));
+                setUserModalError(maybeSaid('The member', 'saved', failureWords(err)));   // a throw proves nothing (§0.261)
             } finally {
                 setUserModalSaving(false);
             }
@@ -93,10 +94,12 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (!res.ok) {   // as the edit's (§0.248)
-                    const why = await readRefusal(res);
+                // As the edit's (§0.248, §0.261). The member's id is the server's, so a second press after one that may have
+                // landed is not the same member — but the roster refuses a second of one email (users.mjs, 409 field email).
+                if (!res.ok) {
+                    const body = await res.json().catch(() => null);
                     if (!stillOrg(askedOrg)) return;
-                    setUserModalError(why);
+                    setUserModalError(writeRefusal(res, body, 'The member').words);
                     setUserModalSaving(false);
                     return;
                 }
@@ -106,7 +109,8 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                 if (!stillOrg(askedOrg)) return;
                 const savedUser = data.user;
                 if (!savedUser || !savedUser.id) {
-                    setUserModalError('The member was not saved. Please try again.');
+                    // Landed (a 2xx) with no member in its answer: saved, not shown (state §0.261) — never "not saved".
+                    setUserModalError('The member was saved, but its answer could not be read — reload the page to see them.');
                     setUserModalSaving(false);
                     return;
                 }
@@ -122,7 +126,7 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to create user:', err);
-                setUserModalError(failureWords(err));
+                setUserModalError(maybeSaid('The member', 'saved', failureWords(err)));   // a throw proves nothing (§0.261)
             } finally {
                 setUserModalSaving(false);
             }

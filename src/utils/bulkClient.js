@@ -14,7 +14,7 @@
 // recording stub in tests/bulk-client.test.mjs goes in through the front door: no
 // module mocks, no --experimental flag, no window.
 
-import { failureWords, refusalWords } from './refusalWords.js';
+import { failureWords, refusalWords, heardRefusal } from './refusalWords.js';
 
 export const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_bulk.mjs
 
@@ -64,7 +64,9 @@ export function makeBulkClient(fetchFn) {
         const landed = [];
         const failed = [];
         const owners = ownerNames();
-        let error = null, done = 0;
+        // unsure (state §0.261, the unknown-save rule): the rows of the chunk whose answer proved nothing — a request that
+        // threw, a 5xx, a page, a wordless 4xx — which may have saved: never counted as "did not save".
+        let error = null, done = 0, unsure = 0;
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
             if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
@@ -73,10 +75,10 @@ export function makeBulkClient(fetchFn) {
             // (§0.249, docs/design/refusal-sweep Part 12): it threw out of the loop, so earlier chunks' rows, written
             // server-side, never reached the screen, and the importer said the raw "Failed to fetch" (18b15).
             let r;
-            try { r = await fetchFn(url, { method: 'POST', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); break; }
+            try { r = await fetchFn(url, { method: 'POST', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); unsure = chunk.length; break; }
             const body = await readJson(r);
 
-            if (!r.ok) { error = refusalWords(r, body); break; }   // the server's words with their ref, else its status (§0.249)
+            if (!r.ok) { error = refusalWords(r, body); if (!heardRefusal(r.status, body)) unsure = chunk.length; break; }   // the server's words with their ref, else its status (§0.249)
             addOwners(owners, body);
 
             if (Array.isArray(body?.insertedIds)) {
@@ -94,7 +96,7 @@ export function makeBulkClient(fetchFn) {
         }
         // `attempted` is the caller's whole list. Rows in chunks after a fatal
         // error were never sent, and reporting only `failed` would omit them.
-        return { landed, failed, error, attempted: items.length, ...ownersOut(owners) };
+        return { landed, failed, error, attempted: items.length, unsure, ...ownersOut(owners) };
     };
 
     // ── PUT overwrites, reporting exactly which ids the server accepted ──────
@@ -119,16 +121,16 @@ export function makeBulkClient(fetchFn) {
         const notFound = [];
         const forbidden = [];
         const owners = ownerNames();
-        let updated = 0, discrepancy = 0, error = null, done = 0;
+        let updated = 0, discrepancy = 0, error = null, done = 0, unsure = 0;   // unsure: as postNew's (§0.261)
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
             if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
             const chunk = items.slice(i, i + BULK_CHUNK);
             let r;   // as postNew's: a chunk whose request threw ends the run, keeping what was applied (§0.249)
-            try { r = await fetchFn(url, { method: 'PUT', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); break; }
+            try { r = await fetchFn(url, { method: 'PUT', body: JSON.stringify(chunk) }); } catch (e) { error = failureWords(e); unsure = chunk.length; break; }
             const body = await readJson(r);
 
-            if (!r.ok) { error = refusalWords(r, body); break; }   // as postNew's (§0.249)
+            if (!r.ok) { error = refusalWords(r, body); if (!heardRefusal(r.status, body)) unsure = chunk.length; break; }   // as postNew's (§0.249, §0.261)
             addOwners(owners, body);
 
             const chunkNotFound  = Array.isArray(body?.notFound)  ? body.notFound  : [];
@@ -151,7 +153,7 @@ export function makeBulkClient(fetchFn) {
             done += chunk.length;
             report(onProgress, progressOffset, done, progressTotal);
         }
-        return { appliedIds, updated, notFound, forbidden, discrepancy, error, attempted: items.length, ...ownersOut(owners) };
+        return { appliedIds, updated, notFound, forbidden, discrepancy, error, attempted: items.length, unsure, ...ownersOut(owners) };
     };
 
     return { postNew, putBulk };

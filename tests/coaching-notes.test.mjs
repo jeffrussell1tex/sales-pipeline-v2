@@ -144,7 +144,10 @@ test('the function stamps the author from the caller, filters through the pure m
     assert.ok(fn.includes('rows.filter(n => noteVisibleTo(n, me, teams))'), 'GET filters on the server');
     assert.ok(fn.includes("if (!me) return reply(200, { coachingNotes: [] });"), 'an unresolvable caller gets nothing, not everything');
     assert.ok(fn.includes("requireRole(auth, ['Admin', 'Manager'], headers)"), 'reps cannot write');
-    assert.doesNotMatch(fn, /data\.legacy|onConflictDoNothing|coaching_note\.imported/, 'the legacy import branch is gone (§0.83)');
+    // Moved in §0.261: the create's own onConflictDoNothing (a taken id refused 409, the unknown-save rule's Part 6) is not the import's.
+    assert.doesNotMatch(fn, /data\.legacy|coaching_note\.imported/, 'the legacy import branch is gone (§0.83)');
+    assert.equal(fn.split('onConflictDoNothing').length - 1, 1, 'one: the create\'s taken id (§0.261)');
+    assert.ok(fn.includes(".onConflictDoNothing({ target: coachingNotes.id }).returning();\n            if (!inserted) return reply(409, { error: 'That note id is already in use.', ...(await ownIdTaken(coachingNotes, values.id, orgId) ? { code: 'idInUse' } : {}) });"));
     assert.ok(fn.includes("if (!noteVisibleTo(note, me, teams)) return reply(404"), 'marking read needs visibility, and does not confirm existence');
     assert.ok(fn.includes('if (!canDeleteNote(note, me)) return reply(403'));
     assert.ok(read('db/schema.ts').includes("export const coachingNotes = pgTable('coaching_notes'"), 'the table is in the schema');

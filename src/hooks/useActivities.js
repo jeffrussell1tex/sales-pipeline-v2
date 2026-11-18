@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
-import { refusalWords, failureWords } from '../utils/refusalWords.js';
+import { refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 
 // A quiet save's Activity rail setters (state §0.199's fifth re-check): the task rail's completion notes leave the
 // Activity rail's banner and wait alone — they are that rail's own save's, and a notes save that ended first let go
@@ -47,6 +47,8 @@ export function useActivities(deps) {
             setActivities(prev => prev.filter(a => a.id !== activityId));
             const r = await dbWrite(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
+            // One whose answer proves nothing may be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe — no Undo offered.
+            if (!r.ok && r.unknown) { setUndoToast({ error: maybeSaid('The activity', 'deleted', r.error) }); return; }
             if (!r.ok) {
                 setActivities(prev => (prev.some(a => a.id === activityId) ? prev : [...prev, activity]));
                 setUndoToast({ error: `Activity not deleted — ${r.error}` });
@@ -67,7 +69,9 @@ export function useActivities(deps) {
                         body: JSON.stringify(activity),
                     });
                     if (rr.ok && stillOrg(askedOrg)) adoptScores(rr.data);
-                    if (rr.ok || !stillOrg(askedOrg)) return;
+                    // Already stored (a 409 'idInUse': the delete never took, or a press before landed) is back (§0.261).
+                    if (rr.ok || rr.landed || !stillOrg(askedOrg)) return;
+                    if (rr.unknown) { setUndoToast({ error: maybeSaid('The activity', 'restored', rr.error) }); return; }   // kept (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
                     setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
                     setUndoToast({ error: `Could not restore the activity — ${rr.error}` });
                 }
@@ -86,7 +90,10 @@ export function useActivities(deps) {
             body: JSON.stringify(activity),
         });
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
-        if (!r.ok) return { ok: false, error: r.error };
+        // Its id is the form's (Part 6): a second press after an answer that proved nothing is the same activity — answered
+        // already stored, it landed with the first: the list read again. One that proves nothing may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+        if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }
+        if (!r.ok) return { ok: false, error: r.unknown ? maybeSaid('The activity', 'saved', r.error) : r.error, unknown: r.unknown };
         setActivities(prev => [...prev, activity]);
         adoptScores(r.data);
         return { ok: true };
@@ -119,7 +126,8 @@ export function useActivities(deps) {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
                 // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3); the
                 // refusal's body read once, for its words and the field a link refused names (saveDroppingRefused).
-                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }
+                // Only a 4xx in the server's words wrote nothing; any other refused answer may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const heard = heardRefusal(res.status, body); const error = heard ? refusalWords(res, body) : maybeSaid('The activity', 'saved', refusalWords(res, body)); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field, unknown: !heard }; }
                 const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || shownRow(payload)) : a));
@@ -128,25 +136,34 @@ export function useActivities(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update activity:', err);
-                setActivityModalError(failureWords(err));
-                return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
+                const error = maybeSaid('The activity', 'saved', failureWords(err));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
+                setActivityModalError(error);
+                return { ok: false, error, unknown: true };   // not known: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         } else {
-            const newId = 'id_' + crypto.randomUUID();
+            // The id its form gave it (state §0.261, Part 6): a second press after an answer that proved nothing is the same
+            // activity, answered already stored if the first landed. A caller that gives none gets one per press.
+            const newId = activityData.id || ('id_' + crypto.randomUUID());
             const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
-                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; const error = refusalWords(res, body); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field }; }   // as the edit's (§0.248)
-                const data = await res.json().catch(() => ({}));
+                // As the edit's (§0.248, §0.261); a second press answered already stored landed with the first: the list read again.
+                let data;
+                if (!res.ok) {
+                    const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
+                    if (landedBefore(res.status, body)) { loadActivities(() => {}); data = null; }
+                    else { const heard = heardRefusal(res.status, body); const error = heard ? refusalWords(res, body) : maybeSaid('The activity', 'saved', refusalWords(res, body)); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field, unknown: !heard }; }
+                } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                setActivities(prev => [...prev, data.activity || newActivity]);
+                if (data) setActivities(prev => [...prev, data.activity || newActivity]);
                 adoptScores(data);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save activity:', err);
-                setActivityModalError(failureWords(err));
-                return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
+                const error = maybeSaid('The activity', 'saved', failureWords(err));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
+                setActivityModalError(error);
+                return { ok: false, error, unknown: true };   // not known: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         }
         if (!stillOrg(askedOrg)) return;

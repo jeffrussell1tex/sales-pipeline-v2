@@ -1,3 +1,5 @@
+import { heardRefusal, landedBefore } from './refusalWords.js';
+
 // Safe localStorage wrapper
 export const safeStorage = {
     getItem(key) { try { return localStorage.getItem(key); } catch(e) { return null; } },
@@ -86,14 +88,14 @@ export const dbFetch = async (url, options) => {
 // §0.181): a 403 is a permission sentence; otherwise the server's own error, with the
 // ref of its log line when it sent one; otherwise the status. Reads the body; never
 // throws.
-export const refusalOf = async (res) => {
+export const refusalOf = async (res) => refusalFrom(res, await bodyOf(res));
+// …from a body already read (null when it was not JSON): dbWrite reads it once, for these words and for whether the
+// server itself refused (heardRefusal).
+export const refusalFrom = (res, body) => {
     if (res.status === 403) return 'You do not have permission to make this change.';
     // serverErrorBody sends { error, requestId }; surface the ref so the
     // exact Netlify function log line can be found.
-    try {
-        const body = await res.json();
-        if (body?.error) return body.requestId ? `${body.error} (ref ${body.requestId})` : body.error;
-    } catch { /* non-JSON error body */ }
+    if (body?.error) return body.requestId ? `${body.error} (ref ${body.requestId})` : body.error;
     return `The server returned ${res.status}.`;
 };
 // …and one that never reached the server: one sentence on every screen (§0.249, docs/design/refusal-sweep Q4 — Jeff:
@@ -101,18 +103,23 @@ export const refusalOf = async (res) => {
 // change was not saved." — a claim nothing checked, and a second wording for one failure.
 export const NETWORK_ERROR = 'The server could not be reached.';
 
-// dbWrite is for write paths. It resolves to { ok, status, error, data } and NEVER
-// throws, so a caller can roll back in one place without a try/catch around every
+// dbWrite is for write paths. It resolves to { ok, status, error, data, unknown, landed } and
+// NEVER throws, so a caller can roll back in one place without a try/catch around every
 // call. data: what a write that landed answered — its JSON body, a save's stored row —
 // or null; a list takes the server's row, not the copy it sent (state §0.198: the
 // Closed Lost save).
+// unknown (state §0.261, the unknown-save rule): the answer proves nothing — a request that threw, a 5xx, a page, a
+// wordless answer — so the write may have landed: the screen keeps the change and says so (maybeSaid), never "Not saved".
+// Only a 4xx in the server's own words (heardRefusal) is a refusal that wrote nothing. landed: a 409 saying the record
+// is already stored in this org (landedBefore) — an earlier press of the same create landed.
 const bodyOf = async (res) => { try { return await res.json(); } catch { return null; } };
 export const dbWrite = async (url, options) => {
     try {
         const res = await dbFetch(url, options);
         if (res.ok) return { ok: true, status: res.status, error: null, data: await bodyOf(res) };
-        return { ok: false, status: res.status, error: await refusalOf(res) };
+        const body = await bodyOf(res);
+        return { ok: false, status: res.status, error: refusalFrom(res, body), unknown: !heardRefusal(res.status, body), landed: landedBefore(res.status, body) };
     } catch (err) {
-        return { ok: false, status: 0, error: NETWORK_ERROR };
+        return { ok: false, status: 0, error: NETWORK_ERROR, unknown: true, landed: false };
     }
 };

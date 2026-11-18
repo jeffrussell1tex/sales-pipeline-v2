@@ -214,7 +214,7 @@ test('THE GUARD: the task, contact and account rails, Quick Log and the document
     assert.ok(q.includes('    const [logging, setLogging] = React.useState(false);\n    const loggingRef = React.useRef(false);'));
     assert.ok(q.includes("useEscapeLayer(quickLogOpen, () => { if (!loggingRef.current) setQuickLogOpen(false); },"), 'Escape');
     assert.ok(q.includes('onClick={() => { if (!loggingRef.current) setQuickLogOpen(false); }} />'), 'the backdrop');
-    assert.ok(q.includes('<button disabled={logging} onClick={() => { if (loggingRef.current) return; setQuickLogOpen(false);'), 'Cancel');
+    assert.ok(q.includes('<button disabled={logging} onClick={() => { if (loggingRef.current) return; draftIdRef.current = null; setQuickLogOpen(false);'), 'Cancel');   // its draft's id let go (§0.261)
     const log = between(q, '<button disabled={logging} onClick={async () => {', "{logging ? 'Logging…' : 'Log Activity'}");
     // Each one present, in order (an indexOf of -1 passed the order alone — the harness found it, 16 Nov).
     const [g1, g2, g3] = ['if (loggingRef.current) return;', 'loggingRef.current = true; setLogging(true);', 'crypto.randomUUID()'].map((t) => log.indexOf(t));

@@ -381,11 +381,14 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
         'const undo = Object.fromEntries(',
         "dbFetch('/.netlify/functions/users?me=true'",
         // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal's words with their ref.
+        // Moved in §0.261 (the unknown-save rule): only the server's own 4xx puts it back; any other answer keeps it, said as maybe.
         'if (!res.ok) {',
-        'const why = await readRefusal(res);',
+        'const body = await res.json().catch(() => null);',
         'if (!stillOrg(askedOrg)) return;',
+        "const w = writeRefusal(res, body, 'Your profile');",
+        'if (w.unknown) { setProfileError(w.words); return; }',
         'setMyProfile(prev => ({ ...(prev||{}), ...undo }));',
-        'setProfileError(`Not saved — ${why}`);',
+        'setProfileError(`Not saved — ${w.words}`);',
         'const data = await res.json().catch(() => ({}));',
         'if (!stillOrg(askedOrg)) return;',
         'if (data.user) {',
@@ -393,8 +396,8 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
         'setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === data.user.id ? { ...u, name: data.user.name } : u) }));',
         '} catch (err) {',
         'if (!stillOrg(askedOrg)) return;',
-        'setMyProfile(prev => ({ ...(prev||{}), ...undo }));');
-    assert.equal(count(save, '...undo }));'), 2, 'a refusal and a failure both put the screen back');
+        "setProfileError(maybeSaid('Your profile', 'saved', failureWords(err)));");
+    assert.equal(count(save, '...undo }));'), 1, 'the server\'s own refusal puts the screen back; a throw keeps it (§0.261)');
     // The roster on screen takes the stored name too: Home, Reports and a Manager's reps
     // list find "me" by it (u.name === currentUser) — currentUser is the profile's name.
     assert.ok(h.includes('        settings, setSettings, currentUser, userRole, clerkUser, isMobile,'),

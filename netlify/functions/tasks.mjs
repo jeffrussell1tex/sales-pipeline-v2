@@ -9,6 +9,7 @@ import { taskEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
+    ownIdTaken,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { checkLinks } from './_links.mjs';
@@ -96,6 +97,9 @@ export const handler = async (event) => {
             const newRow = await stampOwnerId(sanitize({ ...data, ...linked.set }), 'task', { clerkUserId: userId, orgId });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(tasks).values({ ...newRow, orgId }).onConflictDoNothing({ target: tasks.id }).returning();
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(tasks, newRow.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That task id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That task id is already in use.' }) };
             return { statusCode: 201, headers, body: JSON.stringify({ task: inserted }) };
         }

@@ -3,6 +3,7 @@ import { quotes, opportunities, auditLog, users, settings as settingsTable, acco
 import { eq, asc, and, desc, sql, inArray, gte } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId } from './_lib.mjs';
+import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 // A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
 // quote is who may read or change the deal — the deals list's own rule, imported
 // directly so a suite that mocks auth.mjs still runs the real one. What may HAPPEN
@@ -387,6 +388,9 @@ export const handler = async (event) => {
                 // alone: a number taken is still a unique violation on (org, number, version), retried as before.
                 return db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning();
             }, { label: 'quote number' });
+            // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
+            // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
+            if (!inserted && await ownIdTaken(quotes, basePayload.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That quote id is already in use.', code: 'idInUse' }) };
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That quote id is already in use.' }) };
             await auditAs(orgId, auth.userId, {
                 action: 'quote.created', entityType: 'quote', entityId: inserted.id, entityName: inserted.name || inserted.quoteNumber,

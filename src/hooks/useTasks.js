@@ -3,7 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { taskWriteAnswer } from '../utils/taskWrite.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { failureWords, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -59,6 +59,8 @@ export function useTasks(deps) {
             setTasks(prev => prev.filter(t => t.id !== taskId));
             const r = await dbWrite(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
+            // One whose answer proves nothing may be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe — no Undo offered.
+            if (!r.ok && r.unknown) { setUndoToast({ error: maybeSaid(`The task "${title}"`, 'deleted', r.error) }); return; }
             if (!r.ok) {
                 setTasks(prev => (prev.some(t => t.id === taskId) ? prev : [...prev, task]));
                 setUndoToast({ error: `Task not deleted — ${r.error}` });
@@ -77,7 +79,9 @@ export function useTasks(deps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(task),
                     });
-                    if (rr.ok || !stillOrg(askedOrg)) return;
+                    // Already stored (a 409 'idInUse') is back; one whose answer proves nothing is kept, said as maybe (§0.261).
+                    if (rr.ok || rr.landed || !stillOrg(askedOrg)) return;
+                    if (rr.unknown) { setUndoToast({ error: maybeSaid('The task', 'restored', rr.error) }); return; }
                     setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
                     setUndoToast({ error: `Could not restore the task — ${rr.error}` });
                 }
@@ -100,7 +104,8 @@ export function useTasks(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sentBody(payload)) });   // the links nobody touched left out (§0.198)
                 // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
-                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setTaskModalError(why); setTaskModalSaving(false); return; }
+                // Only a 4xx in the server's words wrote nothing; any other refused answer may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+                if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; setTaskModalError(writeRefusal(res, body, `"${taskData.title || 'The task'}"`).words); setTaskModalSaving(false); return; }
                 const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
                 if (!stillOrg(askedOrg)) return;
                 setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || shownRow(payload)) : t));
@@ -113,7 +118,7 @@ export function useTasks(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update task:', err);
-                setTaskModalError(failureWords(err));
+                setTaskModalError(maybeSaid(`"${taskData.title || 'The task'}"`, 'saved', failureWords(err)));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
             } finally { setTaskModalSaving(false); }
         } else {
             // Honor a client-provided id (TaskRail pre-generates one so documents can be
@@ -122,10 +127,16 @@ export function useTasks(deps) {
             const newTask = { ...taskData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
-                if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setTaskModalError(why); setTaskModalSaving(false); return; }   // as the edit's (§0.248)
-                const data = await res.json().catch(() => ({}));
+                // As the edit's (§0.248, §0.261): the rail's id (newTaskId) is kept across its presses — answered already stored,
+                // an earlier press landed: the list read again.
+                let data = null;
+                if (!res.ok) {
+                    const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
+                    if (!landedBefore(res.status, body)) { setTaskModalError(writeRefusal(res, body, `"${taskData.title || 'The task'}"`).words); setTaskModalSaving(false); return; }
+                    loadTasks(() => {});
+                } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
-                setTasks(prev => [...prev, data.task || newTask]);
+                if (data) setTasks(prev => [...prev, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
                 // SMS: task assigned to someone on creation
                 if (taskData.assignedTo) {
@@ -135,7 +146,7 @@ export function useTasks(deps) {
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save task:', err);
-                setTaskModalError(failureWords(err));
+                setTaskModalError(maybeSaid(`"${taskData.title || 'The task'}"`, 'saved', failureWords(err)));   // a throw proves nothing (§0.261)
             } finally { setTaskModalSaving(false); }
         }
     };
@@ -177,6 +188,8 @@ export function useTasks(deps) {
             body: JSON.stringify(next),
         }));
         if (!stillOrg(askedOrg)) return;
+        // An answer that proves nothing keeps the row as pressed (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe); the caller says it as maybe.
+        if (!answer.ok && answer.unknown) return { ok: false, error: answer.error, unknown: true };
         if (!answer.ok) {
             console.error('Failed to persist task completion:', answer.error);
             setTasks(prev => prev.map(t => (t === next ? current : t)));

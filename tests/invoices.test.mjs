@@ -306,7 +306,8 @@ test('quote-to-job.mjs: technician 403, the one Dispatch gate (the switch and th
     assert.ok(f.includes('const extra = gate.extra;'), 'the product types come from the gate’s one settings read');
     assert.ok(f.includes("if (!quote) return reply(404, { error: 'Quote not found' });"), 'another org’s quote is a 404, never a probe');
     assert.ok(f.includes('if (!quoteCanBecomeJob(quote)) {'));
-    assert.ok(f.includes("if (existing) return reply(409, { error: `${existing.jobNumber || 'A job'} already exists for this quote.`, job: existing });"));
+    // Moved in §0.261: said 'already' — an earlier press made it, read by the screen as landed (the unknown-save rule's Part 6).
+    assert.ok(f.includes("if (existing) return reply(409, { error: `${existing.jobNumber || 'A job'} already exists for this quote.`, code: 'already', job: existing });"));
     assert.ok(f.includes('                quoteId: quote.id,'), 'the link is written with the job');
     assert.ok(f.includes("status: 'unscheduled', priority: 'normal', timeSlot: 'anytime',"), 'created unscheduled — no notification is due');
     assert.ok(f.includes("action: 'dispatch_job.created_from_quote'"));

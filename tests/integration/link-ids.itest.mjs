@@ -59,7 +59,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 });
 
 const FN = {};
-for (const name of ['contacts', 'activities', 'tasks', 'opportunities', 'accounts', 'dispatch-customers', 'dispatch-jobs', 'backup']) {
+for (const name of ['contacts', 'activities', 'tasks', 'opportunities', 'accounts', 'dispatch-customers', 'dispatch-jobs', 'backup', 'leads']) {   // leads: §0.261's taken id
     FN[name] = (await import(`../../netlify/functions/${name}.mjs`)).handler;
 }
 const { db } = await import('../../db/index.js');
@@ -480,6 +480,31 @@ test('each CRM create answers 409 for an id org B holds — it crashed, a 500 �
         assert.deepEqual(r.body, { error: `That ${noun} id is already in use.` });
         assert.deepEqual(await one(table, body.id), was, `${fn}: org B's row unchanged`);
     }
+});
+
+// The unknown-save rule's Part 6 (state §0.261): a create sent again with its id, after an answer that proved nothing,
+// finds the row its first press stored — in THIS org it says code 'idInUse', which the screen reads as landed; the row is
+// never written over. Another org's id (above) gets the words alone. A lead's create was a plain insert: a taken id was a
+// primary-key 500; it is refused the same way now.
+test('§0.261: each create answers an id THIS org holds 409 with code idInUse — the row unchanged; another org\'s, the words alone', async () => {
+    for (const [fn, table, noun, body] of [
+        ['contacts', contacts, 'contact', { id: C2, firstName: 'Again' }],
+        ['activities', activities, 'activity', { id: ACT_HELD, type: 'Note', notes: 'again' }],
+        ['tasks', tasks, 'task', { id: T_HELD, title: 'Again', status: 'Open' }],
+        ['opportunities', opportunities, 'deal', { id: D1, opportunityName: 'Again' }],
+        ['accounts', accounts, 'account', { id: ACCT2, name: 'Again Co' }],
+        ['leads', leads, 'lead', { id: L1, firstName: 'Again', lastName: 'Lead' }],
+    ]) {
+        const was = await one(table, body.id);
+        const r = await call(fn, WHO.admin, 'POST', body);
+        assert.equal(r.status, 409, `${fn}: ${JSON.stringify(r.body)}`);
+        assert.deepEqual(r.body, { error: `That ${noun} id is already in use.`, code: 'idInUse' }, `${fn}: REGRESSION — an earlier press that landed said refused`);
+        assert.deepEqual(await one(table, body.id), was, `${fn}: the stored row unchanged`);
+    }
+    const lb = await one(leads, L_B);
+    const r = await call('leads', WHO.admin, 'POST', { id: L_B, firstName: 'Taken', lastName: 'B' });
+    assert.deepEqual([r.status, r.body], [409, { error: 'That lead id is already in use.' }], 'org B\'s lead: the words alone — it was a 500');
+    assert.deepEqual(await one(leads, L_B), lb, 'org B\'s lead unchanged');
 });
 
 // ── 4. Dispatch ──────────────────────────────────────────────────────────────

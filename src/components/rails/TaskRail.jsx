@@ -24,6 +24,10 @@ import { leaveOut } from '../../utils/leaveOut.js';
 // answers nothing over a request that never left) — the house words (§0.249, docs/design/refusal-sweep Q4), never
 // "check your connection and try again".
 const said = (words) => { const s = String(words || 'The server could not be reached.'); return s.endsWith('.') ? s.slice(0, -1) : s; };
+// The completion's words: refused, not completed; an answer that proved nothing, maybe — the task left ticked (state §0.261).
+const doneWords = (unknown, words) => (unknown
+    ? `The task may have been completed — reload the page to see whether it was: ${said(words)}.`
+    : `The task was not completed: ${said(words)}.`);
 
 function SectionHeading({ label }) {
     return (
@@ -178,6 +182,10 @@ export default function TaskRail() {
     const [newTaskId,     setNewTaskId]     = useState(null);
     const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
     const [completionNotes,  setCompletionNotes]  = useState('');
+    // The completion notes' activity id (state §0.261, the unknown-save rule's Part 6): given at a press, kept while the
+    // prompt holds the same notes — a second press after an answer that proved nothing is the same activity — and let go
+    // with the notes (saved, cancelled, another prompt or rail).
+    const notesIdRef = useRef(null);
     const [completionError,  setCompletionError]  = useState('');   // the completion or its notes' activity refused: the prompt stays
     const [completionType,   setCompletionType]   = useState('');
     const [completing,       setCompleting]       = useState(false);   // a press is out: the prompt's buttons wait
@@ -210,6 +218,7 @@ export default function TaskRail() {
         // A completion prompt left by the last task (a refused notes save, then Escape) never opens on this one.
         setCompletionPrompt(false);
         setCompletionNotes('');
+        notesIdRef.current = null;
         setCompletionError('');
         // Pre-generate the id for a brand-new task so documents can be linked to it in
         // the create form before save (handleSaveTask honors this id). Regenerated per open.
@@ -352,6 +361,7 @@ export default function TaskRail() {
         // Show inline notes prompt — notes optional
         setCompletionType(task.type || (settings?.taskTypes?.[0]) || 'Call');
         setCompletionNotes('');
+        notesIdRef.current = null;
         setCompletionError('');
         setCompletionPrompt(true);
     };
@@ -382,10 +392,11 @@ export default function TaskRail() {
         // task alone.
         setCompletionError('');
         let notDone = null;        // the completion's refusal: its words, '' when nothing answered; null when it landed
+        let doneUnknown = false;   // its answer proved nothing: it may have landed (state §0.261), the task left ticked
         let notesSaved = false;
         if (handleCompleteTask && !task.completed) {
             const done = await handleCompleteTask(task.id, 'Completed');
-            if (!done?.ok) notDone = done?.error || '';
+            if (!done?.ok) { notDone = done?.error || ''; doneUnknown = !!done?.unknown; }
         }
         if (!stillOrg(askedOrg)) return;
         // 2. Auto-create activity record if notes provided
@@ -393,6 +404,7 @@ export default function TaskRail() {
             const today = new Date();
             const dateStr = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
             const activityData = {
+                id:            notesIdRef.current || (notesIdRef.current = 'id_' + crypto.randomUUID()),   // one per notes (§0.261)
                 type:          completionType || task.type || 'Call',
                 date:          dateStr,
                 notes:         completionNotes.trim(),
@@ -424,11 +436,15 @@ export default function TaskRail() {
                 if (!answer?.ok) {
                     // On the rail it began on, the prompt keeps the notes for another press; on one moved on since,
                     // the press's notice carries them, with their links as last sent, to log from it (Jeff, 13 Oct:
-                    // "Show them in the toast").
+                    // "Show them in the toast"). Notes whose answer proved nothing may be in (state §0.261): said so,
+                    // and the notice offers no second log of them — the prompt's own press sends the same activity.
+                    const notesWords = answer?.unknown
+                        ? `Its notes may have been saved — reload the page to see whether they were: ${said(answer?.error)}.`
+                        : `Its notes were not saved: ${said(answer?.error)}.`;
                     say(notDone !== null
-                        ? `The task was not completed: ${said(notDone)}. Its notes were not saved: ${said(answer?.error)}.`
-                        : `The task is completed — its notes were not saved: ${said(answer?.error)}.`,
-                        { type: sent.type, notes: sent.notes, opportunityId: sent.opportunityId || '', contactId: sent.contactId || '', accountId: sent.accountId || '' });
+                        ? `${doneWords(doneUnknown, notDone)} ${notesWords}`
+                        : `The task is completed — ${notesWords.charAt(0).toLowerCase()}${notesWords.slice(1)}`,
+                        answer?.unknown ? null : { type: sent.type, notes: sent.notes, opportunityId: sent.opportunityId || '', contactId: sent.contactId || '', accountId: sent.accountId || '' });
                     return;
                 }
                 notesSaved = true;
@@ -436,16 +452,17 @@ export default function TaskRail() {
         }
         if (notDone !== null) {
             // Not completed: said, and the prompt stays for another press — without the notes, once saved.
-            if (notesSaved && here()) setCompletionNotes('');
+            if (notesSaved && here()) { setCompletionNotes(''); notesIdRef.current = null; }
             say(notesSaved
-                ? `Its notes were saved, but the task was not completed: ${said(notDone)}.`
-                : `The task was not completed: ${said(notDone)}.`);
+                ? (doneUnknown ? `Its notes were saved. ${doneWords(true, notDone)}` : `Its notes were saved, but the task was not completed: ${said(notDone)}.`)
+                : doneWords(doneUnknown, notDone));
             return;
         }
         // The rail moved on: the task is completed and its notes saved — nothing to close, nothing to say.
         if (!here()) return;
         setCompletionPrompt(false);
         setCompletionNotes('');
+        notesIdRef.current = null;
         closeRail();
     };
     // One press at a time (state §0.199's second re-check): a press marks the task completed before its write is
@@ -579,7 +596,7 @@ export default function TaskRail() {
                         )}
 
                         <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); setCompletionError(''); }} disabled={completing}
+                            <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); notesIdRef.current = null; setCompletionError(''); }} disabled={completing}
                                 style={{ padding: '8px 14px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: completing ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: completing ? 0.7 : 1 }}>
                                 {completionError && completionNotes.trim() ? 'Discard notes' : 'Cancel'}
                             </button>

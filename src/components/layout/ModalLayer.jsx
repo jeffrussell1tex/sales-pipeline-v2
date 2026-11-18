@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg, stopped } from '../../utils/storage';
 import { readRefusal, refusalWords, failureWords } from '../../utils/refusalWords.js';
+import { heardRefusal, landedBefore, maybeSaid } from '../../utils/refusalWords.js';   // the unknown-save rule (§0.261)
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
@@ -85,6 +86,9 @@ export default function ModalLayer() {
     // not a component, so it cannot own hooks.
     const [spiffClaimError, setSpiffClaimError] = React.useState(null);
     const [spiffClaimBusy, setSpiffClaimBusy] = React.useState(null);
+    // One claim id per deal and SPIFF (state §0.261, the unknown-save rule's Part 6): a second Submit after an answer that
+    // proved nothing is the same claim — answered already stored if the first landed — never a second.
+    const spiffClaimIds = React.useRef({});
     const {
         showModal, setShowModal, editingOpp, setEditingOpp, newDealSeed, setNewDealSeed,
         oppModalError, setOppModalError, oppModalSaving, setOppModalSaving,
@@ -205,7 +209,7 @@ export default function ModalLayer() {
                     // What the deal's History tab logs and deletes, and its team notes, are
                     // saved (state §0.177): these five set the screen and sent nothing — gone,
                     // or back, on reload. Each answers { ok, error } for the modal to show.
-                    onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: 'id_' + crypto.randomUUID(), createdAt: new Date().toISOString(), author: currentUser || '' })}
+                    onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: activityData.id || ('id_' + crypto.randomUUID()), createdAt: new Date().toISOString(), author: currentUser || '' })}   // the form's id (§0.261)
                     onDeleteActivity={(activityId) => handleDeleteActivity(activityId)}
                     currentUserId={currentUserId}
                     onSaveComment={(oppId, text) => saveNotes(oppId, { op: 'add', text })}
@@ -503,9 +507,13 @@ export default function ModalLayer() {
                             // companies apart — they were counted, and named, as contacts.
                             if (companies < newAccts.length) {
                                 const total = newContacts.length + overwrites.length;
+                                // Companies whose answer proved nothing may be in (state §0.261): said so — reload and see.
+                                const unsureCo = Math.min(acc.unsure || 0, newAccts.length - companies);
                                 throw new ImportError({
                                     ...emptyReceipt(), failed: total, attempted: total, companies,
-                                    error: `${newAccts.length - companies} of ${newAccts.length} new companies did not save${acc.error ? ` (${acc.error})` : ''}, so no contact was sent.`,
+                                    error: unsureCo
+                                        ? `${unsureCo} of ${newAccts.length} new companies may have saved — reload the page to see whether they did${acc.error ? ` (${acc.error})` : ''}; no contact was sent.`
+                                        : `${newAccts.length - companies} of ${newAccts.length} new companies did not save${acc.error ? ` (${acc.error})` : ''}, so no contact was sent.`,
                                 }, 'contact');
                             }
                         }
@@ -746,7 +754,11 @@ export default function ModalLayer() {
                             if (!stillOrg(askedOrg)) return stopped();
                             const answered = !!res && (res.status === 201 || (res.status === 400 && Array.isArray(d.errors)));
                             if (!answered) {
-                                receipt.failed += invites.length - i;
+                                // An answer that proves nothing — a throw, a 5xx, a page, a wordless 4xx — may have sent this
+                                // request's invitations (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing is said as maybe): counted as maybe, never "not sent"; the rest were never sent.
+                                const unsureHere = !res || !heardRefusal(res.status, d) ? chunk.length : 0;
+                                receipt.maybe += unsureHere;
+                                receipt.failed += invites.length - i - unsureHere;
                                 // The server's words with their ref, else "The server returned N." (state §0.249) — never "HTTP N".
                                 receipt.error = `Sending stopped: ${res ? refusalWords(res, d) : d.error}`;
                                 break;
@@ -1287,8 +1299,9 @@ export default function ModalLayer() {
                                                     // One claim at a time (state §0.252): a second while the first was out
                                                     // took the busy mark, and the first's answer cleared it under the second.
                                                     if (spiffClaimBusy) return;
+                                                    const claimKey = `${opp.id}|${spiff.id}`;
                                                     const newClaim = {
-                                                        id: 'claim_' + crypto.randomUUID(),
+                                                        id: spiffClaimIds.current[claimKey] || (spiffClaimIds.current[claimKey] = 'claim_' + crypto.randomUUID()),
                                                         spiffId: spiff.id,
                                                         spiffName: spiff.name || 'Unnamed SPIFF',
                                                         opportunityId: opp.id,
@@ -1318,10 +1331,21 @@ export default function ModalLayer() {
                                                         });
                                                         // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): a
                                                         // refusal in the server's words with their ref, else "The server returned N.".
+                                                        // Only a 4xx in the server's words filed nothing; any other refused answer
+                                                        // may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing is said as maybe). Already stored: an earlier press filed it — the claims
+                                                        // read again.
                                                         if (!res.ok) {
-                                                            const why = await readRefusal(res);
+                                                            const refused = await res.json().catch(() => null);
                                                             if (!stillOrg(askedOrg)) return;
-                                                            setSpiffClaimError(`Claim not submitted — ${why}`);
+                                                            if (landedBefore(res.status, refused)) {
+                                                                dbFetch('/.netlify/functions/spiff-claims')
+                                                                    .then(r => (r.ok ? r.json() : null))
+                                                                    .then(data => { if (stillOrg(askedOrg) && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+                                                                    .catch(() => { /* the list as it was; a reload reads it */ });
+                                                                return;
+                                                            }
+                                                            const why = refusalWords(res, refused);
+                                                            setSpiffClaimError(heardRefusal(res.status, refused) ? `Claim not submitted — ${why}` : maybeSaid('The claim', 'submitted', why));
                                                             return;
                                                         }
                                                         // Filed, with an answer that cannot be read: the claim as sent.
@@ -1332,7 +1356,7 @@ export default function ModalLayer() {
                                                     } catch (err) {
                                                         if (!stillOrg(askedOrg)) return;
                                                         console.error('Failed to submit SPIFF claim:', err);
-                                                        setSpiffClaimError(`Claim not submitted — ${failureWords(err)}`);
+                                                        setSpiffClaimError(maybeSaid('The claim', 'submitted', failureWords(err)));   // a throw proves nothing (§0.261)
                                                     } finally {
                                                         setSpiffClaimBusy(null);
                                                     }

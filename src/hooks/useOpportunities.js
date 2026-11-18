@@ -3,7 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped, NETWORK_ERROR } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { dealBody } from '../utils/dealNotes.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { failureWords, heardRefusal, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -93,18 +93,23 @@ export function useOpportunities(deps) {
             for (const o of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
                 const r = await dbWrite(`/.netlify/functions/opportunities?id=${o.id}`, { method: 'DELETE' });
-                if (!r.ok) failed.push({ o, error: r.error });
+                if (!r.ok) failed.push({ o, error: r.error, unknown: r.unknown });
             }
             if (!stillOrg(askedOrg)) return;
             if (failed.length) {
-                // What did not delete is put back, and the first refusal is shown.
+                // What the server refused is put back, and the first refusal is shown. One whose answer proves nothing may
+                // be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe.
+                const refused = failed.filter(f => !f.unknown), unsure = failed.filter(f => f.unknown);
                 setOpportunities(prev => {
                     const have = new Set(prev.map(x => x.id));
-                    return [...prev, ...failed.map(f => f.o).filter(x => !have.has(x.id))];
+                    return [...prev, ...refused.map(f => f.o).filter(x => !have.has(x.id))];
                 });
-                setUndoToast({ error: going.length === 1
-                    ? `Deal not deleted — ${failed[0].error}`
-                    : `${failed.length} of ${going.length} deals not deleted — ${failed[0].error}` });
+                setUndoToast({ error: [
+                    refused.length ? (going.length === 1 ? `Deal not deleted — ${refused[0].error}`
+                        : `${refused.length} of ${going.length} deals not deleted — ${refused[0].error}`) : '',
+                    unsure.length ? (going.length === 1 ? maybeSaid('The deal', 'deleted', unsure[0].error)
+                        : maybeSaid(`${unsure.length} of ${going.length} deals`, 'deleted', unsure[0].error, true)) : '',
+                ].filter(Boolean).join(' ') });
             }
         });
     };
@@ -151,11 +156,12 @@ export function useOpportunities(deps) {
             setShowModal(false);
             // A new deal is given its id once, here: the dialog's retry sends the same
             // deal, never a second one (state §0.193).
-            setLostReasonModal({ pendingFormData: (editingOpp && editingOpp.id) ? enrichedData : { ...enrichedData, id: 'id_' + crypto.randomUUID() }, editingOpp });
+            setLostReasonModal({ pendingFormData: (editingOpp && editingOpp.id) ? enrichedData : { ...enrichedData, id: enrichedData.id || ('id_' + crypto.randomUUID()) }, editingOpp });   // the window's id (§0.261)
             return;
         }
 
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const dealName = enrichedData.opportunityName || enrichedData.account || 'The deal';   // what a maybe names (§0.261)
         if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
             setOppModalSaving(true); setOppModalError(null);
@@ -163,7 +169,8 @@ export function useOpportunities(deps) {
                 .then(async res => {
                     // The ok check first, the house words (state §0.245, docs/design/refusal-sweep 1c; Jeff's Q3): a 502's page
                     // said "…Please check your connection" though the server answered, and a refusal with no words a fallback.
-                    if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setOppModalError(why); return; }
+                    // Only a 4xx in the server's words wrote nothing; any other refused answer may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
+                    if (!res.ok) { const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return; setOppModalError(writeRefusal(res, body, `"${dealName}"`).words); return; }
                     const data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
                     setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || shownRow(updatedOpp)) : opp));
@@ -188,10 +195,12 @@ export function useOpportunities(deps) {
                     }
                     setShowModal(false); setOppModalError(null);
                 })
-                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to update opportunity:', err); setOppModalError(failureWords(err)); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to update opportunity:', err); setOppModalError(maybeSaid(`"${dealName}"`, 'saved', failureWords(err))); })   // a throw proves nothing (§0.261)
                 .finally(() => setOppModalSaving(false));
         } else {
-            const newId = 'id_' + crypto.randomUUID();
+            // The window's id, given when it opened (state §0.261, Part 6): a second press after an answer that proved nothing is
+            // the same deal — answered already stored if the first landed.
+            const newId = enrichedData.id || ('id_' + crypto.randomUUID());
             // No maker sent (state §0.250): who made the deal is the server's, the caller's member name.
             // A lead's convert names its lead (state §0.253): kept out of the body, and the lead marked Converted once the
             // deal lands — never before.
@@ -200,10 +209,15 @@ export function useOpportunities(deps) {
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {
-                    if (!res.ok) { const why = await readRefusal(res); if (!stillOrg(askedOrg)) return; setOppModalError(why); return; }   // as the edit's (§0.245)
-                    const data = await res.json().catch(() => ({}));
+                    // As the edit's (§0.245, §0.261); already stored, an earlier press landed: the list read again.
+                    let data = null;
+                    if (!res.ok) {
+                        const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
+                        if (!landedBefore(res.status, body)) { setOppModalError(writeRefusal(res, body, `"${dealName}"`).words); return; }
+                        loadOpportunities(() => {});
+                    } else data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
-                    setOpportunities(prev => [...prev, data.opportunity || newOpp]);
+                    if (data) setOpportunities(prev => [...prev, data.opportunity || newOpp]);
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
                     // SMS: deal assigned to rep on creation
                     if (enrichedData.salesRep) {
@@ -212,7 +226,7 @@ export function useOpportunities(deps) {
                     setShowModal(false); setOppModalError(null);
                     if (fromLeadId) deps.onLeadConverted?.(fromLeadId);
                 })
-                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError(failureWords(err)); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError(maybeSaid(`"${dealName}"`, 'saved', failureWords(err))); })   // a throw proves nothing (§0.261)
                 .finally(() => setOppModalSaving(false));
         }
     };
@@ -251,6 +265,8 @@ export function useOpportunities(deps) {
             setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shown : opp));
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dealBody(sentBody(updatedOpp))) });   // as the deal window left it (§0.198); never the notes or the stage history (§0.236)
             if (!stillOrg(askedOrg)) return stopped();
+            // An answer that proves nothing keeps the deal as sent (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe); the dialog says it, kept open for another press.
+            if (!r.ok && r.unknown) return { ok: false, error: maybeSaid('It', 'saved as Closed Lost', r.error), unknown: true };
             if (!r.ok) {
                 setOpportunities(prev => prev.map(o => (o === shown && before ? before : o)));   // never show what was not stored; nothing else is undone — a list read again since keeps what it holds
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };   // the dialog says why; no audit
@@ -266,10 +282,14 @@ export function useOpportunities(deps) {
             setOpportunities(prev => [...prev, newOpp]);
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
             if (!stillOrg(askedOrg)) return stopped();
-            if (!r.ok) {
+            // Already stored: the dialog's earlier press landed — the list read again. One whose answer proves nothing keeps the
+            // deal shown (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe), said in the dialog, its id kept for another press.
+            if (!r.ok && r.unknown) return { ok: false, error: maybeSaid('It', 'saved as Closed Lost', r.error), unknown: true };
+            if (!r.ok && !r.landed) {
                 setOpportunities(prev => prev.filter(o => o.id !== newId));
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };
             }
+            if (r.landed) { setOpportunities(prev => prev.filter(o => o.id !== newId)); loadOpportunities(() => {}); }
             if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
             if (fromLeadId) deps.onLeadConverted?.(fromLeadId);
@@ -287,6 +307,7 @@ export function useOpportunities(deps) {
     // the notes the server answers — on a refusal too (a note deleted since, another's note), so the screen shows
     // what is stored. It sent the deal's whole list, built from this screen's copy: a copy older than the stored
     // list erased every note posted since.
+    const NOTE_DONE = { add: 'posted', edit: 'saved', delete: 'deleted' };   // what a maybe says of each operation (§0.261)
     const saveDealNote = async (oppId, note) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         let res, body = null;
@@ -299,11 +320,14 @@ export function useOpportunities(deps) {
             try { body = await res.json(); } catch { body = null; }
         } catch {
             if (!stillOrg(askedOrg)) return stopped();
-            return { ok: false, error: NETWORK_ERROR };
+            return { ok: false, error: maybeSaid('The note', NOTE_DONE[note?.op] || 'saved', NETWORK_ERROR), unknown: true };   // a throw proves nothing (§0.261)
         }
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
         const notes = res.ok ? body?.opportunity?.comments : body?.comments;
         if (Array.isArray(notes)) setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments: notes } : o)));
+        // Only a 4xx in the server's words wrote nothing; any other refused answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe). A post's note id is the
+        // server's: the window holds Post after one (OpportunityModal), never a second note.
+        if (!res.ok && !heardRefusal(res.status, body)) return { ok: false, error: maybeSaid('The note', NOTE_DONE[note?.op] || 'saved', body?.error || `The server returned ${res.status}.`), unknown: true, comments: notes };
         if (!res.ok) return { ok: false, error: body?.error || (res.status === 403 ? 'You do not have permission to make this change.' : `The server returned ${res.status}.`), comments: notes };
         return { ok: true, comments: notes };
     };

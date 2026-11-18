@@ -177,7 +177,9 @@ export default function ActivityRail() {
     useEffect(() => {
         if (!isOpen) return;
         const ctx = activityInitialContext || {};
-        const src = editingActivity ? { ...EMPTY_ACTIVITY, ...editingActivity } : { ...EMPTY_ACTIVITY, date: today(), ...ctx };
+        // A new activity's id is given here, once per open (state §0.261, Part 6): a second Save after an answer that proved
+        // nothing is the same activity, never a second.
+        const src = editingActivity ? { ...EMPTY_ACTIVITY, ...editingActivity } : { ...EMPTY_ACTIVITY, date: today(), id: 'id_' + crypto.randomUUID(), ...ctx };
 
         setFormData(src);
 

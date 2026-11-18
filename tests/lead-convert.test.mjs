@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dealBody } from '../src/utils/dealNotes.js';
 import { sentBody, shownRow } from '../src/utils/leaveOut.js';
-import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, landedBefore, writeRefusal } from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -32,6 +32,7 @@ const SEEDED = Object.freeze({ opportunityName: 'Ada Lane — Lane Co', account:
 
 const handleSaveOf = () => new Function('opportunities', 'setOpportunities', 'setOppModalError', 'setOppModalSaving', 'requestOrg', 'stillOrg', 'dbFetch',
     'dealBody', 'sentBody', 'shownRow', 'readRefusal', 'failureWords', 'addAudit', 'fireMentionSms', 'deps', 'console',
+    'maybeSaid', 'landedBefore', 'writeRefusal', 'loadOpportunities',   // §0.261
     `${between(HOOK, '    const handleSave = (formData, editingOpp, activePipeline, currentUser,', '\n    };\n\n    const completeLostSave')}\n    };\nreturn handleSave;`);
 
 const create = async ({ answer, switchOrg = false, formData = SEEDED }) => {
@@ -41,7 +42,7 @@ const create = async ({ answer, switchOrg = false, formData = SEEDED }) => {
     const handleSave = handleSaveOf()([], opps.set, () => {}, () => {}, () => 'org_a', (o) => o === org,
         async (url, opts) => { did.bodies.push(JSON.parse(opts.body)); if (switchOrg) org = 'org_b'; return answer; },
         dealBody, sentBody, shownRow, readRefusal, failureWords, () => {}, () => {},
-        { onLeadConverted: (id) => { did.order.push('converted'); did.converted.push(id); } }, quiet);
+        { onLeadConverted: (id) => { did.order.push('converted'); did.converted.push(id); } }, quiet, maybeSaid, landedBefore, writeRefusal, () => did.order.push('reread'));
     handleSave({ ...formData }, null, { id: 'pl_1' }, 'Karen Rep', (v) => { if (v === false) did.order.push('closed'); }, () => {});
     await settle();
     return did;
@@ -56,6 +57,20 @@ test('RUN: the deal window\'s create marks the lead once the deal lands — afte
     assert.equal(r.bodies[0].opportunityName, 'Ada Lane — Lane Co');
 });
 
+test('§0.261 RUN: a second press answered that the deal is already stored landed with the first — the list read again, the lead marked; one whose answer proves nothing marks nothing', async () => {
+    const again = await create({ answer: answerOf(409, { error: 'That deal id is already in use.', code: 'idInUse' }) });
+    assert.deepEqual(again.converted, ['lead_1'], 'REGRESSION: a deal an earlier press made left its lead unmarked');
+    assert.deepEqual(again.order, ['reread', 'closed', 'converted']);
+    assert.ok(again.bodies[0].id, 'the window\'s id sent');
+    assert.deepEqual((await create({ answer: answerOf(502, null) })).converted, [], 'not known: nothing marked');
+    const lostAgain = await lost({ ok: false, status: 409, error: 'That deal id is already in use.', landed: true });
+    assert.deepEqual(lostAgain.converted, ['reread', 'lead_1']);
+    assert.deepEqual(lostAgain.out, { ok: true });
+    const lostMaybe = await lost({ ok: false, status: 0, error: 'The server could not be reached.', unknown: true });
+    assert.deepEqual([lostMaybe.converted, lostMaybe.out.unknown], [[], true]);
+    assert.equal(lostMaybe.out.error, 'It may have been saved as Closed Lost — reload the page to see whether it was: The server could not be reached.');
+});
+
 test('RUN: a refused create, or one answered after an org switch, marks nothing; a create from no lead marks nothing', async () => {
     assert.deepEqual((await create({ answer: answerOf(409, { error: 'That deal id is already in use.' }) })).converted, []);
     assert.deepEqual((await create({ answer: answerOf(201, { opportunity: { id: 'x' } }), switchOrg: true })).converted, [], 'the org on screen changed');
@@ -65,7 +80,7 @@ test('RUN: a refused create, or one answered after an org switch, marks nothing;
 
 // ── RUN: the Closed Lost dialog's create ────────────────────────────────────
 
-const lostSaveOf = () => new Function('opportunities', 'setOpportunities', 'requestOrg', 'stillOrg', 'dbWrite', 'dealBody', 'sentBody', 'shownRow', 'addAudit', 'deps',
+const lostSaveOf = () => new Function('opportunities', 'setOpportunities', 'requestOrg', 'stillOrg', 'dbWrite', 'dealBody', 'sentBody', 'shownRow', 'addAudit', 'deps', 'maybeSaid', 'loadOpportunities',
     `${between(HOOK, '    const completeLostSave = async (', '\n    };\n')}\n    };\nreturn completeLostSave;`);
 
 const lost = async (answer) => {
@@ -73,7 +88,7 @@ const lost = async (answer) => {
     const did = { bodies: [], converted: [] };
     const fn = lostSaveOf()([], opps.set, () => 'org_a', () => true,
         async (url, opts) => { did.bodies.push(JSON.parse(opts.body)); return answer; },
-        dealBody, sentBody, shownRow, () => {}, { onLeadConverted: (id) => did.converted.push(id) });
+        dealBody, sentBody, shownRow, () => {}, { onLeadConverted: (id) => did.converted.push(id) }, maybeSaid, () => did.converted.push('reread'));
     const out = await fn({ ...SEEDED, stage: 'Closed Lost', id: 'id_new' }, null, 'Price', 'Budget', { id: 'pl_1' }, 'Karen Rep', () => {});
     return { ...did, out };
 };
@@ -157,7 +172,8 @@ test('WIRING: the window opens on the seed — the form, the Account and Sales R
     assert.ok(m.includes('    errorMessage, onDismissError, saving, onOpenNestedContact, seed, onSeedTaken }) {'));
     assert.ok(m.includes('        const seeded = !opportunity && seed ? {'), 'only a new deal');
     assert.ok(m.includes("            arr: seed.arr || 0, fromLeadId: seed.fromLeadId || null,"));
-    assert.ok(m.includes("            pipelineId: activePipelineId || 'default',\n            ...seeded,\n        };"), 'over the blank form');
+    // Moved in §0.261: a new deal's one id is given with the blank form (Part 6), the seed over both.
+    assert.ok(m.includes("            pipelineId: activePipelineId || 'default',\n            id: 'id_' + crypto.randomUUID(),\n            ...seeded,\n        };"), 'over the blank form');
     assert.ok(m.includes("useState(opportunity?.account || (!opportunity && seed?.account) || '')"));
     assert.ok(m.includes("useState(opportunity?.salesRep || (!opportunity && seed?.salesRep) || '')"));
     assert.ok(m.includes('    useEffect(() => { if (seed && onSeedTaken) onSeedTaken(); }, [seed]);'), 'cleared as it opens, and whenever one is set while it is open, so the next new deal opens blank (the review, 16 Nov)');
