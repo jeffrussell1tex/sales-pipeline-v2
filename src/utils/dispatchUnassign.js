@@ -14,6 +14,16 @@ const nameOf = (id, jobs) => {
     return title || String(id);
 };
 
+// Jobs whose return to the queue got no answer that proves anything (state §0.263, the unknown-save rule — Jeff's Q1, Q2):
+// each may have been returned — said so, to reload and see, never "not returned". Pure; never throws.
+export const maybeFreedWords = (maybeFreed, jobs) => {
+    const list = Array.isArray(maybeFreed) ? maybeFreed : [];
+    if (!list.length) return '';
+    const one = list.length === 1;
+    const each = list.map(({ id, words }) => `${nameOf(id, jobs)}: ${String(words || '').trim().replace(/\.+$/, '') || 'no answer'}`).join('; ');
+    return `${one ? 'One job' : `${list.length} jobs`} may have been returned to the queue — reload the page to see whether ${one ? 'it was' : 'they were'}: ${each}.`;
+};
+
 export const notFreedWords = (notFreed, jobs, techName, total) => {
     const list = Array.isArray(notFreed) ? notFreed : [];
     if (!list.length) return '';

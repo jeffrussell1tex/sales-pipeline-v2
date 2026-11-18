@@ -86,7 +86,7 @@ import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
 import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
 import { esc } from '../src/utils/customerNotifications.js';
 import { T } from '../src/tokens.js';
-import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusal } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusal, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
 import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
 import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
@@ -95,7 +95,7 @@ import { sentBody, shownRow } from '../src/utils/leaveOut.js';
 import { withTiers } from '../src/utils/accountParent.js';
 import { dealBody } from '../src/utils/dealNotes.js';
 import { contactNamesText } from '../src/utils/oppText.js';
-import { notFreedWords } from '../src/utils/dispatchUnassign.js';
+import { notFreedWords, maybeFreedWords } from '../src/utils/dispatchUnassign.js';
 import { saveDroppingRefused } from '../src/utils/linkIds.js';
 import { legacyPlansToCreate } from '../src/utils/planLinks.js';
 import { answerOf as settledBody, liveCountsOf, healthChecksOf, cardStateOf, healthSummaryOf, unreadChecksOf, unreadSentenceOf, allClearOf, mfaAnswerRead } from '../src/utils/settingsCards.js';
@@ -117,6 +117,10 @@ const stateOf = (initial) => {
     s.set = (u) => { s.value = typeof u === 'function' ? u(s.value) : u; };
     return s;
 };
+// The unknown-save rule's helpers (state §0.263, Part 4: Dispatch), handed by name to every Dispatch handler extracted
+// below that reads them — the real ones, never stubs.
+const U4_NAMES = ['writeRefusalOf', 'refusalError', 'unknownOf', 'saidError', 'thrownSaid', 'maybeSaid', 'heardRefusal'];
+const U4 = [writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, maybeSaid, heardRefusal];
 
 // ── Part 1 ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -1506,11 +1510,11 @@ const timeOff = async ({ blk = BLOCK, unassign = [], blockAnswer = answerOf(200,
         return a;
     };
     const saveBlock = new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'notFreedWords', 'setUnassignError',
-        'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', `${fn}\nreturn saveBlock;`)(
+        'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', ...U4_NAMES, 'maybeFreedWords', `${fn}\nreturn saveBlock;`)(
         () => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, notFreedWords,
         (v) => { st.banner.set(v); st.bannerSets.push(st.banner.value); },
         (u) => { st.blockSets.push(u); st.blocks.set(u); }, st.jobs.set, TECHS, jobs,
-        (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v));
+        (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v), ...U4, maybeFreedWords);
     st.threw = null;
     try { await saveBlock(blk, unassign); } catch (e) { st.threw = e; }
     return st;
@@ -1544,28 +1548,45 @@ test('Part 6a: every unassign refused — the banner names each job and the serv
     assert.deepEqual(st.sent.map(([url, m]) => [url, m]), [['/.netlify/functions/dispatch-schedule-blocks', 'POST'],
         ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_2', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_3', 'PUT']]);
     assert.deepEqual(st.sent[0][2], { id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true }, 'the block sent without _isNew');
-    assert.deepEqual(st.bannerSets, ['',
-        'The time off was saved, but 3 of 3 jobs were not returned to the queue and are still assigned to Ann Lee — Boiler service: '
-        + 'Forbidden: read-only role; Gutter clean: Database error (ref r9); Filter swap: The server returned 502. Unassign them from the Job Board.'],
-        'REGRESSION: a refused unassign said nothing — only the audit row\'s "— 3 failed"');
+    // Moved in §0.263 (the unknown-save rule, Part 4): only job_1's refusal is the server's own (a 4xx in words) — "not
+    // returned"; job_2's 500 and job_3's page prove nothing, so each may have been returned — said after it, never "not".
+    const NOT_1 = 'The time off was saved, but 1 of 3 jobs was not returned to the queue and is still assigned to Ann Lee — Boiler service: '
+        + 'Forbidden: read-only role. Unassign it from the Job Board.';
+    const MAYBE_2 = '2 jobs may have been returned to the queue — reload the page to see whether they were: Gutter clean: Database error (ref r9); '
+        + 'Filter swap: The server returned 502.';
+    assert.deepEqual(st.bannerSets, ['', NOT_1, `${NOT_1} ${MAYBE_2}`],
+        'REGRESSION: a refused unassign said nothing — only the audit row\'s "— 3 failed"; or one whose answer proves nothing said as "not returned"');
     assert.deepEqual([st.views, st.selected], [[], []], 'nothing freed, no jump to the Queue');
     assert.deepEqual(st.jobs.value, [TJ1, TJ2, TJ3]);
     assert.equal(st.jobs.value[0], TJ1, 'the same rows');
     assert.deepEqual(st.blocks.value, [STORED_BLOCK], 'the block as stored');
     assert.match(st.audit[0][4], /— 0 job\(s\) returned to the queue — 3 failed$/);
+    // Every unassign refused in the server's own words: each named "not returned", as before.
+    const heard = await timeOff({ unassign: ['job_1', 'job_2', 'job_3'], jobAnswers: {
+        job_1: answerOf(403, { error: 'Forbidden: read-only role' }), job_2: answerOf(409, { error: 'Database error', requestId: 'r9' }), job_3: answerOf(404, { error: 'Job not found' }) } });
+    assert.deepEqual(heard.bannerSets, ['',
+        'The time off was saved, but 3 of 3 jobs were not returned to the queue and are still assigned to Ann Lee — Boiler service: '
+        + 'Forbidden: read-only role; Gutter clean: Database error (ref r9); Filter swap: Job not found. Unassign them from the Job Board.']);
+    assert.deepEqual([heard.views, heard.selected, heard.jobs.value], [[], [], [TJ1, TJ2, TJ3]]);
 });
 
 test('Part 6a: one unsent and one freed — the banner says the one, the Queue shows the freed job; all freed, no words — RUN', async () => {
     const st = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: UNSENT() } });
     assert.equal(st.threw, null);
-    assert.deepEqual(st.bannerSets, ['',
-        'The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — Boiler service: '
-        + 'The server could not be reached. Unassign it from the Job Board.'], 'REGRESSION: an unsent unassign "counted below by omission"');
+    // Moved in §0.263 (the unknown-save rule, Part 4): an unsent unassign may have landed — said as maybe, never "not returned".
+    const ONE_MAYBE = 'One job may have been returned to the queue — reload the page to see whether it was: Boiler service: The server could not be reached.';
+    assert.deepEqual(st.bannerSets, ['', ONE_MAYBE], 'REGRESSION: an unsent unassign "counted below by omission", or said as not returned');
     assert.deepEqual([st.views, st.selected], [['queue'], ['job_2']], 'the dispatcher still goes to the Queue with the freed job (Q12)');
     assert.equal(st.jobs.value[0], TJ1, 'the job not freed left as it was');
     assert.equal(st.jobs.value[1].status, 'unscheduled');
     assert.deepEqual(st.jobs.value[1].assignedTechIds, []);
     assert.equal(st.jobs.value[2], TJ3);
+    // One refused in the server's own words and one freed: "not returned", as before.
+    const heard = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: answerOf(403, { error: 'Forbidden: read-only role' }) } });
+    assert.deepEqual(heard.bannerSets, ['',
+        'The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — Boiler service: '
+        + 'Forbidden: read-only role. Unassign it from the Job Board.']);
+    assert.deepEqual([heard.views, heard.selected, heard.jobs.value[0]], [['queue'], ['job_2'], TJ1]);
     const all = await timeOff({ unassign: ['job_1', 'job_3'] });
     assert.deepEqual(all.bannerSets, [''], 'all freed: an earlier save\'s words cleared as this one began, none said');
     assert.equal(all.banner.value, '');
@@ -1573,8 +1594,10 @@ test('Part 6a: one unsent and one freed — the banner says the one, the Queue s
     // Another save's words landed while this one was out (the dialog left and opened again): this save's are added, never over them.
     const FIRST = 'The time off was saved, but 1 of 1 job was not returned to the queue and is still assigned to Bo Ray — Roof check: Forbidden. Unassign it from the Job Board.';
     const raced = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: UNSENT() }, onPut: (b) => { if (!b.value) b.set(FIRST); } });
-    assert.equal(raced.banner.value, `${FIRST} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
-        + 'Boiler service: The server could not be reached. Unassign it from the Job Board.', 'REGRESSION: a save\'s words written over another save\'s');
+    assert.equal(raced.banner.value, `${FIRST} ${ONE_MAYBE}`, 'REGRESSION: a save\'s words written over another save\'s');
+    const racedHeard = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: answerOf(403, { error: 'Forbidden: read-only role' }) }, onPut: (b) => { if (!b.value) b.set(FIRST); } });
+    assert.equal(racedHeard.banner.value, `${FIRST} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
+        + 'Boiler service: Forbidden: read-only role. Unassign it from the Job Board.', 'REGRESSION: a save\'s words written over another save\'s');
     // A save with no jobs to return leaves the banner as it stands: it is about jobs another save left.
     const none = await timeOff({});
     assert.deepEqual([none.bannerSets, none.banner.value, none.views, none.audit], [[], 'An earlier save\'s words', [], []]);
@@ -1601,17 +1624,23 @@ test('Part 6a: an org switch during the unassigns — nothing more sent, nothing
 });
 
 test('Part 6b: a refused block save throws the server\'s words — a 403 the role\'s sentence — before any unassign; nothing set — RUN', async () => {
+    // Moved in §0.263 (the unknown-save rule, Part 4): each refusal carries whether it was the server's own (heard) —
+    // only a 4xx in words; a wordless 403 is no longer the role's sentence, its words the status. The dialog's catch
+    // (ScheduleView, thrownSaid) says the heard ones as they are, any other as "may have been saved".
     const cases = [
-        [answerOf(403, { error: 'Forbidden' }), 'Your role cannot change availability.'],
-        [answerOf(500, { error: 'Database error', requestId: 'r1' }), 'Database error (ref r1)'],
-        [answerOf(400, {}), 'The server returned 400.'],
-        [PAGE_502(), 'The server returned 502.'],
-        [UNSENT(), 'The server could not be reached.'],
+        [answerOf(403, { error: 'Forbidden' }), 'Your role cannot change availability.', true],
+        [answerOf(403, {}), 'The server returned 403.', false],
+        [answerOf(500, { error: 'Database error', requestId: 'r1' }), 'Database error (ref r1)', false],
+        [answerOf(400, {}), 'The server returned 400.', false],
+        [PAGE_502(), 'The server returned 502.', false],
+        [UNSENT(), 'The server could not be reached.', false],
     ];
-    for (const [blockAnswer, why] of cases) {
+    for (const [blockAnswer, why, heard] of cases) {
         const st = await timeOff({ unassign: ['job_1'], blockAnswer });
         assert.ok(st.threw, why);
         assert.equal(failureWords(st.threw), why, `REGRESSION: "HTTP N", the ref dropped, or a parse error's words (${why})`);
+        assert.equal(unknownOf(st.threw), !heard, `REGRESSION: ${heard ? 'the server\'s own refusal read as maybe' : 'an answer that proves nothing read as nothing written'} (${why})`);
+        assert.equal(thrownSaid(st.threw, 'The time off', 'saved'), heard ? why : maybeSaid('The time off', 'saved', why), 'the dialog\'s words');
         assert.equal(st.sent.length, 1, 'no unassign sent for a block not saved');
         assert.deepEqual([st.blockSets, st.views, st.audit], [[], [], []]);
     }
@@ -1623,6 +1652,7 @@ test('Part 6b: a refused block save throws the server\'s words — a 403 the rol
     const edit = await timeOff({ blk: { ...STORED_BLOCK }, blockAnswer: answerOf(409, { error: 'That block belongs to another workspace' }) });
     assert.deepEqual([edit.sent[0][0], edit.sent[0][1]], ['/.netlify/functions/dispatch-schedule-blocks?id=dblk_1', 'PUT']);
     assert.equal(failureWords(edit.threw), 'That block belongs to another workspace');
+    assert.equal(thrownSaid(edit.threw, 'The time off', 'saved'), 'That block belongs to another workspace', 'the server\'s own refusal: its words alone');
 });
 
 test('Part 6b: a landed block whose answer cannot be read says so — setBlocks never handed undefined; its jobs still go back to the queue, any left named after it — RUN', async () => {
@@ -1631,6 +1661,8 @@ test('Part 6b: a landed block whose answer cannot be read says so — setBlocks 
         // No jobs to return: the dialog says it (a throw), nothing else sent.
         const none = await timeOff({ blockAnswer, blocks: [STORED_BLOCK] });
         assert.equal(failureWords(none.threw), UNREAD, 'REGRESSION: the unchecked saved.id — a TypeError, or undefined put in the list');
+        // Moved in §0.263: said in full (saidError) — the dialog's catch says it as it is, never "may have been saved: …".
+        assert.equal(thrownSaid(none.threw, 'The time off', 'saved'), UNREAD);
         assert.deepEqual([none.blockSets, none.sent.length, none.blocks.value], [[], 1, [STORED_BLOCK]]);
         // Jobs to return: the block landed, so they still go back — a throw sent none and named none (review, 11 Nov).
         const st = await timeOff({ unassign: ['job_1'], blockAnswer, blocks: [STORED_BLOCK] });
@@ -1641,8 +1673,12 @@ test('Part 6b: a landed block whose answer cannot be read says so — setBlocks 
         // One refused: named after it.
         const left = await timeOff({ unassign: ['job_1', 'job_2'], blockAnswer, jobAnswers: { job_2: PAGE_502() } });
         assert.equal(left.threw, null);
-        assert.equal(left.banner.value, `${UNREAD} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
-            + 'Gutter clean: The server returned 502. Unassign it from the Job Board.');
+        // Moved in §0.263 (the unknown-save rule, Part 4): a page proves nothing — the job may have been returned.
+        assert.equal(left.banner.value, `${UNREAD} One job may have been returned to the queue — reload the page to see whether it was: `
+            + 'Gutter clean: The server returned 502.');
+        const leftHeard = await timeOff({ unassign: ['job_1', 'job_2'], blockAnswer, jobAnswers: { job_2: answerOf(403, { error: 'Forbidden: read-only role' }) } });
+        assert.equal(leftHeard.banner.value, `${UNREAD} The time off was saved, but 1 of 2 jobs was not returned to the queue and is still assigned to Ann Lee — `
+            + 'Gutter clean: Forbidden: read-only role. Unassign it from the Job Board.');
     }
     // After an org switch while the block was out: nothing said (the loop's own check then stops before any PUT).
     const moved = await timeOff({ unassign: ['job_1'], blockAnswer: answerOf(200, {}), switchAt: 0 });
@@ -1657,16 +1693,19 @@ test('Part 6b: a refused Delete throws the server\'s words, else the status; a l
     const run = async (answer) => {
         const blocks = stateOf([STORED_BLOCK, { id: 'dblk_2' }]);
         const sent = [];
-        const deleteBlock = new Function('dbFetch', 'readRefusal', 'setBlocks', `${fn}\nreturn deleteBlock;`)(
-            async (url, opts) => { sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, blocks.set);
+        const deleteBlock = new Function('dbFetch', 'readRefusal', 'setBlocks', ...U4_NAMES, `${fn}\nreturn deleteBlock;`)(
+            async (url, opts) => { sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, blocks.set, ...U4);
         let threw = null;
         try { await deleteBlock('dblk_1'); } catch (e) { threw = e; }
         return { threw, sent, blocks: blocks.value };
     };
-    for (const [answer, why] of [[answerOf(500, { error: 'Database error', requestId: 'r4' }), 'Database error (ref r4)'],
-        [PAGE_502(), 'The server returned 502.'], [answerOf(403, { error: 'Forbidden' }), 'Forbidden'], [UNSENT(), 'The server could not be reached.']]) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): only the 403 in words is the server's own refusal; the rest may
+    // have deleted it — the dialog's catch says so (thrownSaid). The block stays in place either way.
+    for (const [answer, why, heard] of [[answerOf(500, { error: 'Database error', requestId: 'r4' }), 'Database error (ref r4)', false],
+        [PAGE_502(), 'The server returned 502.', false], [answerOf(403, { error: 'Forbidden' }), 'Forbidden', true], [UNSENT(), 'The server could not be reached.', false]]) {
         const r = await run(answer);
         assert.equal(failureWords(r.threw), why, `REGRESSION: "HTTP N" (${why})`);
+        assert.equal(thrownSaid(r.threw, 'The time off', 'deleted'), heard ? why : maybeSaid('The time off', 'deleted', why), `REGRESSION: the delete's words (${why})`);
         assert.deepEqual(r.blocks, [STORED_BLOCK, { id: 'dblk_2' }], 'the block left in place');
     }
     const ok = await run(answerOf(200, { ok: true }));
@@ -1678,17 +1717,27 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     const d = dispatchSrc();
     assert.ok(!raw.includes('/* counted below by omission */'), 'REGRESSION: a failed unassign counted only by omission');
     // Moved pin (§0.248, Part 11): New Job's saves read a refusal's body once, for its words and its field (refusalWords).
-    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords } from '../utils/refusalWords.js';"));
-    assert.ok(d.includes("import { notFreedWords } from '../utils/dispatchUnassign.js';"));
+    // Moved in §0.263 (the unknown-save rule, Part 4): and the helpers that tell the server's own refusal from an answer
+    // that proves nothing; the jobs that may have been returned said by maybeFreedWords.
+    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../utils/refusalWords.js';"));
+    assert.ok(d.includes("import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';"));
     const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
-    order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', 'if (!res.ok) throw new Error(', 'const data = await res.json()',
-        'if (!saved && !unassignJobIds.length) throw new Error(unread);', 'if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }',
-        'else setBlocks(', 'if (r.ok) freed.push(jobId);', 'else notFreed.push({ id: jobId, words: await readRefusal(r) });',
-        'notFreed.push({ id: jobId, words: failureWords(e) });', '// and no audit row', 'const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length)',
-        'if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));', "setView('queue');");
+    // Moved in §0.263 (the unknown-save rule, Part 4): a refusal carries whether it was the server's own (refusalError);
+    // an unreadable landed block is said in full (saidError); an unassign refused in the server's words is notFreed, any
+    // other answer or a throw maybeFreed — said after it, in the same banner.
+    order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', "if (!res.ok) { const refused = await writeRefusalOf(res, 'Your role cannot change availability.'); throw refusalError(refused.words, refused.heard); }", 'const data = await res.json()',
+        'if (!saved && !unassignJobIds.length) throw saidError(unread);', 'if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }',
+        'else setBlocks(', 'const freed = [], notFreed = [], maybeFreed = [];', 'if (r.ok) freed.push(jobId);',
+        'else { const w = await writeRefusalOf(r); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }',
+        '} catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }', '// and no audit row', 'const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length)',
+        'if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));',
+        "const maybeFreedSaid = maybeFreed.length ? maybeFreedWords(maybeFreed, jobsWithBridge) : '';",
+        'if (maybeFreed.length) setUnassignError(prev => (prev ? `${prev} ${maybeFreedSaid}` : maybeFreedSaid));', "setView('queue');");
+    assert.ok(!save.includes('notFreed.push({ id: jobId, words: failureWords(e) })'), 'REGRESSION: an unassign that threw said as not returned');
     assert.ok(!save.includes("'HTTP '"), 'REGRESSION: "HTTP N"');
     assert.ok(d.includes("const [unassignError, setUnassignError] = useState('');"));
-    assert.equal(count(d, 'setUnassignError('), 4,'cleared as a save with jobs to return begins, an unreadable landed answer, set from the answer, the Close — none else');
+    // Moved in §0.263: five — the may-have-been-returned words added beside the not-returned ones.
+    assert.equal(count(d, 'setUnassignError('), 5,'cleared as a save with jobs to return begins, an unreadable landed answer, set from the answer (not returned, may have been returned), the Close — none else');
     assert.ok(!/setTimeout\([^;]*setUnassignError/.test(d), 'REGRESSION: the banner closed on a timer');
     // The banner: above {/* Main content */}, outside every view's branch, so it shows in every view.
     const banner = between(d, '{unassignError && (', '{/* Main content */}');
@@ -1696,16 +1745,20 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     order(d, '{/* Sub-tabs', '{unassignError && (', '{/* Main content */}', "{view === 'board' ? (");
     assert.equal(count(d, '{unassignError && ('), 1);
     // ScheduleView's three catches say failureWords — never a raw e.message ("Failed to fetch", "Unexpected token").
+    // Moved in §0.263 (the unknown-save rule, Part 4): through thrownSaid — the server's own refusal and words said in
+    // full as they are (failureWords), any other failure as "The time off may have been saved/deleted".
     const sv = between(d, 'const ScheduleView = ', 'const ShiftPatternDialog = ');
-    assert.equal(count(sv, 'setErr(failureWords(e))'), 3, 'Save, Accept & re-crew, Delete');
+    assert.equal(count(sv, "setErr(thrownSaid(e, 'The time off', 'saved'))"), 2, 'Save, Accept & re-crew');
+    assert.equal(count(sv, "setErr(thrownSaid(e, 'The time off', 'deleted'))"), 1, 'Delete');
+    assert.equal(count(sv, 'setErr(failureWords(e))'), 0, 'REGRESSION: a time off failure said as refused whatever its answer');
     assert.ok(!sv.includes('setErr(e.message)'), 'REGRESSION: a raw e.message in the time off dialogs');
-    order(between(sv, '    const submit = async () => {', '\n    };'), 'try { await onSaveBlock(editing); setEditing(null); }', 'catch (e) { setErr(failureWords(e)); }');
+    order(between(sv, '    const submit = async () => {', '\n    };'), 'try { await onSaveBlock(editing); setEditing(null); }', "catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }");
     // The conflict step shares the dialog's error line: opening it clears the last attempt's words (pane, 11 Nov — a
     // refused Save's words stood in "Already scheduled" before anything there was pressed).
     assert.ok(between(sv, '    const submit = async () => {', '\n    };').includes("if (clashing.length > 0) { setErr(''); setConflict({ block: editing, jobs: clashing }); return; }"),
         'REGRESSION: the conflict step opens with the last refusal\'s words');
-    order(between(sv, '    const confirmWithUnassign = async () => {', '\n    };'), 'await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));', '} catch (e) { setErr(failureWords(e)); }');
-    assert.ok(sv.includes('try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(failureWords(e)); }'));
+    order(between(sv, '    const confirmWithUnassign = async () => {', '\n    };'), 'await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));', "} catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }");
+    assert.ok(sv.includes("try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(thrownSaid(e, 'The time off', 'deleted')); }"));
 });
 
 // ── Part 7 ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -4081,6 +4134,18 @@ const p11Refusals = (role = 'Forbidden: dispatch role required') => [
     [P11_PAGE(), 'The server returned 502.'],
     [UNSENT(), 'The server could not be reached.'],
 ];
+// A write's answers since §0.263 (the unknown-save rule, Part 4), each with whether it is the server's own refusal (a
+// 4xx whose body has words — heardRefusal): only those keep their "not …" words; every other answer, and a throw, may
+// have written. A 4xx in words that is no 403 keeps its words, never the role's; a wordless 403 is no role's sentence.
+const p11Writes = (role = 'Forbidden: dispatch role required') => [
+    [onceOf(403, { error: 'Forbidden: dispatch role required' }), role, true],
+    [onceOf(409, { error: 'The job was changed since.', requestId: 'r2' }), 'The job was changed since. (ref r2)', true],
+    [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)', false],
+    [onceOf(409, {}), 'The server returned 409.', false],
+    [onceOf(403, {}), 'The server returned 403.', false],
+    [P11_PAGE(), 'The server returned 502.', false],
+    [UNSENT(), 'The server could not be reached.', false],
+];
 // A dbFetch over stubs: each request recorded; the org switched as request `switchAt` goes out; `answers` one answer
 // or a function of the URL; a thrown Error throws; `gate` holds the answer until released.
 const p11Fetch = (did, answers, org, { switchAt = -1, gate = null } = {}) => async (url, opts = {}) => {
@@ -4111,30 +4176,33 @@ const crewSave = async ({ answer, held = null, switchAt = -1 }) => {
     if (held) {
         const writeHeldCrew = p10Fn(DISPATCH, '    const writeHeldCrew = async (ids) => {', '\n    };',
             ['selectedJob', 'setScheduleError', 'setScheduleNotice', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'techs', 'onHeld',
-                'setAddedTechs', 'showNotice', 'failureWords'], 'writeHeldCrew')(
+                'setAddedTechs', 'showNotice', 'failureWords', ...U4_NAMES], 'writeHeldCrew')(
             SJOB, (v) => did.errors.push(v), () => {}, (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, techs,
-            (h) => did.heldSaid.push(h), (v) => did.added.push(v), (v) => did.notices.push(v), failureWords);
+            (h) => did.heldSaid.push(h), (v) => did.added.push(v), (v) => did.notices.push(v), failureWords, ...U4);
         await writeHeldCrew(held);
     } else {
         const handleSchedule = p10Fn(DISPATCH, '    const handleSchedule = async () => {', '\n    };',
             ['addedTechs', 'selectedJob', 'scheduleDate', 'scheduleTime', 'setScheduleError', 'techs', 'shiftForDate', 'hhToNum', 'blocksOnDate', 'blocks',
                 'blockTypes', 'equipmentConflicts', 'jobs', 'equipUnits', 'describeConflict', 'pickEquipmentFor', 'overlappingRivals', 'setScheduleNotice',
                 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'candidates', 'onScheduled', 'showNotice', 'to12h', 'unitLabel',
-                'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'failureWords'], 'handleSchedule')(
+                'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'failureWords', ...U4_NAMES], 'handleSchedule')(
             { tech_1: true }, SJOB, '2026-11-16', '09:00', (v) => did.errors.push(v), techs, () => null, (s) => Number(String(s).split(':')[0]), () => [], [],
             [], () => [], [SJOB], [], String, () => ({ picked: [] }), () => [], () => {},
             (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, [{ tech: techs[0], blockers: [] }], (s) => did.scheduled.push(s),
-            (v) => did.notices.push(v), (t) => t, (id) => id, (v) => did.added.push(v), () => {}, () => {}, failureWords);
+            (v) => did.notices.push(v), (t) => t, (id) => id, (v) => did.added.push(v), () => {}, () => {}, failureWords, ...U4);
         await handleSchedule();
     }
     return did;
 };
 
 test('Part 11: the schedule and the held crew — each refusal in the house words, a 403 the role\'s sentence; nothing scheduled — RUN', async () => {
-    for (const held of [null, ['tech_1']]) {
-        for (const [answer, words] of p11Refusals('Your role cannot schedule jobs.')) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal keeps its words (a 403 the role's sentence);
+    // any other answer, and a throw, may have scheduled or held it — said so (thrownSaid), the picks kept, nothing shown done.
+    for (const [held, subject, verb] of [[null, 'The job', 'scheduled'], [['tech_1'], 'The held crew', 'saved'], [[], 'The release', 'saved']]) {
+        for (const [answer, words, heard] of p11Writes('Your role cannot schedule jobs.')) {
+            const said = heard ? words : maybeSaid(subject, verb, words);
             const did = await crewSave({ answer, held });
-            assert.deepEqual(did.errors, ['', words], `${held ? 'held' : 'schedule'}: REGRESSION — "HTTP N", the ref dropped, or "Failed to fetch": ${words}`);
+            assert.deepEqual(did.errors, ['', said], `${held ? 'held' : 'schedule'}: REGRESSION — "HTTP N", the ref dropped, "Failed to fetch", or an answer that proves nothing said as refused: ${said}`);
             assert.deepEqual([did.scheduled, did.heldSaid, did.notices, did.added], [[], [], [], []], 'nothing scheduled, held or said as done');
             assert.equal(did.sent.length, 1);
             assert.equal(did.saving[did.saving.length - 1], false, 'the Save is free again');
@@ -4175,9 +4243,9 @@ const custSave = async ({ answer, switchAt = -1, isNew = false }) => {
     const org = { now: 'org_a' };
     const draft = { ...(isNew ? { _isNew: true } : {}), id: 'cust_1', name: ' Acme ', accountId: '', preferredTechId: '', servicePlanId: '', planStartDate: '' };
     const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.name || '').trim())", '\n    };',
-        ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords'], 'save')(
+        ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords', ...U4_NAMES], 'save')(
         draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
-        (c) => did.saved.push(c), (v) => did.drafts.push(v), (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords);
+        (c) => did.saved.push(c), (v) => did.drafts.push(v), (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords, ...U4);
     await save();
     return did;
 };
@@ -4187,25 +4255,30 @@ const techSave = async ({ answer, switchAt = -1 }) => {
     const savingRef = { current: false };
     const draft = { id: 'dtech_1', firstName: 'Ann ', lastName: 'Lee', userId: '', assignedVehicleId: '', laborRate: '', overtimeRate: '' };
     const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.firstName || '').trim()", '\n    };',
-        ['draft', 'setStatus', 'setSaving', 'savingRef', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'failureWords'], 'save')(
+        ['draft', 'setStatus', 'setSaving', 'savingRef', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'failureWords', ...U4_NAMES], 'save')(
         draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), savingRef, () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
-        (t) => did.saved.push(t), (v) => did.drafts.push(v), (v) => did.selected.push(v), failureWords);
+        (t) => did.saved.push(t), (v) => did.drafts.push(v), (v) => did.selected.push(v), failureWords, ...U4);
     await save();
     return { ...did, held: savingRef.current };
 };
 
 test('Part 11: the customer and technician saves — each refusal in the house words, a 403 the role\'s sentence; nothing saved — RUN', async () => {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal keeps its words (a 403 the role's); any
+    // other answer, and a throw, may have saved it — said so, the form kept with its id (a press again sends the same row).
     for (const isNew of [false, true]) {
-        for (const [answer, words] of p11Refusals('Your role cannot change customers.')) {
+        for (const [answer, words, heard] of p11Writes('Your role cannot change customers.')) {
+            const said = heard ? words : maybeSaid('The customer', 'saved', words);
             const did = await custSave({ answer, isNew });
-            assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `customer: REGRESSION — ${words}`);
-            assert.deepEqual([did.saved, did.editing], [[], []], 'the form stays open, nothing listed');
+            assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `customer: REGRESSION — ${said}`);
+            assert.deepEqual([did.saved, did.editing, did.drafts], [[], [], []], 'the form stays open as typed, nothing listed');
             assert.equal(did.sent[0][1], isNew ? 'POST' : 'PUT');
+            assert.equal(did.sent[0][2].id, 'cust_1', 'the form\'s own id sent');
         }
     }
-    for (const [answer, words] of p11Refusals('Your role cannot change technicians.')) {
+    for (const [answer, words, heard] of p11Writes('Your role cannot change technicians.')) {
+        const said = heard ? words : maybeSaid('The technician', 'saved', words);
         const did = await techSave({ answer });
-        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `technician: REGRESSION — ${words}`);
+        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `technician: REGRESSION — ${said}`);
         assert.deepEqual([did.saved, did.drafts, did.held], [[], [], false]);
     }
 });
@@ -4275,21 +4348,24 @@ test('Part 11: the invoice panel\'s read — landed, the invoices and the live o
     }
 });
 
-const invoiceWrite = async ({ answer, done = 'created' }) => {
+const invoiceWrite = async ({ answer, done = 'created', method = 'POST' }) => {
     const did = { sent: [], errs: [], busy: [], adopted: [], unread: [] };
     const write = p10Fn(DISPATCH, '    const write = async (url, options, done) => {', '\n    };',
-        ['setBusy', 'setErr', 'setUnread', 'dbFetch', 'readRefusal', 'failureWords', 'adopt'], 'write')(
+        ['setBusy', 'setErr', 'setUnread', 'dbFetch', 'readRefusal', 'failureWords', 'adopt', ...U4_NAMES], 'write')(
         (v) => did.busy.push(v), (v) => did.errs.push(v), (v) => did.unread.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, failureWords,
-        (d) => did.adopted.push(d));
-    const r = await write('/.netlify/functions/invoices', { method: 'POST', body: '{"jobId":"job_1"}' }, done);
+        (d) => did.adopted.push(d), ...U4);
+    const r = await write('/.netlify/functions/invoices' + (method === 'POST' ? '' : '?id=inv_2'), { method, body: '{"jobId":"job_1"}' }, done);
     return { ...did, r };
 };
 
 test('Part 11: the invoice panel\'s writes — a refusal says what was not done and why; a landed answer that cannot be read is said, never adopted — RUN', async () => {
     for (const done of ['created', 'issued', 'voided', 'marked paid', 'saved']) {
-        for (const [answer, words] of p11Refusals()) {
+        // Moved in §0.263 (the unknown-save rule, Part 4): only the server's own refusal is "The invoice was not …"; any
+        // other answer, and a throw, may have written it — "The invoice may have been …", nothing adopted.
+        for (const [answer, words, heard] of p11Writes()) {
+            const said = heard ? `The invoice was not ${done} — ${words}` : maybeSaid('The invoice', done, words);
             const did = await invoiceWrite({ answer, done });
-            assert.deepEqual(did.errs, ['', `The invoice was not ${done} — ${words}`], `REGRESSION — "(HTTP N)" or "check your connection": ${words}`);
+            assert.deepEqual(did.errs, ['', said], `REGRESSION — "(HTTP N)", "check your connection", or an answer that proves nothing said as not done: ${said}`);
             assert.deepEqual([did.r, did.adopted, did.busy], [null, [], [true, false]]);
         }
         for (const answer of [P11_UNREADABLE(), onceOf(200, null)]) {
@@ -4312,14 +4388,31 @@ test('Part 11 review fix: the invoice panel\'s writes — landed with an answer 
             assert.deepEqual(did.unread, [true], `REGRESSION: a landed ${done} unread not marked — "No invoice on this job yet" and Create drawn under its words`);
             assert.deepEqual([did.adopted, did.r], [[], true], 'nothing adopted; landed, its editor closes');
         }
-        for (const [answer] of p11Refusals()) {
+        // Moved in §0.263: every refusal of a write, heard or not, leaves the panel unmarked — its words say what to do.
+        for (const [answer] of p11Writes()) {
             const did = await invoiceWrite({ answer, done });
-            assert.deepEqual(did.unread, [], 'a refusal: nothing written, the panel as it was');
+            assert.deepEqual([did.unread, did.adopted], [[], []], 'a refusal: the panel as it was');
         }
     }
     const stored = { invoice: { id: 'inv_4', invoiceNumber: 'INV-0004', status: 'draft' }, job: { id: 'job_1' } };
     const landed = await invoiceWrite({ answer: onceOf(201, stored) });
     assert.deepEqual([landed.errs, landed.unread, landed.adopted], [[''], [], [stored]], 'landed and read: adopted, nothing marked');
+});
+
+test('§0.263 Part 4: an invoice create answered 409 naming the job\'s live invoice shows that invoice — the one an earlier press made — never "not created"; any other 409 is said — RUN', async () => {
+    // invoices.mjs answers a create on a job that holds a live invoice 409 with its words and the invoice.
+    const open = { error: 'INV-0009 is already open on this job. Void it to start another.', invoice: { id: 'inv_9', invoiceNumber: 'INV-0009', status: 'draft' } };
+    const made = await invoiceWrite({ answer: onceOf(409, open) });
+    assert.deepEqual([made.errs, made.adopted, made.r, made.unread], [[''], [{ invoice: open.invoice }], open, []],
+        'REGRESSION: an earlier press\'s invoice said as "The invoice was not created" — a press again made nothing, the invoice unseen (census-B (d))');
+    const plain = await invoiceWrite({ answer: onceOf(409, { error: 'This job is void.' }) });
+    assert.deepEqual([plain.errs, plain.adopted, plain.r], [['', 'The invoice was not created — This job is void.'], [], null], 'a 409 naming no invoice: the server\'s refusal');
+    const notOne = await invoiceWrite({ answer: onceOf(409, { error: 'x', invoice: 'inv_9' }) });
+    assert.deepEqual([notOne.errs[1], notOne.adopted], ['The invoice was not created — x', []], 'an invoice that is no record is never adopted');
+    for (const [done, method] of [['issued', 'PUT'], ['voided', 'PUT']]) {
+        const put = await invoiceWrite({ answer: onceOf(409, open), done, method });
+        assert.deepEqual([put.errs[1], put.adopted, put.r], [`The invoice was not ${done} — ${open.error}`, [], null], 'only a create adopts');
+    }
 });
 
 // The Invoices list (InvoicesView): its read.
@@ -4389,37 +4482,81 @@ test('Part 11 (Q20): the job\'s address — a read that failed says so in the pa
     }
 });
 
-const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer = onceOf(200, { location: LOC }), loc = null, switchAt = -1 }) => {
-    const did = { sent: [], statuses: [], saving: [], saved: [], selected: [] };
+// Since §0.263 (the unknown-save rule, Part 4) the save holds a new address's id per job (`newLocIds`, the component's
+// ref — handed in so presses can share it), and a landed address becomes the form's (`setLoc`, an updater over `loc`).
+const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer = onceOf(200, { location: LOC }), loc = null, switchAt = -1,
+    newLocIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID() }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], selected: [], locs: [] };
     const org = { now: 'org_a' };
     const draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'unscheduled' };
     const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft) return;\n        if (!(draft.title || '').trim())", '\n    };',
-        ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'addHoursHHMM', 'onSaved', 'setSelectedId', 'failureWords'], 'save')(
+        ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'addHoursHHMM', 'onSaved', 'setSelectedId', 'failureWords',
+            'newLocIds', 'setLoc', 'crypto', ...U4_NAMES], 'save')(
         draft, loc, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a',
-        p11Fetch(did, (url) => (url.includes('resource=locations') ? locAnswer : jobAnswer), org, { switchAt }), readRefusal, (o) => o === org.now,
-        (h) => h, (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords);
+        p11Fetch(did, (url) => (url.includes('resource=locations') ? (typeof locAnswer === 'function' ? locAnswer() : locAnswer) : jobAnswer), org, { switchAt }), readRefusal, (o) => o === org.now,
+        (h) => h, (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords,
+        newLocIds, (u) => did.locs.push(typeof u === 'function' ? u(loc) : u), { randomUUID: uuid }, ...U4);
     await save();
     return did;
 };
 
 test('Part 11: the job record\'s save — the job\'s refusal in the house words (a 403 the role\'s), the address\'s named; nothing saved — RUN', async () => {
-    for (const [answer, words] of p11Refusals('Your role cannot edit jobs.')) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal keeps its words (the job's 403 the role's,
+    // the address's "The address was not saved — …"); any other answer, and a throw, may have saved it — said about the
+    // step it was out on: the address, or the job.
+    for (const [answer, words, heard] of p11Writes('Your role cannot edit jobs.')) {
+        const said = heard ? words : maybeSaid('The job', 'saved', words);
         const did = await jobSave({ jobAnswer: answer });
-        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: words }], `the job: REGRESSION — ${words}`);
+        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `the job: REGRESSION — ${said}`);
         assert.deepEqual([did.saved, did.sent.map(([, m]) => m)], [[], ['PUT']]);
     }
-    for (const [answer, words] of p11Refusals()) {
+    for (const [answer, words, heard] of p11Writes()) {
+        const said = heard ? `The address was not saved — ${words}` : maybeSaid('The address', 'saved', words);
         const did = await jobSave({ loc: LOC, locAnswer: answer });
-        const said = answer instanceof Error ? words : `The address was not saved — ${words}`;
         assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `the address: REGRESSION — ${said}`);
-        assert.deepEqual([did.saved, did.sent.length], [[], 1], 'the job is not sent after a refused address');
+        assert.deepEqual([did.saved, did.sent.length, did.locs], [[], 1, []], 'the job is not sent after a refused address; the form\'s address as it was');
     }
+    // A job refused after its address landed: about the job, never the address.
+    const after = await jobSave({ loc: LOC, jobAnswer: UNSENT() });
+    assert.deepEqual(after.statuses[1], { kind: 'err', msg: maybeSaid('The job', 'saved', 'The server could not be reached.') });
+});
+
+test('§0.263 Part 4: the job record\'s new address keeps one id across presses until it lands or the server refuses it in words; landed, the form takes its id — RUN', async () => {
+    const newLocIds = { current: {} };
+    let n = 0;
+    const uuid = () => `u${n++}`;
+    const typed = { id: null, address: '9 Elm St', city: 'Austin', state: 'TX', zip: '' };
+    const press = (locAnswer, loc = typed) => jobSave({ loc, locAnswer, newLocIds, uuid });
+    const lost = await press(UNSENT());
+    assert.deepEqual([lost.sent[0][0], lost.sent[0][1], lost.sent[0][2].id], ['/.netlify/functions/dispatch-customers?resource=locations', 'POST', 'dloc_u0']);
+    assert.deepEqual(newLocIds.current, { job_1: 'dloc_u0' }, 'held for the job');
+    const page = await press(P11_PAGE());
+    assert.equal(page.sent[0][2].id, 'dloc_u0', 'REGRESSION: a fresh id after an answer that proved nothing — a second address each press (census-B (c))');
+    assert.deepEqual(page.statuses[1], { kind: 'err', msg: maybeSaid('The address', 'saved', 'The server returned 502.') });
+    const refused = await press(onceOf(400, { error: 'City is required.' }));
+    assert.equal(refused.sent[0][2].id, 'dloc_u0');
+    assert.deepEqual([refused.statuses[1], newLocIds.current], [{ kind: 'err', msg: 'The address was not saved — City is required.' }, {}], 'the server\'s own refusal: nothing made, the id given up');
+    const fresh = await press(onceOf(201, { location: { id: 'dloc_u1' } }));
+    assert.equal(fresh.sent[0][2].id, 'dloc_u1', 'a fresh id after the server\'s own refusal');
+    assert.deepEqual([newLocIds.current, fresh.locs, fresh.sent[1][2].locationId], [{}, [{ ...typed, id: 'dloc_u1' }], 'dloc_u1'],
+        'landed: the id given up, the form\'s address takes it, the job saved at it');
+    // The form holds the id now: a second Save sends a PUT for that address — never a second address.
+    const again = await press(onceOf(200, { location: { id: 'dloc_u1' } }), fresh.locs[0]);
+    assert.deepEqual([again.sent[0][0], again.sent[0][1], again.sent[0][2].id, n], ['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_u1', 'PUT', 'dloc_u1', 2],
+        'REGRESSION: a second Save made another address');
+    // Landed with an answer that cannot be read: the id sent is the form's.
+    const unread = await jobSave({ loc: typed, locAnswer: P11_UNREADABLE(), newLocIds: { current: {} }, uuid: () => 'k' });
+    assert.deepEqual([unread.locs, unread.sent[1][2].locationId], [[{ ...typed, id: 'dloc_k' }], 'dloc_k']);
+    // After an org switch while the address was out: nothing said, the form left as it was.
+    const moved = await jobSave({ loc: typed, locAnswer: onceOf(201, { location: { id: 'dloc_m' } }), newLocIds: { current: {} }, uuid: () => 'm', switchAt: 0 });
+    assert.deepEqual([moved.locs, moved.statuses, moved.sent.length], [[], [null], 1]);
 });
 
 test('Part 11: the job record\'s save — landed, as stored and the address\'s id; after an org switch nothing said, no job sent — RUN', async () => {
     const landed = await jobSave({ loc: LOC });
     assert.deepEqual(landed.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']]);
     assert.equal(landed.sent[1][2].locationId, 'dloc_1');
+    assert.deepEqual(landed.locs, [{ ...LOC }], 'since §0.263 the form\'s address holds the id stored');
     assert.deepEqual([landed.saved, landed.selected, landed.statuses], [[STORED_JOB], ['job_1'], [null, { kind: 'ok', msg: 'Saved' }]]);
     const unreadable = await jobSave({ jobAnswer: P11_UNREADABLE() });
     assert.deepEqual([unreadable.saved, unreadable.statuses[1]], [[], { kind: 'ok', msg: 'Saved' }], 'landed with no job read: as before');
@@ -4436,20 +4573,28 @@ test('Part 11: the job record\'s save — landed, as stored and the address\'s i
 // The shift pattern's Save and a technician's job card: a failure in the house words, never a raw e.message.
 test('Part 11: the shift pattern\'s Save and a technician\'s job card say failureWords — the server\'s words pass, never "Failed to fetch" — RUN', async () => {
     const src = dispatchSrc();
-    const press = new Function('setBusy', 'setErr', 'onSave', 'wh', 'failureWords',
+    const press = new Function('setBusy', 'setErr', 'onSave', 'wh', 'failureWords', ...U4_NAMES,
         `return ${between(src, "async () => { setBusy(true); setErr(''); try { await onSave(wh); }", ' finally { setBusy(false); } }')} finally { setBusy(false); } };`);
     const run = p10Fn(DISPATCH, "    const run = async (patch) => {\n        setErr('');\n        try { await onUpdate(job.id, patch); }", '\n    };',
-        ['setErr', 'onUpdate', 'job', 'failureWords'], 'run');
-    const cases = [[new Error('Forbidden: read-only role'), 'Forbidden: read-only role'], [UNSENT(), 'The server could not be reached.'],
-        [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.'], [null, null]];
-    for (const [fail, words] of cases) {
+        ['setErr', 'onUpdate', 'job', 'failureWords', ...U4_NAMES], 'run');
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal (thrown by its caller as refusalError,
+    // heard) keeps its words — "Not saved — …" under the shift pattern; any other failure, or an error that does not say,
+    // may have saved it: "The working hours may have been saved …", "The job may have been updated …".
+    const cases = [[refusalError('Forbidden: read-only role', true), 'Forbidden: read-only role', true],
+        [refusalError('Internal server error (ref r1)', false), 'Internal server error (ref r1)', false],
+        [new Error('Forbidden: read-only role'), 'Forbidden: read-only role', false],
+        [UNSENT(), 'The server could not be reached.', false],
+        [new SyntaxError("Unexpected token '<'"), 'Its answer could not be read.', false], [null, null, null]];
+    for (const [fail, words, heard] of cases) {
         const errs = [], busy = [];
-        await press((v) => busy.push(v), (v) => errs.push(v), async () => { if (fail) throw fail; }, { mon: null }, failureWords)();
-        assert.deepEqual(errs, words ? ['', `Not saved — ${words}`] : [''], `the shift pattern: REGRESSION — ${words}`);
+        await press((v) => busy.push(v), (v) => errs.push(v), async () => { if (fail) throw fail; }, { mon: null }, failureWords, ...U4)();
+        const hoursSaid = heard ? `Not saved — ${words}` : maybeSaid('The working hours', 'saved', words, true);
+        assert.deepEqual(errs, words ? ['', hoursSaid] : [''], `the shift pattern: REGRESSION — ${hoursSaid}`);
         assert.deepEqual(busy, [true, false]);
         const cardErrs = [];
-        await run((v) => cardErrs.push(v), async () => { if (fail) throw fail; }, { id: 'job_1' }, failureWords)({ status: 'en_route' });
-        assert.deepEqual(cardErrs, words ? ['', words] : [''], `the job card: REGRESSION — ${words}`);
+        await run((v) => cardErrs.push(v), async () => { if (fail) throw fail; }, { id: 'job_1' }, failureWords, ...U4)({ status: 'en_route' });
+        const cardSaid = heard ? words : maybeSaid('The job', 'updated', words);
+        assert.deepEqual(cardErrs, words ? ['', cardSaid] : [''], `the job card: REGRESSION — ${cardSaid}`);
     }
 });
 
@@ -4502,8 +4647,8 @@ const PV_OLD = Object.freeze({ id: 'pv_0', customerId: 'cust_1', planId: 'plan_1
 const PV_OTHER = Object.freeze({ id: 'pv_9', customerId: 'cust_2', planId: 'plan_1', dueDate: '2026-11-20', action: 'skipped' });
 const PV_NEW = Object.freeze({ id: 'pv_1', customerId: 'cust_1', planId: 'plan_1', dueDate: '2026-11-20', action: 'skipped' });
 const p11bRecordVisit = (did, answer, org, switchAt, visits) => p10Fn(DISPATCH, '    const recordVisit = async (', '\n    };',
-    ['setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setPlanVisits'], 'recordVisit')(
-    (v) => did.errors.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), readRefusal, (o) => o === org.now, failureWords, visits.set);
+    ['setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setPlanVisits', ...U4_NAMES], 'recordVisit')(
+    (v) => did.errors.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), readRefusal, (o) => o === org.now, failureWords, visits.set, ...U4);
 const visitAct = async ({ answer, action = 'skipped', switchAt = -1 }) => {
     const did = { sent: [], errors: [] };
     const org = { now: 'org_a' };
@@ -4515,9 +4660,12 @@ const visitAct = async ({ answer, action = 'skipped', switchAt = -1 }) => {
 
 test('Part 11: Service due\'s skip and defer — each refusal and a failure said on the banner in the house words; false, nothing adopted — RUN', async () => {
     for (const action of ['skipped', 'deferred']) {
-        for (const [answer, words] of p11Refusals()) {
+        // Moved in §0.263 (the unknown-save rule, Part 4): only the server's own refusal is "The visit was not …"; any other
+        // answer, and a throw, may have recorded it (a press again is safe: one per occurrence) — still false, nothing adopted.
+        for (const [answer, words, heard] of p11Writes()) {
+            const said = heard ? `The visit was not ${action} — ${words}` : maybeSaid('The visit', action, words);
             const did = await visitAct({ answer, action });
-            assert.deepEqual(did.errors, ['', `The visit was not ${action} — ${words}`], `REGRESSION — "(HTTP N)", the ref dropped, or offline an unhandled rejection said nowhere: ${words}`);
+            assert.deepEqual(did.errors, ['', said], `REGRESSION — "(HTTP N)", the ref dropped, offline an unhandled rejection said nowhere, or an answer that proves nothing said as not done: ${said}`);
             assert.deepEqual([did.r, did.same], [false, true], 'false — the editor stays open; the exceptions as they were');
             assert.deepEqual(did.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-plan-visits', 'POST']]);
             assert.deepEqual(did.sent[0][2], { customerId: 'cust_1', planId: 'plan_1', dueDate: '2026-11-20', action, reason: 'Declined' });
@@ -4556,10 +4704,13 @@ test('Part 11: submitPending keeps the skip/defer editor open under the banner\'
     };
     for (const mode of ['skip', 'defer']) {
         const action = mode === 'skip' ? 'skipped' : 'deferred';
-        for (const [answer, words] of [[UNSENT(), 'The server could not be reached.'], [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)']]) {
+        // Moved in §0.263 (the unknown-save rule, Part 4): the two that prove nothing say maybe; the server's own refusal "not".
+        for (const [answer, said] of [[UNSENT(), maybeSaid('The visit', action, 'The server could not be reached.')],
+            [onceOf(500, { error: 'Internal server error', requestId: 'r1' }), maybeSaid('The visit', action, 'Internal server error (ref r1)')],
+            [onceOf(409, { error: 'That visit is already recorded.' }), `The visit was not ${action} — That visit is already recorded.`]]) {
             const did = await press(answer, mode);
             assert.deepEqual(did.pending, [], `${mode}: REGRESSION — the editor closed over a visit not recorded`);
-            assert.deepEqual(did.errors, ['', `The visit was not ${action} — ${words}`]);
+            assert.deepEqual(did.errors, ['', said]);
         }
         const landed = await press(onceOf(201, { visit: { ...PV_NEW, action } }), mode);
         assert.deepEqual([landed.pending, landed.errors], [[null], ['']], 'landed: the editor closes, as before');
@@ -4575,18 +4726,21 @@ const renewIt = async ({ answer, switchAt = -1 }) => {
     const custs = stateOf(start);
     let go = null;
     const renewAgreement = p10Fn(DISPATCH, '    const renewAgreement = (row) => {', '\n    };',
-        ['renewedExpiry', 'todayYmd', 'setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setCustomers', 'showConfirm'], 'renewAgreement')(
+        ['renewedExpiry', 'todayYmd', 'setVisitActionError', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'failureWords', 'setCustomers', 'showConfirm', ...U4_NAMES], 'renewAgreement')(
         () => '2027-12-01', '2026-11-12', (v) => did.errors.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), readRefusal, (o) => o === org.now, failureWords,
-        custs.set, (msg, g) => { did.asked.push(msg); go = g; });
+        custs.set, (msg, g) => { did.asked.push(msg); go = g; }, ...U4);
     renewAgreement({ customer: PV_CUST });
     await go();
     return { ...did, custs: custs.value, same: custs.value === start };
 };
 
 test('Part 11: Renew — each refusal and a failure said in the house words on the banner, nothing adopted; landed as before; after an org switch nothing — RUN', async () => {
-    for (const [answer, words] of p11Refusals()) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): only the server's own refusal is "not renewed"; any other answer,
+    // and a throw, may have renewed it — said so, nothing adopted (the customer read again on a reload).
+    for (const [answer, words, heard] of p11Writes()) {
+        const said = heard ? `The agreement was not renewed — ${words}` : maybeSaid('The agreement', 'renewed', words);
         const did = await renewIt({ answer });
-        assert.deepEqual(did.errors, ['', `The agreement was not renewed — ${words}`], `REGRESSION — "(HTTP N)" or offline silent: ${words}`);
+        assert.deepEqual(did.errors, ['', said], `REGRESSION — "(HTTP N)", offline silent, or an answer that proves nothing said as not renewed: ${said}`);
         assert.equal(did.same, true);
         assert.deepEqual(did.sent.map(([u, m, b]) => [u, m, b]), [['/.netlify/functions/dispatch-customers?id=cust_1', 'PUT', { agreementExpiry: '2027-12-01' }]]);
     }
@@ -4601,6 +4755,22 @@ test('Part 11: Renew — each refusal and a failure said in the house words on t
     for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x' }), P11_PAGE(), UNSENT(), onceOf(200, { customer: stored })]) {
         const did = await renewIt({ answer, switchAt: 0 });
         assert.deepEqual([did.errors, did.same], [[''], true], 'REGRESSION: an answer from the org left said or adopted');
+    }
+});
+
+test('§0.263 Part 4: Undo a skip or deferral — the server\'s own refusal "Not undone"; an answer that proves nothing may have undone it, the row kept — RUN', async () => {
+    const undo = p10Fn(DISPATCH, '    const undoVisit = async (row, visit) => {', '\n    };', ['planVisits', 'setVisitActionError', 'dbWrite', 'setPlanVisits', ...U4_NAMES], 'undoVisit');
+    for (const [answer, said, left] of [
+        [{ ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false }, 'Not undone — You do not have permission to make this change.', 2],
+        [{ ok: false, status: 502, error: 'The server returned 502.', unknown: true }, 'It may have been undone — reload the page to see whether it was: The server returned 502.', 2],
+        [{ ok: false, status: 0, error: 'The server could not be reached.', unknown: true }, 'It may have been undone — reload the page to see whether it was: The server could not be reached.', 2],
+        [{ ok: true, status: 200 }, null, 1],
+    ]) {
+        const visits = stateOf([PV_OLD, PV_OTHER]);
+        const errors = [], sent = [];
+        await undo([PV_OLD, PV_OTHER], (v) => errors.push(v), async (url, opts) => { sent.push([url, opts.method]); return answer; }, visits.set, ...U4)(PV_ROW);
+        assert.deepEqual([errors, visits.value.length], [said ? ['', said] : [''], left], said || 'undone');
+        assert.deepEqual(sent, [['/.netlify/functions/dispatch-plan-visits?id=pv_0', 'DELETE']]);
     }
 });
 
@@ -4680,7 +4850,9 @@ const NJ_FORM = Object.freeze({ customer: 'Acme', customerId: 'cust_1', accountI
     madeLocation: null, refusedDeal: '' });
 const NJ_JOB0 = Object.freeze({ id: 'job_0' });
 const NJ_CUST = Object.freeze({ id: 'cust_1', name: 'Acme' });
-const newJob = async ({ form = {}, answers, switchAt = -1 }) => {
+// Since §0.263 (the unknown-save rule, Part 4) New Job's creates hold their ids in `heldNewJobIds` (the tab's ref —
+// handed in so presses can share it); `uuid` stands in for crypto.randomUUID.
+const newJob = async ({ form = {}, answers, switchAt = -1, heldNewJobIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID() }) => {
     const did = { sent: [], errors: [], saving: [], shown: [], selected: [], forms: [] };
     const org = { now: 'org_a' };
     const queue = [...answers];
@@ -4690,19 +4862,22 @@ const newJob = async ({ form = {}, answers, switchAt = -1 }) => {
     const handle = p10Fn(DISPATCH, '    const handleSaveNewJob = async () => {', '\n    };',
         ['newJobForm', 'setNewJobError', 'placeholderOn', 'customerForText', 'customers', 'accounts', 'dealHolds', 'DEAL_NEEDS_PICK', 'typedCustomerRefusal',
             'setNewJobSaving', 'requestOrg', 'saveDroppingRefused', 'stillOrg', 'dbFetch', 'refusalWords', 'readRefusal', 'failureWords', 'setCustomers', 'setNewJobForm',
-            'setJobs', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm'], 'handleSaveNewJob')(
+            'setJobs', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm', 'heldNewJobIds', 'crypto', ...U4_NAMES], 'handleSaveNewJob')(
         f, (v) => did.errors.push(v), () => false, () => ({}), custsStart, [], () => false, 'Pick a customer.', () => 'refused',
         (v) => did.saving.push(v), () => 'org_a', saveDroppingRefused, (o) => o === org.now, p11Fetch(did, () => queue.shift(), org, { switchAt }),
         refusalWords, readRefusal, failureWords, custs.set, (u) => did.forms.push(typeof u === 'function' ? u(f) : u), jobs.set, (v) => did.selected.push(v),
-        NJ_FORM, () => {}, (v) => did.shown.push(v));
+        NJ_FORM, () => {}, (v) => did.shown.push(v), heldNewJobIds, { randomUUID: uuid }, ...U4);
     await handle();
     return { ...did, jobs: jobs.value, jobsSame: jobs.value === jobsStart, custs: custs.value, custsSame: custs.value === custsStart };
 };
 
 test('Part 11: New Job — the job\'s refusal in the server\'s words with their ref, the form open, nothing listed; a refused copied link still dropped — RUN', async () => {
-    for (const [answer, words] of p11Refusals()) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal in its words, as before; any other answer,
+    // and a throw, may have made the job — "The job may have been created …", the form open, nothing listed.
+    for (const [answer, words, heard] of p11Writes()) {
+        const said = heard ? words : maybeSaid('The job', 'created', words);
         const did = await newJob({ answers: [answer] });
-        assert.deepEqual(did.errors, ['', words], `REGRESSION — "Save failed", the ref dropped, or "Failed to fetch": ${words}`);
+        assert.deepEqual(did.errors, ['', said], `REGRESSION — "Save failed", the ref dropped, "Failed to fetch", or an answer that proves nothing said as refused: ${said}`);
         assert.deepEqual([did.jobsSame, did.shown, did.sent.length], [true, [], 1], 'the form stays open, nothing listed');
         assert.deepEqual(did.saving, [true, false]);
     }
@@ -4719,9 +4894,11 @@ test('Part 11: New Job — the job\'s refusal in the server\'s words with their 
 
 test('Part 11: New Job — the customer\'s and the job address\'s refusals named, the job not sent after them; landed unreadable keeps the ids sent — RUN', async () => {
     const typed = { customerId: '', customer: 'New Co' };
-    for (const [answer, words] of p11Refusals()) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): only the server's own refusal is "not created" / "not saved"; any
+    // other answer, and a throw (it said the bare words), may have made it — said about the step it was out on.
+    for (const [answer, words, heard] of p11Writes()) {
         const did = await newJob({ form: typed, answers: [answer] });
-        const said = answer instanceof Error ? words : `The customer was not created — ${words}`;
+        const said = heard ? `The customer was not created — ${words}` : maybeSaid('The customer', 'created', words);
         assert.deepEqual(did.errors, ['', said], `the customer: REGRESSION — ${said}`);
         assert.deepEqual([did.sent.length, did.sent[0][0], did.custsSame, did.jobsSame], [1, '/.netlify/functions/dispatch-customers', true, true]);
     }
@@ -4739,9 +4916,9 @@ test('Part 11: New Job — the customer\'s and the job address\'s refusals named
     assert.deepEqual([dropC.errors, dropC.sent.length, dropC.sent[0][2].accountId, dropC.sent[1][2].accountId, dropC.sent[2][2].customerId], [[''], 3, 'acc_gone', null, 'dcust_k'],
         'REGRESSION: the refused account\'s field lost — the customer not made without it');
     const addressed = { address: '1 Main St', city: 'Austin' };
-    for (const [answer, words] of p11Refusals()) {
+    for (const [answer, words, heard] of p11Writes()) {
         const did = await newJob({ form: addressed, answers: [answer] });
-        const said = answer instanceof Error ? words : `The job address was not saved — ${words}`;
+        const said = heard ? `The job address was not saved — ${words}` : maybeSaid('The job address', 'saved', words);
         assert.deepEqual(did.errors, ['', said], `the address: REGRESSION — ${said}`);
         assert.deepEqual([did.sent.length, did.sent[0][0], did.jobsSame], [1, '/.netlify/functions/dispatch-customers?resource=locations', true]);
     }
@@ -4780,6 +4957,54 @@ test('Part 11: New Job — an answer after an org switch says and lists nothing 
     assert.deepEqual([loc.errors, loc.sent.length], [[''], 1]);
 });
 
+test('§0.263 Part 4: New Job — a customer, address or job create pressed again after an answer that proved nothing sends the same id; after the server\'s own refusal, or once landed, the id is given up — RUN', async () => {
+    let n = 0;
+    const uuid = () => `u${n++}`;
+    const idOf = (did, i = 0) => did.sent[i][2].id;
+    // The customer.
+    const held = { current: {} };
+    const typed = { customerId: '', customer: 'New Co' };
+    const c1 = await newJob({ form: typed, answers: [UNSENT()], heldNewJobIds: held, uuid });
+    assert.deepEqual([c1.errors[1], held.current], [maybeSaid('The customer', 'created', 'The server could not be reached.'), { 'cust|New Co|': idOf(c1) }]);
+    const c2 = await newJob({ form: typed, answers: [P11_PAGE()], heldNewJobIds: held, uuid });
+    assert.equal(idOf(c2), idOf(c1), 'REGRESSION: a fresh customer id after an answer that proved nothing — a second customer of the name');
+    const other = await newJob({ form: { ...typed, customer: 'Other Co' }, answers: [UNSENT()], heldNewJobIds: held, uuid });
+    assert.notEqual(idOf(other), idOf(c1), 'another customer, its own id');
+    const c3 = await newJob({ form: typed, answers: [onceOf(409, { error: 'That account is already a customer.' })], heldNewJobIds: held, uuid });
+    assert.deepEqual([idOf(c3), c3.errors[1]], [idOf(c1), 'The customer was not created — That account is already a customer.']);
+    assert.ok(!('cust|New Co|' in held.current), 'the server\'s own refusal: nothing made, the id given up');
+    const c4 = await newJob({ form: typed, answers: [onceOf(201, { customer: { id: 'dcust_s', name: 'New Co' } }), onceOf(201, { job: { id: 'djob_s' } })], heldNewJobIds: held, uuid });
+    assert.notEqual(idOf(c4), idOf(c1), 'a fresh id after the server\'s own refusal');
+    assert.ok(!('cust|New Co|' in held.current), 'landed: given up');
+    // The job address.
+    const held2 = { current: {} };
+    const addressed = { address: '1 Main St', city: 'Austin' };
+    const a1 = await newJob({ form: addressed, answers: [UNSENT()], heldNewJobIds: held2, uuid });
+    assert.equal(a1.errors[1], maybeSaid('The job address', 'saved', 'The server could not be reached.'));
+    const a2 = await newJob({ form: addressed, answers: [onceOf(500, { error: 'Internal server error' })], heldNewJobIds: held2, uuid });
+    assert.equal(idOf(a2), idOf(a1), 'REGRESSION: a fresh address id after an answer that proved nothing — a second address');
+    const a3 = await newJob({ form: addressed, answers: [onceOf(201, { location: { id: idOf(a1) } }), UNSENT()], heldNewJobIds: held2, uuid });
+    assert.equal(idOf(a3), idOf(a1));
+    assert.ok(a3.forms.some((x) => x.madeLocation?.id === idOf(a1)), 'landed: the form holds the address made — a retry sends no second');
+    assert.equal(a3.errors[1], maybeSaid('The job', 'created', 'The server could not be reached.'), 'the job, not the address, may have been created');
+    assert.ok(!Object.keys(held2.current).some((k) => k.startsWith('loc|')), 'the landed address\'s id given up');
+    const a4 = await newJob({ form: addressed, answers: [onceOf(400, { error: 'City is required.' })], heldNewJobIds: { current: { [`loc|${['cust_1', '1 Main St', 'Austin', '', ''].join('\n')}`]: 'dloc_h' } }, uuid });
+    assert.deepEqual([idOf(a4), a4.errors[1]], ['dloc_h', 'The job address was not saved — City is required.'], 'the held id is the one sent, keyed by the address');
+    // The job.
+    const held3 = { current: {} };
+    const j1 = await newJob({ answers: [UNSENT()], heldNewJobIds: held3, uuid });
+    const j2 = await newJob({ answers: [P11_PAGE()], heldNewJobIds: held3, uuid });
+    assert.equal(idOf(j2), idOf(j1), 'REGRESSION: a fresh job id after an answer that proved nothing — a second job');
+    assert.deepEqual(j2.errors[1], maybeSaid('The job', 'created', 'The server returned 502.'));
+    const changed = await newJob({ form: { title: 'Filter swap' }, answers: [UNSENT()], heldNewJobIds: held3, uuid });
+    assert.notEqual(idOf(changed), idOf(j1), 'another job, its own id');
+    const j3 = await newJob({ answers: [onceOf(409, { error: 'That job id is already in use.' })], heldNewJobIds: held3, uuid });
+    assert.deepEqual([idOf(j3), j3.errors[1]], [idOf(j1), 'That job id is already in use.']);
+    const j4 = await newJob({ answers: [onceOf(201, { job: { id: 'djob_n' } })], heldNewJobIds: held3, uuid });
+    assert.notEqual(idOf(j4), idOf(j1), 'a fresh id after the server\'s own refusal');
+    assert.deepEqual(Object.keys(held3.current).length, 1, 'landed: only the changed job\'s id still held');
+});
+
 // The mass schedule: the first refusal's words, with the job they are about.
 const MJ_1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, equipCategories: [], status: 'unscheduled' });
 const MJ_2 = Object.freeze({ id: 'job_2', title: '', customer: 'Beta Co', durationHrs: 1, equipCategories: [], status: 'unscheduled' });
@@ -4791,25 +5016,31 @@ const massRun = async (answers) => {
         skipped: [], fromStr: '2026-11-16', toStr: '2026-11-22' };
     const confirm = p10Fn(DISPATCH, '    const confirmMassSchedule = async () => {', '\n    };',
         ['massPlan', 'setMassSaving', 'setMassProg', 'requestOrg', 'stillOrg', 'pickEquipmentFor', 'equipment', 'overlappingRivals', 'jobs', 'hhmm', 'dbFetch',
-            'readRefusal', 'failureWords', 'setJobs', 'addAudit', 'setMassPlan'], 'confirmMassSchedule')(
+            'readRefusal', 'failureWords', 'setJobs', 'addAudit', 'setMassPlan', ...U4_NAMES], 'confirmMassSchedule')(
         plan, (v) => did.saving.push(v), (v) => did.prog.push(v), () => 'org_a', () => true, () => ({ picked: [] }), [], () => [], jobs.value,
         (h) => `${String(h).padStart(2, '0')}:00`, p11Fetch(did, () => queue.shift(), { now: 'org_a' }), readRefusal, failureWords, jobs.set,
-        (...a) => did.audits.push(a), (u) => did.plans.push(typeof u === 'function' ? u(plan) : u));
+        (...a) => did.audits.push(a), (u) => did.plans.push(typeof u === 'function' ? u(plan) : u), ...U4);
     await confirm();
     return { ...did, last: did.prog[did.prog.length - 1], jobs: jobs.value };
 };
 
 test('Part 11: the mass schedule — the first refusal or failure said with its job, in the house words; what landed leaves the panel — RUN', async () => {
-    for (const [answer, words] of p11Refusals()) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal keeps its words; any other answer, and a
+    // throw, may have scheduled the job — "It may have been scheduled …", the job left in the panel (a press again re-sends
+    // its PUT, which lands it once).
+    for (const [answer, words, heard] of p11Writes()) {
+        const said = heard ? words : maybeSaid('It', 'scheduled', words);
         const did = await massRun([answer, onceOf(200, { job: {} })]);
-        assert.deepEqual(did.last, { done: 1, total: 2, failed: 1, error: `Boiler service: ${words}` }, `REGRESSION — "HTTP N" or "Failed to fetch": ${words}`);
+        assert.deepEqual(did.last, { done: 1, total: 2, failed: 1, error: `Boiler service: ${said}` }, `REGRESSION — "HTTP N", "Failed to fetch", or an answer that proves nothing said as refused: ${said}`);
         assert.deepEqual(did.jobs.map((j) => j.status), ['unscheduled', 'scheduled'], 'only the job that landed moves');
         assert.deepEqual(did.plans[did.plans.length - 1].proposals.map((p) => p.job.id), ['job_1'], 'a second press sends only the job refused');
     }
     const second = await massRun([onceOf(200, {}), onceOf(409, { error: 'The job was changed since.' })]);
     assert.equal(second.last.error, 'Beta Co: The job was changed since.', 'a job with no title named by its customer');
-    const both = await massRun([onceOf(500, { error: 'first' }), onceOf(500, { error: 'second' })]);
+    const both = await massRun([onceOf(409, { error: 'first' }), onceOf(409, { error: 'second' })]);
     assert.deepEqual([both.last.failed, both.last.error], [2, 'Boiler service: first'], 'the first refusal\'s words kept');
+    const bothMaybe = await massRun([onceOf(500, { error: 'first' }), onceOf(409, { error: 'second' })]);
+    assert.deepEqual([bothMaybe.last.failed, bothMaybe.last.error], [2, `Boiler service: ${maybeSaid('It', 'scheduled', 'first')}`], 'the first failure\'s words kept, as maybe');
     const landed = await massRun([onceOf(200, {}), onceOf(200, {})]);
     assert.deepEqual([landed.last, landed.plans], [{ done: 2, total: 2, failed: 0, error: '' }, [null]]);
 });
@@ -4820,29 +5051,31 @@ test('Part 11: the shift pattern\'s save and the job card\'s update throw the ho
         const did = { sent: [] };
         const start = [{ id: 'dtech_1', workingHours: null }, { id: 'dtech_2' }];
         const raw = stateOf(start);
-        const fn = p10Fn(DISPATCH, '    const saveWorkingHours = async (techId, workingHours) => {', '\n    };', ['dbFetch', 'readRefusal', 'setTechsRaw'], 'saveWorkingHours')(
-            p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set);
+        const fn = p10Fn(DISPATCH, '    const saveWorkingHours = async (techId, workingHours) => {', '\n    };', ['dbFetch', 'readRefusal', 'setTechsRaw', ...U4_NAMES], 'saveWorkingHours')(
+            p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set, ...U4);
         let thrown = null;
         try { await fn('dtech_1', { mon: null }); } catch (e) { thrown = e; }
-        return { ...did, said: thrown ? failureWords(thrown) : null, raw: raw.value, same: raw.value === start };
+        return { ...did, said: thrown ? failureWords(thrown) : null, unknown: thrown ? unknownOf(thrown) : null, raw: raw.value, same: raw.value === start };
     };
     const card = async (answer) => {
         const did = { sent: [], busy: [] };
         const start = [{ id: 'job_1', status: 'scheduled' }, { id: 'job_2' }];
         const raw = stateOf(start);
-        const fn = p10Fn(DISPATCH, '    const updateMyJob = async (jobId, patch) => {', '\n    };', ['setTechBusyId', 'dbFetch', 'readRefusal', 'setJobsRaw'], 'updateMyJob')(
-            (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set);
+        const fn = p10Fn(DISPATCH, '    const updateMyJob = async (jobId, patch) => {', '\n    };', ['setTechBusyId', 'dbFetch', 'readRefusal', 'setJobsRaw', ...U4_NAMES], 'updateMyJob')(
+            (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set, ...U4);
         let thrown = null;
         try { await fn('job_1', { status: 'en_route' }); } catch (e) { thrown = e; }
-        return { ...did, said: thrown ? failureWords(thrown) : null, raw: raw.value, same: raw.value === start };
+        return { ...did, said: thrown ? failureWords(thrown) : null, unknown: thrown ? unknownOf(thrown) : null, raw: raw.value, same: raw.value === start };
     };
-    for (const [answer, words] of p11Refusals()) {
+    // Moved in §0.263 (the unknown-save rule, Part 4): the throw keeps its words and carries whether it was the server's
+    // own refusal — the callers (the shift pattern's Save, the job card) say any other as maybe.
+    for (const [answer, words, heard] of p11Writes()) {
         const h = await hours(answer);
-        assert.deepEqual([h.said, h.same], [words, true], `the shift pattern: REGRESSION — "HTTP N", the ref dropped: ${words}`);
+        assert.deepEqual([h.said, h.unknown, h.same], [words, !heard, true], `the shift pattern: REGRESSION — "HTTP N", the ref dropped, or heard and unknown confused: ${words}`);
     }
-    for (const [answer, words] of p11Refusals()) {
+    for (const [answer, words, heard] of p11Writes()) {
         const c = await card(answer);
-        assert.deepEqual([c.said, c.same, c.busy], [words, true, ['job_1', null]], `the job card: REGRESSION — ${words}`);
+        assert.deepEqual([c.said, c.unknown, c.same, c.busy], [words, !heard, true, ['job_1', null]], `the job card: REGRESSION — ${words}`);
     }
     const hl = await hours(onceOf(200, { technician: { id: 'dtech_1', workingHours: { mon: null } } }));
     assert.deepEqual([hl.said, hl.raw[0].workingHours, hl.sent[0][2]], [null, { mon: null }, { id: 'dtech_1', workingHours: { mon: null } }]);
@@ -4861,22 +5094,37 @@ const weekCommit = async ({ answer, switchAt = -1 }) => {
     const org = { now: 'org_a' };
     const start = [WM_JOB, { id: 'job_2' }];
     const jobs = stateOf(start);
+    // Since §0.263 (the unknown-save rule, Part 4) the row moves through moveRow — handleWeekMove's helper, extracted
+    // beside commit over the same stubs; an answer that proves nothing moves it as sent.
+    const moveRow = p10Fn(DISPATCH, '        const moveRow = (saved) => setJobs(', '\n            : j));',
+        ['setJobs', 'job', 'toDate', 'plan', 'queueWindow', 'reserved'], 'moveRow', '\n            : j));')(
+        jobs.set, WM_JOB, '2026-11-17', { crew: ['tech_1'] }, () => '10:00', null);
     const commit = p10Fn(DISPATCH, '        const commit = async (overridden) => {', '\n        };',
         ['setWeekMove', 'requestOrg', 'dbFetch', 'job', 'payload', 'stillOrg', 'readRefusal', 'failureWords', 'setJobs', 'plan', 'toDate', 'reserved', 'queueWindow',
-            'setJobsRaw', 'addAudit', 'name', 'fromTech', 'where', 'unitLabel', 'equipment', 'weekMoveTimer', 'clearTimeout', 'setTimeout'], 'commit')(
+            'setJobsRaw', 'addAudit', 'name', 'fromTech', 'where', 'unitLabel', 'equipment', 'weekMoveTimer', 'clearTimeout', 'setTimeout', 'moveRow', ...U4_NAMES], 'commit')(
         (v) => did.states.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), WM_JOB, { scheduledDate: '2026-11-17' }, (o) => o === org.now, readRefusal,
         failureWords, jobs.set, { crew: ['tech_1'] }, '2026-11-17', null, () => '10:00', (u) => did.raw.push(u), (...a) => did.audits.push(a), 'Boiler service', null,
-        '2026-11-17', (id) => id, [], { current: null }, () => {}, () => 1);
+        '2026-11-17', (id) => id, [], { current: null }, () => {}, () => 1, moveRow, ...U4);
     await commit([]);
     return { ...did, jobs: jobs.value, same: jobs.value === start };
 };
 
 test('Part 11: the week board\'s move — a refusal in the house words, a 403 the role\'s sentence; nothing moved; after an org switch nothing said — RUN', async () => {
     const BUSY = { busy: true, error: '', notice: '' };
-    for (const [answer, words] of p11Refusals('Your role cannot reschedule jobs.')) {
+    // Moved in §0.263 (the unknown-save rule, Part 4; Jeff's Q2): the server's own refusal keeps its words (a 403 the
+    // role's) and moves nothing; any other answer, and a throw, may have moved it — the row moved as sent, said as maybe,
+    // no audit row and no raw copy (nothing stored was read).
+    for (const [answer, words, heard] of p11Writes('Your role cannot reschedule jobs.')) {
         const did = await weekCommit({ answer });
-        assert.deepEqual(did.states, [BUSY, { busy: false, error: words, notice: '' }], `REGRESSION — "HTTP N" or "Failed to fetch": ${words}`);
-        assert.deepEqual([did.same, did.audits, did.raw], [true, [], []]);
+        const said = heard ? words : maybeSaid('Boiler service', 'moved', words);
+        assert.deepEqual(did.states, [BUSY, { busy: false, error: said, notice: '' }], `REGRESSION — "HTTP N", "Failed to fetch", or an answer that proves nothing said as refused: ${said}`);
+        assert.deepEqual([did.audits, did.raw], [[], []]);
+        if (heard) assert.equal(did.same, true, 'the server\'s own refusal: nothing moved');
+        else {
+            assert.equal(did.same, false, 'REGRESSION: a move that may have landed put back');
+            assert.deepEqual(did.jobs, [{ ...WM_JOB, scheduledDate: '2026-11-17', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [], publicToken: null, customerNotifications: [] },
+                { id: 'job_2' }], 'the row moved as sent — the window kept, no stored row read');
+        }
     }
     const landed = await weekCommit({ answer: onceOf(200, { job: { id: 'job_1', scheduledDate: '2026-11-17', status: 'scheduled' } }) });
     assert.deepEqual([landed.states[1].error, landed.states[1].notice, landed.jobs[0].scheduledDate, landed.jobs[0].window, landed.audits.length], ['', 'Moved Boiler service to 2026-11-17.', '2026-11-17', '10:00', 1]);

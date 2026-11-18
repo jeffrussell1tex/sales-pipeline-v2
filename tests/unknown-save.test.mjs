@@ -12,7 +12,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { heardRefusal, landedBefore, maybeSaid, alreadySaid, writeRefusal, failureWords, refusalWords } from '../src/utils/refusalWords.js';
+import { heardRefusal, landedBefore, maybeSaid, alreadySaid, writeRefusal, failureWords, refusalWords,
+    writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
+import { maybeFreedWords, notFreedWords } from '../src/utils/dispatchUnassign.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
 import { emptyReceipt, receiptFromInsert, receiptFromUpdate, isClean, describeReceipt, mergeReceipts } from '../src/utils/importReceipt.js';
 import { makeBulkClient } from '../src/utils/bulkClient.js';
@@ -153,10 +155,11 @@ const SWEPT = ['src/App.jsx', 'src/components/KanbanView.jsx', 'src/components/l
     'src/hooks/useMerge.js', 'src/hooks/useOpportunities.js', 'src/hooks/useTasks.js', 'src/hooks/useUserHandlers.js', 'src/utils/bulkClient.js',
     'src/utils/documentsStorage.js', 'src/utils/storage.js', 'src/Tabs/TasksTab.jsx', 'src/Tabs/settings/audit/AuditDetail.jsx',
     // Part 3 (state §0.262): Leads, Quotes (and its hook), Reports, the Sales Manager's three throws.
-    'src/Tabs/LeadsTab.jsx', 'src/Tabs/QuotesTab.jsx', 'src/Tabs/ReportsTab.jsx', 'src/Tabs/SalesManagerTab.jsx', 'src/hooks/useQuotes.js'];
-// The next batches (ANSWERS.md Q3): Part 4 (Dispatch), Part 5 (Settings and its senders). Part 3 swept in §0.262.
+    'src/Tabs/LeadsTab.jsx', 'src/Tabs/QuotesTab.jsx', 'src/Tabs/ReportsTab.jsx', 'src/Tabs/SalesManagerTab.jsx', 'src/hooks/useQuotes.js',
+    // Part 4 (state §0.263): Dispatch.
+    'src/Tabs/DispatchTab.jsx'];
+// The next batch (ANSWERS.md Q3): Part 5 (Settings and its senders). Part 3 swept in §0.262, Part 4 in §0.263.
 const PENDING = {
-    'src/Tabs/DispatchTab.jsx': 4,
     'src/Tabs/settings/company/CompanyCalendarDetail.jsx': 5, 'src/Tabs/settings/data/BackupDetail.jsx': 5, 'src/Tabs/settings/data/ExportDetail.jsx': 5,
     'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx': 5, 'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx': 5,
     'src/Tabs/settings/integrations/ApiKeysDetail.jsx': 5, 'src/Tabs/settings/integrations/AutomationsDetail.jsx': 5,
@@ -175,7 +178,7 @@ test('THE GUARD: every file under src/ that sends a write is swept, named with t
     assert.deepEqual(writers.filter((f) => !named.has(f)), [], 'a file sends a write and is not named — sweep it (heardRefusal / writeRefusal / maybeSaid) or name it here with its Part');
     assert.deepEqual([...named].filter((f) => !writers.includes(f)), [], 'a name here sends no write any more — take it out');
     for (const f of SWEPT) assert.ok(RULE.test(read(f)), `${f}: swept, but reads no answer that proves nothing`);
-    for (const f of Object.keys(PENDING)) assert.ok([4, 5].includes(PENDING[f]), f);
+    for (const f of Object.keys(PENDING)) assert.ok([5].includes(PENDING[f]), f);
     assert.ok(writers.length >= 44, `the census's files (${writers.length})`);
 });
 
@@ -363,4 +366,80 @@ test('WIRING (Part 3): the Sales Manager\'s three throws say may-have; the quote
     const reports = read('src/Tabs/ReportsTab.jsx');
     assert.equal((reports.match(/const heldReportIds = React\.useRef\(\{\}\);/g) || []).length, 2, 'the library and Activity history');
     assert.equal((reports.match(/if \(!\(held && landedBefore\(res\.status, refused\)\)\) throw Object\.assign/g) || []).length, 2);
+});
+
+
+// ── Part 4 (state §0.263): Dispatch ──
+// The helpers every Dispatch write reads its refusal through (refusalWords.js) and the banner's words for jobs that may
+// have been returned to the queue (dispatchUnassign.js) run here. The handlers themselves run extracted in
+// tests/refusal-sweep.test.mjs, beside their Part 6 and Part 11 runners: the crew builder, customer, technician, job record
+// (and its new address's one id), invoice panel (a create's 409 naming the invoice adopts it), time off (the unassign
+// loop's notFreed and maybeFreed), Service due, Renew, Undo, New Job (its held ids), the mass schedule, the shift
+// pattern, the job card and the week move (kept as sent) — the tests named "§0.263 Part 4" there, and those moved.
+test('RUN (Part 4): writeRefusalOf — the body read once; heard only for a 4xx in words; the role\'s sentence only for the server\'s own 403', async () => {
+    let reads = 0;
+    const once = (status, body) => ({ ok: false, status, json: async () => { if (reads++) throw new TypeError('Body is unusable'); if (body instanceof Error) throw body; return body; } });
+    const run = async (status, body, role) => { reads = 0; const r = await writeRefusalOf(once(status, body), role); assert.equal(reads, 1, 'the body read once'); return r; };
+    const ROLE = 'Your role cannot edit jobs.';
+    assert.deepEqual(await run(403, { error: 'Forbidden' }, ROLE), { body: { error: 'Forbidden' }, heard: true, words: ROLE });
+    assert.deepEqual(await run(403, { error: 'Forbidden', requestId: 'r1' }), { body: { error: 'Forbidden', requestId: 'r1' }, heard: true, words: 'Forbidden (ref r1)' }, 'no role: the server\'s words');
+    assert.deepEqual(await run(409, { error: 'Changed since.' }, ROLE), { body: { error: 'Changed since.' }, heard: true, words: 'Changed since.' }, 'a 4xx that is no 403 keeps its words, never the role\'s');
+    assert.deepEqual(await run(403, {}, ROLE), { body: {}, heard: false, words: 'The server returned 403.' }, 'REGRESSION: a wordless 403 said as the role\'s — it proves nothing');
+    assert.deepEqual(await run(500, { error: 'Internal server error', requestId: 'r2' }, ROLE), { body: { error: 'Internal server error', requestId: 'r2' }, heard: false, words: 'Internal server error (ref r2)' },
+        'REGRESSION: a 500 in words read as nothing written');
+    assert.deepEqual(await run(502, new SyntaxError('<html>')), { body: null, heard: false, words: 'The server returned 502.' }, 'a page: no body');
+    assert.deepEqual(await run(400, { error: '  ' }), { body: { error: '  ' }, heard: false, words: 'The server returned 400.' }, 'blank words: not heard');
+});
+
+test('RUN (Part 4): refusalError, unknownOf, saidError, thrownSaid — a catch says the server\'s own refusal and words said in full as they are, anything else as maybe', () => {
+    const heard = refusalError('Name is required', true);
+    const lost = refusalError('Internal server error (ref r1)', false);
+    for (const e of [heard, lost]) assert.ok(e instanceof Error && Object.getPrototypeOf(e) === Error.prototype, 'a plain Error: failureWords says its message');
+    assert.deepEqual([heard.message, heard.unknown, unknownOf(heard), failureWords(heard)], ['Name is required', false, false, 'Name is required']);
+    assert.deepEqual([lost.unknown, unknownOf(lost)], [true, true]);
+    for (const e of [new Error('x'), new TypeError('Failed to fetch'), new SyntaxError('<'), null, undefined, {}, { unknown: undefined }]) {
+        assert.equal(unknownOf(e), true, 'REGRESSION: an error that does not say read as nothing written');
+    }
+    const unread = "The time off was saved, but its answer couldn't be read. Refresh to see it.";
+    const said = saidError(unread);
+    assert.deepEqual([said.message, said.said, Object.getPrototypeOf(said) === Error.prototype], [unread, true, true]);
+    assert.equal(thrownSaid(heard, 'The job', 'saved'), 'Name is required', 'the server\'s own refusal: its words alone');
+    assert.equal(thrownSaid(lost, 'The job', 'saved'), 'The job may have been saved — reload the page to see whether it was: Internal server error (ref r1)');
+    assert.equal(thrownSaid(new TypeError('Failed to fetch'), 'The time off', 'deleted'),
+        'The time off may have been deleted — reload the page to see whether it was: The server could not be reached.', 'REGRESSION: a thrown fetch said as refused');
+    assert.equal(thrownSaid(new SyntaxError("Unexpected token '<'"), 'It', 'scheduled'), 'It may have been scheduled — reload the page to see whether it was: Its answer could not be read.');
+    assert.equal(thrownSaid(new Error('Forbidden'), 'The job', 'updated'), 'The job may have been updated — reload the page to see whether it was: Forbidden',
+        'an error that does not say whether the server refused it: maybe');
+    assert.equal(thrownSaid(said, 'The time off', 'saved'), unread, 'said in full: never wrapped again');
+    assert.equal(thrownSaid(saidError(maybeSaid('The address', 'saved', 'x')), 'The job', 'saved'), maybeSaid('The address', 'saved', 'x'), 'a may-have sentence built where it was known: as built');
+    assert.equal(thrownSaid(lost, 'The working hours', 'saved', true), 'The working hours may have been saved — reload the page to see whether they were: Internal server error (ref r1)');
+    assert.equal(thrownSaid(new TypeError('Failed to fetch'), 'The job'), 'The job may have been saved — reload the page to see whether it was: The server could not be reached.', 'the verb: saved');
+});
+
+test('RUN (Part 4): maybeFreedWords — each job that may have been returned to the queue, by name and why; one, many, none; never "not returned"', () => {
+    const jobs = [{ id: 'job_1', title: 'Boiler service', customer: 'Acme' }, { id: 'job_2', title: '', customer: 'Gutter clean' }];
+    const one = maybeFreedWords([{ id: 'job_1', words: 'The server could not be reached.' }], jobs);
+    assert.equal(one, 'One job may have been returned to the queue — reload the page to see whether it was: Boiler service: The server could not be reached.');
+    const three = maybeFreedWords([{ id: 'job_2', words: 'The server returned 502.' }, { id: 'job_9', words: 'Internal server error (ref r1)..' }, { id: 'job_1', words: '' }], jobs);
+    assert.equal(three, '3 jobs may have been returned to the queue — reload the page to see whether they were: '
+        + 'Gutter clean: The server returned 502; job_9: Internal server error (ref r1); Boiler service: no answer.', 'a job by its title, its customer, else its id; one full stop');
+    assert.equal(maybeFreedWords([{ id: 'job_1', words: 'x' }], null), 'One job may have been returned to the queue — reload the page to see whether it was: job_1: x.');
+    assert.equal(maybeFreedWords([], jobs), '');
+    assert.equal(maybeFreedWords(undefined, jobs), '');
+    for (const w of [one, three]) assert.ok(!/not returned|still assigned/.test(w), 'REGRESSION: a job that may have been returned said as still assigned');
+    // The banner says both when both happened: the server's own refusals by notFreedWords, the rest by maybeFreedWords.
+    assert.ok(notFreedWords([{ id: 'job_1', words: 'Forbidden' }], jobs, 'Ann Lee', 2).includes('was not returned to the queue'));
+});
+
+test('WIRING (Part 4): Dispatch\'s creates keep their ids — New Job\'s customer, address and job, held by what each sends; the job record\'s new address, per job', () => {
+    const d = read('src/Tabs/DispatchTab.jsx');
+    assert.equal((d.match(/const heldNewJobIds = useRef\(\{\}\);/g) || []).length, 1);
+    assert.ok(d.includes("const newCustId = heldNewJobIds.current[custKey] || (heldNewJobIds.current[custKey] = 'dcust_' + crypto.randomUUID());"));
+    assert.ok(d.includes("const locId = heldNewJobIds.current[locHeld] || (heldNewJobIds.current[locHeld] = 'dloc_' + crypto.randomUUID());"));
+    assert.ok(d.includes('jobId = payload.id = heldNewJobIds.current[jobKey] || (heldNewJobIds.current[jobKey] = jobId);'));
+    assert.ok(d.includes('const custKey = `cust|${custLabel}|${custAccountId}`;') && d.includes('const locHeld = `loc|${locKey}`;')
+        && d.includes('const jobKey = `job|${JSON.stringify({ ...payload, id: null })}`;'), 'keyed by what each create sends');
+    assert.equal((d.match(/const newLocIds = useRef\(\{\}\);/g) || []).length, 1);
+    assert.ok(d.includes("const locId = loc.id || newLocIds.current[draft.id] || (newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID());"));
+    assert.ok(d.includes('if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));'), 'a landed address is the form\'s: a second Save PUTs it');
 });

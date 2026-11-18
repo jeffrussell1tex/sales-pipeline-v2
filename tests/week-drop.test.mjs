@@ -169,6 +169,9 @@ test('the parent’s handler: the planner’s refusal is shown, the equipment ga
     assert.ok(s.includes("showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), false);"), 'the app-wide confirm, like the builder’s Override — the INFO variant: its button reads Confirm; the danger variant’s reads Delete (seen in the pane, 14 Sep)');
     assert.ok(s.includes("addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,"));
     // Moved pin (state §0.248, docs/design/refusal-sweep Part 11): the ok check first; a 403 still the role's sentence (Q13).
-    assert.ok(s.includes("const why = res.status === 403 ? 'Your role cannot reschedule jobs.' : await readRefusal(res);"));
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own 403 the role's sentence; the refusal carries
+    // whether it proves nothing was written, and one that does not moves the row as sent, said as maybe.
+    assert.ok(s.includes("const r = await writeRefusalOf(res, 'Your role cannot reschedule jobs.');"));
+    assert.ok(s.includes("if (unknownOf(e)) { moveRow(null); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }"));
     assert.ok(s.includes('onMove={handleWeekMove} moveState={weekMove}'), 'wired into the week range of the board');
 });

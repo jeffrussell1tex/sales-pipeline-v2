@@ -317,8 +317,10 @@ test("THE GUARD: the Technicians screen picks a member by their app id and shows
         "a second press counts afresh — the last run's count and words are not shown as this one's");
     // Moved pin (state §0.248, docs/design/refusal-sweep Part 11): the refusal in the house words (readRefusal, with their
     // ref), a failure in plain words (failureWords) — each with the job it is about.
-    assert.ok(inOrder(d, "        let firstError = '';", '                if (!res.ok) throw new Error(await readRefusal(res));',
-        "                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${failureWords(e)}`;", '            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });',
+    // Moved in §0.263 (the unknown-save rule, Part 4): the refusal carries whether it was the server's own (refusalError),
+    // and the catch says one that proves nothing as may-have-been scheduled (thrownSaid).
+    assert.ok(inOrder(d, "        let firstError = '';", '                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }',
+        "                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${thrownSaid(e, 'It', 'scheduled')}`;", '            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });',
         '        if (!failed) setMassPlan(null);', '        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr)) });'),
         "the first refusal's words kept — the server's, with the job they are about — not 'HTTP 404'; what landed leaves the panel, so a second press sends only the rest");
     assert.ok(inOrder(d, '                {(saving || progress.failed > 0) && (',

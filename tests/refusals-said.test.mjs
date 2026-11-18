@@ -630,6 +630,9 @@ const BODY_FIRST = [
         why: 'the leads load: checkOk (the load\'s one ok check, beside the offline banner) throws a refusal before the read — to the console alone, the list left as it was' },
     { file: 'src/utils/refusalWords.js', text: 'try { body = await res.json(); } catch { /* not JSON, or no body */ }',
         why: 'readRefusal itself: the words of an answer its caller found refused — read at any status, by design' },
+    // Since §0.262 (the unknown-save rule, Part 4) writeRefusalOf reads a refused write's body once, for its words and heardRefusal.
+    { file: 'src/utils/refusalWords.js', text: 'const body = await res.json().catch(() => null);',
+        why: 'writeRefusalOf itself: a refused write\'s body, read once after its caller\'s `if (!res.ok)` — its words and whether the server itself refused (heardRefusal), null when not JSON (§0.262)' },
     // Since §0.261 refusalOf reads its body through bodyOf (dbWrite reads a refused one once, for its words and heardRefusal).
     { file: 'src/utils/storage.js', text: 'const bodyOf = async (res) => { try { return await res.json(); } catch { return null; } };',
         why: 'dbWrite\'s bodyOf: a landed answer after `if (res.ok)` in dbWrite, null when not JSON; and a refused one\'s, read once after that check (dbWrite, refusalOf) for its words and whether the server itself refused (heardRefusal, §0.261) — never thrown' },

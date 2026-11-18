@@ -464,8 +464,9 @@ One commit per verified batch; doc patch in the same commit.
   `ownIdTaken`) is an earlier press that landed (THE GUARD,
   tests/unknown-save.test.mjs; guide §18b134); since §0.262 Leads, Quotes,
   Reports and the Sales Manager too — a refusal puts back only its own row, a
-  create with no form keeps its id by what it sends; Dispatch and Settings to
-  build (Parts 4-5, OPEN_ITEMS §4.8); a message names who acted
+  create with no form keeps its id by what it sends; since §0.263 Dispatch
+  too (`thrownSaid`, `saidError`); Settings to build (Part 5, OPEN_ITEMS
+  §4.8); a message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the

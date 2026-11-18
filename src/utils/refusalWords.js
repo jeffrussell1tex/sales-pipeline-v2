@@ -60,3 +60,22 @@ export const writeRefusal = (res, body, subject, verb = 'saved') => {
 };
 // …and for a press an earlier press had already landed: the record as stored is what the screen shows.
 export const alreadySaid = (subject, verb) => `${subject} was already ${verb} by an earlier press — shown as stored.`;
+// A refused write's body read once (state §0.263, Part 4): `heard` — the server's own refusal, nothing written — with its
+// words, or `role` (a screen's sentence for its role) in place of the words of the server's own 403; any other answer in
+// refusalWords' words, not heard: it may have written.
+export const writeRefusalOf = async (res, role = null) => {
+    const body = await res.json().catch(() => null);
+    const heard = heardRefusal(res.status, body);
+    return { body, heard, words: heard && role && res.status === 403 ? role : refusalWords(res, body) };
+};
+// A refusal thrown through a screen's catch carries whether its write may have landed (`unknown`); a thrown fetch, or any
+// error that does not say, may have — `unknownOf` reads it so. A step that sent nothing throws `refusalError(words, true)`.
+export const refusalError = (words, heard) => Object.assign(new Error(words), { unknown: !heard });
+export const unknownOf = (e) => e?.unknown !== false;
+// An error whose words are already said in full (a may-have sentence built where it was known, a landed answer that
+// cannot be read): its catch says them as they are.
+export const saidError = (words) => Object.assign(new Error(words), { said: true });
+// A screen's catch (state §0.263, Part 4): words said in full, and the server's own refusal, as they are (failureWords: a
+// plain error's message); anything else — a thrown fetch, a 5xx, a page — said as maybe about `subject`.
+export const thrownSaid = (e, subject, verb = 'saved', plural = false) =>
+    (e?.said || e?.unknown === false ? failureWords(e) : maybeSaid(subject, verb, failureWords(e), plural));

@@ -523,9 +523,11 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     assert.ok(d.includes("                if (!stillOrg(askedOrg)) return undefined;\n                const r = await dbFetch('/.netlify/functions/dispatch-jobs',"), 'an org switch stops it before each send (the fix review, screens F2)');
     // Moved pins (state §0.248, docs/design/refusal-sweep Part 11): the ok check first — a refusal's body read once, for
     // its field and its words (refusalWords: the server's with their ref, else the status).
-    assert.ok(d.includes("                if (!r.ok) {\n                    const refused = await r.json().catch(() => null);\n                    why = refusalWords(r, refused);\n                    return { ok: false, status: r.status, field: refused?.field };\n"),
+    // Moved in §0.263 (the unknown-save rule, Part 4): whether the refusal was the server's own is read beside its words,
+    // and the throw says it as it is, or as maybe (saidError).
+    assert.ok(d.includes("                if (!r.ok) {\n                    const refused = await r.json().catch(() => null);\n                    why = refusalWords(r, refused); jheard = heardRefusal(r.status, refused);\n                    return { ok: false, status: r.status, field: refused?.field };\n"),
         "the server's refusal handed to the drop, its status and field (the fix review, tests F2)");
-    assert.ok(d.includes('if (!answer.ok) throw new Error(why);'), 'anything else is said under the form');
+    assert.ok(d.includes("            if (!answer.ok) {\n                if (jheard) delete heldNewJobIds.current[jobKey];\n                throw saidError(jheard ? why : maybeSaid('The job', 'created', why));\n            }\n"), 'anything else is said under the form');
     assert.ok(d.includes('opportunityId:   sent.opportunityId || null,'), 'the job on screen holds the deal it was saved with');
 });
 

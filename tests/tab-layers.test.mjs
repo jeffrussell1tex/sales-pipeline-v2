@@ -318,7 +318,8 @@ test('Dispatch\'s layers each take their Escape, and do what their own close doe
     const sp = decl(d, 'ShiftPatternDialog');
     assert.ok(sp.includes('    const requestClose = useLocalLayer(true, { onClose: onCancel, dirty: weekKey(wh) !== base, busy });'), 'the shift pattern — a changed week asks');
     assert.equal(count(sp, 'onClick={requestClose}'), 2, 'its backdrop and Cancel');
-    assert.ok(sp.includes("catch (e) { setErr(`Not saved — ${failureWords(e)}`); }") && sp.includes('<div role="alert"'), 'a refused save is said — a try with no catch left it silent; in the house words (state §0.248)');
+    // Moved in §0.263 (the unknown-save rule, Part 4): the server's own refusal "Not saved"; any other failure may have saved it.
+    assert.ok(sp.includes("catch (e) { setErr(unknownOf(e) ? maybeSaid('The working hours', 'saved', failureWords(e), true) : `Not saved — ${failureWords(e)}`); }") && sp.includes('<div role="alert"'), 'a refused save is said — a try with no catch left it silent; in the house words (state §0.248)');
     const tab = decl(d, 'DispatchTab');
     assert.ok(tab.includes("    useLocalLayer(!!openFilter && !!filterRect && view === 'board', { onClose: closeFilter });"), 'the board\'s filter menu, while it is drawn');
     assert.ok(tab.includes('    const requestCloseNewJob = useLocalLayer(showNewJobForm, { onClose: closeNewJob, dirty: showNewJobForm && JSON.stringify(newJobForm) !== newJobBaseRef.current, busy: newJobSaving });'), 'New Job — typed work asks, nothing while its Save runs');

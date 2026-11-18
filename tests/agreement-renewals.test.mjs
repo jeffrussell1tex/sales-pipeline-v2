@@ -83,11 +83,13 @@ test('DispatchTab: the queue reads the recorded exceptions, a deferred visit sta
     // Each action writes first and adopts the server's row; a refusal is shown above the queue.
     // Moved pins (state §0.248, docs/design/refusal-sweep Part 11): the ok check first, the server's words with their ref
     // (readRefusal) — it said "(HTTP N)"; a failure that never reached the server said too (failureWords).
-    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${why}`);"));
-    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${why}`);"));
+    // Moved in §0.263 (the unknown-save rule, Part 4): only the server's own refusal (r.heard) says "not"; any other
+    // answer, and a throw, may have written — said by maybeSaid.
+    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(r.heard ? `The visit was not ${action} — ${r.words}` : maybeSaid('The visit', action, r.words));"));
+    assert.ok(s.includes("if (stillOrg(askedOrg)) setVisitActionError(r.heard ? `The agreement was not renewed — ${r.words}` : maybeSaid('The agreement', 'renewed', r.words));"));
     for (const [from, to] of [['    const recordVisit = async (', '    const skipVisit '], ['    const renewAgreement = (row) => {', '    const startBridgeJob = ']]) {
         const fn = s.slice(s.indexOf(from), s.indexOf(to));
-        assert.ok(fn.length > 200 && fn.includes('const why = await readRefusal(res);') && fn.includes('failureWords(e)'), `${from.trim()}: the refusal's words, and a failure's`);
+        assert.ok(fn.length > 200 && fn.includes('const r = await writeRefusalOf(res);') && fn.includes('failureWords(e)'), `${from.trim()}: the refusal's words, and a failure's`);
     }
     assert.ok(s.includes('const next = renewedExpiry(row.customer, todayYmd, 12);'), 'renewal keeps the anniversary');
     assert.ok(s.includes('planVisits={planVisits}'), 'the customer list receives the exceptions');

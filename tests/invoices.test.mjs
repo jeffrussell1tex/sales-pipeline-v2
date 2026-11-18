@@ -410,7 +410,11 @@ test('DispatchTab: the invoice panel and the Invoices view at module scope; the 
     assert.ok(s.includes('openJobRequest={openJobRequest} showConfirm={showConfirm}'));
     assert.ok(s.includes('                                    value: parseFloat(saved.invoiceAmount || 0),'), 'the board adopts the mirrored amount');
     assert.ok(s.includes('if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);'), 'the danger variant');
-    assert.ok(s.includes("if (!res.ok) { setErr(`The invoice was not ${done} — ${await readRefusal(res)}`); return null; }"), 'a refusal is shown in the panel, in the house words (state §0.248)');
+    // Moved in §0.263 (the unknown-save rule, Part 4): the refusal's body read once (writeRefusalOf); only the server's own
+    // refusal says "not", any other answer may have written it; a create answered 409 naming the job's invoice adopts it.
+    assert.ok(s.includes('                const r = await writeRefusalOf(res);'), 'a refusal\'s body read once');
+    assert.ok(s.includes("setErr(r.heard ? `The invoice was not ${done} — ${r.words}` : maybeSaid('The invoice', done, r.words));"), 'a refusal is shown in the panel, in the house words (state §0.248); one that proves nothing as maybe (§0.263)');
+    assert.ok(s.includes("if (options.method === 'POST' && res.status === 409 && r.body?.invoice && typeof r.body.invoice === 'object') { adopt({ invoice: r.body.invoice }); return r.body; }"), 'a create answered that the job holds an invoice shows it (§0.263)');
     assert.ok(s.includes('if (data.job && onJobMirror) onJobMirror(data.job);'), 'the server’s job is adopted');
     assert.ok(s.includes("setInvoice(list.find(isLiveInvoice) || list[0] || null);"), 'the live invoice leads');
     assert.ok(s.includes("<InvoiceTotals lines={cleanInvoiceLines(draft.lineItems)} taxRate={draft.taxRate}/>"), 'the draft’s preview runs the same arithmetic');

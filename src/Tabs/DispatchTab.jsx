@@ -5,8 +5,8 @@ import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
-import { readRefusal, failureWords, refusalWords } from '../utils/refusalWords.js';
-import { notFreedWords } from '../utils/dispatchUnassign.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../utils/refusalWords.js';
+import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
@@ -1204,9 +1204,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): the server's words with
             // their ref, else "The server returned N." — a 403 the role's sentence (Q13); it said "HTTP N", the ref dropped.
             if (!res.ok) {
-                const why = res.status === 403 ? 'Your role cannot schedule jobs.' : await readRefusal(res);
+                const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
                 if (!stillOrg(askedOrg)) return;
-                throw new Error(why);
+                throw refusalError(r.words, r.heard);
             }
             const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the job as sent
             if (!stillOrg(askedOrg)) return;
@@ -1238,7 +1238,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             setScheduleTime('');
             setScheduleDate('');
         } catch (e) {
-            setScheduleError(failureWords(e));
+            // An answer that proves nothing may have scheduled it (state §0.263, the unknown-save rule): said so, the picks kept.
+            setScheduleError(thrownSaid(e, 'The job', 'scheduled'));
         } finally {
             setSaving(false);
         }
@@ -1265,9 +1266,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),
             });
             if (!res.ok) {   // as the schedule's (§0.248): the ok check first, the house words, a 403 the role's sentence
-                const why = res.status === 403 ? 'Your role cannot schedule jobs.' : await readRefusal(res);
+                const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
                 if (!stillOrg(askedOrg)) return;
-                throw new Error(why);
+                throw refusalError(r.words, r.heard);
             }
             if (!stillOrg(askedOrg)) return;
             const crewNames = ids.map(id => techs.find(t => t.id === id)?.name || id);
@@ -1277,7 +1278,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 ? `Crew held — ${crewNames.join(', ')}. The job stays in Jobs to schedule; Mass-schedule next week will place them, or come back and Schedule now.`
                 : 'Held crew released. The job is back to needing a crew.');
         } catch (e) {
-            setScheduleError(failureWords(e));
+            setScheduleError(thrownSaid(e, ids.length ? 'The held crew' : 'The release', 'saved'));   // maybe (state §0.263)
         } finally {
             setSaving(false);
         }
@@ -3142,9 +3143,9 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
             });
             // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
             if (!res.ok) {
-                const why = res.status === 403 ? 'Your role cannot change customers.' : await readRefusal(res);
+                const r = await writeRefusalOf(res, 'Your role cannot change customers.');
                 if (!stillOrg(askedOrg)) return;
-                throw new Error(why);
+                throw refusalError(r.words, r.heard);
             }
             const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the copy sent
             if (!stillOrg(askedOrg)) return;
@@ -3157,7 +3158,9 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
             setEditing(false);
             setStatus({ kind: 'ok', msg: 'Saved.' });
         } catch (err) {
-            setStatus({ kind: 'err', msg: failureWords(err) });
+            // An answer that proves nothing may have saved it (state §0.263): said so, the form kept with its id — a press
+            // again sends the same customer (the server's upsert, in this org).
+            setStatus({ kind: 'err', msg: thrownSaid(err, 'The customer', 'saved') });
         }
         setSaving(false);
     };
@@ -3593,9 +3596,9 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 body: JSON.stringify(body),
             });
             if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
-                const why = res.status === 403 ? 'Your role cannot change technicians.' : await readRefusal(res);
+                const r = await writeRefusalOf(res, 'Your role cannot change technicians.');
                 if (!stillOrg(askedOrg)) return;
-                throw new Error(why);
+                throw refusalError(r.words, r.heard);
             }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
@@ -3607,7 +3610,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
             if (saved) { onSaved(saved); setDraft({ ...saved }); setSelectedId(saved.id); }
             setStatus({ kind: 'ok', msg: draft._isNew ? 'Technician created' : 'Saved' });
         } catch (e) {
-            setStatus({ kind: 'err', msg: failureWords(e) });
+            setStatus({ kind: 'err', msg: thrownSaid(e, 'The technician', 'saved') });   // maybe (state §0.263)
         } finally {
             setSaving(false); savingRef.current = false;
         }
@@ -3974,7 +3977,15 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
         setBusy(true); setErr('');
         try {
             const res  = await dbFetch(url, options);
-            if (!res.ok) { setErr(`The invoice was not ${done} — ${await readRefusal(res)}`); return null; }
+            if (!res.ok) {
+                const r = await writeRefusalOf(res);
+                // A create answered that the job already holds a live invoice names it (invoices.mjs): that invoice is shown —
+                // the one an earlier press made, or another member's (census-B finding (d); state §0.263). It was said as refused.
+                if (options.method === 'POST' && res.status === 409 && r.body?.invoice && typeof r.body.invoice === 'object') { adopt({ invoice: r.body.invoice }); return r.body; }
+                // Only the server's own refusal is "not" (state §0.263, the unknown-save rule); any other may have written it.
+                setErr(r.heard ? `The invoice was not ${done} — ${r.words}` : maybeSaid('The invoice', done, r.words));
+                return null;
+            }
             const data = await res.json().catch(() => null);
             // Marked unread (the review of §0.248): never "No invoice on this job yet" and its Create under "The invoice was
             // created — …"; every landed write's answer names its invoice (invoices.mjs), so one that names none is unread too.
@@ -3982,7 +3993,7 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
             adopt(data);
             return data;
         } catch (e) {
-            setErr(`The invoice was not ${done} — ${failureWords(e)}`);
+            setErr(maybeSaid('The invoice', done, failureWords(e)));   // no answer: it may have been written (state §0.263)
             return null;
         } finally {
             setBusy(false);
@@ -4260,6 +4271,9 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
     const setLocF = (k, v) => setLoc(l => ({ ...(l || {}), [k]: v }));
 
     const customerName = (id) => (customers || []).find(c => c.id === id)?.name || '—';
+    // A job's new address keeps one id (state §0.263, census-B finding (c)): a press after one that may have made it
+    // sends it again, and once it lands the address is the form's — a second Save made another address each time.
+    const newLocIds = useRef({});
 
     const save = async () => {
         if (!draft) return;
@@ -4268,13 +4282,15 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
             setStatus({ kind: 'err', msg: 'City is required when an address is set.' }); return;
         }
         setSaving(true); setStatus(null);
+        let subject = 'The job';   // what a failure with no answer may have saved (state §0.263)
         try {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             let locationId = draft.locationId || null;
 
             // 1 — address, when one has been entered or changed
             if (loc && (loc.address || '').trim()) {
-                const locId = loc.id || ('dloc_' + crypto.randomUUID());
+                subject = 'The address';
+                const locId = loc.id || newLocIds.current[draft.id] || (newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID());
                 const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations'
                     + (loc.id ? '&id=' + encodeURIComponent(loc.id) : ''), {
                     method: loc.id ? 'PUT' : 'POST',
@@ -4290,13 +4306,17 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 // The ok check first, the house words (state §0.248, Part 11): the server's with their ref, else "The
                 // server returned N." — the address named, since the job is not sent after it.
                 if (!lres.ok) {
-                    const why = await readRefusal(lres);
+                    const r = await writeRefusalOf(lres);
                     if (!stillOrg(askedOrg)) return;
-                    throw new Error(`The address was not saved — ${why}`);
+                    if (r.heard) delete newLocIds.current[draft.id];
+                    throw saidError(r.heard ? `The address was not saved — ${r.words}` : maybeSaid('The address', 'saved', r.words));
                 }
                 const ldata = await lres.json().catch(() => ({}));
                 locationId = ldata.location?.id || locId;
+                delete newLocIds.current[draft.id];
+                if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));
             }
+            subject = 'The job';
 
             if (!stillOrg(askedOrg)) return;   // the job's PUT would carry the new org's token
             // 2 — the job
@@ -4326,16 +4346,16 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 }),
             });
             if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
-                const why = res.status === 403 ? 'Your role cannot edit jobs.' : await readRefusal(res);
+                const r = await writeRefusalOf(res, 'Your role cannot edit jobs.');
                 if (!stillOrg(askedOrg)) return;
-                throw new Error(why);
+                throw refusalError(r.words, r.heard);
             }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
             if (data.job) { onSaved(data.job); setSelectedId(data.job.id); }
             setStatus({ kind: 'ok', msg: 'Saved' });
         } catch (e) {
-            setStatus({ kind: 'err', msg: failureWords(e) });
+            setStatus({ kind: 'err', msg: thrownSaid(e, subject, 'saved') });   // maybe (state §0.263)
         } finally {
             setSaving(false);
         }
@@ -4974,7 +4994,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
 
         setBusy(true); setErr('');
         try { await onSaveBlock(editing); setEditing(null); }
-        catch (e) { setErr(failureWords(e)); }
+        catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }   // maybe (state §0.263)
         finally { setBusy(false); }
     };
 
@@ -4983,7 +5003,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
         try {
             await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));
             setConflict(null); setEditing(null);
-        } catch (e) { setErr(failureWords(e)); }
+        } catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }
         finally { setBusy(false); }
     };
 
@@ -5207,7 +5227,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
                             {!editing._isNew && (
-                                <button onClick={async () => { setBusy(true); try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(failureWords(e)); } finally { setBusy(false); } }}
+                                <button onClick={async () => { setBusy(true); try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(thrownSaid(e, 'The time off', 'deleted')); } finally { setBusy(false); } }}
                                     disabled={busy}
                                     style={{ marginRight: 'auto', padding: '7px 12px', background: 'transparent', color: T.danger,
                                         border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
@@ -5305,7 +5325,7 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
                             cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
                         Cancel
                     </button>
-                    <button onClick={async () => { setBusy(true); setErr(''); try { await onSave(wh); } catch (e) { setErr(`Not saved — ${failureWords(e)}`); } finally { setBusy(false); } }}
+                    <button onClick={async () => { setBusy(true); setErr(''); try { await onSave(wh); } catch (e) { setErr(unknownOf(e) ? maybeSaid('The working hours', 'saved', failureWords(e), true) : `Not saved — ${failureWords(e)}`); } finally { setBusy(false); } }}
                         disabled={busy}
                         style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.ink, color: '#fbf8f3',
                             border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
@@ -5346,7 +5366,7 @@ const TechJobCard = ({ job, customerName, blocks, onUpdate, busyId }) => {
     const run = async (patch) => {
         setErr('');
         try { await onUpdate(job.id, patch); }
-        catch (e) { setErr(failureWords(e)); }   // the house words (state §0.248, Part 11) — never "Failed to fetch"
+        catch (e) { setErr(thrownSaid(e, 'The job', 'updated')); }   // the house words (state §0.248, Part 11); no answer, maybe (§0.263)
     };
 
     return (
@@ -5666,8 +5686,9 @@ export default function DispatchTab() {
                 body: JSON.stringify({ customerId: row.customer.id, planId: row.plan.id, dueDate: row.occurrence || row.due, action, deferredTo, reason }),
             });
             if (!res.ok) {
-                const why = await readRefusal(res);
-                if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${why}`);
+                const r = await writeRefusalOf(res);
+                // Only the server's own refusal is "not" (state §0.263); a press again is safe (the server keeps one per occurrence).
+                if (stillOrg(askedOrg)) setVisitActionError(r.heard ? `The visit was not ${action} — ${r.words}` : maybeSaid('The visit', action, r.words));
                 return false;
             }
             const data = await res.json().catch(() => null);
@@ -5682,7 +5703,7 @@ export default function DispatchTab() {
             ]);
             return true;
         } catch (e) {
-            if (stillOrg(askedOrg)) setVisitActionError(`The visit was not ${action} — ${failureWords(e)}`);
+            if (stillOrg(askedOrg)) setVisitActionError(maybeSaid('The visit', action, failureWords(e)));
             return false;
         }
     };
@@ -5694,7 +5715,7 @@ export default function DispatchTab() {
         if (!target) return;
         setVisitActionError('');
         const r = await dbWrite(`/.netlify/functions/dispatch-plan-visits?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
-        if (!r.ok) { setVisitActionError(`Not undone — ${r.error}`); return; }
+        if (!r.ok) { setVisitActionError(r.unknown ? maybeSaid('It', 'undone', r.error) : `Not undone — ${r.error}`); return; }   // maybe (state §0.263)
         setPlanVisits(prev => prev.filter(v => v.id !== target.id));
     };
     // Twelve months from the CURRENT end date (an expired one renews from today),
@@ -5711,8 +5732,8 @@ export default function DispatchTab() {
                     body: JSON.stringify({ agreementExpiry: next }),
                 });
                 if (!res.ok) {
-                    const why = await readRefusal(res);
-                    if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${why}`);
+                    const r = await writeRefusalOf(res);
+                    if (stillOrg(askedOrg)) setVisitActionError(r.heard ? `The agreement was not renewed — ${r.words}` : maybeSaid('The agreement', 'renewed', r.words));
                     return;
                 }
                 const data = await res.json().catch(() => null);
@@ -5723,7 +5744,7 @@ export default function DispatchTab() {
                 }
                 setCustomers(prev => prev.map(c => c.id === data.customer.id ? data.customer : c));
             } catch (e) {
-                if (stillOrg(askedOrg)) setVisitActionError(`The agreement was not renewed — ${failureWords(e)}`);
+                if (stillOrg(askedOrg)) setVisitActionError(maybeSaid('The agreement', 'renewed', failureWords(e)));
             }
         };
         if (showConfirm) showConfirm(`Renew the maintenance agreement for ${row.customer.name} through ${next}?`, go, false);
@@ -6003,6 +6024,10 @@ export default function DispatchTab() {
     // "Discard changes?"; nothing while its Save runs. What it is measured against: the form as it opened — a won deal's,
     // a plan's visit or a blank one — set the render it opens.
     const newJobBaseRef = useRef(null);
+    // New Job's creates keep their ids once an answer proved nothing (state §0.263, the unknown-save rule, Part 6): the same
+    // customer, address or job pressed again sends the same id — the server's upsert in this org lands it once. Keyed by
+    // what each sends; a landed create, or the server's own refusal, gives its id up.
+    const heldNewJobIds = useRef({});
     if (!showNewJobForm) newJobBaseRef.current = null;
     else if (newJobBaseRef.current === null) newJobBaseRef.current = JSON.stringify(newJobForm);
     const requestCloseNewJob = useLocalLayer(showNewJobForm, { onClose: closeNewJob, dirty: showNewJobForm && JSON.stringify(newJobForm) !== newJobBaseRef.current, busy: newJobSaving });
@@ -6031,6 +6056,7 @@ export default function DispatchTab() {
         setNewJobSaving(true);
         setNewJobError('');
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+        let step = ['The customer', 'created'];   // what a failure with no answer may have made (state §0.263)
         try {
             // 1 — resolve the customer FK
             let customerId  = newJobForm.customerId || typed?.customer?.id || '';
@@ -6038,27 +6064,32 @@ export default function DispatchTab() {
             const custLabel = typed?.customer?.name || typed?.account?.name || custName;   // a record typed in full, under its own spelling
             let createdCust = null;
             if (!customerId) {
-                const newCustId = 'dcust_' + crypto.randomUUID();
+                const custKey = `cust|${custLabel}|${custAccountId}`;
+                const newCustId = heldNewJobIds.current[custKey] || (heldNewJobIds.current[custKey] = 'dcust_' + crypto.randomUUID());
                 // A won deal's account, copied onto its placeholder, is left off when the server says it names no live
                 // account — deleted since (state §0.214): the customer is made as before, unlinked. Only a 404 is
                 // dropped: the 409 for an account another customer stands for is said under the form.
                 // The ok check first (state §0.248, docs/design/refusal-sweep Part 11): a refusal's body read once, for the
                 // link it names and its words (the server's, with their ref, else "The server returned N."); a landed
                 // answer that cannot be read keeps the id sent — the customer was made under it.
-                let cdata = null, cwhy = '';
+                let cdata = null, cwhy = '', cheard = false;
                 const { answer: cans, sent: csent } = await saveDroppingRefused(async (body) => {
                     if (!stillOrg(askedOrg)) return undefined;
                     const r = await dbFetch('/.netlify/functions/dispatch-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                     if (!r.ok) {
                         const refused = await r.json().catch(() => null);
-                        cwhy = refusalWords(r, refused);
+                        cwhy = refusalWords(r, refused); cheard = heardRefusal(r.status, refused);
                         return { ok: false, status: r.status, field: refused?.field };
                     }
                     cdata = await r.json().catch(() => null);
                     return { ok: true, status: r.status };
                 }, { id: newCustId, name: custLabel, accountId: custAccountId || null }, newJobForm.opportunityCopied ? ['accountId'] : []);
                 if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
-                if (!cans.ok) throw new Error(`The customer was not created — ${cwhy}`);
+                if (!cans.ok) {
+                    if (cheard) delete heldNewJobIds.current[custKey];
+                    throw saidError(cheard ? `The customer was not created — ${cwhy}` : maybeSaid('The customer', 'created', cwhy));
+                }
+                delete heldNewJobIds.current[custKey];
                 // Landed with an answer that cannot be read: the row as sent (its refused account left off) — listed, and its
                 // first address its default (the review of §0.248).
                 createdCust = cdata?.customer || { id: newCustId, name: custLabel, accountId: csent.accountId || null };
@@ -6077,7 +6108,9 @@ export default function DispatchTab() {
             const locKey = [customerId, address, city, newJobForm.state.trim(), newJobForm.zip.trim()].join('\n');
             if (address && newJobForm.madeLocation?.key === locKey) locationId = newJobForm.madeLocation.id;
             else if (address) {
-                const locId = 'dloc_' + crypto.randomUUID();
+                step = ['The job address', 'saved'];
+                const locHeld = `loc|${locKey}`;
+                const locId = heldNewJobIds.current[locHeld] || (heldNewJobIds.current[locHeld] = 'dloc_' + crypto.randomUUID());
                 const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -6090,7 +6123,12 @@ export default function DispatchTab() {
                     }),
                 });
                 // The ok check first, the house words (state §0.248, Part 11); a landed answer that cannot be read keeps the id sent.
-                if (!lres.ok) throw new Error(`The job address was not saved — ${await readRefusal(lres)}`);
+                if (!lres.ok) {
+                    const lr = await writeRefusalOf(lres);
+                    if (lr.heard) delete heldNewJobIds.current[locHeld];
+                    throw saidError(lr.heard ? `The job address was not saved — ${lr.words}` : maybeSaid('The job address', 'saved', lr.words));
+                }
+                delete heldNewJobIds.current[locHeld];
                 const ldata = await lres.json().catch(() => null);
                 locationId = ldata?.location?.id || locId;
                 if (stillOrg(askedOrg)) setNewJobForm(f => ({ ...f, madeLocation: { id: locationId, key: locKey } }));
@@ -6098,7 +6136,8 @@ export default function DispatchTab() {
 
             if (!stillOrg(askedOrg)) return;
             // 3 — the job
-            const jobId = 'djob_' + crypto.randomUUID();
+            step = ['The job', 'created'];
+            let jobId = 'djob_' + crypto.randomUUID();
             const payload = {
                 id:              jobId,
                 customerId,
@@ -6120,6 +6159,8 @@ export default function DispatchTab() {
                 servicePlanId:   newJobForm.servicePlanId || null,
                 planDueDate:     newJobForm.planDueDate   || null,
             };
+            const jobKey = `job|${JSON.stringify({ ...payload, id: null })}`;
+            jobId = payload.id = heldNewJobIds.current[jobKey] || (heldNewJobIds.current[jobKey] = jobId);
             // The CRM account a job copies from its customer, and the deal a won deal's placeholder copies, are
             // left off when the server says they name no live record — deleted since (a create asks every link
             // it names, state §0.199) — and the job is saved without them. A deal the dispatcher picked is
@@ -6128,20 +6169,24 @@ export default function DispatchTab() {
             // org's token.
             // As the customer's (state §0.248, Part 11): the ok check first, a refusal's words and link from its body; a
             // landed answer that cannot be read keeps the job as sent, under the id sent.
-            let data = null, why = '';
+            let data = null, why = '', jheard = false;
             const { answer, sent } = await saveDroppingRefused(async (body) => {
                 if (!stillOrg(askedOrg)) return undefined;
                 const r = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 if (!r.ok) {
                     const refused = await r.json().catch(() => null);
-                    why = refusalWords(r, refused);
+                    why = refusalWords(r, refused); jheard = heardRefusal(r.status, refused);
                     return { ok: false, status: r.status, field: refused?.field };
                 }
                 data = await r.json().catch(() => null);
                 return { ok: true, status: r.status };
             }, payload, newJobForm.opportunityCopied ? ['accountId', 'opportunityId'] : ['accountId']);
             if (!stillOrg(askedOrg)) return;
-            if (!answer.ok) throw new Error(why);
+            if (!answer.ok) {
+                if (jheard) delete heldNewJobIds.current[jobKey];
+                throw saidError(jheard ? why : maybeSaid('The job', 'created', why));
+            }
+            delete heldNewJobIds.current[jobKey];
             // Optimistically add to local state
             const saved = data?.job || data || {};
             const optimistic = {
@@ -6175,7 +6220,7 @@ export default function DispatchTab() {
             setAppliedTemplate(null);
             setShowNewJobForm(false);
         } catch (err) {
-            if (stillOrg(askedOrg)) setNewJobError(failureWords(err));   // in plain words (state §0.248) — never "Failed to fetch"
+            if (stillOrg(askedOrg)) setNewJobError(thrownSaid(err, step[0], step[1]));   // in plain words (state §0.248); no answer, maybe (§0.263)
         } finally {
             setNewJobSaving(false);
         }
@@ -6286,7 +6331,7 @@ export default function DispatchTab() {
                     }),
                 });
                 // The house words (state §0.248, Part 11): the server's with their ref, else "The server returned N."
-                if (!res.ok) throw new Error(await readRefusal(res));
+                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
                 applied.push(pr);
                 reservedThisRun.push(...pr.assignedEquipment);
                 done += 1;
@@ -6294,7 +6339,8 @@ export default function DispatchTab() {
                 failed += 1;
                 // the job as the panel names it — its title, or its customer's (state §0.201: it read 'A job'); a failure
                 // in plain words (failureWords) — never "Failed to fetch"
-                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${failureWords(e)}`;
+                // One whose answer proved nothing may have been scheduled (state §0.263): said so; a press again re-sends its PUT.
+                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${thrownSaid(e, 'It', 'scheduled')}`;
             }
             setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });
         }
@@ -6345,14 +6391,14 @@ export default function DispatchTab() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change availability.' : await readRefusal(res));
+        if (!res.ok) { const refused = await writeRefusalOf(res, 'Your role cannot change availability.'); throw refusalError(refused.words, refused.heard); }
         const data = await res.json().catch(() => null);
         const saved = data && data.block;
         // Landed (a 2xx) with an answer that cannot be read: with jobs to return they still go back to the queue, the
         // banner saying the time off shows after a refresh (any job left is added after it) — a throw here sent no
         // unassign and named no job (review, 11 Nov); with none to return the dialog says it.
         const unread = "The time off was saved, but its answer couldn't be read. Refresh to see it.";
-        if (!saved && !unassignJobIds.length) throw new Error(unread);
+        if (!saved && !unassignJobIds.length) throw saidError(unread);
         if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }
         else setBlocks(prev => {
             const i = prev.findIndex(b => b.id === saved.id);
@@ -6362,7 +6408,7 @@ export default function DispatchTab() {
 
         if (!unassignJobIds.length) return;
 
-        const freed = [], notFreed = [];
+        const freed = [], notFreed = [], maybeFreed = [];
         for (const jobId of unassignJobIds) {
             if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
             try {
@@ -6375,8 +6421,8 @@ export default function DispatchTab() {
                     }),
                 });
                 if (r.ok) freed.push(jobId);
-                else notFreed.push({ id: jobId, words: await readRefusal(r) });
-            } catch (e) { notFreed.push({ id: jobId, words: failureWords(e) }); }
+                else { const w = await writeRefusalOf(r); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }
+            } catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }
         }
 
         if (!stillOrg(askedOrg)) return;   // and no audit row filed in the new org
@@ -6397,6 +6443,9 @@ export default function DispatchTab() {
         const techLabel = `${techName.firstName || ''} ${techName.lastName || ''}`.trim();
         const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length) : '';
         if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));
+        // One whose answer proved nothing may have been returned (state §0.263): said so, never "not returned".
+        const maybeFreedSaid = maybeFreed.length ? maybeFreedWords(maybeFreed, jobsWithBridge) : '';
+        if (maybeFreed.length) setUnassignError(prev => (prev ? `${prev} ${maybeFreedSaid}` : maybeFreedSaid));
 
         // Drop the dispatcher into the queue so the freed work is in front of them.
         if (freed.length) { setSelectedJobId(freed[0]); setView('queue'); }
@@ -6404,7 +6453,7 @@ export default function DispatchTab() {
 
     const deleteBlock = async (id) => {
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks?id=' + encodeURIComponent(id), { method: 'DELETE' });
-        if (!res.ok) throw new Error(await readRefusal(res));
+        if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
         setBlocks(prev => prev.filter(b => b.id !== id));
     };
 
@@ -6414,7 +6463,7 @@ export default function DispatchTab() {
             body: JSON.stringify({ id: techId, workingHours }),
         });
         // The ok check first, the house words (state §0.248, Part 11) — the shift pattern says them under its Save.
-        if (!res.ok) throw new Error(await readRefusal(res));
+        if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
         const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before
         if (data.technician) setTechsRaw(prev => prev.map(t => t.id === techId ? data.technician : t));
     };
@@ -6429,7 +6478,7 @@ export default function DispatchTab() {
                 body: JSON.stringify({ id: jobId, ...patch }),
             });
             // The ok check first, the house words (state §0.248, Part 11) — the job card says them.
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before
             if (data.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? data.job : j));
         } finally {
@@ -6503,6 +6552,18 @@ export default function DispatchTab() {
                 .filter(b => !/^(Not rostered|Off ·|Double-booked)/.test(b))
             : [];
 
+        // The row moved as sent, or as the server stored it (`saved`): by a landed move, and by one whose answer proves
+        // nothing (state §0.263, the unknown-save rule — Jeff's Q2: the change kept as sent, said as maybe).
+        const moveRow = (saved) => setJobs(prev => prev.map(j => j.id === job.id
+            ? { ...j,
+                scheduledDate:   saved?.scheduledDate ?? toDate,
+                assignedTechIds: plan.crew,
+                window:          saved ? queueWindow(saved) : j.window,
+                assignedEquipment: reserved ?? j.assignedEquipment,
+                // The server decided and recorded the customer notification (§0.111).
+                publicToken: saved?.publicToken ?? j.publicToken ?? null,
+                customerNotifications: Array.isArray(saved?.customerNotifications) ? saved.customerNotifications : (j.customerNotifications || []) }
+            : j));
         const commit = async (overridden) => {
             setWeekMove({ busy: true, error: '', notice: '' });
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
@@ -6513,23 +6574,14 @@ export default function DispatchTab() {
                 });
                 // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
                 if (!res.ok) {
-                    const why = res.status === 403 ? 'Your role cannot reschedule jobs.' : await readRefusal(res);
+                    const r = await writeRefusalOf(res, 'Your role cannot reschedule jobs.');
                     if (!stillOrg(askedOrg)) return;
-                    throw new Error(why);
+                    throw refusalError(r.words, r.heard);
                 }
                 const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read moves the row as sent
                 if (!stillOrg(askedOrg)) return;
                 const saved = data.job || null;
-                setJobs(prev => prev.map(j => j.id === job.id
-                    ? { ...j,
-                        scheduledDate:   saved?.scheduledDate ?? toDate,
-                        assignedTechIds: plan.crew,
-                        window:          saved ? queueWindow(saved) : j.window,
-                        assignedEquipment: reserved ?? j.assignedEquipment,
-                        // The server decided and recorded the customer notification (§0.111).
-                        publicToken: saved?.publicToken ?? j.publicToken ?? null,
-                        customerNotifications: Array.isArray(saved?.customerNotifications) ? saved.customerNotifications : (j.customerNotifications || []) }
-                    : j));
+                moveRow(saved);
                 if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));
                 if (addAudit) {
                     addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,
@@ -6543,6 +6595,7 @@ export default function DispatchTab() {
                 weekMoveTimer.current = setTimeout(() => setWeekMove(st => ({ ...st, notice: '' })), 8000);
             } catch (e) {
                 if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
+                if (unknownOf(e)) { moveRow(null); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }
                 setWeekMove({ busy: false, error: failureWords(e), notice: '' });   // plain words (state §0.248)
             }
         };
