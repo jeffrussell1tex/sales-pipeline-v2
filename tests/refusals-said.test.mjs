@@ -1281,7 +1281,8 @@ test('5b: the backup schedule is never saved from defaults never read; a save se
 test('5c: New quote stops when the create was refused (the banner says why), and opens the quote the hook saved', () => {
     const q = code(read('src/Tabs/QuotesTab.jsx'));
     const nq = between(q, '    const handleNewQuoteForOpp = async (oppId, template = null) => {', '\n    };');
-    order(nq, 'const saved = await handleSaveQuote(payload, null);', 'if (saved) openConfigurator(oppId, saved.id || payload.id);');
+    // Moved in §0.262 (Part 6): the create goes through createQuote, which keeps its id across presses.
+    order(nq, 'const made = await createQuote(payload);', 'if (made) openConfigurator(oppId, made.saved.id || made.id);');
     assert.equal(nq.split('openConfigurator(').length - 1, 1, 'REGRESSION: the builder opens on a quote that was never made');
     // The words: handleSaveQuote keeps them in quoteModalError, drawn on the tab's banner.
     assert.ok(q.includes('{(error || quoteModalError) && <div'), 'the banner draws the hook\'s words');

@@ -19,7 +19,7 @@ import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
-import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { matchSearch } from '../utils/searchMatch.js';
 import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
@@ -34,6 +34,15 @@ import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
 // hourly job reads (state §0.135) — and the words for it on the card.
 import { DELIVERY_CADENCES, WEEKDAYS, DELIVERY_RUN_EVERY_MIN, cleanDelivery, deliverySummary, deliveryHasChannel, isTimezone, timeLabel } from '../utils/reportDelivery.js';
+
+// A saved report read again by id (state §0.261, Part 6): a create an earlier press had landed, as stored — null when the
+// read fails or the report is not in the caller's list.
+async function storedReportOf(id) {
+    const res = await dbFetch('/.netlify/functions/saved-reports').catch(() => null);
+    if (!res || !res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return (Array.isArray(data?.reports) ? data.reports : []).find(r => r && r.id === id) || null;
+}
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -2534,19 +2543,29 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     // with the row, which the list adopts — never the body. The ok check first (state §0.249, docs/design/refusal-sweep
     // Part 12): a 403 the owner's sentence, any other refusal the server's words with their ref, else "The server
     // returned N."; a landed answer that cannot be read is null — the change landed, the stored row not known.
+    // Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1): a refusal thrown carries `unknown: false` only for the
+    // server's own (a 4xx in its words — nothing written); any other answer, or none (a thrown fetch carries no flag),
+    // may have written it, and its caller says so (`unknownOf`).
     const patchReport = async (id, patch) => {
         setLibError('');
         const res = await dbFetch('/.netlify/functions/saved-reports', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...patch }) });
-        if (!res.ok) throw new Error(res.status === 403 ? 'Only the report’s owner or an Admin can change it.' : await readRefusal(res));
+        if (!res.ok) {
+            const refused = await res.json().catch(() => null);
+            throw Object.assign(new Error(res.status === 403 ? 'Only the report’s owner or an Admin can change it.' : refusalWords(res, refused)), { unknown: !heardRefusal(res.status, refused) });
+        }
         const data = await res.json().catch(() => ({}));
         if (data.report) setSavedReportsList(prev => prev.map(r => r.id === data.report.id ? data.report : r));
         return data.report || null;
     };
+    const unknownOf = (e) => e?.unknown !== false;
+    // A schedule save that failed (state §0.261, the unknown-save rule): the server's own refusal "not saved", any other
+    // answer or none that it may have been.
+    const scheduleRefused = (e) => (unknownOf(e) ? maybeSaid('The schedule', 'saved', failureWords(e)) : `Schedule not saved — ${failureWords(e)}`);
     const toggleShare = async (r) => {
         try {
             const saved = await patchReport(r.id, { isShared: !r.isShared });
             if (!saved) setLibError(`${r.isShared ? 'Unshared' : 'Shared'} — Its answer could not be read. Reload the page to see the report as stored.`);
-        } catch (e) { setLibError(`Sharing not changed — ${failureWords(e)}`); }
+        } catch (e) { setLibError(unknownOf(e) ? maybeSaid('Sharing', 'changed', failureWords(e)) : `Sharing not changed — ${failureWords(e)}`); }
     };
     const pinnedIds = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];
     const isPinned = (r) => pinnedIds.includes(r.id);
@@ -2585,7 +2604,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             }
         }
         if (!stillOrg(askedOrg)) return;
-        if (!res.ok) { setLibError(`Pin not saved — ${refusalWords(res, data)}`); return; }   // the server's words with their ref, else "The server returned N." (state §0.249)
+        // The server's words with their ref, else "The server returned N." (state §0.249); only its own refusal is "not
+        // saved" (state §0.261, the unknown-save rule) — a 5xx, a page or a wordless 4xx may have pinned it.
+        if (!res.ok) { setLibError(heardRefusal(res.status, data) ? `Pin not saved — ${refusalWords(res, data)}` : maybeSaid('The report', unpin ? 'unpinned' : 'pinned', refusalWords(res, data))); return; }
         const stored = Array.isArray(data.user?.pinnedReports) ? data.user.pinnedReports : next;
         if (setMyProfile) setMyProfile(prev => ({ ...(prev || {}), ...(data.user || {}), pinnedReports: stored }));
     };
@@ -2593,16 +2614,25 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const saveDelivery = async (delivery) => {
         setDeliveryBusy(true); setDeliveryNote(null);
         try { const saved = await patchReport(deliveryFor.id, { delivery }); if (saved) setDeliveryFor(saved); setDeliveryNote({ ok: true, text: (delivery.enabled ? `Schedule saved — ${deliverySummary(saved?.config?.delivery || delivery)}.` : 'Schedule saved, delivery off.') + (saved ? '' : ' Its answer could not be read — reload the page to see the schedule as stored.') }); return saved; }
-        catch (e) { setDeliveryNote({ ok: false, text: `Schedule not saved — ${failureWords(e)}` }); return null; }
+        catch (e) { setDeliveryNote({ ok: false, text: scheduleRefused(e) }); return null; }
         finally { setDeliveryBusy(false); }
     };
     // Save, then the same path the hourly job takes — and say what went where.
     const sendNow = async (delivery) => {
         setDeliveryBusy(true); setDeliveryNote(null);
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+        // A send whose answer proves nothing may have gone (state §0.261, the unknown-save rule — Jeff's Q1): said so, and
+        // to check before sending again — a second press sends it again. Reloading would not show where it went.
+        const maybeSent = (words) => `The report may have been sent — check with its recipients before sending it again: ${words}`;
+        let sending = false;
         try {
-            const saved = await patchReport(deliveryFor.id, { delivery });
+            // The schedule saved first (census-B finding (e)): a failure there is the schedule's, said so — it said "Not
+            // sent" over a schedule save the server refused — and nothing is sent.
+            let saved;
+            try { saved = await patchReport(deliveryFor.id, { delivery }); }
+            catch (e) { if (stillOrg(askedOrg)) setDeliveryNote({ ok: false, text: `${scheduleRefused(e)} Nothing was sent.` }); return; }
             if (!stillOrg(askedOrg)) return;   // the send would be asked with the new org's token
+            sending = true;
             const res = await dbFetch('/.netlify/functions/saved-reports?action=deliver&id=' + encodeURIComponent(deliveryFor.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
             // The ok check first (state §0.249, docs/design/refusal-sweep Part 12). A run that did not reach every channel
             // answers 400 with its own result (deliverReport: what went, its errors) — said as before; any other refusal (a
@@ -2611,7 +2641,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             if (!res.ok) {
                 data = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
-                if (!Array.isArray(data?.errors)) { setDeliveryNote({ ok: false, text: `Not sent — ${refusalWords(res, data)}` }); return; }
+                if (!Array.isArray(data?.errors)) { setDeliveryNote({ ok: false, text: heardRefusal(res.status, data) ? `Not sent — ${refusalWords(res, data)}` : maybeSent(refusalWords(res, data)) }); return; }
             } else {
                 data = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
@@ -2626,13 +2656,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 setDeliveryFor(stamped);
                 setSavedReportsList(prev => prev.map(r => r.id === stamped.id ? stamped : r));
             }
-        } catch (e) { if (stillOrg(askedOrg)) setDeliveryNote({ ok: false, text: `Not sent — ${failureWords(e)}` }); }
+        } catch (e) { if (stillOrg(askedOrg)) setDeliveryNote({ ok: false, text: sending ? maybeSent(failureWords(e)) : `Not sent — ${failureWords(e)}` }); }
         finally { setDeliveryBusy(false); }
     };
     const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };
     const confirmDelete = (r) => showConfirm(`Delete the saved report "${r.name}"?`, async () => {
         const rd = await dbWrite('/.netlify/functions/saved-reports', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
-        if (!rd.ok) { setLibError(`Report not deleted — ${rd.error}`); return; }
+        // Only the server's own refusal is "not deleted" (state §0.261, the unknown-save rule); any other may have deleted it.
+        if (!rd.ok) { setLibError(rd.unknown ? maybeSaid('The report', 'deleted', rd.error) : `Report not deleted — ${rd.error}`); return; }
         setSavedReportsList(prev => prev.filter(x => x.id !== r.id));
     });
     // Home's "Open →" on a pinned report: the id waits in localStorage until
@@ -2657,15 +2688,24 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const refusalHere = saveState === 'error' && saveErrorAt === savePlace;
 
     // Save report handler — used by both blank and AI builder Save to library buttons
+    // Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1, Q2; Part 6): a new report keeps its id once an answer
+    // proved nothing — the same report pressed again, its body as sent but for the id, sends that id, and the server's
+    // "already in use" is the earlier press landed: the list read again, the report taken as saved. Only the server's own
+    // refusal is "not saved"; any other failure says it may have been. A landed answer that cannot be read is saved —
+    // it said "not saved — Its answer could not be read." over a report that landed (census-B finding (a)).
+    const heldReportIds = React.useRef({});
     const handleSaveReport = React.useCallback(async ({ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null }) => {
         const at = savePlaceRef.current;   // the screen pressed from — read now, not when the answer lands
         setSaveState('saving');
         setSaveError(null);
+        // Who made it is the server's (state §0.250, guide §18b125 rule 2): the body names no maker, neither id nor name.
+        const body = { name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters };
+        const key = existingId ? null : JSON.stringify(body);
+        const held = key ? heldReportIds.current[key] : null;
         // §0.133: a report opened from the library saves back to ITS row (PUT);
         // a new one is a POST. The endpoint's PUT is an owner-or-Admin upsert.
-        const id = existingId || ('rpt_' + crypto.randomUUID());
-        // Who made it is the server's (state §0.250, guide §18b125 rule 2): the body names no maker, neither id nor name.
-        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters };
+        const id = existingId || held || ('rpt_' + crypto.randomUUID());
+        const payload = { id, ...body };
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
@@ -2677,8 +2717,15 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 body: JSON.stringify(payload),
             });
             // The server's words (state §0.246, Q9): a teammate's shared report saved back is a 403 with its reason.
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
+            let data;
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (!(held && landedBefore(res.status, refused))) throw Object.assign(new Error(refusalWords(res, refused)), { unknown: !heardRefusal(res.status, refused) });
+                const stored = await storedReportOf(id);
+                if (!stored) throw new Error('It could not be read again.');
+                data = { report: stored };
+            } else data = await res.json().catch(() => null);
+            if (key) delete heldReportIds.current[key];
             if (!stillOrg(askedOrg)) return;
             const saved = data?.report || payload;
             // A 2xx whose answer names no row (state §0.250): a save in place merges over the row in the list — its maker
@@ -2701,9 +2748,11 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             setCreateMode('picker');
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
+            const unknown = err?.unknown !== false;
+            if (key) { if (unknown) heldReportIds.current[key] = id; else delete heldReportIds.current[key]; }
             // Kept until its Close (SaveRefusalNote, BuilderHeader's line) — never on a timer.
             setSaveState('error');
-            setSaveError(`The report was not saved — ${failureWords(err)}`);
+            setSaveError(unknown ? maybeSaid('The report', 'saved', failureWords(err)) : `The report was not saved — ${failureWords(err)}`);
             setSaveErrorAt(at);
         }
     }, [currentUser, clerkUserId]);
@@ -5722,10 +5771,16 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [saveReportError, setSaveReportError] = React.useState('');
     const { userId: clerkUserId } = useAuth();   // the viewer's Clerk id: a report they make is theirs (state §0.250)
 
+    // Since §0.261 (the unknown-save rule, Part 3; Part 6) as the library's save: the same report pressed again after an
+    // answer that proved nothing sends the same id, and "already in use" is the earlier press landed; only the server's
+    // own refusal is "not saved"; a landed answer that cannot be read is saved (census-B finding (a)).
+    const heldReportIds = React.useRef({});
     const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
         setSaveReportState('saving');
         setSaveReportError('');
-        const id = 'rpt_' + crypto.randomUUID();
+        const key = `${entityType}\n${entityName || ''}`;
+        const held = heldReportIds.current[key];
+        const id = held || ('rpt_' + crypto.randomUUID());
         const name = entityName ? `${entityType} history — ${entityName}` : `${entityType} history report`;
         const payload = {
             id, name, source: entityType === 'Account' ? 'Accounts' : 'Contacts',
@@ -5743,8 +5798,15 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
+            let data;
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (!(held && landedBefore(res.status, refused))) throw Object.assign(new Error(refusalWords(res, refused)), { unknown: !heardRefusal(res.status, refused) });
+                const stored = await storedReportOf(id);
+                if (!stored) throw new Error('It could not be read again.');
+                data = { report: stored };
+            } else data = await res.json().catch(() => null);
+            delete heldReportIds.current[key];
             if (!stillOrg(askedOrg)) return;
             // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
             // A 2xx whose answer names no row (state §0.250): the viewer made it — their Clerk id and name, here only.
@@ -5754,8 +5816,10 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             setTimeout(() => setSaveReportState(s => (s === 'saved' ? 'idle' : s)), 3000);
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
+            const unknown = e?.unknown !== false;
+            if (unknown) heldReportIds.current[key] = id; else delete heldReportIds.current[key];
             setSaveReportState('error');
-            setSaveReportError(`The history report was not saved — ${failureWords(e)}`);
+            setSaveReportError(unknown ? maybeSaid('The history report', 'saved', failureWords(e)) : `The history report was not saved — ${failureWords(e)}`);
         }
     }, [currentUser, clerkUserId, onSaveReport]);
     const closeSaveReportRefusal = () => { setSaveReportError(''); setSaveReportState(s => (s === 'error' ? 'idle' : s)); };
@@ -6429,6 +6493,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             }),
                                                         });
                                                         if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its section hears nothing
+                                                        // An answer that proves nothing keeps the change as sent and says it may have
+                                                        // been saved (state §0.261, the unknown-save rule — Jeff's Q2).
+                                                        if (!added.ok && added.unknown) { setDealContactsError(maybeSaid(newIds.length === 1 ? 'The contact' : `${newIds.length} contacts`, 'added to this deal', added.error, newIds.length !== 1)); setLocalContactIds(mergedIds); setShowAddContact(false); return; }
                                                         if (!added.ok) { setDealContactsError(`${newIds.length === 1 ? 'The contact was' : `${newIds.length} contacts were`} not added to this deal — ${added.error}`); return; }
                                                         setDealContactsError('');
                                                         setLocalContactIds(mergedIds);
@@ -6487,6 +6554,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             body: JSON.stringify({ id: forDeal, contactIds: merged, contacts: contactNamesText(mergedNames) }),
                                                         });
                                                         if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its section hears nothing
+                                                        if (!removed.ok && removed.unknown) { setDealContactsError(maybeSaid(name || 'The contact', 'taken off this deal', removed.error)); setLocalContactIds(merged); return; }   // kept as sent (state §0.261)
                                                         if (!removed.ok) { setDealContactsError(`${name || 'The contact'} was not taken off this deal — ${removed.error}`); return; }
                                                         setDealContactsError('');
                                                         setLocalContactIds(merged);
@@ -6513,6 +6581,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                 body: JSON.stringify({ id: contact.id, buyerPersona: personaId }),
                                                             });
                                                             if (shownOppIdRef.current !== forDeal) return;   // another deal picked since: its map and banner hear nothing
+                                                            // An answer that proves nothing keeps the pick and says it may have been
+                                                            // saved (state §0.261, the unknown-save rule — Jeff's Q2).
+                                                            if (!rp.ok && rp.unknown) { setDealContactsError(maybeSaid(`${name || 'The contact'}'s buyer persona`, 'saved', rp.error)); return; }
                                                             if (!rp.ok) {
                                                                 // Only while this pick is still the one shown: a later pick stands.
                                                                 setLocalPersonaMap(prev => (prev[contact.id] === personaId ? { ...prev, [contact.id]: shown } : prev));

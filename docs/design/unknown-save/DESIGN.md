@@ -2,7 +2,7 @@
 
 # Design: a write whose answer proves nothing says it may have been saved
 
-**Parts 1, 2 and 6 built 18 Nov** (state §0.261; guide §18b134; harness deferred) as answered (ANSWERS.md), with these changes at build: the settings senders moved to Part 5; the quote and product creates' ids to Part 3; `ownRefusal`, `destRefusedOwn` and `recordRefusal` kept until Parts 3 and 5; the invite's raw text (Q4) fixed; the lead, coaching-note and export creates refuse a taken id 409 (they were 500s); a team note's Post held after an answer that proves nothing. Parts 3-5 follow.
+**Part 3 built 18 Nov** (state §0.262; guide §18b134 rules 6-9; harness deferred): Leads, Quotes and useQuotes' creates' ids, Reports, the Sales Manager's three throws. **Parts 1, 2 and 6 built 18 Nov** (state §0.261; guide §18b134; harness deferred) as answered (ANSWERS.md), with these changes at build: the settings senders moved to Part 5; the quote and product creates' ids to Part 3; `ownRefusal`, `destRefusedOwn` and `recordRefusal` kept until Parts 3 and 5; the invite's raw text (Q4) fixed; the lead, coaching-note and export creates refuse a taken id 409 (they were 500s); a team note's Post held after an answer that proves nothing. Parts 3-5 follow.
 
 ## What was decided 16 Nov, and what the census changed
 

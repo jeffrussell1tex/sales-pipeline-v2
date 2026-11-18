@@ -1,7 +1,16 @@
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, waitForToken, requestOrg, stillOrg } from '../utils/storage';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
+
+// One stored row read again by id, from the list its GET answers (state §0.261, Part 6): a create an earlier press had
+// landed is shown as stored. Null when the read fails or the row is not in it.
+const storedRowOf = async (url, key, id) => {
+    const res = await dbFetch(url).catch(() => null);
+    if (!res || !res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return (Array.isArray(data?.[key]) ? data[key] : []).find(r => r && r.id === id) || null;
+};
 
 /**
  * useQuotes — manages quotes and products (price book) state.
@@ -70,15 +79,20 @@ export function useQuotes() {
      * @param {object|null} editingQuote — existing quote if editing, null if new
      * @returns {object|null}  — saved quote record, or null on error
      */
-    const handleSaveQuote = useCallback(async (formData, editingQuote = null) => {
+    // Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1, Q2; Part 6): a create keeps the id its caller sends (a
+    // press after an answer that proved nothing sends the same one), and the server's answer that the id is already this
+    // org's is the earlier press landed — the quote read again and taken as saved. Only the server's own refusal says its
+    // words alone; any other failure says the quote may have been saved. `onFailure` hears { words, unknown }.
+    const handleSaveQuote = useCallback(async (formData, editingQuote = null, { onFailure } = {}) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setQuoteModalError(null);
         setQuoteModalSaving(true);
+        const fail = (words, unknown) => { setQuoteModalError(words); if (onFailure) onFailure({ words, unknown }); return null; };
         try {
             const isEdit = !!editingQuote;
             const payload = isEdit
                 ? { ...formData, id: editingQuote.id }
-                : { ...formData, id: 'qt_' + crypto.randomUUID() };
+                : { ...formData, id: formData.id || ('qt_' + crypto.randomUUID()) };
 
             const res = await dbFetch('/.netlify/functions/quotes', {
                 method: isEdit ? 'PUT' : 'POST',
@@ -87,10 +101,17 @@ export function useQuotes() {
             });
             // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 10; Jeff's Q3).
             if (!res.ok) {
-                const why = await readRefusal(res);
+                const refused = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return null;
-                setQuoteModalError(why);
-                return null;
+                if (!isEdit && landedBefore(res.status, refused)) {
+                    const stored = await storedRowOf('/.netlify/functions/quotes', 'quotes', payload.id);
+                    if (!stillOrg(askedOrg)) return null;
+                    if (!stored) return fail(maybeSaid('The quote', 'saved', 'It could not be read again.'), true);
+                    setQuotes(prev => [...prev.filter(q => q.id !== stored.id), stored]);
+                    return stored;
+                }
+                const heard = heardRefusal(res.status, refused);
+                return fail(heard ? refusalWords(res, refused) : maybeSaid('The quote', 'saved', refusalWords(res, refused)), !heard);
             }
             const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
             if (!stillOrg(askedOrg)) return null;
@@ -104,8 +125,7 @@ export function useQuotes() {
             return saved;
         } catch (err) {
             if (!stillOrg(askedOrg)) return null;
-            setQuoteModalError(failureWords(err));
-            return null;
+            return fail(maybeSaid('The quote', 'saved', failureWords(err)), true);
         } finally {
             setQuoteModalSaving(false);
         }
@@ -135,13 +155,17 @@ export function useQuotes() {
     // when refused — the server's words, else "The server returned N." — for the Price Book to draw; and
     // { ok: false, quiet: true } when the org changed while it was out (state §0.175): that answer changes nothing
     // and says nothing. `formData` is the body as the screen built it (productChanges.js — only what changed).
+    // Since §0.261 (the unknown-save rule, Part 3; Part 6): a new product keeps the id its form sends — one per opening of
+    // the form — and the server's answer that it is already this org's is the earlier press landed, the product read
+    // again; only the server's own refusal is { ok: false, error } in its words alone, any other failure says it may have
+    // been saved (`unknown`).
     const handleSaveProduct = useCallback(async (formData, editingProduct = null) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const isEdit = !!editingProduct;
             const payload = isEdit
                 ? { ...formData, id: editingProduct.id }
-                : { ...formData, id: 'prod_' + crypto.randomUUID() };
+                : { ...formData, id: formData.id || ('prod_' + crypto.randomUUID()) };
 
             const res = await dbFetch('/.netlify/functions/products', {
                 method: isEdit ? 'PUT' : 'POST',
@@ -149,7 +173,19 @@ export function useQuotes() {
                 body: JSON.stringify(payload),
             });
             // The ok check first (state §0.248, docs/design/refusal-sweep Part 10): the server's words with their ref.
-            if (!res.ok) { const error = await readRefusal(res); if (!stillOrg(askedOrg)) return { ok: false, quiet: true }; return { ok: false, error }; }
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+                if (!isEdit && landedBefore(res.status, refused)) {
+                    const stored = await storedRowOf('/.netlify/functions/products?includeInactive=true', 'products', payload.id);
+                    if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+                    if (!stored) return { ok: false, error: maybeSaid('The product', 'saved', 'It could not be read again.'), unknown: true };
+                    setProducts(prev => [...prev.filter(p => p.id !== stored.id), stored]);
+                    return { ok: true, product: stored };
+                }
+                const heard = heardRefusal(res.status, refused);
+                return { ok: false, error: heard ? refusalWords(res, refused) : maybeSaid('The product', 'saved', refusalWords(res, refused)), unknown: !heard };
+            }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
             const saved = data.product || payload;
@@ -161,27 +197,38 @@ export function useQuotes() {
             return { ok: true, product: saved };
         } catch (err) {
             if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
-            return { ok: false, error: failureWords(err) };
+            return { ok: false, error: maybeSaid('The product', 'saved', failureWords(err)), unknown: true };
         }
     }, []);
 
+    // A product's Delete answers what happened (state §0.261, the unknown-save rule, Part 3): { ok: true } once deleted;
+    // { ok: false, error, unknown } when it was not — the server's own refusal in its words (`unknown` false), any other
+    // answer or none may have deleted it; { ok: false, quiet: true } after an org switch. It said nothing when refused
+    // (census-A row 38): the Price Book's row stayed, with no word why.
     const handleDeleteProduct = useCallback(async (productId, showConfirm) => {
         const doDelete = async () => {
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+            let res;
             try {
-                const res = await dbFetch('/.netlify/functions/products?id=' + productId, { method: 'DELETE' });
-                if (!res.ok || !stillOrg(askedOrg)) return;
-                // Soft-delete: mark inactive in local state
-                setProducts(prev => prev.map(p => p.id === productId ? { ...p, active: false } : p));
+                res = await dbFetch('/.netlify/functions/products?id=' + productId, { method: 'DELETE' });
             } catch (err) {
-                console.error('Delete product error:', err.message);
+                if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+                return { ok: false, error: failureWords(err), unknown: true };
             }
+            if (!stillOrg(askedOrg)) return { ok: false, quiet: true };
+            if (!res.ok) {
+                const refused = await res.json().catch(() => null);
+                return { ok: false, error: refusalWords(res, refused), unknown: !heardRefusal(res.status, refused) };
+            }
+            // Soft-delete: mark inactive in local state
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, active: false } : p));
+            return { ok: true };
         };
         if (showConfirm) {
             showConfirm('Deactivate this product? It will no longer appear in the catalog for new quotes.', doDelete, true);
-        } else {
-            await doDelete();
+            return null;
         }
+        return doDelete();
     }, []);
 
     // ── Helper: get all versions for a given opportunity ──────────────────────

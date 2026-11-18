@@ -271,7 +271,7 @@ test('QuotesTab: a New version copies the rate and the switch as stored — none
         'dealDiscount: source.dealDiscount || 0,',
         'taxRate: source.taxRate ?? null,',
         'taxExempt: source.taxExempt ?? null,',
-        'const saved = await handleSaveQuote(payload, null);');
+        'const made = await createQuote(payload);');   // moved in §0.262 (Part 6): the id is createQuote's
     // A new quote names no rate: the server fills the org's default (R3).
     const nq = between(code(read(TAB)), '    const handleNewQuoteForOpp = async (oppId, template = null) => {', '\n    };');
     assert.ok(!nq.includes('taxRate') && !nq.includes('taxExempt'), 'a new quote takes the org default and the customer prefill');
@@ -296,7 +296,7 @@ test('QuotesTab → Price Book: a Taxable switch per product — on for a new on
     assert.equal(productForm({ id: 'p1', name: 'A', taxable: null }).taxable, true, 'none reads taxable');
     assert.ok(cat.includes('<input type="checkbox" id="prod-taxable" checked={form.taxable !== false} onChange={e => setForm(f => ({ ...f, taxable: e.target.checked }))} />'));
     assert.ok(cat.includes('<label htmlFor="prod-taxable"'));
-    assert.ok(cat.includes('const changes = productChanges(stored, form, formDefaults);') && cat.includes('await onSave(stored ? { ...changes, id: stored.id } : changes, stored);'), 'the form, Taxable with it, is the body');
+    assert.ok(cat.includes('const changes = productChanges(stored, form, formDefaults);') && cat.includes('await onSave(stored ? { ...changes, id: stored.id } : { ...changes, id: newProductId.current }, stored);'), 'the form, Taxable with it, is the body');
     // A new product sends its Taxable; an edit sends it when switched (§0.242: only what changed).
     const NEW = { name: 'A', category: '', productType: 'recurring', listPrice: '10', unit: 'flat', description: '', active: true, customPrice: false, taxable: false };
     assert.equal(productChanges(null, NEW).taxable, false);

@@ -7,7 +7,7 @@ import { popoverPlacement } from '../utils/popoverPlacement.js';
 import { T } from '../tokens.js';
 import { canEditCrm } from '../utils/roles.js';
 import { daysSince } from '../utils/dateLocal';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 import { pressNoticeOf } from '../utils/pressNotice.js';
 
 // ── Design tokens ────────────────────────────────────────────
@@ -1157,20 +1157,26 @@ export default function LeadsTab() {
 
     // ── Persist a lead field change to DB + local state ────────
     // After an org switch an answer changes nothing on screen (state §0.175).
+    // Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1, Q2): an answer that proves nothing keeps the change and says
+    // it may have been saved; the server's own refusal puts back only this row's changed fields, and only while the row
+    // still shows them — it put back the whole list as it stood before the press, undoing the other rows a bulk press
+    // changed at the same time (census-B L1).
     const saveLead = useCallback(async (id, patch) => {
         const askedOrg = requestOrg();
-        let snapshot;
-        setLeads(prev => { snapshot = prev; return prev.map(l => l.id === id ? { ...l, ...patch } : l); });
+        let before = null;
+        setLeads(prev => prev.map(l => { if (l.id !== id) return l; before = l; return { ...l, ...patch }; }));
         // dbFetch resolves for ANY status (guide 18b1), so the old catch fired on a
         // network failure only and a rejected edit stayed on screen until reload.
         const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, {
             method: 'PUT',
             body: JSON.stringify({ id, ...patch }),
         });
-        if (!r.ok && stillOrg(askedOrg)) {
-            setLeads(snapshot);
-            setUndoToast({ error: `Lead not saved — ${r.error}` });
-        }
+        if (r.ok || !stillOrg(askedOrg)) return;
+        if (r.unknown) { setUndoToast({ error: maybeSaid('The lead', 'saved', r.error) }); return; }
+        const keys = Object.keys(patch);
+        if (before) setLeads(prev => prev.map(l => (l.id === id && keys.every(k => l[k] === patch[k])
+            ? { ...l, ...Object.fromEntries(keys.map(k => [k, before[k]])) } : l)));
+        setUndoToast({ error: `Lead not saved — ${r.error}` });
     }, [setLeads]);
 
     // ── Lead claim requests (§0.58) ────────────────────────────
@@ -1186,27 +1192,29 @@ export default function LeadsTab() {
     // request" — a rep's Triage and Cockpit say "Checking requests…" and offer neither Request nor Cancel. It starts
     // false on each mount, and an org switch remounts the tab (App.jsx keys it by the org), so each org's read starts it.
     const [requestsLanded, setRequestsLanded] = useState(false);
+    // The list read, by the mount and again after a press an earlier press had landed (state §0.261, Part 6): `mine` says
+    // whether its answer is still this screen's.
+    const loadRequests = useCallback(async (mine) => {
+        try {
+            const res = await dbFetch('/.netlify/functions/lead-requests');
+            if (!mine()) return;
+            if (!res.ok) { const words = await readRefusal(res); if (mine()) setRequestsError(words); return; }
+            const data = await res.json();
+            if (!mine()) return;
+            if (!Array.isArray(data?.leadRequests)) throw new Error('Its answer could not be read.');
+            setLeadRequests(data.leadRequests);
+            setRequestsError('');
+            setRequestsLanded(true);
+        } catch (e) {
+            if (mine()) setRequestsError(failureWords(e));   // never "Failed to fetch" or a parse error's words
+        }
+    }, []);
     useEffect(() => {
         let cancelled = false;
         const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        const mine = () => !cancelled && stillOrg(askedOrg);
-        (async () => {
-            try {
-                const res = await dbFetch('/.netlify/functions/lead-requests');
-                if (!mine()) return;
-                if (!res.ok) { const words = await readRefusal(res); if (mine()) setRequestsError(words); return; }
-                const data = await res.json();
-                if (!mine()) return;
-                if (!Array.isArray(data?.leadRequests)) throw new Error('Its answer could not be read.');
-                setLeadRequests(data.leadRequests);
-                setRequestsError('');
-                setRequestsLanded(true);
-            } catch (e) {
-                if (mine()) setRequestsError(failureWords(e));   // never "Failed to fetch" or a parse error's words
-            }
-        })();
+        loadRequests(() => !cancelled && stillOrg(askedOrg));
         return () => { cancelled = true; };
-    }, []);
+    }, [loadRequests]);
 
     // ── Delete a lead — server FIRST, then local state ─────────
     // The row's delete used to be setLeads-only: the lead vanished until the
@@ -1218,7 +1226,8 @@ export default function LeadsTab() {
         const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, { method: 'DELETE' });
         if (!stillOrg(askedOrg)) return;
         if (r.ok) setLeads(prev => prev.filter(l => l.id !== id));
-        else setUndoToast({ error: `Lead not deleted — ${r.error}` });
+        // An answer that proves nothing may have deleted it (state §0.261, the unknown-save rule): said so, the row kept.
+        else setUndoToast({ error: r.unknown ? maybeSaid('The lead', 'deleted', r.error) : `Lead not deleted — ${r.error}` });
     }, [setLeads, setUndoToast]);
 
     // A claim request's refusal, a failure, or a landed answer that cannot be read is said in a press notice (§0.249,
@@ -1230,28 +1239,45 @@ export default function LeadsTab() {
         setPressNotices(list => [...list, pressNoticeOf(claimTitleOf(allLeads, leadId), words)]);
     }, [allLeads, setPressNotices]);
 
+    // A request keeps its id once an answer proved nothing (state §0.261, the unknown-save rule, Part 6): the same request
+    // pressed again sends that id, and the server's answer that it is already filed (`code: 'already'`) is read as the
+    // earlier press landed — the list read again. Keyed by the lead and the note sent; a request that lands, or is
+    // refused in the server's own words, gives its id up.
+    const heldRequestIds = useRef({});
     const requestLead = useCallback(async (leadId, note) => {
         const askedOrg = requestOrg();
-        const id = 'lcr_' + crypto.randomUUID();
+        const key = `${leadId}\n${note || ''}`;
+        const held = heldRequestIds.current[key];
+        const id = held || ('lcr_' + crypto.randomUUID());
         let res;
         try {
             res = await dbFetch('/.netlify/functions/lead-requests', {
                 method: 'POST',
                 body: JSON.stringify({ id, leadId, note: note || null }),
             });
-        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not sent: ${failureWords(e)}`); return; }
-        if (!stillOrg(askedOrg)) return;
-        if (!res.ok) {
-            const words = await readRefusal(res);
-            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not sent: ${words}`);
+        } catch (e) {
+            if (!stillOrg(askedOrg)) return;
+            heldRequestIds.current[key] = id;
+            sayClaim(leadId, maybeSaid('The request', 'sent', failureWords(e)));
             return;
         }
+        if (!stillOrg(askedOrg)) return;
+        if (!res.ok) {
+            const refused = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return;
+            if (held && landedBefore(res.status, refused)) { delete heldRequestIds.current[key]; loadRequests(() => stillOrg(askedOrg)); return; }
+            if (!heardRefusal(res.status, refused)) { heldRequestIds.current[key] = id; sayClaim(leadId, maybeSaid('The request', 'sent', refusalWords(res, refused))); return; }
+            delete heldRequestIds.current[key];
+            sayClaim(leadId, `Request not sent: ${refusalWords(res, refused)}`);
+            return;
+        }
+        delete heldRequestIds.current[key];
         // Landed: an answer that cannot be read is said as landed — the request was filed (its Cancel waits for a reload).
         const data = await res.json().catch(() => null);
         if (!stillOrg(askedOrg)) return;
         if (data?.leadRequest) setLeadRequests(prev => [data.leadRequest, ...prev]);
         else sayClaim(leadId, 'Requested — Its answer could not be read. Reload the page to see the request.');
-    }, [sayClaim]);
+    }, [sayClaim, loadRequests]);
 
     const cancelRequest = useCallback(async (id) => {
         const askedOrg = requestOrg();
@@ -1259,13 +1285,15 @@ export default function LeadsTab() {
         let res;
         try {
             res = await dbFetch(`/.netlify/functions/lead-requests?id=${id}`, { method: 'DELETE' });
-        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not cancelled: ${failureWords(e)}`); return; }
+        // No answer, or one that proves nothing, may have cancelled it (state §0.261, the unknown-save rule): said so.
+        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, maybeSaid('The request', 'cancelled', failureWords(e))); return; }
         if (!stillOrg(askedOrg)) return;
         if (res.ok) {
             setLeadRequests(prev => prev.filter(r => r.id !== id));
         } else {
-            const words = await readRefusal(res);
-            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not cancelled: ${words}`);
+            const refused = await res.json().catch(() => null);
+            const words = refusalWords(res, refused);
+            if (stillOrg(askedOrg)) sayClaim(leadId, heardRefusal(res.status, refused) ? `Request not cancelled: ${words}` : maybeSaid('The request', 'cancelled', words));
         }
     }, [leadRequests, sayClaim]);
 
@@ -1279,11 +1307,16 @@ export default function LeadsTab() {
                 method: 'PUT',
                 body: JSON.stringify({ id, action }),
             });
-        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, `Request not ${verb}: ${failureWords(e)}`); return; }
+        } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, maybeSaid('The request', verb, failureWords(e))); return; }
         if (!stillOrg(askedOrg)) return;
         if (!res.ok) {
-            const words = await readRefusal(res);
-            if (stillOrg(askedOrg)) sayClaim(leadId, `Request not ${verb}: ${words}`);
+            const refused = await res.json().catch(() => null);
+            if (!stillOrg(askedOrg)) return;
+            const words = refusalWords(res, refused);
+            // Already approved (or denied) as asked — an earlier press, or another approver (state §0.261, Part 6): it is
+            // done, never "not approved"; the requests are read again and the server's words said.
+            if (landedBefore(res.status, refused)) { loadRequests(() => stillOrg(askedOrg)); sayClaim(leadId, `${words} Reload the page to see the lead as stored.`); return; }
+            sayClaim(leadId, heardRefusal(res.status, refused) ? `Request not ${verb}: ${words}` : maybeSaid('The request', verb, words));
             return;
         }
         // Landed: the server assigned (or denied) it — an answer that cannot be read is said as landed, never as refused.
@@ -1305,7 +1338,7 @@ export default function LeadsTab() {
         } else {
             setLeadRequests(prev => prev.map(r => r.id === resolved.id ? resolved : r));
         }
-    }, [reps, setLeads, leadRequests, sayClaim]);
+    }, [reps, setLeads, leadRequests, sayClaim, loadRequests]);
 
     // ── Convert a lead to an opportunity ─────────────────────
     const convertLead = useCallback((lead) => {

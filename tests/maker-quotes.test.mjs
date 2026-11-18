@@ -122,8 +122,10 @@ test('the save by scan: merged over the stored row with the stored maker; the up
 
 test('the Quotes tab sends no maker: New quote and New version leave it to the server; the Approvals card reads the stored one', () => {
     const tab = code(read('src/Tabs/QuotesTab.jsx'));
-    const newQuote = between(tab, 'const handleNewQuoteForOpp = async (oppId, template = null) => {', 'const saved = await handleSaveQuote(payload, null);');
-    const newVersion = between(tab, 'const handleNewVersion = async () => {', 'const saved = await handleSaveQuote(payload, null);');
+    // Moved in §0.262 (the unknown-save rule, Part 6): each create sends its payload through createQuote, which adds only the id.
+    const newQuote = between(tab, 'const handleNewQuoteForOpp = async (oppId, template = null) => {', 'const made = await createQuote(payload);');
+    const newVersion = between(tab, 'const handleNewVersion = async () => {', 'const made = await createQuote(payload);');
+    assert.ok(between(tab, 'const createQuote = async (body) => {', '\n    };').includes('const saved = await handleSaveQuote({ ...body, id }, null, { onFailure: (f) => { failure = f; } });'), 'createQuote adds the id alone');
     for (const [name, block] of [['New quote', newQuote], ['New version', newVersion]]) {
         assert.ok(block.includes('const payload = {') && block.includes("status: 'Draft',"), `${name}: its payload`);
         assert.ok(!/createdBy/.test(block), `REGRESSION: ${name} sends a maker`);

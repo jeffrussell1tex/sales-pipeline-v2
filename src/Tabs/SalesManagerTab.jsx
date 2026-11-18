@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch, requestOrg, stillOrg, NETWORK_ERROR } from '../utils/storage';
-import { refusalWords, failureWords } from '../utils/refusalWords.js';
+import { refusalWords, failureWords, maybeSaid } from '../utils/refusalWords.js';
 import { isoLocal, todayLocal, daysSince } from '../utils/dateLocal';
 import { currentQuarter, fiscalStartOf, fiscalMonthOf } from '../utils/quarters';
 import { cleanQuotaPeriods, quotaPlanOf, quotaDraftRow, editQuotaDraft, checkQuotaSave, quotaRefusal, quotaYearsOffered } from '../utils/quotaPlan.js';
@@ -224,9 +224,11 @@ const claimUnanswered = (done) => `No answer from the server \u2014 reload the p
 // A coaching note's Delete refused (state §0.246, 7b; the last pass): "Not deleted" only for the server's own refusal, or a
 // request that never reached it (Q4's sentence, NETWORK_ERROR); any other answer — a 5xx (coaching-notes.mjs audits after it
 // deletes), a gateway's page, a 4xx with no words — may have deleted it. The hook's words are readRefusal's, with its ref.
-const noteNotDeleted = (r) => (r.error === NETWORK_ERROR || ownRefusal(r.status, saidOf(r.status, r.error))
+// Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1) a request that never answered may have deleted it too: only the
+// server's own refusal is "Not deleted"; the hook's `unknown` says which (useCoachingNotes `answered`).
+const noteNotDeleted = (r) => (!r.unknown && ownRefusal(r.status, saidOf(r.status, r.error))
     ? `Not deleted — ${r.error}`
-    : `The coaching note may have been deleted — reload the page to see whether it was: ${r.error}`);
+    : maybeSaid('The coaching note', 'deleted', r.error));
 
 // A SPIFF's status on the SPIFF board (state §0.204 — Jeff asked for a clear Active / Inactive control on
 // each SPIFF): Active is offered to reps on a Closed Won deal; Inactive is not, and claims already filed can
@@ -974,9 +976,9 @@ export default function SalesManagerTab() {
         } catch (err) {
             console.error('[SalesManagerTab] save ' + label, err);
             if (!stillOrg(askedOrg)) return false;
-            // A request that never left says Q4's one sentence (state §0.249, review fixes): failureWords — it said
-            // "network error while saving <label>", a second wording for one failure.
-            setSaveState({ status: 'error', msg: `Not saved — ${failureWords(err)}` });
+            // A request with no answer may have landed (state §0.261, the unknown-save rule — Jeff's Q1): said as maybe, in
+            // failureWords' words (Q4's one sentence for a request that never answered).
+            setSaveState({ status: 'error', msg: maybeSaid(`${who || 'A member'}'s ${label}`, 'saved', failureWords(err)) });
             return false;
         }
     };
@@ -1068,8 +1070,8 @@ export default function SalesManagerTab() {
         setSaveState({ status: 'error', msg: w.status === 403
             ? `Not saved — only Admins can change ${label}.`
             : w.status === 0
-            // Q4's one sentence (state §0.249, review fixes) — it said "network error while saving <label>".
-            ? `Not saved — ${NETWORK_ERROR}`
+            // No answer may have landed it (state §0.261, the unknown-save rule — Jeff's Q1), in Q4's one sentence.
+            ? maybeSaid(`The ${label}`, 'saved', NETWORK_ERROR, true)
             // Only the server's own refusal (ownRefusal, on writeSettings' words) is "Not saved" (§0.249, the last pass):
             // a 5xx, a page or a wordless 4xx may have written it — settings.mjs answers a 500 after its transaction.
             : ownRefusal(w.status, saidOf(w.status, w.error))

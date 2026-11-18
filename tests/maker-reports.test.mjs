@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { namedByMaker } from '../src/utils/reportMaker.js';
-import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid } from '../src/utils/refusalWords.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
@@ -181,8 +181,12 @@ const saves = (which, list = [STORED_ROW]) => {
     const r = read('src/Tabs/ReportsTab.jsx');
     const st = { list: stateOf(list), sent: [], handed: [], answers: [] };
     const dbFetch = async (url, opts) => { st.sent.push([opts.method, JSON.parse(opts.body)]); return st.answers.shift(); };
-    const common = [() => 'org_a', () => true, dbFetch, readRefusal, failureWords, () => {}, { randomUUID: () => 'new' }, VIEWER, VIEWER_ID];
-    const names = ['requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setTimeout', 'crypto', 'currentUser', 'clerkUserId'];
+    // Since §0.262 (the unknown-save rule, Part 3) the saves also read refusalWords, heardRefusal, landedBefore, maybeSaid,
+    // storedReportOf and their held ids.
+    const common = [() => 'org_a', () => true, dbFetch, readRefusal, failureWords, () => {}, { randomUUID: () => 'new' }, VIEWER, VIEWER_ID,
+        refusalWords, heardRefusal, landedBefore, maybeSaid, async () => null, { current: {} }];
+    const names = ['requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'setTimeout', 'crypto', 'currentUser', 'clerkUserId',
+        'refusalWords', 'heardRefusal', 'landedBefore', 'maybeSaid', 'storedReportOf', 'heldReportIds'];
     const noop = () => {};
     if (which === 'library') {
         const fn = callbackOf(r, 'handleSaveReport', '[currentUser, clerkUserId]');

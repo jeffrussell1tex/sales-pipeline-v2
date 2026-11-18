@@ -2133,11 +2133,12 @@ test('S10 — Edit brand\'s window while its save is out, run as written (critic
 
 // Moved in §0.249 (review fixes, last pass, F4): saveExtra judges writeSettings' words by the tab's module-scope ownRefusal and saidOf, and says
 // refusalWords' words — read here as written, with refusalWords as the tab imports it.
+// maybeSaid too since §0.262 (the unknown-save rule, Part 3): a request with no answer says the SPIFFs may have been saved.
 const salesManagerWords = async () => {
-    const { refusalWords } = await import('../src/utils/refusalWords.js');
+    const { refusalWords, maybeSaid } = await import('../src/utils/refusalWords.js');
     const lines = read(SALES_MANAGER).split(/\r?\n/);
     const line = (start) => { const l = lines.find((x) => x.startsWith(start)); assert.ok(l, start); return l; };
-    return new Function('refusalWords', `${line('const ownRefusal = ')}\n${line('const saidOf = ')}\nreturn { refusalWords, ownRefusal, saidOf };`)(refusalWords);
+    return new Function('refusalWords', 'maybeSaid', `${line('const ownRefusal = ')}\n${line('const saidOf = ')}\nreturn { refusalWords, maybeSaid, ownRefusal, saidOf };`)(refusalWords, maybeSaid);
 };
 // The Sales Manager's saveExtra as written: the drafts' tokens (`opened`); writeSettings answers `answer`; the latest,
 // when given, is taken into the copy.
@@ -2188,7 +2189,8 @@ test('S10 — the Sales Manager\'s saveExtra, run as written (JB3-5): the tokens
     for (const [answer, msg] of [
         [{ ok: false, status: 403, error: 'x' }, 'Not saved — only Admins can change SPIFFs.'],
         // Q4's one sentence (state §0.249, review fixes) — whatever the answer's error says; it was "network error while saving SPIFFs."
-        [{ ok: false, status: 0, error: 'x' }, 'Not saved — The server could not be reached.'],
+        // Moved in §0.262 (the unknown-save rule, Part 3 — Jeff's Q1): a request with no answer may have saved them.
+        [{ ok: false, status: 0, error: 'x' }, 'The SPIFFs may have been saved — reload the page to see whether they were: The server could not be reached.'],
         // Moved in §0.249 (review fixes, last pass, F4): a 5xx may have saved — only the server's own refusal (a 4xx in its words) is "Not saved".
         [{ ok: false, status: 500, error: 'The server returned 500.' }, 'The SPIFFs may have been saved — reload the page to see whether they were: The server returned 500.'],
         [{ ok: false, status: 400, error: 'Quota periods are quarters or months.' }, 'Not saved — Quota periods are quarters or months.'],

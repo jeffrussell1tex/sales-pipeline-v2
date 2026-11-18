@@ -385,7 +385,8 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
     assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'), 'a move carries no copy of the lines');
     // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal read once — RUN in tests/refusal-sweep.test.mjs Part 12b.
     assert.ok(s.includes("if (res.status === 409 && refused?.job) { setLinkedJob(refused.job); setJobUnread(false); return; }"), 'an existing job is adopted');
-    assert.ok(s.includes("setJobError(`The job was not created — ${refusalWords(res, refused)}`);"), 'a refusal is shown, never logged');
+    // Moved in §0.262 (the unknown-save rule, Part 3): only the server's own refusal is "not created"; any other may have made it.
+    assert.ok(s.includes("setJobError(heardRefusal(res.status, refused) ? `The job was not created — ${refusalWords(res, refused)}` : maybeSaid('The job', 'created', refusalWords(res, refused)));"), 'a refusal is shown, never logged');
     assert.ok(s.includes("}, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);"), 'the read re-keys on the quote and the switch');
     assert.ok(s.includes("if (!activeQuote || !quoteCanBecomeJob(activeQuote) || !settings?.dispatchEnabled) { setJobLoading(false); return; }"));
     assert.ok(s.includes('{jobError && <div role="alert"'));

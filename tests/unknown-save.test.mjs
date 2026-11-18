@@ -12,7 +12,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { heardRefusal, landedBefore, maybeSaid, alreadySaid, writeRefusal } from '../src/utils/refusalWords.js';
+import { heardRefusal, landedBefore, maybeSaid, alreadySaid, writeRefusal, failureWords, refusalWords } from '../src/utils/refusalWords.js';
+import { pressNoticeOf } from '../src/utils/pressNotice.js';
 import { emptyReceipt, receiptFromInsert, receiptFromUpdate, isClean, describeReceipt, mergeReceipts } from '../src/utils/importReceipt.js';
 import { makeBulkClient } from '../src/utils/bulkClient.js';
 
@@ -150,11 +151,11 @@ const SWEPT = ['src/App.jsx', 'src/components/KanbanView.jsx', 'src/components/l
     'src/components/layout/QuickLogFab.jsx', 'src/components/modals/LeadModal.jsx', 'src/components/modals/OpportunityModal.jsx', 'src/components/rails/AccountPicker.jsx',
     'src/hooks/useAccounts.js', 'src/hooks/useActivities.js', 'src/hooks/useCoachingNotes.js', 'src/hooks/useContacts.js', 'src/hooks/useDocuments.js',
     'src/hooks/useMerge.js', 'src/hooks/useOpportunities.js', 'src/hooks/useTasks.js', 'src/hooks/useUserHandlers.js', 'src/utils/bulkClient.js',
-    'src/utils/documentsStorage.js', 'src/utils/storage.js', 'src/Tabs/TasksTab.jsx', 'src/Tabs/settings/audit/AuditDetail.jsx'];
-// The next batches (ANSWERS.md Q3): Part 3 (Leads, Quotes, Reports, the Sales Manager's three throws said "Not"; the quote
-// and product creates' ids, useQuotes), Part 4 (Dispatch), Part 5 (Settings and its senders).
+    'src/utils/documentsStorage.js', 'src/utils/storage.js', 'src/Tabs/TasksTab.jsx', 'src/Tabs/settings/audit/AuditDetail.jsx',
+    // Part 3 (state §0.262): Leads, Quotes (and its hook), Reports, the Sales Manager's three throws.
+    'src/Tabs/LeadsTab.jsx', 'src/Tabs/QuotesTab.jsx', 'src/Tabs/ReportsTab.jsx', 'src/Tabs/SalesManagerTab.jsx', 'src/hooks/useQuotes.js'];
+// The next batches (ANSWERS.md Q3): Part 4 (Dispatch), Part 5 (Settings and its senders). Part 3 swept in §0.262.
 const PENDING = {
-    'src/Tabs/LeadsTab.jsx': 3, 'src/Tabs/QuotesTab.jsx': 3, 'src/Tabs/ReportsTab.jsx': 3, 'src/Tabs/SalesManagerTab.jsx': 3, 'src/hooks/useQuotes.js': 3,
     'src/Tabs/DispatchTab.jsx': 4,
     'src/Tabs/settings/company/CompanyCalendarDetail.jsx': 5, 'src/Tabs/settings/data/BackupDetail.jsx': 5, 'src/Tabs/settings/data/ExportDetail.jsx': 5,
     'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx': 5, 'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx': 5,
@@ -174,7 +175,7 @@ test('THE GUARD: every file under src/ that sends a write is swept, named with t
     assert.deepEqual(writers.filter((f) => !named.has(f)), [], 'a file sends a write and is not named — sweep it (heardRefusal / writeRefusal / maybeSaid) or name it here with its Part');
     assert.deepEqual([...named].filter((f) => !writers.includes(f)), [], 'a name here sends no write any more — take it out');
     for (const f of SWEPT) assert.ok(RULE.test(read(f)), `${f}: swept, but reads no answer that proves nothing`);
-    for (const f of Object.keys(PENDING)) assert.ok([3, 4, 5].includes(PENDING[f]), f);
+    for (const f of Object.keys(PENDING)) assert.ok([4, 5].includes(PENDING[f]), f);
     assert.ok(writers.length >= 44, `the census's files (${writers.length})`);
 });
 
@@ -198,4 +199,168 @@ test('WIRING: a create keeps its id across presses — the rails, the deal windo
     assert.ok(m.includes('if (r?.unknown) setNotePostHeld(true);') && m.includes('disabled={notePostHeld} onClick={postNote}'));
     // Rows that may have saved offer no second Import (their ids were that run's).
     assert.ok(read('src/components/modals/CsvImportModal.jsx').includes("{!clean && !r.maybe && <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>}"));
+});
+
+
+// ── Part 3 (state §0.262): Leads, Quotes, Reports, the Sales Manager ──
+// Each handler extracted as written and run over stubs. The Reports, Leads-request, quote-window, Create-job and Sales
+// Manager cases run in tests/refusal-sweep.test.mjs (moved there with their Part); these are the ones no test ran.
+const between = (src, start, end) => { const a = src.indexOf(start); assert.ok(a >= 0, start); const b = src.indexOf(end, a + start.length); assert.ok(b > a, end); return src.slice(a, b); };
+const stateOf = (v) => { const st = { value: v }; st.set = (x) => { st.value = typeof x === 'function' ? x(st.value) : x; }; return st; };
+const LEADS = 'src/Tabs/LeadsTab.jsx';
+const leadSave = () => new Function('useCallback', 'requestOrg', 'stillOrg', 'setLeads', 'dbWrite', 'setUndoToast', 'maybeSaid',
+    `${between(read(LEADS), '    const saveLead = useCallback(', '\n    }, [setLeads]);')}\n    }, [setLeads]);\nreturn saveLead;`);
+
+test('RUN (Part 3): a lead change refused in the server\'s own words puts back only its own row\'s fields — a bulk press\'s other rows that landed stay; one whose answer proves nothing is kept and said as maybe', async () => {
+    const run = (answers, org = { now: 'org_a' }) => {
+        const leads = stateOf([{ id: 'l1', status: 'New', assignee: '' }, { id: 'l2', status: 'New', assignee: '' }]);
+        const toasts = [];
+        const gates = {};
+        const dbWrite = (url) => new Promise((resolve) => { const id = url.split('id=')[1]; gates[id] = () => resolve(answers[id]); });
+        const save = leadSave()((fn) => fn, () => 'org_a', (o) => o === org.now, leads.set, dbWrite, (t) => toasts.push(t), maybeSaid);
+        return { leads, toasts, gates, save, org };
+    };
+    const HEARD = { ok: false, status: 403, error: 'Only a manager can assign leads.', unknown: false };
+    const LOST = { ok: false, status: 0, error: 'The server could not be reached.', unknown: true };
+    // A bulk press: l1 and l2 out together; l2 lands, then l1 is refused.
+    const bulk = run({ l1: HEARD, l2: { ok: true, status: 200 } });
+    const a = bulk.save('l1', { status: 'Working', assignee: 'Karen' });
+    const b = bulk.save('l2', { status: 'Working', assignee: 'Karen' });
+    bulk.gates.l2(); await b;
+    bulk.gates.l1(); await a;
+    assert.deepEqual(bulk.leads.value, [{ id: 'l1', status: 'New', assignee: '' }, { id: 'l2', status: 'Working', assignee: 'Karen' }],
+        'REGRESSION: the whole list put back as it stood before the press — the other row that landed undone (census-B L1)');
+    assert.deepEqual(bulk.toasts, [{ error: 'Lead not saved — Only a manager can assign leads.' }]);
+    // No answer: kept, said as maybe.
+    const lost = run({ l1: LOST });
+    const c = lost.save('l1', { status: 'Working' });
+    lost.gates.l1(); await c;
+    assert.equal(lost.leads.value[0].status, 'Working', 'REGRESSION: a change that may have landed put back');
+    assert.deepEqual(lost.toasts, [{ error: 'The lead may have been saved — reload the page to see whether it was: The server could not be reached.' }]);
+    // Changed again since the press: the refusal leaves the newer value.
+    const later = run({ l1: HEARD });
+    const d = later.save('l1', { status: 'Working' });
+    later.leads.set((prev) => prev.map((l) => (l.id === 'l1' ? { ...l, status: 'Lost' } : l)));
+    later.gates.l1(); await d;
+    assert.equal(later.leads.value[0].status, 'Lost', 'REGRESSION: a refusal put back over a newer change to its row');
+    // After an org switch: nothing.
+    const sw = run({ l1: HEARD });
+    const e = sw.save('l1', { status: 'Working' });
+    sw.org.now = 'org_b';
+    sw.gates.l1(); await e;
+    assert.deepEqual(sw.toasts, []);
+});
+
+test('RUN (Part 3): a lead Delete — the server\'s own refusal "Lead not deleted"; any other answer may have deleted it, the row kept', async () => {
+    const del = new Function('useCallback', 'requestOrg', 'stillOrg', 'dbWrite', 'setLeads', 'setUndoToast', 'maybeSaid',
+        `${between(read(LEADS), '    const deleteLead = useCallback(', '\n    }, [setLeads, setUndoToast]);')}\n    }, [setLeads, setUndoToast]);\nreturn deleteLead;`);
+    for (const [answer, toast, rows] of [
+        [{ ok: false, status: 403, error: 'Only an Admin can delete leads.', unknown: false }, 'Lead not deleted — Only an Admin can delete leads.', 1],
+        [{ ok: false, status: 502, error: 'The server returned 502.', unknown: true }, 'The lead may have been deleted — reload the page to see whether it was: The server returned 502.', 1],
+        [{ ok: true, status: 200 }, null, 0],
+    ]) {
+        const leads = stateOf([{ id: 'l1' }]);
+        const toasts = [];
+        await del((fn) => fn, () => 'o', () => true, async () => answer, leads.set, (t) => toasts.push(t), maybeSaid)('l1');
+        assert.deepEqual([toasts, leads.value.length], [toast ? [{ error: toast }] : [], rows], toast || 'deleted');
+    }
+});
+
+const QUOTES_HOOK = 'src/hooks/useQuotes.js';
+const QUOTES_TAB = 'src/Tabs/QuotesTab.jsx';
+test('RUN (Part 3): a product Delete answers what happened, and the Price Book says it — the server\'s own refusal "Not deleted", any other answer or none that it may have been; it said nothing', async () => {
+    const hook = new Function('useCallback', 'setProducts', 'requestOrg', 'stillOrg', 'dbFetch', 'failureWords', 'refusalWords', 'heardRefusal',
+        `${between(read(QUOTES_HOOK), '    const handleDeleteProduct = useCallback(', '\n    }, []);')}\n    }, []);\nreturn handleDeleteProduct;`);
+    const run = async (answer, { switchOrg = false } = {}) => {
+        const products = stateOf([{ id: 'p1', name: 'Widget', active: true }]);
+        const org = { now: 'org_a' };
+        const fetch = async () => { if (switchOrg) org.now = 'org_b'; if (answer instanceof Error) throw answer; return answer; };
+        const r = await hook((fn) => fn, products.set, () => 'org_a', (o) => o === org.now, fetch, failureWords, refusalWords, heardRefusal)('p1');
+        return { r, products: products.value };
+    };
+    assert.deepEqual((await run(answerOf(403, { error: 'Only an Admin can change the Price Book.' }))).r, { ok: false, error: 'Only an Admin can change the Price Book.', unknown: false });
+    assert.deepEqual((await run(answerOf(502, new SyntaxError('x')))).r, { ok: false, error: 'The server returned 502.', unknown: true });
+    assert.deepEqual((await run(new TypeError('Failed to fetch'))).r, { ok: false, error: 'The server could not be reached.', unknown: true });
+    const done = await run(answerOf(200, {}));
+    assert.deepEqual([done.r, done.products[0].active], [{ ok: true }, false]);
+    assert.deepEqual((await run(answerOf(403, { error: 'x' }), { switchOrg: true })).r, { ok: false, quiet: true });
+    // The Price Book's press notice, titled by the product.
+    const local = new Function('handleDeleteProduct', 'products', 'setPressNotices', 'pressNoticeOf', 'maybeSaid',
+        `${between(read(QUOTES_TAB), '    const handleDeleteProductLocal = async (id) => {', '\n    };')}\n    };\nreturn handleDeleteProductLocal;`);
+    for (const [answer, words] of [
+        [{ ok: false, error: 'Only an Admin can change the Price Book.', unknown: false }, 'Not deleted: Only an Admin can change the Price Book.'],
+        [{ ok: false, error: 'The server returned 502.', unknown: true }, 'It may have been deleted — reload the page to see whether it was: The server returned 502.'],
+        [{ ok: true }, null], [{ ok: false, quiet: true }, null],
+    ]) {
+        const notices = stateOf([]);
+        await local(async () => answer, [{ id: 'p1', name: 'Widget' }], notices.set, pressNoticeOf, maybeSaid)('p1');
+        assert.deepEqual(notices.value.map((n) => [n.title, n.words]), words ? [['Widget', words]] : [], words || 'nothing said');
+    }
+});
+
+test('RUN (Part 6): a new quote or version keeps its id after an answer that proved nothing — the same body pressed again sends it; saved or refused in the server\'s own words, the id goes', async () => {
+    const make = new Function('heldQuoteIds', 'genQuoteId', 'handleSaveQuote',
+        `${between(read(QUOTES_TAB), '    const createQuote = async (body) => {', '\n    };')}\n    };\nreturn createQuote;`);
+    const held = { current: {} };
+    let n = 0;
+    const sent = [];
+    const answers = [];
+    const create = make(held, () => 'q_' + (n++), async (payload, editing, { onFailure }) => {
+        sent.push(payload.id);
+        const a = answers.shift();
+        if (a.saved) return a.saved;
+        onFailure(a);
+        return null;
+    });
+    const BODY = { name: 'Acme v1', opportunityId: 'd1', version: 1 };
+    answers.push({ words: 'The quote may have been saved — reload the page to see whether it was: The server returned 502.', unknown: true }, { saved: { id: 'q_0' } });
+    assert.equal(await create(BODY), null);
+    assert.deepEqual(await create({ ...BODY }), { saved: { id: 'q_0' }, id: 'q_0' });
+    assert.deepEqual(sent, ['q_0', 'q_0'], 'REGRESSION: a fresh id per press — a lost answer\'s retry makes a second quote');
+    assert.deepEqual(held.current, {}, 'saved: the id given up');
+    answers.push({ words: 'A copied line names no product of this organization.', unknown: false }, { words: 'x', unknown: true }, { words: 'x', unknown: true });
+    await create(BODY);
+    await create(BODY);
+    await create({ ...BODY, name: 'Acme v2' });
+    assert.deepEqual(sent.slice(2), ['q_1', 'q_2', 'q_3'], 'after the server\'s own refusal a fresh id; another body its own');
+    // The line editor's words: the hook's — the server's own refusal "Not saved", any other its may-have sentence.
+    const lines = new Function('setSaving', 'handleSaveQuote',
+        `${between(read(QUOTES_TAB), '    const handleSaveLineItems   = async (payload) => {', '\n    };')}\n    };\nreturn handleSaveLineItems;`);
+    for (const [failure, words] of [[{ words: 'Approved quotes are locked.', unknown: false }, 'Not saved — Approved quotes are locked.'],
+        [{ words: 'The quote may have been saved — reload the page to see whether it was: x', unknown: true }, 'The quote may have been saved — reload the page to see whether it was: x']]) {
+        await assert.rejects(lines(() => {}, async (p, e, { onFailure }) => { onFailure(failure); return null; })({ id: 'q_1' }), { message: words });
+    }
+});
+
+test('RUN (Part 3): a saved report\'s Delete — the server\'s own refusal "Report not deleted"; any other answer may have deleted it, the card kept', async () => {
+    const del = new Function('showConfirm', 'dbWrite', 'setLibError', 'setSavedReportsList', 'maybeSaid',
+        `${between(read('src/Tabs/ReportsTab.jsx'), '    const confirmDelete = (r) => showConfirm(', '\n    });')}\n    });\nreturn confirmDelete;`);
+    for (const [answer, said, left] of [
+        [{ ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false }, 'Report not deleted — You do not have permission to make this change.', 2],
+        [{ ok: false, status: 0, error: 'The server could not be reached.', unknown: true }, 'The report may have been deleted — reload the page to see whether it was: The server could not be reached.', 2],
+        [{ ok: true, status: 200 }, null, 1],
+    ]) {
+        const list = stateOf([{ id: 'rpt_a', name: 'A' }, { id: 'rpt_b', name: 'B' }]);
+        const words = [];
+        let pressed = null;
+        del((msg, fn) => { pressed = fn(); }, async () => answer, (w) => words.push(w), list.set, maybeSaid)({ id: 'rpt_a', name: 'A' });
+        await pressed;
+        assert.deepEqual([words, list.value.length], [said ? [said] : [], left], said || 'deleted');
+    }
+});
+
+test('WIRING (Part 3): the Sales Manager\'s three throws say may-have; the quote and product forms send their ids; each Part 3 file names its may-have words', () => {
+    const sm = read('src/Tabs/SalesManagerTab.jsx');
+    assert.ok(sm.includes("setSaveState({ status: 'error', msg: maybeSaid(`${who || 'A member'}'s ${label}`, 'saved', failureWords(err)) });"), 'a forecast call that never answered');
+    assert.ok(sm.includes("? maybeSaid(`The ${label}`, 'saved', NETWORK_ERROR, true)"), 'the tiers and SPIFFs that never answered');
+    assert.ok(sm.includes("const noteNotDeleted = (r) => (!r.unknown && ownRefusal(r.status, saidOf(r.status, r.error))"), 'a coaching note Delete that never answered');
+    const tab = read(QUOTES_TAB);
+    assert.ok(tab.includes("const openNew  = () => { newProductId.current = 'prod_' + crypto.randomUUID(); setForm(EMPTY); setEditing('new'); setError(null); };"));
+    assert.ok(tab.includes('await onSave(stored ? { ...changes, id: stored.id } : { ...changes, id: newProductId.current }, stored);'));
+    const hook = read(QUOTES_HOOK);
+    assert.ok(hook.includes(": { ...formData, id: formData.id || ('qt_' + crypto.randomUUID()) };") && hook.includes(": { ...formData, id: formData.id || ('prod_' + crypto.randomUUID()) };"), 'a create keeps its caller\'s id');
+    assert.equal((hook.match(/if \(!isEdit && landedBefore\(res\.status, refused\)\) \{/g) || []).length, 2, 'the quote and the product read an earlier press that landed');
+    const reports = read('src/Tabs/ReportsTab.jsx');
+    assert.equal((reports.match(/const heldReportIds = React\.useRef\(\{\}\);/g) || []).length, 2, 'the library and Activity history');
+    assert.equal((reports.match(/if \(!\(held && landedBefore\(res\.status, refused\)\)\) throw Object\.assign/g) || []).length, 2);
 });

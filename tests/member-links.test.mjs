@@ -61,7 +61,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { NOUNS, MERGES, notInOrg, NOT_AN_ID, linksAsked, linksDecided, productIdsOf, lineProductsCleared, memberLinksCleared } from '../src/utils/linkIds.js';
 import { PAGE_FIELDS } from '../src/utils/memberSave.js';
-import { refusalWords } from '../src/utils/refusalWords.js';
+import { refusalWords, heardRefusal, maybeSaid } from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -716,8 +716,9 @@ test("T14 — a Pin from a window holding a stale pin list (ReportsTab.jsx's tog
         };
         const setMyProfile = (f) => { myProfile = f(myProfile); adopted.push(myProfile.pinnedReports); };
         // refusalWords handed in since §0.249 (the refusal sweep, Part 12): a refusal's words with their ref, after "Pin not saved — ".
-        const togglePin = new Function('myProfile', 'setMyProfile', 'setLibError', 'dbFetch', 'requestOrg', 'stillOrg', 'refusalWords', `${PINNED.join('\n')}\n${TP}\nreturn togglePin;`)(
-            myProfile, setMyProfile, (m) => { if (m) said.push(m); }, dbFetch, () => org, (asked) => asked === org, refusalWords);
+        // heardRefusal and maybeSaid since §0.262 (the unknown-save rule): only the server's own refusal is "Pin not saved".
+        const togglePin = new Function('myProfile', 'setMyProfile', 'setLibError', 'dbFetch', 'requestOrg', 'stillOrg', 'refusalWords', 'heardRefusal', 'maybeSaid', `${PINNED.join('\n')}\n${TP}\nreturn togglePin;`)(
+            myProfile, setMyProfile, (m) => { if (m) said.push(m); }, dbFetch, () => org, (asked) => asked === org, refusalWords, heardRefusal, maybeSaid);
         await togglePin({ id: click });
         return { sent, held, adopted, said };
     };
@@ -744,10 +745,12 @@ test("T14 — a Pin from a window holding a stale pin list (ReportsTab.jsx's tog
         { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [] }, "REGRESSION: the org switched while a stale Pin was refused — the member's row read again in the org switched to (state §0.175)");
     assert.deepEqual(await run({ shown: ['rep_w'], stored: ['rep_w'], live: ['rep_w', 'rep_y'], click: 'rep_y', switchAt: 'PUT' }),
         { sent: [['rep_w', 'rep_y']], held: ['rep_w', 'rep_y'], adopted: [], said: [] }, 'the org switched during the PUT: its answer changes nothing (state §0.175)');
-    for (const [refusal, words] of [[{ status: 500, body: { error: 'Internal server error', requestId: 'r1' } }, 'Internal server error (ref r1)'], [{ status: 403, body: { error: 'Not your row.' } }, 'Not your row.'],
-        [{ status: 502, body: {} }, 'The server returned 502.']]) {
+    // Moved in §0.262 (the unknown-save rule, Part 3 — Jeff's Q1): only the server's own refusal (a 4xx in its words) is
+    // "Pin not saved"; a 500, a 502's page or a wordless answer may have pinned it, said so in the same words.
+    for (const [refusal, words, heard] of [[{ status: 500, body: { error: 'Internal server error', requestId: 'r1' } }, 'Internal server error (ref r1)', false], [{ status: 403, body: { error: 'Not your row.' } }, 'Not your row.', true],
+        [{ status: 502, body: {} }, 'The server returned 502.', false]]) {
         assert.deepEqual(await run({ ...STALE, click: 'rep_y', refusal }),
-            { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [`Pin not saved — ${words}`] }, `a refusal not about the pins (${refusal.status}): said as it is, with its ref, never "HTTP N", never read again and re-sent`);
+            { sent: [['rep_x', 'rep_w', 'rep_y']], held: ['rep_w'], adopted: [], said: [heard ? `Pin not saved — ${words}` : `The report may have been pinned — reload the page to see whether it was: ${words}`] }, `a refusal not about the pins (${refusal.status}): said as it is, with its ref, never "HTTP N", never read again and re-sent`);
     }
     // No answer to a PUT (the second fix round): it may have landed, so the window says to reload and see — what the
     // member asked, pinned or unpinned; nothing adopted; after an org switch nothing said (state §0.175). togglePin never

@@ -155,14 +155,21 @@ test('useQuotes.handleSaveProduct answers { ok, error | quiet }: the server\'s w
     order(save,
         'const askedOrg = requestOrg();',
         "const res = await dbFetch('/.netlify/functions/products', {",
-        'if (!res.ok) { const error = await readRefusal(res); if (!stillOrg(askedOrg)) return { ok: false, quiet: true }; return { ok: false, error }; }',
+        // Moved in §0.262 (the unknown-save rule, Part 3): the refusal's body read once; an id already this org's is the
+        // earlier press landed, read again; the server's own refusal its words, any other may have saved it.
+        'if (!res.ok) {',
+        'const refused = await res.json().catch(() => null);',
+        'if (!stillOrg(askedOrg)) return { ok: false, quiet: true };',
+        'if (!isEdit && landedBefore(res.status, refused)) {',
+        'const heard = heardRefusal(res.status, refused);',
+        "return { ok: false, error: heard ? refusalWords(res, refused) : maybeSaid('The product', 'saved', refusalWords(res, refused)), unknown: !heard };",
         'const data = await res.json().catch(() => ({}));',
         'if (!stillOrg(askedOrg)) return { ok: false, quiet: true };',
         'setProducts(prev =>',
         'return { ok: true, product: saved };',
         '} catch (err) {',
         'if (!stillOrg(askedOrg)) return { ok: false, quiet: true };',
-        'return { ok: false, error: failureWords(err) };');
+        "return { ok: false, error: maybeSaid('The product', 'saved', failureWords(err)), unknown: true };");
     assert.ok(!/return null/.test(save), 'REGRESSION: a refusal answered as null and said nowhere');
 });
 
@@ -187,7 +194,8 @@ test('the Price Book sends productChanges, closes only on success and draws a re
         'const changes = productChanges(stored, form, formDefaults);',
         'if (stored && !Object.keys(changes).length) { cancel(); return; }',
         'setSaving(true);',
-        'await onSave(stored ? { ...changes, id: stored.id } : changes, stored);',
+        // Moved in §0.262 (Part 6): a new product sends the form's id, one per opening.
+        'await onSave(stored ? { ...changes, id: stored.id } : { ...changes, id: newProductId.current }, stored);',
         'cancel();',
         // Moved in §0.249 (the refusal sweep, Part 12): the thrown words in failureWords — the server's passed through.
         "} catch (err) { setError(failureWords(err)); }");

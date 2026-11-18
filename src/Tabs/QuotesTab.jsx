@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOrganization } from '@clerk/clerk-react';
 import { useLocalLayer } from '../hooks/useLocalLayer';
 // Who the quote is from (state §0.234): the org's Company profile, else its name in Clerk — never the app's.
@@ -7,7 +7,8 @@ import { useApp } from '../AppContext';
 import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { quotePdfOf } from '../utils/quotePdfAnswer.js';
-import { readRefusal, refusalWords, failureWords } from '../utils/refusalWords.js';
+import { readRefusal, refusalWords, failureWords, heardRefusal, maybeSaid } from '../utils/refusalWords.js';
+import { pressNoticeOf } from '../utils/pressNotice.js';
 import { T } from '../tokens.js';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -1107,7 +1108,10 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     }, [products, search, filterCat, sortBy, intelligence]);
     const filtered = sorted;
 
-    const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
+    // A new product's id is the form's, one per opening (state §0.261, Part 6): a press after an answer that proved
+    // nothing sends the same id, and the hook reads the server's "already in use" as the earlier press landed.
+    const newProductId = useRef(null);
+    const openNew  = () => { newProductId.current = 'prod_' + crypto.randomUUID(); setForm(EMPTY); setEditing('new'); setError(null); };
     // The form's first type and unit, shown for a product that holds none (productChanges.js productForm).
     const formDefaults = { typeId: typeOpts[0]?.id || 'recurring', unit: unitOpts[0] || 'flat' };
     const openEdit = (p) => { setForm(productForm(p, formDefaults)); setEditing(p.id); setError(null); };
@@ -1125,7 +1129,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
         if (stored && !Object.keys(changes).length) { cancel(); return; }
         setSaving(true);
         try {
-            await onSave(stored ? { ...changes, id: stored.id } : changes, stored);
+            await onSave(stored ? { ...changes, id: stored.id } : { ...changes, id: newProductId.current }, stored);
             cancel();
         } catch (err) { setError(failureWords(err)); }
         finally { setSaving(false); }
@@ -1535,7 +1539,7 @@ export default function QuotesTab() {
         quotes, setQuotes, products, opportunities, settings, currentUserId, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
         loadQuotes, showConfirm, quoteModalError,
-        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId, setPressNotices,
     } = useApp();
     // The sending org as the preview draws it — the same rule the PDF and the email read on the server (§0.234).
     const { organization } = useOrganization();
@@ -1736,6 +1740,19 @@ export default function QuotesTab() {
     };
 
     // ── Handlers ──────────────────────────────────────────────
+    // A new quote or version keeps its id once an answer proved nothing (state §0.261, the unknown-save rule, Part 6):
+    // the same quote pressed again — its body as sent, but for the id — sends that id, and the hook reads the server's
+    // "already in use" as the earlier press landed. A quote saved, or refused in the server's own words, gives it up.
+    const heldQuoteIds = useRef({});
+    const createQuote = async (body) => {
+        const key = JSON.stringify(body);
+        const id = heldQuoteIds.current[key] || genQuoteId();
+        let failure = null;
+        const saved = await handleSaveQuote({ ...body, id }, null, { onFailure: (f) => { failure = f; } });
+        if (!saved && failure?.unknown) heldQuoteIds.current[key] = id;
+        else delete heldQuoteIds.current[key];
+        return saved ? { saved, id } : null;
+    };
     // `template` (§0.142): a usable saved template from the picker seeds the
     // line items; null (Start from scratch, or the old callers) is a blank quote.
     const handleNewQuoteForOpp = async (oppId, template = null) => {
@@ -1744,7 +1761,7 @@ export default function QuotesTab() {
         try {
             const opp     = (opportunities || []).find(o => o.id === oppId);
             const payload = {
-                id: genQuoteId(),
+                // The id is createQuote's (state §0.261): one kept across presses after an answer that proved nothing.
                 // No quoteNumber: the server issues it and returns it on the
                 // response, which handleSaveQuote writes into state.
                 version: 1,
@@ -1755,11 +1772,11 @@ export default function QuotesTab() {
                 // No createdBy: who made it is the server's (guide §18b125 rule 2).
                 paymentTerms: 'Net 30 · Annual',
             };
-            const saved = await handleSaveQuote(payload, null);
+            const made = await createQuote(payload);
             // Refused: the server's own words are on the banner already — handleSaveQuote keeps them in
             // quoteModalError — and no builder opens on a quote that was never made (state §0.243, as
-            // handleNewVersion). The id is the saved quote's: the hook issues its own.
-            if (saved) openConfigurator(oppId, saved.id || payload.id);
+            // handleNewVersion).
+            if (made) openConfigurator(oppId, made.saved.id || made.id);
         } catch (err) { setError(`The quote was not created — ${failureWords(err)}`); }
         finally { setSaving(false); }
     };
@@ -1781,7 +1798,7 @@ export default function QuotesTab() {
                 (best, q) => ((q.version || 1) > (best.version || 1) ? q : best), configuratorQuotes[0]);
 
             const payload = {
-                id: genQuoteId(),
+                // The id is createQuote's (state §0.261).
                 quoteNumber: source.quoteNumber,
                 version: maxV + 1,
                 name: (source.name || '').replace(/\s+v\d+$/, '') + ' v' + (maxV + 1),
@@ -1807,17 +1824,18 @@ export default function QuotesTab() {
                 status: 'Draft',
                 // No createdBy: the server stamps whoever makes this version (guide §18b125 rule 2).
             };
-            const saved = await handleSaveQuote(payload, null);
+            const made = await createQuote(payload);
             // Refused: the server's own words are on the banner already — handleSaveQuote keeps them
             // in quoteModalError (state §0.204: a copied line naming no product of this org is refused,
             // and the version is not made).
-            if (!saved) return;
+            if (!made) return;
+            const { saved } = made;
             // Carrying nothing forward is almost never what the rep wanted, so say so
             // rather than leaving them to discover an empty builder.
             if ((source.lineItems || []).length && !(saved.lineItems || []).length) {
                 setError(`v${maxV} had ${source.lineItems.length} product(s) but none carried over. Check the console and re-add them.`);
             }
-            setConfiguratorQId(saved.id || payload.id);
+            setConfiguratorQId(saved.id || made.id);
         } catch (err) { setError(`The version was not created — ${failureWords(err)}`); }
         finally { setSaving(false); }
     };
@@ -1856,7 +1874,9 @@ export default function QuotesTab() {
                 const refused = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
                 if (res.status === 409 && refused?.job) { setLinkedJob(refused.job); setJobUnread(false); return; }
-                setJobError(`The job was not created — ${refusalWords(res, refused)}`);
+                // Only the server's own refusal is "not created" (state §0.261, the unknown-save rule — Jeff's Q1): any
+                // other answer may have made it. A second press is safe — the server answers the job already made (409).
+                setJobError(heardRefusal(res.status, refused) ? `The job was not created — ${refusalWords(res, refused)}` : maybeSaid('The job', 'created', refusalWords(res, refused)));
                 return;
             }
             const data = await res.json().catch(() => null);
@@ -1865,7 +1885,7 @@ export default function QuotesTab() {
             setLinkedJob(data.job); setJobUnread(false);
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            setJobError(`The job was not created — ${failureWords(e)}`);
+            setJobError(maybeSaid('The job', 'created', failureWords(e)));
         } finally {
             setJobBusy(false);
         }
@@ -1873,12 +1893,14 @@ export default function QuotesTab() {
     // handleSaveQuote RETURNS NULL on a failed save rather than throwing, so the
     // editor's catch never fired: it closed on a rejected write and the quote came
     // back empty with no error anywhere. Convert the null into a throw so the
-    // editor stays open and shows why.
+    // editor stays open and shows why — in the hook's words (state §0.261, the unknown-save rule): the server's own
+    // refusal "Not saved", any other failure that it may have been saved. It said "nothing was written" for both.
     const handleSaveLineItems   = async (payload) => {
         setSaving(true);
         try {
-            const saved = await handleSaveQuote(payload, payload);
-            if (!saved) throw new Error('Could not save the quote — nothing was written. Please try again.');
+            let failure = null;
+            const saved = await handleSaveQuote(payload, payload, { onFailure: (f) => { failure = f; } });
+            if (!saved) throw new Error(!failure ? 'The quote was not saved.' : failure.unknown ? failure.words : `Not saved — ${failure.words}`);
             return saved;
         } finally { setSaving(false); }
     };
@@ -1893,7 +1915,15 @@ export default function QuotesTab() {
         const result = await handleSaveProduct(data, stored);
         if (!result?.ok && !result?.quiet) throw new Error(result?.error || 'The product was not saved.');
     };
-    const handleDeleteProductLocal = async (id) => { await handleDeleteProduct(id); };
+    // A product's Delete refused is said (state §0.261, the unknown-save rule, Part 3) in a press notice kept until its ✕ —
+    // the Price Book's list has no error place of its own: the server's own refusal "Not deleted", any other answer or
+    // none that it may have been. It said nothing.
+    const handleDeleteProductLocal = async (id) => {
+        const r = await handleDeleteProduct(id);
+        if (!r || r.ok || r.quiet) return;
+        const name = (products || []).find(p => p.id === id)?.name || 'The product';
+        setPressNotices(list => [...list, pressNoticeOf(name, r.unknown ? maybeSaid('It', 'deleted', r.error) : `Not deleted: ${r.error}`)]);
+    };
 
     // The quote PDF (state §0.246, docs/design/refusal-sweep 7a; Jeff's Q14): a PDF not made is said under Download PDF in
     // the house words (quotePdfOf: the server's words with their ref, else "The server returned N.", or "The server could

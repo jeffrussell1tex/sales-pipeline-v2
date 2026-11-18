@@ -793,8 +793,9 @@ test("New version: a refusal says the server's words (the banner reads quoteModa
     order(nv,
         ind(8, 'setSaving(true); setError(null);'),
         ind(16, 'lineItems: (source.lineItems || []).map(li => ({ ...li })),'),
-        ind(12, 'const saved = await handleSaveQuote(payload, null);'),
-        ind(12, 'if (!saved) return;'));
+        // Moved in §0.262 (Part 6): the create goes through createQuote.
+        ind(12, 'const made = await createQuote(payload);'),
+        ind(12, 'if (!made) return;'));
     assert.ok(!nv.includes('Could not create the new version'), "REGRESSION: a line of its own over the server's words");
     assert.ok(!nv.includes('saveDroppingRefused'), 'a copied line is never left off');
 });
