@@ -21644,10 +21644,11 @@ const mutations = [
         "src/hooks/useCoachingNotes.js",
         "return { ok: true, data: body ? await res.json().catch(() => null) : null, status: res.status };",
         "return { ok: true, data: body ? await res.json() : null, status: res.status };"],
-    ["§0.246 coaching notes: a delete reads a body — a landed delete whose answer is no JSON said as refused",
-        "src/hooks/useCoachingNotes.js",
-        "{ body: false });",
-        ");"],
+    // (§0.261 retired "§0.246 coaching notes: a delete reads a body — a landed delete whose answer is no JSON said as
+    // refused": an equivalent mutant since §0.261 — `answered` reads a landed answer's body as `res.json().catch(() => null)`,
+    // so a delete that reads one only reads a body it never uses, and a Response's json() cannot fail past that catch; it
+    // survived the scoped run of 18 Nov (base a5c38bb) and no test can tell it apart. The catch itself is held by "§0.261
+    // coaching notes: a landed note whose answer cannot be read said as not saved".)
     ["§0.246 coaching notes: a refused load reads as no notes",
         "src/hooks/useCoachingNotes.js",
         "if (!res.ok) throw new Error(await readRefusal(res));",
