@@ -276,6 +276,8 @@ One commit per verified batch; doc patch in the same commit.
   into the app (THE GUARD, tests/customer-docs.test.mjs). It is sent as
   the org and replies to the org — a quote to the rep, a visit email to
   the support email; the members' emails keep the app's (guide §18b117).
+  The rep a quote PDF names is the deal's, the maker only when the deal
+  names none (`repOf`, §0.260).
   pdfkit stays outside the quote PDF's bundle (netlify.toml). The quote PDF
   lays out its own pages (`_quotePdf.mjs`): nothing of the body below its
   floor, every text placed by position bounded to its lines (guide §18b118).

@@ -212,6 +212,23 @@ test('PDF: no display name — the org\'s Clerk name; Clerk down — no name lin
     assert.ok(!APP_WORDS.test(dt.all) && !APP_WORDS.test(dt.raw), 'REGRESSION: the app\'s name stands in for a missing one');
 });
 
+// The Rep a customer reads (Jeff, 16 Nov: "A" — OPEN_ITEMS §4.2): the stored deal's Sales Rep, read in the org.
+test('PDF: the Rep is the deal\'s rep — a version a Manager made names the deal\'s rep; a deal naming none, the maker', async () => {
+    const extra = (id, org, opp, createdBy) => ({ id, orgId: org, opportunityId: opp, quoteNumber: 'Q-ITEST-REP', version: 2, name: 'Itest Rep Quote',
+        status: 'Draft', lineItems: [], createdBy });
+    await db.insert(quotes).values([extra('q_itest_brand_rep_a', A, OPP_A, 'Itest Brand Manager'), extra('q_itest_brand_rep_c', C, OPP_PDF[C], 'Itest Maker C')]);
+    const repOn = async (org, quoteId) => {
+        const r = await pdfFn(ev(org, { quoteId }));
+        assert.equal(r.statusCode, 200, r.body);
+        const { lines, all } = pdfText(r.body);
+        return { rep: lines[lines.indexOf('REP') + 1], all };
+    };
+    const a = await repOn(A, 'q_itest_brand_rep_a');
+    assert.equal(a.rep, 'Itest Brand Rep', 'the deal\'s rep');
+    assert.ok(!a.all.includes('Itest Brand Manager'), 'REGRESSION: the version\'s maker named to the customer');
+    assert.equal((await repOn(C, 'q_itest_brand_rep_c')).rep, 'Itest Maker C', 'the deal names no rep: the maker');
+});
+
 // ── EMAIL ────────────────────────────────────────────────────────────────────
 
 test('EMAIL: sent as the org — the From name, the reply to the sending rep, the org\'s name and contact; no app name, no link into the app', async () => {

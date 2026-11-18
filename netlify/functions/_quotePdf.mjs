@@ -103,6 +103,14 @@ export function wrapLines(doc, text, width) {
     return out;
 }
 
+// The rep a customer reads is the deal's (Jeff, 16 Nov: "A"): its Sales Rep as stored; who made the quote only when the
+// deal names none. Until then the PDF printed the quote's maker, so a New version a Manager or an Admin made named
+// them to the customer. The maker stays on the app's own screens (the Quotes list).
+export const repOf = (quote, opportunity) => {
+    const rep = typeof opportunity?.salesRep === 'string' ? opportunity.salesRep.trim() : '';
+    return rep || quote?.createdBy || '';
+};
+
 // ── PDF builder ───────────────────────────────────────────────────────────────
 // `identity` is the sending org's (src/utils/orgIdentity.js): its name, address lines, phone and email. Rendered and
 // read back by tests/quote-pdf-pages.test.mjs (the pages) and tests/integration/quote-branding.itest.mjs (the org).
@@ -137,7 +145,7 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         const { lines, grandTotal, recurringValue, oneTimeValue, avgDisc } = totals;
 
         const oppName  = opportunity ? (opportunity.opportunityName || opportunity.account || '') : '';
-        const repName  = quote.createdBy || '';
+        const repName  = repOf(quote, opportunity);
 
         // ── HEADER BAND (page 1) ───────────────────────────────────────────
         // The sending org's address lines, then its phone · email, under the quote name; taller when there are any.

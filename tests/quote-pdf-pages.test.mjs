@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import PDFDocument from 'pdfkit';
-import { buildPDF, wrapLines, printable, PAGE_H, FOOTER_H, CONTENT_TOP, CONTENT_BOTTOM, NAME_LINES } from '../netlify/functions/_quotePdf.mjs';
+import { buildPDF, wrapLines, printable, repOf, PAGE_H, FOOTER_H, CONTENT_TOP, CONTENT_BOTTOM, NAME_LINES } from '../netlify/functions/_quotePdf.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -371,6 +371,21 @@ test('WIRING: the handler renders through this layout, and the layout is the onl
     const layout = read('netlify/functions/_quotePdf.mjs');
     assert.ok(layout.includes("import PDFDocument from 'pdfkit';") && layout.includes('bufferPages: true,'), 'pdfkit, every page kept for its footer');
     assert.equal(CONTENT_BOTTOM, PAGE_H - FOOTER_H - 12, 'the content floor above the footer band');
+});
+
+// The Rep a customer reads (Jeff, 16 Nov: "A" — OPEN_ITEMS §4.2): the deal's Sales Rep, not who made the version.
+test('REP: the PDF names the deal\'s rep — a Manager\'s New version never names the Manager; the maker only when the deal names none', async () => {
+    const repLine = (page) => { const w = words(page); return w[w.indexOf('REP') + 1]; };
+    const made = quoteOf(2, { createdBy: 'Mark Manager' });
+    const onDeal = await render(made, ORG, { opportunityName: 'Rollout', salesRep: 'Karen Rep' });
+    assert.equal(repLine(onDeal[0]), 'Karen Rep', 'the deal\'s rep');
+    assert.ok(!words(onDeal[0]).includes('Mark Manager'), 'REGRESSION: the version\'s maker named to the customer');
+    assert.equal(repLine((await render(made, ORG, { opportunityName: 'Rollout', salesRep: '  ' }))[0]), 'Mark Manager', 'a blank rep: the maker');
+    assert.equal(repLine((await render(made, ORG, { opportunityName: 'Rollout' }))[0]), 'Mark Manager', 'no rep on the deal: the maker');
+    assert.equal(repLine((await render(made, ORG, null))[0]), 'Mark Manager', 'no deal: the maker');
+    assert.equal(repLine((await render(quoteOf(1), ORG, null))[0]), String.fromCharCode(0x97), 'neither: the dash (WinAnsi 0x97 in the PDF)');
+    assert.equal(repOf({ createdBy: 'M' }, { salesRep: ' Karen Rep ' }), 'Karen Rep', 'the stored name, trimmed');
+    assert.equal(repOf({}, { salesRep: 42 }), '', 'a rep that is not text is none');
 });
 
 test('the suites: this file is graded by the harness', () => {

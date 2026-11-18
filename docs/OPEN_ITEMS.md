@@ -1805,7 +1805,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.2 Deals, activities and pipeline
 
-- **The quote PDF's "Rep" is the deal's rep — decided 16 Nov, to build** (Jeff, 16 Nov: "A", Claude's recommendation after a re-read of the code; was §2.4, from §0.250): netlify/functions/_quotePdf.mjs:140 prints `quote.createdBy` — the quote's maker, so a New version made by a Manager or an Admin names them to the customer. Build: print the deal's rep (`salesRep` of the deal quote-pdf.mjs already reads in the org under its read rule, :66-69), the maker when the deal names none; the maker stays on the app's own screens (the Quotes list, QuotesTab.jsx:1440). Re-read 16 Nov: no test and no harness entry quotes line 140; `salesRep` is a stored name no member rename updates (none found in users.mjs) — as `createdBy` is today. Low.
 - **A customer's documents name the rep by no one rule** (filed 16 Nov, the §2.4 re-read; read in code): the PDF names the quote's maker (the deal's rep once the item above lands); the quote email whoever presses Send (signature and reply-to, quote-email.mjs:188-196, :254-256 — Jeff's 9 Nov Q3); the on-screen preview (QuotesTab.jsx:298-387) and the print copy (:125-135) name none. One helper for all four, as `src/utils/orgIdentity.js` is for the org? Jeff's call when built. Low.
 - **A convert's deal answered after an org switch leaves its lead as it was** (§0.253's review, 16 Nov; read in code): the deal is stored in the org it was made in, but the answer is dropped on the switch (`stillOrg`), so the lead is not marked Converted and nothing says so; a request that threw ("could not be reached") marks nothing either — the deal may or may not exist. Low.
 - **A convert's Account is the lead's company as typed** (§0.253's browser check, 16 Nov): a company no saved account has is refused at Save ("isn't a saved account … use Create"). Jeff may want the convert to offer the account by the lead's link, or Create with the name. Low.
@@ -2505,6 +2504,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.3 Settings
 
+- **A member stored with the role's word in the name — open question** (§0.260's check, 17 Nov; SELECT only): Jeff's Admin member of Accelerep QA is `users.name` "Jeff RussellAdmin" (no first or last name in the profile); two QA quotes carry it as their maker (`q_qa_11`, 1 Oct; Q-2026-013, 10 Nov), and a coaching note's author line read it on Home. How it was written — a rename typed so, a sync, a save that joined a badge's text — not read. QA data; nothing changed. Recommended: read users.mjs's and users-sync.mjs's name writes before deciding. Low.
 - **API keys' examples call the CRM endpoint with a key it does not take** (§0.252's map, 16 Nov; read in code): ApiKeysDetail.jsx's snippets send an `spt_live_` key to /.netlify/functions/opportunities, which takes only a member's sign-in (auth.mjs); only public-api.mjs reads keys. Low.
 - **Company profile's own live preview names the org differently from
   its quotes** (§0.234's browser check, 9 Nov; read in code,

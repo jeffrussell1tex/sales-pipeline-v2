@@ -27269,6 +27269,19 @@ const mutations = [
         "src/Tabs/HomeTab.jsx",
         "body: `${stageCount} stage moves in its first ${createdDays} ${createdDays === 1 ? 'day' : 'days'}. Keep the pace.`,",
         "body: `Faster than your avg (14d). Keep the pace.`,"],
+    // ── The quote PDF's Rep is the deal's rep (17 Nov 2026; Jeff, 16 Nov: "A" — OPEN_ITEMS §4.2) ──
+    ["Quote PDF rep: the version's maker named to the customer again",
+        "netlify/functions/_quotePdf.mjs",
+        "        const repName  = repOf(quote, opportunity);",
+        "        const repName  = quote.createdBy || '';"],
+    ["Quote PDF rep: the maker before the deal's rep",
+        "netlify/functions/_quotePdf.mjs",
+        "    return rep || quote?.createdBy || '';",
+        "    return quote?.createdBy || rep || '';"],
+    ["Quote PDF rep: a blank rep printed over the maker",
+        "netlify/functions/_quotePdf.mjs",
+        "opportunity.salesRep.trim() : '';",
+        "opportunity.salesRep : '';"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
