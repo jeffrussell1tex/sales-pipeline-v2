@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -14,6 +14,9 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
     const [error,   setError]   = React.useState('');
     const [result,  setResult]  = React.useState(null); // { key, plaintextKey }
     const [copied,  setCopied]  = React.useState(false);
+    // Create held after an answer that proved nothing, or a key made whose answer could not be read (state §0.264, the
+    // unknown-save rule, Part 5): the key's id is the server's, so a second press could make a second key.
+    const [held,    setHeld]    = React.useState(false);
 
     // One close for Escape, the backdrop, × and Cancel (state §0.232): a name typed or a scope ticked asks "Discard
     // changes?"; nothing while the key is created — the key would be made and its plaintext lost — and nothing at the
@@ -29,6 +32,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
     });
 
     const handleCreate = async () => {
+        if (held) return;
         if (!name.trim()) { setError('Key name is required'); return; }
         setStep('creating');
         setError('');
@@ -40,15 +44,25 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
             });
             // The ok check first (§0.243): a refusal reads its words (else its status), the key's answer is parsed as
             // sent — then the org is checked, after every read, before anything is done.
-            const why  = res.ok ? '' : await readRefusal(res);
-            const data = res.ok ? await res.json() : null;
+            // Only the server's own refusal re-arms Create (state §0.264, the unknown-save rule, Part 5); a landed answer that
+            // cannot be read, or holds no key, is a key made — its value lost, Create held.
+            const r    = res.ok ? null : await writeRefusalOf(res);
+            const data = res.ok ? await res.json().catch(() => null) : null;
             if (!stillOrg(askedOrg)) return;
-            if (why) throw new Error(why);
+            if (r) throw refusalError(r.words, r.heard);
+            if (!data || !data.key || !data.plaintextKey) {
+                setHeld(true);
+                setError('The key was created, but its answer could not be read, so its value cannot be shown. Reload the page, revoke that key, and create another.');
+                setStep('form');
+                return;
+            }
             setResult(data);
             if (onCreated) onCreated(data.key);
             setStep('reveal');
         } catch (e) {
-            setError(failureWords(e));
+            // An answer that proves nothing may have made the key: said so, Create held (state §0.264, Part 5).
+            if (unknownOf(e)) setHeld(true);
+            setError(thrownSaid(e, 'The key', 'created'));
             setStep('form');
         }
     };
@@ -74,7 +88,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 120px', gap:12, marginBottom:14 }}>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Key name</label>
-                                <input value={name} onChange={e => { setName(e.target.value); setError(''); }}
+                                <input value={name} onChange={e => { setName(e.target.value); if (!held) setError(''); }}
                                     placeholder="e.g. Production pipeline sync"
                                     onKeyDown={e => e.key === 'Enter' && handleCreate()}
                                     autoFocus style={inp}/>
@@ -176,7 +190,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
                 {step === 'form' && (
                     <>
                         <IntBtn label="Cancel" onClick={requestClose}/>
-                        <IntBtn label="Create key" primary onClick={handleCreate} disabled={!name.trim()}/>
+                        <IntBtn label="Create key" primary onClick={handleCreate} disabled={!name.trim() || held}/>
                     </>
                 )}
                 {step === 'creating' && <IntBtn label="Creating…" primary disabled/>}
@@ -431,10 +445,11 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch(`/.netlify/functions/api-keys?id=${keyRecord.id}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // the server's words, else its status (§0.243)
             if (onRevoked) onRevoked(keyRecord.id);
             onClose();
-        } catch(e) { setError(failureWords(e)); setConfirming(false); }
+        // An answer that proves nothing may have revoked it: said so (state §0.264, the unknown-save rule, Part 5).
+        } catch(e) { setError(thrownSaid(e, 'The key', 'revoked')); setConfirming(false); }
     };
 
     return (

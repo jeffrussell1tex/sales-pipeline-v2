@@ -21,7 +21,7 @@
 // decisions any more, but deleting live data to tidy up is not worth the risk.
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid } from '../../../utils/refusalWords.js';
 import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -321,11 +321,14 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                 body: JSON.stringify(body),
             });
             // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change vehicles.' : await readRefusal(res));
+            // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change vehicles.'); throw refusalError(r.words, r.heard); }
             await load();
             setVDraft(null);
         } catch (err) {
-            setVError(failureWords(err));
+            // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again upserts
+            // the same vehicle in this org (state §0.264, the unknown-save rule, Part 5).
+            setVError(thrownSaid(err, 'The vehicle', 'saved'));
         }
         setBusy(false);
     };
@@ -338,11 +341,11 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             const res = await dbFetch('/.netlify/functions/dispatch-vehicles?id=' + encodeURIComponent(vDraft.id), { method: 'DELETE' });
             // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status — never
             // "HTTP N" (§0.247 Part 8).
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete vehicles.' : await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot delete vehicles.'); throw refusalError(r.words, r.heard); }
             await load();
             setVDraft(null);
         } catch (err) {
-            setVError(failureWords(err));
+            setVError(thrownSaid(err, 'The vehicle', 'deleted'));   // maybe (state §0.264, the unknown-save rule, Part 5)
         }
         setBusy(false);
     };
@@ -365,11 +368,13 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                 body: JSON.stringify(body),
             });
             // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change equipment.' : await readRefusal(res));
+            // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change equipment.'); throw refusalError(r.words, r.heard); }
             await load();
             setEDraft(null);
         } catch (err) {
-            setEError(failureWords(err));
+            // An answer that proves nothing may have saved it: said so, the draft kept with its id (state §0.264, Part 5).
+            setEError(thrownSaid(err, 'The equipment', 'saved'));
         }
         setBusy(false);
     };
@@ -381,11 +386,11 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-equipment?id=' + encodeURIComponent(eDraft.id), { method: 'DELETE' });
             // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status (§0.247).
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete equipment.' : await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot delete equipment.'); throw refusalError(r.words, r.heard); }
             await load();
             setEDraft(null);
         } catch (err) {
-            setEError(failureWords(err));
+            setEError(thrownSaid(err, 'The equipment', 'deleted'));   // maybe (state §0.264, the unknown-save rule, Part 5)
         }
         setBusy(false);
     };
@@ -409,29 +414,34 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         }
         if (!stillOrg(askedOrg)) return;
         if (!plan.known) { setImportError(IMPORT_UNREAD); setImporting(false); return; }
-        let ok = 0; const failed = [];
+        // A row the server refused was not imported; a row whose answer proved nothing may have been, said apart (state
+        // §0.264, the unknown-save rule, Part 5; guide §18b134 rule 11) — a press again re-reads the tables first.
+        let ok = 0; const failed = []; const maybe = [];
         for (const row of plan.vehicles) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-vehicles', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) { failed.push(`${row.name}: ${unstopped(await readRefusal(res))}`); continue; }
+                if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }
                 ok++;
-            } catch { failed.push(`${row.name}: the server could not be reached`); }
+            } catch { maybe.push(`${row.name}: the server could not be reached`); }
         }
         for (const row of plan.equipment) {
             if (!stillOrg(askedOrg)) return;
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-equipment', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) { failed.push(`${row.name}: ${unstopped(await readRefusal(res))}`); continue; }
+                if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }
                 ok++;
-            } catch { failed.push(`${row.name}: the server could not be reached`); }
+            } catch { maybe.push(`${row.name}: the server could not be reached`); }
         }
         await load();
         if (!stillOrg(askedOrg)) return;
-        if (failed.length) {
-            setImportError(`Imported ${ok} of ${plan.count}. ${failed.length} not imported — ${failed.slice(0, 3).join('; ')}${failed.length > 3 ? '…' : ''}.`);
+        if (failed.length || maybe.length) {
+            const listed = (rows) => `${rows.slice(0, 3).join('; ')}${rows.length > 3 ? '…' : ''}`;
+            setImportError(`Imported ${ok} of ${plan.count}.`
+                + (failed.length ? ` ${failed.length} not imported — ${listed(failed)}.` : '')
+                + (maybe.length ? ` ${maybeSaid(`${maybe.length} record${maybe.length === 1 ? '' : 's'}`, 'imported', listed(maybe), maybe.length > 1)}.` : ''));
         } else {
             setImportResult(plan.count === 0
                 ? 'Nothing was missing: every entry of the old list is already in the tables.'

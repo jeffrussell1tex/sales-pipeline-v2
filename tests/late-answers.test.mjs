@@ -275,7 +275,11 @@ test('putSettings answers only in the org that asked: after a switch it never se
         let pr = putSettings({ teams: [] }); await tick(); answer(200, { settings: { ok: 1 } });
         assert.deepEqual(await outcome(pr), { v: { settings: { ok: 1 } } });
 
+        // Moved in §0.264 (the unknown-save rule, Part 5): a 5xx proves nothing — it throws the may-have sentence in
+        // full; the server's own refusal (a 4xx in its words) still throws its words.
         pr = putSettings({ teams: [] }); await tick(); answer(500, { error: 'refused' });
+        assert.deepEqual(await outcome(pr), { e: 'The settings may have been saved — reload the page to see whether they were: refused' }, 'an answer that proves nothing in the same org throws, for the panel to show');
+        pr = putSettings({ teams: [] }); await tick(); answer(400, { error: 'refused' });
         assert.deepEqual(await outcome(pr), { e: 'refused' }, 'a refusal in the same org throws, for the panel to show');
 
         pr = putSettings({ teams: [] }); await tick();            // a switch while it is out

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
 import { useApp } from '../../../AppContext';
@@ -138,6 +138,9 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     const [actions,    setActs]  = React.useState(Array.isArray(rule?.actions) && rule.actions.length ? rule.actions : [{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
+    // A new rule's Create held after an answer that proved nothing, with its words (state §0.264, the unknown-save rule,
+    // Part 5): the rule's id is the server's, so a second press could make a second rule.
+    const [held,    setHeld]    = React.useState('');
     // One close for Escape, the backdrop and × (state §0.232): a rule changed since it opened asks "Discard changes?";
     // nothing while it saves.
     const [opened] = React.useState(() => JSON.stringify([name, trigger, conditions, actions]));
@@ -164,6 +167,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     const steps = ['Trigger','Conditions','Actions','Review'];
 
     const handleSave = async () => {
+        if (held) return;
         if (!name.trim()) { setError('Name is required'); return; }
         if (actions.length === 0) { setError('Add at least one action'); return; }
         if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }
@@ -178,14 +182,21 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
             });
             // The ok check first (§0.243): a refusal reads its words (else its status), the rule's answer is parsed as
             // sent — then the org is checked, after every read, before anything is done.
-            const why  = res.ok ? '' : await readRefusal(res);
-            const data = res.ok ? await res.json() : null;
+            // Only the server's own refusal is "not" (state §0.264, the unknown-save rule, Part 5). A landed answer that
+            // cannot be read is landed: an edit keeps the copy sent; a new rule, with no id to show, holds Create.
+            const r    = res.ok ? null : await writeRefusalOf(res);
+            const data = res.ok ? await res.json().catch(() => null) : null;
             if (!stillOrg(askedOrg)) return;
-            if (why) throw new Error(why);
-            if (onSaved) onSaved(data.automation);
+            if (r) throw refusalError(r.words, r.heard);
+            const saved = data && data.automation;
+            if (!saved && !editing) { setHeld('The automation was created, but its answer could not be read — reload the page to see it.'); return; }
+            if (onSaved) onSaved(saved || { ...rule, name: name.trim(), triggerEvent: trigger, conditions, actions });
             onClose();
         } catch(e) {
-            setError(failureWords(e));
+            // An answer that proves nothing may have saved the rule: said so, the modal kept with its steps; a new rule's
+            // Create held (state §0.264, Part 5). An edit pressed again sends the same rule by id.
+            const words = thrownSaid(e, 'The automation', editing ? 'saved' : 'created');
+            if (unknownOf(e) && !editing) setHeld(words); else setError(words);
         } finally {
             setSaving(false);
         }
@@ -313,14 +324,14 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                     alone, so "Name is required" on step 1 was invisible and Next looked
                     dead (Jeff, 14 Sep: "I can't move a new automation from trigger stage
                     to conditions"). */}
-                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}
+                {(error || held) && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error || held}</div>}
             </div>
             <IntModalFooter>
                 {step > 1 && <IntBtn label="← Back" onClick={() => setStep(s=>s-1)}/>}
                 <div style={{ flex:1 }}/>
                 {step < 4
                     ? <IntBtn label="Next →" primary onClick={() => { if(step===1&&!name.trim()){setError('Name is required');return;} setError(''); setStep(s=>s+1); }}/>
-                    : <IntBtn label={saving?'Saving…':editing?'Save changes':'Create automation'} primary onClick={handleSave} disabled={saving}/>
+                    : <IntBtn label={saving?'Saving…':editing?'Save changes':'Create automation'} primary onClick={handleSave} disabled={saving || !!held}/>
                 }
             </IntModalFooter>
         </IntModal>
@@ -395,7 +406,7 @@ export const AutomationsDetail = ({ onBack }) => {
                 method: 'PUT',
                 body: JSON.stringify({ id: rule.id, active: !rule.active }),
             });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             // Landed is landed (§0.247 review fix): a 200 whose body is not JSON keeps the flipped flag, says nothing.
             const data = await res.json().catch(() => null);
             // The row as it is now, never the press's copy: an Edit saved while the toggle was out stands.
@@ -403,9 +414,12 @@ export const AutomationsDetail = ({ onBack }) => {
             // A banner about this rule is no longer true once its retry lands; one about another stands until closed.
             if (errorRule.current === rule.id) { errorRule.current = null; setError(null); }
         } catch(e) {
+            errorRule.current = rule.id;
+            // An answer that proves nothing may have flipped it: the flag stays as pressed, said so (state §0.264, the
+            // unknown-save rule, Part 5). Only the server's own refusal puts it back.
+            if (unknownOf(e)) { setError(maybeSaid(`"${rule.name}"`, rule.active ? 'paused' : 'resumed', failureWords(e))); return; }
             // Only the flag goes back, on the row as it is now (§0.247 review fix) — an Edit saved meanwhile survives.
             setAutomationList(prev => prev.map(r => r.id===rule.id ? { ...r, active: rule.active } : r));
-            errorRule.current = rule.id;
             setError(`"${rule.name}" was not ${rule.active ? 'paused' : 'resumed'} — ${failureWords(e)}`);
         } finally { busyRules.current.delete(rule.id); setBusyIds([...busyRules.current]); }
     };
@@ -419,11 +433,14 @@ export const AutomationsDetail = ({ onBack }) => {
         setAutomationList(prev => prev.filter(r => r.id !== rule.id));
         try {
             const res = await dbFetch(`/.netlify/functions/automations?id=${rule.id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             if (errorRule.current === rule.id) { errorRule.current = null; setError(null); }
         } catch(e) {
-            setAutomationList(prev => (prev.some(r => r.id === rule.id) ? prev : [...prev.slice(0, at), rule, ...prev.slice(at)]));
             errorRule.current = rule.id;
+            // An answer that proves nothing may have deleted it: the row stays off the list, said so (state §0.264, the
+            // unknown-save rule, Part 5). Only the server's own refusal puts it back.
+            if (unknownOf(e)) { setError(maybeSaid(`"${rule.name}"`, 'deleted', failureWords(e))); return; }
+            setAutomationList(prev => (prev.some(r => r.id === rule.id) ? prev : [...prev.slice(0, at), rule, ...prev.slice(at)]));
             setError(`"${rule.name}" was not deleted — ${failureWords(e)}`);
         } finally { busyRules.current.delete(rule.id); setBusyIds([...busyRules.current]); }
     };

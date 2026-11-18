@@ -1,7 +1,7 @@
 // settings/salesProcess/PipelinesDetail.jsx
 import React, { useState } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { STILL_SAVING } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
@@ -91,13 +91,20 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             // the old copy, nothing to put back. Unread, the revert and the
             // server's words below.
             if (e.stale && await panelStale(e)) return false;
-            setSettings(prev => ({ ...prev, ...held }));
-            setSaveError(`${label} not saved — ${e.message}`);
+            // Only the server's own refusal puts the held keys back and says "not saved"; an answer that proves nothing
+            // keeps the change on screen and says putSettings' may-have sentence (state §0.264, the unknown-save rule,
+            // Part 5). Its tokens are not moved: a next change after one that landed is refused as stale, and the panel
+            // is drawn again on the latest.
+            const maybe = e.unknown === true;
+            if (!maybe) setSettings(prev => ({ ...prev, ...held }));
+            setSaveError(settingsSaid(e, (x) => `${label} not saved — ${x.message}`));
             // The gate opens only now (state §0.228): opened before panelStale answered, a change made while
             // AdminView read the latest went out with the old tokens. A panel drawn again on the latest has a
             // gate of its own; one that has closed needs none.
             inFlight.current = false;
-            return false;
+            // null, not false, for a change kept on an answer that proved nothing (state §0.264): a caller that puts
+            // back more than the keys (the deletion's selection) does so only for false.
+            return maybe ? null : false;
         }
     };
     const [editingTeam, setEditingTeam] = useState(null);
@@ -235,8 +242,9 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         setConfirmDeletePipeline(null);
         if (wasSelected) setSelectedId(updated[0]?.id || null);
         // Restore the selection too if the delete did not land, or the panel shows
-        // a different pipeline than the one still in the database.
-        if (!await persist({ pipelines: updated }, 'Pipeline deletion') && wasSelected) {
+        // a different pipeline than the one still in the database. A deletion that may have landed (null — state
+        // §0.264) keeps the pipeline off the list, and so the selection as moved.
+        if (await persist({ pipelines: updated }, 'Pipeline deletion') === false && wasSelected) {
             setSelectedId(confirmDeletePipeline);
         }
     };

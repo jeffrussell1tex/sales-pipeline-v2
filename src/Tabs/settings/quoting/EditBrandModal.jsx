@@ -6,6 +6,8 @@ import React from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { T } from '../shared/tokens.js';
 import { writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+// Only the server's own refusal is "not saved"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { maybeSaid } from '../../../utils/refusalWords.js';
 import { revsAfter, BRAND_CHANGED } from '../../../utils/settingsRevs.js';
 import { useApp } from '../../../AppContext';
 import { contactLineOf, brandLook } from '../../../utils/orgIdentity.js';
@@ -279,7 +281,9 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, initialRev = null, onCl
         return;
       }
     }
-    setSaveError(`Brand not saved — ${w.error}`);
+    // An answer that proves nothing may have saved it (state §0.264, the unknown-save rule, Part 5): said so, the window
+    // open on the edit. A Save after one that landed is refused as stale and the window shows the latest — that brand.
+    setSaveError(w.unknown ? maybeSaid('The brand', 'saved', w.error) : `Brand not saved — ${w.error}`);
     setSaving(false);
   };
 

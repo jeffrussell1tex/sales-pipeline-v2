@@ -155,7 +155,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
             await save();
         } catch (e) {
             setGuardSaving(false);
-            setGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);
+            setGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : e?.unknown === true ? 'unknown' : true);
             return;                  // guard stays open — see below
         }
 

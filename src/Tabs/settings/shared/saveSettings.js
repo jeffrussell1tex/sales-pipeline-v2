@@ -46,7 +46,17 @@
 import { dbFetch, requestOrg, stillOrg, stopped, refusalOf, NETWORK_ERROR } from '../../../utils/storage.js';
 import { withIfRevs, staleOf, revsAfter } from '../../../utils/settingsRevs.js';
 import { settingsAsLoaded } from '../../../utils/settingsDefaults.js';
-import { refusalWords } from '../../../utils/refusalWords.js';
+import { refusalWords, heardRefusal, maybeSaid, refusalError } from '../../../utils/refusalWords.js';
+
+// Since §0.264 (the unknown-save rule, Part 5 — Jeff's Q1, Q2): only the server's own refusal (a 4xx in its words) proves
+// nothing was written. putSettings throws it with `unknown: false` — its words, the Admin role's sentence for its own
+// 403, `.stale` for a stale one; any other answer, or none, may have saved the settings: it throws the may-have sentence
+// in full (`unknown: true`, `said: true`), which a panel says as it is and the leave guard says as may-have. writeSettings
+// answers `unknown` beside its words.
+export const maybeSettingsError = (words) => Object.assign(new Error(maybeSaid('The settings', 'saved', words, true)), { unknown: true, said: true });
+// A panel's words for a thrown save, with its own "not" sentence only for the server's own refusal: `notSaid(e)` is
+// the refusal's words; a may-have error is said as it is.
+export const settingsSaid = (e, notSaid) => (e && e.unknown === true ? e.message : notSaid(e));
 
 const SETTINGS_URL = '/.netlify/functions/settings';
 
@@ -61,20 +71,23 @@ export async function putSettings(payload, revs) {
         });
     } catch {
         if (!stillOrg(askedOrg)) return stopped();
-        throw new Error(NETWORK_ERROR);
+        throw maybeSettingsError(NETWORK_ERROR);   // no answer may have saved them (state §0.264)
     }
     if (!stillOrg(askedOrg)) return stopped();
     if (!res.ok) {
-        if (res.status === 403) throw new Error('You need the Admin role to change these settings.');
         // The server's words with their ref, else "The server returned N." (§0.247, docs/design/refusal-sweep Part 8) —
         // it said "HTTP N" and dropped the ref. A body that is not JSON is none; staleOf reads none as no stale refusal.
         let d = null;
         try { d = await res.json(); } catch (_) {}
+        if (!stillOrg(askedOrg)) return stopped();
+        const heard = heardRefusal(res.status, d);
+        // The Admin role's sentence for the server's own 403 (state §0.264: a wordless 403 proves nothing — said as may-have).
+        if (heard && res.status === 403) throw refusalError('You need the Admin role to change these settings.', true);
         const msg = refusalWords(res, d);
         const stale = staleOf(res.status, d);
-        if (stale && stillOrg(askedOrg)) throw Object.assign(new Error(msg), { stale });
-        if (!stillOrg(askedOrg)) return stopped();
-        throw new Error(msg);
+        if (stale) throw Object.assign(new Error(msg), { stale, unknown: false });
+        if (heard) throw refusalError(msg, true);
+        throw maybeSettingsError(msg);
     }
     const body = await res.json().catch(() => ({}));
     if (!stillOrg(askedOrg)) return stopped();
@@ -90,13 +103,13 @@ export async function writeSettings(payload, revs) {
     const askedOrg = requestOrg();
     let res;
     try { res = await dbFetch(SETTINGS_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(withIfRevs(payload, revs)) }); }
-    catch { return stillOrg(askedOrg) ? { ok: false, status: 0, error: NETWORK_ERROR } : stopped(); }
+    catch { return stillOrg(askedOrg) ? { ok: false, status: 0, error: NETWORK_ERROR, unknown: true } : stopped(); }
     const answer = await res.json().catch(() => null);
     if (!stillOrg(askedOrg)) return stopped();
     if (res.ok) return { ok: true, status: res.status, error: null, data: answer, revs: revsAfter(null, answer?.revs) };
     const stale = staleOf(res.status, answer);
     const error = await refusalOf({ status: res.status, json: async () => answer });
-    return { ok: false, status: res.status, error, ...(stale ? { stale } : {}) };
+    return { ok: false, status: res.status, error, unknown: !heardRefusal(res.status, answer), ...(stale ? { stale } : {}) };
 }
 
 // What a stale refusal does next (J-B4): read settings once, and put the latest
@@ -136,9 +149,9 @@ export async function addToSettingsList(key, apply, { list, rev, setSettings }) 
         }
         if (!w.stale) return w;
         const latest = await takeLatestSettings(setSettings);
-        if (!latest) return { ok: false, status: 409, error: w.error, stale: w.stale };
+        if (!latest) return { ok: false, status: 409, error: w.error, stale: w.stale, unknown: false };
         held = latest[key];
         token = latest.revs?.[key] ?? null;
     }
-    return { ok: false, status: 409, stale: true, twice: true };
+    return { ok: false, status: 409, stale: true, twice: true, unknown: false };
 }

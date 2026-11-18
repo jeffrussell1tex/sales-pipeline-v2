@@ -26,6 +26,8 @@ import { parse } from '@babel/parser';
 import { inviteFrom } from '../src/utils/userImport.js';
 // Since §0.225 (batch 4b-3, step B-2): a teams save names the token its list was read with.
 import { revsAfter, listChanged, STALE_ERROR } from '../src/utils/settingsRevs.js';
+// Since §0.264 (the unknown-save rule, Part 5): only the server's own refusal is "not"; any other answer may have written.
+import { heardRefusal, maybeSaid } from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -89,7 +91,9 @@ test('the Invite page sends the team\'s id and adds the new members to their tea
     // With the list's token as the page loaded it (state §0.225, J-B6): a list another tab saved since is read again and
     // the members added to it once more (saveSettings.js addToSettingsList); a second refusal is said in Jeff's words.
     assert.ok(page.includes("const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, sent), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });"));
-    assert.ok(page.includes("if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : ` The team list was not updated — ${added.error}`;"),
+    // Moved in §0.264 (the unknown-save rule, Part 5): a list whose answer proved nothing (`added.unknown`) may have been
+    // updated — said so, never "was not updated"; the server's own refusal keeps its words.
+    assert.ok(page.includes("if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : added.unknown ? ` ${maybeSaid('The team list', 'updated', added.error)}` : ` The team list was not updated — ${added.error}`;"),
         'REGRESSION: a list refused twice is said as a failed save, or not said');
     assert.ok(page.includes('if (teamNote) throw new Error('), 'a team list that did not save is said, not dropped');
 });
@@ -413,13 +417,31 @@ const handlerIn = (src, component, handler) => {
     return out;
 };
 const TEAM_SAVE = handlerIn(read('src/Tabs/settings/people/TeamsDetail.jsx').replace(/\r\n/g, '\n'), 'TeamModal', 'handleSave');
+// Since §0.264 (the unknown-save rule, Part 5) handleSave reads the module's member-loop words (memberRowsWords, over
+// `sentence`) — the real ones, taken from the file as written and run over the real maybeSaid.
+const moduleConst = (src, name) => {
+    let out = null;
+    for (const st of parse(src, { sourceType: 'module', plugins: ['jsx'] }).program.body) {
+        if (st.type !== 'VariableDeclaration') continue;
+        for (const d of st.declarations) if (d.id.name === name) out = src.slice(d.init.start, d.init.end);
+    }
+    assert.ok(out, `${name} not found at module scope`);
+    return out;
+};
+const TEAMS_SRC = read('src/Tabs/settings/people/TeamsDetail.jsx').replace(/\r\n/g, '\n');
+const memberRowsWords = new Function('maybeSaid', `const sentence = ${moduleConst(TEAMS_SRC, 'sentence')}; return ${moduleConst(TEAMS_SRC, 'memberRowsWords')};`)(maybeSaid);
+// What the real senders answer `unknown` (state §0.264): whether a refused answer is not the server's own — a 4xx with
+// its words. A made-up answer here names its words in `error` (or its body in `data`), as the server's body held them.
+const unknownOfAnswer = (a) => (a.unknown !== undefined ? a.unknown : !heardRefusal(a.status, a.data ?? (a.error != null ? { error: a.error } : null)));
 // Since §0.225 the window sends its list with the token it opened with (`base`, its list and token as one snapshot)
 // through writeSettings — a stub here that records the body it sends (`ifRevs`: the tokens) and answers in its shape,
 // asked through `answers` as the requests are. The copy's token is 'NEWER', the window's 'OPENED': a save that reads the
 // copy's sends the wrong one. `latest`: what a take-latest reads (null: it could not); `base`: a window re-based before.
 // dbFetch stays in the scope, so a handler that still sends through it fails on what it sends, not on a missing name.
-const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base = null, latest = null }) => {
+// `newTeamId`: the window's ref for a new team's id (state §0.264) — handed again to run a second press of one window.
+const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base = null, latest = null, newTeamId = { current: null } }) => {
     const calls = [], said = [];
+    if (!team && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;   // as TeamModal mints it, once per opening
     const held = base || { list: teams, rev: 'OPENED' };
     const settings = { teams, users, revs: { teams: 'NEWER', territories: 'TERR' } };
     const state = { settings, base: held, took: 0 };
@@ -436,15 +458,17 @@ const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base =
         managerId: form.managerId ?? opened?.managerId ?? '', repIds: form.repIds ?? opened?.repIds ?? [], color: form.color ?? opened?.color ?? '#2a2622',
         allUsers: users.filter((u) => u.name && u.active !== false),
         teamNameRefused, teamSaveMembers, rosterAfterTeamSave, revsAfter, listChanged,
+        newTeamId, memberRowsWords, maybeSaid,   // since §0.264 (the unknown-save rule, Part 5)
         requestOrg: () => 'org_A', stillOrg: (o) => o === 'org_A',
         dbFetch: async (url, opts) => { const a = ask(url, opts); return { ok: a.ok, status: a.status, json: async () => a.data ?? { error: a.error } }; },
-        dbWrite: async (url, opts) => ask(url, opts),
+        // storage.js dbWrite: a refused answer says `unknown` as the real one does (state §0.264).
+        dbWrite: async (url, opts) => { const a = ask(url, opts); return a.ok ? a : { ...a, unknown: unknownOfAnswer(a) }; },
         // saveSettings.js writeSettings: never throws; { ok, status, error, data }, the answered tokens on a landed save,
         // the keys that moved on a stale refusal.
         writeSettings: async (payload, revs) => {
             const a = ask('/.netlify/functions/settings', { body: JSON.stringify({ ...payload, ifRevs: revs }) });
             return { ok: a.ok, status: a.status, error: a.error ?? a.data?.error ?? null, data: a.data,
-                ...(a.ok ? { revs: a.revs ?? { teams: 'T2' } } : {}), ...(a.stale ? { stale: a.stale } : {}) };
+                ...(a.ok ? { revs: a.revs ?? { teams: 'T2' } } : { unknown: unknownOfAnswer(a) }), ...(a.stale ? { stale: a.stale } : {}) };   // `unknown` since §0.264
         },
         // saveSettings.js takeLatestSettings: one read; the copy takes the latest, the roster kept; null when unread.
         takeLatestSettings: async (set) => { state.took++; if (!latest) return null; set((prev) => ({ ...latest, users: prev.users })); return latest; },
@@ -573,9 +597,55 @@ test('C5 handleSave, run as written: the list goes with the token the window ope
     // again sends the landed list with its own token.
     const f = await runTeamSave({ team: UKG_TEAM, form: { repIds: [...UKG_TEAM.repIds, 'usr_d'] }, teams: [UKG_TEAM], users: UKG_USERS,
         answers: { users: () => ({ ok: false, status: 500, error: 'TEST' }) } });
-    assert.deepEqual(f.said, ['Team saved, but 1 member record(s) did not update: D: TEST']);
+    // Moved in §0.264 (the unknown-save rule, Part 5): a 500 proves nothing — the member's row may have been updated,
+    // never "did not update"; the server's own refusal keeps those words (C4, and the mix in C6).
+    assert.deepEqual(f.said, ['Team saved, but 1 member record(s) may have been updated — reload the page to see whether they were: D: TEST']);
     assert.equal(f.state.settings.revs.teams, 'T2');
     assert.deepEqual(f.state.base, { list: f.calls[0].body.teams, rev: 'T2' });
+});
+
+// ── §0.264 (the unknown-save rule, Part 5): handleSave run as written — an answer that proves nothing may have written ──
+
+test('C6 handleSave, run as written: a member loop says the refused rows apart from the rows whose answer proved nothing', async () => {
+    const ask = { users: (b) => (b.id === 'usr_b' ? { ok: false, status: 404, error: 'That member is not in your organization — they may have been removed. Reload and try again.' }
+        : { ok: false, status: 502, error: 'The server returned 502.' }) };
+    const r = await runTeamSave({ team: UKG_TEAM, form: { repIds: [...withoutMember(UKG_TEAM.repIds, UKG_USERS[1]), 'usr_d'] }, teams: [UKG_TEAM], users: UKG_USERS, answers: ask });
+    assert.deepEqual(r.said, ['Team saved, but 1 member record(s) did not update: B: That member is not in your organization — they may have been removed. Reload and try again. '
+        + '1 member record(s) may have been updated — reload the page to see whether they were: D: The server returned 502.']);
+    assert.notEqual(r.state.closed, true, 'stays open so the message is read');
+    const roster = r.state.settings.users;
+    assert.equal(roster.find((u) => u.id === 'usr_b'), UKG_USERS[1], 'neither row taken as answered');
+    assert.equal(roster.find((u) => u.id === 'usr_d'), UKG_USERS.find((u) => u.id === 'usr_d'));
+    // The words alone, run: a refused list with no full stop of its own gets one only before the may-have sentence.
+    assert.equal(memberRowsWords('Team saved', ['B: TEST'], []), 'Team saved, but 1 member record(s) did not update: B: TEST');
+    assert.equal(memberRowsWords('Team deleted', ['B: TEST'], ['D: X']), 'Team deleted, but 1 member record(s) did not update: B: TEST. '
+        + '1 member record(s) may have been updated — reload the page to see whether they were: D: X');
+    assert.equal(memberRowsWords('Team deleted', [], ['D: X', 'E: Y']), 'Team deleted, but 2 member record(s) may have been updated — reload the page to see whether they were: D: X; E: Y');
+});
+
+test('C6 handleSave, run as written: a team list whose answer proved nothing keeps the window open as typed, sends no member, and a new team keeps its id for the next press', async () => {
+    const form = { name: 'North', repIds: ['usr_d'] };
+    const ref = { current: null };
+    const r = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, newTeamId: ref,
+        answers: { settings: () => ({ ok: false, status: 500, error: 'Internal server error' }) } });
+    assert.deepEqual(r.calls.map((c) => c.to), ['settings'], 'no member PUT after a list that may not have landed');
+    assert.deepEqual(r.said, ['The team may have been saved — reload the page to see whether it was: Internal server error']);
+    assert.notEqual(r.state.closed, true, 'the window stays open with what was typed');
+    assert.equal(r.state.settings.users, UKG_USERS, 'the roster untouched');
+    const firstId = r.calls[0].body.teams.at(-1).id;
+    assert.equal(firstId, ref.current, 'the new team goes with the window\'s id');
+    // Save again from the same window: the same id — never a second team of a new id.
+    const again = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, newTeamId: ref });
+    assert.equal(again.calls[0].body.teams.at(-1).id, firstId, 'REGRESSION: a press after an answer that proved nothing mints a new id');
+    // A list that already holds it (an earlier press landed, the latest taken): that entry, never a second one.
+    const landed = { list: [UKG_TEAM, { id: firstId, name: 'North', repIds: [] }], rev: 'T_LATEST' };
+    const held = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, newTeamId: ref, base: landed });
+    assert.deepEqual(held.calls[0].body.teams.map((t) => t.id), ['team_ukg', firstId], 'REGRESSION: a team the list holds is added twice');
+    assert.deepEqual(held.calls[0].body.teams[1].repIds, ['usr_d'], 'the entry as typed now');
+    // The server's own refusal keeps its words.
+    const refused = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS,
+        answers: { settings: () => ({ ok: false, status: 400, data: { error: 'TEST: refused.' } }) } });
+    assert.deepEqual(refused.said, ['TEST: refused.']);
 });
 
 test('C5 handleSave, run as written: an edit refused as stale takes the latest once, closes with the words on the page, and sends no member anything', async () => {

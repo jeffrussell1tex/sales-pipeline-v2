@@ -158,7 +158,9 @@ test('the Slack switch exists and the template is wired; the card lives in Conne
     assert.ok(card.includes('    const webForm       = cleanWebToLead(settings?.webToLead);'), 'read from the app\'s copy (state §0.229)');
     assert.ok(card.includes('            const answer = await putSettings({ webToLead: { ...(webForm || {}), ...patch } }, opened);'), 'saved through the settings PUT, naming the tokens the panel opened with');
     assert.ok(card.includes("            landed(answer);\n            const latest = await takeLatestSettings(setSettings);\n            if (latest) reopen(latest.revs);\n            else note('webform', 'Saved — the new link could not be read; reload the page to see it.');"), 'the latest read to learn the minted token — the copy and its tokens together, the panel reopened on them; unread, said on the card');
-    assert.ok(card.includes("            note('webform', `Not saved — ${failureWords(e)}`);"), 'the outcome on the card (§18b32), in plain words (refusal sweep Part 12)');
+    // Moved in §0.264 (the unknown-save rule, Part 5): "Not saved" only for the server's own refusal; a save whose
+    // answer proved nothing says putSettings' may-have sentence as it is (settingsSaid).
+    assert.ok(card.includes("            note('webform', settingsSaid(e, (e) => `Not saved — ${failureWords(e)}`));"), 'the outcome on the card (§18b32), in plain words (refusal sweep Part 12)');
     assert.ok(!card.includes('randomBytes') && !card.includes('randomUUID'), 'the client never mints');
     assert.ok(card.includes("<WebFormCard form={webForm} isAdmin={isAdmin} busy={busy === 'webform'} note={notes.webform} onSave={saveWebForm}/>"));
     assert.ok(card.includes('        + (webForm?.enabled && webForm.token ? 1 : 0);'), 'counted as live');

@@ -157,17 +157,26 @@ const SWEPT = ['src/App.jsx', 'src/components/KanbanView.jsx', 'src/components/l
     // Part 3 (state §0.262): Leads, Quotes (and its hook), Reports, the Sales Manager's three throws.
     'src/Tabs/LeadsTab.jsx', 'src/Tabs/QuotesTab.jsx', 'src/Tabs/ReportsTab.jsx', 'src/Tabs/SalesManagerTab.jsx', 'src/hooks/useQuotes.js',
     // Part 4 (state §0.263): Dispatch.
-    'src/Tabs/DispatchTab.jsx'];
-// The next batch (ANSWERS.md Q3): Part 5 (Settings and its senders). Part 3 swept in §0.262, Part 4 in §0.263.
-const PENDING = {
-    'src/Tabs/settings/company/CompanyCalendarDetail.jsx': 5, 'src/Tabs/settings/data/BackupDetail.jsx': 5, 'src/Tabs/settings/data/ExportDetail.jsx': 5,
-    'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx': 5, 'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx': 5,
-    'src/Tabs/settings/integrations/ApiKeysDetail.jsx': 5, 'src/Tabs/settings/integrations/AutomationsDetail.jsx': 5,
-    'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx': 5, 'src/Tabs/settings/integrations/WebhooksDetail.jsx': 5,
-    'src/Tabs/settings/people/TeamsDetail.jsx': 5, 'src/Tabs/settings/people/TerritoriesDetail.jsx': 5, 'src/Tabs/settings/people/UsersDetail.jsx': 5,
-    'src/Tabs/settings/salesProcess/DealScoringDetail.jsx': 5, 'src/Tabs/settings/salesProcess/LeadScoringDetail.jsx': 5,
-    'src/Tabs/settings/shared/saveSettings.js': 5,
-};
+    'src/Tabs/DispatchTab.jsx',
+    // Part 5 (state §0.264): Settings and its senders.
+    'src/Tabs/settings/company/CompanyCalendarDetail.jsx',
+    'src/Tabs/settings/data/BackupDetail.jsx',
+    'src/Tabs/settings/data/ExportDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx',
+    'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx',
+    'src/Tabs/settings/integrations/ApiKeysDetail.jsx',
+    'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+    'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+    'src/Tabs/settings/integrations/WebhooksDetail.jsx',
+    'src/Tabs/settings/people/TeamsDetail.jsx',
+    'src/Tabs/settings/people/TerritoriesDetail.jsx',
+    'src/Tabs/settings/people/UsersDetail.jsx',
+    'src/Tabs/settings/salesProcess/DealScoringDetail.jsx',
+    'src/Tabs/settings/salesProcess/LeadScoringDetail.jsx',
+    'src/Tabs/settings/shared/saveSettings.js'];
+// Every Part swept: Part 3 in §0.262, Part 4 in §0.263, Part 5 in §0.264.
+// Part 5 swept in §0.264: no file is pending.
+const PENDING = {};
 const EXEMPT = {
     'src/utils/calendarConnect.js': 'starts the OAuth hand-off: calendar-oauth-start stores no connection (census-A row 66), so "not connected" holds whatever its answer',
 };
@@ -178,7 +187,7 @@ test('THE GUARD: every file under src/ that sends a write is swept, named with t
     assert.deepEqual(writers.filter((f) => !named.has(f)), [], 'a file sends a write and is not named — sweep it (heardRefusal / writeRefusal / maybeSaid) or name it here with its Part');
     assert.deepEqual([...named].filter((f) => !writers.includes(f)), [], 'a name here sends no write any more — take it out');
     for (const f of SWEPT) assert.ok(RULE.test(read(f)), `${f}: swept, but reads no answer that proves nothing`);
-    for (const f of Object.keys(PENDING)) assert.ok([5].includes(PENDING[f]), f);
+    assert.deepEqual(Object.keys(PENDING), [], 'every Part is swept (§0.264)');
     assert.ok(writers.length >= 44, `the census's files (${writers.length})`);
 });
 
@@ -442,4 +451,173 @@ test('WIRING (Part 4): Dispatch\'s creates keep their ids — New Job\'s custome
     assert.equal((d.match(/const newLocIds = useRef\(\{\}\);/g) || []).length, 1);
     assert.ok(d.includes("const locId = loc.id || newLocIds.current[draft.id] || (newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID());"));
     assert.ok(d.includes('if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));'), 'a landed address is the form\'s: a second Save PUTs it');
+});
+
+// ── Part 5 (state §0.264): Settings ──
+// The shared sender's halves run in tests/settings-saves.test.mjs (S3: putSettings' may-have error and its 403 split,
+// settingsSaid, writeSettings' and addToSettingsList's `unknown`; S6/S7, S10, S11: the territory window, Assign, the
+// optimistic panels, Edit brand and both leave guards' 'unknown', with LeaveGuardModal's words); the team window and its
+// member loops in tests/team-membership.test.mjs (C6); the profile page in tests/member-profile-save.test.mjs (R5u-R7u);
+// the backup, Export toggles and the three creates in tests/refusals-said.test.mjs. These are the ones no test ran.
+test('RUN (Part 5): refusalFrom — the permission sentence only for the server\'s own 403; a wordless 403 (a gateway\'s) says its status, through dbWrite too', async () => {
+    const { refusalFrom, refusalOf } = await import('../src/utils/storage.js');
+    assert.equal(refusalFrom({ status: 403 }, { error: 'Forbidden' }), 'You do not have permission to make this change.');
+    assert.equal(refusalFrom({ status: 403 }, {}), 'The server returned 403.', 'REGRESSION (§0.264): a 403 with no words said as the server\'s permission refusal');
+    assert.equal(refusalFrom({ status: 403 }, null), 'The server returned 403.', 'a page');
+    assert.equal(await refusalOf(answerOf(403, new SyntaxError('<html>'))), 'The server returned 403.');
+    assert.equal(await refusalOf(answerOf(403, { error: 'Admins only' })), 'You do not have permission to make this change.');
+    const hadWindow = globalThis.window, hadFetch = globalThis.fetch, quiet = console.error;
+    globalThis.window = { __getClerkToken: async () => 'tok' };
+    console.error = () => {};
+    try {
+        const { dbWrite } = await import('../src/utils/storage.js');
+        globalThis.fetch = async () => answerOf(403, {});
+        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, error: 'The server returned 403.', unknown: true, landed: false });
+        globalThis.fetch = async () => answerOf(403, new SyntaxError('<html>'));
+        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, error: 'The server returned 403.', unknown: true, landed: false });
+    } finally {
+        console.error = quiet;
+        globalThis.fetch = hadFetch;
+        if (hadWindow === undefined) delete globalThis.window; else globalThis.window = hadWindow;
+    }
+});
+
+const EXPORT = 'src/Tabs/settings/data/ExportDetail.jsx';
+const storedRowOfSrc = () => { const s = read(EXPORT); const a = s.indexOf('const storedRowOf = async (url, listKey, id) => {'); return s.slice(a, s.indexOf('\n};', a) + 3); };
+test('RUN (Part 5): a new export schedule and a GDPR request keep their window\'s id — a 500 or no answer says it may have been saved, the window open; the press again answered "already in use" reads the row as stored and closes; the server\'s own refusal "not saved"', async () => {
+    const fnText = between(read(EXPORT), '    const saveSchedule = async (payload, newId) => {', '\n    const saveDsr = async (payload) => {');
+    const dsrText = between(read(EXPORT), '    const saveDsr = async (payload) => {', '\n    // ── ad-hoc export');
+    const run = async (handler, answers, payload, newId, schedules = []) => {
+        const st = { sent: [], schedules: stateOf(schedules), dsr: stateOf([]), closed: 0 };
+        const dbFetch = async (url, opts) => {
+            st.sent.push([url, opts?.method || 'GET', opts?.body ? JSON.parse(opts.body) : undefined]);
+            const a = answers.shift();
+            if (a instanceof Error) throw a;
+            return a;
+        };
+        const make = new Function('dbFetch', 'schedules', 'setSchedules', 'setDsrItems', 'setShowModal', 'setEditingSched', 'setShowDsrModal',
+            'maybeSaid', 'failureWords', 'landedBefore', 'heardRefusal', 'refusalWords', 'crypto',
+            `${storedRowOfSrc()}\nreturn (${handler.trim().replace(/^const \w+ = /, '').replace(/;\s*$/, '')});`);
+        const h = make(dbFetch, schedules, st.schedules.set, st.dsr.set, () => { st.closed++; }, () => {}, () => { st.closed++; },
+            maybeSaid, failureWords, landedBefore, heardRefusal, refusalWords, { randomUUID: () => 'MINTED' });
+        st.why = await h(payload, newId);
+        return st;
+    };
+    const P = () => ({ id: null, name: 'Weekly', scope: 'accounts', format: 'CSV', cadence: 'Weekly', destination: 'download', enabled: true, status: 'ok' });
+    // A 500: may have been saved — the window's id sent, the window kept open.
+    const lost = await run(fnText, [answerOf(500, { error: 'Internal server error' })], P(), 'sch_WINDOW');
+    assert.equal(lost.why, 'The schedule may have been saved — reload the page to see whether it was: Internal server error');
+    assert.deepEqual([lost.sent[0][1], lost.sent[0][2].id, lost.closed], ['POST', 'sch_WINDOW', 0], 'REGRESSION: a new schedule minted its id on the press');
+    const offline = await run(fnText, [new TypeError('Failed to fetch')], P(), 'sch_WINDOW');
+    assert.equal(offline.why, 'The schedule may have been saved — reload the page to see whether it was: The server could not be reached.');
+    // The press again: "already in use" in this org — the row as stored, read again, the window closed.
+    const STORED = { id: 'sch_WINDOW', name: 'Weekly', enabled: true };
+    const again = await run(fnText, [answerOf(409, { error: 'That id is already in use.', code: 'idInUse' }), answerOf(200, { schedules: [{ id: 'x' }, STORED] })], P(), 'sch_WINDOW');
+    assert.deepEqual([again.why, again.closed, again.schedules.value], ['', 1, [STORED]], 'REGRESSION: an earlier press that landed said as refused, or listed twice');
+    assert.deepEqual(again.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/export-schedules', 'POST'], ['/.netlify/functions/export-schedules', 'GET']]);
+    const unreadAgain = await run(fnText, [answerOf(409, { error: 'That id is already in use.', code: 'idInUse' }), answerOf(500, {})], P(), 'sch_WINDOW');
+    assert.deepEqual([unreadAgain.why, unreadAgain.closed], ['The schedule was saved by an earlier press, but it could not be read again — reload the page to see it.', 0]);
+    // The server's own refusal: "not saved", in its words.
+    const refused = await run(fnText, [answerOf(400, { error: 'name is required' })], P(), 'sch_WINDOW');
+    assert.deepEqual([refused.why, refused.closed], ['The schedule was not saved — name is required', 0]);
+    // An edit's 409 is no earlier press: said as refused, never read again.
+    const edit = await run(fnText, [answerOf(409, { error: 'That id is already in use.', code: 'idInUse' })], { ...P(), id: 'sch_1' }, 'sch_WINDOW', [{ id: 'sch_1' }]);
+    assert.deepEqual([edit.why, edit.sent.length, edit.sent[0][1]], ['The schedule was not saved — That id is already in use.', 1, 'PUT']);
+    // Landed, its answer unread: saved as sent.
+    const landed = await run(fnText, [answerOf(201, new SyntaxError('<html>'))], P(), 'sch_WINDOW');
+    assert.deepEqual([landed.why, landed.closed, landed.schedules.value.map((s) => s.id)], ['', 1, ['sch_WINDOW']]);
+
+    // A GDPR request: the window's id; a 502 may have; the press again reads it as stored; landed unread, read again.
+    const D = () => ({ id: 'dsr_WINDOW', subject: 'a@x.test', type: 'access', notes: null });
+    const dLost = await run(dsrText, [answerOf(502, new SyntaxError('<html>'))], D());
+    assert.deepEqual([dLost.why, dLost.sent[0][2].id, dLost.closed], ['The request may have been saved — reload the page to see whether it was: The server returned 502.', 'dsr_WINDOW', 0]);
+    const DROW = { id: 'dsr_WINDOW', subject: 'a@x.test', status: 'open' };
+    const dAgain = await run(dsrText, [answerOf(409, { error: 'That id is already in use.', code: 'idInUse' }), answerOf(200, { dsrQueue: [DROW] })], D());
+    assert.deepEqual([dAgain.why, dAgain.closed, dAgain.dsr.value], ['', 1, [DROW]]);
+    const dUnread = await run(dsrText, [answerOf(201, new SyntaxError('<html>')), answerOf(200, { dsrQueue: [DROW] })], D());
+    assert.deepEqual([dUnread.why, dUnread.dsr.value], ['', [DROW]], 'landed, its answer unread: the request as stored, read again');
+    const dRefused = await run(dsrText, [answerOf(403, { error: 'Admin only' })], D());
+    assert.deepEqual([dRefused.why, dRefused.closed], ['The request was not saved — Admin only', 0]);
+    // The windows mint their id once per opening.
+    const s = read(EXPORT);
+    assert.equal((s.match(/const \[newId\] = React\.useState\(\(\) => 'sch_' \+ crypto\.randomUUID\(\)\);/g) || []).length, 1, 'the schedule window');
+    assert.equal((s.match(/const \[newId\] = React\.useState\(\(\) => 'dsr_' \+ crypto\.randomUUID\(\)\);/g) || []).length, 1, 'the request window');
+    assert.ok(s.includes("const why = await onSave({ id: newId, subject: subject.trim(), type, notes: notes.trim() || null });"));
+    assert.ok(s.includes("const why = await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' }, newId);"));
+});
+
+test('RUN (Part 5): an ad-hoc export keeps its run\'s id after an answer that proved nothing — the same export pressed again sends it, and "already in use" says it ran; another export, a landed one or the server\'s own refusal gives the id up', async () => {
+    const fnText = between(read(EXPORT), '    const handleAdHoc = async () => {', '\n    // ── update DSR status');
+    const heldRunIds = { current: {} };
+    let minted = 0;
+    const run = async (answers, scope = 'accounts') => {
+        const st = { sent: [], said: [], runs: stateOf([]) };
+        const dbFetch = async (url, opts) => {
+            st.sent.push([url, opts?.method || 'GET', opts?.body ? JSON.parse(opts.body) : undefined]);
+            const a = answers.shift();
+            if (a instanceof Error) throw a;
+            return a;
+        };
+        const make = new Function('requestOrg', 'stillOrg', 'setAdhocLoading', 'setAdhocError', 'adHocScope', 'adHocFmt', 'heldRunIds', 'dbFetch', 'setRuns',
+            'maybeSaid', 'failureWords', 'landedBefore', 'heardRefusal', 'refusalWords', 'crypto',
+            `return (${fnText.trim().replace(/^const handleAdHoc = /, '').replace(/;\s*$/, '')});`);
+        await make(() => 'org_a', (o) => o === 'org_a', () => {}, (v) => { if (v) st.said.push(v); }, scope, 'CSV', heldRunIds, dbFetch, st.runs.set,
+            maybeSaid, failureWords, landedBefore, heardRefusal, refusalWords, { randomUUID: () => `R${++minted}` })();
+        return st;
+    };
+    const first = await run([new TypeError('Failed to fetch')]);
+    assert.deepEqual(first.said, ['The export may have been run — reload the page to see whether it was: The server could not be reached.']);
+    const id = first.sent[0][2].id;
+    assert.equal(id, 'run_R1');
+    const lost = await run([answerOf(504, {})]);
+    assert.equal(lost.sent[0][2].id, id, 'REGRESSION: the same export pressed again after an answer that proved nothing mints a new run');
+    assert.deepEqual(lost.said, ['The export may have been run — reload the page to see whether it was: The server returned 504.']);
+    const other = await run([answerOf(400, { error: 'Unknown scope.' })], 'contacts');
+    assert.notEqual(other.sent[0][2].id, id, 'another export is another run');
+    assert.deepEqual(other.said, ['Unknown scope.'], 'the server\'s own refusal: its words');
+    const already = await run([answerOf(409, { error: 'That id is already in use.', code: 'idInUse' }), answerOf(200, { runs: [{ id }] })]);
+    assert.deepEqual([already.sent[0][2].id, already.sent[1][1], already.runs.value, already.said],
+        [id, 'GET', [{ id }], ['The export was already run by an earlier press, but its file was not downloaded here — press Download now for a new one.']]);
+    const fresh = await run([answerOf(400, { error: 'Unknown scope.' })]);
+    assert.notEqual(fresh.sent[0][2].id, id, 'after "already in use" the id is given up');
+    assert.deepEqual(fresh.said, ['Unknown scope.']);
+    // A landed run whose answer cannot be read is a run made, its file not here.
+    const unread = await run([answerOf(201, new SyntaxError('<html>'))]);
+    assert.deepEqual(unread.said, ['The export ran, but its file could not be read — press Download now for a new one.']);
+});
+
+test('WIRING (Part 5): a Settings press whose id is the server\'s is held after an answer that proved nothing; a window\'s new entry keeps one id per opening', () => {
+    const at = (f) => read(`src/Tabs/settings/${f}`);
+    const backup = at('data/BackupDetail.jsx');
+    assert.ok(backup.includes('if (runningBackup || backupHeld) return;') && backup.includes('disabled={runningBackup || backupHeld}')
+        && backup.includes('if (!e?.said && unknownOf(e)) setBackupHeld(true);'), 'Run backup now');
+    const keys = at('integrations/ApiKeysDetail.jsx');
+    assert.ok(keys.includes('if (unknownOf(e)) setHeld(true);') && keys.includes("disabled={!name.trim() || held}"), 'Create key');
+    const hooks = at('integrations/WebhooksDetail.jsx');
+    assert.ok(hooks.includes('if (unknownOf(e)) setHeld(true);') && hooks.includes('disabled={saving||held||!name.trim()||!url.trim()}'), 'Create endpoint');
+    const rules = at('integrations/AutomationsDetail.jsx');
+    assert.ok(rules.includes('if (unknownOf(e) && !editing) setHeld(words); else setError(words);') && rules.includes('disabled={saving || !!held}'), 'Create automation');
+    const users = at('people/UsersDetail.jsx');
+    assert.ok(users.includes('disabled={saving || held || readyCount === 0}') && users.includes('if (busyEmail || heldResends.has(e.email)) return;'), 'Send invites, Resend');
+    const teams = at('people/TeamsDetail.jsx');
+    assert.ok(teams.includes('if (!isEdit && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;') && teams.includes('const id = isEdit ? team.id : newTeamId.current;'), 'a new team');
+    const terrs = at('people/TerritoriesDetail.jsx');
+    assert.ok(terrs.includes("if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;") && terrs.includes('const newT = { id:newTerrId.current,'), 'a new territory');
+});
+
+test('RUN (Part 5): the company calendar\'s Disconnect — the server\'s own refusal "Calendar not disconnected"; any other answer, or none, may have disconnected it; the list read again only once it landed', async () => {
+    const run = new Function('setCalError', 'dbWrite', 'maybeSaid', 'loadOrgCals',
+        `${between(read('src/Tabs/settings/company/CompanyCalendarDetail.jsx'), '    const disconnectCorporateCalendar = async (id) => {', '\n    };')}\n    };\nreturn disconnectCorporateCalendar;`);
+    for (const [answer, said, loads] of [
+        [{ ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false }, 'Calendar not disconnected — You do not have permission to make this change.', 0],
+        [{ ok: false, status: 502, error: 'The server returned 502.', unknown: true }, 'The calendar may have been disconnected — reload the page to see whether it was: The server returned 502.', 0],
+        [{ ok: false, status: 0, error: 'The server could not be reached.', unknown: true }, 'The calendar may have been disconnected — reload the page to see whether it was: The server could not be reached.', 0],
+        [{ ok: true, status: 200 }, '', 1],
+    ]) {
+        const errs = [], sent = [];
+        let reads = 0;
+        await run((v) => errs.push(v), async (url, opts) => { sent.push([url, opts.method]); return answer; }, maybeSaid, () => { reads += 1; })('cal_1');
+        assert.deepEqual([errs[errs.length - 1], reads], [said, loads], said || 'landed');
+        assert.deepEqual(sent, [['/.netlify/functions/calendar-connections?id=cal_1&scope=org', 'DELETE']]);
+    }
 });

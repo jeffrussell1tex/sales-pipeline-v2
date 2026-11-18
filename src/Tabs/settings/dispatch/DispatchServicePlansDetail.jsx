@@ -12,7 +12,7 @@
 // concurrent edit, and these rows are referenced live by customers.
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -322,10 +322,13 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                 body: JSON.stringify(body),
             });
             // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change service plans.' : await readRefusal(res));
+            // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change service plans.'); throw refusalError(r.words, r.heard); }
             await load();
             setDraft(null);
-        } catch (err) { setError(failureWords(err)); }
+        // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again upserts the
+        // same plan in this org (state §0.264, the unknown-save rule, Part 5).
+        } catch (err) { setError(thrownSaid(err, 'The plan', 'saved')); }
         setBusy(false);
     };
 
@@ -337,10 +340,10 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             // 409 carries the real reason (customers still on the plan) — surfacing
             // "HTTP 409" instead would hide the one thing the admin needs to know. The ok check first, the server's
             // words with their ref (state §0.248, Part 11); a 403 the role's sentence (Q13).
-            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot delete service plans.' : await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot delete service plans.'); throw refusalError(r.words, r.heard); }
             await load();
             setDraft(null);
-        } catch (err) { setError(failureWords(err)); }
+        } catch (err) { setError(thrownSaid(err, 'The plan', 'deleted')); }   // maybe (state §0.264, the unknown-save rule, Part 5)
         setBusy(false);
     };
 
@@ -371,7 +374,9 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
             setSeedMsg(`Nothing created — the plans could not be read: ${failureWords(err)}`); setSeeding(false); return;
         }
-        let ok = 0; const failed = [];
+        // A row the server refused failed; a row whose answer proved nothing may have been created, said apart (state §0.264,
+        // the unknown-save rule, Part 5; guide §18b134 rule 11) — a press again re-reads the plans by name first.
+        let ok = 0; const failed = []; const maybe = [];
         for (const { tier, name } of todo.create) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             const row = {
@@ -384,15 +389,17 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-service-plans', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first, the house words (state §0.248)
+                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // the ok check first, the house words (state §0.248)
                 ok++;
-            } catch (err) { failed.push(`${tier}: ${failureWords(err)}`); }
+            } catch (err) { (unknownOf(err) ? maybe : failed).push(`${tier}: ${failureWords(err)}`); }
         }
         if (!stillOrg(askedOrg)) return;
         await load();
         const had = todo.existing ? ` ${todo.existing} already had one — left as ${todo.existing === 1 ? 'it was' : 'they were'}.` : '';
-        setSeedMsg(failed.length
-            ? `Created ${ok}.${had} ${failed.length} failed — ${failed.join('; ')}`
+        const maybeWords = maybe.length ? ` ${maybeSaid(`${maybe.length} plan${maybe.length === 1 ? '' : 's'}`, 'created', maybe.join('; '), maybe.length > 1)}` : '';
+        setSeedMsg(failed.length || maybe.length
+            // The failed list ends with one full stop before a may-have sentence (§0.264) — never "…required 2 plans may have…".
+            ? `Created ${ok}.${had}${failed.length ? ` ${failed.length} failed — ${failed.join('; ').replace(/\.+$/, '')}${maybe.length ? '.' : ''}` : ''}${maybeWords}`
             : `Created ${ok} plan${ok === 1 ? '' : 's'}.${had} Assign customers to them from Dispatch → Customers.`);
         setSeeding(false);
     };

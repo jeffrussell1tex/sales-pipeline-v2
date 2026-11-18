@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -27,6 +27,9 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
     const [error,   setError]   = React.useState('');
     const [secret,  setSecret]  = React.useState('');
     const [copiedSec, setCopiedSec] = React.useState(false);
+    // Create held after an answer that proved nothing (state §0.264, the unknown-save rule, Part 5): the endpoint's id is
+    // the server's, so a second press could make a second endpoint.
+    const [held,    setHeld]    = React.useState(false);
 
     // One close for Escape, the backdrop, × and Cancel (state §0.232): a name, a URL or an event changed asks "Discard
     // changes?"; nothing while it is created, nor once the signing secret shows — it closes only by "I've saved it".
@@ -42,6 +45,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
     const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     const handleCreate = async () => {
+        if (held) return;
         if (!name.trim()) { setError('Name is required'); return; }
         if (!url.trim())  { setError('Endpoint URL is required'); return; }
         if (checked.size === 0) { setError('Select at least one event'); return; }
@@ -54,19 +58,22 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
             });
             // The ok check first (§0.243): a refusal reads its words (else its status), the endpoint's answer is parsed
             // as sent — then the org is checked, after every read, before anything is done.
-            const why  = res.ok ? '' : await readRefusal(res);
+            const r    = res.ok ? null : await writeRefusalOf(res);
             // The server answers 201 { webhook, secret } (webhooks.mjs POST). It was read as `subscription` from 11 May 2026
             // (5772f63) to §0.247: the list took undefined and its next draw threw (Jeff, 12 Nov: "Fix in this batch
             // (Recommended)"). Landed is landed: an answer that cannot be read, or names no endpoint, is still an endpoint
             // made — never Create again (a second one); the list is read again and a secret not read is said so.
             const data = res.ok ? await res.json().catch(() => null) : null;
             if (!stillOrg(askedOrg)) return;
-            if (why) throw new Error(why);
+            if (r) throw refusalError(r.words, r.heard);
             setSecret(typeof data?.secret === 'string' ? data.secret : '');
             if (onCreated) onCreated(data && data.webhook && data.webhook.id ? data.webhook : null);
             setStep('created');
         } catch (e) {
-            setError(failureWords(e));
+            // An answer that proves nothing may have made the endpoint: said so, the form kept, Create held; only the
+            // server's own refusal re-arms it (state §0.264, the unknown-save rule, Part 5).
+            if (unknownOf(e)) setHeld(true);
+            setError(thrownSaid(e, 'The endpoint', 'created'));
         } finally {
             setSaving(false);
         }
@@ -83,7 +90,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Name</label>
-                                <input value={name} onChange={e=>{setName(e.target.value);setError('');}} placeholder="e.g. Pipeline → Zapier" style={inp} autoFocus/>
+                                <input value={name} onChange={e=>{setName(e.target.value);if(!held)setError('');}} placeholder="e.g. Pipeline → Zapier" style={inp} autoFocus/>
                             </div>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Signing</label>
@@ -92,7 +99,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                         </div>
                         <div style={{ marginBottom:14 }}>
                             <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Endpoint URL</label>
-                            <input value={url} onChange={e=>{setUrl(e.target.value);setError('');}} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                            <input value={url} onChange={e=>{setUrl(e.target.value);if(!held)setError('');}} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
                         </div>
                         <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>
                             Events <span style={{ color:T.inkMuted, fontWeight:400 }}>({checked.size} selected)</span>
@@ -152,7 +159,7 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
                 {step === 'form' ? (
                     <>
                         <IntBtn label="Cancel" onClick={requestClose}/>
-                        <IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||!name.trim()||!url.trim()}/>
+                        <IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||held||!name.trim()||!url.trim()}/>
                     </>
                 ) : (
                     <IntBtn label={secret ? "I've saved it — close" : 'Close'} primary onClick={onClose}/>
@@ -209,13 +216,14 @@ export const WebhooksDetail = ({ onBack }) => {
                 method: 'PUT',
                 body: JSON.stringify({ id: wh.id, active: !wh.active }),
             });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             // Landed is landed (§0.247 review fix): the PUT answers { success: true } (newSecret when rotated) and never a
             // row (webhooks.mjs), and the row became undefined — the next draw threw. Its body is not read (Jeff, 12 Nov:
             // "Fix in this batch (Recommended)" — the key it looked for is not the server's); the row as it is now takes
             // the flag, so a 200 whose body is not JSON is landed too.
             setWebhooks(prev => prev.map(w => w.id === wh.id ? { ...w, active: !wh.active } : w));
-        } catch (e) { setError(failureWords(e)); }
+        // An answer that proves nothing may have flipped it: said so (state §0.264, the unknown-save rule, Part 5).
+        } catch (e) { setError(thrownSaid(e, wh.name ? `"${wh.name}"` : 'The endpoint', wh.active ? 'paused' : 'resumed')); }
         finally { busyHooks.current.delete(wh.id); setBusyIds([...busyHooks.current]); }
     };
 
@@ -227,9 +235,10 @@ export const WebhooksDetail = ({ onBack }) => {
         setDeleting(wh.id);
         try {
             const res = await dbFetch(`/.netlify/functions/webhooks?id=${wh.id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             setWebhooks(prev => prev.filter(w => w.id !== wh.id));
-        } catch (e) { setError(failureWords(e)); }
+        // An answer that proves nothing may have deleted it: said so (state §0.264, the unknown-save rule, Part 5).
+        } catch (e) { setError(thrownSaid(e, wh.name ? `"${wh.name}"` : 'The endpoint', 'deleted')); }
         finally { busyHooks.current.delete(wh.id); setBusyIds([...busyHooks.current]); setDeleting(null); }
     };
 

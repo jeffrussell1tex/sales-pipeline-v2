@@ -77,7 +77,11 @@ test('score-leads-batch.mjs: the per-org pass is one exported function the night
 test('the panel: Train now is disabled while the form is dirty, POSTs the function with no body, and adopts the returned config', () => {
     const s = code(read('src/Tabs/settings/salesProcess/LeadScoringDetail.jsx'));
     assert.ok(s.includes("            const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });"));
-    assert.ok(s.includes('            if (!res.ok) throw new Error(await readRefusal(res));\n            const trained = await res.json().catch(() => null);'), 'a refusal is shown, never swallowed (18b1) — in the server\'s words, the ok check first (refusal sweep Part 12)');
+    // Moved in §0.264 (the unknown-save rule, Part 5): the refusal is thrown with whether it is the server's own
+    // (writeRefusalOf / refusalError) — the catch says "Not trained" only for that, anything else may have trained.
+    assert.ok(s.includes('            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have trained (state §0.264)\n            const trained = await res.json().catch(() => null);'), 'a refusal is shown, never swallowed (18b1) — in the server\'s words, the ok check first (refusal sweep Part 12)');
+    assert.ok(s.includes("            setTrainMsg({ ok: false, text: unknownOf(e) ? maybeSaid('The model', 'trained', failureWords(e)) : `Not trained — ${failureWords(e)}` });"),
+        'only the server\'s own refusal is "Not trained"; any other answer may have trained it (state §0.264)');
     assert.ok(s.includes("import { revsAfter } from '../../../utils/settingsRevs.js';"));
     assert.ok(s.includes('            if (trained.ok && trained.leadScoring) setSettings(prev => ({ ...prev, leadScoring: trained.leadScoring, revs: revsAfter(prev.revs, trained.revs) }));'),
         'the server\'s config becomes the prop, with the token it answered — else the next rules save is refused against itself (state §0.226)');

@@ -1,7 +1,7 @@
 // settings/salesProcess/LeadScoringDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 // The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { revsAfter } from '../../../utils/settingsRevs.js';
@@ -11,7 +11,9 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { DEFAULT_LEAD_SCORING, isDecidedLead, trainNowMessage } from '../../../utils/leadScoringDefaults.js';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { failureWords } from '../../../utils/refusalWords.js';
+// Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
 
 const FIELD_OPTS = [
     { v: 'title',        l: 'Title' },
@@ -140,7 +142,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
         try {
             const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have trained (state §0.264)
             const trained = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;
             if (!trained) { setTrainMsg({ ok: false, text: 'Its answer could not be read. Reload the page to see whether a model was trained.' }); return; }
@@ -148,7 +150,8 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
             setTrainMsg(trainNowMessage(trained));
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            setTrainMsg({ ok: false, text: `Not trained — ${failureWords(e)}` });
+            // Only the server's own refusal is "Not trained"; any other answer may have trained it (state §0.264, Part 5).
+            setTrainMsg({ ok: false, text: unknownOf(e) ? maybeSaid('The model', 'trained', failureWords(e)) : `Not trained — ${failureWords(e)}` });
         } finally { setTraining(false); }
     };
 
@@ -172,7 +175,8 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.226 — J-B5).
             if (e.stale && await panelStale(e)) throw e;
-            setSaveError(`Lead scoring not saved — ${failureWords(e)}`);
+            // The server's own refusal "not saved"; any other answer putSettings' may-have sentence (state §0.264, Part 5).
+            setSaveError(settingsSaid(e, (x) => `Lead scoring not saved — ${failureWords(x)}`));
             // Clear the spinner, then rethrow: the leave guard's "Save and
             // continue" runs this too, and only a throw keeps it from moving on.
             setSaving(false);

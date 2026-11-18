@@ -1665,7 +1665,7 @@ dbFetch('/.netlify/functions/users?me=true')
             await save();
         } catch (e) {
             setNavGuardSaving(false);
-            setNavGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : true);
+            setNavGuardFailed(e?.tookLatest ? (e.partial ? 'stale-partial' : 'stale') : e?.unknown === true ? 'unknown' : true);
             return;
         }
         setNavGuardSaving(false);

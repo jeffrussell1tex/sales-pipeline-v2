@@ -418,7 +418,9 @@ test('the screens: the profile panel sends what changed, shows a refusal and tak
         'body:JSON.stringify(toSave) });',
         'if (!stillOrg(askedOrg)) return;',
         // The ok check before the body, a refusal in the server's words (docs/design/refusal-sweep Part 12).
-        'if (!resp.ok) { const why = await readRefusal(resp); if (!stillOrg(askedOrg)) return; throw new Error(why); }',
+        // Moved in §0.264 (the unknown-save rule, Part 5): thrown with whether it is the server's own refusal — the catch
+        // says any other answer may have saved the profile.
+        'if (!resp.ok) { const r = await writeRefusalOf(resp); if (!stillOrg(askedOrg)) return; throw refusalError(r.words, r.heard); }',
         'const stored = await resp.json().catch(() => null);',
         'if (!stillOrg(askedOrg)) return;',
         'row = stored?.user || { ...user, ...toSave };',

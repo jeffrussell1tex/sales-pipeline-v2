@@ -9,7 +9,9 @@ import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { failureWords } from '../../../utils/refusalWords.js';
+// Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
 import { standingWords, trainDealWords, featureOn, MIN_TEACHING, comparisonWords } from '../../../utils/dealScore.js';
 import { funnelRowsOf } from '../../../utils/stageOrder.js';
 
@@ -40,7 +42,7 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
         try {
             const res = await dbFetch('/.netlify/functions/train-deal-model', { method: 'POST' });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have trained (state §0.264)
             const answer = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;
             if (!answer) { setTrainMsg({ ok: false, text: 'Its answer could not be read. Reload the page to see whether a model was trained.' }); return; }
@@ -51,7 +53,8 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
             if (typeof loadOpportunities === 'function') loadOpportunities(() => {});
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            setTrainMsg({ ok: false, text: `Not trained — ${failureWords(e)}` });
+            // Only the server's own refusal is "Not trained"; any other answer may have trained it (state §0.264, Part 5).
+            setTrainMsg({ ok: false, text: unknownOf(e) ? maybeSaid('The model', 'trained', failureWords(e)) : `Not trained — ${failureWords(e)}` });
         } finally { setTraining(false); }
     };
 

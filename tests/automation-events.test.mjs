@@ -485,11 +485,14 @@ test('the engine posts the Block Kit shape through the send-slack template, with
 test('the modal\'s error renders on WHICHEVER step raised it — "Name is required" on step 1 was invisible inside step 4 and Next looked dead (Jeff, 14 Sep)', () => {
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
     const modal = s.slice(s.indexOf('const AutomationModal = ('), s.indexOf('<IntModalFooter>'));
-    const errLine = "                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}";
+    // Moved in §0.264 (the unknown-save rule, Part 5): the one line says a held Create's words too (`held` — a new rule
+    // whose answer proved nothing), on whichever step is open.
+    const errLine = "                {(error || held) && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error || held}</div>}";
     const at = modal.indexOf(errLine);
     assert.ok(at > 0, 'one error line, in the modal body');
     assert.ok(at > modal.lastIndexOf('{step === 4 && (<>'), 'after the last step block — not inside any of them');
     assert.ok(!modal.includes("                        {error && <div style={{ fontSize:12, color:T.danger }}>{error}</div>}"), 'REGRESSION: the step-4-only render is gone');
-    assert.equal((modal.match(/\{error &&/g) || []).length, 1, 'exactly one render, shared by every step');
+    assert.equal((modal.match(/\{\(?error( \|\| held\))? &&/g) || []).length, 1, 'exactly one render, shared by every step');
+    assert.equal((modal.match(/\{held &&/g) || []).length, 0, 'no second render for the held words (state §0.264)');
     assert.ok(s.includes("if(step===1&&!name.trim()){setError('Name is required');return;}"), 'the step-1 gate still names what is missing');
 });

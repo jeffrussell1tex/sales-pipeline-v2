@@ -27,8 +27,8 @@ import React, { useState, useEffect } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { startCalendarConnect } from '../../../utils/calendarConnect.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
-import { putSettings, takeLatestSettings } from '../shared/saveSettings.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
+import { putSettings, takeLatestSettings, settingsSaid } from '../shared/saveSettings.js';
 // The saves name the tokens this panel opened with; a stale refusal draws it again on the latest (state §0.229).
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { PANEL_CHANGED_WEBHOOK } from '../../../utils/settingsRevs.js';
@@ -124,10 +124,14 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                 method: 'POST',
                 body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
             });
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             setMsg({ ok: true, text: 'Message sent — check your Slack channel.' });
         } catch (e) {
-            setMsg({ ok: false, text: `Test not sent — ${failureWords(e)}` });
+            // "Not sent" only for the server's own refusal; any other answer may have posted it, and a reload would not show
+            // it — check the channel before sending again (state §0.264, the unknown-save rule, Part 5; guide §18b134 rule 9).
+            setMsg({ ok: false, text: unknownOf(e)
+                ? `The test message may have been sent — check your Slack channel before sending it again: ${failureWords(e)}`
+                : `Test not sent — ${failureWords(e)}` });
         } finally { setTesting(false); }
     };
 
@@ -144,7 +148,8 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
         try {
             await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });
         } catch (e) {
-            setMsg({ ok: false, text: 'Not saved — ' + failureWords(e) });
+            // "Not saved" only for the server's own refusal; a may-have answer said as it is (state §0.264, Part 5).
+            setMsg({ ok: false, text: settingsSaid(e, (e) => 'Not saved — ' + failureWords(e)) });
             setSaving(false);
         }
     };
@@ -479,7 +484,8 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
             if (e.stale && await panelStale(e)) return;
-            note('slack', `Not disconnected — ${failureWords(e)}`);
+            // "Not disconnected" only for the server's own refusal (state §0.264, the unknown-save rule, Part 5).
+            note('slack', settingsSaid(e, (e) => `Not disconnected — ${failureWords(e)}`));
         }
         setBusy(null);
     };
@@ -494,7 +500,11 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         setBusy('cal'); note('cal:' + provider, '');
         try {
             const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });
-            if (!r.ok) note('cal:' + provider, `Not disconnected — ${r.error}`);
+            // "Not disconnected" only for the server's own refusal; any other answer may have disconnected it — a wordless
+            // 403 said as its status, never the permission sentence (state §0.264, the unknown-save rule, Part 5).
+            if (!r.ok) note('cal:' + provider, r.unknown
+                ? maybeSaid('The calendar', 'disconnected', r.status === 403 ? 'The server returned 403.' : r.error)
+                : `Not disconnected — ${r.error}`);
             try { await reloadCal(); }
             catch (e) { if (r.ok) note('cal:' + provider, `Disconnected — the connections could not be read again: ${failureWords(e)} Reload the page to see them.`); }
         } finally {
@@ -516,7 +526,7 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
             if (!stillOrg(askedOrg)) return;
             // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
             // their ref; a landed answer that cannot be read is said — the request is the server's, its date unknown.
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             const recorded = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;   // answered after a switch: the copy on screen is another org's
             if (!recorded?.request) note(app.id, 'Requested — Its answer could not be read. Reload the page to see the request.');
@@ -525,7 +535,9 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
             }
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
-            note(app.id, `Not requested — ${failureWords(e)}`);
+            // "Not requested" only for the server's own refusal; any other answer may have recorded it — a press again is
+            // answered as already requested, nothing sent twice (state §0.264, the unknown-save rule, Part 5).
+            note(app.id, unknownOf(e) ? maybeSaid(`The request for ${app.name}`, 'recorded', failureWords(e)) : `Not requested — ${failureWords(e)}`);
         }
         setBusy(null);
     };
@@ -547,7 +559,8 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.229 — J-B5).
             if (e.stale && await panelStale(e)) return;
-            note('webform', `Not saved — ${failureWords(e)}`);
+            // "Not saved" only for the server's own refusal (state §0.264, the unknown-save rule, Part 5).
+            note('webform', settingsSaid(e, (e) => `Not saved — ${failureWords(e)}`));
         } finally {
             setBusy(null);
         }

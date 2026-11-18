@@ -1,9 +1,11 @@
 // settings/people/TeamsDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useApp } from '../../../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+import { putSettings, writeSettings, takeLatestSettings, settingsSaid } from '../shared/saveSettings.js';
+// Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { maybeSaid } from '../../../utils/refusalWords.js';
 // A teams save names the token its list was read with, and a stale refusal takes the latest (state §0.225).
 import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
@@ -26,6 +28,17 @@ const AttainBar = ({ pct }) => {
     );
 };
 
+// A member loop's words (state §0.264, the unknown-save rule, Part 5): the rows the server refused apart from the rows
+// whose answer proved nothing — those may have been updated, never "did not update" (guide §18b134 rule 11).
+const sentence = (s) => (/[.!?)]$/.test(s) ? s : `${s}.`);
+const memberRowsWords = (lead, refused, maybe) => {
+    const parts = [];
+    // The refused alone keep their words as they were; a full stop only before the may-have sentence.
+    if (refused.length) { const w = `${lead}, but ${refused.length} member record(s) did not update: ${refused.join('; ')}`; parts.push(maybe.length ? sentence(w) : w); }
+    if (maybe.length) parts.push(`${refused.length ? '' : `${lead}, but `}${maybeSaid(`${maybe.length} member record(s)`, 'updated', maybe.join('; '), true)}`);
+    return parts.join(' ');
+};
+
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
 const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) => {
@@ -46,6 +59,10 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
     const teams       = base.list;
 
     const isEdit = !!team;
+    // A new team keeps one id for this opening of the window (state §0.264, the unknown-save rule, Part 5): a press after
+    // an answer that proved nothing sends the same entry again — it minted `team_${Date.now()}` on every press.
+    const newTeamId = useRef(null);
+    if (!isEdit && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;
     const [name,       setName]       = useState(team?.name       || '');
     const [territory,  setTerritory]  = useState(team?.territory  || '');
     const [vertical,   setVertical]   = useState(team?.vertical   || '');
@@ -65,9 +82,11 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
 
     const handleSave = async () => {
         if (!name.trim()) { setErr('Team name is required.'); return; }
-        const id = isEdit ? team.id : `team_${Date.now()}`;
+        const id = isEdit ? team.id : newTeamId.current;
         const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
-        const updatedTeams = isEdit ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
+        // A new team the list already holds — this window's earlier press landed (its list re-based after a member's
+        // failure, or the latest taken after a stale refusal) — is that entry, never a second one (state §0.264).
+        const updatedTeams = isEdit || teams.some(t => t.id === id) ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
         // No new team of a name another has (state §0.222 — Q8): the server's rule and words, checked here first.
         const nameRefused = teamNameRefused(updatedTeams, teams);
         if (nameRefused) { setErr(nameRefused.error); return; }
@@ -95,25 +114,31 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
                 setErr(words);
                 return;
             }
-            if (!w.ok) throw new Error(w.error || 'Save failed');
+            if (!w.ok) {
+                // An answer that proves nothing may have saved the team (state §0.264, the unknown-save rule, Part 5): the
+                // window stays open with what was typed and its kept id, no member sent; the server's own refusal as before.
+                setErr(w.unknown ? maybeSaid('The team', 'saved', w.error) : (w.error || 'Save failed.'));
+                return;
+            }
             // The list landed: the window holds it with its new token, so a Save after a member's failure sends both.
             setBase({ list: updatedTeams, rev: w.revs.teams ?? null });
 
             // A member whose row did not update is reported by name; one that did is kept as the server answered it.
-            const failed = [];
+            // One whose answer proved nothing may have updated (state §0.264): said apart from the refused.
+            const failed = [], maybe = [];
             const answered = new Map();
             for (const { u, body } of sends) {
                 if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
                 const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify(body) });
-                if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
+                if (!r.ok) (r.unknown ? maybe : failed).push(`${u.name || u.id}: ${r.error}`);
                 else answered.set(u.id, r.data?.user || { ...u, ...body });
             }
             if (!stillOrg(askedOrg)) return;
 
             const renamed = isEdit && team.name !== saved.name ? { id, name: saved.name } : null;
             setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, w.revs), users: rosterAfterTeamSave(prev.users, answered, renamed) }));
-            if (failed.length) {
-                setErr(`Team saved, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
+            if (failed.length || maybe.length) {
+                setErr(memberRowsWords('Team saved', failed, maybe));
                 return;                                  // stay open so the message is read
             }
             onSave(updatedTeams);
@@ -411,7 +436,9 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     const latest = await takeLatestSettings(setSettings);
                     if (latest) { setDeleteErr(listChanged('team')); return; }
                 }
-                setDeleteErr(`Team not deleted — ${e.message}`);
+                // Only the server's own refusal is "not deleted"; any other answer is putSettings' may-have sentence, the team
+                // left on the list and no member sent (state §0.264, the unknown-save rule, Part 5).
+                setDeleteErr(settingsSaid(e, (x) => `Team not deleted — ${x.message}`));
                 return;
             }
             // The list landed: the copy takes it and its token now, before the member rows — a save made while they go
@@ -420,18 +447,19 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
             // The team is gone; now the member rows. One that did not update is
             // reported by name, not logged — it still points at a team the
             // roster no longer has.
-            const cleared = new Set(), failed = [];
+            const cleared = new Set(), failed = [], maybe = [];
             for (const u of members) {
                 if (!stillOrg(askedOrg)) return;
                 const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) });
-                if (r.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${r.error}`);
+                // An answer that proves nothing may have cleared the row (state §0.264): said apart from the refused.
+                if (r.ok) cleared.add(u.id); else (r.unknown ? maybe : failed).push(`${u.name || u.id}: ${r.error}`);
             }
             if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
                 users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u),
             }));
-            if (failed.length) setDeleteErr(`Team deleted, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
+            if (failed.length || maybe.length) setDeleteErr(memberRowsWords('Team deleted', failed, maybe));
         });
     };
 
@@ -456,12 +484,20 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     const latest = await takeLatestSettings(setSettings);
                     if (latest) { setAssignErr(listChanged('team')); return; }
                 }
-                if (!rt.ok) { setAssignErr(`Not assigned — ${rt.error}`); return; }
+                // An answer that proves nothing may have listed them (state §0.264, the unknown-save rule, Part 5): said so,
+                // the member sent nothing; a press again is refused as stale if it landed, and the latest then lists them.
+                if (!rt.ok) { setAssignErr(rt.unknown ? maybeSaid('The team list', 'updated', rt.error) : `Not assigned — ${rt.error}`); return; }
                 setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, rt.revs) }));
             }
             const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
             if (!stillOrg(askedOrg)) return;
-            if (!ru.ok) { setAssignErr(`Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`); return; }
+            if (!ru.ok) {
+                // …and the member's row likewise (state §0.264): the server's own refusal "was not", any other answer may have.
+                setAssignErr(ru.unknown
+                    ? `Team updated, but ${maybeSaid(`${assigningUser.name || 'the user'}'s record`, 'updated', ru.error)}`
+                    : `Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`);
+                return;
+            }
             setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === assigningUser.id ? { ...u, ...(ru.data?.user || { team: t.name, teamId: t.id, territory: t.territory || '', vertical: t.vertical || '' }) } : u) }));
             setAssigningUser(null);
         } finally {

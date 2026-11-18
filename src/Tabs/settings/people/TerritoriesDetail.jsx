@@ -1,12 +1,25 @@
 // settings/people/TerritoriesDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { useApp } from '../../../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { putSettings, writeSettings, takeLatestSettings } from '../shared/saveSettings.js';
+import { putSettings, writeSettings, takeLatestSettings, settingsSaid } from '../shared/saveSettings.js';
 import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
+// Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { maybeSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
+
+// A rep loop's words (state §0.264, the unknown-save rule, Part 5): the rows the server refused apart from the rows
+// whose answer proved nothing — those may have been updated, never "did not update" (guide §18b134 rule 11).
+const sentence = (s) => (/[.!?)]$/.test(s) ? s : `${s}.`);
+const userRowsWords = (lead, refused, maybe) => {
+    const parts = [];
+    // The refused alone keep their words as they were; a full stop only before the may-have sentence.
+    if (refused.length) { const w = `${lead}, but ${refused.length} user record(s) did not update: ${refused.join('; ')}`; parts.push(maybe.length ? sentence(w) : w); }
+    if (maybe.length) parts.push(`${refused.length ? '' : `${lead}, but `}${maybeSaid(`${maybe.length} user record(s)`, 'updated', maybe.join('; '), true)}`);
+    return parts.join(' ');
+};
 
 const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClose }) => {
     // mode: 'new' | 'edit' | 'owner' | 'reps' | 'rule'
@@ -16,6 +29,10 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
     // the latest after a refusal.
     const [base, setBase] = useState(() => ({ list: settings.territories || [], rev: settings.revs?.territories ?? null }));
     const territories = base.list;
+    // A new territory keeps one id for this opening of the window (state §0.264, the unknown-save rule, Part 5): a press
+    // after an answer that proved nothing sends the same entry again — it minted `terr_${Date.now()}` on every press.
+    const newTerrId = useRef(null);
+    if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;
 
     const [name,    setName]    = useState(territory?.name    || '');
     const [parent,  setParent]  = useState(territory?.parent  || '');
@@ -41,8 +58,10 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
             let updatedUsers = [...allUsers];
 
             if (mode === 'new') {
-                const newT = { id:`terr_${Date.now()}`, name:name.trim(), parent:parent.trim(), rule:rule.trim(), ownerId, repIds, accounts:0, pipeline:'—', status: ownerId ? 'Active' : 'Unassigned' };
-                updatedTerritories = [...territories, newT];
+                const newT = { id:newTerrId.current, name:name.trim(), parent:parent.trim(), rule:rule.trim(), ownerId, repIds, accounts:0, pipeline:'—', status: ownerId ? 'Active' : 'Unassigned' };
+                // One the list already holds — this window's earlier press landed and the latest was taken after a stale
+                // refusal — is that entry, never a second one (state §0.264).
+                updatedTerritories = territories.some(t => t.id === newT.id) ? territories.map(t => t.id === newT.id ? newT : t) : [...territories, newT];
             } else if (mode === 'edit') {
                 const oldName = territory.name;
                 updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, name:name.trim(), parent:parent.trim() } : t);
@@ -78,25 +97,31 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
                 setErr(words);
                 return;
             }
-            if (!w.ok) throw new Error(w.error || 'Save failed');
+            if (!w.ok) {
+                // An answer that proves nothing may have saved the territory (state §0.264, the unknown-save rule, Part 5):
+                // the window stays open with what was typed and its kept id, no rep sent; the server's own refusal as before.
+                setErr(w.unknown ? maybeSaid('The territory', 'saved', w.error) : (w.error || 'Save failed.'));
+                return;
+            }
             setBase({ list: updatedTerritories, rev: w.revs.territories ?? null });
 
             // Persist changed users. A member whose row did not update is reported by name; one that did is kept as
             // the server answered it — the roster is mapped by id, never replaced from this window's copy, which
             // leaves out a member with no name (state §0.225 — JB2-7).
             const changedUsers = updatedUsers.filter((u, i) => allUsers[i] && u.territory !== allUsers[i].territory);
-            const failed = [];
+            // One whose answer proved nothing may have updated (state §0.264): said apart from the refused.
+            const failed = [], maybe = [];
             const answered = new Map();
             for (const u of changedUsers) {
                 if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
                 const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) });
-                if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
+                if (!r.ok) (r.unknown ? maybe : failed).push(`${u.name || u.id}: ${r.error}`);
                 else answered.set(u.id, r.data?.user || u);
             }
             if (!stillOrg(askedOrg)) return;
 
-            if (failed.length) {
-                setErr(`Territory saved, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
+            if (failed.length || maybe.length) {
+                setErr(userRowsWords('Territory saved', failed, maybe));
                 setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, w.revs) }));
                 return;
             }
@@ -258,7 +283,10 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                     const latest = await takeLatestSettings(setSettings);
                     window.alert(latest ? listChanged('territory') : `Import failed to save — ${w.error}`);
                 }
-                else window.alert(`Import failed to save — ${w.error}`);
+                // An answer that proves nothing may have imported them (state §0.264, the unknown-save rule, Part 5): said so.
+                // Choosing the file again after one that landed is refused as stale and the page takes the latest; chosen
+                // once more, its rows merge by name onto that list — no second copy of a territory.
+                else window.alert(w.unknown ? maybeSaid('The territories', 'imported', w.error, true) : `Import failed to save — ${w.error}`);
             } catch (e) { console.error('territory CSV import', e); window.alert('Could not import the CSV. Please check the format.'); }
         };
         input.click();
@@ -278,24 +306,27 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
             } catch (e) {
                 // Another change landed first (state §0.225): the page takes the latest and says so.
                 if (e.stale) { const latest = await takeLatestSettings(setSettings); if (latest) { setDeleteErr(listChanged('territory')); return; } }
-                setDeleteErr(`Territory not deleted — ${e.message}`);
+                // Only the server's own refusal is "not deleted"; any other answer is putSettings' may-have sentence, the
+                // territory left on the list and no rep sent (state §0.264, the unknown-save rule, Part 5).
+                setDeleteErr(settingsSaid(e, (x) => `Territory not deleted — ${x.message}`));
                 return;
             }
             setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, answer?.revs) }));
             // The territory is gone; now the rep rows. One that did not update is
             // reported by name, not logged.
-            const cleared = new Set(), failed = [];
+            const cleared = new Set(), failed = [], maybe = [];
             for (const u of reps) {
                 if (!stillOrg(askedOrg)) return;
                 const rc = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) });
-                if (rc.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${rc.error}`);
+                // An answer that proves nothing may have cleared the row (state §0.264): said apart from the refused.
+                if (rc.ok) cleared.add(u.id); else (rc.unknown ? maybe : failed).push(`${u.name || u.id}: ${rc.error}`);
             }
             if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
                 users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, territory: '' } : u),
             }));
-            if (failed.length) setDeleteErr(`Territory deleted, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
+            if (failed.length || maybe.length) setDeleteErr(userRowsWords('Territory deleted', failed, maybe));
         });
     };
 

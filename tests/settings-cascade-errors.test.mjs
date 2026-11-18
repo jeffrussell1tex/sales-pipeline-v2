@@ -24,9 +24,11 @@ const blockOf = (src, name) => {
     return src.slice(at, next < 0 ? src.length : next);
 };
 
-for (const [file, handler, noun] of [
-    ['src/Tabs/settings/people/TeamsDetail.jsx',       'handleDelete', 'Team'],
-    ['src/Tabs/settings/people/TerritoriesDetail.jsx', 'handleDelete', 'Territory'],
+// Moved in §0.264 (the unknown-save rule, Part 5): each file's rows-words helper (`words`, about `rows` records) says the
+// refused rows apart from those whose answer proved nothing.
+for (const [file, handler, noun, words, rows, r] of [
+    ['src/Tabs/settings/people/TeamsDetail.jsx',       'handleDelete', 'Team',      'memberRowsWords', 'member', 'r'],
+    ['src/Tabs/settings/people/TerritoriesDetail.jsx', 'handleDelete', 'Territory', 'userRowsWords',   'user',   'rc'],
 ]) {
     test(`${file}: a refused ${noun.toLowerCase()} delete is shown above the table, and a member row that did not update is named`, () => {
         const s = code(read(file));
@@ -34,8 +36,14 @@ for (const [file, handler, noun] of [
         assert.match(s, /import \{[^}]*\bputSettings\b[^}]*\} from '\.\.\/shared\/saveSettings\.js';/, 'uses the shared save, which throws on non-2xx');
         const del = blockOf(s, handler);
         assert.ok(del.includes('await putSettings({'), 'the settings PUT goes through putSettings');
-        assert.ok(del.includes(`setDeleteErr(\`${noun} not deleted — \${e.message}\`)`), 'a refused PUT is reported');
-        assert.ok(del.includes(`setDeleteErr(\`${noun} deleted, but \${failed.length}`), 'a cascade failure is reported by name');
+        // Moved in §0.264 (the unknown-save rule, Part 5): "not deleted" only for the server's own refusal; any other answer
+        // says putSettings' may-have sentence as it is (settingsSaid).
+        assert.ok(del.includes(`setDeleteErr(settingsSaid(e, (x) => \`${noun} not deleted — \${x.message}\`));`), 'a refused PUT is reported');
+        // Moved in §0.264: a row the server refused "did not update"; one whose answer proved nothing may have — both named.
+        assert.ok(del.includes(`if (${r}.ok) cleared.add(u.id); else (${r}.unknown ? maybe : failed).push(\`\${u.name || u.id}: \${${r}.error}\`);`), 'each row sorted by whether its answer proved nothing');
+        assert.ok(del.includes(`if (failed.length || maybe.length) setDeleteErr(${words}('${noun} deleted', failed, maybe));`), 'a cascade failure is reported by name');
+        assert.ok(s.includes(`if (refused.length) { const w = \`\${lead}, but \${refused.length} ${rows} record(s) did not update: \${refused.join('; ')}\`;`), 'the refused rows in their old words');
+        assert.ok(s.includes(`if (maybe.length) parts.push(\`\${refused.length ? '' : \`\${lead}, but \`}\${maybeSaid(\`\${maybe.length} ${rows} record(s)\`, 'updated', maybe.join('; '), true)}\`);`), 'the rows that may have updated, in the rule\'s words');
         assert.ok(!/console\.error/.test(del), 'nothing in the delete handler goes to the console alone');
         assert.ok(!del.includes('if (res.ok) {'), 'the silent-on-failure shape is gone');
         assert.ok(s.includes('{deleteErr && ('), 'the banner renders');

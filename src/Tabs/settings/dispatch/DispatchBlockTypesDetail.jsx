@@ -9,7 +9,7 @@ import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 
 const SWATCHES = ['#4d6b3d', '#9c3a2e', '#3a5a7a', '#b87333', '#7a6a48', '#5a544c', '#8a8378'];
 
@@ -53,8 +53,9 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
-            // Surfaced, never swallowed — a failed PUT must not look like a save.
-            setError('Could not save: ' + e.message);
+            // Surfaced, never swallowed — a failed PUT must not look like a save. "Could not save" only for the server's own
+            // refusal; an answer that proves nothing says it may have saved (state §0.264, the unknown-save rule, Part 5).
+            setError(settingsSaid(e, (e) => 'Could not save: ' + e.message));
             // Rethrow for the navigation guard. `finally` still clears the
             // spinner, so no extra cleanup is needed here.
             throw e;

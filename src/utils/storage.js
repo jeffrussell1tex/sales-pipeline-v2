@@ -92,10 +92,13 @@ export const refusalOf = async (res) => refusalFrom(res, await bodyOf(res));
 // …from a body already read (null when it was not JSON): dbWrite reads it once, for these words and for whether the
 // server itself refused (heardRefusal).
 export const refusalFrom = (res, body) => {
-    if (res.status === 403) return 'You do not have permission to make this change.';
+    // The permission sentence for the server's own 403 only (state §0.264, the unknown-save rule, Part 5): a 403 with no
+    // words of the server's — a gateway's — proves nothing, and is said by its status inside the may-have sentence.
+    if (res.status === 403 && heardRefusal(res.status, body)) return 'You do not have permission to make this change.';
     // serverErrorBody sends { error, requestId }; surface the ref so the
     // exact Netlify function log line can be found.
-    if (body?.error) return body.requestId ? `${body.error} (ref ${body.requestId})` : body.error;
+    // Words that are text and not blank (§0.264: a blank `error` read as its words said nothing — a 403's among them).
+    if (typeof body?.error === 'string' && body.error.trim()) return body.requestId ? `${body.error} (ref ${body.requestId})` : body.error;
     return `The server returned ${res.status}.`;
 };
 // …and one that never reached the server: one sentence on every screen (§0.249, docs/design/refusal-sweep Q4 — Jeff:

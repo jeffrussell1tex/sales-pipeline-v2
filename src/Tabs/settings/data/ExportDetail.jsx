@@ -2,9 +2,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
+
+// A create an earlier press landed (state §0.264, the unknown-save rule, Part 5 — a 409 `code: 'idInUse'`, this org's):
+// its row as stored, read again from its list by id — null when the list could not be read or does not hold it.
+const storedRowOf = async (url, listKey, id) => {
+    try {
+        const res = await dbFetch(url);
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => null);
+        return (Array.isArray(data?.[listKey]) && data[listKey].find(r => r && r.id === id)) || null;
+    } catch { return null; }
+};
 
 const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
 const FLm = ({ label, children }) => (<div style={{ marginBottom:14 }}><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
@@ -24,13 +35,16 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
     const [saveError, setSaveError] = React.useState('');
     const [opened] = React.useState(() => JSON.stringify([existing?.name || '', existing?.scope || 'accounts', existing?.format || 'CSV', existing?.cadence || 'Weekly · Mondays 06:00 UTC', existing?.destination || 'download']));
     const requestClose = useLocalLayer(true, { onClose, dirty: JSON.stringify([nameNow, scope, fmt, cadence, dest]) !== opened, busy: saving });
+    // A new schedule's id, one for this opening of the window (state §0.264, the unknown-save rule, Part 5): every press
+    // sends it, so a press after an answer that proved nothing is answered "already in use" if the first landed.
+    const [newId] = React.useState(() => 'sch_' + crypto.randomUUID());
 
     const handleSave = async () => {
         const name = nameRef.current?.value?.trim();
         if (!name) return;
         setSaveError('');
         setSaving(true);
-        const why = await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' });
+        const why = await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' }, newId);
         setSaving(false);
         if (why) setSaveError(why);
     };
@@ -160,7 +174,8 @@ export const ExportDetail = ({ onBack }) => {
             // The flag alone (§0.247 review fix): the PUT merges what a save names over the stored row (export-schedules.mjs,
             // §0.242). The whole screen copy it sent wrote back over an Edit saved while the toggle was out.
             const res  = await dbFetch('/.netlify/functions/export-schedules', { method:'PUT', body: JSON.stringify({ id: sched.id, enabled: !sched.enabled }) });
-            if (!res.ok) throw new Error(await readRefusal(res));   // the server's words, else its status (§0.243)
+            // The server's words, else its status (§0.243); whether they are its own refusal (state §0.264, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             // Landed is landed (§0.247 review fix): a 200 whose body is not JSON keeps the change and says nothing.
             const data = await res.json().catch(() => null);
             // The row as it is now, never the press's copy: an Edit saved while the toggle was out stands.
@@ -169,10 +184,14 @@ export const ExportDetail = ({ onBack }) => {
             // another row stands until closed — by id, never by name (§0.247 review fix).
             if (errorSched.current === sched.id) { errorSched.current = null; setActionError(''); }
         } catch (e) {
-            // Only the flag goes back, on the row as it is now (§0.247 review fix) — an Edit saved meanwhile survives.
-            setSchedules(prev => prev.map(s => s.id === sched.id ? { ...s, enabled: sched.enabled } : s));
+            // Only the flag goes back, on the row as it is now (§0.247 review fix) — an Edit saved meanwhile survives —
+            // and only on the server's own refusal: an answer that proves nothing keeps it, said as maybe (state §0.264,
+            // the unknown-save rule, Part 5).
+            const unknown = unknownOf(e);
+            if (!unknown) setSchedules(prev => prev.map(s => s.id === sched.id ? { ...s, enabled: sched.enabled } : s));
             errorSched.current = sched.id;
-            setActionError(`"${sched.name}" was not ${sched.enabled ? 'paused' : 'enabled'} — ${failureWords(e)}`);
+            setActionError(unknown ? maybeSaid(`"${sched.name}"`, sched.enabled ? 'paused' : 'enabled', failureWords(e))
+                : `"${sched.name}" was not ${sched.enabled ? 'paused' : 'enabled'} — ${failureWords(e)}`);
         } finally { busyScheds.current.delete(sched.id); setBusyIds([...busyScheds.current]); }
     };
 
@@ -192,6 +211,8 @@ export const ExportDetail = ({ onBack }) => {
             const r = await dbWrite(`/.netlify/functions/export-schedules?id=${encodeURIComponent(sched.id)}`, { method:'DELETE' });
             // A banner about this schedule goes once it is deleted — by id, never by name (§0.247 review fix).
             if (r.ok) { if (errorSched.current === sched.id) { errorSched.current = null; setActionError(''); } return; }
+            // An answer that proves nothing keeps it off the list, said as maybe (state §0.264, the unknown-save rule, Part 5).
+            if (r.unknown) { errorSched.current = sched.id; setActionError(maybeSaid(`"${sched.name}"`, 'deleted', r.error)); return; }
             setSchedules(prev => (prev.some(s => s.id === sched.id) ? prev : [...prev.slice(0, at), sched, ...prev.slice(at)]));
             errorSched.current = sched.id;
             setActionError(`"${sched.name}" was not deleted — ${r.error}`);
@@ -202,48 +223,104 @@ export const ExportDetail = ({ onBack }) => {
     // Each answers '' when it landed (the window closed) or the words why not, which its window draws above its buttons
     // and keeps open (§0.245, docs/design/refusal-sweep 4b, Q8) — never window.alert, which said "Save failed: Failed to
     // fetch" over whatever screen was open by then.
-    const saveSchedule = async (payload) => {
-        try {
-            const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
-            const method = isEdit ? 'PUT' : 'POST';
-            if (!isEdit) payload.id = 'sch_' + crypto.randomUUID();
-            const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
-            if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? data.schedule : s));
-            else        setSchedules(prev => [data.schedule, ...prev]);
-            setShowModal(false); setEditingSched(null);
-            return '';
-        } catch(e) { return `The schedule was not saved — ${failureWords(e)}`; }
+    // Since §0.264 (the unknown-save rule, Part 5): only the server's own refusal is "not saved"; any other answer — a
+    // thrown fetch, a 5xx, a page — may have saved it, said so with the window open as typed. A new one sends its window's
+    // id (one per opening), so a press after one that landed is answered "already in use" for this org (409 `code:
+    // 'idInUse'`): the row read again from the list and the window closed as saved. A landed answer that cannot be read is
+    // saved.
+    const saveSchedule = async (payload, newId) => {
+        const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
+        const method = isEdit ? 'PUT' : 'POST';
+        if (!isEdit) payload.id = newId || ('sch_' + crypto.randomUUID());
+        let res;
+        try { res = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) }); }
+        catch (e) { return maybeSaid('The schedule', 'saved', failureWords(e)); }
+        if (!res.ok) {
+            const refused = await res.json().catch(() => null);
+            if (!isEdit && landedBefore(res.status, refused)) {
+                const stored = await storedRowOf('/.netlify/functions/export-schedules', 'schedules', payload.id);
+                if (!stored) return 'The schedule was saved by an earlier press, but it could not be read again — reload the page to see it.';
+                setSchedules(prev => (prev.some(s => s.id === stored.id) ? prev.map(s => (s.id === stored.id ? stored : s)) : [stored, ...prev]));
+                setShowModal(false); setEditingSched(null);
+                return '';
+            }
+            return heardRefusal(res.status, refused) ? `The schedule was not saved — ${refusalWords(res, refused)}` : maybeSaid('The schedule', 'saved', refusalWords(res, refused));
+        }
+        const data = await res.json().catch(() => null);
+        if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? (data?.schedule || { ...s, ...payload }) : s));
+        else        setSchedules(prev => [data?.schedule || payload, ...prev]);
+        setShowModal(false); setEditingSched(null);
+        return '';
     };
     const saveDsr = async (payload) => {
-        try {
-            payload.id = 'dsr_' + crypto.randomUUID();
-            const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
-            setDsrItems(prev => [data.dsr, ...prev]);
-            setShowDsrModal(false);
-            return '';
-        } catch(e) { return `The request was not saved — ${failureWords(e)}`; }
+        if (!payload.id) payload.id = 'dsr_' + crypto.randomUUID();   // the window sends its own, one per opening (state §0.264)
+        let res;
+        try { res = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) }); }
+        catch (e) { return maybeSaid('The request', 'saved', failureWords(e)); }
+        let row = null;
+        if (!res.ok) {
+            const refused = await res.json().catch(() => null);
+            if (!landedBefore(res.status, refused)) {
+                return heardRefusal(res.status, refused) ? `The request was not saved — ${refusalWords(res, refused)}` : maybeSaid('The request', 'saved', refusalWords(res, refused));
+            }
+        } else row = (await res.json().catch(() => null))?.dsr || null;
+        // An earlier press landed, or this one did with an answer that cannot be read: the request as stored, read again.
+        if (!row) row = await storedRowOf('/.netlify/functions/export-dsr', 'dsrQueue', payload.id);
+        if (!row) return 'The request was saved, but it could not be read again — reload the page to see it.';
+        setDsrItems(prev => (prev.some(d => d.id === row.id) ? prev : [row, ...prev]));
+        setShowDsrModal(false);
+        return '';
     };
 
     // ── ad-hoc export ─────────────────────────────────────────
+    // A run keeps its id once an answer proved nothing (state §0.264, the unknown-save rule, Part 5; ReportsTab's
+    // heldReportIds): the same export pressed again — its body as sent but for the id — sends that id, and the server's
+    // "already in use" for this org (409 `code: 'idInUse'`) is the earlier press landed: the runs read again, and said that
+    // its file was not downloaded here. Another body, a landed answer or the server's own refusal gives the id up.
+    const heldRunIds = React.useRef({});
     const handleAdHoc = async () => {
         // After an org switch its answer saves no file and says nothing (state §0.175; §0.247 Part 8): the old org's
         // export was saved to disk on the new org's screen.
         const askedOrg = requestOrg();
         setAdhocLoading(true);
         setAdhocError(null);
+        const body = { scope: adHocScope, format: adHocFmt };
+        const key  = JSON.stringify(body);
+        const held = heldRunIds.current[key];
+        const id   = held || ('run_' + crypto.randomUUID());
         try {
-            const id  = 'run_' + crypto.randomUUID();
-            const res = await dbFetch('/.netlify/functions/export-runs', {
-                method: 'POST',
-                body: JSON.stringify({ id, scope: adHocScope, format: adHocFmt }),
-            });
-            if (!res.ok) throw new Error(await readRefusal(res));   // the ok check first (§0.243): its words, else its status
-            const data = await res.json();
+            let res;
+            try {
+                res = await dbFetch('/.netlify/functions/export-runs', {
+                    method: 'POST',
+                    body: JSON.stringify({ id, ...body }),
+                });
+            } catch (e) {
+                heldRunIds.current[key] = id;
+                if (stillOrg(askedOrg)) setAdhocError(maybeSaid('The export', 'run', failureWords(e)));
+                return;
+            }
+            if (!res.ok) {   // the ok check first (§0.243): its words, else its status
+                const refused = await res.json().catch(() => null);
+                if (held && landedBefore(res.status, refused)) {
+                    delete heldRunIds.current[key];
+                    const runRes = await dbFetch('/.netlify/functions/export-runs').catch(() => null);
+                    const runData = runRes && runRes.ok ? await runRes.json().catch(() => null) : null;
+                    if (!stillOrg(askedOrg)) return;
+                    if (Array.isArray(runData?.runs)) setRuns(runData.runs);
+                    setAdhocError('The export was already run by an earlier press, but its file was not downloaded here — press Download now for a new one.');
+                    return;
+                }
+                if (heardRefusal(res.status, refused)) delete heldRunIds.current[key];
+                else heldRunIds.current[key] = id;
+                if (stillOrg(askedOrg)) setAdhocError(heardRefusal(res.status, refused) ? refusalWords(res, refused) : maybeSaid('The export', 'run', refusalWords(res, refused)));
+                return;
+            }
+            delete heldRunIds.current[key];
+            // Landed is landed (state §0.264): an answer that cannot be read is a run made whose file never came.
+            const data = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;
+            if (!data || !data.download) { setAdhocError('The export ran, but its file could not be read — press Download now for a new one.'); return; }
 
             // Trigger browser download from base64 payload
             const dl  = data.download;
@@ -263,7 +340,8 @@ export const ExportDetail = ({ onBack }) => {
             // Add run to recent list
             if (data.run) setRuns(prev => [data.run, ...prev].slice(0, 20));
         } catch (e) {
-            if (stillOrg(askedOrg)) setAdhocError(failureWords(e));
+            // Only after the run landed (its answer read above): its file could not be made here (state §0.264, Part 5).
+            if (stillOrg(askedOrg)) setAdhocError(`The export ran, but its file could not be saved — ${failureWords(e)}`);
         } finally {
             setAdhocLoading(false);
         }
@@ -275,14 +353,19 @@ export const ExportDetail = ({ onBack }) => {
         setDsrItems(prev => prev.map(d => d.id === dsr.id ? updated : d));
         try {
             const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'PUT', body: JSON.stringify(updated) });
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
-            setDsrItems(prev => prev.map(d => d.id === dsr.id ? (data.dsr || updated) : d));
-            setActionError(prev => (prev.startsWith(`Request ${dsr.id} was not `) ? '' : prev));
+            // Whether the refusal is the server's own (state §0.264, the unknown-save rule, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
+            const data = await res.json().catch(() => null);   // landed is landed (state §0.264): kept as sent
+            setDsrItems(prev => prev.map(d => d.id === dsr.id ? ((data && data.dsr) || updated) : d));
+            setActionError(prev => (prev.startsWith(`Request ${dsr.id} was not `) || prev.startsWith(`Request ${dsr.id} may have been `) ? '' : prev));
         } catch (e) {
-            setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
+            // Put back only on the server's own refusal; an answer that proves nothing keeps the change, said as maybe
+            // (state §0.264, the unknown-save rule, Part 5).
+            const unknown = unknownOf(e);
+            const done = newStatus === 'completed' ? 'marked complete' : 'updated';
+            if (!unknown) setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
             errorSched.current = null;   // these words speak of a request, no schedule (§0.247 review fix)
-            setActionError(`Request ${dsr.id} was not ${newStatus === 'completed' ? 'marked complete' : 'updated'} — ${failureWords(e)}`);
+            setActionError(unknown ? maybeSaid(`Request ${dsr.id}`, done, failureWords(e)) : `Request ${dsr.id} was not ${done} — ${failureWords(e)}`);
         }
     };
 
@@ -503,12 +586,15 @@ const NewDsrModal = ({ onClose, onSave }) => {
     // A refused or unsent save, said here above the buttons and kept while the window is open (§0.245 4b, Q8).
     const [saveError, setSaveError] = React.useState('');
     const requestClose = useLocalLayer(true, { onClose, dirty: !!(subject.trim() || notes.trim()) || type !== 'access', busy: saving });
+    // The request's id, one for this opening of the window (state §0.264, the unknown-save rule, Part 5): a press after an
+    // answer that proved nothing sends it again, never a second request.
+    const [newId] = React.useState(() => 'dsr_' + crypto.randomUUID());
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
     const handleSave = async () => {
         if (!subject.trim()) return;
         setSaveError('');
         setSaving(true);
-        const why = await onSave({ subject: subject.trim(), type, notes: notes.trim() || null });
+        const why = await onSave({ id: newId, subject: subject.trim(), type, notes: notes.trim() || null });
         setSaving(false);
         if (why) setSaveError(why);
     };

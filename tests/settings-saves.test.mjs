@@ -51,6 +51,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { teamsWithMembers, teamsWithMemberOn } from '../src/utils/teamMembership.js';
+// Since §0.264 (the unknown-save rule, Part 5): the handlers run here read the rule's helpers — the real ones.
+import * as RW from '../src/utils/refusalWords.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -718,7 +720,11 @@ test('S3 — putSettings: a send that never reached the server throws writeSetti
     await withServer(async ({ queue, setRequestOrg }) => {
         queue.push(new Error('offline'));
         const lost = await outcome(putSettings({ teams: [] }, { teams: 'T1' }));
-        assert.equal(lost.e?.message, NETWORK_ERROR, 'REGRESSION (JB3-7c): the network\'s own words, or none — writeSettings says NETWORK_ERROR');
+        // Moved in §0.264 (the unknown-save rule, Part 5): no answer may have saved them — the may-have sentence in full,
+        // NETWORK_ERROR's words inside it (`unknown`, `said`: a panel says it as it is, the leave guard as may-have).
+        assert.equal(lost.e?.message, `The settings may have been saved — reload the page to see whether they were: ${NETWORK_ERROR}`, 'REGRESSION (JB3-7c): the network\'s own words, or none — writeSettings says NETWORK_ERROR');
+        assert.equal(lost.e?.unknown, true);
+        assert.equal(lost.e?.said, true);
         assert.equal(lost.e?.stale, undefined, 'no stale refusal');
         const h = held(); queue.push(h.answer);
         const pr = putSettings({ teams: [] }, { teams: 'T1' });
@@ -726,6 +732,44 @@ test('S3 — putSettings: a send that never reached the server throws writeSetti
         setRequestOrg('org_B'); h.fail();
         assert.equal(await outcome(pr), PENDING, 'REGRESSION (JB3-7c): the last org\'s failed send said on the new org\'s screen');
     });
+});
+
+// ── Added in §0.264 (the unknown-save rule, Part 5): putSettings throws the server's own refusal as "not" (`unknown:
+// false`) and any other answer as the may-have sentence in full (`unknown: true`, `said: true`); the Admin role's
+// sentence only for the server's own 403; settingsSaid says each as its panel does; writeSettings' `unknown` is RUN above.
+test('S3 — putSettings (§0.264): the server\'s own refusal in its words; the Admin sentence for its own 403 alone; a 5xx, a page, a wordless 4xx — the may-have sentence; settingsSaid', async () => {
+    const { putSettings, settingsSaid, maybeSettingsError } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const { STALE_ERROR } = await import('../src/utils/settingsRevs.js');
+    const MAYBE = (w) => `The settings may have been saved — reload the page to see whether they were: ${w}`;
+    await withServer(async ({ queue }) => {
+        const cases = [
+            [{ status: 400, body: { error: 'teams must be a list.', requestId: 'r1' } }, 'teams must be a list. (ref r1)', false],
+            [{ status: 404, body: { error: 'Not in your org.' } }, 'Not in your org.', false],
+            [{ status: 403, body: { error: 'Admin only' } }, 'You need the Admin role to change these settings.', false],
+            [{ status: 403, body: {} }, MAYBE('The server returned 403.'), true],
+            [{ status: 403 }, MAYBE('The server returned 403.'), true],
+            [{ status: 400, body: { error: '   ' } }, MAYBE('The server returned 400.'), true],
+            [{ status: 500, body: { error: 'Internal server error', requestId: 'r2' } }, MAYBE('Internal server error (ref r2)'), true],
+            [{ status: 502 }, MAYBE('The server returned 502.'), true],
+        ];
+        for (const [answer, words, unknown] of cases) {
+            queue.push(answer);
+            const r = await outcome(putSettings({ teams: [] }, { teams: 'T1' }));
+            assert.equal(r.e?.message, words, JSON.stringify(answer));
+            assert.equal(r.e?.unknown, unknown, `${JSON.stringify(answer)}: unknown`);
+            assert.equal(r.e?.said === true, unknown, `${JSON.stringify(answer)}: said in full only when it may have saved`);
+            assert.equal(r.e?.stale, undefined);
+            // As a panel says it: its own "not" words for the server's refusal; the may-have sentence as it is.
+            assert.equal(settingsSaid(r.e, (x) => `Not saved — ${x.message}`), unknown ? words : `Not saved — ${words}`);
+        }
+        queue.push({ status: 409, body: { error: STALE_ERROR, code: 'stale', stale: ['teams'] } });
+        const stale = await outcome(putSettings({ teams: [] }, { teams: 'old' }));
+        assert.deepEqual([stale.e?.message, stale.e?.stale, stale.e?.unknown], [STALE_ERROR, ['teams'], false], 'a stale refusal is the server\'s own');
+    });
+    const e = maybeSettingsError('The server returned 502.');
+    assert.deepEqual([e instanceof Error, e.message, e.unknown, e.said], [true, MAYBE('The server returned 502.'), true, true]);
+    assert.equal(settingsSaid(null, () => 'not'), 'not', 'no error: the panel\'s own words');
+    assert.equal(settingsSaid({ unknown: 'yes', message: 'm' }, () => 'not'), 'not', 'only `unknown: true` is may-have');
 });
 
 test('S3 — writeSettings never throws: lands with its tokens; stale with the keys; a refusal in dbWrite\'s words; the network; never settles after a switch', async () => {
@@ -738,16 +782,25 @@ test('S3 — writeSettings never throws: lands with its tokens; stale with the k
         assert.deepEqual(await send(), { ok: true, status: 200, error: null, data: { success: true, revs: { teams: 'T2', junk: 7 } }, revs: { teams: 'T2' } },
             'REGRESSION: a landed save answers no tokens — the screen\'s next save is refused');
         assert.deepEqual(sent[0].body, { teams: [], ifRevs: { teams: 'T1' } });
+        // Moved in §0.264 (the unknown-save rule, Part 5): every refused answer says `unknown` — false only for the
+        // server's own refusal (a 4xx in its words); a 5xx, a page, a wordless 4xx and no answer may have saved.
         queue.push({ status: 409, body: { error: STALE_ERROR, code: 'stale', stale: ['teams'] } });
-        assert.deepEqual(await send(), { ok: false, status: 409, error: STALE_ERROR, stale: ['teams'] }, 'REGRESSION: a stale refusal not told apart');
+        assert.deepEqual(await send(), { ok: false, status: 409, error: STALE_ERROR, unknown: false, stale: ['teams'] }, 'REGRESSION: a stale refusal not told apart');
         queue.push({ status: 500 });
-        assert.deepEqual(await send(), { ok: false, status: 500, error: 'The server returned 500.' }, 'no stale on another refusal');
+        assert.deepEqual(await send(), { ok: false, status: 500, error: 'The server returned 500.', unknown: true }, 'no stale on another refusal');
+        queue.push({ status: 500, body: { error: 'Internal server error', requestId: 'r0' } });
+        assert.deepEqual(await send(), { ok: false, status: 500, error: 'Internal server error (ref r0)', unknown: true }, 'a 5xx in words proves nothing either (state §0.264)');
         queue.push({ status: 404, body: { error: 'Not in your org.', requestId: 'r1' } });
-        assert.deepEqual(await send(), { ok: false, status: 404, error: 'Not in your org. (ref r1)' }, 'dbWrite\'s words');
+        assert.deepEqual(await send(), { ok: false, status: 404, error: 'Not in your org. (ref r1)', unknown: false }, 'dbWrite\'s words');
+        queue.push({ status: 400, body: {} });
+        assert.deepEqual(await send(), { ok: false, status: 400, error: 'The server returned 400.', unknown: true }, 'a wordless 4xx proves nothing (state §0.264)');
         queue.push({ status: 403, body: { error: 'Forbidden' } });
-        assert.equal((await send()).error, 'You do not have permission to make this change.');
+        assert.deepEqual(await send(), { ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false });
+        // A 403 with no words of the server's (a gateway's): its status, never the permission sentence (state §0.264).
+        queue.push({ status: 403, body: {} });
+        assert.deepEqual(await send(), { ok: false, status: 403, error: 'The server returned 403.', unknown: true });
         queue.push(new Error('offline'));
-        assert.deepEqual(await send(), { ok: false, status: 0, error: NETWORK_ERROR }, 'REGRESSION: a network failure thrown');
+        assert.deepEqual(await send(), { ok: false, status: 0, error: NETWORK_ERROR, unknown: true }, 'REGRESSION: a network failure thrown');
         // A switch at the send, at the body read, or while the network fails: it never settles.
         for (const at of ['send', 'body', 'network']) {
             setRequestOrg('org_A');
@@ -835,18 +888,27 @@ test('S3 — addToSettingsList (Q5): lands; refused as stale, made again on the 
 
         begin();
         queue.push(STALE, latestOf([EAST, THEIRS], 'TL'), STALE, latestOf([EAST], 'TL2'));
-        assert.deepEqual(await add(), { ok: false, status: 409, stale: true, twice: true }, 'REGRESSION: a second refusal not said (J-B6)');
+        // Moved in §0.264 (the unknown-save rule, Part 5): each answer says `unknown` — a stale refusal is the server's own.
+        assert.deepEqual(await add(), { ok: false, status: 409, stale: true, twice: true, unknown: false }, 'REGRESSION: a second refusal not said (J-B6)');
         assert.deepEqual(sent.map((s) => s.method), ['PUT', 'GET', 'PUT', 'GET']);
         assert.deepEqual([state.teams, state.revs], [[EAST], { teams: 'TL2' }], 'the latest on screen');
 
         begin();
         queue.push(STALE, { status: 500, body: { error: 'x' } });
-        assert.deepEqual(await add(), { ok: false, status: 409, error: STALE_ERROR, stale: ['teams'] }, 'the latest unread: the refusal');
+        assert.deepEqual(await add(), { ok: false, status: 409, error: STALE_ERROR, stale: ['teams'], unknown: false }, 'the latest unread: the refusal');
 
         begin();
         queue.push({ status: 404, body: { error: 'That member is not in your organization.' } });
-        assert.deepEqual(await add(), { ok: false, status: 404, error: 'That member is not in your organization.' });
+        assert.deepEqual(await add(), { ok: false, status: 404, error: 'That member is not in your organization.', unknown: false });
         assert.equal(sent.length, 1, 'REGRESSION: a refusal that is not stale tried again');
+        // An answer that proves nothing (state §0.264): `unknown`, never tried again — the list may hold them already.
+        begin();
+        queue.push({ status: 502 });
+        assert.deepEqual(await add(), { ok: false, status: 502, error: 'The server returned 502.', unknown: true });
+        assert.equal(sent.length, 1, 'REGRESSION: an answer that proved nothing tried again');
+        begin();
+        queue.push(new Error('offline'));
+        assert.deepEqual(await add(), { ok: false, status: 0, error: 'The server could not be reached.', unknown: true });
 
         // A switch at each request — the first send, the read of the latest, the second send: it never settles, and
         // sets nothing after the switch.
@@ -971,8 +1033,10 @@ test("S4 — B-3c's refusals: Connected apps' catches hand a stale refusal to pa
     });
     assert.deepEqual(got, {
         handleSaveSlack: ["if (e.stale) await panelStale(e, (config.webhookUrl || '') !== (slackConfig.webhookUrl || '') ? PANEL_CHANGED_WEBHOOK : undefined);", 'throw e;'],
-        handleDisconnectSlack: ['if (e.stale && await panelStale(e)) return;', "note('slack', `Not disconnected — ${failureWords(e)}`);"],
-        saveWebForm: ['if (e.stale && await panelStale(e)) return;', "note('webform', `Not saved — ${failureWords(e)}`);"],
+        // Moved in §0.264 (the unknown-save rule, Part 5): the card's "Not …" only for the server's own refusal; putSettings'
+        // may-have sentence said as it is (settingsSaid).
+        handleDisconnectSlack: ['if (e.stale && await panelStale(e)) return;', "note('slack', settingsSaid(e, (e) => `Not disconnected — ${failureWords(e)}`));"],
+        saveWebForm: ['if (e.stale && await panelStale(e)) return;', "note('webform', settingsSaid(e, (e) => `Not saved — ${failureWords(e)}`));"],
     }, 'REGRESSION (J-B5, JB3-3): a stale refusal not handed to AdminView first, the old mount going on over the latest, or Slack\'s words not asking for the URL again');
     assert.ok(src.includes("import { PANEL_CHANGED_WEBHOOK } from '../../../utils/settingsRevs.js';"), 'the words are the shared ones');
     assert.ok(!has(program, callsNamed('useRegisterSave')), 'no leave guard — the first-line rule of a guarded panel is not this file\'s');
@@ -1058,10 +1122,26 @@ const requests = (answers, fallback) => {
     return {
         calls,
         dbFetch: async (url, opts) => { const a = ask(url.split('/').pop(), JSON.parse(opts.body)); return { ok: a.ok, status: a.status, json: async () => a.data ?? { error: a.error } }; },
-        dbWrite: async (url, opts) => ask(url.split('/').pop(), JSON.parse(opts.body)),
-        writeSettings: async (payload, revs) => ask('settings', { ...payload, ifRevs: revs }),
+        // Since §0.264 (the unknown-save rule, Part 5) dbWrite and writeSettings answer a refusal's `unknown` — whether it
+        // is not the server's own (a 4xx in its words) — as the real ones do; a made-up answer names its words in `error`.
+        dbWrite: async (url, opts) => withUnknown(ask(url.split('/').pop(), JSON.parse(opts.body))),
+        writeSettings: async (payload, revs) => withUnknown(ask('settings', { ...payload, ifRevs: revs })),
     };
 };
+const withUnknown = (a) => (a.ok || 'unknown' in a ? a : { ...a, unknown: !RW.heardRefusal(a.status, a.data ?? (a.error != null ? { error: a.error } : null)) });
+// A module-scope const of a source file, as written (its init's text).
+const moduleConst = (src, name) => {
+    let out = null;
+    for (const st of astOf(src).program.body) {
+        if (st.type !== 'VariableDeclaration') continue;
+        for (const d of st.declarations) if (d.id.name === name) out = src.slice(d.init.start, d.init.end);
+    }
+    assert.ok(out, `${name} not found at module scope`);
+    return out;
+};
+// TerritoriesDetail's rep-loop words (§0.264), the real ones over the real maybeSaid.
+const TERR_SRC = read('src/Tabs/settings/people/TerritoriesDetail.jsx');
+const userRowsWords = new Function('maybeSaid', `const sentence = ${moduleConst(TERR_SRC, 'sentence')}; return ${moduleConst(TERR_SRC, 'userRowsWords')};`)(RW.maybeSaid);
 const runAs = (fnSrc, scope, ...args) => {
     const names = Object.keys(scope);
     return new Function(...names, `return (${fnSrc});`)(...names.map((n) => scope[n]))(...args);
@@ -1077,7 +1157,9 @@ const THEIRS_T = { id: 'terr_t', name: 'Theirs', parent: '', rule: '', ownerId: 
 const TERR_USERS = [{ id: 'usr_a', name: 'Ann', territory: 'North' }, { id: 'usr_x', territory: 'North' }, { id: 'usr_b', name: 'Bo', territory: '' }];
 const TERR_LATEST = { territories: [NORTH, SOUTH, THEIRS_T], revs: { territories: 'TL' } };
 
-const runTerritorySave = async ({ mode, territory = null, form = {}, base = null, answers = {}, latest = null }) => {
+// `newTerrId`: the window's ref for a new territory's id (state §0.264) — handed again to run a second press of one window.
+const runTerritorySave = async ({ mode, territory = null, form = {}, base = null, answers = {}, latest = null, newTerrId = { current: null } }) => {
+    if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;   // as TerritoryModal mints it, once per opening
     const { revsAfter, listChanged } = await import('../src/utils/settingsRevs.js');
     const save = handlerIn(read('src/Tabs/settings/people/TerritoriesDetail.jsx'), 'TerritoryModal', 'save');
     const said = [], stale = [];
@@ -1102,6 +1184,7 @@ const runTerritorySave = async ({ mode, territory = null, form = {}, base = null
             return latest;
         },
         revsAfter, listChanged,
+        newTerrId, userRowsWords, maybeSaid: RW.maybeSaid,   // since §0.264 (the unknown-save rule, Part 5)
         setErr: (v) => said.push(v), setSaving: () => {},
         setSettings: (f) => { state.settings = f(state.settings); },
         onStale: (w) => stale.push(w), onClose: () => { state.closed = true; },
@@ -1195,6 +1278,7 @@ const runAssign = async ({ settings, to, user = ANN, assigning = false, answers 
             return latest;
         },
         teamsWithMemberOn, revsAfter, listChanged,
+        maybeSaid: RW.maybeSaid,   // since §0.264 (the unknown-save rule, Part 5)
         setAssignErr: (v) => said.push(v), setAssigning: (v) => state.busy.push(v),
         setAssigningUser: (v) => { if (v === null) state.open = false; },
         setSettings: (f) => { state.settings = f(state.settings); },
@@ -1243,6 +1327,50 @@ test('S7 — Assign, run as written: stale, the latest taken and said, no member
     assert.equal(failed.state.settings.revs.teams, 'T2', 'REGRESSION: the landed list\'s token lost with the member\'s save — the next teams save refused');
     assert.deepEqual(failed.state.settings.teams[1].repIds, ['usr_a'], 'the list as landed');
     assert.equal(failed.state.open, true);
+});
+
+// ── Added in §0.264 (the unknown-save rule, Part 5): the territory window and Assign, run as written — an answer that
+// proves nothing may have written: said so, never "not"; nothing put back, no member sent after a list that may not have
+// landed; a new territory keeps its id across presses of its window.
+test('S6/S7 (§0.264) — an answer that proves nothing: the territory window and Assign say it may have been saved, send no member after it, and a new territory keeps one id', async () => {
+    const MAYBE = (subject, words, plural = false) => RW.maybeSaid(subject, 'saved', words, plural);
+    // The list answered a 500: said as maybe, no rep sent, the window open on what was typed.
+    const lost = await runTerritorySave({ mode: 'reps', territory: NORTH, form: { repIds: ['usr_a', 'usr_b'] },
+        answers: { settings: () => ({ ok: false, status: 500, error: 'Internal server error' }) } });
+    assert.deepEqual(lost.calls.map((c) => c.to), ['settings'], 'REGRESSION: a rep sent after a list that may not have landed');
+    assert.deepEqual(lost.said, [MAYBE('The territory', 'Internal server error')]);
+    assert.deepEqual([lost.state.base, lost.state.closed, lost.state.settings.revs.territories], [null, false, 'NEWER'], 'nothing taken as landed');
+    // A new territory: the same id on every press of one window; a list that holds it (an earlier press landed) keeps one.
+    const ref = { current: null };
+    const first = await runTerritorySave({ mode: 'new', form: { name: 'East' }, newTerrId: ref, answers: { settings: () => ({ ok: false, status: 0, error: 'The server could not be reached.' }) } });
+    assert.deepEqual(first.said, [MAYBE('The territory', 'The server could not be reached.')]);
+    const id = first.calls[0].body.territories.at(-1).id;
+    assert.equal(id, ref.current);
+    const second = await runTerritorySave({ mode: 'new', form: { name: 'East' }, newTerrId: ref });
+    assert.equal(second.calls[0].body.territories.at(-1).id, id, 'REGRESSION: a press after an answer that proved nothing mints a new id');
+    const landed = { list: [NORTH, SOUTH, { ...SOUTH, id, name: 'East' }], rev: 'TL' };
+    const third = await runTerritorySave({ mode: 'new', form: { name: 'East' }, newTerrId: ref, base: landed });
+    assert.deepEqual(third.calls[0].body.territories.map((t) => t.id), ['terr_n', 'terr_s', id], 'REGRESSION: a territory the list holds is added twice');
+    // A rep loop: the refused apart from the may-have, each named.
+    const mix = await runTerritorySave({ mode: 'edit', territory: NORTH, form: { name: 'North 2' },
+        answers: { users: () => ({ ok: false, status: 502, error: 'The server returned 502.' }) } });
+    assert.deepEqual(mix.said, ['Territory saved, but 1 user record(s) may have been updated — reload the page to see whether they were: Ann: The server returned 502.']);
+    assert.equal(mix.state.settings.revs.territories, 'T2', 'the landed list keeps its token');
+    assert.equal(userRowsWords('Territory deleted', ['Bo: gone'], ['Ann: X']), 'Territory deleted, but 1 user record(s) did not update: Bo: gone. '
+        + '1 user record(s) may have been updated — reload the page to see whether they were: Ann: X');
+    assert.equal(userRowsWords('Territory deleted', ['Bo: gone.'], []), 'Territory deleted, but 1 user record(s) did not update: Bo: gone.', 'the refused alone as they were');
+
+    // Assign: the list answered a 500 — said as maybe, the member sent nothing; the member answered a 500 — said as maybe.
+    const list = await runAssign({ settings: TEAMS_START, to: WEST_TEAM, answers: { settings: () => ({ ok: false, status: 500, error: 'Internal server error' }) } });
+    assert.deepEqual(list.calls.map((c) => c.to), ['settings']);
+    assert.deepEqual(list.said, ['The team list may have been updated — reload the page to see whether it was: Internal server error']);
+    assert.equal(list.state.open, true);
+    const refusedList = await runAssign({ settings: TEAMS_START, to: WEST_TEAM, answers: { settings: () => ({ ok: false, status: 404, error: 'gone' }) } });
+    assert.deepEqual(refusedList.said, ['Not assigned — gone'], 'the server\'s own refusal keeps its words');
+    const member = await runAssign({ settings: TEAMS_START, to: WEST_TEAM, answers: { users: () => ({ ok: false, status: 0, error: 'The server could not be reached.' }) } });
+    assert.deepEqual(member.said, ['Team updated, but Ann\'s record may have been updated — reload the page to see whether it was: The server could not be reached.']);
+    assert.equal(member.state.settings.revs.teams, 'T2', 'the landed list keeps its token');
+    assert.equal(member.state.open, true);
 });
 
 test('S7 — Assign, run as written (JB2-8): the member\'s save refused, the same team again, then another — the member is listed once, on one team', async () => {
@@ -1554,7 +1682,8 @@ const FEATURES = 'src/Tabs/settings/data/FeaturesDetail.jsx';
 const PROPERTY_TYPES = 'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx';
 const staleRefusal = async (key) => {
     const { STALE_ERROR } = await import('../src/utils/settingsRevs.js');
-    return Object.assign(new Error(STALE_ERROR), { stale: [key] });
+    // `unknown: false` since §0.264 (the unknown-save rule, Part 5): a stale refusal is the server's own, as putSettings throws it.
+    return Object.assign(new Error(STALE_ERROR), { stale: [key], unknown: false });
 };
 // A panel's save as written, its hook and the sender stubbed: once hands the save itself back (the hook's own is S9's);
 // putSettings answers `answer` or throws `refusal`; panelStale answers `took`. Today's direct send is kept so old code
@@ -1562,6 +1691,7 @@ const staleRefusal = async (key) => {
 // and what it threw.
 const runPanelSave = async (file, component, handler, scope, { answer = { success: true, revs: {} }, refusal = null, took = false } = {}) => {
     const steps = [], said = [], handed = [];
+    const { settingsSaid } = await import('../src/Tabs/settings/shared/saveSettings.js');   // the real one (state §0.264)
     let copy = { revs: { k: 'NEWER' } };
     const opened = { k: 'OPENED' };
     let thrown = null;
@@ -1576,6 +1706,7 @@ const runPanelSave = async (file, component, handler, scope, { answer = { succes
             setSaveError: (v) => said.push(v), setError: (v) => said.push(v),
             dbFetch: async (url, opts) => { steps.push(['dbFetch', url, JSON.parse(opts.body)]); return { ok: true, status: 200, json: async () => answer }; },
             requestOrg: () => 'org_A', stillOrg: () => true,
+            settingsSaid,
             ...scope,
         });
     } catch (e) { thrown = e; }
@@ -1689,6 +1820,7 @@ const deferred = () => { let resolve, reject; const p = new Promise((a, b) => { 
 // pinned in S12, never run here. `extra(st)` adds a handler's own scope.
 const optimisticRig = async (file, component, handler, sayer, extra = () => ({})) => {
     const { STILL_SAVING } = await import('../src/utils/settingsRevs.js');
+    const { settingsSaid } = await import('../src/Tabs/settings/shared/saveSettings.js');   // the real one (state §0.264)
     const settings = {
         pipelines: [{ id: 'p1', name: 'Sales' }], assignmentRules: [{ id: 'r1' }], customHolidays: [{ date: 'Jan 2', name: 'Ours' }],
         revs: { pipelines: 'R0', customHolidays: 'C0', other: 'O0' },
@@ -1697,7 +1829,7 @@ const optimisticRig = async (file, component, handler, sayer, extra = () => ({})
         syncing: [], gets: [], org: 'org_A', shown: '', timers: [] };
     const fnSrc = handlerIn(read(file), component, handler);
     const scope = {
-        STILL_SAVING, settings, opened: st.opened, inFlight: st.gate,
+        STILL_SAVING, settings, opened: st.opened, inFlight: st.gate, settingsSaid,
         setSettings: (f) => { st.copy = typeof f === 'function' ? f(st.copy) : f; },
         putSettings: (...args) => { const d = deferred(); st.sends.push({ args, ...d }); return d.p; },
         landed: (a) => st.landed.push(a),
@@ -1738,12 +1870,14 @@ test('S10 — Pipelines\' persist, run as written (JB3-8, J-B10): the tokens it 
     const refused = st.call({ pipelines: P1 }, 'Pipeline rename');
     const A1 = [{ id: 'r2' }];
     st.copy = { ...st.copy, assignmentRules: A1, revs: { ...st.copy.revs, other: 'O1' } };   // meanwhile: another key set, another save's token merged
-    st.sends[0].reject(new Error('Server error 500'));
+    // Moved in §0.264 (the unknown-save rule, Part 5): the refusal thrown as putSettings throws the server's own — a 4xx in
+    // its words, `unknown: false` (it was a made-up "Server error 500"; a 500 is now the may-have sentence, run below).
+    st.sends[0].reject(RW.refusalError('Pipeline names must be unique.', true));
     assert.equal(await refused, false);
     assert.deepEqual(st.copy.pipelines, st.settings.pipelines, 'the change put back');
     assert.equal(st.copy.assignmentRules, A1, 'REGRESSION (J-B10): a key it never sent put back — another change undone');
     assert.deepEqual(st.copy.revs, { pipelines: 'R0', customHolidays: 'C0', other: 'O1' }, 'REGRESSION (J-B10): the tokens put back — another save\'s token lost, the next save of that key refused');
-    assert.deepEqual(st.said, ['Pipeline rename not saved — Server error 500']);
+    assert.deepEqual(st.said, ['Pipeline rename not saved — Pipeline names must be unique.']);
     assert.deepEqual(st.handed, [], 'no stale refusal: never AdminView\'s');
     assert.equal(st.gate.current, false, 'REGRESSION (JB3-8): a refusal leaves the gate shut');
 
@@ -2038,6 +2172,80 @@ test('S10 — the calendar\'s Sync: a success\'s timer clears only its own words
     assert.deepEqual([st.said, st.shown, st.copy.federalHolidays], [['Failed to sync — Admin only'], 'Failed to sync — Admin only', undefined]);
 });
 
+// ── Added in §0.264 (the unknown-save rule, Part 5): the optimistic saves, run as written, on an answer that proves
+// nothing — putSettings' may-have error (`unknown: true`): the change kept on screen (never put back), the may-have
+// sentence said as it is, the gate opened; Pipelines' persist answers null (a deletion's selection stays as moved), the
+// calendar's 'unknown' (its Add form closes — a second Save would add the holiday twice); Features says it, rethrown.
+test('S10 (§0.264) — an answer that proves nothing keeps the change: Pipelines\' persist and deletion, the calendar\'s holidays, Add and Sync, Features — run as written', async () => {
+    const { maybeSettingsError } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const { failureWords } = await import('../src/utils/refusalWords.js');
+    const MAYBE = (w) => `The settings may have been saved — reload the page to see whether they were: ${w}`;
+    const P1 = [{ id: 'p1', name: 'Sales 2' }];
+
+    // Pipelines' persist.
+    let st = await optimisticRig(PIPELINES, 'PipelinesDetail', 'persist', 'setSaveError');
+    let pending = st.call({ pipelines: P1 }, 'Pipeline rename');
+    st.sends[0].reject(maybeSettingsError('The server returned 502.'));
+    assert.equal(await pending, null, 'null — kept on an answer that proved nothing, never false');
+    assert.deepEqual(st.copy.pipelines, P1, 'REGRESSION (state §0.264): a change that may have landed put back');
+    assert.deepEqual([st.said, st.handed, st.gate.current], [[MAYBE('The server returned 502.')], [], false], 'the may-have sentence as it is; the gate opened');
+    // …and its deletion: the selection stays as moved (only false puts it back).
+    const del = async (answer) => {
+        const calls = [];
+        await runAs(handlerIn(read(PIPELINES), 'PipelinesDetail', 'handleConfirmDeletePipeline'), {
+            pipelines: [{ id: 'p1' }, { id: 'p2' }], confirmDeletePipeline: 'p1', selectedId: 'p1',
+            setConfirmDeletePipeline: () => {}, setSelectedId: (v) => calls.push(v), persist: async () => answer,
+        });
+        return calls;
+    };
+    assert.deepEqual(await del(null), ['p2'], 'REGRESSION (state §0.264): a deletion that may have landed put the selection back on it');
+    assert.deepEqual(await del(false), ['p2', 'p1'], 'the server\'s own refusal: the selection back');
+    assert.deepEqual(await del(true), ['p2']);
+
+    // The calendar's persistHolidays.
+    const C1 = [{ date: 'Jan 2', name: 'Ours' }, { date: 'Mar 3', name: 'New' }];
+    st = await optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'persistHolidays', 'setCalError', () => ({ failureWords }));
+    pending = st.call({ customHolidays: C1 }, 'Holiday');
+    st.sends[0].reject(maybeSettingsError('The server could not be reached.'));
+    assert.equal(await pending, 'unknown');
+    assert.deepEqual([st.copy.customHolidays, st.said, st.gate.current], [C1, [MAYBE('The server could not be reached.')], false], 'REGRESSION (state §0.264): kept, said, the gate opened');
+    // …the server's own refusal still puts back, in its words.
+    st = await optimisticRig(CALENDAR, 'CompanyCalendarDetail', 'persistHolidays', 'setCalError', () => ({ failureWords }));
+    pending = st.call({ customHolidays: C1 }, 'Holiday');
+    st.sends[0].reject(RW.refusalError('Holiday names must be unique.', true));
+    assert.equal(await pending, false);
+    assert.deepEqual([st.copy.customHolidays, st.said], [st.settings.customHolidays, ['Holiday not saved — Holiday names must be unique.']]);
+    // Add: 'unknown' closes the form (a second Save would add it twice); false keeps it open.
+    for (const [ok, closed] of [['unknown', true], [false, false], [true, true]]) {
+        const calls = [];
+        await runAs(handlerIn(read(CALENDAR), 'CompanyCalendarDetail', 'handleAddHoliday'), {
+            formName: 'New', formDay: '3', formMonth: '2', MONTHS_SHORT: ['Jan', 'Feb', 'Mar'], customHolidays: [],
+            setFormError: (v) => calls.push(['err', v]), setSaving: () => {}, persistHolidays: async () => ok, resetForm: () => calls.push(['reset']),
+        });
+        assert.equal(calls.some(([k]) => k === 'reset'), closed, `${ok}: the form ${closed ? 'closed' : 'kept open'}`);
+    }
+
+    // The calendar's Sync: the two keys kept, the may-have sentence said as it is, the gate opened.
+    st = await syncRig();
+    pending = st.call();
+    await until(() => st.sends.length);
+    st.sends[0].reject(maybeSettingsError('Internal server error'));
+    await pending;
+    flushTimers(st);
+    assert.deepEqual([st.copy.federalHolidays, st.said, st.shown, st.gate.current], [SYNC_FRESH, [MAYBE('Internal server error')], MAYBE('Internal server error'), false],
+        'REGRESSION (state §0.264): a Sync that may have landed put back, or said "Failed to sync"');
+
+    // Features: said as it is — never "Failed to save:" before a may-have sentence — the draft kept, rethrown for the guard.
+    const { PANEL_CHANGED, PANEL_CHANGED_KEY } = await import('../src/utils/settingsRevs.js');
+    const { aiSettingsToSave } = await import('../src/utils/aiModels.js');
+    const key = [];
+    const maybe = maybeSettingsError('The server returned 504.');
+    const f = await runPanelSave(FEATURES, 'FeaturesDetail', 'handleSaveAi', { PANEL_CHANGED, PANEL_CHANGED_KEY, aiSettingsToSave,
+        aiSettings: { model: 'm' }, flags: {}, tabViz: { leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false, repsCanUseDispatch: false },
+        aiScoring: false, aiPrompts: true, keyAction: null, apiKeyInput: '', setApiKeyInput: (v) => key.push(v), setKeyAction: (v) => key.push(v) }, { refusal: maybe });
+    assert.deepEqual([f.said, f.thrown, f.handed, key], [[MAYBE('The server returned 504.')], maybe, [], []]);
+});
+
 // Edit brand's Save as written: the window's brand and its token (`base`); writeSettings answers `answer`; the latest,
 // when given, is taken into the copy.
 const BRAND_STUB = { preset: true };
@@ -2047,6 +2255,7 @@ const runBrandSave = async ({ answer, latest = null, base = { rev: 'B0' }, brand
     const st = { copy: { quoteBrand: { accent: '#old' }, revs: { quoteBrand: 'B0', other: 'O0' } }, sends: [], saving: [], said: [], brands: [], bases: [], closed: 0, taken: 0, order: [] };
     await runAs(handlerIn(read(EDIT_BRAND), 'EditBrandModal', 'handleSave'), {
         brand, base, BRAND_PRESET: BRAND_STUB, BRAND_CHANGED, revsAfter, brandLook,
+        maybeSaid: RW.maybeSaid,   // since §0.264 (the unknown-save rule, Part 5), the real one
         writeSettings: async (...a) => { st.sends.push(a); st.order.push('send'); return answer; },
         takeLatestSettings: async (set) => {
             st.taken += 1;
@@ -2072,7 +2281,8 @@ test('S10 — Edit brand\'s Save, run as written (JB3-4): the token its window o
     assert.deepEqual([ok.closed, ok.saving[0], ok.said], [1, true, []]);
     assert.deepEqual(ok.order, ['cleared', 'send'], "REGRESSION (critic m2): the window's last words not cleared as a save starts — a refusal's words shown over the save out");
 
-    const STALE = { ok: false, status: 409, error: STALE_ERROR, stale: ['quoteBrand'] };
+    // `unknown` since §0.264 (the unknown-save rule, Part 5), as writeSettings answers it: a stale refusal is the server's own.
+    const STALE = { ok: false, status: 409, error: STALE_ERROR, unknown: false, stale: ['quoteBrand'] };
     const theirs = { accent: '#999' };
     const taken = await runBrandSave({ brand, answer: STALE, latest: { quoteBrand: theirs, revs: { quoteBrand: 'BL' } } });
     assert.equal(taken.taken, 1, 'REGRESSION (JB3-4): the latest not taken');
@@ -2100,8 +2310,17 @@ test('S10 — Edit brand\'s Save, run as written (JB3-4): the token its window o
     assert.deepEqual([unread.taken, unread.brands, unread.bases, unread.closed, unread.saving.at(-1)], [1, [], [], 0, false]);
     assert.deepEqual(unread.said, [`Brand not saved — ${STALE_ERROR}`], 'the latest unread: the server\'s words');
     assert.deepEqual(unread.copy.quoteBrand, { accent: '#old' }, 'REGRESSION (JB3-4): optimistic — the copy took a brand the server refused');
-    const forbidden = await runBrandSave({ brand, answer: { ok: false, status: 403, error: 'You do not have permission to make this change.' } });
+    const forbidden = await runBrandSave({ brand, answer: { ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false } });
     assert.deepEqual([forbidden.taken, forbidden.said, forbidden.closed], [0, ['Brand not saved — You do not have permission to make this change.'], 0]);
+    // Added in §0.264 (the unknown-save rule, Part 5): an answer that proves nothing (`unknown: true` — a 5xx, a page, a
+    // wordless 4xx, no answer) may have saved it: said so, the window open on the edit, nothing taken into the copy.
+    for (const [answer, words] of [[{ ok: false, status: 500, error: 'Internal server error', unknown: true }, 'Internal server error'],
+        [{ ok: false, status: 403, error: 'The server returned 403.', unknown: true }, 'The server returned 403.'],
+        [{ ok: false, status: 0, error: 'The server could not be reached.', unknown: true }, 'The server could not be reached.']]) {
+        const maybe = await runBrandSave({ brand, answer });
+        assert.deepEqual([maybe.taken, maybe.said, maybe.closed, maybe.saving.at(-1)], [0, [`The brand may have been saved — reload the page to see whether it was: ${words}`], 0, false], words);
+        assert.deepEqual(maybe.copy.quoteBrand, { accent: '#old' }, 'not taken as saved');
+    }
 });
 
 // A declaration anywhere inside a component, as written — Escape's handler is inside the component's effect.
@@ -2479,6 +2698,7 @@ const runConnected = async (handler, args, { answer = { success: true, revs: { s
     try {
         await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', handler), {
             PANEL_CHANGED_WEBHOOK, opened, setSettings, readRefusal, failureWords,
+            settingsSaid: (await import('../src/Tabs/settings/shared/saveSettings.js')).settingsSaid,   // the real one (state §0.264)
             connectedApps: CA_COPY().connectedApps, webForm: CA_FORM,
             putSettings: async (...a) => { steps.push(['put', ...a, JSON.parse(JSON.stringify(st.copy))]); if (refusal) throw refusal; return answer; },
             landed: (a) => steps.push(['landed', a]),
@@ -2556,8 +2776,14 @@ test('S10 — Connected apps\' Disconnect, run as written (state §0.229): the t
     const unread = await runConnected('handleDisconnectSlack', [], { refusal, took: false, scope: LIVE });
     assert.deepEqual(unread.said, [['slack', `Not disconnected — ${refusal.message}`]], 'the latest unread: the server\'s words on the Slack card');
     assert.deepEqual([unread.handed.length, unread.kinds, unread.copy], [1, ['busy', 'put', 'busy'], CA_COPY()], 'nothing set, the button freed');
-    const gone = await runConnected('handleDisconnectSlack', [], { refusal: new Error('Server error 500'), scope: LIVE });
-    assert.deepEqual([gone.handed, gone.said], [[], [['slack', 'Not disconnected — Server error 500']]], 'a refusal that is not stale: its words, never AdminView\'s');
+    // Moved in §0.264 (the unknown-save rule, Part 5): the made-up refusal is thrown as putSettings throws it now — the
+    // server's own (a 4xx in its words) keeps "Not disconnected"; a 500 is the may-have sentence, said as it is.
+    const gone = await runConnected('handleDisconnectSlack', [], { refusal: RW.refusalError('Not in your organization.', true), scope: LIVE });
+    assert.deepEqual([gone.handed, gone.said], [[], [['slack', 'Not disconnected — Not in your organization.']]], 'a refusal that is not stale: its words, never AdminView\'s');
+    const { maybeSettingsError } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const maybe = await runConnected('handleDisconnectSlack', [], { refusal: maybeSettingsError('Internal server error'), scope: LIVE });
+    assert.deepEqual([maybe.handed, maybe.said, maybe.copy], [[], [['slack', 'The settings may have been saved — reload the page to see whether they were: Internal server error']], CA_COPY()],
+        'an answer that proves nothing: the may-have sentence on the card, never "Not disconnected" (state §0.264)');
 });
 
 test('S10 — Connected apps\' web form, run as written (critic A7): the tokens it opened with; landed, then the latest taken — the minted link and its tokens into the copy as one set — and the panel reopened on its tokens; the latest unread — said on the card; stale — to AdminView; unread — the server\'s words', async () => {
@@ -2586,8 +2812,14 @@ test('S10 — Connected apps\' web form, run as written (critic A7): the tokens 
     assert.deepEqual([taken.kinds, taken.said, taken.thrown], [['busy', 'put', 'busy'], [], null], 'no read of its own, no words from the old mount');
     const unread = await runConnected('saveWebForm', [{ enabled: false }], { refusal, took: false });
     assert.deepEqual(unread.said, [['webform', `Not saved — ${refusal.message}`]], 'the latest unread: the server\'s words on the card');
-    const gone = await runConnected('saveWebForm', [{ enabled: false }], { refusal: new Error('Server error 500') });
-    assert.deepEqual([gone.handed, gone.said, gone.kinds], [[], [['webform', 'Not saved — Server error 500']], ['busy', 'put', 'busy']], 'a refusal that is not stale: its words, never AdminView\'s');
+    // Moved in §0.264 (the unknown-save rule, Part 5): thrown as putSettings throws it now — the server's own refusal keeps
+    // "Not saved"; a 500 is the may-have sentence, said as it is.
+    const gone = await runConnected('saveWebForm', [{ enabled: false }], { refusal: RW.refusalError('webToLead must be an object.', true) });
+    assert.deepEqual([gone.handed, gone.said, gone.kinds], [[], [['webform', 'Not saved — webToLead must be an object.']], ['busy', 'put', 'busy']], 'a refusal that is not stale: its words, never AdminView\'s');
+    const { maybeSettingsError } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const maybe = await runConnected('saveWebForm', [{ enabled: false }], { refusal: maybeSettingsError('The server could not be reached.') });
+    assert.deepEqual([maybe.handed, maybe.said, maybe.kinds], [[], [['webform', 'The settings may have been saved — reload the page to see whether they were: The server could not be reached.']], ['busy', 'put', 'busy']],
+        'an answer that proves nothing: the may-have sentence on the card (state §0.264)');
 });
 
 test('S10 — Connected apps\' request, run as written (state §0.229): it lands in the app\'s copy by an updater — the one app\'s request beside the others, whatever landed meanwhile — and only in the org that asked: answered, refused or failed after a switch, nothing set and nothing said', async () => {
@@ -2598,6 +2830,8 @@ test('S10 — Connected apps\' request, run as written (state §0.229): it lands
         const st = { org: 'org_A', copy: CA_COPY(), sent: [], sets: [], notes: [], busy: [], own: [] };
         await runAs(handlerIn(read(CONNECTED_APPS), 'ConnectedAppsDetail', 'requestApp'), {
             requestOrg: () => st.org, stillOrg: (o) => o === st.org, readRefusal, failureWords,
+            // The rule's helpers (state §0.264, the unknown-save rule, Part 5) — the real ones.
+            maybeSaid: RW.maybeSaid, writeRefusalOf: RW.writeRefusalOf, refusalError: RW.refusalError, unknownOf: RW.unknownOf,
             dbFetch: async (url, opts) => {
                 st.sent.push([url, opts.method, JSON.parse(opts.body)]);
                 // Meanwhile another request lands in the copy.
@@ -2628,10 +2862,15 @@ test('S10 — Connected apps\' request, run as written (state §0.229): it lands
     assert.deepEqual([lateOffline.sets, lateOffline.notes], [[], [['hubspot', '']]], 'failed after a switch: nothing said on the new org\'s screen');
     const refused = await run({ ok: false, status: 400, body: { error: 'Unknown integration.' } });
     assert.deepEqual([refused.sets, refused.notes, refused.busy], [[], [['hubspot', ''], ['hubspot', 'Not requested — Unknown integration.']], ['hubspot', null]], 'refused in the org that asked: said on its row');
+    // Moved in §0.264 (the unknown-save rule, Part 5): no answer, a 5xx, a wordless 4xx — the request may have been
+    // recorded (a press again is answered as already requested); never "Not requested".
     const offline = await run({ offline: true });
-    assert.deepEqual(offline.notes.at(-1), ['hubspot', 'Not requested — offline']);
+    assert.deepEqual(offline.notes.at(-1), ['hubspot', 'The request for HubSpot may have been recorded — reload the page to see whether it was: offline']);
     const bare = await run({ ok: false, status: 503, body: {} });
-    assert.deepEqual(bare.notes.at(-1), ['hubspot', 'Not requested — The server returned 503.']);
+    assert.deepEqual(bare.notes.at(-1), ['hubspot', 'The request for HubSpot may have been recorded — reload the page to see whether it was: The server returned 503.']);
+    const wordless = await run({ ok: false, status: 400, body: {} });
+    assert.deepEqual(wordless.notes.at(-1), ['hubspot', 'The request for HubSpot may have been recorded — reload the page to see whether it was: The server returned 400.']);
+    assert.deepEqual([offline.sets, bare.sets, wordless.sets], [[], [], []], 'nothing set into the copy from an answer that proved nothing');
 });
 
 // An org that has saved no settings has none of Connected apps' keys (settings.mjs answers `{ settings: null }`, the
@@ -2736,7 +2975,11 @@ test('S11 — AdminView\'s panelStale, run as written: read — the slot and App
 
 // A leave guard's save as written: the save it runs answers or throws `thrown`; answers what it set.
 const refusedWith = (fields) => async () => { throw Object.assign(new Error('x'), fields); };
-const GUARD_CASES = [[{ tookLatest: true }, 'stale'], [{ tookLatest: true, partial: true }, 'stale-partial'], [{ stale: ['k'] }, true], [{}, true]];
+// Added in §0.264 (the unknown-save rule, Part 5): a save whose answer proved nothing (`unknown: true`, as putSettings'
+// may-have error carries it) is 'unknown' — the dialog says it may have gone through; the server's own refusal (`unknown:
+// false`) and an error that does not say stay true; a refusal that took the latest says so first.
+const GUARD_CASES = [[{ tookLatest: true }, 'stale'], [{ tookLatest: true, partial: true }, 'stale-partial'], [{ stale: ['k'] }, true], [{}, true],
+    [{ unknown: true, said: true }, 'unknown'], [{ unknown: false }, true], [{ stale: ['k'], unknown: false }, true], [{ tookLatest: true, unknown: true }, 'stale']];
 
 test('S11 — AdminView\'s guardSave, run as written: a refusal that took the latest says so — \'stale\', \'stale-partial\'; any other, true; a save that lands moves on. Back, another card and Discard', async () => {
     const runGuard = async (save) => {
@@ -2840,7 +3083,19 @@ test('S12 — the pins: the dialog\'s words (J-B11, JB3-2), still saving (JB3-8)
     assert.equal(BRAND_CHANGED, 'The brand changed since this window opened — it now shows the latest. Make your change again.', 'JB3-4, verbatim');
     const modal = withoutComments(read('src/Tabs/settings/shared/LeaveGuardModal.jsx'));
     assert.ok(modal.includes("const stale = failed === 'stale' || failed === 'stale-partial';"));
-    assert.match(modal, /\{failed === 'stale-partial' \? LEAVE_STALE_PART\s*: stale \? LEAVE_STALE\s*: 'The save did not go through — the page behind this dialog shows why\. Your changes are still here\.'\}/, 'the three states');
+    // Moved in §0.264 (the unknown-save rule, Part 5): a fourth state — a save whose answer proved nothing ('unknown') may
+    // have gone through.
+    assert.match(modal, /\{failed === 'stale-partial' \? LEAVE_STALE_PART\s*: stale \? LEAVE_STALE\s*: failed === 'unknown' \? 'The save may have gone through — reload the page to see whether it did\. Your changes are still here\.'\s*: 'The save did not go through — the page behind this dialog shows why\. Your changes are still here\.'\}/, 'the four states');
+    // …and RUN (§0.264): the expression as written, for each value the two guards set.
+    const words = (() => {
+        const at = modal.indexOf("{failed === 'stale-partial' ? LEAVE_STALE_PART");
+        const expr = modal.slice(at + 1, modal.indexOf("Your changes are still here.'}", at) + "Your changes are still here.'".length);
+        return (failed) => new Function('failed', 'stale', 'LEAVE_STALE', 'LEAVE_STALE_PART', `return (${expr});`)(failed, failed === 'stale' || failed === 'stale-partial', LEAVE_STALE, LEAVE_STALE_PART);
+    })();
+    assert.equal(words('unknown'), 'The save may have gone through — reload the page to see whether it did. Your changes are still here.');
+    assert.equal(words(true), 'The save did not go through — the page behind this dialog shows why. Your changes are still here.');
+    assert.equal(words('stale'), LEAVE_STALE);
+    assert.equal(words('stale-partial'), LEAVE_STALE_PART);
     assert.match(modal, /\{!\(stale && !canSave\) && \(\s*<div style=\{\{[^}]*\}\}>\s*\{message\}\s*<\/div>\s*\)\}/, 'REGRESSION (critic A6): "Save them, or discard" said — or its box drawn empty — with nothing left to save');
     assert.ok(modal.includes("{stale && !canSave ? 'Continue' : 'Discard changes and continue'}"), 'JB3-2: nothing to discard — it continues');
     assert.match(modal, /\{canSave && \(\s*<button onClick=\{onSave\}/, 'Save offered on canSave alone (critic A4)');

@@ -1,10 +1,10 @@
 // settings/company/CompanyCalendarDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { STILL_SAVING } from '../../../utils/settingsRevs.js';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -79,10 +79,12 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const inFlight = useRef(false);
     useEffect(() => { inFlight.current = false; }, [opened]);
 
-    // Optimistic write, reverted on failure so the list never shows a holiday the
+    // Optimistic write, reverted on the server's own refusal so the list never shows a holiday the
     // database does not have. Only the keys it sent are put back, as the render
     // that built them held them — never the tokens (state §0.228). A stale
     // refusal puts nothing back: the panel is drawn again on the latest.
+    // An answer that proves nothing keeps the change and says it may have been saved, answering 'unknown' (state §0.264,
+    // the unknown-save rule, Part 5).
     const persistHolidays = async (patch, label) => {
         if (inFlight.current) { setCalError(`${label} not saved — ${STILL_SAVING}`); return false; }
         inFlight.current = true;
@@ -95,12 +97,13 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             return true;
         } catch (e) {
             if (e.stale && await panelStale(e)) return false;
-            setSettings(prev => ({ ...prev, ...held }));
-            setCalError(`${label} not saved — ${failureWords(e)}`);   // putSettings' words pass through (§0.247)
+            const unknown = e.unknown === true;   // kept, never put back (state §0.264, the unknown-save rule, Part 5)
+            if (!unknown) setSettings(prev => ({ ...prev, ...held }));
+            setCalError(settingsSaid(e, (e) => `${label} not saved — ${failureWords(e)}`));   // putSettings' words pass through (§0.247)
             // The gate opens only now (state §0.228): opened before panelStale answered, a change made while
             // AdminView read the latest went out with the old tokens.
             inFlight.current = false;
-            return false;
+            return unknown ? 'unknown' : false;
         }
     };
 
@@ -137,7 +140,9 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         // The server requires isAdmin for scope=org. A non-admin used to see the
         // calendar disappear from the list on the next load and reappear after.
         const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=org`, { method: 'DELETE' });
-        if (!r.ok) { setCalError(`Calendar not disconnected — ${r.error}`); return; }
+        // Only the server's own refusal is "not disconnected"; any other answer may have disconnected it (state §0.264, the
+        // unknown-save rule, Part 5).
+        if (!r.ok) { setCalError(r.unknown ? maybeSaid('The calendar', 'disconnected', r.error) : `Calendar not disconnected — ${r.error}`); return; }
         loadOrgCals();
     };
 
@@ -192,7 +197,8 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                 // The gate stays shut while AdminView reads the latest (state §0.228); not taken, the refusal goes
                 // on to the catch below, which opens it.
                 if (e.stale && await panelStale(e)) return;
-                setSettings(prev => ({ ...prev, ...held }));
+                // An answer that proves nothing keeps the synced lists (state §0.264, the unknown-save rule, Part 5).
+                if (e.unknown !== true) setSettings(prev => ({ ...prev, ...held }));
                 throw e;
             }
             // The success's timer clears only its own words, never a later failure (Q10).
@@ -205,7 +211,8 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             if (!stillOrg(askedOrg)) return;
             console.error('sync holidays error', err);
             // The house words, kept until its Close or the next Sync — never on a timer (state §0.246, Q11).
-            setSyncMsg(`Failed to sync — ${failureWords(err)}`);
+            // A save whose answer proved nothing says putSettings' may-have sentence as it is (state §0.264, Part 5).
+            setSyncMsg(settingsSaid(err, (e) => `Failed to sync — ${failureWords(e)}`));
         }
         setSyncing(false);
     };
@@ -230,7 +237,9 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         setSaving(true);
         const ok = await persistHolidays({ customHolidays: updated }, 'Holiday');
         setSaving(false);
-        if (ok) resetForm();          // keep the form open so the entry is not lost
+        // Refused: keep the form open so the entry is not lost. 'unknown' closes it too (state §0.264, the unknown-save
+        // rule, Part 5): the holiday stays on the list as sent, and a second Save would add it twice.
+        if (ok) resetForm();
     };
 
     const handleDeleteHoliday = async (holiday) => {
@@ -261,7 +270,7 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         >
             {/* A failed write must be visible here, not only in the console.
                 DetailPageChrome has no error prop, and the optimistic state is
-                reverted alongside this, so the list always matches the database. */}
+                reverted alongside a refusal; an answer that proves nothing keeps it and says so (state §0.264). */}
             {calError && (
                 <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)',
                     border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger,

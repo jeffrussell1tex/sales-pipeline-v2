@@ -229,7 +229,9 @@ test('WIRING: the screen plans with the lifted helper, from the tables as read n
     const s = code(read(SCREEN));
     assert.ok(s.includes("import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';"));
     // Moved pin (§0.247 Part 8): the import names failureWords too — every catch says it, never a raw err.message.
-    assert.ok(s.includes("import { readRefusal, failureWords } from '../../../utils/refusalWords.js';"));
+    // Moved in §0.264 (the unknown-save rule, Part 5): it names the rule's helpers too — a row whose answer proved nothing
+    // may have been imported, said apart from the rows the server refused.
+    assert.ok(s.includes("import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid } from '../../../utils/refusalWords.js';"));
     // The old in-file planners are gone: one rule, the helper's.
     assert.equal(count(s, 'plannedVehicleImports'), 0);
     assert.equal(count(s, 'plannedEquipmentImports'), 0);
@@ -256,10 +258,17 @@ test('WIRING: the screen plans with the lifted helper, from the tables as read n
     order(run, 'for (const row of plan.vehicles) {', 'if (!stillOrg(askedOrg)) return;', "dbFetch('/.netlify/functions/dispatch-vehicles', {");
     order(run, 'for (const row of plan.equipment) {', 'if (!stillOrg(askedOrg)) return;', "dbFetch('/.netlify/functions/dispatch-equipment', {");
     // A refusal: the server's words, not "HTTP 409".
-    assert.equal(count(run, 'failed.push(`${row.name}: ${unstopped(await readRefusal(res))}`); continue;'), 2);
+    // Moved in §0.264 (the unknown-save rule, Part 5): the server's own refusal is "not imported"; any other answer, or
+    // none, may have imported the row — listed apart (guide §18b134 rule 11).
+    assert.equal(count(run, 'if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }'), 2);
+    assert.equal(count(run, '} catch { maybe.push(`${row.name}: the server could not be reached`); }'), 2);
+    assert.equal(count(run, 'failed.push(`${row.name}: the server could not be reached`)'), 0, 'a throw is never "not imported" (state §0.264)');
     assert.equal(count(run, "'HTTP '"), 0);
     // A failed row is an error, kept until closed; "Re-running is safe" is gone from the screen.
-    assert.ok(run.includes('if (failed.length) {\n            setImportError(`Imported ${ok} of ${plan.count}.'));
+    // Moved in §0.264 (the unknown-save rule, Part 5): a row that may have been imported is an error too, in the rule's words.
+    assert.ok(run.includes('if (failed.length || maybe.length) {\n            const listed = (rows) => '));
+    assert.ok(run.includes('            setImportError(`Imported ${ok} of ${plan.count}.`\n                + (failed.length ? ` ${failed.length} not imported — ${listed(failed)}.` : \'\')'));
+    assert.ok(run.includes("+ (maybe.length ? ` ${maybeSaid(`${maybe.length} record${maybe.length === 1 ? '' : 's'}`, 'imported', listed(maybe), maybe.length > 1)}.` : ''));"));
     assert.equal(count(s, 'Re-running is safe'), 0);
     assert.equal(count(s, 're-running the import cannot create duplicates'), 0);
 

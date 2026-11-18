@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 // The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { PANEL_CHANGED, PANEL_CHANGED_KEY } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
@@ -167,7 +167,9 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             if (e.stale && await panelStale(e, 'anthropicApiKey' in payload ? PANEL_CHANGED_KEY : PANEL_CHANGED)) throw e;
             // The latest could not be read: the draft stays with the server's words — but never the typed key.
             if (e.stale && 'anthropicApiKey' in payload) { setApiKeyInput(''); setKeyAction(null); setError('Failed to save: ' + e.message + ' Enter the API key again.'); throw e; }
-            setError('Failed to save: ' + e.message);
+            // A save whose answer proved nothing says putSettings' may-have sentence as it is, the draft kept (state §0.264,
+            // the unknown-save rule, Part 5).
+            setError(settingsSaid(e, (e) => 'Failed to save: ' + e.message));
             // Rethrow for the navigation guard. `finally` still clears the spinner.
             throw e;
         } finally {

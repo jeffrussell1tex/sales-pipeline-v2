@@ -35,7 +35,7 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { PAGE_FIELDS, sameValue, memberChanges, roleChanged, formAfterSave, clause } from '../src/utils/memberSave.js';
 import { NETWORK_ERROR } from '../src/utils/storage.js';
-import { readRefusal, failureWords } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../src/utils/refusalWords.js';
 import { HELD_TEAM, teamOptions, teamPicked, heldTeam, managerOptions, managerPicked, managerNameOf, heldManager, heldTerritory } from '../src/Tabs/settings/people/memberPickers.js';
 import { linksAsked, linksDecided, memberLinksCleared, NOT_AN_ID, namesItself, notInOrg } from '../src/utils/linkIds.js';
 import { teamIdNamed, teamsWithMemberOn } from '../src/utils/teamMembership.js';
@@ -349,9 +349,11 @@ const freeNames = (fnSrc) => {
 };
 
 const SAVE = handlerOf(read(UD), 'UserProfilePage', 'handleSave');
-const SAVE_NAMES = ['TEAM_MOVE_CHANGED', 'TEAM_MOVE_CHANGED_UNREAD', 'clause', 'dbFetch', 'failureWords', 'form', 'formAfterSave', 'listOwed', 'memberChanges',
-    'readRefusal', 'requestOrg', 'revsAfter', 'roleChanged', 'setError', 'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving',
-    'setSettings', 'setTimeout', 'setUser', 'settings', 'stillOrg', 'takeLatestSettings', 'teamsWithMemberOn', 'user', 'writeSettings'];
+// Moved in §0.264 (the unknown-save rule, Part 5): readRefusal gone; the rule's helpers (maybeSaid, refusalError, unknownOf,
+// writeRefusalOf) read — handed in as the real ones.
+const SAVE_NAMES = ['TEAM_MOVE_CHANGED', 'TEAM_MOVE_CHANGED_UNREAD', 'clause', 'dbFetch', 'failureWords', 'form', 'formAfterSave', 'listOwed', 'maybeSaid', 'memberChanges',
+    'refusalError', 'requestOrg', 'revsAfter', 'roleChanged', 'setError', 'setForm', 'setListOwed', 'setMyProfile', 'setRoleNote', 'setSaved', 'setSaving',
+    'setSettings', 'setTimeout', 'setUser', 'settings', 'stillOrg', 'takeLatestSettings', 'teamsWithMemberOn', 'unknownOf', 'user', 'writeRefusalOf', 'writeSettings'];
 
 // The server's answer to a member PUT, made up the way it builds one: the body laid over the stored row, the name
 // built from First and Last first (S2), the profile's userType the column's role.
@@ -384,6 +386,7 @@ const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, 
     const scope = {
         user, form, listOwed, settings, memberChanges, roleChanged, teamsWithMemberOn, formAfterSave, clause, teamIdNamed,
         readRefusal, failureWords,   // the house words (docs/design/refusal-sweep Part 12), as the page imports them
+        maybeSaid, writeRefusalOf, refusalError, unknownOf,   // the unknown-save rule's (state §0.264, Part 5), the real ones
         requestOrg: () => 'org_A',
         stillOrg: (asked) => asked === 'org_A' && org(calls),
         dbFetch: async (url, opts) => {
@@ -421,7 +424,9 @@ const R1 = () => runSave({ user: TESS, form: { ...TESS, phone: '2' },
     answers: { users: [{ status: 200, body: { user: { ...TESS, phone: '2', title: 'Rep (newer)' } } }] } });
 const R5 = () => runSave({ user: TESS, form: { ...TESS, phone: '2', role: 'Manager' },
     answers: { 'user-role': [{ status: 400, body: { error: 'You cannot change your own role. Ask another Admin.' } }] } });
-const R6 = () => runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 500, error: 'TEST' }] } });
+// Moved in §0.264 (the unknown-save rule, Part 5): the list refused by the server's own 4xx (`unknown: false`, as the real
+// writeSettings answers it); a 500 proves nothing (`unknown: true`) — R6u.
+const R6 = () => runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 400, error: 'TEST', unknown: false }] } });
 
 test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what order, what it says, and what it holds after — faed240\'s handleSave runs on R1\'s and R3\'s rows in S10 OLD', async () => {
     assert.deepEqual(freeNames(SAVE), SAVE_NAMES, 'the names it reads are the ones handed in');
@@ -515,6 +520,34 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.deepEqual(r7.named('setSettings'), []);
     assert.equal(r7.named('setSaving').at(-1), false, 'REGRESSION: a refused save leaves the button on Saving…');
 
+    // ── Added in §0.264 (the unknown-save rule, Part 5): an answer that proves nothing may have written, said so ──
+    // R7u the member PUT answered a 500, or not at all: the profile may have been saved; nothing more sent, nothing held,
+    // the form kept as typed — Save changes sends it again.
+    for (const [answer, words] of [[{ status: 500, body: { error: 'Internal server error' } }, 'Internal server error'],
+        [{ status: 502, body: null }, 'The server returned 502.'], [{ status: 403, body: {} }, 'The server returned 403.'],
+        [{ throws: 'Failed to fetch' }, 'The server could not be reached.']]) {
+        const r7u = await runSave({ user: TESS, form: { ...TESS, name: 'Bob Russell', role: 'Manager' }, answers: { users: [answer] } });
+        assert.deepEqual(r7u.to, ['users'], 'no role request after a member PUT that may not have landed');
+        assert.deepEqual(SAID(r7u), [`Tess Undoer's profile may have been saved — reload the page to see whether it was: ${words}`]);
+        assert.deepEqual(r7u.named('setUser'), []);
+        assert.deepEqual(r7u.named('setSettings'), []);
+        assert.equal(r7u.state.form.name, 'Bob Russell', 'the form keeps what was typed');
+        assert.equal(r7u.named('setSaving').at(-1), false);
+    }
+    // R5u the role answered a 500 after the phone landed: the role may have been changed — never "was not changed".
+    const r5u = await runSave({ user: TESS, form: { ...TESS, phone: '2', role: 'Manager' },
+        answers: { 'user-role': [{ status: 500, body: { error: 'Internal server error' } }] } });
+    assert.deepEqual(r5u.to, ['users', 'user-role']);
+    assert.deepEqual(SAID(r5u), ['Saved, but the role may have been changed — reload the page to see whether it was: Internal server error']);
+    assert.equal(r5u.state.user.phone, '2');
+    assert.equal(r5u.state.form.role, 'Manager', 'the pick still waits');
+    // R6u the list answered a 500 (writeSettings: `unknown: true`): it may have moved — said so, the move still owed.
+    const r6u = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 500, error: 'TEST', unknown: true }] } });
+    assert.deepEqual(SAID(r6u), ['Saved, but the team list may have been updated — TEST. Save changes tries the list again.']);
+    assert.deepEqual(r6u.named('setListOwed'), [{ teamId: 'team_west' }]);
+    assert.equal(r6u.state.settings.teams, TEAMS, 'the list on screen is as it was');
+    assert.equal(r6u.state.user.teamId, 'team_west', 'the member was saved');
+
     // R8 the org switched while the PUT was out: nothing more sent, nothing set but the button.
     const r8 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), role: 'Manager' }, org: () => false });
     assert.deepEqual(r8.to, ['users']);
@@ -550,7 +583,9 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.deepEqual(r12.to, ['users', 'settings', 'user-role'], 'REGRESSION: a role request that fails first leaves the team list unmoved');
     assert.deepEqual(r12.named('setListOwed'), [null]);
     // In plain words (failureWords, docs/design/refusal-sweep Part 12): it said fetch's own "Failed to fetch".
-    assert.deepEqual(SAID(r12), ['Saved, but not everything — The server could not be reached. Reload to see what was saved.']);
+    // Moved in §0.264 (the unknown-save rule, Part 5): a role request with no answer may have changed the role — said so
+    // about the role, never "not everything".
+    assert.deepEqual(SAID(r12), ['Saved, but the role may have been changed — reload the page to see whether it was: The server could not be reached.']);
     assert.equal(r12.state.user.teamId, 'team_west');
     assert.equal(r12.state.user.role, 'User');
     assert.equal(r12.state.form.role, 'Manager');
@@ -580,7 +615,11 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
     assert.equal(roleChanged(r14.state.user, r14.state.form), true);
     const r14b = await runSave({ user: TESS, form: { ...TESS, role: 'Manager' }, answers: { 'user-role': [{ status: 400, body: {} }] } });
     // A refusal with no words says its status (docs/design/refusal-sweep Part 12): it said "Could not change the role."
-    assert.deepEqual(SAID(r14b), ['The server returned 400.']);
+    // Moved in §0.264 (the unknown-save rule, Part 5): a wordless 400 is not the server's own refusal — the role may have
+    // been changed; said so, the pick still waiting.
+    assert.deepEqual(SAID(r14b), ['The role may have been changed — reload the page to see whether it was: The server returned 400.']);
+    assert.deepEqual(r14b.named('setUser'), []);
+    assert.equal(roleChanged(r14b.state.user, r14b.state.form), true);
 
     // R15 the member, the list and the role all land: one roster update holding all three; nothing owed; saved.
     const r15 = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), phone: '2', role: 'Manager' }, revs: { teams: 'T_OPEN', territories: 'R_HELD' } });
@@ -599,14 +638,22 @@ test('S10 (P1, P5, P7-P11) handleSave, run as written: what it sends, in what or
 
     // R16 (the review) dbWrite's own words are whole sentences: the page's sentence goes on from them with one full
     // stop; a list refused and then a role request with no answer says to Save again — a reload would lose the move.
-    const r16 = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 0, error: NETWORK_ERROR }] } });
-    assert.deepEqual(SAID(r16), [`Saved, but the team list was not updated — ${NETWORK_ERROR.slice(0, -1)}. Save changes tries the list again.`],
+    // Moved in §0.264 (the unknown-save rule, Part 5): writeSettings answers no answer (status 0) `unknown: true` — said as
+    // may-have, still one full stop; the server's own refusal ending in one (R16h) keeps "was not updated".
+    const r16 = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 0, error: NETWORK_ERROR, unknown: true }] } });
+    assert.deepEqual(SAID(r16), [`Saved, but the team list may have been updated — ${NETWORK_ERROR.slice(0, -1)}. Save changes tries the list again.`],
         'REGRESSION: the server\'s full stop doubled — "saved.. Save changes"');
+    assert.deepEqual(r16.named('setListOwed'), [{ teamId: 'team_west' }], 'a list that may have moved is still owed (state §0.264)');
+    const r16h = await runSave({ user: TESS, form: withTeam(TESS, 'team_west'), answers: { settings: [{ ok: false, status: 400, error: 'TEST: the list is refused.', unknown: false }] } });
+    assert.deepEqual(SAID(r16h), ['Saved, but the team list was not updated — TEST: the list is refused. Save changes tries the list again.'],
+        'REGRESSION: the server\'s full stop doubled — "refused.. Save changes"');
     const r16b = await runSave({ user: TESS, form: { ...withTeam(TESS, 'team_west'), role: 'Manager' },
-        answers: { settings: [{ ok: false, status: 500, error: 'The server returned 500.' }], 'user-role': [{ throws: 'NetworkError when attempting to fetch resource.' }] } });
+        answers: { settings: [{ ok: false, status: 500, error: 'The server returned 500.', unknown: true }], 'user-role': [{ throws: 'NetworkError when attempting to fetch resource.' }] } });
     assert.deepEqual(r16b.to, ['users', 'settings', 'user-role']);
-    assert.deepEqual(SAID(r16b), ['Saved, but the team list was not updated — The server returned 500. Save changes tries the list again. '
-        + 'Saved, but not everything — The server could not be reached. Save changes tries again.'],   // failureWords (Part 12): never fetch's own words
+    // Moved in §0.264 (the unknown-save rule, Part 5): a 500 and a request with no answer may each have landed — said so,
+    // the owed list's words still "Save changes tries … again".
+    assert.deepEqual(SAID(r16b), ['Saved, but the team list may have been updated — The server returned 500. Save changes tries the list again. '
+        + 'Saved, but the role may have been changed — reload the page to see whether it was: The server could not be reached. Save changes tries again.'],   // failureWords (Part 12): never fetch's own words
         "REGRESSION: an owed list's words say Reload, which loses the move");
     assert.deepEqual(r16b.named('setListOwed'), [{ teamId: 'team_west' }]);
     assert.equal(r16b.state.form.role, 'Manager', 'the pick waits too: Save sends the list and the role again');
@@ -801,7 +848,11 @@ test('S11 (P3, P5, P8, P12, P13) the page holds the member as stored, counts "Sa
     once(page, ind(8, 'if (row) setMyProfile(prev => (prev && prev.id === row.id ? { ...prev, ...row } : prev));'));
     once(page, ind(8, 'if (!stillOrg(askedOrg)) return;   // a request that failed after an org switch changes nothing here'));
     const save = between(page, '    const handleSave = async () => {', '\n    };');
-    order(save, ind(8, '} catch (err) {'), 'missed.push(row || teamsNow ? `Saved, but not everything ', ind(8, '} finally { setSaving(false); }'),
+    // Moved in §0.264 (the unknown-save rule, Part 5): the catch says, by whether anything landed and whether its answer
+    // proved nothing, the server's words, the may-have sentence about the step sent, or "not everything".
+    order(save, ind(8, '} catch (err) {'), ind(12, 'if (!(row || teamsNow)) missed.push(unknownOf(err) ? maybeSaid(subject, verb, why) : why);'),
+        'else if (unknownOf(err)) missed.push(`Saved, but ${maybeSaid(\'the role\', \'changed\', clause(why))}. ',
+        'else missed.push(`Saved, but not everything ', ind(8, '} finally { setSaving(false); }'),
         ind(8, 'if (!stillOrg(askedOrg)) return;'), ind(12, 'setUser(row);'));
     // The member, then the lists (which depend on it alone), then the role (critic C1).
     order(save, ind(12, 'if (Object.keys(changes).length) {'), ind(12, 'if (move) {'), ind(12, 'if (roleNew) {'));

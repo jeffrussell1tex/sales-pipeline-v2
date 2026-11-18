@@ -115,8 +115,11 @@ test('P6 — the screen: the press reads the plans first, checks the org after t
         'for (const { tier, name } of todo.create) {',
         "id:      'plan_' + crypto.randomUUID(),",
         "method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });",
-        'if (!res.ok) throw new Error(await readRefusal(res));',
-        "} catch (err) { failed.push(`${tier}: ${failureWords(err)}`); }"),
+        // Moved in §0.264 (the unknown-save rule, Part 5): a row the server refused failed; a row whose answer proved
+        // nothing may have been created, said apart (guide §18b134 rule 11).
+        'if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }',
+        "} catch (err) { (unknownOf(err) ? maybe : failed).push(`${tier}: ${failureWords(err)}`); }",
+        "const maybeWords = maybe.length ? ` ${maybeSaid(`${maybe.length} plan${maybe.length === 1 ? '' : 's'}`, 'created', maybe.join('; '), maybe.length > 1)}` : '';"),
         'in this order — the read fails closed (REGRESSION: an answer with no plans read as none, every label made again), and a refusal reads its words');
     assert.ok(!seed.includes('data.plans || []'), 'REGRESSION: a read with no list of plans taken as "this org has none"');
     assert.ok(!seed.includes("'plan_legacy_'"), 'REGRESSION: an id made from the label — global, overwritten on a re-press, refused for a second org');

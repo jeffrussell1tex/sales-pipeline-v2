@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, writeRefusalOf, refusalError, saidError, thrownSaid, unknownOf } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { LIcon } from '../shared/ui.jsx';
 import { DataStatCard, DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -433,8 +433,11 @@ export const BackupDetail = ({ onBack }) => {
     };
 
     // ── Run backup now
+    // Its snapshot's id is the server's, and a second press makes another snapshot (state §0.264, the unknown-save rule,
+    // Part 5): after an answer that proved nothing the button is held until the page is reloaded, the words saying so.
+    const [backupHeld, setBackupHeld] = useState(false);
     const handleRunBackup = async () => {
-        if (runningBackup) return;
+        if (runningBackup || backupHeld) return;
         // After an org switch the old org's snapshot is never saved to disk on the new org's screen (state §0.175;
         // §0.247 Part 8): the org is checked before its file is fetched.
         const askedOrg = requestOrg();
@@ -447,8 +450,11 @@ export const BackupDetail = ({ onBack }) => {
             const res  = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
             // The ok check first (§0.243): a refusal says the server's words, else its status — the body read before it
             // said "Unexpected token '<'" for a page that was not JSON. The backup's own answer is parsed as sent.
-            if (!res.ok) throw new Error(await readRefusal(res));
-            const data = await res.json();
+            // Only the server's own refusal is no backup; any other answer may have made one (state §0.264, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
+            // Landed is landed (state §0.264): an answer that cannot be read is a backup made, not a maybe.
+            const data = await res.json().catch(() => null);
+            if (!data || typeof data !== 'object') throw saidError('The backup was made, but its answer could not be read — reload the page to see it.');
 
             // Prepend new snapshot to list immediately
             setSnapshots(prev => [{
@@ -471,7 +477,10 @@ export const BackupDetail = ({ onBack }) => {
             const why = await saveSnapshotFile(data.id, askedOrg);
             if (why) setDownloadError({ id: data.id, words: `The backup was made, but its file was not downloaded (${unstopped(why)}). Download it from the table below.` });
         } catch (e) {
-            setBackupError(failureWords(e));   // plain words — never "Failed to fetch" or a parse error's (§0.247)
+            // The server's own refusal in its words; anything else — a thrown fetch, a 5xx, a page — may have made a
+            // backup: said so, and the button held (state §0.264, the unknown-save rule, Part 5).
+            if (!e?.said && unknownOf(e)) setBackupHeld(true);
+            setBackupError(thrownSaid(e, 'The backup', 'started'));
         } finally {
             setRunningBackup(false);
         }
@@ -494,7 +503,8 @@ export const BackupDetail = ({ onBack }) => {
                 body: JSON.stringify(changes),
             });
             // The ok check first (§0.243): the server's words, else its status. The answer's body is not used.
-            if (!res.ok) throw new Error(await readRefusal(res));
+            // Only the server's own refusal is "not saved"; any other answer may have saved it (state §0.264, Part 5).
+            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             const saved = { ...schedule, ...changes };
             setSchedule(saved);
             setEditSched(saved);
@@ -502,7 +512,9 @@ export const BackupDetail = ({ onBack }) => {
             setSchedSaved(true);
             setTimeout(() => setSchedSaved(false), 3000);
         } catch (e) {
-            setSchedError(failureWords(e));
+            // The edit stays, dirty; a thrown fetch or an answer that proves nothing says it may have been saved (state
+            // §0.264, the unknown-save rule, Part 5).
+            setSchedError(thrownSaid(e, 'The schedule', 'saved'));
         } finally {
             setSchedSaving(false);
         }
@@ -546,7 +558,7 @@ export const BackupDetail = ({ onBack }) => {
                     <DataBtn key="run"
                         label={runningBackup ? 'Running…' : 'Run backup now'}
                         primary
-                        disabled={runningBackup}
+                        disabled={runningBackup || backupHeld}
                         onClick={handleRunBackup}/>,
                 ]}/>
 

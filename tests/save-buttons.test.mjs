@@ -214,8 +214,10 @@ test('every way out of a tab asks first on a page with unsaved edits — the gua
     assert.ok(app.includes("if (navigateToRef.current('pipeline')) setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(null); setShowModal(true); }, 100);"),
         'the new deal opens only once the pipeline is open — not over the dialog — and only in the org it was asked in (§0.175)');
     const save = between(app, 'const navGuardSave = React.useCallback(async () => {', '}, [pendingNavTab, setActiveTab]);');
-    assert.ok(/try \{\s*await save\(\);\s*\} catch \(e\) \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(e\?\.tookLatest \? \(e\.partial \? 'stale-partial' : 'stale'\) : true\);\s*return;/.test(save),
-        'a save that throws keeps the dialog — one refused as stale, the latest taken, says so (state §0.226 — J-B11)');
+    // Moved in §0.264 (the unknown-save rule, Part 5): a save whose answer proved nothing (`unknown: true`) keeps the
+    // dialog too, marked 'unknown' — LeaveGuardModal says it may have gone through.
+    assert.ok(/try \{\s*await save\(\);\s*\} catch \(e\) \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(e\?\.tookLatest \? \(e\.partial \? 'stale-partial' : 'stale'\) : e\?\.unknown === true \? 'unknown' : true\);\s*return;/.test(save),
+        'a save that throws keeps the dialog — one refused as stale, the latest taken, says so (state §0.226 — J-B11); one whose answer proved nothing says it may have saved (state §0.264)');
 });
 
 // ── the Sales Manager's Administration page ────────────────────────────────

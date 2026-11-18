@@ -7,6 +7,8 @@ import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 // The house words (docs/design/refusal-sweep Part 12): a refusal the server's words with their ref, else "The server
 // returned N."; a thrown failure in plain words — never "HTTP N" or a raw e.message ("Failed to fetch").
 import { readRefusal, refusalWords, failureWords } from '../../../utils/refusalWords.js';
+// Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
+import { heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 // A teams save names the token of the list it read (state §0.225): one sender, the latest taken on a refusal.
@@ -46,6 +48,9 @@ const isKnownRole = (role) => Object.prototype.hasOwnProperty.call(ROLE_LABEL, r
 // but the row it took off and the lists the server wrote are the server's, so the page says to reload for them.
 const REVOKED_UNREAD = 'The invitation was revoked. Its answer could not be read, so the list here may still show their row — reload the page to see it.';
 const REMOVED_UNREAD = 'Removed. Its answer could not be read, so the team and territory lists here may still name them — reload the page to see them.';
+// A member action's words (state §0.264, the unknown-save rule, Part 5): the server's own refusal keeps "Could not …"
+// and its words; any other answer — a thrown fetch, a 5xx, a page, a wordless 4xx — may have done it.
+const actionSaid = (err, notWords, subject, verb) => (unknownOf(err) ? maybeSaid(subject, verb, failureWords(err)) : `${notWords}${failureWords(err)}`);
 
 // A <select> whose value matches none of its options does not render empty — the
 // browser falls back to the FIRST option, so a user stored as `member` displayed
@@ -117,8 +122,9 @@ const PeoplePageHeader = ({ title, subtitle, statusDetail, statusState, rightAct
     </div>
 );
 
-const PeopleSecBtn = ({ children, onClick }) => (
-    <button onClick={onClick} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+// `disabled`: a press held after an answer that proved nothing (state §0.264 — a Resend's row).
+const PeopleSecBtn = ({ children, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1, fontFamily:T.sans }}
         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
         {children}
     </button>
@@ -166,6 +172,9 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     // A notice whose words include a roster read that failed is drawn in the warning tint, never the success green
     // (the §0.249 review, round 3); a clean landed-unread notice keeps the green.
     const [noticeWarn, setNoticeWarn] = useState(false);
+    // A send whose answer proved nothing may have emailed every row (state §0.264, the unknown-save rule, Part 5): Send
+    // is held from then on — a second press would email each person again — the rows kept as typed; never re-armed here.
+    const [held, setHeld] = useState(false);
 
     const allTeams  = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
     const allReps   = [...new Set((settings.users || []).map(u => u.name).filter(Boolean))].sort();
@@ -192,6 +201,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const pendingToday = (settings.users || []).filter(u => u.name && memberStatus(u) === 'Invited').length;
 
     const handleSend = async () => {
+        if (held) return;
         setNotice('');
         const validated = validateRows();
         setRows(validated);
@@ -201,9 +211,30 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         try {
             const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, teamId: teamIdNamed(settings.teams, r.team), manager:r.manager, territory:r.territory, expiresInDays: expiry }));
-            const resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) });
+            let resp;
+            try { resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) }); }
+            catch (e) {
+                // No answer: the invitations may have gone out (state §0.264) — said so, Send held, the rows kept.
+                if (!stillOrg(askedOrg)) return;
+                setHeld(true);
+                setError(maybeSaid('The invitations', 'sent', failureWords(e), true));
+                return;
+            }
             const d = await resp.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;   // and the last org's team list is never PUT into the new org
+            // Only the server's own refusal — a 4xx with a top-level `error` — proves none went out (state §0.264, the
+            // unknown-save rule, Part 5). A 5xx, a gateway's page, a wordless answer, and the 400 users.mjs answers when
+            // every row failed (`errors`, no top-level `error`: a row Clerk invited whose database step failed reads
+            // "The server could not finish this invitation") may have sent some: said so, its rows' words with it, Send
+            // held, the rows kept as typed.
+            if (!resp.ok && !heardRefusal(resp.status, d)) {
+                const rowsSaid = Array.isArray(d.errors) && d.errors.length
+                    ? d.errors.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')
+                    : refusalWords(resp, d);
+                setHeld(true);
+                setError(maybeSaid('The invitations', 'sent', rowsSaid, true));
+                return;
+            }
             // A landed answer always holds its `invited` list (users.mjs): one without it could not be read — the
             // invitations went out, and who they are is the server's (docs/design/refusal-sweep Part 12). Taken as landed
             // (the §0.249 review): the batch is emptied, so Send is never left armed over the same rows — a second press
@@ -245,7 +276,8 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             let teamNote = '';
             const added = await addToSettingsList('teams', (l) => teamsWithMembers(l, sent), { list: settings.teams, rev: settings.revs?.teams ?? null, setSettings });
             if (!stillOrg(askedOrg)) return;
-            if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : ` The team list was not updated — ${added.error}`;
+            // An answer that proves nothing may have listed them (state §0.264): said so, never "was not updated".
+            if (!added.ok) teamNote = added.twice ? ` ${TEAMS_CHANGED_TWICE}` : added.unknown ? ` ${maybeSaid('The team list', 'updated', added.error)}` : ` The team list was not updated — ${added.error}`;
             // Per-invite refusals come back in `errors` — with a 201 when some went
             // out. They were dropped, and the screen said "Sent!".
             const failed = Array.isArray(d.errors) ? d.errors : [];
@@ -273,7 +305,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                 statusState="read"
                 rightActions={<>
                     <PeopleSecBtn onClick={onUsers}>Cancel</PeopleSecBtn>
-                    <PeoplePriBtn onClick={handleSend} disabled={saving || readyCount === 0}>
+                    <PeoplePriBtn onClick={handleSend} disabled={saving || held || readyCount === 0}>
                         {saving ? 'Sending…' : saved ? '✓ Sent!' : `Send ${readyCount > 0 ? readyCount : ''} invite${readyCount !== 1 ? 's' : ''}`}
                     </PeoplePriBtn>
                 </>}
@@ -531,11 +563,17 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
     const isExpired = (inv) => !!(inv && inv.expiresAt && inv.expiresAt < now);
     const liveCount = entries.filter(e => e.invite && !isExpired(e.invite)).length;
 
+    // A Resend whose answer proved nothing may have emailed a fresh link (state §0.264, the unknown-save rule, Part 5): its
+    // row's Resend is held — a second press would email them again — until the page is opened again.
+    const [heldResends, setHeldResends] = useState(() => new Set());
     const doResend = async (e) => {
-        if (busyEmail) return;
+        if (busyEmail || heldResends.has(e.email)) return;
         setBusyEmail(e.email); setActionError('');
         try { await resendInvite(e.row); await loadInvites(); }
-        catch (err) { setActionError(`Could not resend to ${e.email}: ${failureWords(err)}`); }
+        catch (err) {
+            if (unknownOf(err)) setHeldResends(prev => new Set(prev).add(e.email));
+            setActionError(actionSaid(err, `Could not resend to ${e.email}: `, `A fresh link to ${e.email}`, 'sent'));
+        }
         finally { setBusyEmail(null); }
     };
     const doRevoke = (e) => {
@@ -555,7 +593,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
                 if (note) setActionError(note);
             } catch (err) {
                 if (!stillOrg(askedOrg)) return;
-                setActionError(`Could not revoke the invitation to ${e.email}: ${failureWords(err)}`);
+                setActionError(actionSaid(err, `Could not revoke the invitation to ${e.email}: `, `The invitation to ${e.email}`, 'revoked'));   // maybe (state §0.264)
             }
             finally { setBusyEmail(null); }
         }, false);
@@ -597,7 +635,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
                                 {!e.invite ? (clerkInvites === null ? '…' : invitesUnread ? 'Link not read' : 'No live link') : expired ? `Expired ${fmtDate(e.invite.expiresAt)}` : `Expires ${fmtDate(e.invite.expiresAt)}`}
                             </div>
                             <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                                {e.row && <PeopleSecBtn onClick={() => doResend(e)}>{busyEmail === e.email ? 'Working…' : 'Resend'}</PeopleSecBtn>}
+                                {e.row && <PeopleSecBtn onClick={() => doResend(e)} disabled={heldResends.has(e.email)}>{busyEmail === e.email ? 'Working…' : 'Resend'}</PeopleSecBtn>}
                                 <PeopleSecBtn onClick={() => doRevoke(e)}>Revoke</PeopleSecBtn>
                             </div>
                         </div>
@@ -915,7 +953,8 @@ const setMemberActive = async (id, active) => {
         method:'PUT', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ id, active }),
     });
-    if (!res.ok) throw new Error(await readRefusal(res));
+    // Thrown with whether it may have landed (state §0.264, the unknown-save rule, Part 5): the caller says actionSaid.
+    if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
     const stored = await res.json().catch(() => null);
     return stored?.user || { id, active };
 };
@@ -929,7 +968,7 @@ const revokeInvite = async (email) => {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ action:'revoke-invite', email }),
     });
-    if (!res.ok) throw new Error(await readRefusal(res));
+    if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)
     // Landed: its answer (the row taken off, the lists as written), or null when it cannot be read — said by the caller.
     return res.json().catch(() => null);
 };
@@ -942,9 +981,14 @@ const resendInvite = async (row) => {
         body:JSON.stringify({ action:'invite', invites:[{ email: row.email, role: row.role || 'User', team: row.team || null, territory: row.territory || null }] }),
     });
     const d = await res.json().catch(() => ({}));
+    // Only the server's own refusal (a 4xx with a top-level `error`) proves nothing went out (state §0.264, the unknown-save
+    // rule, Part 5). A one-row invite refused per row answers a 400 with `errors` and no top-level `error` (users.mjs) —
+    // its row's words are said, but it may have sent: a row Clerk invited whose database step failed reads "The server
+    // could not finish this invitation", and the answer cannot tell that row from one Clerk refused.
+    const heard = heardRefusal(res.status, d);
     const refused = Array.isArray(d.errors) && d.errors[0];
-    if (refused) throw new Error(refused.error || 'Clerk refused the invitation');
-    if (!res.ok) throw new Error(refusalWords(res, d));
+    if (refused) throw refusalError(refused.error || 'Clerk refused the invitation', heard);
+    if (!res.ok) throw refusalError(refusalWords(res, d), heard);
     return d;
 };
 const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString() : '—');
@@ -1116,14 +1160,17 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
         let move = listOwed;             // the teams' lists to move: one owed from an earlier save, or this save's team
         let roleLanded = false, teamsNow = null, teamsRevs = null, owedNext = listOwed;
         const missed = [];               // what did not land, in the server's words
+        // What a failure whose answer proves nothing may have saved (state §0.264, the unknown-save rule, Part 5).
+        let subject = user.name ? `${user.name}'s profile` : 'The profile', verb = 'saved';
         try {
             if (Object.keys(changes).length) {
                 const toSave = { id: user.id, ...changes };
                 const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
                 if (!stillOrg(askedOrg)) return;
                 // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
-                // their ref, else "The server returned N." — never "Save failed" over a 502's page.
-                if (!resp.ok) { const why = await readRefusal(resp); if (!stillOrg(askedOrg)) return; throw new Error(why); }
+                // their ref, else "The server returned N." — never "Save failed" over a 502's page. Thrown with whether it
+                // may have landed (state §0.264): the form keeps what was typed either way, Save changes sends it again.
+                if (!resp.ok) { const r = await writeRefusalOf(resp); if (!stillOrg(askedOrg)) return; throw refusalError(r.words, r.heard); }
                 const stored = await resp.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
                 // The row as stored (state §0.196): the name trimmed or rebuilt, every key this save left out as kept.
@@ -1144,6 +1191,10 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                     if (!stillOrg(askedOrg)) return;
                     if (rt.ok) { teamsNow = moved; teamsRevs = rt.revs; owedNext = null; }
                     else if (rt.stale) { owedNext = move; const latest = await takeLatestSettings(setSettings); missed.push(latest ? TEAM_MOVE_CHANGED : TEAM_MOVE_CHANGED_UNREAD); }
+                    // An answer that proves nothing may have moved them (state §0.264): said so, the move still owed — a
+                    // Save after one that landed is refused as stale, the latest taken, and the next finds them moved.
+                    // Never "reload" here (R16b): a reload loses the move still owed — Save changes tries it again.
+                    else if (rt.unknown) { owedNext = move; missed.push(`Saved, but the team list may have been updated — ${clause(rt.error)}. Save changes tries the list again.`); }
                     else { owedNext = move; missed.push(`Saved, but the team list was not updated \u2014 ${clause(rt.error)}. Save changes tries the list again.`); }
                 }
             }
@@ -1160,6 +1211,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
             // hand it straight to the Clerk API, which stopped working the moment
             // users.id stopped being the Clerk id.
             if (roleNew) {
+                subject = 'The role'; verb = 'changed';
                 const rr = await dbFetch('/.netlify/functions/user-role', {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ targetUserId: user.id, role: form.role }),
@@ -1171,14 +1223,20 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                     row = { ...(row || user), role: form.role, userType: form.role };
                     setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
                 } else {
-                    const why = await readRefusal(rr);
+                    // Only the server's own refusal is "not changed"; any other answer may have changed it (state §0.264).
+                    const r = await writeRefusalOf(rr);
                     if (!stillOrg(askedOrg)) return;
-                    if (!row && !teamsNow) throw new Error(why);
-                    missed.push(`Saved, but the role was not changed \u2014 ${why}`);
+                    if (!row && !teamsNow) throw refusalError(r.words, r.heard);
+                    missed.push(r.heard ? `Saved, but the role was not changed \u2014 ${r.words}` : `Saved, but ${maybeSaid('the role', 'changed', r.words)}`);
                 }
             }
         } catch (err) {
-            missed.push(row || teamsNow ? `Saved, but not everything \u2014 ${clause(failureWords(err))}. ${owedNext ? 'Save changes tries again.' : 'Reload to see what was saved.'}` : failureWords(err));
+            // A failure whose answer proves nothing may have saved what it sent (state §0.264): said so about that step —
+            // after a part landed, the one step that can throw is the role's request.
+            const why = failureWords(err);
+            if (!(row || teamsNow)) missed.push(unknownOf(err) ? maybeSaid(subject, verb, why) : why);
+            else if (unknownOf(err)) missed.push(`Saved, but ${maybeSaid('the role', 'changed', clause(why))}. ${owedNext ? 'Save changes tries again.' : ''}`.trim());
+            else missed.push(`Saved, but not everything \u2014 ${clause(why)}. ${owedNext ? 'Save changes tries again.' : 'Reload to see what was saved.'}`);
         } finally { setSaving(false); }
         if (!stillOrg(askedOrg)) return;   // a request that failed after an org switch changes nothing here
         // What landed, set once (state §0.211): the page holds the member as stored, the roster on screen takes the
@@ -1217,7 +1275,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
-            } catch(err) { if (stillOrg(askedOrg)) setError('Could not deactivate: ' + failureWords(err)); }
+            } catch(err) { if (stillOrg(askedOrg)) setError(actionSaid(err, 'Could not deactivate: ', `${user.name || 'The member'}'s account`, 'deactivated')); }   // maybe (state §0.264)
         }, false);
     };
 
@@ -1229,7 +1287,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
-            } catch(err) { if (stillOrg(askedOrg)) setError('Could not reactivate: ' + failureWords(err)); }
+            } catch(err) { if (stillOrg(askedOrg)) setError(actionSaid(err, 'Could not reactivate: ', `${user.name || 'The member'}'s account`, 'reactivated')); }   // maybe (state §0.264)
         }, false);
     };
 
@@ -1240,14 +1298,14 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
             try {
                 const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
                 if (!stillOrg(askedOrg)) return;
-                if (!res.ok) throw new Error(await readRefusal(res));
+                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)
                 // Off the roster, and the lists as the server wrote them with their ids off (state §0.222). A landed
                 // answer that cannot be read is a delete that landed, its lists unknown (Part 12): said, never "not deleted".
                 const deleted = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
                 setSettings(prev => settingsAfterRemoval(prev, user.id, deleted));   // the profile page's delete
                 onRemoved(deleted ? removalNote(deleted) : REMOVED_UNREAD);   // back to the list — the member is gone — saying so if the lists were left
-            } catch(err) { if (stillOrg(askedOrg)) setError('Could not delete: ' + failureWords(err)); }
+            } catch(err) { if (stillOrg(askedOrg)) setError(actionSaid(err, 'Could not delete: ', user.name || 'The member', 'deleted')); }   // maybe (state §0.264)
         });
     };
 
@@ -1262,7 +1320,7 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                 if (!r) { onRemoved(REVOKED_UNREAD); return; }   // landed, its answer unread: back to the list, said
                 setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the profile page's revoke
                 onRemoved(removalNote(r));   // back to the list — the row is gone — saying so if the lists were left
-            } catch(err) { if (stillOrg(askedOrg)) setError('Could not revoke the invitation: ' + failureWords(err)); }
+            } catch(err) { if (stillOrg(askedOrg)) setError(actionSaid(err, 'Could not revoke the invitation: ', `The invitation to ${user.email || user.name}`, 'revoked')); }   // maybe (state §0.264)
         }, false);
     };
 
@@ -1648,7 +1706,7 @@ export const UsersDetail = ({ settings, onBack }) => {
             // The ok check before the body (docs/design/refusal-sweep Part 12): a refusal in the server's words with
             // their ref; a landed sync whose answer cannot be read is a sync that ran — said, its counts unknown.
             // A refusal or a failure is said only in the org that asked: each catch checks it.
-            if (!res.ok) throw new Error(await readRefusal(res));
+            if (!res.ok) { const refused = await writeRefusalOf(res); throw refusalError(refused.words, refused.heard); }   // may have run (state §0.264)
             const synced = await res.json().catch(() => null);
             if (!stillOrg(askedOrg)) return;   // switched away: nothing said, and no roster read in the new org
             let msg;
@@ -1679,7 +1737,8 @@ export const UsersDetail = ({ settings, onBack }) => {
             }
         } catch (err) {
             if (!stillOrg(askedOrg)) return;
-            setSyncMsg('Sync failed: ' + failureWords(err));
+            // Only the server's own refusal is "Sync failed"; any other answer may have run it (state §0.264, Part 5).
+            setSyncMsg(actionSaid(err, 'Sync failed: ', 'The roster', 'synced with Clerk'));
         } finally {
             setSyncing(false);
         }
@@ -1939,7 +1998,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                             const row = await setMemberActive(u.id, false);
                                                             if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
-                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not deactivate ${u.name}: ${failureWords(err)}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(actionSaid(err, `Could not deactivate ${u.name}: `, `${u.name}'s account`, 'deactivated')); }   // maybe (state §0.264)
                                                     }, false);
                                                 }},
                                                 // Reactivate = the way back (state §0.164): the row kept its role.
@@ -1951,7 +2010,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                             const row = await setMemberActive(u.id, true);
                                                             if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
-                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not reactivate ${u.name}: ${failureWords(err)}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(actionSaid(err, `Could not reactivate ${u.name}: `, `${u.name}'s account`, 'reactivated')); }   // maybe (state §0.264)
                                                     }, false);
                                                 }},
                                                 // An invitation not yet accepted is revoked, not deleted (state
@@ -1967,7 +2026,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                             _setSettings(prev => settingsAfterRemoval(prev, r.removedRowId, r));   // the row menu's revoke
                                                             const note = removalNote(r);
                                                             if (note) setUserActionError(note);
-                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${failureWords(err)}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(actionSaid(err, `Could not revoke the invitation to ${u.email || u.name}: `, `The invitation to ${u.email || u.name}`, 'revoked')); }   // maybe (state §0.264)
                                                     }, false);
                                                 }},
                                                 // Delete = permanent. This previously sent the id in the BODY while
@@ -1980,13 +2039,13 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                         try {
                                                             const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(u.id)}`, { method:'DELETE' });
                                                             if (!stillOrg(askedOrg)) return;
-                                                            if (!res.ok) throw new Error(await readRefusal(res));
+                                                            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)
                                                             const gone = await res.json().catch(() => null);   // null: landed, its answer unread (Part 12)
                                                             if (!stillOrg(askedOrg)) return;
                                                             _setSettings(prev => settingsAfterRemoval(prev, u.id, gone));   // the row menu's delete
                                                             const left = gone ? removalNote(gone) : REMOVED_UNREAD;
                                                             if (left) setUserActionError(left);
-                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(`Could not delete ${u.name}: ${failureWords(err)}`); }
+                                                        } catch(err) { if (stillOrg(askedOrg)) setUserActionError(actionSaid(err, `Could not delete ${u.name}: `, u.name, 'deleted')); }   // maybe (state §0.264)
                                                     });
                                                 }},
                                             ].filter(Boolean).map((item, mi) => (

@@ -14,7 +14,7 @@
 // are different rules and conflating them is how 18b20-shaped bugs start.
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 // The save names the tokens this panel opened with; a stale refusal remounts it on the latest (state §0.226).
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
@@ -78,7 +78,9 @@ export const LeadVisibilityDetail = ({ settings, setSettings, onBack, setSetting
         } catch (e) {
             // Refused because another save landed first: AdminView shows the latest and says so (state §0.226 — J-B5).
             if (e.stale && await panelStale(e)) throw e;
-            setSaveError(`Visibility not saved — ${e.message}`);
+            // The server's own refusal "not saved"; any other answer putSettings' may-have sentence (state §0.264, the
+            // unknown-save rule, Part 5) — the draft kept either way.
+            setSaveError(settingsSaid(e, (x) => `Visibility not saved — ${x.message}`));
             // Clear the spinner, then rethrow: the leave guard's "Save and
             // continue" runs this too, and only a throw keeps it from moving on.
             setSaving(false);

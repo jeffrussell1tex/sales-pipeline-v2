@@ -13,7 +13,7 @@ import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-import { putSettings } from '../shared/saveSettings.js';
+import { putSettings, settingsSaid } from '../shared/saveSettings.js';
 import { cleanProductTypes, BUILTIN_PRODUCT_TYPES, JOB_LINE_TYPES } from '../../../utils/invoices.js';
 
 const KIND_LABELS = { labor: 'Labor', part: 'Part', material: 'Material', fee: 'Fee', discount: 'Discount' };
@@ -64,8 +64,9 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
-            // Surfaced, never swallowed — a failed PUT must not look like a save.
-            setError('Could not save: ' + e.message);
+            // Surfaced, never swallowed — a failed PUT must not look like a save. "Could not save" only for the server's own
+            // refusal; an answer that proves nothing says it may have saved (state §0.264, the unknown-save rule, Part 5).
+            setError(settingsSaid(e, (e) => 'Could not save: ' + e.message));
             throw e;
         } finally {
             setSaving(false);

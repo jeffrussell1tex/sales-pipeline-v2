@@ -75,10 +75,16 @@ test('the Pending invites page lists the real invitations, with Clerk\'s dates, 
 test('Revoke and Resend are real calls — Revoke withdraws the invitation in Clerk, Resend sends a fresh one', () => {
     const revoke = between(screen, 'const revokeInvite = async (email) => {', '\n};');
     assert.ok(revoke.includes("body:JSON.stringify({ action:'revoke-invite', email }),"), 'REGRESSION: Revoke calls nothing again');
-    assert.ok(revoke.includes("if (!res.ok) throw new Error(await readRefusal(res));\n    return res.json().catch(() => null);"), 'a refusal is shown, in the server\'s words (refusal sweep Part 12) — the body read only after the ok check');
+    // Moved in §0.264 (the unknown-save rule, Part 5): thrown with whether it is the server's own refusal — its callers say
+    // "Could not revoke" only for that, anything else may have revoked it.
+    assert.ok(revoke.includes("if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)\n    return res.json().catch(() => null);"), 'a refusal is shown, in the server\'s words (refusal sweep Part 12) — the body read only after the ok check');
     const resend = between(screen, 'const resendInvite = async (row) => {', '\n};');
     assert.ok(resend.includes("invites:[{ email: row.email, role: row.role || 'User', team: row.team || null, territory: row.territory || null }]"), 'the row\'s role travels with the resend');
-    assert.ok(resend.includes("if (refused) throw new Error(refused.error || 'Clerk refused the invitation');"), 'a per-invite refusal is shown — the server answers it in `errors`');
+    // Moved in §0.264 (the unknown-save rule, Part 5): a per-invite refusal (a 400 with `errors`, no top-level `error`) is
+    // said in its row's words, but is not the server's own refusal — it may have sent (heardRefusal decides).
+    assert.ok(resend.includes('const heard = heardRefusal(res.status, d);'), 'whether the answer is the server\'s own refusal');
+    assert.ok(resend.includes("if (refused) throw refusalError(refused.error || 'Clerk refused the invitation', heard);"), 'a per-invite refusal is shown — the server answers it in `errors`');
+    assert.ok(resend.includes('if (!res.ok) throw refusalError(refusalWords(res, d), heard);'), 'any other refusal in the house words, with whether it is the server\'s own');
     const page = between(screen, 'const UsersPendingPage = ', '\nconst UsersSeatPage = ');
     assert.ok(page.includes('const r = await revokeInvite(e.email);'));
     // Since §0.222 the server takes the row's id off the org's lists and answers them; the page applies the answer —
@@ -89,7 +95,11 @@ test('Revoke and Resend are real calls — Revoke withdraws the invitation in Cl
         'the roster on screen loses the row the server removed; a landed answer that cannot be read is said (refusal sweep Part 12)');
     assert.ok(!screen.includes('dropRevokedRow'), 'REGRESSION: a screen writes the team list of its own after a revoke');
     assert.ok(page.includes('try { await resendInvite(e.row); await loadInvites(); }'), 'Resend, then Clerk\'s new dates');
-    assert.ok(page.includes('{e.row && <PeopleSecBtn onClick={() => doResend(e)}>'), 'Resend only for a roster row — an invitation made in Clerk carries no app role');
+    // Moved in §0.264 (the unknown-save rule, Part 5): a row's Resend is held after an answer that proved nothing — a
+    // second press would email them again.
+    assert.ok(page.includes('{e.row && <PeopleSecBtn onClick={() => doResend(e)} disabled={heldResends.has(e.email)}>'), 'Resend only for a roster row — an invitation made in Clerk carries no app role');
+    assert.ok(page.includes('if (busyEmail || heldResends.has(e.email)) return;'), 'a held Resend sends nothing (state §0.264)');
+    assert.ok(page.includes('if (unknownOf(err)) setHeldResends(prev => new Set(prev).add(e.email));'), 'held only after an answer that proved nothing (state §0.264)');
 });
 
 test('an invited member is revoked, not deleted — on the row menu and the profile', () => {

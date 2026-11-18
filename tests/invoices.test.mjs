@@ -335,7 +335,9 @@ test('product & service types: settings.mjs carries productTypes in BOTH halves 
     assert.ok(panel.includes("import { cleanProductTypes, BUILTIN_PRODUCT_TYPES, JOB_LINE_TYPES } from '../../../utils/invoices.js';"), 'one vocabulary');
     assert.ok(panel.includes('const payload = { productTypes: cleanProductTypes(types) };'), 'saved cleaned');
     assert.ok(panel.includes('const answer = await putSettings(payload, opened);'), 'through the shared save (a refusal throws), naming the tokens the panel opened with (state §0.226)');
-    assert.ok(panel.includes("setError('Could not save: ' + e.message);"), 'and is shown');
+    // Moved in §0.264 (the unknown-save rule, Part 5): "Could not save" only for the server's own refusal; a save whose
+    // answer proved nothing says putSettings' may-have sentence as it is (settingsSaid).
+    assert.ok(panel.includes("setError(settingsSaid(e, (e) => 'Could not save: ' + e.message));"), 'and is shown');
     assert.ok(panel.includes('{builtin ? <span/> : ('), 'a built-in cannot be removed');
     assert.ok(!panel.includes('updatedAt="') && !panel.includes('updatedBy='), 'no typed edit history');
     const q = code(read('src/Tabs/QuotesTab.jsx'));

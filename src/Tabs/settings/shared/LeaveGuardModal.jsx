@@ -44,6 +44,8 @@ export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDis
                 <div style={{ fontSize:12.5, fontWeight:600, color:T.danger, marginBottom:10, fontFamily:T.sans }}>
                     {failed === 'stale-partial' ? LEAVE_STALE_PART
                         : stale ? LEAVE_STALE
+                        // A save whose answer proves nothing may have landed (state §0.264, the unknown-save rule).
+                        : failed === 'unknown' ? 'The save may have gone through — reload the page to see whether it did. Your changes are still here.'
                         : 'The save did not go through — the page behind this dialog shows why. Your changes are still here.'}
                 </div>
             )}
