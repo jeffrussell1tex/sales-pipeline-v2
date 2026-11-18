@@ -490,7 +490,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    (`814e309..a5c38bb`, Tests GREEN) after the full run (6,282/6,283, its
    survivor fixed). The dev check PASSED as Karen 17 Nov (a real Explain,
    meeting prep's next step, the logged row read back; two findings, §4.2).
-   Next: the prod ship (Jeff's word); batch 3's
+   **SHIPPED 18 Nov (UTC), the forty-seventh ship** (`a73c618..4a32c00`;
+   prod's nightly deal scoring first runs 06:00 UTC 18 Nov). Next: batch 3's
    comparisons wait on an org's 10th won deal with a history.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. **Designed and answered 4 Nov** (Jeff's ten
