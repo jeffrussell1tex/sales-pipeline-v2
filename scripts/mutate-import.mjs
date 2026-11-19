@@ -18243,10 +18243,11 @@ const mutations = [
         "src/Tabs/SalesManagerTab.jsx",
         "if (now.locked) return;",
         ""],
+    // (repointed §0.272) the Remove's confirm names its button since §0.272: the same list edited from the click.
     ["§0.228 manager: a SPIFF's Remove answered late edits the list from when × was clicked — a SPIFF added since gone again, the old draft's start kept",
         "src/Tabs/SalesManagerTab.jsx",
-        ",()=>removeSpiff(spiff))}",
-        ",()=>editSpiffs(spiffList.filter((_,i)=>i!==si)))}"],
+        ",()=>removeSpiff(spiff),true,{ confirm: 'Remove' })}",
+        ",()=>editSpiffs(spiffList.filter((_,i)=>i!==si)),true,{ confirm: 'Remove' })}"],
     // §0.229 — Connected apps, the last screen of step B (batch 4b-3, step B-3c): the panel reads Slack, the requests
     // and the web form from the app's copy, each empty for an org with none, and loads no settings of its own; Slack
     // Save, Disconnect and the web form name the tokens it opened with and are no longer optimistic, a landed save
@@ -28535,6 +28536,28 @@ const mutations = [
         "src/Tabs/settings/integrations/ConnectedAppsDetail.jsx",
         "const done = r.ok || r.landed;",
         "const done = r.ok;"],
+    // §0.272 — a confirm's button names its own action: a danger confirm with no labels reads "Delete" (ModalLayer),
+    // wrong over a Void, a Rotate, a Remove or a Deactivate (Jeff, 19 Nov: "Void button wording").
+    ["§0.272 Dispatch: an invoice's Void confirmed by a button reading Delete",
+        "src/Tabs/DispatchTab.jsx",
+        "a new invoice can be raised for this job.`, go, true, { confirm: 'Void invoice' });",
+        "a new invoice can be raised for this job.`, go, true);"],
+    ["§0.272 Audit log: a destination's secret rotated by a button reading Delete",
+        "src/Tabs/settings/audit/AuditDetail.jsx",
+        "}, true, { confirm: 'Rotate secret' });",
+        "}, true);"],
+    ["§0.272 Audit log: a destination's Remove confirmed by a button reading Delete",
+        "src/Tabs/settings/audit/AuditDetail.jsx",
+        "}, true, { confirm: 'Remove' });",
+        "}, true);"],
+    ["§0.272 manager: a SPIFF's Remove confirmed by a button reading Delete",
+        "src/Tabs/SalesManagerTab.jsx",
+        "()=>removeSpiff(spiff),true,{ confirm: 'Remove' })",
+        "()=>removeSpiff(spiff),true)"],
+    ["§0.272 quotes: a product's Deactivate confirmed by a button reading Delete",
+        "src/hooks/useQuotes.js",
+        "doDelete, true, { confirm: 'Deactivate' });",
+        "doDelete, true);"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

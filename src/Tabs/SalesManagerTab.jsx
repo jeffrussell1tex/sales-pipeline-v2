@@ -794,7 +794,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                                         onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                                     <SpiffStatus name={spiff.name} active={!!spiff.active} disabled={!canEditIncentives}
                                         onChange={v => editSpiffs(spiffList.map((s,i)=>i===si?{...s,active:v}:s))}/>
-                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>removeSpiff(spiff))}
+                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>removeSpiff(spiff),true,{ confirm: 'Remove' })}
                                         style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
                                 {/* Description — stored on `condition`, which the claim modal already renders */}

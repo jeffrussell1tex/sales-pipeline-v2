@@ -578,7 +578,7 @@ export const AuditDetail = ({ onBack }) => {
     const rotate = (dest) => showConfirm(`Rotate the signing secret for "${dest.name}"? The current secret stops verifying immediately; you will see the new one once.`, async () => {
         const data = await putDest({ id: dest.id, rotateSecret: true }, 'Rotate secret');
         if (data?.newSecret) setReveal({ dest: data.destination, secret: data.newSecret, rotated: true });
-    }, true);
+    }, true, { confirm: 'Rotate secret' });   // never "Delete" over a rotate (state §0.272)
     const remove = (dest) => showConfirm(`Remove destination "${dest.name}"? Audit events stop going there at once.`, async () => {
         setDestError(''); setBusyId(dest.id);
         // An answer that proves nothing (the review's fixes, round 4): audit-stream.mjs answers each refusal it words (400,
@@ -605,7 +605,7 @@ export const AuditDetail = ({ onBack }) => {
         } catch (e) {
             maybeRemoved(failureWords(e));
         } finally { setBusyId(null); }
-    }, true);
+    }, true, { confirm: 'Remove' });   // its button says what it does (state §0.272)
 
     // A count only over a list that was read (the review's fixes): a failed load, or a create whose answer could not be
     // read, leaves the list unknown — "Streaming to 1 destination" over it would be a count of what is not known.

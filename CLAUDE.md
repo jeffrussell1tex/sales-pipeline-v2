@@ -480,6 +480,9 @@ One commit per verified batch; doc patch in the same commit.
   and a member is not told of their own act (by owner id). A deal's
   created date is the server's once it exists; its won date follows the
   stage (§0.240).
+- A danger confirm that is not a delete names its own button
+  (`showConfirm`'s fourth argument, `{ confirm: 'Void invoice' }`) — never
+  the "Delete" default (THE GUARD, tests/house-dialogs.test.mjs; state §0.272).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

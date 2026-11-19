@@ -3230,6 +3230,13 @@ coaching note. The app had owned a confirmation modal for months.
   old `return` moves inside the callback, and an `async` handler becomes an
   async callback. The one `window.alert` left (a failed report delete) is a
   notice, not a decision; replace it when that code is next touched.
+- A confirm's button names its own action (state §0.272). `showConfirm`'s
+  danger default draws **Delete** — right only for a delete. A danger
+  confirm that is not one (a Void, a Rotate, a Remove, a Deactivate, a
+  Discard) passes its fourth argument, `{ confirm: 'Void invoice' }`.
+  THE GUARD (tests/house-dialogs.test.mjs) parses every call: a danger
+  confirm whose message does not start "Delete" or "Permanently delete"
+  and names no confirm label fails the build.
 
 
 ## 18b29. A JSX Name Is A Reference (hard rule)

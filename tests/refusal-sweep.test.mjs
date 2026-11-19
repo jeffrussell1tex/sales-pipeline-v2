@@ -6002,7 +6002,7 @@ test('Part 12a: the Audit log\'s destinations — "No destinations." only over a
     // Moved pin (§0.249, the review's fixes, round 3): no count while the log loads — "Loading…", never "Showing 0 of 0".
     assert.ok(s.includes("{eventsError ? 'Not loaded' : eventsLoading ? 'Loading…' : <>Showing {visible.length} of {events.length}</>}"));
     // Moved pin (§0.249, the review's fixes, round 4): a Remove that threw may have reached the server — said as maybe.
-    assert.ok(between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);').includes('        } catch (e) {\n            maybeRemoved(failureWords(e));\n        } finally'),
+    assert.ok(between(s, '    const remove = (dest) => showConfirm(', '\n    }, true, { confirm: \'Remove\' });').includes('        } catch (e) {\n            maybeRemoved(failureWords(e));\n        } finally'),
         'REGRESSION: Remove offline rejects unsaid');
     assert.ok(!/\b(e|err)\??\.message\b/.test(s) && !P12A_OLD.test(s), 'REGRESSION: a raw e.message or the old words');
 });
@@ -7422,7 +7422,7 @@ const p12fxARemove = async (answer, statusBefore = []) => {
     // module's destGone, built from the source line over the real destRefusedOwn.
     const destGone = new Function('destRefusedOwn', `return ${between(code(read(P12A_AUDIT)), 'const destGone = ', ';\n').slice('const destGone = '.length)};`)(destRefusedOwn);
     let confirmed = null;
-    const remove = p12aFn(P12A_AUDIT, '    const remove = (dest) => showConfirm(', '\n    }, true);', '\n    }, true);',
+    const remove = p12aFn(P12A_AUDIT, '    const remove = (dest) => showConfirm(', '\n    }, true, { confirm: \'Remove\' });', '\n    }, true, { confirm: \'Remove\' });',
         ['showConfirm', 'setDestError', 'setBusyId', 'dbFetch', 'STREAM_URL', 'readRefusal', 'failureWords', 'setDests', 'setStatusUnread', 'refusalWords', 'destRefusedOwn', 'destGone'], 'remove')(
         (msg, run) => { confirmed = run; }, (v) => did.errors.push(v), (v) => did.busy.push(v),
         async (url, opts = {}) => { did.sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; },
@@ -10512,7 +10512,7 @@ test('Part 12 fixes (A4): WIRING — the Audit log\'s Add and Remove read a refu
         'if (destRefusedOwn(res, refused)) return { ok: false, error: refusalWords(res, refused) };', 'return maybeAdded(refusalWords(res, refused));',
         '} catch (e) {', 'return maybeAdded(failureWords(e));');
     assert.ok(!add.includes('readRefusal('), 'REGRESSION: the Add says every answer as a refusal again');
-    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);');
+    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true, { confirm: \'Remove\' });');
     order(rm, 'const maybeRemoved = (words) => {', 'setStatusUnread(ids => [...ids, dest.id]);', 'if (!res.ok) {', 'const refused = await res.json().catch(() => null);',
         'if (destRefusedOwn(res, refused)) setDestError(`Remove destination failed — ${refusalWords(res, refused)}`);', 'else maybeRemoved(refusalWords(res, refused));',
         'setDests(prev => prev.filter(d => d.id !== dest.id));', '} catch (e) {', 'maybeRemoved(failureWords(e));');
@@ -11251,7 +11251,7 @@ test('Part 12 fixes (F1): WIRING — the Audit log\'s Remove judges a 404 by the
     const s = code(read(P12A_AUDIT));
     order(s, '\nconst destRefusedOwn = (res, body) => ', '\nconst destGone = (res, body) => res.status === 404 && destRefusedOwn(res, body);', '\nexport const AuditDetail = ');
     assert.equal(count(s, 'const destGone = '), 1);
-    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true);');
+    const rm = between(s, '    const remove = (dest) => showConfirm(', '\n    }, true, { confirm: \'Remove\' });');
     order(rm, 'const refused = await res.json().catch(() => null);', 'if (destGone(res, refused)) {', 'setDests(rows => rows.filter(row => row.id !== dest.id));',
         'setStatusUnread(ids => ids.filter(id => id !== dest.id));', "setDestError('The destination was already removed.');",
         'else if (destRefusedOwn(res, refused)) setDestError(`Remove destination failed — ${refusalWords(res, refused)}`);', 'else maybeRemoved(refusalWords(res, refused));');

@@ -4007,7 +4007,8 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
     const issue  = () => write(url(invoice.id), put({ status: 'issued' }), 'issued');
     const voidIt = () => {
         const go = () => write(url(invoice.id), put({ status: 'void' }), 'voided');
-        if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);
+        // Its button says Void (state §0.272): the confirm's default for a danger is "Delete", and a void keeps the invoice.
+        if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true, { confirm: 'Void invoice' });
         else go();
     };
     const markPaid = async () => {

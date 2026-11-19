@@ -426,7 +426,8 @@ test('DispatchTab: the invoice panel and the Invoices view at module scope; the 
     assert.ok(s.includes('{selected && <JobInvoicePanel key={selected.id} job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}'));
     assert.ok(s.includes('openJobRequest={openJobRequest} showConfirm={showConfirm}'));
     assert.ok(s.includes('                                    value: parseFloat(saved.invoiceAmount || 0),'), 'the board adopts the mirrored amount');
-    assert.ok(s.includes('if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);'), 'the danger variant');
+    assert.ok(s.includes('if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true, { confirm: \'Void invoice\' });'), 'the danger variant');
+    // Moved pin (§0.272): its button says "Void invoice", never the danger default "Delete" (tests/house-dialogs.test.mjs).
     // Moved in §0.263 (the unknown-save rule, Part 4): the refusal's body read once (writeRefusalOf); only the server's own
     // refusal says "not", any other answer may have written it; a create answered 409 naming the job's invoice adopts it.
     assert.ok(s.includes('                const r = await writeRefusalOf(res);'), 'a refusal\'s body read once');

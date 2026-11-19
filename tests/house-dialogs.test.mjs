@@ -67,3 +67,57 @@ test('coachingNotes is OUT of settings.mjs entirely (§0.83), and the Manager ca
     assert.ok(!s.includes('managerNote'), 'no Manager may write the settings blob');
     assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], headers);"));
 });
+
+// §0.272: a confirm's button names its own action. ModalLayer falls back to "Delete" for a danger confirm
+// with no labels — right for a delete, wrong over a Void, a Rotate, a Remove or a Deactivate (Jeff, 19 Nov:
+// "Void button wording"). Every showConfirm under src/ is parsed: a danger one (third argument true or left
+// out) whose message is not a literal starting "Delete" or "Permanently delete" passes labels naming its
+// confirm word.
+test('§0.272 every danger confirm that is not a delete names its own button', async () => {
+    const { parse } = await import('@babel/parser');
+    const ml = read('src/components/layout/ModalLayer.jsx');
+    assert.ok(ml.includes("{confirmModal.labels?.confirm || (confirmModal.danger !== false ? 'Delete' : 'Confirm')}"),
+        'the premise: an unlabelled danger confirm reads "Delete"');
+    assert.ok(read('src/App.jsx').includes('const showConfirm = (message, onConfirm, danger = true, labels = null) => {'),
+        'the premise: danger defaults to true');
+    const calls = [], offenders = [];
+    for (const f of walk(fileURLToPath(new URL('src', root)))) {
+        const src = readFileSync(f, 'utf8');
+        if (!src.includes('showConfirm(')) continue;
+        const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+        const visit = (n) => {
+            if (!n || typeof n.type !== 'string') return;
+            if (n.type === 'CallExpression') {
+                const c = n.callee;
+                const name = c.type === 'Identifier' ? c.name : (c.type === 'MemberExpression' && !c.computed ? c.property.name : null);
+                if (name === 'showConfirm' && n.arguments.length) {
+                    const [msg, , danger, labels] = n.arguments;
+                    const where = `${f.replace(/\\/g, '/').replace(/^.*?\/src\//, 'src/')}:${n.loc.start.line}`;
+                    calls.push(where);
+                    const isDanger = !danger || !(danger.type === 'BooleanLiteral' && danger.value === false);
+                    const head = msg.type === 'StringLiteral' ? msg.value
+                        : msg.type === 'TemplateLiteral' ? msg.quasis[0].value.cooked : null;
+                    const isDelete = head != null && /^(Delete|Permanently delete) /.test(head);
+                    const named = labels && (labels.type === 'Identifier'
+                        || (labels.type === 'ObjectExpression' && labels.properties.some(p => p.key && (p.key.name || p.key.value) === 'confirm')));
+                    if (isDanger && !isDelete && !named) offenders.push(`${where}: ${src.slice(msg.start, msg.end).slice(0, 60)}`);
+                }
+            }
+            for (const k of Object.keys(n)) {
+                if (k === 'loc') continue;
+                const v = n[k];
+                if (Array.isArray(v)) v.forEach(visit); else if (v && typeof v === 'object') visit(v);
+            }
+        };
+        visit(ast.program);
+    }
+    assert.ok(calls.length >= 35, `the scan reads every confirm (found ${calls.length})`);
+    assert.deepEqual(offenders, [], 'a danger confirm that is not a delete shows "Delete" on its button');
+    // The batch's own five, by their words.
+    assert.ok(read('src/Tabs/DispatchTab.jsx').includes("a new invoice can be raised for this job.`, go, true, { confirm: 'Void invoice' });"));
+    const audit = read('src/Tabs/settings/audit/AuditDetail.jsx');
+    assert.ok(audit.includes("}, true, { confirm: 'Rotate secret' });"));
+    assert.ok(audit.includes("}, true, { confirm: 'Remove' });"));
+    assert.ok(read('src/Tabs/SalesManagerTab.jsx').includes("()=>removeSpiff(spiff),true,{ confirm: 'Remove' })"));
+    assert.ok(read('src/hooks/useQuotes.js').includes("doDelete, true, { confirm: 'Deactivate' });"));
+});

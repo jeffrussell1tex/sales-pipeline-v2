@@ -206,7 +206,7 @@ export function useQuotes() {
             return { ok: true };
         };
         if (showConfirm) {
-            showConfirm('Deactivate this product? It will no longer appear in the catalog for new quotes.', doDelete, true);
+            showConfirm('Deactivate this product? It will no longer appear in the catalog for new quotes.', doDelete, true, { confirm: 'Deactivate' });   // never "Delete" over a soft delete (state §0.272)
             return null;
         }
         return doDelete();
