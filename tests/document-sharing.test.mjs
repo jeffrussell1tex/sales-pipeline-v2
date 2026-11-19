@@ -122,15 +122,17 @@ test('a link names a record of this org the caller can see, under the record\'s 
     assert.ok(s.includes("task:        { table: tasks,         name: (r) => r.title },"));
     assert.ok(s.includes("activity:    { table: activities,    name: (r) => r.subject || r.type },"));
     const create = between(s, "if (!action || action === 'create') {", "if (action === 'new-version') {");
-    before(create, 'const linked = await resolveLinks(auth, viewer, asked, headers);', 'await db.insert(documents)', 'a create checks its links first');
-    before(create, 'const who = await whoMaySee(orgId, visibility || \'team\', visibilityUserIds, headers);', 'await db.insert(documents)', 'and its people');
+    // Moved in §0.267: the create's writes are one batch.
+    before(create, 'const linked = await resolveLinks(auth, viewer, asked, headers);', 'await db.batch([', 'a create checks its links first');
+    before(create, 'const who = await whoMaySee(orgId, visibility || \'team\', visibilityUserIds, headers);', 'await db.batch([', 'and its people');
     const link = between(s, "if (action === 'link') {", "return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action' }) };");
     before(link, 'const linked = await resolveLinks(auth, viewer, asked, headers);', 'await insertLinks(orgId, id, linked.rows)', 'a link too');
 });
 
 test('a restore answers the document it left', () => {
     const restore = between(fn(), "if (action === 'restore-version') {", "if (action === 'link') {");
-    assert.ok(restore.includes('.where(and(eq(documents.id, id), eq(documents.orgId, orgId))).returning();'));
+    // Moved in §0.267: the update answers from inside the restore's batch.
+    assert.ok(restore.includes('.where(and(eq(documents.id, id), eq(documents.orgId, orgId))).returning(),') && restore.includes('const [, [restored]] = await db.batch(['));
     assert.ok(restore.includes('document: restored ? { ...restored, visibility: restored.visibilityKind } : null'));
     const hook = read('src/hooks/useDocuments.js');
     assert.ok(hook.includes("d.id === id ? { ...d, modifiedAt: new Date().toISOString(), ...(r.data.document || {}), version: r.data.version } : d));"),

@@ -351,28 +351,29 @@ export const handler = async (event) => {
           version: 1, storageKey, contentType: contentType || null, note: note || null,
           uploadedAt: now, modifiedAt: now, createdAt: now, updatedAt: now,
         };
-        // A create never takes over an id (state §0.166). The upsert this was wrote
-        // nothing for an id another org holds — and the version and link rows below
-        // went in anyway, against that org's document (the links' unique index
-        // ignores the org, so one could block that org's own link). An id this org
-        // holds is refused too: a create resets a document to version 1, and
-        // changing one is PUT, a new file is new-version.
-        const [created] = await db.insert(documents).values(row)
-          .onConflictDoNothing({ target: documents.id })
-          .returning({ id: documents.id });
-        // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
-        // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
-        if (!created && await ownIdTaken(documents, row.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.', code: 'idInUse' }) };
-        if (!created) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };
+        // A create never takes over an id (state §0.166): an id a document holds — another org's, or this org's (a create
+        // resets a document to version 1; changing one is PUT, a new file is new-version) — is refused before anything is
+        // written. Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) —
+        // said with code 'idInUse', which the screen reads as landed. Another org's id: the words alone.
+        const [taken] = await db.select({ id: documents.id }).from(documents).where(eq(documents.id, row.id));
+        if (taken && await ownIdTaken(documents, row.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.', code: 'idInUse' }) };
+        if (taken) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };
 
-        // version 1
-        await db.insert(documentVersions).values({
-          id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v: 1,
-          storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || null,
-          byId: userId, byName: row.ownerName, note: 'Initial upload', createdAt: now,
-        });
-
-        const inserted = await insertLinks(orgId, id, links);
+        // The document, its version 1 and its links: one batch, all of them or none (state §0.267). They were three
+        // statements, and a failure after the first left a document with no version or no links, answered 500 — and a
+        // retry was refused "already in use" over the half-made row (census-D §2B-C). A plain insert: an id taken between
+        // the read and the batch fails the whole batch, nothing written — never the version and links of another's row.
+        const linkRows = linkRowsOf(orgId, id, links);
+        const made = await db.batch([
+          db.insert(documents).values(row),
+          db.insert(documentVersions).values({
+            id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v: 1,
+            storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || null,
+            byId: userId, byName: row.ownerName, note: 'Initial upload', createdAt: now,
+          }),
+          ...(linkRows.length ? [insertLinkRows(linkRows)] : []),
+        ]);
+        const inserted = linkRows.length ? linksAnswered(made[2]) : [];
         await auditAs(orgId, userId, { action: 'document.created', entityType: 'document', entityId: id, entityName: name, detail: `${row.category} · ${row.ext || 'file'} · ${row.sizeKb} KB · ${row.visibilityKind}${inserted.length ? ` · linked to ${inserted.length}` : ''}` });
         return { statusCode: 201, headers, body: JSON.stringify({ document: { ...row, visibility: row.visibilityKind, canManage: mayManage(row, viewer), links: inserted } }) };
       }
@@ -385,14 +386,20 @@ export const handler = async (event) => {
         const v = (doc.version || 1) + 1;
         if (!keyIs(storageKey, orgId, id, v)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         const now = new Date();
-        await db.insert(documentVersions).values({
-          id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
-          storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || null,
-          byId: userId, byName: (await getCallerName(userId, orgId)) || 'Unknown', note: note || null, createdAt: now,
-        });
-        await db.update(documents)
-          .set({ version: v, storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || doc.contentType, modifiedAt: now, updatedAt: now })
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+        const byName = (await getCallerName(userId, orgId)) || 'Unknown';
+        // The version row and the document's move to it: one batch (state §0.267). Two statements before, a failure
+        // between them left a version the document never pointed at — and the next new-version read the old number and
+        // stored a second v (census-D §5).
+        await db.batch([
+          db.insert(documentVersions).values({
+            id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
+            storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || null,
+            byId: userId, byName, note: note || null, createdAt: now,
+          }),
+          db.update(documents)
+            .set({ version: v, storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || doc.contentType, modifiedAt: now, updatedAt: now })
+            .where(and(eq(documents.id, id), eq(documents.orgId, orgId))),
+        ]);
         await auditAs(orgId, userId, { action: 'document.version_added', entityType: 'document', entityId: id, entityName: doc.name, detail: `v${v} · ${Number(sizeKb) || 0} KB${note ? ' · ' + String(note).slice(0, 120) : ''}` });
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true, version: v }) };
       }
@@ -407,14 +414,18 @@ export const handler = async (event) => {
         if (!src) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Version not found' }) };
         const v = (doc.version || 1) + 1;
         const now = new Date();
-        await db.insert(documentVersions).values({
-          id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
-          storageKey: src.storageKey, sizeKb: src.sizeKb, contentType: src.contentType,
-          byId: userId, byName: (await getCallerName(userId, orgId)) || 'Unknown', note: `Restored from v${src.v}`, createdAt: now,
-        });
-        const [restored] = await db.update(documents)
-          .set({ version: v, storageKey: src.storageKey, sizeKb: src.sizeKb, modifiedAt: now, updatedAt: now })
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId))).returning();
+        const byName = (await getCallerName(userId, orgId)) || 'Unknown';
+        // The restored version and the document's move to it: one batch (state §0.267), as a new version is.
+        const [, [restored]] = await db.batch([
+          db.insert(documentVersions).values({
+            id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
+            storageKey: src.storageKey, sizeKb: src.sizeKb, contentType: src.contentType,
+            byId: userId, byName, note: `Restored from v${src.v}`, createdAt: now,
+          }),
+          db.update(documents)
+            .set({ version: v, storageKey: src.storageKey, sizeKb: src.sizeKb, modifiedAt: now, updatedAt: now })
+            .where(and(eq(documents.id, id), eq(documents.orgId, orgId))).returning(),
+        ]);
         await auditAs(orgId, userId, { action: 'document.version_restored', entityType: 'document', entityId: id, entityName: doc.name, detail: `v${v} restored from v${src.v}` });
         // The document as the restore left it (state §0.183): its size and file are the
         // restored version's — the answer was the number alone, and the screens kept the
@@ -490,16 +501,20 @@ export const handler = async (event) => {
       if (refusal && refusal.statusCode !== 404) return refusal;
       // ...by its owner or an Admin (state §0.183; Jeff: "Owner or an Admin").
       if (doomed && !mayManage(doomed, viewer)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only the document\'s owner or an Admin can delete it.' }) };
-      // best-effort blob cleanup (don't fail the row delete on storage error)
+      // The versions, the links and the document: one batch, all or none (state §0.267) — three statements before, a
+      // failure between them left a document with no versions, or links to none. The files after, best effort, from the
+      // keys the batch deleted: before, they went first, and a delete that then failed left a document whose files were
+      // gone.
+      const [goneVersions] = await db.batch([
+        db.delete(documentVersions).where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id)))
+          .returning({ storageKey: documentVersions.storageKey }),
+        db.delete(documentLinks).where(and(eq(documentLinks.orgId, orgId), eq(documentLinks.documentId, id))),
+        db.delete(documents).where(and(eq(documents.id, id), eq(documents.orgId, orgId))),
+      ]);
       try {
-        const vers = await db.select().from(documentVersions)
-          .where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id)));
-        await Promise.allSettled(vers.map((ver) =>
-          r2().send(new DeleteObjectCommand({ Bucket: BUCKET(), Key: ver.storageKey }))));
+        await Promise.allSettled([...new Set(goneVersions.map((ver) => ver.storageKey).filter(Boolean))].map((key) =>
+          r2().send(new DeleteObjectCommand({ Bucket: BUCKET(), Key: key }))));
       } catch (e) { console.warn('[documents] R2 cleanup failed', e?.message); }
-      await db.delete(documentVersions).where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id)));
-      await db.delete(documentLinks).where(and(eq(documentLinks.orgId, orgId), eq(documentLinks.documentId, id)));
-      await db.delete(documents).where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
       if (doomed) await auditAs(orgId, userId, { action: 'document.deleted', entityType: 'document', entityId: id, entityName: doomed.name, detail: `${doomed.version || 1} version${(doomed.version || 1) === 1 ? '' : 's'} removed` });
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     }
@@ -510,19 +525,23 @@ export const handler = async (event) => {
   }
 };
 
-// Insert links, de-duplicating against the unique (documentId, recordType, recordId) index.
-async function insertLinks(orgId, documentId, links) {
+// A document's link rows, the insert of them (de-duplicating against the unique (documentId, recordType, recordId)
+// index) and its answer as the screens read it — apart, so a create's batch can carry the insert (state §0.267).
+function linkRowsOf(orgId, documentId, links) {
   if (!Array.isArray(links) || !links.length) return [];
-  const rows = links
+  return links
     .filter((l) => l && RECORD_TYPES.has(l.type) && (l.recordId || l.id))
     .map((l) => ({
       id: 'dlk_' + crypto.randomUUID(), orgId, documentId,
       recordType: l.type, recordId: String(l.recordId || l.id),
       recordName: l.name || null, recordSub: l.sub || null, createdAt: new Date(),
     }));
-  if (!rows.length) return [];
-  const inserted = await db.insert(documentLinks).values(rows)
-    .onConflictDoNothing({ target: [documentLinks.documentId, documentLinks.recordType, documentLinks.recordId] })
-    .returning();
-  return inserted.map((l) => ({ id: l.id, type: l.recordType, recordId: l.recordId, name: l.recordName, sub: l.recordSub }));
+}
+const insertLinkRows = (rows) => db.insert(documentLinks).values(rows)
+  .onConflictDoNothing({ target: [documentLinks.documentId, documentLinks.recordType, documentLinks.recordId] })
+  .returning();
+const linksAnswered = (inserted) => (inserted || []).map((l) => ({ id: l.id, type: l.recordType, recordId: l.recordId, name: l.recordName, sub: l.recordSub }));
+async function insertLinks(orgId, documentId, links) {
+  const rows = linkRowsOf(orgId, documentId, links);
+  return rows.length ? linksAnswered(await insertLinkRows(rows)) : [];
 }

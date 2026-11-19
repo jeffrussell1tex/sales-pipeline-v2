@@ -40,12 +40,13 @@ test('each write to an existing document reads it through writableDoc before it 
     const s = code(read('netlify/functions/documents.mjs'));
     const branches = [
         ['a version\'s upload URL', between(s, "if (kind === 'version') {", '} else {'), 'await writableDoc(documentId, orgId, viewer, headers', 'v = (doc.version || 1) + 1;'],
-        ['a new version', between(s, "if (action === 'new-version') {", "if (action === 'restore-version') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.insert(documentVersions)'],
-        ['a restore', between(s, "if (action === 'restore-version') {", "if (action === 'link') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.insert(documentVersions)'],
+        // Moved in §0.267: the version and the document's move to it are one batch.
+        ['a new version', between(s, "if (action === 'new-version') {", "if (action === 'restore-version') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.batch(['],
+        ['a restore', between(s, "if (action === 'restore-version') {", "if (action === 'link') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.batch(['],
         ['a link', between(s, "if (action === 'link') {", "return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action' }) };"), 'await writableDoc(id, orgId, viewer, headers)', 'await insertLinks(orgId, id, linked.rows)'],
         ['a PUT', between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {"), 'await writableDoc(data.id, orgId, viewer, headers)', 'await db.update(documents)'],
         ['an unlink', between(s, "if (event.httpMethod === 'DELETE') {", 'const id = qs.id;'), 'await writableDoc(link.documentId, orgId, viewer, headers)', 'await db.delete(documentLinks)'],
-        ['a delete', s.slice(s.indexOf('const id = qs.id;'), s.indexOf("return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };")), 'await writableDoc(id, orgId, viewer, headers)', 'await db.delete(documentVersions)'],
+        ['a delete', s.slice(s.indexOf('const id = qs.id;'), s.indexOf("return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };")), 'await writableDoc(id, orgId, viewer, headers)', 'await db.batch(['],
     ];
     for (const [what, body, check, write] of branches) {
         before(body, check, write, `${what}: the document is checked before the write`);
@@ -56,6 +57,10 @@ test('each write to an existing document reads it through writableDoc before it 
     const del = branches[6][1];
     assert.ok(del.includes('if (refusal && refusal.statusCode !== 404) return refusal;'));
     before(del, 'if (refusal && refusal.statusCode !== 404) return refusal;', 'r2().send(new DeleteObjectCommand', 'refused before the objects go');
+    // Added in §0.267: the rows go first, as one batch — the objects after, from the keys it deleted, each once.
+    before(del, 'const [goneVersions] = await db.batch([', 'r2().send(new DeleteObjectCommand', 'REGRESSION: the objects deleted before the rows — a delete that then failed left a document with no files');
+    assert.ok(del.includes('[...new Set(goneVersions.map((ver) => ver.storageKey).filter(Boolean))]'), 'each object once, from the rows the batch deleted');
+    assert.equal((del.match(/await db\.delete\(/g) || []).length, 0, 'REGRESSION: a delete of its own outside the batch');
     const unlink = branches[5][1];
     assert.ok(unlink.includes('if (link) {'), 'a link that is not there is unlinked already');
 });

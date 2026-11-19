@@ -111,7 +111,9 @@ test('WIRING: each create answers a taken id 409 in words, and says idInUse only
     assert.ok(!/\.select\(\)|returning/.test(own), 'a yes or no — no row answered');
     for (const [file, table, idExpr] of CREATES) {
         const s = read(`netlify/functions/${file}.mjs`);
-        assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id })`), `${file}: a taken id writes nothing`);
+        // Moved in §0.267: a document is read first and refused (its writes are one batch, its insert plain — foreign-ids).
+        if (file === 'documents') assert.ok(s.includes('if (taken && await ownIdTaken(documents, row.id, orgId))'), 'documents: a taken id refused before its batch');
+        else assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id })`), `${file}: a taken id writes nothing`);
         assert.ok(s.includes(`await ownIdTaken(${table}, ${idExpr}, orgId)`), `${file}: idInUse asked of this org's ${table}`);
         assert.ok(/import \{[^}]*\bownIdTaken\b[^}]*\} from '\.\/_lib\.mjs';/.test(s), `${file}: imports it`);
     }

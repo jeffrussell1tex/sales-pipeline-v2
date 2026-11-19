@@ -31,11 +31,17 @@ test('a new member\'s id is minted by the server — the screen sends none, and 
 
 test('a document create never takes over an id, and every key must be one the server issues', () => {
     const d = fn('documents');
-    assert.ok(d.includes('.onConflictDoNothing({ target: documents.id })'), 'REGRESSION: the create upserts again');
-    assert.ok(d.includes("if (!created) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };"), 'REGRESSION: the version and link rows go in for an id the create did not write');
+    // Moved in §0.267: the id is read first and a taken one refused; then the document, its version 1 and its links are
+    // one batch whose document insert is plain — an id taken between the read and the batch fails it whole, so the
+    // version and link rows never go in for a document the create did not write.
     const create = d.slice(d.indexOf("if (!action || action === 'create') {"), d.indexOf("if (action === 'new-version') {"));
-    assert.ok(create.indexOf('if (!created) return') < create.indexOf('await db.insert(documentVersions)'), 'refused before the version row');
-    assert.ok(create.indexOf('if (!created) return') < create.indexOf('await insertLinks(orgId, id, links)'), 'and before the links');
+    assert.ok(!create.includes('onConflictDoUpdate') && !create.includes('onConflictDoNothing({ target: documents.id })'), 'REGRESSION: the create upserts again, or skips a taken id inside the batch');
+    assert.ok(create.includes('const [taken] = await db.select({ id: documents.id }).from(documents).where(eq(documents.id, row.id));'));
+    assert.ok(create.includes("if (taken) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };"), 'REGRESSION: a taken id not refused');
+    assert.ok(create.indexOf('if (taken) return') < create.indexOf('const made = await db.batch(['), 'refused before anything is written');
+    const batch = create.slice(create.indexOf('const made = await db.batch(['), create.indexOf(']);', create.indexOf('const made = await db.batch([')));
+    assert.ok(batch.includes('db.insert(documents).values(row),') && batch.includes('db.insert(documentVersions).values({') && batch.includes('...(linkRows.length ? [insertLinkRows(linkRows)] : []),'), 'REGRESSION: the version or the links written outside the document\'s batch');
+    assert.ok(!create.includes('await db.insert(') && !create.includes('await insertLinks('), 'nothing written on its own');
     assert.ok(d.includes('const KEY_SHAPE = /^[^/]+\\/[^/]+\\/v\\d+\\/[A-Za-z0-9._-]+$/;'));
     assert.ok(d.includes('typeof key === \'string\' && key.startsWith(`${orgId}/${docId}/v${v}/`) && KEY_SHAPE.test(key);'), 'REGRESSION: any key under the prefix is taken');
     assert.ok(d.includes("if (!keyIs(storageKey, orgId, id, 1)) return"), 'a create takes version 1\'s key');

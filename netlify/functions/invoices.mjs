@@ -82,14 +82,26 @@ async function liveInvoiceFor(orgId, jobId) {
     return rows.find(isLiveInvoice) || null;
 }
 
-// Re-mirror the job from its live invoice; return the job as the client reads it.
-async function mirrorJob(orgId, jobId) {
-    if (!jobId) return null;
-    const live = await liveInvoiceFor(orgId, jobId);
-    await db.update(dispatchJobs).set({ ...mirrorForJob(live ? normaliseInvoice(live) : null), updatedAt: new Date() })
-        .where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId)));
-    const [job] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId)));
-    return job ? normaliseJob(job) : null;
+// The job's mirror of its live invoice (mirrorForJob's three columns: its total, its status — 'none' with none — and when
+// it was paid), as one UPDATE that reads the live invoice in SQL: the newest of the job's invoices whose status is not
+// void (isLiveInvoice). It rides in the same db.batch as the invoice write it follows (state §0.267), so it reads that
+// write and lands with it or not at all — it was a read and an update after the write, and a failure between left the
+// job showing the invoice as it was, answered 500 (census-D §2C). Returns the job row, answered by the update itself.
+const liveInvoiceCol = (orgId, jobId, col) => sql`(${db.select({ v: col }).from(invoices)
+    .where(and(eq(invoices.orgId, orgId), eq(invoices.jobId, jobId), sql`${invoices.status} <> 'void'`))
+    .orderBy(desc(invoices.createdAt)).limit(1)})`;
+const mirrorStatement = (orgId, jobId) => db.update(dispatchJobs).set({
+    invoiceAmount: liveInvoiceCol(orgId, jobId, invoices.total),
+    invoiceStatus: sql`coalesce(${liveInvoiceCol(orgId, jobId, invoices.status)}, 'none')`,
+    invoicePaidAt: liveInvoiceCol(orgId, jobId, invoices.paidAt),
+    updatedAt: new Date(),
+}).where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId))).returning();
+// An invoice write and the job's mirror, as one batch: [the write's rows, the job as the client reads it (null with no
+// job)]. An invoice with no job writes alone.
+async function withMirror(orgId, jobId, write) {
+    if (!jobId) return [await write, null];
+    const [rows, [job]] = await db.batch([write, mirrorStatement(orgId, jobId)]);
+    return [rows, job ? normaliseJob(job) : null];
 }
 
 const detailOf = (inv) => `${inv.status} · $${Number(inv.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.dueDate ? ' · due ' + inv.dueDate : ''}`;
@@ -157,9 +169,11 @@ export const handler = async (event) => {
             const dueDate   = patch.dueDate   === undefined ? dueDateFromTerms(issueDate, paymentTerms) : patch.dueDate;
             const id = 'inv_' + randomUUID();
             const now = new Date();
-            const [inserted] = await withNumberRetry(async () => {
+            // The invoice and the job's mirror of it, one batch (state §0.267); a number another press took fails the batch
+            // whole and is tried again.
+            const [[inserted], mirrored] = await withNumberRetry(async () => {
                 const invoiceNumber = await nextInvoiceNumber(orgId);
-                return db.insert(invoices).values({
+                return withMirror(orgId, jobId, db.insert(invoices).values({
                     id, orgId, invoiceNumber,
                     jobId, quoteId: job.quoteId ?? null, customerId: job.customerId ?? null,
                     accountId: job.accountId ?? null, opportunityId: job.opportunityId ?? null,
@@ -168,9 +182,8 @@ export const handler = async (event) => {
                     lineItems: lines, ...totalsFor(lines, taxRate),
                     amountPaid: null, paidAt: null, notes: patch.notes ?? null,
                     createdBy: userId ?? null, createdAt: now, updatedAt: now,
-                }).returning();
+                }).returning());
             }, { label: 'invoice number' });
-            const mirrored = await mirrorJob(orgId, jobId);
             await auditAs(orgId, userId, { action: 'invoice.created', entityType: 'invoice', entityId: inserted.id, entityName: inserted.invoiceNumber, detail: `${detailOf(inserted)} · ${job.jobNumber || jobId} · ${lines.length} line item${lines.length === 1 ? '' : 's'}` });
             return reply(201, { invoice: normaliseInvoice(inserted), job: mirrored });
         }
@@ -225,9 +238,11 @@ export const handler = async (event) => {
                 }
             }
 
-            const [updated] = await db.update(invoices).set(updates)
-                .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId))).returning();
-            const mirrored = await mirrorJob(orgId, updated.jobId);
+            // The change and the job's mirror of it, one batch (state §0.267). A PUT never moves the invoice's job.
+            const [[updated], mirrored] = await withMirror(orgId, current.jobId, db.update(invoices).set(updates)
+                .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId))).returning());
+            // Deleted since it was read: nothing changed (the mirror reads what stands).
+            if (!updated) return reply(404, { error: 'Not found' });
             const changed = Object.keys(updates).filter(k => k !== 'updatedAt');
             await auditAs(orgId, userId, { action, entityType: 'invoice', entityId: updated.id, entityName: updated.invoiceNumber, detail: `${detailOf(updated)}${action === 'invoice.updated' ? ' · ' + changed.join(', ') : ''}`.slice(0, 300) });
             return reply(200, { invoice: normaliseInvoice(updated), job: mirrored });
@@ -240,8 +255,8 @@ export const handler = async (event) => {
             const [current] = await db.select().from(invoices).where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
             if (!current) return reply(404, { error: 'Not found' });
             if (current.status !== 'draft') return reply(422, { error: `${current.invoiceNumber} is ${current.status} — void it instead of deleting it.` });
-            await db.delete(invoices).where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
-            const mirrored = await mirrorJob(orgId, current.jobId);
+            // The delete and the job's mirror, one batch (state §0.267).
+            const [, mirrored] = await withMirror(orgId, current.jobId, db.delete(invoices).where(and(eq(invoices.id, id), eq(invoices.orgId, orgId))).returning({ id: invoices.id }));
             await auditAs(orgId, userId, { action: 'invoice.deleted', entityType: 'invoice', entityId: current.id, entityName: current.invoiceNumber, detail: detailOf(current) });
             return reply(200, { ok: true, job: mirrored });
         }

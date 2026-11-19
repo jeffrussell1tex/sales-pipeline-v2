@@ -180,7 +180,8 @@ test('the owner may do each — and a delete takes its versions, its links and t
     assert.equal(await docRow(PRIV), undefined, 'the document is gone');
     assert.deepEqual(await versionsOf(PRIV), [], 'and its versions');
     assert.deepEqual(await linksOf(PRIV), [], 'and its links');
-    assert.equal(r2Sent.length, 4, 'and each version\'s object');
+    // Moved in §0.267: each object once — v4, restored from v1, holds v1's object, which was asked to go twice before.
+    assert.deepEqual(r2Sent.map((c) => c.Key).sort(), [`${A}/${PRIV}/v1/f.pdf`, `${A}/${PRIV}/v2/f.pdf`, `${A}/${PRIV}/v3/x.pdf`].sort(), 'and each version\'s object, once');
     const actions = (await auditFor(PRIV)).map((a) => a.action).sort();
     assert.deepEqual(actions, ['document.deleted', 'document.linked', 'document.unlinked', 'document.updated', 'document.version_added', 'document.version_restored'].sort());
 });

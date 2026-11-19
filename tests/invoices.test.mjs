@@ -360,7 +360,21 @@ test('invoices.mjs: technician 403, every read and write by org, totals recomput
     assert.ok(f.includes("if (editing.length && !isInvoiceEditable(current.status)) {"));
     assert.ok(f.includes('if (!canTransition(current.status, to)) {'));
     assert.ok(f.includes("if (live) return reply(409, { error: `${live.invoiceNumber} is already open on this job. Void it to start another.`, invoice: normaliseInvoice(live) });"));
-    assert.equal((f.match(/await mirrorJob\(orgId, /g) || []).length, 3, 'POST, PUT and DELETE each re-mirror the job');
+    // Moved in §0.267: each write and the job's mirror are one batch (withMirror), the mirror reading the live invoice in SQL.
+    assert.equal((f.match(/await withMirror\(orgId, /g) || []).length, 2, 'PUT and DELETE each re-mirror the job with their write');
+    assert.ok(f.includes('return withMirror(orgId, jobId, db.insert(invoices).values({'), 'POST too, inside its number retry');
+    assert.ok(f.includes('const [rows, [job]] = await db.batch([write, mirrorStatement(orgId, jobId)]);'), 'REGRESSION: the mirror written apart from its invoice');
+    assert.ok(!f.includes('mirrorJob('), 'REGRESSION: a mirror read and written after the invoice, on its own');
+    // The live invoice in SQL, as isLiveInvoice and liveInvoiceFor read it: the job's, this org's, not void, newest first;
+    // no live invoice reads 'none' (mirrorForJob). tests/integration/invoices.itest.mjs runs it.
+    const liveAt = f.indexOf('const liveInvoiceCol = (orgId, jobId, col) => sql`(${db.select({ v: col }).from(invoices)');
+    assert.ok(liveAt >= 0, 'the live invoice read in SQL');
+    const live = f.slice(liveAt, f.indexOf('.limit(1)})`;', liveAt));
+    assert.ok(live.includes("eq(invoices.orgId, orgId), eq(invoices.jobId, jobId), sql`${invoices.status} <> 'void'`") && live.includes('.orderBy(desc(invoices.createdAt))'),
+        'REGRESSION: the mirror reads a void invoice, another job\'s or another org\'s, or not the newest');
+    assert.ok(f.includes("invoiceStatus: sql`coalesce(${liveInvoiceCol(orgId, jobId, invoices.status)}, 'none')`,"), 'no live invoice: none');
+    assert.ok(f.includes('invoiceAmount: liveInvoiceCol(orgId, jobId, invoices.total),') && f.includes('invoicePaidAt: liveInvoiceCol(orgId, jobId, invoices.paidAt),'));
+    assert.ok(f.includes("if (!updated) return reply(404, { error: 'Not found' });"), 'a PUT whose invoice went since it was read: 404, never a crash on its row');
     assert.ok(f.includes("if (!isAdmin(auth.userRole)) return reply(403, { error: 'Admin only' });"));
     assert.ok(f.includes("if (current.status !== 'draft') return reply(422, { error: `${current.invoiceNumber} is ${current.status} — void it instead of deleting it.` });"));
     for (const a of ['invoice.created', 'invoice.issued', 'invoice.paid', 'invoice.voided', 'invoice.updated', 'invoice.deleted']) assert.ok(f.includes(`'${a}'`), a);
