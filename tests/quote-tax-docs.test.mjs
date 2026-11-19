@@ -217,7 +217,9 @@ test('WIRING: quote-to-job carries the deal discount; a new invoice takes its qu
     const j = code(read('netlify/functions/quote-to-job.mjs'));
     assert.ok(j.includes('rows.push(...quoteDiscountJobItems(rows, quote, rows.length).map((item) => ({'), 'REGRESSION (§0.241): the deal discount never reaches the job');
     assert.ok(j.includes("id: 'djli_' + randomUUID(), orgId, jobId, ...item, createdAt: now, updatedAt: now,"), 'each discount line the job\'s, in this org');
-    assert.ok(j.indexOf('rows.push(...quoteDiscountJobItems(') < j.indexOf('await db.insert(dispatchJobLineItems).values(rows);'), 'written with the lines');
+    // Moved in §0.269: the lines, discount lines with them, are written in the job's batch.
+    const linesAt = j.indexOf('...(rows.length ? [db.insert(dispatchJobLineItems).values(rows)] : []),');
+    assert.ok(linesAt > 0 && j.indexOf('rows.push(...quoteDiscountJobItems(') < linesAt, 'written with the lines');
     const inv = code(read('netlify/functions/invoices.mjs'));
     assert.ok(inv.includes('let taxRate = patch.taxRate;') && inv.includes('if (paymentTerms === undefined || taxRate === undefined) {'));
     assert.ok(inv.includes('? await db.select({ paymentTerms: quotes.paymentTerms, taxRate: quotes.taxRate, taxExempt: quotes.taxExempt }).from(quotes).where(and(eq(quotes.id, job.quoteId), eq(quotes.orgId, orgId))).limit(1)'),

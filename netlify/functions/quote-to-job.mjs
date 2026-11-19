@@ -138,53 +138,22 @@ export const handler = async (event) => {
         // live — a deal on an account deleted since (or merged into a chain that leads nowhere) links none; it stored
         // the dead id, which no write may name (§0.214's eighth review; CLAUDE.md, a link names a live row).
         const linkTo = orgAccounts.some((a) => a.id === found.accountId && a.mergeArchived !== true) ? found.accountId : null;
-        let customer = found.customer || null;
-        let customerCreated = false;
-        if (!customer) {
-            const name = String(opp?.account || opp?.opportunityName || quote.name || 'Customer').trim().slice(0, 255);
-            const id = 'dcust_' + randomUUID();
-            await withNumberRetry(async () => {
-                const customerNumber = await nextCustomerNumber(orgId);
-                await db.insert(dispatchCustomers).values({
-                    id, orgId, customerNumber, name,
-                    accountId: linkTo,   // the account the deal stands on (state §0.214)
-                    customerType: 'commercial',
-                    tags: JSON.stringify([]),
-                    createdAt: new Date(), updatedAt: new Date(),
-                });
-            }, { label: 'customer number' });
-            customer = { id, name, accountId: linkTo };
-            customerCreated = true;
-            await auditAs(orgId, userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: id, entityName: name, detail: `from quote ${quote.quoteNumber}` });
-        }
+        // The customer a deal has none for is made in the job's batch, below — never alone (state §0.269).
+        const customerCreated = !found.customer;
+        const customer = found.customer || {
+            id: 'dcust_' + randomUUID(),
+            name: String(opp?.account || opp?.opportunityName || quote.name || 'Customer').trim().slice(0, 255),
+            accountId: linkTo,   // the account the deal stands on (state §0.214)
+        };
 
         // ── the job ──────────────────────────────────────────────────────────
         const { title, description } = jobFromQuote(quote, opp);
         const jobId = 'djob_' + randomUUID();
         const now = new Date();
-        await withNumberRetry(async () => {
-            const jobNumber = await nextJobNumber(orgId);
-            await db.insert(dispatchJobs).values({
-                id: jobId, orgId, jobNumber,
-                customerId: customer.id,
-                accountId: linkTo || customer.accountId || null,
-                opportunityId: quote.opportunityId ?? null,
-                quoteId: quote.id,
-                title, description,
-                trade: '', jobType: '',
-                status: 'unscheduled', priority: 'normal', timeSlot: 'anytime',
-                needSkills: JSON.stringify([]), coTechIds: JSON.stringify([]),
-                equipmentIds: JSON.stringify([]), assignedEquipmentIds: JSON.stringify([]),
-                tags: JSON.stringify([]), customFields: JSON.stringify({}),
-                invoiceStatus: 'none',
-                createdBy: userId ?? null,
-                createdAt: now, updatedAt: now,
-            });
-        }, { label: 'job number' });
 
         // ── the lines: the quote's, at the price the customer accepted ───────
         const quoteLines = Array.isArray(quote.lineItems) ? quote.lineItems : [];
-        let lineCount = 0;
+        const rows = [];
         if (quoteLines.length) {
             const ids = [...new Set(quoteLines.map(li => li?.productId).filter(Boolean))];
             const catalog = ids.length
@@ -193,27 +162,62 @@ export const handler = async (event) => {
                 : [];
             const byId = new Map(catalog.map(p => [p.id, p]));
             const types = cleanProductTypes(extra.productTypes);   // the Admin's kinds
-            const rows = quoteLines.map((li, i) => ({
+            rows.push(...quoteLines.map((li, i) => ({
                 id: 'djli_' + randomUUID(), orgId, jobId,
                 ...quoteLineToJobItem(li, i, byId.get(li?.productId) || null, types),
                 createdAt: now, updatedAt: now,
-            }));
+            })));
             // The deal discount the customer accepted, after the lines: one line on the taxable items and one on the rest,
             // so the invoice taxes what the quote taxed (state §0.241, R7) — until §0.241 it never reached the job.
             rows.push(...quoteDiscountJobItems(rows, quote, rows.length).map((item) => ({
                 id: 'djli_' + randomUUID(), orgId, jobId, ...item, createdAt: now, updatedAt: now,
             })));
-            await db.insert(dispatchJobLineItems).values(rows);
-            lineCount = rows.length;
         }
+        const lineCount = rows.length;
 
-        await db.insert(dispatchJobStatusHistory).values({
-            id: `sh_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            orgId, jobId, fromStatus: null, toStatus: 'unscheduled',
-            changedBy: userId ?? null, note: `Job created from quote ${quote.quoteNumber} v${quote.version || 1}`, createdAt: now,
-        }).catch(() => {}); // non-fatal, as dispatch-jobs.mjs treats it
+        // The customer it makes, the job, its lines and its history: ONE batch, all or none (state §0.269). They were four
+        // statements, the history's failure swallowed: a failure after the job left it with no lines, or no customer row
+        // behind it, answered 500 — and every press after was refused "already exists for this quote" over that job, so its
+        // lines never came (census-D §2B-C). The numbers are taken inside the retry; one another press took fails the batch
+        // whole and is tried again. The job is answered by its own insert — no read after the commit.
+        const written = await withNumberRetry(async () => {
+            const customerNumber = customerCreated ? await nextCustomerNumber(orgId) : null;
+            const jobNumber = await nextJobNumber(orgId);
+            const made = await db.batch([
+                ...(customerCreated ? [db.insert(dispatchCustomers).values({
+                    id: customer.id, orgId, customerNumber, name: customer.name,
+                    accountId: linkTo,   // the account the deal stands on (state §0.214)
+                    customerType: 'commercial',
+                    tags: JSON.stringify([]),
+                    createdAt: now, updatedAt: now,
+                })] : []),
+                db.insert(dispatchJobs).values({
+                    id: jobId, orgId, jobNumber,
+                    customerId: customer.id,
+                    accountId: linkTo || customer.accountId || null,
+                    opportunityId: quote.opportunityId ?? null,
+                    quoteId: quote.id,
+                    title, description,
+                    trade: '', jobType: '',
+                    status: 'unscheduled', priority: 'normal', timeSlot: 'anytime',
+                    needSkills: JSON.stringify([]), coTechIds: JSON.stringify([]),
+                    equipmentIds: JSON.stringify([]), assignedEquipmentIds: JSON.stringify([]),
+                    tags: JSON.stringify([]), customFields: JSON.stringify({}),
+                    invoiceStatus: 'none',
+                    createdBy: userId ?? null,
+                    createdAt: now, updatedAt: now,
+                }).returning(),
+                ...(rows.length ? [db.insert(dispatchJobLineItems).values(rows)] : []),
+                db.insert(dispatchJobStatusHistory).values({
+                    id: `sh_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    orgId, jobId, fromStatus: null, toStatus: 'unscheduled',
+                    changedBy: userId ?? null, note: `Job created from quote ${quote.quoteNumber} v${quote.version || 1}`, createdAt: now,
+                }),
+            ]);
+            return made[customerCreated ? 1 : 0][0];
+        }, { label: 'job or customer number' });
 
-        const [written] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId)));
+        if (customerCreated) await auditAs(orgId, userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: customer.id, entityName: customer.name, detail: `from quote ${quote.quoteNumber}` });
         await auditAs(orgId, userId, {
             action: 'dispatch_job.created_from_quote', entityType: 'dispatch_job', entityId: jobId,
             entityName: `${written.jobNumber} · ${written.title || 'Untitled'}`,

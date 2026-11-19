@@ -11987,3 +11987,31 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     const techs = code(read('netlify/functions/dispatch-technicians.mjs'));
     assert.ok(!techs.includes('memberId: await memberIdOf('), 'REGRESSION: a technician\'s member read after its write');
 });
+
+// ── §0.269: quote → job is one batch (OPEN_ITEMS §4.8, census-D §2B-C; Jeff, 19 Nov: "Quote-to-job atomicity") ─────────────
+test('§0.269 quote → job: the customer it makes, the job, its lines and its history are ONE batch inside the number retry; the job answered by its own insert; nothing written apart — WIRING', () => {
+    const q = code(read('netlify/functions/quote-to-job.mjs'));
+    const post = q.slice(q.indexOf("if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });"), q.indexOf('} catch (err) {'));
+    assert.ok(post.length > 1000, 'the POST read');
+    // Every refusal before any write: the 404s, the 422, the 409s (already, and two customers).
+    const firstWrite = post.indexOf('await withNumberRetry(');
+    assert.ok(firstWrite > 0, 'the one write');
+    for (const refusal of ["return reply(404, { error: 'Quote not found' });", 'return reply(422,', "code: 'already', job: existing });", "return reply(409, { error: dealCustomerRefusal(found, 'server'),"]) {
+        assert.ok(post.indexOf(refusal) >= 0 && post.indexOf(refusal) < firstWrite, `REGRESSION: a refusal after the write — ${refusal}`);
+    }
+    // One write: the retry's batch. No insert, update or read of a written row anywhere else in the POST.
+    assert.equal(count(post, 'await withNumberRetry('), 1, 'REGRESSION: a second write of its own');
+    assert.equal(count(post, 'await db.batch(['), 1);
+    assert.ok(!/await db\.(insert|update|delete)\(/.test(post), 'REGRESSION: a statement written apart from the batch');
+    assert.ok(!/db\.select\(\)\.from\(dispatchJobs\)/.test(post.slice(firstWrite)), 'REGRESSION: the job read again after the batch — a read that fails answers 500 over a job that was made');
+    assert.ok(!post.includes('.catch(() => {})'), 'REGRESSION: a write in the batch whose failure is swallowed');
+    const batch = between(post, 'const made = await db.batch([', '            ]);');
+    order(batch, "...(customerCreated ? [db.insert(dispatchCustomers).values({", 'db.insert(dispatchJobs).values({', '}).returning(),',
+        '...(rows.length ? [db.insert(dispatchJobLineItems).values(rows)] : []),', 'db.insert(dispatchJobStatusHistory).values({');
+    assert.ok(post.includes('return made[customerCreated ? 1 : 0][0];'), 'the job, from its own insert — after the customer when one is made');
+    // Both numbers are taken inside the retry, so a collision runs the whole batch again on fresh numbers.
+    const retry = between(post, 'const written = await withNumberRetry(async () => {', "}, { label: 'job or customer number' });");
+    order(retry, 'const customerNumber = customerCreated ? await nextCustomerNumber(orgId) : null;', 'const jobNumber = await nextJobNumber(orgId);', 'const made = await db.batch([');
+    // The audits only after it all landed.
+    order(post, "}, { label: 'job or customer number' });", "if (customerCreated) await auditAs(orgId, userId, { action: 'dispatch_customer.created'", "action: 'dispatch_job.created_from_quote'");
+});
