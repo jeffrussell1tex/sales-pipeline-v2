@@ -982,7 +982,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const {
         userModalError, setUserModalError,
         userModalSaving, setUserModalSaving,
-        handleAddUser, handleEditUser, handleDeleteUser, handleSaveUser,
+        handleAddUser, handleEditUser, handleSaveUser,
     } = useUserHandlers({ setSettings, showConfirm: (...a) => _showConfirmRef.current?.(...a), showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
 
     const {
@@ -991,7 +991,7 @@ dbFetch('/.netlify/functions/users?me=true')
         loadQuotes, loadProducts,
         quoteModalError, setQuoteModalError,
         quoteModalSaving, setQuoteModalSaving,
-        handleSaveQuote, handleDeleteQuote,
+        handleSaveQuote,
         handleSaveProduct, handleDeleteProduct,
         getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
@@ -1918,7 +1918,7 @@ dbFetch('/.netlify/functions/users?me=true')
         allTerritoryNames,
         // Quotes & Price Book
         loadQuotes, loadProducts,
-        handleSaveQuote, handleDeleteQuote,
+        handleSaveQuote,
         handleSaveProduct, handleDeleteProduct,
         quoteModalError, setQuoteModalError,
         quoteModalSaving,
@@ -1961,7 +1961,7 @@ dbFetch('/.netlify/functions/users?me=true')
         userModalError, setUserModalError,
         userModalSaving, setUserModalSaving,
         handleSaveUser,
-        handleAddUser, handleEditUser, handleDeleteUser,
+        handleAddUser, handleEditUser,
         showActivityModal, setShowActivityModal,
         editingActivity, setEditingActivity,
         viewingActivity, setViewingActivity,

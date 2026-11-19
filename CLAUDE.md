@@ -471,7 +471,8 @@ One commit per verified batch; doc patch in the same commit.
   create with no form keeps its id by what it sends; since §0.263 Dispatch
   too (`thrownSaid`, `saidError`); since §0.264 Settings and its senders
   (`maybeSettingsError`, `settingsSaid`) — every screen; a create the
-  server names holds its button after an answer that proved nothing; a
+  server names holds its button after an answer that proved nothing (the
+  panel's hold — the window opened again stays held, §0.266); a
   message names who acted
   by member name, never a Clerk id,
   and a member is not told of their own act (by owner id). A deal's

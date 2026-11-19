@@ -592,9 +592,10 @@ test('WIRING (Part 5): a Settings press whose id is the server\'s is held after 
     assert.ok(backup.includes('if (runningBackup || backupHeld) return;') && backup.includes('disabled={runningBackup || backupHeld}')
         && backup.includes('if (!e?.said && unknownOf(e)) setBackupHeld(true);'), 'Run backup now');
     const keys = at('integrations/ApiKeysDetail.jsx');
-    assert.ok(keys.includes('if (unknownOf(e)) setHeld(true);') && keys.includes("disabled={!name.trim() || held}"), 'Create key');
+    // Moved in §0.266: setHeld takes the words, sets the window's hold and hands them to the panel.
+    assert.ok(keys.includes('if (unknownOf(e)) setHeld(words); else setError(words);') && keys.includes("disabled={!name.trim() || held}"), 'Create key');
     const hooks = at('integrations/WebhooksDetail.jsx');
-    assert.ok(hooks.includes('if (unknownOf(e)) setHeld(true);') && hooks.includes('disabled={saving||held||!name.trim()||!url.trim()}'), 'Create endpoint');
+    assert.ok(hooks.includes('if (unknownOf(e)) setHeld(words); else setError(words);') && hooks.includes('disabled={saving||held||!name.trim()||!url.trim()}'), 'Create endpoint');
     const rules = at('integrations/AutomationsDetail.jsx');
     assert.ok(rules.includes('if (unknownOf(e) && !editing) setHeld(words); else setError(words);') && rules.includes('disabled={saving || !!held}'), 'Create automation');
     const users = at('people/UsersDetail.jsx');

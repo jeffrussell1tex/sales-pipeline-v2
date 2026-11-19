@@ -232,7 +232,7 @@ test('a saved report OPENS into the builder and saves back to its own row; the n
     const header = s.slice(s.indexOf('const BuilderHeader = ('), s.indexOf("        if (createMode === 'picker') {"));   // comments are stripped: end at the picker's first code line
     assert.ok(header.length > 800 && header.length < 6000, 'the header slice is bounded');
     assert.ok(!header.includes('<input'), 'REGRESSION: a form control inside the inline-declared header remounts on every render and loses focus');
-    assert.ok(s.includes('function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, leads = [] }) {'));
+    assert.ok(s.includes('function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, savedReportsUnread = \'\', onReadSavedAgain, leads = [] }) {'));
     assert.ok(s.includes('                                leads={reportsLeads}'), 'the sliced leads, never the raw array');
     assert.ok(!s.includes("setBuilderTab('data')"), 'the tab key is Data — a lowercase key showed no tab');
 });

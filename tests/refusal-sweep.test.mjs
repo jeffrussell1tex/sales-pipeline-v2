@@ -2494,11 +2494,11 @@ const automationSave = async ({ rule = null, answer, held = '', switchOrg = fals
     const src = code(read(AUTOMATIONS));
     const modal = src.slice(src.indexOf('const AutomationModal = ('));
     const fn = between(modal, '    const handleSave = async () => {', '\n    };') + '\n    };';
-    const did = { sent: [], saving: [], errors: [], held: [], saved: [], closed: 0 };
+    const did = { sent: [], saving: [], errors: [], held: [], saved: [], closed: 0, panelHeld: [] };
     const handleSave = new Function('held', 'name', 'actions', 'editing', 'rule', 'trigger', 'conditions', 'setSaving', 'setError', 'setHeld',
         'requestOrg', 'stillOrg', 'dbFetch', 'onSaved', 'onClose', ...U4_NAMES, `${fn}\nreturn handleSave;`)(
         held, ' Stage alert ', [{ type: 'create_task', params: { title: 'Call', dueOffsetDays: 1, priority: 'Medium' } }], !!rule, rule,
-        'opportunity.stage_changed', [], (v) => did.saving.push(v), (v) => did.errors.push(v), (v) => did.held.push(v),
+        'opportunity.stage_changed', [], (v) => did.saving.push(v), (v) => did.errors.push(v), setHeldOf(modal, (v) => did.held.push(v), null, (v) => did.panelHeld.push(v)),
         () => 'org_a', () => !switchOrg,
         async (url, opts) => { did.sent.push([url, opts.method, JSON.parse(opts.body)]); if (answer instanceof Error) throw answer; return answer; },
         (r) => did.saved.push(r), () => { did.closed++; }, ...U4);
@@ -2518,10 +2518,11 @@ test('Part 8a (§0.264): the rule window\'s Save — the server\'s own refusal "
         } else {
             assert.deepEqual(created.errors, [''], `REGRESSION: an unknown create said in the error line, Create free to press again (${why})`);
             assert.deepEqual(created.held, [maybeSaid('The automation', 'created', why)], `REGRESSION: a create that may have landed not held (${why})`);
+            assert.deepEqual(created.panelHeld, created.held, `REGRESSION: the hold forgotten when the window closes (§0.266; ${why})`);
         }
         const edited = await automationSave({ rule: RULE, answer });
         assert.deepEqual(edited.sent.map(([, m, b]) => [m, b.id]), [['PUT', 'aut_1']]);
-        assert.deepEqual([edited.saved, edited.closed, edited.held], [[], 0, []], `an edit is never held — it sends the same rule by id (${why})`);
+        assert.deepEqual([edited.saved, edited.closed, edited.held, edited.panelHeld], [[], 0, [], []], `an edit is never held — it sends the same rule by id (${why})`);
         assert.deepEqual(edited.errors, ['', heard ? why : maybeSaid('The automation', 'saved', why)], `an edit's words (${why})`);
     }
     // Held: a press sends nothing and says nothing new.
@@ -2548,7 +2549,9 @@ test('Part 8a (§0.264): the rule window\'s Save — the server\'s own refusal "
     }
     // WIRING: the held words shown on the error line; Create disabled while held.
     const modal = code(read(AUTOMATIONS)).slice(code(read(AUTOMATIONS)).indexOf('const AutomationModal = ('));
-    order(modal, "const [held,    setHeld]    = React.useState('');", 'const handleSave = async () => {', 'if (held) return;',
+    // Moved in §0.266: a new rule's window starts from the panel's hold; an edit never does.
+    order(modal, "const [held,    setHeldHere] = React.useState(editing ? '' : heldWords);", 'const setHeld = (words) => { setHeldHere(words); if (onHeld) onHeld(words); };',
+        'const handleSave = async () => {', 'if (held) return;',
         '{(error || held) && <div', '{error || held}</div>}',
         "<IntBtn label={saving?'Saving…':editing?'Save changes':'Create automation'} primary onClick={handleSave} disabled={saving || !!held}/>");
 });
@@ -3852,19 +3855,30 @@ test('Part 9g: the list\'s load over the server\'s answers — landed, the endpo
 // handleCreate, extracted from WebhooksDetail.jsx, over the server's 201 — with the screen's own onCreated.
 // Moved in §0.264 (the unknown-save rule, Part 5): handleCreate reads `held` (its Create held after an answer that proved
 // nothing — `held` here is its value at the press) and the unknown-save helpers, the real ones.
+// Since §0.266 a held Create is kept by its panel: the window's setHeld (its own line, the real one) sets the window's hold
+// and its words and hands the words to the panel (`onHeld`), so the window opened again stays held. Built from the file
+// over the runner's stubs.
+const setHeldOf = (src, setHeldHere, setError, onHeld) => {
+    const at = src.indexOf('    const setHeld = ');
+    assert.ok(at >= 0 && src.indexOf('    const setHeld = ', at + 1) < 0, 'one setHeld in the file');
+    const line = src.slice(at + '    const setHeld = '.length, src.indexOf(';\n', at));
+    return new Function('setHeldHere', 'setError', 'onHeld', `return ${line};`)(setHeldHere, setError, onHeld);
+};
+
 const webhookCreate = async ({ answer, switchOrg = false, list = [WH_A], loadFailed = false, held = false }) => {
     const src = code(read(WEBHOOKS));
     const fn = between(src, '    const handleCreate = async () => {', '\n    };') + '\n    };';
     const cb = between(src, ' onCreated={', '}/>}').slice(' onCreated={'.length);
     const rows = stateOf(list);
-    const did = { sent: [], saving: [], error: [], secret: [], created: [], step: [], loads: 0, held: [] };
+    const did = { sent: [], saving: [], error: [], secret: [], created: [], step: [], loads: 0, held: [], panelHeld: [] };
     const onCreated = new Function('setWebhooks', 'load', 'loadFailed', `return ${cb};`)(rows.set, () => { did.loads++; }, loadFailed);
     const create = new Function('name', 'url', 'checked', 'setSaving', 'setError', 'setSecret', 'onCreated', 'setStep', 'dbFetch', 'requestOrg', 'stillOrg',
         'readRefusal', 'failureWords', 'held', 'setHeld', ...U4_NAMES, `${fn}\nreturn handleCreate;`)(
         ' Won deals to ERP ', 'https://erp.example.test/hook', new Set(['opportunity.won']), (v) => did.saving.push(v), (v) => did.error.push(v),
         (v) => did.secret.push(v), (v) => { did.created.push(v); onCreated(v); }, (v) => did.step.push(v),
         async (url, opts) => { did.sent.push([url, opts.method, JSON.parse(opts.body)]); if (answer instanceof Error) throw answer; return answer; },
-        () => 'org_a', (o) => !switchOrg && o === 'org_a', readRefusal, failureWords, held, (v) => did.held.push(v), ...U4);
+        () => 'org_a', (o) => !switchOrg && o === 'org_a', readRefusal, failureWords, held,
+        setHeldOf(src, (v) => did.held.push(v), (v) => did.error.push(v), (v) => did.panelHeld.push(v)), ...U4);
     await create();
     return { ...did, list: rows.value };
 };
@@ -3901,6 +3915,8 @@ test('Part 9g: a create refused, unsent or a 502 page says why, makes nothing; a
         const r = await webhookCreate({ answer });
         assert.deepEqual([r.error, r.created, r.step, r.secret, r.list, r.saving], [['', heard ? why : maybeSaid('The endpoint', 'created', why)], [], [], [], [WH_A], [true, false]], why);
         assert.deepEqual(r.held, heard ? [] : [true], `REGRESSION: Create ${heard ? 'held after the server\'s own refusal' : 'left free after an answer that proved nothing'} (${why})`);
+        // Added in §0.266: the panel keeps the hold and its words — the window opened again stays held.
+        assert.deepEqual(r.panelHeld, heard ? [] : [maybeSaid('The endpoint', 'created', why)], `REGRESSION: the hold forgotten when the window closes (${why})`);
     }
     for (const answer of [answerOf(201, { [row]: WH_ROW, [secret]: 'whsec_abc123' }), answerOf(201, new SyntaxError("Unexpected token '<'")), answerOf(403, { error: 'Admin only' }), PAGE_502()]) {
         const r = await webhookCreate({ answer, switchOrg: true });
@@ -3914,8 +3930,11 @@ test('Part 9g (§0.264): a held Create sends nothing and says nothing new; drawn
     const r = await webhookCreate({ answer: answerOf(201, { [row]: WH_ROW, [secret]: 'whsec_abc123' }), held: true });
     assert.deepEqual([r.sent, r.error, r.saving, r.created, r.step, r.held], [[], [], [], [], [], []], 'REGRESSION: a held Create sent a second endpoint');
     const wh = code(read(WEBHOOKS));
-    order(wh, 'const [held,    setHeld]    = React.useState(false);', '    const handleCreate = async () => {', 'if (held) return;',
-        'if (unknownOf(e)) setHeld(true);', "setError(thrownSaid(e, 'The endpoint', 'created'));");
+    // Moved in §0.266: the window's hold starts from the panel's and is handed back to it.
+    order(wh, 'const [held,    setHeldHere] = React.useState(!!heldWords);', 'const setHeld = (words) => { setHeldHere(true); setError(words); if (onHeld) onHeld(words); };',
+        '    const handleCreate = async () => {', 'if (held) return;',
+        "const words = thrownSaid(e, 'The endpoint', 'created');", 'if (unknownOf(e)) setHeld(words); else setError(words);');
+    assert.ok(wh.includes("const [error,   setError]   = React.useState(heldWords);"), 'the window opened again says why it is held');
     assert.ok(wh.includes("<IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||held||!name.trim()||!url.trim()}/>"));
     assert.ok(wh.includes('onChange={e=>{setName(e.target.value);if(!held)setError(\'\');}}') && wh.includes('onChange={e=>{setUrl(e.target.value);if(!held)setError(\'\');}}'),
         'REGRESSION: typing cleared the held words — Create disabled with nothing saying why');
@@ -5263,17 +5282,19 @@ const newJob = async ({ form = {}, answers, switchAt = -1, heldNewJobIds = { cur
     const queue = [...answers];
     const jobsStart = [NJ_JOB0], custsStart = [NJ_CUST];
     const jobs = stateOf(jobsStart), custs = stateOf(custsStart);
+    // The Jobs view's list, as stored (since §0.266 New Job adds the job it made).
+    const rawStart = [{ id: 'job_0', jobNumber: 'J-0' }], raw = stateOf(rawStart);
     const f = { ...NJ_FORM, ...form };
     const handle = p10Fn(DISPATCH, '    const handleSaveNewJob = async () => {', '\n    };',
         ['newJobForm', 'setNewJobError', 'placeholderOn', 'customerForText', 'customers', 'accounts', 'dealHolds', 'DEAL_NEEDS_PICK', 'typedCustomerRefusal',
             'setNewJobSaving', 'requestOrg', 'saveDroppingRefused', 'stillOrg', 'dbFetch', 'refusalWords', 'readRefusal', 'failureWords', 'setCustomers', 'setNewJobForm',
-            'setJobs', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm', 'heldNewJobIds', 'crypto', ...U4_NAMES], 'handleSaveNewJob')(
+            'setJobs', 'setJobsRaw', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm', 'heldNewJobIds', 'crypto', ...U4_NAMES], 'handleSaveNewJob')(
         f, (v) => did.errors.push(v), () => false, () => ({}), custsStart, [], () => false, 'Pick a customer.', () => 'refused',
         (v) => did.saving.push(v), () => 'org_a', saveDroppingRefused, (o) => o === org.now, p11Fetch(did, () => queue.shift(), org, { switchAt }),
-        refusalWords, readRefusal, failureWords, custs.set, (u) => did.forms.push(typeof u === 'function' ? u(f) : u), jobs.set, (v) => did.selected.push(v),
+        refusalWords, readRefusal, failureWords, custs.set, (u) => did.forms.push(typeof u === 'function' ? u(f) : u), jobs.set, raw.set, (v) => did.selected.push(v),
         NJ_FORM, () => {}, (v) => did.shown.push(v), heldNewJobIds, { randomUUID: uuid }, ...U4);
     await handle();
-    return { ...did, jobs: jobs.value, jobsSame: jobs.value === jobsStart, custs: custs.value, custsSame: custs.value === custsStart };
+    return { ...did, jobs: jobs.value, jobsSame: jobs.value === jobsStart, custs: custs.value, custsSame: custs.value === custsStart, raw: raw.value, rawSame: raw.value === rawStart };
 };
 
 test('Part 11: New Job — the job\'s refusal in the server\'s words with their ref, the form open, nothing listed; a refused copied link still dropped — RUN', async () => {
@@ -5293,8 +5314,13 @@ test('Part 11: New Job — the job\'s refusal in the server\'s words with their 
     // Landed, as before.
     const landed = await newJob({ answers: [onceOf(201, { job: { id: 'djob_1' } })] });
     assert.deepEqual([landed.errors, landed.jobs.map((j) => j.id), landed.selected, landed.shown], [[''], ['djob_1', 'job_0'], ['djob_1'], [false]]);
+    // Added in §0.266: the Jobs view lists the job made, as the server answered it — once, whatever it held.
+    assert.deepEqual(landed.raw, [{ id: 'djob_1' }, { id: 'job_0', jobNumber: 'J-0' }], 'REGRESSION: the Jobs view lists the new job only after a reload');
+    const again = await newJob({ answers: [onceOf(201, { job: { id: 'job_0', jobNumber: 'J-0', title: 'As stored' } })] });
+    assert.deepEqual(again.raw, [{ id: 'job_0', jobNumber: 'J-0', title: 'As stored' }], 'a job it already lists is listed once, as stored');
     const unreadable = await newJob({ answers: [P11_UNREADABLE()] });
     assert.deepEqual([unreadable.errors, unreadable.jobs[0].id, unreadable.shown], [[''], unreadable.sent[0][2].id, [false]], 'landed with no job read: listed under the id sent');
+    assert.equal(unreadable.rawSame, true, 'no stored job read: the Jobs view lists none made up');
 });
 
 test('Part 11: New Job — the customer\'s and the job address\'s refusals named, the job not sent after them; landed unreadable keeps the ids sent — RUN', async () => {
@@ -6168,7 +6194,7 @@ const P12A_SETTINGS = () => ({ users: [{ id: 'usr_1', name: 'Ann', email: 'ann@x
 // helpers, the real ones; `addAnswer` is addToSettingsList's answer.
 const inviteSend = async ({ answer, switchAt = -1, team = '', held = false, addAnswer = { ok: true } }) => {
     const { teamsWithMembers } = await import('../src/utils/teamMembership.js');
-    const did = { sent: [], errors: [], saving: [], saved: [], added: [], timers: [], rows: [], notices: [], warn: [], held: [] };
+    const did = { sent: [], errors: [], saving: [], saved: [], added: [], timers: [], rows: [], notices: [], warn: [], held: [], panelHeld: [] };
     const org = { now: 'org_a' };
     const settings = stateOf(P12A_SETTINGS());
     const queue = Array.isArray(answer) ? [...answer] : null;
@@ -6180,7 +6206,8 @@ const inviteSend = async ({ answer, switchAt = -1, team = '', held = false, addA
         () => [{ id: 1, email: 'new@x.test', role: 'User', team, valid: true }], (v) => did.rows.push(v), (v) => did.errors.push(v), (v) => did.saving.push(v),
         () => 'org_a', (o) => o === org.now, 'User', settings.value, 7, () => null, p11Fetch(did, queue ? () => queue.shift() : answer, org, { switchAt }), settings.set,
         async (key, apply) => { did.added.push(key); return addAnswer; }, teamsWithMembers, 'twice', refusalWords, failureWords, (v) => did.saved.push(v),
-        (f, ms) => did.timers.push(ms), () => {}, (v) => did.notices.push(v), readRefusal, (v) => did.warn.push(v), held, (v) => did.held.push(v), ...U4);
+        (f, ms) => did.timers.push(ms), () => {}, (v) => did.notices.push(v), readRefusal, (v) => did.warn.push(v), held,
+        setHeldOf(code(read(P12A_USERS)), (v) => did.held.push(v), (v) => did.errors.push(v), (v) => did.panelHeld.push(v)), ...U4);
     await h();
     return { ...did, users: settings.value.users, said: did.errors.filter(Boolean), told: did.notices.filter(Boolean) };
 };
@@ -6192,6 +6219,7 @@ test('Part 12a: Users\' invite — a refusal in the server\'s words with its ref
         // answer may have emailed every row — said so, Send held, the rows kept as typed.
         assert.deepEqual(did.said, [heard ? words : maybeSaid('The invitations', 'sent', words, true)], `REGRESSION: ${words}`);
         assert.deepEqual(did.held, heard ? [] : [true], `REGRESSION: Send ${heard ? 'held after the server\'s own refusal' : 'left free after an answer that proved nothing'} (${words})`);
+        assert.deepEqual(did.panelHeld, heard ? [] : did.said, `REGRESSION: the hold forgotten when the page closes (§0.266; ${words})`);
         assert.deepEqual([did.saved, did.users.length, did.saving.at(-1)], [[], 2, false], 'nothing sent said; the roster unchanged; the button back');
         assert.equal(did.rows.length, 1, 'the rows validated once — kept as typed, never emptied');
     }
@@ -11788,4 +11816,112 @@ test('Part 12 fixes, last pass (G5): WIRING — every source walk\'s floor acros
         assert.equal(got.length, floors.length, `${file}: ${needle.trim()} — ${floors.length} floor(s), found ${got.length}`);
         got.forEach((n, k) => assert.ok(Number.isInteger(n) && n >= floors[k], `REGRESSION: ${file}'s floor on ${what} is ${n}, below the ${floors[k]} measured (§0.249, G5) — say the new count, and why, in both places`));
     }
+});
+
+// ── §0.266: the unknown-save rule's small follow-ons (OPEN_ITEMS §4.8; Jeff, 19 Nov: "Small follow-ups") ──────────────────
+
+// Export's request status (rule 6): the change alone is sent — the PUT merges what it names over the stored request — and
+// the server's own refusal puts back its status only, only while the row still shows this press's.
+test('§0.266 Export: a request\'s status sends { id, status } alone and sets only the status; the server\'s own refusal puts back only it, never over a later press — RUN', async () => {
+    const fn = between(code(read(EXPORT)), '    const handleDsrStatus = async (dsr, newStatus) => {', '\n    };') + '\n    };';
+    const run = (answer, items, sent, meanwhile = () => {}) => new Function('setDsrItems', 'dbFetch', 'readRefusal', 'failureWords', 'setActionError', 'errorSched',
+        ...U4_NAMES, `${fn}\nreturn handleDsrStatus;`)(
+        items.set, async (url, opts) => { sent.push([url, opts.method, JSON.parse(opts.body)]); meanwhile(); if (answer instanceof Error) throw answer; return answer; },
+        readRefusal, failureWords, () => {}, { current: null }, ...U4);
+    const PRESSED = Object.freeze({ id: 'dsr_1', status: 'open', notes: 'as pressed' });
+    const NOW = Object.freeze({ id: 'dsr_1', status: 'open', notes: 'changed since' });
+    const sent = [], items = stateOf([NOW]);
+    await run(answerOf(200, new SyntaxError("Unexpected token '<'")), items, sent)(PRESSED, 'in_progress');
+    assert.deepEqual(sent, [['/.netlify/functions/export-dsr', 'PUT', { id: 'dsr_1', status: 'in_progress' }]], 'REGRESSION: the row as pressed written back over the stored one');
+    assert.deepEqual(items.value, [{ ...NOW, status: 'in_progress' }], 'REGRESSION: the row as pressed put over the row as it stands');
+    const refused = stateOf([NOW]);
+    await run(answerOf(403, { error: 'Admin only' }), refused, [])(PRESSED, 'completed');
+    assert.deepEqual(refused.value, [NOW], 'REGRESSION: the server\'s own refusal put back the whole row as pressed, not its status');
+    // A later press shown while this one was out: its status stands.
+    const later = stateOf([NOW]);
+    await run(answerOf(403, { error: 'Admin only' }), later, [], () => later.set((p) => p.map((d) => ({ ...d, status: 'rejected' }))))(PRESSED, 'completed');
+    assert.deepEqual(later.value, [{ ...NOW, status: 'rejected' }], 'REGRESSION: a refusal put its status back over a later press\'s');
+});
+
+// Reports' saved list (§0.247's rule): a read that failed is said with a Try again, never "No saved reports yet".
+test('§0.266 Reports: the saved reports\' load — a refused, unreadable or unsent read said in words, the list left as it is; a landed read takes the list and clears them — RUN and WIRING', async () => {
+    const src = code(read('src/Tabs/ReportsTab.jsx'));
+    const body = between(src, "        (async () => {\n            try {\n                const r = await dbFetch('/.netlify/functions/saved-reports');", '\n        })();');
+    const load = async (answer, cancelled = false) => {
+        const did = { lists: [], unread: [] };
+        await new Function('dbFetch', 'readRefusal', 'failureWords', 'setSavedReportsList', 'setSavedReportsUnread', 'cancelled', `return ${body}\n        })();`)(
+            async (url) => { assert.equal(url, '/.netlify/functions/saved-reports'); if (answer instanceof Error) throw answer; return answer; },
+            readRefusal, failureWords, (v) => did.lists.push(v), (v) => did.unread.push(v), cancelled);
+        return did;
+    };
+    for (const [answer, words] of [
+        [answerOf(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)'],
+        [answerOf(403, null), 'The server returned 403.'],
+        [PAGE_502(), 'The server returned 502.'],
+        [answerOf(200, { nothing: true }), 'Its answer could not be read.'],
+        [answerOf(200, new SyntaxError("Unexpected token '<'")), 'Its answer could not be read.'],
+        [UNSENT(), 'The server could not be reached.'],
+    ]) {
+        const did = await load(answer);
+        assert.deepEqual([did.lists, did.unread], [[], [words]], `REGRESSION: a read that failed drawn as no reports (${words})`);
+    }
+    const REPORTS = [{ id: 'rpt_1', name: 'Pipeline' }];
+    assert.deepEqual(await load(answerOf(200, { reports: REPORTS })), { lists: [REPORTS], unread: [''] }, 'a landed read: the list, the words cleared');
+    assert.deepEqual(await load(PAGE_502(), true), { lists: [], unread: [] }, 'left before it answered: nothing set');
+    // WIRING: Try again reads it once more; the library and Duplicate say the failure, never "No saved reports yet".
+    order(src, "const [savedReportsUnread, setSavedReportsUnread] = useState('');", 'const [savedReportsReads, setSavedReportsReads] = useState(0);',
+        '    }, [savedReportsReads]);', 'onReadSavedAgain={() => setSavedReportsReads(n => n + 1)}');
+    assert.ok(src.includes('{filteredSaved.length === 0 && !srchQ && !savedReportsUnread && ('), 'REGRESSION: "No saved reports yet" over a read that failed');
+    assert.ok(src.includes('<span style={{ flex:1, minWidth:0 }}>The saved reports could not be loaded — {savedReportsUnread}</span>')
+        && src.includes('{onReadSavedAgain && <button onClick={onReadSavedAgain}'), 'the words and Try again');
+    assert.ok(src.includes("{savedReportsUnread ? `The saved reports could not be loaded — ${savedReportsUnread}` : 'No saved reports yet.'}"), 'Duplicate says it too');
+    assert.ok(!src.includes(': { reports: [] }))'), 'REGRESSION: a refused read read as no reports');
+});
+
+// A held Create kept by its panel (rule 13): the window opened again starts held, saying why, until the panel is opened again.
+test('§0.266 a held Create is kept by its panel — API keys, Webhooks, a new Automation, the invitations\' Send: the window opened again starts held with its words — WIRING', () => {
+    const at = (f) => code(read(`src/Tabs/settings/${f}`));
+    const keys = at('integrations/ApiKeysDetail.jsx'), hooks = at('integrations/WebhooksDetail.jsx'), rules = at('integrations/AutomationsDetail.jsx'), users = at('people/UsersDetail.jsx');
+    for (const [name, s, sig, start, panel, mount] of [
+        ['API keys', keys, "const NewApiKeyModal = ({ onClose, onCreated, heldWords = '', onHeld }) => {", 'const [held,    setHeldHere] = React.useState(!!heldWords);',
+            "const [createHeld, setCreateHeld] = React.useState('');", '<NewApiKeyModal heldWords={createHeld} onHeld={setCreateHeld} '],
+        ['Webhooks', hooks, "const NewWebhookModal = ({ onClose, onCreated, heldWords = '', onHeld }) => {", 'const [held,    setHeldHere] = React.useState(!!heldWords);',
+            "const [createHeld, setCreateHeld] = React.useState('');", '<NewWebhookModal heldWords={createHeld} onHeld={setCreateHeld} '],
+        ['Automations', rules, "const AutomationModal = ({ rule, onClose, onSaved, heldWords = '', onHeld }) => {", "const [held,    setHeldHere] = React.useState(editing ? '' : heldWords);",
+            "const [createHeld,     setCreateHeld]     = React.useState('');", '<AutomationModal rule={editingRule} heldWords={createHeld} onHeld={setCreateHeld} '],
+        ['Invite', users, "const UsersInvitePage = ({ settings, onBack, onUsers, heldWords = '', onHeld }) => {", 'const [held, setHeldHere] = useState(!!heldWords);',
+            "const [inviteHeld, setInviteHeld] = useState('');", '<UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers} heldWords={inviteHeld} onHeld={setInviteHeld}/>'],
+    ]) {
+        order(s, sig, start, 'const setHeld = (words) => { setHeldHere(', 'if (onHeld) onHeld(words); };');
+        assert.ok(s.includes(panel) && s.includes(mount), `REGRESSION: ${name}'s hold forgotten when its window closes — the panel keeps none, or hands it none`);
+    }
+    for (const [name, s] of [['API keys', keys], ['Webhooks', hooks], ['Invite', users]]) {
+        assert.ok(/const \[error, +setError\] += (React\.)?useState\(heldWords\);/.test(s), `REGRESSION: ${name}'s window opened again held with nothing saying why`);
+    }
+    assert.ok(rules.includes('{(error || held) && <div') && rules.includes('{error || held}</div>}'), 'a held rule window says its words');
+});
+
+// Dispatch's creates are upserts (§0.172): a create sent again with its id (New Job keeps one — §0.263) writes "Job created"
+// once, and every Dispatch create audits a row it already held as an update, never a second create.
+test('§0.266 Dispatch: a create sent again writes "Job created" once — its own status move as a PUT records one — and audits an update, not a second create — WIRING', () => {
+    const fnSrc = (n) => code(read(`netlify/functions/${n}.mjs`));
+    const jobs = fnSrc('dispatch-jobs');
+    const post = between(jobs, "        if (event.httpMethod === 'POST') {", "        if (event.httpMethod === 'PUT') {");
+    order(post, 'const [priorJob] = await db.select()',
+        "if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');",
+        'else if (row.status !== priorJob.status) await recordStatusChange(orgId, data.id, priorJob.status, row.status, userId, null);',
+        "action: priorJob ? 'dispatch_job.updated' : 'dispatch_job.created'");
+    assert.equal(count(post, 'recordStatusChange('), 2, 'REGRESSION: a status-history write the re-POST makes regardless');
+    for (const [file, prior, entity] of [['dispatch-customers', 'priorCust', 'dispatch_customer'], ['dispatch-customers', 'priorLoc', 'dispatch_location'],
+        ['dispatch-equipment', 'prior', 'dispatch_equipment'], ['dispatch-schedule-blocks', 'prior', 'dispatch_block'], ['dispatch-service-plans', 'prior', 'dispatch_plan'],
+        ['dispatch-technicians', 'prior', 'dispatch_technician'], ['dispatch-vehicles', 'prior', 'dispatch_vehicle']]) {
+        const s = fnSrc(file);
+        assert.ok(s.includes(`action: ${prior} ? '${entity}.updated' : '${entity}.created'`), `REGRESSION: ${file} audits a create sent again as a second ${entity} create`);
+        assert.ok(!s.includes(`{ action: '${entity}.created'`), `${file}: no create audited without its prior row read`);
+    }
+    const cust = fnSrc('dispatch-customers');
+    order(cust, "if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };",
+        'const [priorLoc] = await db.select({ id: dispatchServiceLocations.id }).from(dispatchServiceLocations)',
+        '.where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));',
+        'await db.insert(dispatchServiceLocations).values(row)');
 });

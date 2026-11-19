@@ -181,6 +181,8 @@ export const handler = async (event) => {
                 const [ownCust] = await db.select({ id: dispatchCustomers.id }).from(dispatchCustomers)
                     .where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));
                 if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };
+                const [priorLoc] = await db.select({ id: dispatchServiceLocations.id }).from(dispatchServiceLocations)
+                    .where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));
                 const row = {
                     id:            data.id,
                     orgId,
@@ -209,7 +211,8 @@ export const handler = async (event) => {
                 // An id another org holds: the upsert wrote nothing, and this crashed — a 500
                 // that said the id was taken elsewhere (state §0.166).
                 if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That location id is already in use.' }) };
-                await auditAs(orgId, auth.userId, { action: 'dispatch_location.created', entityType: 'dispatch_customer', entityId: inserted.customerId, entityName: inserted.name, detail: [inserted.address, inserted.city].filter(Boolean).join(', ') || null });
+                // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
+                await auditAs(orgId, auth.userId, { action: priorLoc ? 'dispatch_location.updated' : 'dispatch_location.created', entityType: 'dispatch_customer', entityId: inserted.customerId, entityName: inserted.name, detail: [inserted.address, inserted.city].filter(Boolean).join(', ') || null });
                 return { statusCode: 201, headers, body: JSON.stringify({ location: normaliseLoc(inserted) }) };
             }
 
@@ -321,7 +324,8 @@ export const handler = async (event) => {
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That customer id is already in use.' }) };
-            await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.customerNumber}${inserted.customerType ? ' · ' + inserted.customerType : ''}` });
+            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
+            await auditAs(orgId, auth.userId, { action: priorCust ? 'dispatch_customer.updated' : 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.customerNumber}${inserted.customerType ? ' · ' + inserted.customerType : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ customer: normaliseCust(inserted) }) };
         }
 

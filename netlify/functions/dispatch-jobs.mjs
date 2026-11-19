@@ -407,12 +407,17 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
             if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };
 
-            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
+            // A create sent again with its id (New Job keeps one id across its presses — state §0.263) is an upsert of the
+            // job it made: "Job created" once, by the press that made it; a re-POST that moved the status records that
+            // move as a PUT does (state §0.266).
+            if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
+            else if (row.status !== priorJob.status) await recordStatusChange(orgId, data.id, priorJob.status, row.status, userId, null);
             // A job created already scheduled confirms the appointment (§0.111).
             await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
             const [inserted] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
-            await auditAs(orgId, userId, { action: 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
+            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
+            await auditAs(orgId, userId, { action: priorJob ? 'dispatch_job.updated' : 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
 
             return { statusCode: 201, headers, body: JSON.stringify({ job: normaliseJob(inserted) }) };
         }

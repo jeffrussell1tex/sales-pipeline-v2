@@ -157,7 +157,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettings
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
-            // Keep the panel dirty: the change was NOT saved (a 400 names why). putSettings' words pass through
+            // Keep the panel dirty: the change was not saved (a 400 names why), or may not have been (state §0.264). putSettings' words pass through
             // failureWords; a failure of its own says plain words, never a raw e.message (§0.247).
             setSaveError(failureWords(e));
             // Clear the spinner, then rethrow: the leave guard's "Save and

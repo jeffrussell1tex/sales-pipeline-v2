@@ -6215,6 +6215,9 @@ export default function DispatchTab() {
                 _raw:            data,
             };
             setJobs(prev => [optimistic, ...prev]);
+            // The Jobs view lists the jobs as stored (jobsRaw): the job made joins it as the server answered it — it showed
+            // only after a reload (state §0.266). A landed answer that could not be read has no stored job to list.
+            if (saved.id) setJobsRaw(prev => [saved, ...prev.filter(j => j.id !== saved.id)]);
             setSelectedJobId(optimistic.id);
             setNewJobForm(EMPTY_JOB);
             setAppliedTemplate(null);

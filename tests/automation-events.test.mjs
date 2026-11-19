@@ -390,7 +390,7 @@ test('the Update field action saves what it shows — a select over the allowlis
 
 test('an existing automation can be EDITED — the same modal seeded from the rule, saved through PUT with its id, the list updated in place (Jeff, 13 Sep)', () => {
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
-    assert.ok(s.includes('const AutomationModal = ({ rule, onClose, onSaved }) => {') && !s.includes('NewAutomationModal'), 'one modal for both');
+    assert.ok(s.includes('const AutomationModal = ({ rule, onClose, onSaved, heldWords = \'\', onHeld }) => {') && !s.includes('NewAutomationModal'), 'one modal for both');
     assert.ok(s.includes("    const [name,    setName]    = React.useState(rule?.name || '');"));
     assert.ok(s.includes("    const [trigger, setTrigger] = React.useState(rule?.triggerEvent || 'opportunity.stage_changed');"));
     assert.ok(s.includes('    const [conditions, setConds] = React.useState(Array.isArray(rule?.conditions) ? rule.conditions : []);'));

@@ -18,18 +18,20 @@ const WebhookRowMenu = ({ wh, onToggle, onDelete, onClose }) => {
     );
 };
 
-const NewWebhookModal = ({ onClose, onCreated }) => {
+const NewWebhookModal = ({ onClose, onCreated, heldWords = '', onHeld }) => {
     const [step,    setStep]    = React.useState('form'); // form | created
     const [name,    setName]    = React.useState('');
     const [url,     setUrl]     = React.useState('');
     const [checked, setChecked] = React.useState(new Set(['opportunity.stage_changed','opportunity.won']));
     const [saving,  setSaving]  = React.useState(false);
-    const [error,   setError]   = React.useState('');
+    const [error,   setError]   = React.useState(heldWords);
     const [secret,  setSecret]  = React.useState('');
     const [copiedSec, setCopiedSec] = React.useState(false);
     // Create held after an answer that proved nothing (state §0.264, the unknown-save rule, Part 5): the endpoint's id is
-    // the server's, so a second press could make a second endpoint.
-    const [held,    setHeld]    = React.useState(false);
+    // the server's, so a second press could make a second endpoint. Held by the panel
+    // (state §0.266): a window opened again keeps it, with its words, until the panel is opened again and reads the list afresh.
+    const [held,    setHeldHere] = React.useState(!!heldWords);
+    const setHeld = (words) => { setHeldHere(true); setError(words); if (onHeld) onHeld(words); };
 
     // One close for Escape, the backdrop, × and Cancel (state §0.232): a name, a URL or an event changed asks "Discard
     // changes?"; nothing while it is created, nor once the signing secret shows — it closes only by "I've saved it".
@@ -72,8 +74,8 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
         } catch (e) {
             // An answer that proves nothing may have made the endpoint: said so, the form kept, Create held; only the
             // server's own refusal re-arms it (state §0.264, the unknown-save rule, Part 5).
-            if (unknownOf(e)) setHeld(true);
-            setError(thrownSaid(e, 'The endpoint', 'created'));
+            const words = thrownSaid(e, 'The endpoint', 'created');
+            if (unknownOf(e)) setHeld(words); else setError(words);
         } finally {
             setSaving(false);
         }
@@ -174,6 +176,8 @@ export const WebhooksDetail = ({ onBack }) => {
     const [loading,   setLoading]   = React.useState(true);
     const [error,     setError]     = React.useState(null);
     const [showModal, setShowModal] = React.useState(false);
+    // A Create held in its window, and why — kept here so the window opened again stays held (state §0.266).
+    const [createHeld, setCreateHeld] = React.useState('');
     const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('wh-btn-', 'wh-menu-');
     const [deleting,  setDeleting]  = React.useState(null);
     const menuRefs = React.useRef({});
@@ -258,7 +262,7 @@ export const WebhooksDetail = ({ onBack }) => {
     return (
         <div style={{ fontFamily:T.sans }}>
             {/* An endpoint made whose answer names none (or cannot be read): the list is read again, never handed undefined (§0.247). */}
-            {showModal && <NewWebhookModal onClose={() => setShowModal(false)} onCreated={wh => { if (wh && !loadFailed) setWebhooks(prev => [wh, ...prev]); else load(); }}/>}
+            {showModal && <NewWebhookModal heldWords={createHeld} onHeld={setCreateHeld} onClose={() => setShowModal(false)} onCreated={wh => { if (wh && !loadFailed) setWebhooks(prev => [wh, ...prev]); else load(); }}/>}
             <IntCrumb page="Webhooks" onBack={onBack}/>
             <IntTitle
                 title="Webhooks"

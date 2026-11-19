@@ -19,7 +19,6 @@ const storedRowOf = async (url, key, id) => {
  *   quotes[]            — all quotes for the org (loaded once on mount)
  *   loadQuotes()        — fetch all quotes from /quotes
  *   handleSaveQuote()   — POST (new) or PUT (update existing)
- *   handleDeleteQuote() — DELETE (admin only)
  *
  * Products (Price Book):
  *   products[]          — all active products
@@ -131,25 +130,6 @@ export function useQuotes() {
         }
     }, []);
 
-    const handleDeleteQuote = useCallback(async (quoteId, showConfirm) => {
-        const doDelete = async () => {
-            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-            try {
-                const res = await dbFetch('/.netlify/functions/quotes?id=' + quoteId, { method: 'DELETE' });
-                if (!stillOrg(askedOrg)) return;
-                if (!res.ok) { console.error('Failed to delete quote'); return; }
-                setQuotes(prev => prev.filter(q => q.id !== quoteId));
-            } catch (err) {
-                console.error('Delete quote error:', err.message);
-            }
-        };
-        if (showConfirm) {
-            showConfirm('Delete this quote version? This cannot be undone.', doDelete, true);
-        } else {
-            await doDelete();
-        }
-    }, []);
-
     // ── Product CRUD ──────────────────────────────────────────────────────────
     // A product save's answer (state §0.242, §18b123 rule 4): { ok: true, product } once saved; { ok: false, error }
     // when refused — the server's words, else "The server returned N." — for the Price Book to draw; and
@@ -258,7 +238,6 @@ export function useQuotes() {
         quoteModalError, setQuoteModalError,
         quoteModalSaving, setQuoteModalSaving,
         handleSaveQuote,
-        handleDeleteQuote,
         // Product ops — a save answers { ok, error | quiet }, drawn by the Price Book's own form (state §0.242)
         handleSaveProduct,
         handleDeleteProduct,

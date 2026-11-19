@@ -6,17 +6,19 @@ import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thr
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
-const NewApiKeyModal = ({ onClose, onCreated }) => {
+const NewApiKeyModal = ({ onClose, onCreated, heldWords = '', onHeld }) => {
     const [step,    setStep]    = React.useState('form'); // form | creating | reveal
     const [name,    setName]    = React.useState('');
     const [env,     setEnv]     = React.useState('live');
     const [scopes,  setScopes]  = React.useState(new Set(['read']));
-    const [error,   setError]   = React.useState('');
+    const [error,   setError]   = React.useState(heldWords);
     const [result,  setResult]  = React.useState(null); // { key, plaintextKey }
     const [copied,  setCopied]  = React.useState(false);
     // Create held after an answer that proved nothing, or a key made whose answer could not be read (state §0.264, the
-    // unknown-save rule, Part 5): the key's id is the server's, so a second press could make a second key.
-    const [held,    setHeld]    = React.useState(false);
+    // unknown-save rule, Part 5): the key's id is the server's, so a second press could make a second key. Held by the panel
+    // (state §0.266): a window opened again keeps it, with its words, until the panel is opened again and reads the list afresh.
+    const [held,    setHeldHere] = React.useState(!!heldWords);
+    const setHeld = (words) => { setHeldHere(true); setError(words); if (onHeld) onHeld(words); };
 
     // One close for Escape, the backdrop, × and Cancel (state §0.232): a name typed or a scope ticked asks "Discard
     // changes?"; nothing while the key is created — the key would be made and its plaintext lost — and nothing at the
@@ -51,8 +53,7 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
             if (!stillOrg(askedOrg)) return;
             if (r) throw refusalError(r.words, r.heard);
             if (!data || !data.key || !data.plaintextKey) {
-                setHeld(true);
-                setError('The key was created, but its answer could not be read, so its value cannot be shown. Reload the page, revoke that key, and create another.');
+                setHeld('The key was created, but its answer could not be read, so its value cannot be shown. Reload the page, revoke that key, and create another.');
                 setStep('form');
                 return;
             }
@@ -61,8 +62,8 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
             setStep('reveal');
         } catch (e) {
             // An answer that proves nothing may have made the key: said so, Create held (state §0.264, Part 5).
-            if (unknownOf(e)) setHeld(true);
-            setError(thrownSaid(e, 'The key', 'created'));
+            const words = thrownSaid(e, 'The key', 'created');
+            if (unknownOf(e)) setHeld(words); else setError(words);
             setStep('form');
         }
     };
@@ -494,6 +495,8 @@ export const ApiKeysDetail = ({ onBack }) => {
     const [error,      setError]      = React.useState(null);
     const [filter,     setFilter]     = React.useState('Active');
     const [showModal,  setShowModal]  = React.useState(false);
+    // A Create held in its window, and why — kept here so the window opened again stays held (state §0.266).
+    const [createHeld, setCreateHeld] = React.useState('');
     const [showDocs,   setShowDocs]   = React.useState(false);
     const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('key-btn-', 'key-menu-');
     const [revoking,   setRevoking]   = React.useState(null); // key record
@@ -536,7 +539,7 @@ export const ApiKeysDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewApiKeyModal onClose={() => setShowModal(false)} onCreated={k => { setKeys(prev => [k, ...prev]); }}/>}
+            {showModal && <NewApiKeyModal heldWords={createHeld} onHeld={setCreateHeld} onClose={() => setShowModal(false)} onCreated={k => { setKeys(prev => [k, ...prev]); }}/>}
             {revoking  && <RevokeKeyModal keyRecord={revoking} onClose={() => setRevoking(null)} onRevoked={id => { setKeys(prev => prev.map(k => k.id===id ? {...k, revokedAt: new Date().toISOString()} : k)); }}/>}
 
             <IntCrumb page="API keys" onBack={onBack}/>

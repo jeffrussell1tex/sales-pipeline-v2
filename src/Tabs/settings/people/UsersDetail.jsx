@@ -151,7 +151,7 @@ const SectionCard = ({ title, description, headAction, children }) => (
     </div>
 );
 
-const UsersInvitePage = ({ settings, onBack, onUsers }) => {
+const UsersInvitePage = ({ settings, onBack, onUsers, heldWords = '', onHeld }) => {
     const { setSettings } = useApp();
     const [rows, setRows] = useState([
         { id:1, email:'', role:'User', team:'', manager:'', territory:'', valid:true, error:'' },
@@ -166,7 +166,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const [expiry, setExpiry] = useState(7);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [error, setError] = useState('');
+    const [error, setError] = useState(heldWords);
     // What a send that landed has to say (the §0.249 review): kept until the next Send, never the red box of a failure.
     const [notice, setNotice] = useState('');
     // A notice whose words include a roster read that failed is drawn in the warning tint, never the success green
@@ -174,7 +174,10 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const [noticeWarn, setNoticeWarn] = useState(false);
     // A send whose answer proved nothing may have emailed every row (state §0.264, the unknown-save rule, Part 5): Send
     // is held from then on — a second press would email each person again — the rows kept as typed; never re-armed here.
-    const [held, setHeld] = useState(false);
+    // Held by the People panel (state §0.266): the page opened again keeps it, with its words, until Settings → Users is
+    // opened again and reads the roster afresh.
+    const [held, setHeldHere] = useState(!!heldWords);
+    const setHeld = (words) => { setHeldHere(true); setError(words); if (onHeld) onHeld(words); };
 
     const allTeams  = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
     const allReps   = [...new Set((settings.users || []).map(u => u.name).filter(Boolean))].sort();
@@ -216,8 +219,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             catch (e) {
                 // No answer: the invitations may have gone out (state §0.264) — said so, Send held, the rows kept.
                 if (!stillOrg(askedOrg)) return;
-                setHeld(true);
-                setError(maybeSaid('The invitations', 'sent', failureWords(e), true));
+                setHeld(maybeSaid('The invitations', 'sent', failureWords(e), true));
                 return;
             }
             const d = await resp.json().catch(() => ({}));
@@ -231,8 +233,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                 const rowsSaid = Array.isArray(d.errors) && d.errors.length
                     ? d.errors.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')
                     : refusalWords(resp, d);
-                setHeld(true);
-                setError(maybeSaid('The invitations', 'sent', rowsSaid, true));
+                setHeld(maybeSaid('The invitations', 'sent', rowsSaid, true));
                 return;
             }
             // A landed answer always holds its `invited` list (users.mjs): one without it could not be read — the
@@ -1579,6 +1580,8 @@ export const UsersDetail = ({ settings, onBack }) => {
     const [search, setSearch]   = useState('');
     const [selected, setSelected] = useState(new Set());
     const [peopleView, setPeopleView] = useState(null); // null|'invite'|'export'|'pending'|'seats'|'security'|'profile'
+    // The invite page's Send held, and why — kept here so the page opened again stays held (state §0.266).
+    const [inviteHeld, setInviteHeld] = useState('');
     const [viewingUser, setViewingUser] = useState(null);
     const [openUserKebab, setOpenUserKebab] = useState(null); // user id
     const [kebabPos, setKebabPos] = useState(null);
@@ -1751,7 +1754,7 @@ export const UsersDetail = ({ settings, onBack }) => {
     };
 
     // Sub-page router
-    if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
+    if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers} heldWords={inviteHeld} onHeld={setInviteHeld}/>;
     if (peopleView === 'export')   return <UsersExportPage   settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
     if (peopleView === 'pending')  return <UsersPendingPage  settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers} seats={seats} seatsFailed={seatsFailed}/>;

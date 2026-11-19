@@ -131,7 +131,8 @@ export const handler = async (event) => {
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That block id is already in use.' }) };
 
-            await auditAs(orgId, userId, { action: 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
+            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
+            await auditAs(orgId, userId, { action: prior ? 'dispatch_block.updated' : 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ block: normalise(inserted) }) };
         }
 

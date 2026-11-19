@@ -1537,7 +1537,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
 export default function QuotesTab() {
     const {
         quotes, setQuotes, products, opportunities, settings, currentUserId, userRole,
-        handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
+        handleSaveQuote, handleSaveProduct, handleDeleteProduct,
         loadQuotes, showConfirm, quoteModalError,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId, setPressNotices,
     } = useApp();

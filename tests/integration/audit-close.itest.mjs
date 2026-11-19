@@ -360,6 +360,13 @@ test('a job\'s createdBy is the caller\'s and survives a re-POST; no body sets c
     const [again] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.id, job.id));
     assert.equal(again.title, 'Fresh again');
     assert.equal(again.createdBy, WHO.admin.user, 'a re-POST keeps who created it');
+    // Added in §0.266: a create sent again with its id (New Job keeps one across its presses — §0.263) writes "Job created"
+    // once, the first press's, and is audited as an update — never a second create.
+    const history = await db.select().from(dispatchJobStatusHistory).where(eq(dispatchJobStatusHistory.jobId, job.id));
+    assert.deepEqual(history.map((h) => [h.fromStatus, h.toStatus, h.note]), [[null, 'unscheduled', 'Job created']],
+        'REGRESSION: a create sent again writes a second "Job created" row');
+    const audits = (await db.select().from(auditLog).where(eq(auditLog.entityId, job.id))).map((a) => a.action).sort();
+    assert.deepEqual(audits, ['dispatch_job.created', 'dispatch_job.updated'], 'REGRESSION: a create sent again audited as a second create');
     await call('dispatch-jobs', WHO.admin, 'PUT', { createdBy: 'usr_forged', dispatchedBy: 'usr_forged', title: 'Edited' }, { id: job.id });
     const [edited] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.id, job.id));
     assert.equal(edited.title, 'Edited');

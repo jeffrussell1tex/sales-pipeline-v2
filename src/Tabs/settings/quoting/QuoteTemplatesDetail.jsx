@@ -1099,7 +1099,8 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSetting
             // Refused because another save landed first: AdminView puts the latest in a fresh panel and says so (state
             // §0.226 — J-B5). When the latest could not be read, the words below say why and the draft stays.
             if (e.stale && await panelStale(e)) throw e;
-            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // Keep the panel dirty: the change was not saved, or may not have been (an answer that proved nothing, said as
+            // maybe — state §0.264); clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
             // Clear the spinner, then rethrow: the leave guard's "Save and

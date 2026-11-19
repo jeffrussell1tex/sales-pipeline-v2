@@ -128,7 +128,7 @@ const ActionEditor = ({ action, idx, actions, setAction, setAssignee, delAction,
 // same four steps, seeded from the rule, saved through the endpoint's PUT — a
 // rule could only be deleted and rebuilt before (Jeff, 13 Sep). Editing lets
 // every step be opened directly; a new rule still walks them in order.
-const AutomationModal = ({ rule, onClose, onSaved }) => {
+const AutomationModal = ({ rule, onClose, onSaved, heldWords = '', onHeld }) => {
     const editing = !!rule;
     const roster = useApp().settings?.users || [];
     const [step,    setStep]    = React.useState(1); // 1=trigger 2=conditions 3=actions 4=review
@@ -139,8 +139,10 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
     // A new rule's Create held after an answer that proved nothing, with its words (state §0.264, the unknown-save rule,
-    // Part 5): the rule's id is the server's, so a second press could make a second rule.
-    const [held,    setHeld]    = React.useState('');
+    // Part 5): the rule's id is the server's, so a second press could make a second rule. Held by the panel
+    // (state §0.266): a window opened again keeps it, with its words, until the panel is opened again and reads the list afresh.
+    const [held,    setHeldHere] = React.useState(editing ? '' : heldWords);
+    const setHeld = (words) => { setHeldHere(words); if (onHeld) onHeld(words); };
     // One close for Escape, the backdrop and × (state §0.232): a rule changed since it opened asks "Discard changes?";
     // nothing while it saves.
     const [opened] = React.useState(() => JSON.stringify([name, trigger, conditions, actions]));
@@ -357,6 +359,8 @@ export const AutomationsDetail = ({ onBack }) => {
     const [loading,        setLoading]        = React.useState(true);
     const [error,          setError]          = React.useState(null);
     const [showModal,      setShowModal]      = React.useState(false);
+    // A new rule's Create held in its window, and why — kept here so the window opened again stays held (state §0.266).
+    const [createHeld,     setCreateHeld]     = React.useState('');
     const [editingRule,    setEditingRule]    = React.useState(null); // the rule the modal edits; null = a new one
     const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('auto-btn-', 'auto-menu-');
     const lists = useApp(); // opportunities / leads / tasks — to name a run's record
@@ -472,7 +476,7 @@ export const AutomationsDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <AutomationModal rule={editingRule} onClose={() => { setShowModal(false); setEditingRule(null); }}
+            {showModal && <AutomationModal rule={editingRule} heldWords={createHeld} onHeld={setCreateHeld} onClose={() => { setShowModal(false); setEditingRule(null); }}
                 onSaved={saved => setAutomationList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev])}/>}
 
             {/* Run history slide-over */}

@@ -120,7 +120,8 @@ export const handler = async (event) => {
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That vehicle id is already in use.' }) };
 
-            await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.created', entityType: 'dispatch_vehicle', entityId: inserted.id, entityName: inserted.name, detail: [inserted.year, inserted.make, inserted.model].filter(Boolean).join(' ') || inserted.type || null });
+            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
+            await auditAs(orgId, auth.userId, { action: prior ? 'dispatch_vehicle.updated' : 'dispatch_vehicle.created', entityType: 'dispatch_vehicle', entityId: inserted.id, entityName: inserted.name, detail: [inserted.year, inserted.make, inserted.model].filter(Boolean).join(' ') || inserted.type || null });
             return { statusCode: 201, headers, body: JSON.stringify({ vehicle: normalise(inserted) }) };
         }
 

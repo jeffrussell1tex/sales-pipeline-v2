@@ -349,21 +349,25 @@ export const ExportDetail = ({ onBack }) => {
 
     // ── update DSR status ─────────────────────────────────────
     const handleDsrStatus = async (dsr, newStatus) => {
-        const updated = { ...dsr, status: newStatus };
-        setDsrItems(prev => prev.map(d => d.id === dsr.id ? updated : d));
+        // The status alone on the row as it now stands (state §0.266): never the row as it was pressed over a later change.
+        setDsrItems(prev => prev.map(d => d.id === dsr.id ? { ...d, status: newStatus } : d));
         try {
-            const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'PUT', body: JSON.stringify(updated) });
+            // The change alone (state §0.266): the PUT merges what it names over the stored request (export-dsr.mjs, §0.242),
+            // so the row as this screen last read it is never written back.
+            const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'PUT', body: JSON.stringify({ id: dsr.id, status: newStatus }) });
             // Whether the refusal is the server's own (state §0.264, the unknown-save rule, Part 5).
             if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
             const data = await res.json().catch(() => null);   // landed is landed (state §0.264): kept as sent
-            setDsrItems(prev => prev.map(d => d.id === dsr.id ? ((data && data.dsr) || updated) : d));
+            setDsrItems(prev => prev.map(d => d.id === dsr.id ? ((data && data.dsr) || { ...d, status: newStatus }) : d));
             setActionError(prev => (prev.startsWith(`Request ${dsr.id} was not `) || prev.startsWith(`Request ${dsr.id} may have been `) ? '' : prev));
         } catch (e) {
             // Put back only on the server's own refusal; an answer that proves nothing keeps the change, said as maybe
             // (state §0.264, the unknown-save rule, Part 5).
             const unknown = unknownOf(e);
             const done = newStatus === 'completed' ? 'marked complete' : 'updated';
-            if (!unknown) setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
+            // Put back only what this press changed, its status, and only while the row still shows it (state §0.266, guide
+            // §18b134 rule 6): never the whole row as it was pressed over a later change.
+            if (!unknown) setDsrItems(prev => prev.map(d => d.id === dsr.id && d.status === newStatus ? { ...d, status: dsr.status } : d));
             errorSched.current = null;   // these words speak of a request, no schedule (§0.247 review fix)
             setActionError(unknown ? maybeSaid(`Request ${dsr.id}`, done, failureWords(e)) : `Request ${dsr.id} was not ${done} — ${failureWords(e)}`);
         }

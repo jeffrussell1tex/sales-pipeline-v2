@@ -67,7 +67,8 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
             // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
             // it. Unread, the server's words below and the draft kept.
             if (e.stale && await panelStale(e)) throw e;
-            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // Keep the panel dirty: the change was not saved, or may not have been (an answer that proved nothing, said as
+            // maybe — state §0.264); clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
             // Clear the spinner, then rethrow: the leave guard's "Save and

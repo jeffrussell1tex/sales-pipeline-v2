@@ -155,8 +155,10 @@ const removalSites = (file) => {
 };
 test('THE CLASS — every removal applies the server\'s lists inside its own handler: the org asked before its request, checked after its last answer, the lists-left note said; no screen writes a list of its own', () => {
     const s = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
+    // Moved in §0.266: the app's delete (useUserHandlers handleDeleteUser) had no caller and is gone — five removals.
     const sites = [...removalSites('src/Tabs/settings/people/UsersDetail.jsx'), ...removalSites('src/hooks/useUserHandlers.js')];
-    assert.equal(sites.length, 6, 'the Pending page\'s, the profile page\'s and the row menu\'s revoke; the profile page\'s, the row menu\'s and the app\'s delete');
+    assert.equal(sites.length, 5, 'the Pending page\'s, the profile page\'s and the row menu\'s revoke; the profile page\'s and the row menu\'s delete');
+    assert.ok(!read('src/hooks/useUserHandlers.js').includes('handleDeleteUser'), 'REGRESSION: the app\'s uncalled delete is back');
     for (const { file, call, body } of sites) {
         const at = body.indexOf(call);
         const asked = body.indexOf('const askedOrg = requestOrg();');

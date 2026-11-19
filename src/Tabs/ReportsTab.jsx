@@ -102,20 +102,29 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const [reportsTeam, setReportsTeam] = useState(null);
     const [reportsTerritory, setReportsTerritory] = useState(null);
     const [savedReportsList, setSavedReportsList] = useState([]);
+    // The words of a read of the list that failed ('' once one landed): a read that failed is never "No saved reports
+    // yet" (state §0.266, §0.247's rule) — it read a refused answer as `{ reports: [] }`. Try again reads it once more.
+    const [savedReportsUnread, setSavedReportsUnread] = useState('');
+    const [savedReportsReads, setSavedReportsReads] = useState(0);
 
     // Load saved reports once at ReportsTab level so ActivityHistory saves are visible in Saved tab
     React.useEffect(() => {
         let cancelled = false;
-        dbFetch('/.netlify/functions/saved-reports')
-            // The callback was named `data` but receives a RESPONSE (guide 18b3).
-            // Nothing in the chain called .json(), so `data?.reports` was always
-            // undefined and this list has never loaded. The endpoint returns
-            // { reports: [...] } as a JSON body.
-            .then(r => (r.ok ? r.json() : { reports: [] }))
-            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
-            .catch(() => {});
+        (async () => {
+            try {
+                // The ok check before the body (§0.247): the server's words, else its status; an answer with no list
+                // could not be read.
+                const r = await dbFetch('/.netlify/functions/saved-reports');
+                if (!r.ok) throw new Error(await readRefusal(r));
+                const data = await r.json();
+                if (!Array.isArray(data?.reports)) throw new Error('Its answer could not be read.');
+                if (!cancelled) { setSavedReportsList(data.reports); setSavedReportsUnread(''); }
+            } catch (e) {
+                if (!cancelled) setSavedReportsUnread(failureWords(e));
+            }
+        })();
         return () => { cancelled = true; };
-    }, []);
+    }, [savedReportsReads]);
 
 
                 // ── Role-based data visibility ─────────────────────────────────────────
@@ -2123,6 +2132,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 currentUser={currentUser}
                                 savedReportsList={savedReportsList}
                                 setSavedReportsList={setSavedReportsList}
+                                savedReportsUnread={savedReportsUnread}
+                                onReadSavedAgain={() => setSavedReportsReads(n => n + 1)}
                                 leads={reportsLeads}
                             />
                         )}
@@ -2387,7 +2398,7 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
     );
 };
 
-function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, leads = [] }) {
+function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, savedReportsUnread = '', onReadSavedAgain, leads = [] }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -4471,7 +4482,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 </button>
                             </div>
                         ))}
-                        {DUPES.length===0 && <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No saved reports yet.</div>}
+                        {DUPES.length===0 && <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>{savedReportsUnread ? `The saved reports could not be loaded — ${savedReportsUnread}` : 'No saved reports yet.'}</div>}
                     </div>
                 </div>
             );
@@ -4707,7 +4718,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     currentUserId={currentUserId} busy={deliveryBusy} note={deliveryNote}
                     onSave={saveDelivery} onSendNow={sendNow} onClose={()=>{ setDeliveryFor(null); setDeliveryNote(null); }}/>
             )}
-            {filteredSaved.length === 0 && !srchQ && (
+            {/* A read of the list that failed is said, never "No saved reports yet" (state §0.266): kept until a read lands. */}
+            {savedReportsUnread && (
+                <div role="alert" style={{ marginBottom:20, padding:'10px 14px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, display:'flex', alignItems:'flex-start', gap:12, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>
+                    <span style={{ flex:1, minWidth:0 }}>The saved reports could not be loaded — {savedReportsUnread}</span>
+                    {onReadSavedAgain && <button onClick={onReadSavedAgain} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans, padding:0 }}>Try again</button>}
+                </div>
+            )}
+            {filteredSaved.length === 0 && !srchQ && !savedReportsUnread && (
                 <div style={{ marginBottom:20, padding:'14px 16px', background:T.surface, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:T.sans }}>
                     <div>
                         <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>No saved reports yet</div>
