@@ -12015,3 +12015,24 @@ test('§0.269 quote → job: the customer it makes, the job, its lines and its h
     // The audits only after it all landed.
     order(post, "}, { label: 'job or customer number' });", "if (customerCreated) await auditAs(orgId, userId, { action: 'dispatch_customer.created'", "action: 'dispatch_job.created_from_quote'");
 });
+
+// ── §0.270: a merge answers its survivor from its own batch (OPEN_ITEMS §4.8, census-D §2C; Jeff, 19 Nov: "Merges' re-read") ──
+test('§0.270 a merge answers its survivor as the batch\'s own update left it — no read after the batch; the update the last write to that row before the log — WIRING', () => {
+    const m = code(read('netlify/functions/merge.mjs'));
+    const mb = between(m, 'async function mergeBatch(', '\n}\n');
+    assert.ok(mb.includes('try { return { results: await db.batch(ops) }; }') && mb.includes('return { refused: { statusCode: 409,'), 'mergeBatch answers { results } or { refused }');
+    for (const [kind, table, answer] of [['account', 'accounts', 'account'], ['contact', 'contacts', 'contact']]) {
+        const at = m.indexOf(`const done = await mergeBatch(ops, { table: ${table}, survivorId, archivedId, orgId, headers });`);
+        assert.ok(at > 0, `${kind}: its batch`);
+        const before = m.slice(m.lastIndexOf(`const survivorAt = ops.length;`, at), at);
+        assert.ok(before.startsWith('const survivorAt = ops.length;'), `${kind}: the survivor's place in the batch taken as it is pushed`);
+        assert.ok(before.includes(`ops.push(db.update(${table}).set(survSet).where(and(eq(${table}.id, survivorId), eq(${table}.orgId, orgId))).returning());`),
+            `REGRESSION: ${kind}: the survivor's update answers nothing — its row read again after the batch`);
+        // After the survivor's update only the merge log is written: what it returns is the row as the batch leaves it.
+        assert.equal(count(before, 'ops.push('), 2, `${kind}: the survivor's update, then the log — nothing after it writes the survivor's row`);
+        assert.ok(before.includes('ops.push(db.insert(mergeLog).values({'));
+        const after = m.slice(at, m.indexOf(`JSON.stringify({ ${answer}: updatedSurvivor,`, at));
+        assert.ok(after.includes('if (done.refused) return done.refused;') && after.includes('const [updatedSurvivor] = done.results[survivorAt];'), `${kind}: answered from the batch`);
+        assert.ok(!/await db\.select\(/.test(after), `REGRESSION: ${kind}: a read after the batch — one that fails answers 500 over a merge that landed`);
+    }
+});

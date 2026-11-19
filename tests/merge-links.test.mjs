@@ -124,11 +124,12 @@ test('THE SERVER (state §0.218): an account merge moves the record merged away\
     assert.ok(batch.includes(".where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId), or(isNull(accounts.mergeArchived), eq(accounts.mergeArchived, false)), asStamped(accounts, survRead)))"), 'the survivor held only while live and as read — two merges into one survivor, the second from a stale read (the review)');
     assert.equal((batch.match(/writesItsRow\(/g) || []).length, 2, 'each aborts the batch unless it wrote its row');
     assert.ok(!g.includes("ops.push(db.update(accounts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now })"), 'archived once, by the claim');
-    assert.ok(g.includes('const refused = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });') && g.includes('const refused = await mergeBatch(ops, { table: contacts, survivorId, archivedId, orgId, headers });'));
+    // Moved in §0.270: mergeBatch answers { results } or { refused }, as undoBatch does.
+    assert.ok(g.includes('const done = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });') && g.includes('const done = await mergeBatch(ops, { table: contacts, survivorId, archivedId, orgId, headers });'));
     const mb = between(g, 'async function mergeBatch(', '\n}\n');
     assert.ok(mb.includes("if (!['22012', '40001', '40P01'].includes(String(e?.cause?.code || e?.code || ''))) throw e;"), 'only an abort read again as a refusal');
     assert.ok(mb.includes('.where(and(eq(table.orgId, orgId), inArray(table.id, [survivorId, archivedId])));'), 'read again in this org');
-    assert.ok(mb.includes("const error = now(archivedId)?.mergeArchived === true ? 'That record has already been merged.'") && mb.includes('return { statusCode: 409, headers, body: JSON.stringify({ error }) };'));
+    assert.ok(mb.includes("const error = now(archivedId)?.mergeArchived === true ? 'That record has already been merged.'") && mb.includes('return { refused: { statusCode: 409, headers, body: JSON.stringify({ error }) } };'));
     assert.ok(g.includes('const summary = recordsTouched(rewrites, (r) => r.table);') && g.includes("const summary = recordsTouched(rewrites, (r) => r.table + '.' + r.column);"), 'each record counted once (Q18)');
     const pair = between(g, "        if (rw.kind === 'idPair') {", '        // Each row the merge moved, back where it still holds what the merge wrote.');
     assert.ok(pair.includes('ops.push(db.update(table).set({ [rw.column]: rw.oldValue, company, updatedAt: now })'), 'back with its own company');

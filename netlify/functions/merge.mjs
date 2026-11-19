@@ -66,9 +66,11 @@ const TABLE_BY_NAME = {
 // held, each only while live — aborts the batch (22012) unless it wrote its row; a stricter isolation level's conflict
 // (40001) or a deadlock (40P01) wrote nothing too. The two records are read again and the refusal said (409): null when
 // the batch landed. Any other failure is the handler's 500.
+// Since §0.270 it answers { results } — the batch's statements' answers, the survivor's update among them — or { refused },
+// as undoBatch does.
 export const MERGE_CHANGED = 'One of these records changed while the merge was being made. Please re-open and review again.';
 async function mergeBatch(ops, { table, survivorId, archivedId, orgId, headers }) {
-    try { await db.batch(ops); return null; }
+    try { return { results: await db.batch(ops) }; }
     catch (e) {
         if (!['22012', '40001', '40P01'].includes(String(e?.cause?.code || e?.code || ''))) throw e;
         const rows = await db.select({ id: table.id, mergeArchived: table.mergeArchived }).from(table).where(and(eq(table.orgId, orgId), inArray(table.id, [survivorId, archivedId])));
@@ -76,7 +78,7 @@ async function mergeBatch(ops, { table, survivorId, archivedId, orgId, headers }
         const error = now(archivedId)?.mergeArchived === true ? 'That record has already been merged.'
             : now(survivorId)?.mergeArchived === true ? 'The survivor was archived by a prior merge — refresh and try again.'
             : MERGE_CHANGED;
-        return { statusCode: 409, headers, body: JSON.stringify({ error }) };
+        return { refused: { statusCode: 409, headers, body: JSON.stringify({ error }) } };
     }
 }
 
@@ -354,7 +356,8 @@ export const handler = async (event) => {
         // an account, its deals where they are, counted; state §0.198, §0.207; the server critic, 12 Oct: a top-level
         // account merged into its own site left the site at the top, its deals on it).
         if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';
-        ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
+        const survivorAt = ops.length;
+        ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))).returning());
 
         // The loser is soft-archived by the batch's first statement, the claim (kept for its Undo; no screen, report or
         // public-API answer lists a merged-away row — state §0.210; guide §18b101).
@@ -378,10 +381,12 @@ export const handler = async (event) => {
             performedById: userId,
         }));
 
-        const refused = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });
-        if (refused) return refused;
+        const done = await mergeBatch(ops, { table: accounts, survivorId, archivedId, orgId, headers });
+        if (done.refused) return done.refused;
 
-        const [updatedSurvivor] = await db.select().from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId)));
+        // The survivor as the batch's own update of it left it (state §0.270): it was read again after the batch, and a read that
+        // failed answered 500 over a merge that landed (census-D §2C). The survivor's update is the batch's last write to its row.
+        const [updatedSurvivor] = done.results[survivorAt];
         const summary = recordsTouched(rewrites, (r) => r.table);
         // The merge log is the undo record; the audit log is the who-did-what record (§0.143).
         await auditAs(orgId, userId, { action: 'account.merged', entityType: 'account', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
@@ -884,7 +889,8 @@ async function mergeContacts({ body, orgId, userId, headers }) {
         updatedAt: now,
     };
     if (owner) survSet.ownerId = owner.ownerId;   // the id with the name (§0.193)
-    ops.push(db.update(contacts).set(survSet).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId))));
+    const survivorAt = ops.length;
+    ops.push(db.update(contacts).set(survSet).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId))).returning());
 
     // 5) The loser is soft-archived by the batch's first statement, the claim.
 
@@ -898,10 +904,12 @@ async function mergeContacts({ body, orgId, userId, headers }) {
         status: 'merged', performedBy, performedById: userId,
     }));
 
-    const refused = await mergeBatch(ops, { table: contacts, survivorId, archivedId, orgId, headers });
-    if (refused) return refused;
+    const done = await mergeBatch(ops, { table: contacts, survivorId, archivedId, orgId, headers });
+    if (done.refused) return done.refused;
 
-    const [updatedSurvivor] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
+    // The survivor as the batch's own update of it left it (state §0.270): it was read again after the batch, and a read that
+    // failed answered 500 over a merge that landed (census-D §2C). The survivor's update is the batch's last write to its row.
+    const [updatedSurvivor] = done.results[survivorAt];
     const summary = recordsTouched(rewrites, (r) => r.table + '.' + r.column);
     await auditAs(orgId, userId, { action: 'contact.merged', entityType: 'contact', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
 
