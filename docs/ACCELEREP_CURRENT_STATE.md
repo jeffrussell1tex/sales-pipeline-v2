@@ -8838,7 +8838,7 @@ Its check found that round's own Rename stage change could rename the wrong pipe
 
 **What Jeff sees.** A Void says Void invoice; a secret rotation says Rotate secret; a destination's or a SPIFF's removal says Remove — never Delete over what is not a delete.
 
-**Found:** (1) the buttons stay red — the style guide says red only for delete; whether a Void, a Rotate, a Remove and a Deactivate keep the danger colour is Jeff's call (OPEN_ITEMS §4.8); (2) dead code: QuotesTab's `handleDelete` ("Delete this product?") has no caller — the Price Book draws no Delete — and useQuotes' Deactivate confirm is never reached (its one caller passes no `showConfirm`) (OPEN_ITEMS §4.8).
+**Found:** (1) the buttons stay red — the style guide said red only for delete; Jeff, asked: "Keep red" (19 Nov) — a danger confirm's button is red whatever it names; (2) dead code: QuotesTab's `handleDelete` ("Delete this product?") has no caller — the Price Book draws no Delete — and useQuotes' Deactivate confirm is never reached (its one caller passes no `showConfirm`) (OPEN_ITEMS §4.8).
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

@@ -484,7 +484,8 @@ One commit per verified batch; doc patch in the same commit.
   (`showConfirm`'s fourth argument, `{ confirm: 'Void invoice' }`) — never
   the "Delete" default (THE GUARD, tests/house-dialogs.test.mjs; state §0.272).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
-  Sans, near-black buttons, red only for delete).
+  Sans, near-black buttons, red only for delete and a danger confirm's
+  button — Jeff, 19 Nov: "Keep red").
 
 ## Environment and tooling
 

@@ -3234,6 +3234,8 @@ coaching note. The app had owned a confirmation modal for months.
   danger default draws **Delete** — right only for a delete. A danger
   confirm that is not one (a Void, a Rotate, a Remove, a Deactivate, a
   Discard) passes its fourth argument, `{ confirm: 'Void invoice' }`.
+  Its button stays red — a danger confirm's colour, whatever it names
+  (Jeff, 19 Nov: "Keep red").
   THE GUARD (tests/house-dialogs.test.mjs) parses every call: a danger
   confirm whose message does not start "Delete" or "Permanently delete"
   and names no confirm label fails the build.
