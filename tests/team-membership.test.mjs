@@ -25,7 +25,7 @@ import { clause } from '../src/utils/memberSave.js';
 import { parse } from '@babel/parser';
 import { inviteFrom } from '../src/utils/userImport.js';
 // Since §0.225 (batch 4b-3, step B-2): a teams save names the token its list was read with.
-import { revsAfter, listChanged, STALE_ERROR } from '../src/utils/settingsRevs.js';
+import { revsAfter, listChanged, STALE_ERROR, listHolds } from '../src/utils/settingsRevs.js';   // listHolds since §0.265
 // Since §0.264 (the unknown-save rule, Part 5): only the server's own refusal is "not"; any other answer may have written.
 import { heardRefusal, maybeSaid } from '../src/utils/refusalWords.js';
 
@@ -439,7 +439,9 @@ const unknownOfAnswer = (a) => (a.unknown !== undefined ? a.unknown : !heardRefu
 // copy's sends the wrong one. `latest`: what a take-latest reads (null: it could not); `base`: a window re-based before.
 // dbFetch stays in the scope, so a handler that still sends through it fails on what it sends, not on a missing name.
 // `newTeamId`: the window's ref for a new team's id (state §0.264) — handed again to run a second press of one window.
-const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base = null, latest = null, newTeamId = { current: null } }) => {
+// `maybeSent` (§0.265): the window's ref for what a press whose answer proved nothing sent — handed again, as newTeamId
+// is, to run a later press of the same window.
+const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base = null, latest = null, newTeamId = { current: null }, maybeSent = { current: null } }) => {
     const calls = [], said = [];
     if (!team && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;   // as TeamModal mints it, once per opening
     const held = base || { list: teams, rev: 'OPENED' };
@@ -459,6 +461,7 @@ const runTeamSave = async ({ team, form = {}, teams, users, answers = {}, base =
         allUsers: users.filter((u) => u.name && u.active !== false),
         teamNameRefused, teamSaveMembers, rosterAfterTeamSave, revsAfter, listChanged,
         newTeamId, memberRowsWords, maybeSaid,   // since §0.264 (the unknown-save rule, Part 5)
+        maybeSent, listHolds,                    // since §0.265
         requestOrg: () => 'org_A', stillOrg: (o) => o === 'org_A',
         dbFetch: async (url, opts) => { const a = ask(url, opts); return { ok: a.ok, status: a.status, json: async () => a.data ?? { error: a.error } }; },
         // storage.js dbWrite: a refused answer says `unknown` as the real one does (state §0.264).
@@ -683,4 +686,88 @@ test('C5 handleSave, run as written: a new team refused as stale stays open on t
     assert.deepEqual(again.calls[0].body.teams.map((t) => t.name), ['UKG', 'Other', 'North'], 'the other tab\'s team kept, the new one added');
     assert.equal(again.calls[0].body.teams[0].color, '#3a5a7a', 'and its colour');
     assert.equal(again.state.closed, true);
+});
+
+// ── §0.265: handleSave, run as written — a press refused as stale after one whose answer proved nothing ──────────────
+// The refusal is the token that press moved: a latest list holding the team as sent is that press landed — the member
+// rows go out as a landed save sends them, nothing written twice; changed in the window since, the team is saved once
+// more on the latest list with its token.
+
+const LOST = () => ({ ok: false, status: 502, error: 'The server returned 502.' });
+const inTurn = (...answers) => { let n = 0; return (body) => answers[Math.min(n++, answers.length - 1)](body); };
+const memberBodies = (r) => r.calls.filter((c) => c.to === 'users').map((c) => c.body);
+
+test('C7 (§0.265) handleSave, run as written: an edit whose answer was lost, saved again and refused as stale, finds the team on the latest as sent — its member rows sent, the window closed as saved', async () => {
+    const form = { repIds: [...UKG_TEAM.repIds, 'usr_d'], territory: 'NAM' };
+    // What a landed save of this edit sends its members (the rows to match).
+    const clean = await runTeamSave({ team: UKG_TEAM, form, teams: [UKG_TEAM], users: UKG_USERS });
+    assert.ok(memberBodies(clean).length >= 2, 'the edit names member rows: D joins, the territory goes to the team');
+    const maybeSent = { current: null };
+    const first = await runTeamSave({ team: UKG_TEAM, form, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: LOST } });
+    assert.deepEqual(first.calls.map((c) => c.to), ['settings'], 'no member after a list that may not have landed');
+    const sent = first.calls[0].body.teams[0];
+    assert.deepEqual(maybeSent.current, sent, 'REGRESSION: what the press sent is not kept for the next');
+    // It landed: the list holds the team as sent, the other tab's team beside it, the token moved.
+    const latest = { teams: [sent, LATEST_TEAMS[1]], revs: { teams: 'T_LANDED', territories: 'TERR' } };
+    const second = await runTeamSave({ team: UKG_TEAM, form, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: STALE }, latest });
+    assert.equal(second.calls.filter((c) => c.to === 'settings').length, 1, 'nothing written twice');
+    assert.deepEqual(memberBodies(second), memberBodies(clean), 'REGRESSION (the §0.264 finding): the member rows of a save that landed never sent');
+    assert.equal(second.state.took, 1);
+    assert.deepEqual([second.said, second.state.stale, second.state.closed, second.state.saved], [[], undefined, true, true],
+        'REGRESSION: said as another\'s change — "Make your change again"');
+    assert.deepEqual(second.state.settings.teams, latest.teams, 'the latest on the page');
+    assert.equal(second.state.settings.revs.teams, 'T_LANDED', 'with its token');
+    assert.deepEqual(second.state.base, { list: latest.teams, rev: 'T_LANDED' });
+    // No earlier press: a latest that holds the team as sent is the change made — the same.
+    const plain = await runTeamSave({ team: UKG_TEAM, form, teams: [UKG_TEAM], users: UKG_USERS, answers: { settings: STALE }, latest });
+    assert.deepEqual([memberBodies(plain), plain.state.closed], [memberBodies(clean), true]);
+});
+
+test('C7 (§0.265) handleSave, run as written: changed since the press whose answer was lost — saved once more on the latest list with its token; refused again, the latest read again and said', async () => {
+    const form = { repIds: [...UKG_TEAM.repIds, 'usr_d'], territory: 'NAM' };
+    const maybeSent = { current: null };
+    const first = await runTeamSave({ team: UKG_TEAM, form, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: LOST } });
+    const latest = { teams: [first.calls[0].body.teams[0], LATEST_TEAMS[1]], revs: { teams: 'T_LANDED', territories: 'TERR' } };
+    const now = { ...form, color: '#4d6b3d' };
+    const landed = () => ({ ok: true, status: 200, data: {}, revs: { teams: 'T3' } });
+    const r = await runTeamSave({ team: UKG_TEAM, form: now, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: inTurn(STALE, landed) }, latest });
+    const sends = r.calls.filter((c) => c.to === 'settings');
+    assert.equal(sends.length, 2);
+    assert.deepEqual(sends[1].body.ifRevs, { teams: 'T_LANDED' }, 'REGRESSION: made again with the refused token');
+    assert.deepEqual(sends[1].body.teams.map((t) => [t.id, t.color]), [['team_ukg', '#4d6b3d'], ['team_other', '#2a2622']], 'on the latest list — the other tab\'s team kept');
+    assert.ok(memberBodies(r).length >= 2, 'the member rows sent');
+    assert.deepEqual([r.state.closed, r.said, r.state.settings.revs.teams], [true, [], 'T3']);
+    // Refused again: the latest read once more, the page says so, no member sent.
+    const twice = await runTeamSave({ team: UKG_TEAM, form: now, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: STALE }, latest });
+    assert.deepEqual([twice.calls.map((c) => c.to), twice.state.took, twice.state.stale, twice.state.closed], [['settings', 'settings'], 2, listChanged('team'), true]);
+    // A latest that holds neither press: another's change — as before (C5).
+    const other = await runTeamSave({ team: UKG_TEAM, form: now, teams: [UKG_TEAM], users: UKG_USERS, maybeSent, answers: { settings: STALE }, latest: LATEST });
+    assert.deepEqual([other.calls.map((c) => c.to), other.state.took, other.state.stale], [['settings'], 1, listChanged('team')]);
+});
+
+test('C7 (§0.265) handleSave, run as written: a new team whose answer was lost, saved again and refused as stale, found on the latest — its members sent in that press, no second team', async () => {
+    const form = { name: 'North', repIds: ['usr_d'] };
+    const newTeamId = { current: null }, maybeSent = { current: null };
+    const first = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, newTeamId, maybeSent, answers: { settings: LOST } });
+    const sent = first.calls[0].body.teams.at(-1);
+    const latest = { teams: [UKG_TEAM, sent], revs: { teams: 'T_LANDED', territories: 'TERR' } };
+    const second = await runTeamSave({ team: null, form, teams: [UKG_TEAM], users: UKG_USERS, newTeamId, maybeSent, answers: { settings: STALE }, latest });
+    assert.equal(second.calls.filter((c) => c.to === 'settings').length, 1, 'nothing written twice');
+    assert.deepEqual(memberBodies(second).map((b) => b.id), ['usr_d'], 'REGRESSION: the new team\'s member never sent — D joins no team');
+    assert.deepEqual([second.state.closed, second.said], [true, []]);
+    assert.equal(second.state.settings.teams.filter((t) => t.id === sent.id).length, 1, 'one team');
+});
+
+test('C7 (§0.265) listHolds: the entry of that id, every key sent equal by value — an object\'s keys in any order, a missing key and an undefined one alike; nothing else', () => {
+    const list = [{ id: 'a', name: 'A', repIds: ['x', 'y'], cfg: { b: 1, a: 2 }, extra: 'kept' }, 'Legacy', null];
+    assert.equal(listHolds(list, { id: 'a', name: 'A', repIds: ['x', 'y'] }), true, 'the keys sent, not every key stored');
+    assert.equal(listHolds(list, { id: 'a', cfg: { a: 2, b: 1 } }), true, 'an object by value, its keys in any order');
+    assert.equal(listHolds(list, { id: 'a', gone: undefined }), true, 'undefined sent, missing stored: JSON keeps neither');
+    assert.equal(listHolds(list, { id: 'a', cfg: { a: 2, b: 1, c: undefined } }), true, 'inside an object too — an undefined key there is no key');
+    assert.equal(listHolds(list, { id: 'a', repIds: ['y', 'x'] }), false, 'a list in order');
+    assert.equal(listHolds(list, { id: 'a', name: 'B' }), false);
+    assert.equal(listHolds(list, { id: 'a', name: null }), false, 'null is a value');
+    assert.equal(listHolds(list, { id: 'b', name: 'A' }), false, 'another id');
+    for (const none of [null, undefined, {}, { name: 'A' }, 'a']) assert.equal(listHolds(list, none), false, `no entry: ${JSON.stringify(none)}`);
+    assert.equal(listHolds(null, { id: 'a' }), false, 'no list');
 });

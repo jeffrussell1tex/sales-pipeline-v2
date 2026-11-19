@@ -5,6 +5,8 @@ import { useApp } from '../../../AppContext';
 import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings, writeSettings, takeLatestSettings, settingsSaid } from '../shared/saveSettings.js';
 import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
+// A stale refusal whose latest list already holds what was sent is an earlier press that landed (state §0.265).
+import { listHolds } from '../../../utils/settingsRevs.js';
 // Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
 import { maybeSaid } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
@@ -33,6 +35,9 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
     // after an answer that proved nothing sends the same entry again — it minted `terr_${Date.now()}` on every press.
     const newTerrId = useRef(null);
     if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;
+    // What a press whose answer proved nothing sent (state §0.265): a later press refused as stale finds it on the latest
+    // list when that press landed.
+    const maybeSent = useRef(null);
 
     const [name,    setName]    = useState(territory?.name    || '');
     const [parent,  setParent]  = useState(territory?.parent  || '');
@@ -54,28 +59,25 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
         if ((mode === 'new' || mode === 'edit') && !name.trim()) { setErr('Name is required.'); return; }
         setSaving(true); setErr('');
         try {
-            let updatedTerritories = [...territories];
             let updatedUsers = [...allUsers];
-
+            // What this press sends, as the entry's id and the keys it changes (state §0.265): built onto a list by `withPress`
+            // — this window's list, or the latest after a stale refusal.
+            const targetId = mode === 'new' ? newTerrId.current : territory.id;
+            let patch = {};
             if (mode === 'new') {
-                const newT = { id:newTerrId.current, name:name.trim(), parent:parent.trim(), rule:rule.trim(), ownerId, repIds, accounts:0, pipeline:'—', status: ownerId ? 'Active' : 'Unassigned' };
-                // One the list already holds — this window's earlier press landed and the latest was taken after a stale
-                // refusal — is that entry, never a second one (state §0.264).
-                updatedTerritories = territories.some(t => t.id === newT.id) ? territories.map(t => t.id === newT.id ? newT : t) : [...territories, newT];
+                patch = { id:newTerrId.current, name:name.trim(), parent:parent.trim(), rule:rule.trim(), ownerId, repIds, accounts:0, pipeline:'—', status: ownerId ? 'Active' : 'Unassigned' };
             } else if (mode === 'edit') {
                 const oldName = territory.name;
-                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, name:name.trim(), parent:parent.trim() } : t);
+                patch = { name:name.trim(), parent:parent.trim() };
                 // Sync rename onto users
                 updatedUsers = allUsers.map(u => u.territory === oldName ? { ...u, territory: name.trim() } : u);
             } else if (mode === 'rule') {
-                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, rule:rule.trim() } : t);
+                patch = { rule:rule.trim() };
             } else if (mode === 'owner') {
                 const owner = allUsers.find(u => u.id === ownerId);
-                updatedTerritories = territories.map(t => t.id === territory.id
-                    ? { ...t, ownerId, ownerInit: owner ? owner.name.slice(0,2).toUpperCase() : null, owner: owner?.name || 'Unassigned', status: owner ? 'Active' : 'Unassigned' }
-                    : t);
+                patch = { ownerId, ownerInit: owner ? owner.name.slice(0,2).toUpperCase() : null, owner: owner?.name || 'Unassigned', status: owner ? 'Active' : 'Unassigned' };
             } else if (mode === 'reps') {
-                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, repIds, reps: repIds.length } : t);
+                patch = { repIds, reps: repIds.length };
                 // Update u.territory for added/removed reps
                 updatedUsers = allUsers.map(u => {
                     if (repIds.includes(u.id)) return { ...u, territory: territory.name };
@@ -83,14 +85,38 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
                     return u;
                 });
             }
+            // A new territory the list already holds — this window's earlier press landed and the latest was taken after a
+            // stale refusal — is that entry, never a second one (state §0.264); any other press changes its keys on its entry.
+            const withPress = (list) => (mode === 'new' && !list.some(t => t.id === targetId) ? [...list, patch]
+                : list.map(t => t.id === targetId ? (mode === 'new' ? patch : { ...t, ...patch }) : t));
+            const sent = { id: targetId, ...patch };
+            let updatedTerritories = withPress(territories);
 
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const w = await writeSettings({ territories: updatedTerritories }, { territories: base.rev });
+            let w = await writeSettings({ territories: updatedTerritories }, { territories: base.rev });
             if (!stillOrg(askedOrg)) return;
+            let latest, took = false;
+            if (w.stale) {
+                // A press before this one landed though its answer proved nothing (state §0.265): the refusal is the token
+                // that press moved. The latest list holds the territory as this press sends it — the save is in: on to the
+                // rep rows (a rename's among them), nothing written again — or as that press sent it, changed in the window
+                // since: this press is made once more on the latest list, with its token.
+                latest = await takeLatestSettings(setSettings); took = true;
+                const held = latest?.territories || [];
+                if (latest && listHolds(held, sent)) { updatedTerritories = held; w = { ok: true, revs: { territories: latest.revs?.territories ?? null } }; }
+                else if (latest && listHolds(held, maybeSent.current)) {
+                    // The latest list with this press made on it, and that list's token: one set, as the window's own base is.
+                    const onLatest = { list: withPress(held), rev: latest.revs?.territories ?? null };
+                    updatedTerritories = onLatest.list;
+                    w = await writeSettings({ territories: onLatest.list }, { territories: onLatest.rev });
+                    if (!stillOrg(askedOrg)) return;
+                    if (w.stale) took = false;   // refused again: the latest is read once more
+                }
+            }
             // Another change landed first (state §0.225 — J-B8): the page takes the latest and no member row is sent. An
             // edit closes and the page says so; a new territory stays open on the latest list, its next Save that list's.
             if (w.stale) {
-                const latest = await takeLatestSettings(setSettings);
+                if (!took) latest = await takeLatestSettings(setSettings);
                 const words = latest ? listChanged('territory') : w.error;
                 if (mode !== 'new') { onStale(words); onClose(); return; }
                 if (latest) setBase({ list: latest.territories || [], rev: latest.revs?.territories ?? null });
@@ -100,6 +126,7 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onStale, onClo
             if (!w.ok) {
                 // An answer that proves nothing may have saved the territory (state §0.264, the unknown-save rule, Part 5):
                 // the window stays open with what was typed and its kept id, no rep sent; the server's own refusal as before.
+                if (w.unknown) maybeSent.current = sent;   // a later press refused as stale looks for it (state §0.265)
                 setErr(w.unknown ? maybeSaid('The territory', 'saved', w.error) : (w.error || 'Save failed.'));
                 return;
             }
@@ -300,18 +327,24 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
             const terrRev = settings.revs?.territories ?? null;   // the token of the list it is built from (state §0.225)
             const reps = allUsers.filter(u => u.territory === tr.name);
             setDeleteErr(''); setListNote('');
-            let answer;
+            let answer, gone = false;
             try {
                 answer = await putSettings({ territories: updatedTerritories }, { territories: terrRev });   // throws on non-2xx
             } catch (e) {
                 // Another change landed first (state §0.225): the page takes the latest and says so.
-                if (e.stale) { const latest = await takeLatestSettings(setSettings); if (latest) { setDeleteErr(listChanged('territory')); return; } }
+                if (e.stale) {
+                    const latest = await takeLatestSettings(setSettings);
+                    // The territory no longer on the latest list (state §0.265): a Delete before this one landed though its
+                    // answer proved nothing — the refusal is the token it moved — or another's. It is gone: its reps are
+                    // cleared as a landed Delete clears them, the copy already the latest.
+                    if (latest && !(latest.territories || []).some(t => t.id === tr.id)) gone = true;
+                    else if (latest) { setDeleteErr(listChanged('territory')); return; }
+                }
                 // Only the server's own refusal is "not deleted"; any other answer is putSettings' may-have sentence, the
                 // territory left on the list and no rep sent (state §0.264, the unknown-save rule, Part 5).
-                setDeleteErr(settingsSaid(e, (x) => `Territory not deleted — ${x.message}`));
-                return;
+                if (!gone) { setDeleteErr(settingsSaid(e, (x) => `Territory not deleted — ${x.message}`)); return; }
             }
-            setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, answer?.revs) }));
+            if (!gone) setSettings(prev => ({ ...prev, territories: updatedTerritories, revs: revsAfter(prev.revs, answer?.revs) }));
             // The territory is gone; now the rep rows. One that did not update is
             // reported by name, not logged.
             const cleared = new Set(), failed = [], maybe = [];

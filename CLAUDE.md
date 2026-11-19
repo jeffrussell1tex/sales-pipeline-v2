@@ -167,7 +167,11 @@ One commit per verified batch; doc patch in the same commit.
   — one save at a time, a draft's token taken when it begins (rule 11);
   since §0.229 Connected apps too, reading the settings prop — no settings
   screen loads its own copy (rule 12). Every settings screen names its
-  tokens.
+  tokens. Since §0.265 a list write refused as stale after a press whose
+  answer proved nothing first reads whether that press landed — the latest
+  holding what it sent (`listHolds`), the entry gone, the member listed —
+  and then sends the member rows, never "the list changed" (guide §18b134
+  rule 14).
 - Persistent data rule: anything that must survive a refresh is saved via
   `dbFetch` immediately after the local state update. `setState` alone is
   never sufficient.

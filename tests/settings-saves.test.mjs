@@ -181,8 +181,9 @@ const CONNECTED_APPS = 'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx';
 // The sends, file by file, each converted: B-2's people screens (state §0.225), B-3a's panels (state §0.226), B-3b's
 // (state §0.228) and B-3c's (state §0.229).
 const SITES = {
-    'src/Tabs/settings/people/TeamsDetail.jsx': { putSettings: 1, writeSettings: 2 },          // Delete; the window, Assign
-    'src/Tabs/settings/people/TerritoriesDetail.jsx': { putSettings: 1, writeSettings: 2 },    // Delete; the window, the CSV
+    // Since §0.265 each window makes its press once more on the latest list when an earlier press of it landed.
+    'src/Tabs/settings/people/TeamsDetail.jsx': { putSettings: 1, writeSettings: 3 },          // Delete; the window (twice), Assign
+    'src/Tabs/settings/people/TerritoriesDetail.jsx': { putSettings: 1, writeSettings: 3 },    // Delete; the window (twice), the CSV
     'src/Tabs/settings/people/UsersDetail.jsx': { writeSettings: 1, addToSettingsList: 1 },    // the profile's move; Invite
     'src/components/layout/ModalLayer.jsx': { addToSettingsList: 1 },                          // the member import
     ...Object.fromEntries(B3A_FILES.map((f) => [f, { putSettings: 1 }])),
@@ -1158,9 +1159,10 @@ const TERR_USERS = [{ id: 'usr_a', name: 'Ann', territory: 'North' }, { id: 'usr
 const TERR_LATEST = { territories: [NORTH, SOUTH, THEIRS_T], revs: { territories: 'TL' } };
 
 // `newTerrId`: the window's ref for a new territory's id (state §0.264) — handed again to run a second press of one window.
-const runTerritorySave = async ({ mode, territory = null, form = {}, base = null, answers = {}, latest = null, newTerrId = { current: null } }) => {
+// `maybeSent` (§0.265): the window's ref for what a press whose answer proved nothing sent — handed again likewise.
+const runTerritorySave = async ({ mode, territory = null, form = {}, base = null, answers = {}, latest = null, newTerrId = { current: null }, maybeSent = { current: null } }) => {
     if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;   // as TerritoryModal mints it, once per opening
-    const { revsAfter, listChanged } = await import('../src/utils/settingsRevs.js');
+    const { revsAfter, listChanged, listHolds } = await import('../src/utils/settingsRevs.js');
     const save = handlerIn(read('src/Tabs/settings/people/TerritoriesDetail.jsx'), 'TerritoryModal', 'save');
     const said = [], stale = [];
     const state = { settings: { territories: [NORTH, SOUTH], users: TERR_USERS, revs: { territories: 'NEWER', teams: 'TM' } }, base: null, closed: false, taken: 0 };
@@ -1185,6 +1187,7 @@ const runTerritorySave = async ({ mode, territory = null, form = {}, base = null
         },
         revsAfter, listChanged,
         newTerrId, userRowsWords, maybeSaid: RW.maybeSaid,   // since §0.264 (the unknown-save rule, Part 5)
+        maybeSent, listHolds,                                 // since §0.265
         setErr: (v) => said.push(v), setSaving: () => {},
         setSettings: (f) => { state.settings = f(state.settings); },
         onStale: (w) => stale.push(w), onClose: () => { state.closed = true; },
@@ -3373,4 +3376,154 @@ test('S12 — B-3c\'s pins (state §0.229): the webhook words, verbatim (JB3-3);
     assert.equal(anc[anc.indexOf(fn) - 1]?.id?.name, 'saveWebForm', 'in the web form\'s save');
     assert.equal(count(withoutComments(read(ADMIN)), '<ConnectedAppsDetail settings={settings} setSettings={setSettings} onBack={onBack}/>'), 1,
         'REGRESSION (critic A1): the panel mounted without the copy it reads, or its setter');
+});
+
+// ── §0.265: a press refused as stale after one whose answer proved nothing — the earlier press landed ──────────────
+// The refusal is the token that press moved, not another's change: a list that already holds what was sent is taken as
+// landed, and the member rows go out as a landed save sends them. The territory window, the Deletes and Assign, run as
+// written.
+
+const LOST = () => ({ ok: false, status: 502, error: 'The server returned 502.' });
+// writeSettings' answers in order: one per send.
+const inTurn = (...answers) => { let n = 0; return (body) => answers[Math.min(n++, answers.length - 1)](body); };
+
+test('S6 (§0.265) — a territory renamed, its answer lost, saved again and refused as stale: the latest holds the rename, so the reps are renamed and the window closes — nothing written twice', async () => {
+    const STALE = await STALE_ANSWER('territories');
+    const maybeSent = { current: null };
+    const form = { name: 'North 2' };
+    const first = await runTerritorySave({ mode: 'edit', territory: NORTH, form, maybeSent, answers: { settings: LOST } });
+    assert.deepEqual(first.calls.map((c) => c.to), ['settings'], 'no rep after a list that may not have landed');
+    assert.deepEqual(first.said, [RW.maybeSaid('The territory', 'saved', 'The server returned 502.')]);
+    assert.deepEqual(maybeSent.current, { id: 'terr_n', name: 'North 2', parent: '' }, 'REGRESSION: what the press sent is not kept for the next');
+    // It landed: the list holds North as renamed, and its token moved.
+    const latest = { territories: [{ ...NORTH, name: 'North 2' }, SOUTH, THEIRS_T], revs: { territories: 'T_LANDED' } };
+    const second = await runTerritorySave({ mode: 'edit', territory: NORTH, form, maybeSent, answers: { settings: STALE }, latest });
+    assert.deepEqual(second.calls.map((c) => [c.to, c.body.id]), [['settings', undefined], ['users', 'usr_a']],
+        'REGRESSION (the §0.264 finding): the rename\'s rep rows never sent — its reps keep the old name');
+    assert.deepEqual(second.calls[1].body, { id: 'usr_a', territory: 'North 2' });
+    assert.equal(second.state.taken, 1, 'the latest read once');
+    assert.deepEqual([second.stale, second.said, second.state.closed], [[], [], true], 'REGRESSION: said as another\'s change — "Make your change again"');
+    assert.deepEqual(second.state.settings.territories, latest.territories, 'the latest on the page');
+    assert.equal(second.state.settings.revs.territories, 'T_LANDED', 'with its token');
+    assert.deepEqual(second.state.base, { list: latest.territories, rev: 'T_LANDED' });
+    assert.equal(second.state.settings.users.find((u) => u.id === 'usr_a').answered, true, 'the rep as the server answered');
+    // No earlier press of this window: a latest that holds the change as sent is the change made — the same.
+    const plain = await runTerritorySave({ mode: 'edit', territory: NORTH, form, answers: { settings: STALE }, latest });
+    assert.deepEqual([plain.calls.map((c) => c.to), plain.state.closed, plain.stale], [['settings', 'users'], true, []]);
+});
+
+test('S6 (§0.265) — changed in the window since the press whose answer was lost: that press found on the latest, this one is made once more on it, with its token; refused again, the latest is read again and said', async () => {
+    const STALE = await STALE_ANSWER('territories');
+    const maybeSent = { current: { id: 'terr_n', name: 'North 2', parent: '' } };   // the lost press's, as the window kept it
+    const latest = { territories: [{ ...NORTH, name: 'North 2' }, SOUTH, THEIRS_T], revs: { territories: 'T_LANDED' } };
+    const landed = () => ({ ok: true, status: 200, error: null, data: { success: true }, revs: { territories: 'T3' } });
+    const r = await runTerritorySave({ mode: 'edit', territory: NORTH, form: { name: 'North 3' }, maybeSent, answers: { settings: inTurn(STALE, landed) }, latest });
+    assert.deepEqual(r.calls.map((c) => c.to), ['settings', 'settings', 'users']);
+    assert.deepEqual(r.calls[1].body.ifRevs, { territories: 'T_LANDED' }, 'REGRESSION: made again with the refused token');
+    assert.deepEqual(r.calls[1].body.territories.map((t) => t.name), ['North 3', 'South', 'Theirs'], 'on the latest list — the other tab\'s Theirs kept');
+    assert.deepEqual(r.calls[2].body, { id: 'usr_a', territory: 'North 3' }, 'the reps from the name they hold');
+    assert.deepEqual([r.state.closed, r.said, r.stale, r.state.settings.revs.territories], [true, [], [], 'T3']);
+    // Refused again: another change landed between — the latest read once more, said, no rep sent.
+    const twice = await runTerritorySave({ mode: 'edit', territory: NORTH, form: { name: 'North 3' }, maybeSent, answers: { settings: STALE }, latest });
+    const { listChanged } = await import('../src/utils/settingsRevs.js');
+    assert.deepEqual(twice.calls.map((c) => c.to), ['settings', 'settings']);
+    assert.deepEqual([twice.state.taken, twice.stale, twice.state.closed], [2, [listChanged('territory')], true]);
+    // A latest that holds neither press: another's change — as before (S6): taken, said, no rep.
+    const other = await runTerritorySave({ mode: 'edit', territory: NORTH, form: { name: 'North 3' }, maybeSent, answers: { settings: STALE }, latest: TERR_LATEST });
+    assert.deepEqual([other.calls.map((c) => c.to), other.state.taken, other.stale], [['settings'], 1, [listChanged('territory')]]);
+});
+
+test('S6 (§0.265) — a new territory whose answer was lost, saved again and refused as stale, found on the latest: closes in that press, no second copy', async () => {
+    const STALE = await STALE_ANSWER('territories');
+    const newTerrId = { current: null }, maybeSent = { current: null };
+    const form = { name: 'East', repIds: ['usr_b'] };
+    const first = await runTerritorySave({ mode: 'new', form, newTerrId, maybeSent, answers: { settings: LOST } });
+    const sent = first.calls[0].body.territories.at(-1);
+    assert.deepEqual(maybeSent.current, sent);
+    const latest = { territories: [NORTH, SOUTH, sent], revs: { territories: 'T_LANDED' } };
+    const second = await runTerritorySave({ mode: 'new', form, newTerrId, maybeSent, answers: { settings: STALE }, latest });
+    assert.deepEqual(second.calls.map((c) => c.to), ['settings'], 'nothing written twice; a new territory names no rep row');
+    assert.deepEqual([second.state.closed, second.said], [true, []], 'REGRESSION: a landed territory kept open, said as another\'s change');
+    assert.equal(second.state.settings.territories.filter((t) => t.id === sent.id).length, 1);
+});
+
+// TeamsDetail's and TerritoriesDetail's handleDelete, run as written: the confirm pressed, putSettings answered.
+const TEAMS_SRC_S = read('src/Tabs/settings/people/TeamsDetail.jsx');
+const memberRowsWordsS = new Function('maybeSaid', `const sentence = ${moduleConst(TEAMS_SRC_S, 'sentence')}; return ${moduleConst(TEAMS_SRC_S, 'memberRowsWords')};`)(RW.maybeSaid);
+const runDelete = async ({ kind, answer, latest = null }) => {
+    const { revsAfter, listChanged, STALE_ERROR } = await import('../src/utils/settingsRevs.js');
+    const { settingsSaid, maybeSettingsError } = await import('../src/Tabs/settings/shared/saveSettings.js');
+    const team = kind === 'team';
+    const item = team ? EAST_TEAM : NORTH;
+    const key = team ? 'teams' : 'territories';
+    const settings = team ? { teams: [EAST_TEAM, WEST_TEAM], users: TEAM_USERS, revs: { teams: 'T1' } } : { territories: [NORTH, SOUTH], users: TERR_USERS, revs: { territories: 'T1' } };
+    const state = { settings, taken: 0, err: [] };
+    const calls = [];
+    let confirmed = null;
+    const r = requests({}, { users: (body) => ({ ok: true, status: 200, error: null, data: { user: body } }) });
+    const del = handlerIn(read(team ? 'src/Tabs/settings/people/TeamsDetail.jsx' : 'src/Tabs/settings/people/TerritoriesDetail.jsx'), team ? 'TeamsDetail' : 'TerritoriesDetail', 'handleDelete');
+    await runAs(del, {
+        setOpenKebab: () => {}, setOpenTerrKebab: () => {}, showConfirm: (_m, f) => { confirmed = f; },
+        requestOrg: () => 'org_A', stillOrg: (o) => o === 'org_A',
+        [key]: settings[key], settings, allUsers: settings.users.filter((u) => u.name),
+        setDeleteErr: (v) => state.err.push(v), setListNote: () => {},
+        putSettings: async (payload, revs) => {
+            calls.push({ to: 'settings', body: { ...payload, ifRevs: revs } });
+            if (answer === 'ok') return { success: true, revs: { [key]: 'T2' } };
+            if (answer === 'stale') throw Object.assign(new Error(STALE_ERROR), { stale: [key], unknown: false });
+            throw maybeSettingsError('The server returned 502.');
+        },
+        takeLatestSettings: async (set) => { state.taken += 1; if (!latest) return null; set((prev) => ({ ...prev, [key]: latest[key], revs: latest.revs })); return latest; },
+        listChanged, settingsSaid, revsAfter, memberRowsWords: memberRowsWordsS, userRowsWords,
+        dbWrite: async (url, opts) => { calls.push({ to: 'users', body: JSON.parse(opts.body) }); return r.dbWrite(url, opts); },
+        setSettings: (f) => { state.settings = f(state.settings); },
+    }, item);
+    await confirmed();
+    return { calls, said: state.err.filter(Boolean), state };
+};
+
+test('S5 (§0.265) — a Delete whose answer was lost, pressed again and refused as stale: the team or territory gone from the latest, its members are cleared as a landed Delete clears them; still there, said as before', async () => {
+    const { listChanged } = await import('../src/utils/settingsRevs.js');
+    // The team: Bo is on East.
+    const lost = await runDelete({ kind: 'team', answer: 'lost' });
+    assert.deepEqual([lost.calls.map((c) => c.to), lost.said.length], [['settings'], 1], 'the may-have sentence, no member sent');
+    // The latest holds a team this Delete's list has not — the copy must be the latest, not the list it built.
+    const gone = { teams: [WEST_TEAM, { id: 'team_n', name: 'N', repIds: [] }], revs: { teams: 'T_LANDED' } };
+    const t = await runDelete({ kind: 'team', answer: 'stale', latest: gone });
+    assert.deepEqual(t.calls.map((c) => [c.to, c.body.id]), [['settings', undefined], ['users', 'usr_b']],
+        'REGRESSION (the §0.264 finding): a deleted team\'s members never cleared — they stay on a team that is gone');
+    assert.deepEqual(t.calls[1].body, { id: 'usr_b', team: '', teamId: '', territory: '', vertical: '' });
+    assert.deepEqual(t.said, [], 'REGRESSION: said as another\'s change');
+    assert.deepEqual(t.state.settings.teams, gone.teams, 'REGRESSION: the list this Delete built put over the latest — team N, saved in another tab, gone from the page');
+    assert.equal(t.state.settings.revs.teams, 'T_LANDED', 'with its token');
+    assert.equal(t.state.settings.users.find((u) => u.id === 'usr_b').teamId, '', 'Bo cleared on the page');
+    const there = await runDelete({ kind: 'team', answer: 'stale', latest: { teams: [EAST_TEAM, WEST_TEAM, { id: 'team_n', name: 'N', repIds: [] }], revs: { teams: 'TL' } } });
+    assert.deepEqual([there.calls.map((c) => c.to), there.said], [['settings'], [listChanged('team')]], 'still on the list: another\'s change, as before');
+    const blind = await runDelete({ kind: 'team', answer: 'stale' });
+    assert.deepEqual(blind.calls.map((c) => c.to), ['settings'], 'the latest unread: nothing known, no member sent');
+    // The territory: Ann holds North.
+    const tr = await runDelete({ kind: 'territory', answer: 'stale', latest: { territories: [SOUTH, THEIRS_T], revs: { territories: 'T_LANDED' } } });
+    assert.deepEqual(tr.calls.map((c) => [c.to, c.body.id]), [['settings', undefined], ['users', 'usr_a']], 'REGRESSION: a deleted territory\'s reps never cleared');
+    assert.deepEqual(tr.calls[1].body, { id: 'usr_a', territory: '' });
+    assert.deepEqual([tr.said, tr.state.settings.territories, tr.state.settings.revs.territories], [[], [SOUTH, THEIRS_T], 'T_LANDED'], 'the latest — Theirs kept — not the list this Delete built');
+    const trThere = await runDelete({ kind: 'territory', answer: 'stale', latest: TERR_LATEST });
+    assert.deepEqual([trThere.calls.map((c) => c.to), trThere.said], [['settings'], [listChanged('territory')]]);
+    // A Delete that lands, as before.
+    const ok = await runDelete({ kind: 'team', answer: 'ok' });
+    assert.deepEqual([ok.calls.map((c) => c.to), ok.state.settings.revs.teams, ok.said], [['settings', 'users'], 'T2', []]);
+});
+
+test('S7 (§0.265) — an Assign whose answer was lost, pressed again and refused as stale: the latest lists the member on that team alone, so their row is sent and the window closes; listed elsewhere too, said as before', async () => {
+    const { listChanged } = await import('../src/utils/settingsRevs.js');
+    const answers = { settings: await STALE_ANSWER('teams') };
+    const listed = { teams: [EAST_TEAM, { ...WEST_TEAM, repIds: ['usr_a'] }, { id: 'team_n', name: 'N', repIds: [] }], revs: { teams: 'T_LANDED' } };
+    const r = await runAssign({ settings: TEAMS_START, to: WEST_TEAM, answers, latest: listed });
+    assert.deepEqual(r.calls.map((c) => c.to), ['settings', 'users'], 'REGRESSION (the §0.264 finding): the member\'s row never sent after a list that landed');
+    assert.deepEqual(r.calls[1].body, { id: 'usr_a', team: 'West', teamId: 'team_west', territory: '', vertical: 'Health' });
+    assert.deepEqual([r.said, r.state.open], [[], false]);
+    assert.deepEqual(r.state.settings.teams, listed.teams, 'REGRESSION: the list this Assign built put over the latest — team N gone from the page');
+    assert.equal(r.state.settings.revs.teams, 'T_LANDED');
+    const twice = await runAssign({ settings: TEAMS_START, to: WEST_TEAM, answers,
+        latest: { teams: [{ ...EAST_TEAM, repIds: ['usr_b', 'usr_a'] }, { ...WEST_TEAM, repIds: ['usr_a'] }], revs: { teams: 'TL' } } });
+    assert.deepEqual([twice.calls.map((c) => c.to), twice.said, twice.state.open], [['settings'], [listChanged('team')], true], 'on two lists: not this Assign\'s list');
 });

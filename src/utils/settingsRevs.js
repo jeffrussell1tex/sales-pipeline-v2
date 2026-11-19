@@ -42,6 +42,15 @@ export const STALE_ERROR = 'These settings changed since this page loaded. Reloa
 // latest already (J-B4) and says so; the profile page's move is owed, and its next Save changes sends it (J-B7).
 /** A list's save refused: the screen now shows the latest list. `noun` names it: 'team', 'territory'. */
 export const listChanged = (noun) => `The ${noun} list changed since this page loaded — it now shows the latest. Make your change again.`;
+// Whether a list as stored holds an entry as a press sent it (state §0.265): the entry of that id, every key the press
+// sent equal — by value, an object's keys in any order, a missing key and an undefined one alike (a stored list is JSON).
+// A press refused as stale whose latest list holds what it sent, or what an earlier press of the same window sent whose
+// answer proved nothing, finds that press landed — the refusal is the token it moved, never another's change.
+const canon = (v) => (Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => [k, canon(v[k])]))
+        : v === undefined ? null : v);
+export const listHolds = (list, entry) => !!entry && typeof entry === 'object' && entry.id != null && Array.isArray(list)
+    && list.some((t) => t && t.id === entry.id && Object.keys(entry).every((k) => JSON.stringify(canon(t[k])) === JSON.stringify(canon(entry[k]))));
 // The member invite and import: the invitations went out, and the team list refused their addition twice (J-B6).
 export const TEAMS_CHANGED_TWICE = 'The invitations went out, but the team list changed twice while saving and does not list them yet — reload; their team is set on their row.';
 // The member profile page: the member saved, the move on the team list refused — owed to the next Save changes.

@@ -1190,9 +1190,15 @@ const UserProfilePage = ({ user: opened, settings, onBack, onUsers, onRemoved, m
                     const rt = await writeSettings({ teams: moved }, { teams: settings.revs?.teams ?? null });
                     if (!stillOrg(askedOrg)) return;
                     if (rt.ok) { teamsNow = moved; teamsRevs = rt.revs; owedNext = null; }
-                    else if (rt.stale) { owedNext = move; const latest = await takeLatestSettings(setSettings); missed.push(latest ? TEAM_MOVE_CHANGED : TEAM_MOVE_CHANGED_UNREAD); }
+                    else if (rt.stale) {
+                        const latest = await takeLatestSettings(setSettings);
+                        // The latest already holds the move (state §0.265): an earlier Save's list landed though its answer
+                        // proved nothing — the refusal is the token it moved. Nothing is owed, nothing said.
+                        if (latest && !teamsWithMemberOn(latest.teams || [], user.id, move.teamId).changed) owedNext = null;
+                        else { owedNext = move; missed.push(latest ? TEAM_MOVE_CHANGED : TEAM_MOVE_CHANGED_UNREAD); }
+                    }
                     // An answer that proves nothing may have moved them (state §0.264): said so, the move still owed — a
-                    // Save after one that landed is refused as stale, the latest taken, and the next finds them moved.
+                    // Save after one that landed is refused as stale, the latest taken, and finds them moved (§0.265).
                     // Never "reload" here (R16b): a reload loses the move still owed — Save changes tries it again.
                     else if (rt.unknown) { owedNext = move; missed.push(`Saved, but the team list may have been updated — ${clause(rt.error)}. Save changes tries the list again.`); }
                     else { owedNext = move; missed.push(`Saved, but the team list was not updated \u2014 ${clause(rt.error)}. Save changes tries the list again.`); }

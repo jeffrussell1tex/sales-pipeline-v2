@@ -365,7 +365,7 @@ const storedRow = (stored, body) => {
 // setter call recorded in order, the setters' updaters applied to made-up state.
 // `typeDuring`: what the Admin types while the member's PUT is out — laid over the form when that request is asked.
 // `revs`: the tokens the page loaded with the lists (state §0.225); `latestFails`: a take-latest that could not read.
-const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, users = USERS, revs, me = null, answers = {}, org = () => true, typeDuring = null, latestFails = false }) => {
+const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, users = USERS, revs, me = null, answers = {}, org = () => true, typeDuring = null, latestFails = false, latest = LATEST }) => {   // latest: the run's own since §0.265
     const calls = [], sets = [], timers = [];
     const settings = { teams, users, revs };
     const state = { user, form, me, listOwed, settings, error: undefined, saving: undefined, saved: undefined, roleNote: undefined };
@@ -403,8 +403,8 @@ const runSave = async ({ fn = SAVE, user, form, listOwed = null, teams = TEAMS, 
         takeLatestSettings: async (setter) => {
             calls.push({ to: 'settings', via: 'takeLatestSettings', method: 'GET', body: undefined });
             if (latestFails) return null;
-            setter((prev) => ({ ...LATEST, users: prev.users }));
-            return LATEST;
+            setter((prev) => ({ ...latest, users: prev.users }));
+            return latest;
         },
         revsAfter, TEAM_MOVE_CHANGED, TEAM_MOVE_CHANGED_UNREAD,
         setError: set('setError', 'error'), setSaving: set('setSaving', 'saving'), setSaved: set('setSaved', 'saved'),
@@ -1018,4 +1018,22 @@ test('S16 (P14, D15) the Manager box is a type-ahead of one pick at module scope
 test('the suites: this file is graded by the harness', () => {
     const suites = read('scripts/mutate-import.mjs').match(/^const SUITES = '([^'\n]*)';$/m)?.[1].split(' ') ?? [];
     assert.ok(suites.includes('tests/member-profile-save.test.mjs'), 'SUITES runs this file');
+});
+
+// §0.265: the owed move whose list answer was lost, sent again and refused as stale — the latest already holds the move
+// (the earlier list landed): nothing owed, nothing said, saved.
+test('R19d (§0.265) handleSave, run as written: an owed move refused as stale finds it on the latest list — nothing owed, nothing said', async () => {
+    const moved = { ...TESS, team: 'West', teamId: 'team_west' };   // the member's row saved by the earlier press
+    const STALE = { ok: false, status: 409, error: STALE_ERROR, stale: ['teams'] };
+    const landed = Object.freeze({ teams: [{ ...TEAMS[0], repIds: [] }, TEAMS[1], { ...TEAMS[2], repIds: ['usr_tess'] }, 'Legacy'], revs: { teams: 'T_LANDED' } });
+    const r = await runSave({ user: moved, form: moved, listOwed: { teamId: 'team_west' }, revs: { teams: 'T_OPEN' }, answers: { settings: [STALE] }, latest: landed });
+    assert.deepEqual(r.calls.map((c) => [c.to, c.via]), [['settings', 'writeSettings'], ['settings', 'takeLatestSettings']]);
+    assert.deepEqual(SAID(r), [], 'REGRESSION: a move that landed said as "the team list changed … Save changes tries the list again"');
+    assert.deepEqual(r.named('setListOwed'), [null], 'REGRESSION: a move that landed still owed');
+    assert.deepEqual(r.named('setSaved'), [true]);
+    assert.deepEqual(r.state.settings.teams, landed.teams, 'the latest on screen');
+    // The latest holds them on West and still on East: the move is not in — owed, said, as before (R19).
+    const half = Object.freeze({ teams: [TEAMS[0], TEAMS[1], { ...TEAMS[2], repIds: ['usr_tess'] }, 'Legacy'], revs: { teams: 'T_HALF' } });
+    const h = await runSave({ user: moved, form: moved, listOwed: { teamId: 'team_west' }, answers: { settings: [STALE] }, latest: half });
+    assert.deepEqual([SAID(h), h.named('setListOwed')], [[TEAM_MOVE_CHANGED], [{ teamId: 'team_west' }]]);
 });

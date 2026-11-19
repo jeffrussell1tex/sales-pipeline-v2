@@ -602,7 +602,8 @@ test('WIRING (Part 5): a Settings press whose id is the server\'s is held after 
     const teams = at('people/TeamsDetail.jsx');
     assert.ok(teams.includes('if (!isEdit && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;') && teams.includes('const id = isEdit ? team.id : newTeamId.current;'), 'a new team');
     const terrs = at('people/TerritoriesDetail.jsx');
-    assert.ok(terrs.includes("if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;") && terrs.includes('const newT = { id:newTerrId.current,'), 'a new territory');
+    // Moved in §0.265: the new territory is the press's patch, built onto a list by withPress.
+    assert.ok(terrs.includes("if (mode === 'new' && !newTerrId.current) newTerrId.current = `terr_${Date.now()}`;") && terrs.includes('patch = { id:newTerrId.current,'), 'a new territory');
 });
 
 test('RUN (Part 5): the company calendar\'s Disconnect — the server\'s own refusal "Calendar not disconnected"; any other answer, or none, may have disconnected it; the list read again only once it landed', async () => {

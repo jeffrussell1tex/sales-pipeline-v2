@@ -8,6 +8,8 @@ import { putSettings, writeSettings, takeLatestSettings, settingsSaid } from '..
 import { maybeSaid } from '../../../utils/refusalWords.js';
 // A teams save names the token its list was read with, and a stale refusal takes the latest (state §0.225).
 import { revsAfter, listChanged } from '../../../utils/settingsRevs.js';
+// A stale refusal whose latest list already holds what was sent is an earlier press that landed (state §0.265).
+import { listHolds } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 // A team is one record (state §0.222): a list's entries read as the members they name, a save sends only what it
@@ -63,6 +65,9 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
     // an answer that proved nothing sends the same entry again — it minted `team_${Date.now()}` on every press.
     const newTeamId = useRef(null);
     if (!isEdit && !newTeamId.current) newTeamId.current = `team_${Date.now()}`;
+    // The team as a press whose answer proved nothing sent it (state §0.265): a later press refused as stale finds it on
+    // the latest list when that press landed.
+    const maybeSent = useRef(null);
     const [name,       setName]       = useState(team?.name       || '');
     const [territory,  setTerritory]  = useState(team?.territory  || '');
     const [vertical,   setVertical]   = useState(team?.vertical   || '');
@@ -86,7 +91,8 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
         const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
         // A new team the list already holds — this window's earlier press landed (its list re-based after a member's
         // failure, or the latest taken after a stale refusal) — is that entry, never a second one (state §0.264).
-        const updatedTeams = isEdit || teams.some(t => t.id === id) ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
+        const withSaved = (list) => (isEdit || list.some(t => t.id === id) ? list.map(t => t.id === id ? saved : t) : [...list, saved]);
+        let updatedTeams = withSaved(teams);
         // No new team of a name another has (state §0.222 — Q8): the server's rule and words, checked here first.
         const nameRefused = teamNameRefused(updatedTeams, teams);
         if (nameRefused) { setErr(nameRefused.error); return; }
@@ -102,12 +108,30 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
             // Persist to settings (teams + users). The list goes with the token the window opened with (state §0.225): a
             // save another landed first is refused — nothing written, no one renamed.
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const w = await writeSettings({ teams: updatedTeams }, { teams: base.rev });
+            let w = await writeSettings({ teams: updatedTeams }, { teams: base.rev });
             if (!stillOrg(askedOrg)) return;
+            let latest, took = false;
+            if (w.stale) {
+                // A press before this one landed though its answer proved nothing (state §0.265): the refusal is the token
+                // that press moved. The latest list holds this team as this press sends it — the save is in: on to the
+                // member rows, nothing written again — or as that press sent it, changed in the window since: this team
+                // is saved once more on the latest list, with its token. A rename was the server's when the list landed.
+                latest = await takeLatestSettings(setSettings); took = true;
+                const held = latest?.teams || [];
+                if (latest && listHolds(held, saved)) { updatedTeams = held; w = { ok: true, revs: { teams: latest.revs?.teams ?? null } }; }
+                else if (latest && listHolds(held, maybeSent.current)) {
+                    // The latest list with this team on it, and that list's token: one set, as the window's own base is.
+                    const onLatest = { list: withSaved(held), rev: latest.revs?.teams ?? null };
+                    updatedTeams = onLatest.list;
+                    w = await writeSettings({ teams: onLatest.list }, { teams: onLatest.rev });
+                    if (!stillOrg(askedOrg)) return;
+                    if (w.stale) took = false;   // refused again: the latest is read once more
+                }
+            }
             if (w.stale) {
                 // The page takes the latest and says so (J-B8), and no member is sent anything: an edit closes, its words
                 // on the page; a new team stays open on the latest list, so Save again sends it with that list's token.
-                const latest = await takeLatestSettings(setSettings);
+                if (!took) latest = await takeLatestSettings(setSettings);
                 const words = latest ? listChanged('team') : w.error;
                 if (isEdit) { onStale(words); onClose(); return; }
                 if (latest) setBase({ list: latest.teams || [], rev: latest.revs?.teams ?? null });
@@ -117,6 +141,7 @@ const TeamModal = ({ team, settings, setSettings, onSave, onStale, onClose }) =>
             if (!w.ok) {
                 // An answer that proves nothing may have saved the team (state §0.264, the unknown-save rule, Part 5): the
                 // window stays open with what was typed and its kept id, no member sent; the server's own refusal as before.
+                if (w.unknown) maybeSent.current = saved;   // a later press refused as stale looks for it (state §0.265)
                 setErr(w.unknown ? maybeSaid('The team', 'saved', w.error) : (w.error || 'Save failed.'));
                 return;
             }
@@ -426,7 +451,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
             const teamsRev = settings.revs?.teams ?? null;   // the token of the list this delete is built from (state §0.225)
             const members = allUsers.filter(u => u.teamId === team.id);
             setDeleteErr(''); setListNote('');
-            let answer;
+            let answer, gone = false;
             try {
                 answer = await putSettings({ teams: updatedTeams }, { teams: teamsRev });   // throws on non-2xx
             } catch (e) {
@@ -434,16 +459,19 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                 // When the latest cannot be read, the refusal's own words.
                 if (e.stale) {
                     const latest = await takeLatestSettings(setSettings);
-                    if (latest) { setDeleteErr(listChanged('team')); return; }
+                    // The team no longer on the latest list (state §0.265): a Delete before this one landed though its answer
+                    // proved nothing — the refusal is the token it moved — or another's. The team is gone: its members are
+                    // cleared as a landed Delete clears them, the copy already the latest.
+                    if (latest && !(latest.teams || []).some(t => t.id === team.id)) gone = true;
+                    else if (latest) { setDeleteErr(listChanged('team')); return; }
                 }
                 // Only the server's own refusal is "not deleted"; any other answer is putSettings' may-have sentence, the team
                 // left on the list and no member sent (state §0.264, the unknown-save rule, Part 5).
-                setDeleteErr(settingsSaid(e, (x) => `Team not deleted — ${x.message}`));
-                return;
+                if (!gone) { setDeleteErr(settingsSaid(e, (x) => `Team not deleted — ${x.message}`)); return; }
             }
             // The list landed: the copy takes it and its token now, before the member rows — a save made while they go
             // out sends the list as it stands, with its token.
-            setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, answer?.revs) }));
+            if (!gone) setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, answer?.revs) }));
             // The team is gone; now the member rows. One that did not update is
             // reported by name, not logged — it still points at a team the
             // roster no longer has.
@@ -480,14 +508,18 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
             if (changed) {
                 const rt = await writeSettings({ teams: updatedTeams }, { teams: teamsRev });
                 if (!stillOrg(askedOrg)) return;
+                let listed = false;
                 if (rt.stale) {
                     const latest = await takeLatestSettings(setSettings);
-                    if (latest) { setAssignErr(listChanged('team')); return; }
+                    // The latest already lists them on this team and on no other (state §0.265): an Assign before this one
+                    // landed though its answer proved nothing — on to the member's row, the copy already the latest.
+                    if (latest && !teamsWithMemberOn(latest.teams || [], assigningUser.id, t.id).changed) listed = true;
+                    else if (latest) { setAssignErr(listChanged('team')); return; }
                 }
                 // An answer that proves nothing may have listed them (state §0.264, the unknown-save rule, Part 5): said so,
-                // the member sent nothing; a press again is refused as stale if it landed, and the latest then lists them.
-                if (!rt.ok) { setAssignErr(rt.unknown ? maybeSaid('The team list', 'updated', rt.error) : `Not assigned — ${rt.error}`); return; }
-                setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, rt.revs) }));
+                // the member sent nothing; a press again is refused as stale if it landed, and finds them listed (§0.265).
+                if (!rt.ok && !listed) { setAssignErr(rt.unknown ? maybeSaid('The team list', 'updated', rt.error) : `Not assigned — ${rt.error}`); return; }
+                if (!listed) setSettings(prev => ({ ...prev, teams: updatedTeams, revs: revsAfter(prev.revs, rt.revs) }));
             }
             const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
             if (!stillOrg(askedOrg)) return;
