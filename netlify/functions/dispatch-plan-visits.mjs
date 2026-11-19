@@ -130,7 +130,19 @@ export const handler = async (event) => {
             const gone = await db.delete(dispatchPlanVisits)
                 .where(and(eq(dispatchPlanVisits.id, id), eq(dispatchPlanVisits.orgId, orgId)))
                 .returning({ id: dispatchPlanVisits.id, customerId: dispatchPlanVisits.customerId, action: dispatchPlanVisits.action, dueDate: dispatchPlanVisits.dueDate });
-            if (!gone.length) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+            // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+            if (!gone.length) {
+                // The occurrence the screen undoes (its customer, plan and due date) still holds a decision — made again since,
+                // under a new id (the POST upserts by occurrence): not this Undo landed — said, never done (§0.271's review).
+                const occ = params.customerId && params.planId && params.dueDate
+                    ? await db.select({ id: dispatchPlanVisits.id }).from(dispatchPlanVisits).where(and(eq(dispatchPlanVisits.orgId, orgId),
+                        eq(dispatchPlanVisits.customerId, String(params.customerId)), eq(dispatchPlanVisits.planId, String(params.planId)), eq(dispatchPlanVisits.dueDate, String(params.dueDate)))).limit(1)
+                    : null;
+                if (!occ) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };   // nothing to tell it by: as before
+                if (occ.length) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Another decision was made for this visit since this list was read — reload the page to see it.' }) };
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };
+            }
             await auditAs(orgId, userId, { action: 'dispatch_visit.deleted', entityType: 'dispatch_customer', entityId: gone[0].customerId, entityName: null, detail: `${gone[0].action} · due ${gone[0].dueDate} · record removed` });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }

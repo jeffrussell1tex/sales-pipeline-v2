@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
-import { readRefusal, failureWords, maybeSaid, writeRefusal } from '../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusal, landedBefore } from '../../utils/refusalWords.js';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
@@ -385,9 +385,12 @@ export default function AppHeader({
             // Only a 4xx in the server's words disconnected nothing; any other answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
-                const w = writeRefusal(res, body, 'The calendar', 'disconnected');
-                if (stillOrg(askedOrg)) setCalActionError(w.unknown ? w.words : `Not disconnected — ${w.words}`);
-                return;
+                // Gone already (state §0.271): an earlier Disconnect landed — done, below, as one that answered.
+                if (!landedBefore(res.status, body)) {
+                    const w = writeRefusal(res, body, 'The calendar', 'disconnected');
+                    if (stillOrg(askedOrg)) setCalActionError(w.unknown ? w.words : `Not disconnected — ${w.words}`);
+                    return;
+                }
             }
             if (!stillOrg(askedOrg)) return;
             gone = true;

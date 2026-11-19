@@ -142,7 +142,8 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=org`, { method: 'DELETE' });
         // Only the server's own refusal is "not disconnected"; any other answer may have disconnected it (state §0.264, the
         // unknown-save rule, Part 5).
-        if (!r.ok) { setCalError(r.unknown ? maybeSaid('The calendar', 'disconnected', r.error) : `Calendar not disconnected — ${r.error}`); return; }
+        // Gone already (state §0.271): an earlier Disconnect landed — done, the list read again.
+        if (!r.ok && !r.landed) { setCalError(r.unknown ? maybeSaid('The calendar', 'disconnected', r.error) : `Calendar not disconnected — ${r.error}`); return; }
         loadOrgCals();
     };
 

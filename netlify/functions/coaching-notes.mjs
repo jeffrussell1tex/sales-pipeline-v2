@@ -151,7 +151,9 @@ export const handler = async (event) => {
             if (!me) return reply(403, { error: 'Your account is not in this organization\'s roster.' });
             const [note] = await db.select().from(coachingNotes)
                 .where(and(eq(coachingNotes.id, id), eq(coachingNotes.orgId, orgId)));
-            if (!note) return reply(404, { error: 'Not found' });
+            // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+            // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+            if (!note) return reply(404, { error: 'Not found', code: 'gone' });
             if (!canDeleteNote(note, me)) return reply(403, { error: 'Only the note\'s author or an Admin can delete it.' });
             await db.delete(coachingNotes).where(and(eq(coachingNotes.id, id), eq(coachingNotes.orgId, orgId)));
             await writeAudit(orgId, { action: 'coaching_note.deleted', entityType: 'coaching_note', entityId: id, entityName: null, detail: null, userId });

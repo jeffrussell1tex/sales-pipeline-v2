@@ -611,7 +611,7 @@ export const handler = async (event) => {
                 let stored = existing;
                 for (let attempt = 0; attempt < 3; attempt++) {
                     const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });
-                    if (applied.error) return { statusCode: applied.status, headers, body: JSON.stringify({ error: applied.error, comments: notesOf(stored.comments) }) };
+                    if (applied.error) return { statusCode: applied.status, headers, body: JSON.stringify({ error: applied.error, ...(applied.code ? { code: applied.code } : {}), comments: notesOf(stored.comments) }) };
                     const [written] = await db.update(opportunities)
                         .set({ comments: applied.list, updatedAt: new Date() })
                         .where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments)))

@@ -114,7 +114,8 @@ export const handler = async (event) => {
                 .where(and(eq(apiKeys.id, id), eq(apiKeys.orgId, orgId)));
 
             if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Key not found.' }) };
-            if (existing.revokedAt) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Key already revoked.' }) };
+            // Already revoked (state §0.271): an earlier press landed — code 'already', which the screen reads as done.
+            if (existing.revokedAt) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Key already revoked.', code: 'already' }) };
 
             await db
                 .update(apiKeys)

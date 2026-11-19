@@ -65,7 +65,8 @@ test('RULE: an edit replaces the text of that note alone; a delete removes it al
     assert.deepEqual(applyNoteOp([OLD, NEW], { op: 'delete', id: 'note_2' }, ctx(KAREN)), { error: NOTE_WORDS.notAuthor, status: 403 }, 'REGRESSION (Q2): another member deletes a note');
     assert.deepEqual(applyNoteOp([OLD, NEW], { op: 'edit', id: 'c_1', text: 'x' }, ctx(BOB)), { error: NOTE_WORDS.notAuthor, status: 403 });
     assert.deepEqual(applyNoteOp([OLD], { op: 'edit', id: 'note_2', text: 'x' }, ctx(BOB)), { error: NOTE_WORDS.gone, status: 409 });
-    assert.deepEqual(applyNoteOp([OLD], { op: 'delete', id: 'note_2' }, ctx(BOB)), { error: NOTE_WORDS.gone, status: 409 });
+    // Moved in §0.271: a delete of a note gone already says so with code 'already' — an earlier press landed; an edit does not.
+    assert.deepEqual(applyNoteOp([OLD], { op: 'delete', id: 'note_2' }, ctx(BOB)), { error: NOTE_WORDS.gone, status: 409, code: 'already' });
 });
 
 test('RULE: an operation is read for its shape — add text, edit an id and text, delete an id; empty, too long or unknown refused', () => {
@@ -193,7 +194,7 @@ test('WIRING: the endpoint applies a note by compare-and-set, stamps it from the
     assert.ok(branch.includes("const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });"));
     assert.ok(branch.includes('.where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments)))'), 'the compare-and-set, in this org');
     assert.ok(branch.includes('[stored] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));'), 'a moved list read again');
-    assert.ok(branch.includes("body: JSON.stringify({ error: applied.error, comments: notesOf(stored.comments) })"), 'a refusal answers the notes as stored');
+    assert.ok(branch.includes("body: JSON.stringify({ error: applied.error, ...(applied.code ? { code: applied.code } : {}), comments: notesOf(stored.comments) })"), 'a refusal answers the notes as stored (its code with it since §0.271)');
     assert.ok(s.includes("? isNull(opportunities.comments)\n    : sql`${opportunities.comments} = ${JSON.stringify(stored)}::jsonb`);"));
 });
 

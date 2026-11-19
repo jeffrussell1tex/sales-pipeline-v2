@@ -186,3 +186,23 @@ test('DELETE undoes one record, is org-scoped, and a second delete is a 404', as
     assert.equal(parse(await call('DELETE', ORG_A, { params: { id: target.id } })).status, 404);
     assert.equal(parse(await call('DELETE', ORG_A, { role: 'Technician', params: { id: 'pv_any' } })).status, 403);
 });
+
+// Added in §0.271: an Undo pressed again after one that landed is done ('gone') — but only when no decision stands for the
+// occurrence; one made again since, under a new id (the POST upserts by occurrence), is refused in words (the review).
+test('§0.271: an Undo of an id gone is "gone" only when nothing stands for its occurrence — a decision made again since is refused, not done', async () => {
+    const occ = { customerId: CUST_A, planId: PLAN, dueDate: '2026-10-02' };
+    const first = parse(await call('POST', ORG_A, { body: { ...occ, action: 'skipped' } }));
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+    const again = parse(await call('POST', ORG_A, { body: { ...occ, action: 'deferred', deferredTo: '2026-11-02' } }));
+    assert.notEqual(again.body.visit.id, first.body.visit.id, 'decided again, under a new id');
+    const stale = parse(await call('DELETE', ORG_A, { params: { id: first.body.visit.id, ...occ } }));
+    assert.deepEqual([stale.status, stale.body.code], [409, undefined], 'REGRESSION: a stale Undo read as done while a decision still stands');
+    assert.match(stale.body.error, /Another decision was made for this visit/);
+    assert.equal((await rowsOf(ORG_A)).filter((v) => v.dueDate === occ.dueDate).length, 1, 'the decision made since stands');
+    assert.equal(parse(await call('DELETE', ORG_A, { params: { id: again.body.visit.id, ...occ } })).status, 200);
+    const gone = parse(await call('DELETE', ORG_A, { params: { id: again.body.visit.id, ...occ } }));
+    assert.deepEqual([gone.status, gone.body.code], [404, 'gone'], 'pressed again after it landed: gone');
+    const bare = parse(await call('DELETE', ORG_A, { params: { id: again.body.visit.id } }));
+    assert.deepEqual([bare.status, bare.body.code], [404, undefined], 'with nothing to tell its occurrence by: not found, as before');
+    assert.equal(parse(await call('DELETE', ORG_B, { params: { id: 'pv_none', ...occ } })).body.code, 'gone', 'another org sees nothing of org A\'s occurrence');
+});

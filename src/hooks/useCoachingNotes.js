@@ -104,7 +104,8 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
     const deleteCoachingNote = useCallback(async (id) => {
         const askedOrg = requestOrg();
         const r = await answered(() => dbFetch(`${URL}?id=${encodeURIComponent(id)}`, { method: 'DELETE' }), { body: false });
-        if (!r.ok) return r;
+        // Gone already (state §0.271): an earlier press landed — done, the note taken off.
+        if (!r.ok && !r.landed) return r;
         if (stillOrg(askedOrg)) setCoachingNotes(prev => prev.filter(n => n.id !== id));
         return { ok: true };
     }, []);

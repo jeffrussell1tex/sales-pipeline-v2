@@ -2751,7 +2751,7 @@ const webhookPress = async ({ press, wh = WH_A, list = [WH_A, WH_B], answer, mea
     const did = { sent: [], said: [], menu: [], drawn: [], deleting: [] };
     // Moved in §0.264 (the unknown-save rule, Part 5): the handlers read the unknown-save helpers — the real ones.
     const h = new Function('setWebhooks', 'setActiveMenu', 'dbFetch', 'readRefusal', 'failureWords', 'setError', 'busyHooks', 'setBusyIds', 'setDeleting',
-        ...U4_NAMES, `${fns}\nreturn { handleToggle, handleDelete };`)(
+        ...U4_NAMES, 'landedBefore', `${fns}\nreturn { handleToggle, handleDelete };`)(
         rows.set, (v) => did.menu.push(v),
         async (url, opts) => {
             did.sent.push([url, opts.method, opts.body ? JSON.parse(opts.body) : undefined]);
@@ -2759,7 +2759,7 @@ const webhookPress = async ({ press, wh = WH_A, list = [WH_A, WH_B], answer, mea
             if (answer instanceof Error) throw answer;
             return answer;
         },
-        readRefusal, failureWords, (v) => did.said.push(v), busyHooks, (v) => did.drawn.push(v), (v) => did.deleting.push(v), ...U4);
+        readRefusal, failureWords, (v) => did.said.push(v), busyHooks, (v) => did.drawn.push(v), (v) => did.deleting.push(v), ...U4, landedBefore);
     await h[press](wh);
     return { ...did, list: rows.value, busy: [...busyHooks.current] };
 };
@@ -4260,6 +4260,16 @@ test('Part 10: the quote window and the Price Book — each refusal in the house
         assert.equal(gone.said, maybeSaid(which === 'quote' ? 'The quote' : 'The product', 'saved', 'It could not be read again.'));
         const edit = await saveQuoteOrProduct(which, { answer: TAKEN, create: false, stored: row });
         assert.deepEqual([edit.said, edit.reread], ['That id is already in use.', undefined], 'an edit\'s 409 is the server\'s own refusal');
+        // Added in §0.271: a quote's move made already (a send back that landed — 409 code 'already') is read again, as
+        // stored, in its place in the list; nothing said. The product's edit is unchanged.
+        if (which === 'quote') {
+            const SENT_BACK = answerOf(409, { error: 'This quote was already sent back with that note.', code: 'already' });
+            const asStored = { id: 'qt_1', title: 'as stored', status: 'Draft', approvalNote: 'Fix the price' };
+            const moved = await saveQuoteOrProduct('quote', { answer: SENT_BACK, create: false, stored: asStored });
+            assert.deepEqual([moved.reread, moved.answered, moved.said ?? null], [['/.netlify/functions/quotes', 'quotes', 'qt_1'], asStored, null],
+                'REGRESSION: a send back an earlier press landed said as refused');
+            assert.deepEqual(moved.quotes, [asStored], 'the quote as stored, in its place');
+        }
     }
 });
 
@@ -5189,12 +5199,18 @@ test('§0.263 Part 4: Undo a skip or deferral — the server\'s own refusal "Not
         [{ ok: false, status: 502, error: 'The server returned 502.', unknown: true }, 'It may have been undone — reload the page to see whether it was: The server returned 502.', 2],
         [{ ok: false, status: 0, error: 'The server could not be reached.', unknown: true }, 'It may have been undone — reload the page to see whether it was: The server could not be reached.', 2],
         [{ ok: true, status: 200 }, null, 1],
+        // Added in §0.271: pressed again after one that landed (404 code 'gone' — dbWrite's landed): done, the record off.
+        [{ ok: false, status: 404, error: 'Not found', unknown: false, landed: true }, null, 1],
+        // …and a decision made again since (the review): the server's own refusal, said, the row kept.
+        [{ ok: false, status: 409, error: 'Another decision was made for this visit since this list was read — reload the page to see it.', unknown: false, landed: false },
+            'Not undone — Another decision was made for this visit since this list was read — reload the page to see it.', 2],
     ]) {
         const visits = stateOf([PV_OLD, PV_OTHER]);
         const errors = [], sent = [];
         await undo([PV_OLD, PV_OTHER], (v) => errors.push(v), async (url, opts) => { sent.push([url, opts.method]); return answer; }, visits.set, ...U4)(PV_ROW);
         assert.deepEqual([errors, visits.value.length], [said ? ['', said] : [''], left], said || 'undone');
-        assert.deepEqual(sent, [['/.netlify/functions/dispatch-plan-visits?id=pv_0', 'DELETE']]);
+        // Moved in §0.271: the occurrence it undoes travels with the id.
+        assert.deepEqual(sent, [['/.netlify/functions/dispatch-plan-visits?id=pv_0&customerId=cust_1&planId=plan_1&dueDate=2026-11-20', 'DELETE']]);
     }
 });
 
@@ -6137,7 +6153,8 @@ test('Part 12a: WIRING — Connected apps: no raw e.message, no old words; the c
     // (settingsSaid); their "not" words only for the server's own refusal.
     assert.ok(s.includes("note('slack', settingsSaid(e, (e) => `Not disconnected — ${failureWords(e)}`));") && s.includes("note('webform', settingsSaid(e, (e) => `Not saved — ${failureWords(e)}`));"));
     assert.ok(s.includes("setMsg({ ok: false, text: settingsSaid(e, (e) => 'Not saved — ' + failureWords(e)) });"), 'the Slack window\'s save');
-    order(between(s, '    const disconnectCalendar = async (id, scope, provider) => {', '\n    };'), "if (!r.ok) note('cal:' + provider, r.unknown",
+    // Moved in §0.271: a Disconnect gone already is done (`done`), as one that answered.
+    order(between(s, '    const disconnectCalendar = async (id, scope, provider) => {', '\n    };'), 'const done = r.ok || r.landed;', "if (!done) note('cal:' + provider, r.unknown",
         "? maybeSaid('The calendar', 'disconnected', r.status === 403 ? 'The server returned 403.' : r.error)", ': `Not disconnected — ${r.error}`);');
     // The job line's read stays silent by design (Part 12): named for the guard by its own text, which no other read shares.
     assert.equal(count(s, 'const data = await res.json();'), 1);
@@ -6147,7 +6164,8 @@ test('Part 12a: WIRING — Connected apps: no raw e.message, no old words; the c
 const P12A_USERS = 'src/Tabs/settings/people/UsersDetail.jsx';
 // Moved in §0.264 (the unknown-save rule, Part 5): the helpers read the unknown-save helpers — the real ones — and throw
 // with whether the write may have landed (`unknown`, read by unknownOf).
-const usersHelper = (start, name) => p12aFn(P12A_USERS, start, '\n};', '\n};', ['dbFetch', 'readRefusal', 'refusalWords', ...U4_NAMES], name);
+// Since §0.271 landedBefore too (a revoke whose invitation is gone already is done), handed in last.
+const usersHelper = (start, name) => { const f = p12aFn(P12A_USERS, start, '\n};', '\n};', ['dbFetch', 'readRefusal', 'refusalWords', ...U4_NAMES, 'landedBefore'], name); return (...a) => f(...a, landedBefore); };
 const usersCall = async (start, name, answer, ...args) => {
     const sent = [];
     const h = usersHelper(start, name)(async (url, opts) => { sent.push([url, opts.method, JSON.parse(opts.body)]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, refusalWords, ...U4);
@@ -6404,7 +6422,7 @@ test('Part 12a: WIRING — Users: no "HTTP N", no raw e.message; each removal an
     assert.equal(count(s, 'const d = await res.json().catch(() => ({}));'), 1);
     // Moved in §0.264 (the unknown-save rule, Part 5): Resend throws with whether it may have landed.
     assert.ok(s.includes('if (!resp.ok) throw new Error(refusalWords(resp, d));') && s.includes('if (!res.ok) throw refusalError(refusalWords(res, d), heard);'));
-    assert.ok(s.includes("import { heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';"));
+    assert.ok(s.includes("import { heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, landedBefore } from '../../../utils/refusalWords.js';"));   // landedBefore since §0.271
     // The member save: the ok check first, the role refusal read once after its check, every catch failureWords. Moved in
     // §0.264: each refusal thrown with whether it may have landed; the catch says maybe for an answer that proved nothing.
     const save = between(s, 'const UserProfilePage = ', '    const handleDeactivate = ');
@@ -6934,11 +6952,11 @@ const p12bHeaderDisconnect = async ({ answer, switchOrg = false, refetch = null,
     const org = { now: 'org_a' };
     const h = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
         ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
-            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal'], 'disconnectCalendar')(
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal', 'landedBefore'], 'disconnectCalendar')(
         { id: 'cc_1' }, () => 'org_a', (o) => o === org.now, (v) => did.busy.push(v), (v) => did.errors.push(v), p10Fetch(did, answer, org, switchOrg), readRefusal, failureWords,
         (v) => did.conn.push(v), async () => { did.refetched++; did.steps.push('refetch'); if (refetch) await refetch(); },
         (v) => { did.connected.push(v); did.steps.push(`connected:${v}`); }, (v) => { did.events.push(v); did.steps.push('events'); },
-        (v) => { did.disconnected.push(v); did.steps.push(`disconnected:${v}`); }, () => { did.dropAt.push(did.steps.length); }, loading, maybeSaid, writeRefusal);
+        (v) => { did.disconnected.push(v); did.steps.push(`disconnected:${v}`); }, () => { did.dropAt.push(did.steps.length); }, loading, maybeSaid, writeRefusal, landedBefore);
     await h();
     return { ...did, said: did.errors.filter(Boolean) };
 };
@@ -7031,7 +7049,7 @@ test('Part 12b: the SPIFF claim — a refusal in the house words with its ref, n
 
 test('Part 12b: WIRING — the profile panel and the layer: no "HTTP N", no raw e.message; the per-invite read kept (named for the guard), its stop in refusalWords\' words', () => {
     const h = code(read(P12B_HEADER));
-    assert.ok(h.includes("import { readRefusal, failureWords, maybeSaid, writeRefusal } from '../../utils/refusalWords.js';"));   // §0.261
+    assert.ok(h.includes("import { readRefusal, failureWords, maybeSaid, writeRefusal, landedBefore } from '../../utils/refusalWords.js';"));   // §0.261; landedBefore since §0.271
     assert.ok(!/HTTP \$\{|'HTTP '/.test(h) && !P12B_NO_RAW.test(h), 'REGRESSION: "HTTP N" or a raw e.message in the profile panel');
     assert.ok(!h.includes('the change did not reach the server'), 'the old offline words');
     const m = code(read(P12B_LAYER));
@@ -8398,7 +8416,8 @@ test('Part 12 fixes (L): WIRING — Leads\' claim requests: the panel says a fai
     assert.ok(!/Request not (sent|cancelled|resolved)\.'|b\?\.error|\.message\b/.test(presses), 'REGRESSION: the old words, or a raw message');
     // Moved in §0.262 (the unknown-save rule): each refusal's body read once and said in refusalWords' words — the server's
     // own refusal or the may-have sentence; each failure in failureWords' words inside the may-have sentence.
-    assert.equal(count(presses, 'const refused = await res.json().catch(() => null);'), 3, 'each refusal read once');
+    // Moved in §0.271: the Cancel reads its refusal before asking whether it is gone already (an earlier press that landed).
+    assert.equal(count(presses, 'const refused = await res.json().catch(() => null);') + count(presses, 'const refused = res.ok ? null : await res.json().catch(() => null);'), 3, 'each refusal read once');
     assert.equal(count(presses, 'failureWords(e))'), 3, 'each failure in failureWords\'');
     assert.equal(count(presses, 'heardRefusal(res.status, refused)'), 3, 'each asks whether it is the server\'s own refusal');
 });
@@ -9008,9 +9027,9 @@ const p12fxC2Flow = async ({ deleteAnswer, readAnswer, switchOrg = false }) => {
         (v) => { st.connected = v; }, (v) => { st.events = v; }, gen, (v) => { st.read = v; });
     const disconnect = p12aFn(P12B_HEADER, '    const disconnectCalendar = async () => {', '\n    };', '\n    };',
         ['calConn', 'requestOrg', 'stillOrg', 'setDisconnecting', 'setCalActionError', 'dbFetch', 'readRefusal', 'failureWords', 'setCalConn', 'fetchCalendarEvents',
-            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal'], 'disconnectCalendar')(
+            'setCalendarConnected', 'setCalendarEvents', 'setCalDisconnected', 'dropCalendarReads', 'calendarLoading', 'maybeSaid', 'writeRefusal', 'landedBefore'], 'disconnectCalendar')(
         st.conn, () => 'org_a', (o) => o === org.now, () => {}, (v) => { if (v) st.said.push(v); }, p10Fetch(st, deleteAnswer, org, switchOrg), readRefusal, failureWords,
-        (v) => { st.conn = v; }, fetchCal, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; }, () => { gen.current += 1; }, false, maybeSaid, writeRefusal);
+        (v) => { st.conn = v; }, fetchCal, (v) => { st.connected = v; }, (v) => { st.events = v; }, (v) => { st.disconnected = v; }, () => { gen.current += 1; }, false, maybeSaid, writeRefusal, landedBefore);
     await disconnect();
     const panel = p12fxCPanel({ loading: st.loading, error: st.error, connected: st.connected, conn: st.conn, disconnected: st.disconnected, read: st.read });
     return { ...st, panel };
@@ -12035,4 +12054,85 @@ test('§0.270 a merge answers its survivor as the batch\'s own update left it �
         assert.ok(after.includes('if (done.refused) return done.refused;') && after.includes('const [updatedSurvivor] = done.results[survivorAt];'), `${kind}: answered from the batch`);
         assert.ok(!/await db\.select\(/.test(after), `REGRESSION: ${kind}: a read after the batch — one that fails answers 500 over a merge that landed`);
     }
+});
+
+// ── §0.271: a delete-like press after one that landed finishes quietly (OPEN_ITEMS §4.8; Jeff, 19 Nov: "Automations' unknown
+// DELETE", then "Fix the class") — the server keeps its honest answer (404 / 409) with a code the screen reads as done ──
+
+test('§0.271 landedBefore: a 404 coded gone or a 409 coded already (or idInUse) is an earlier press that landed — nothing else — RULE', () => {
+    for (const [status, body, landed] of [
+        [404, { error: 'Not found', code: 'gone' }, true], [409, { error: 'Key already revoked.', code: 'already' }, true], [409, { error: 'x', code: 'idInUse' }, true],
+        [404, { error: 'Not found' }, false], [404, { error: 'x', code: 'already' }, false], [409, { error: 'x', code: 'gone' }, false],
+        [403, { error: 'x', code: 'gone' }, false], [404, null, false], [500, { code: 'gone' }, false],
+    ]) assert.equal(landedBefore(status, body), landed, `${status} ${JSON.stringify(body)}`);
+});
+
+test('§0.271 a Delete, a Revoke or a Disconnect pressed again after one that landed: done, the row off, nothing said; the same status with no code is still the refusal — RUN', async () => {
+    // Webhooks' Delete.
+    const gone = await webhookPress({ press: 'handleDelete', answer: answerOf(404, { error: 'Webhook not found.', code: 'gone' }) });
+    assert.deepEqual([gone.list.map((w) => w.id), gone.said.filter(Boolean)], [['wh_2'], []], 'REGRESSION: "Webhook not found." over an endpoint an earlier press deleted');
+    const notFound = await webhookPress({ press: 'handleDelete', answer: answerOf(404, { error: 'Webhook not found.' }) });
+    assert.deepEqual([notFound.list.map((w) => w.id), notFound.said.filter(Boolean)], [['wh_1', 'wh_2'], ['Webhook not found.']], 'no code: the server\'s own refusal, as before');
+    // The invitation's Revoke: revoked, its answer unread (null) — its callers say so and send the roster to be read again.
+    const REVOKE = ['const revokeInvite = async (email) => {', 'revokeInvite'];
+    const revoked = await usersCall(...REVOKE, answerOf(404, { error: 'No pending invitation for that email in this organization.', code: 'gone' }), 'bo@x.test');
+    assert.deepEqual([revoked.value, revoked.thrown], [null, null], 'REGRESSION: a revoke whose invitation an earlier press revoked said as refused');
+    const refused = await usersCall(...REVOKE, answerOf(404, { error: 'No pending invitation for that email in this organization.' }), 'bo@x.test');
+    assert.deepEqual([refused.thrown, refused.unknown], ['No pending invitation for that email in this organization.', false]);
+    // The header's calendar Disconnect: done as one that answered — not connected, its events gone, said nowhere.
+    const disc = await p12bHeaderDisconnect({ answer: answerOf(404, { error: 'Connection not found', code: 'gone' }) });
+    assert.deepEqual([disc.said.filter(Boolean), disc.connected, disc.events, disc.disconnected], [[], [false], [[]], [true]],
+        'REGRESSION: "Not disconnected — Connection not found" over a calendar an earlier press disconnected');
+});
+
+// THE CLASS: each delete-like path the §0.271 census found answering a press after one that landed with a refusal in words
+// — the server now says it with a code, and its screen reads that code as done.
+test('§0.271 THE CLASS — each delete-like server says "gone already" with a code, and each screen that sends it reads the code as done — WIRING', () => {
+    const fnSrc = (n) => code(read(`netlify/functions/${n}.mjs`));
+    for (const [file, line] of [
+        ['webhooks', "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Webhook not found.', code: 'gone' }) };\n\n            await db.delete(webhookSubscriptions)"],
+        ['api-keys', "if (existing.revokedAt) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Key already revoked.', code: 'already' }) };"],
+        ['dispatch-plan-visits', "return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };"],
+        ['users', "return { statusCode: 404, headers, body: JSON.stringify({ error: 'No pending invitation for that email in this organization.', code: 'gone' }) };"],
+        ['leads', "if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };"],
+        ['coaching-notes', "if (!note) return reply(404, { error: 'Not found', code: 'gone' });\n            if (!canDeleteNote(note, me))"],
+        ['lead-requests', "if (!request) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };"],
+        ['opportunities', '...(applied.code ? { code: applied.code } : {}), comments: notesOf(stored.comments) })'],
+        ['quotes', "return { statusCode: 409, headers, body: JSON.stringify({ error: 'This quote was already sent back with that note.', code: 'already' }) };"],
+    ]) assert.ok(fnSrc(file).includes(line), `REGRESSION: ${file}.mjs answers a press after one that landed with no code the screen reads as done`);
+    assert.equal(count(fnSrc('calendar-connections'), "JSON.stringify({ error: 'Connection not found', code: 'gone' })"), 2, 'both Disconnects, the member\'s and the company\'s');
+    // The review's two (§0.271): a plan visit's Undo is gone only when no decision stands for its occurrence; a revoke whose
+    // invitation was ACCEPTED is "already joined", never revoked.
+    const pv = between(fnSrc('dispatch-plan-visits'), '            if (!gone.length) {', "return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };");
+    order(pv, 'const occ = params.customerId && params.planId && params.dueDate', "if (!occ) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+        "if (occ.length) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Another decision was made for this visit since this list was read — reload the page to see it.' }) };");
+    assert.ok(code(read('src/Tabs/DispatchTab.jsx')).includes('const occurrence = `&customerId=${encodeURIComponent(target.customerId)}&planId=${encodeURIComponent(target.planId)}&dueDate=${encodeURIComponent(target.dueDate)}`;'),
+        'the screen names the occurrence it undoes');
+    const rv = between(fnSrc('users'), 'if (!mine.length && !removeRow) {', "code: 'gone' }) };");
+    order(rv, "status: ['accepted']", 'accepted = (done?.data || (Array.isArray(done) ? done : [])).some((inv) => inviteEmail(inv) === email);',
+        "if (accepted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'They have already joined. Deactivate them instead.' }) };");
+    assert.ok(rv.includes("return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not reach Clerk. Nothing was revoked.' }) };"), 'Clerk unread: nothing said as revoked');
+    const sendBack = between(fnSrc('quotes'), 'const sendBack = data.sendBack === true;', 'if (sendBack) {\n');
+    assert.ok(sendBack.includes("if (sendBack && from === 'Draft' && !!existing.approvalNote && existing.approvalNote === String(data.sendBackNote ?? '').trim()) {"),
+        'only a Draft holding this very note is a send back that landed');
+    assert.ok(read('src/utils/dealNotes.js').includes("if (at < 0) return { error: NOTE_WORDS.gone, status: 409, ...(op.op === 'delete' ? { code: 'already' } : {}) };"),
+        'a delete of a note gone already, never an edit of one');
+    // The screens.
+    for (const [file, line] of [
+        ['src/Tabs/settings/integrations/WebhooksDetail.jsx', 'if (!res.ok) { const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body)) throw refusalError(r.words, r.heard); }\n            setWebhooks(prev => prev.filter(w => w.id !== wh.id));'],
+        ['src/Tabs/settings/integrations/ApiKeysDetail.jsx', 'if (!res.ok) { const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body)) throw refusalError(r.words, r.heard); }'],
+        ['src/Tabs/DispatchTab.jsx', "if (!r.ok && !r.landed) { setVisitActionError(r.unknown ? maybeSaid('It', 'undone', r.error) : `Not undone — ${r.error}`); return; }"],
+        ['src/Tabs/settings/people/UsersDetail.jsx', '        if (landedBefore(res.status, r.body)) return null;'],
+        ['src/components/layout/AppHeader.jsx', '                if (!landedBefore(res.status, body)) {'],
+        ['src/Tabs/settings/company/CompanyCalendarDetail.jsx', "if (!r.ok && !r.landed) { setCalError(r.unknown ? maybeSaid('The calendar', 'disconnected', r.error) : `Calendar not disconnected — ${r.error}`); return; }"],
+        ['src/Tabs/settings/integrations/ConnectedAppsDetail.jsx', 'const done = r.ok || r.landed;'],
+        ['src/Tabs/LeadsTab.jsx', 'if (r.ok || r.landed) setLeads(prev => prev.filter(l => l.id !== id));'],
+        ['src/Tabs/LeadsTab.jsx', 'if (res.ok || landedBefore(res.status, refused)) {\n            setLeadRequests(prev => prev.filter(r => r.id !== id));'],
+        ['src/hooks/useCoachingNotes.js', 'if (!r.ok && !r.landed) return r;\n        if (stillOrg(askedOrg)) setCoachingNotes(prev => prev.filter(n => n.id !== id));'],
+        ['src/hooks/useOpportunities.js', "if (!res.ok && note?.op === 'delete' && landedBefore(res.status, body)) return { ok: true, comments: notes };"],
+        ['src/hooks/useQuotes.js', "if (landedBefore(res.status, refused) && (!isEdit || refused.code === 'already')) {"],
+    ]) assert.ok(code(read(file)).includes(line), `REGRESSION: ${file} says "not done" over a press an earlier one landed`);
+    assert.ok(code(read('src/Tabs/settings/integrations/ConnectedAppsDetail.jsx')).includes("catch (e) { if (done) note('cal:' + provider, `Disconnected — the connections could not be read again:"), 'a gone Disconnect whose re-read fails says Disconnected');
+    // The API key's Revoke checks the org again after reading the refusal's body (late-answers).
+    order(code(read('src/Tabs/settings/integrations/ApiKeysDetail.jsx')), 'if (!res.ok) { const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body))', 'if (!stillOrg(askedOrg)) return;', 'if (onRevoked) onRevoked(keyRecord.id);');
 });

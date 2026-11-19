@@ -76,7 +76,8 @@ test('App: useActivities gets the shared deps — softDelete and setUndoToast ar
 
 test('useOpportunities: a note is PUT alone, one operation, and the list takes the notes the server answers — after the org check', () => {
     const src = read('src/hooks/useOpportunities.js');
-    const save = between(src, 'const saveDealNote = async (oppId, note) => {', 'return { ok: true, comments: notes };');
+    // Moved in §0.271: a delete of a note gone already returns done earlier — the save read to its end.
+    const save = between(src, 'const saveDealNote = async (oppId, note) => {', '\n    };');
     assert.ok(save.includes("method: 'PUT',"));
     assert.ok(save.includes('body: JSON.stringify({ id: oppId, note }),'), 'the operation alone (state §0.236)');
     assert.ok(/if \(!stillOrg\(askedOrg\)\) return stopped\(\);   \/\/ the deal modal was remounted by the switch\r?\n        const notes = res\.ok/.test(save), 'the org checked after the answer, before its notes are read');

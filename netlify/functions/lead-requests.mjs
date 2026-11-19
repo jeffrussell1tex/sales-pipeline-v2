@@ -185,7 +185,9 @@ export const handler = async (event) => {
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const [request] = await db.select().from(leadClaimRequests)
                 .where(and(eq(leadClaimRequests.id, id), eq(leadClaimRequests.orgId, orgId)));
-            if (!request) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+            // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+            if (!request) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };
             if (!canSeeAll(userRole)) {
                 const callerId = await getCallerId(userId, orgId);
                 // NOT NULL requesterId vs a possibly-null caller: never equal,

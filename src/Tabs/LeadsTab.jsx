@@ -1225,7 +1225,8 @@ export default function LeadsTab() {
         const askedOrg = requestOrg();
         const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, { method: 'DELETE' });
         if (!stillOrg(askedOrg)) return;
-        if (r.ok) setLeads(prev => prev.filter(l => l.id !== id));
+        // Gone already (state §0.271): an earlier press landed — done, the row taken off.
+        if (r.ok || r.landed) setLeads(prev => prev.filter(l => l.id !== id));
         // An answer that proves nothing may have deleted it (state §0.261, the unknown-save rule): said so, the row kept.
         else setUndoToast({ error: r.unknown ? maybeSaid('The lead', 'deleted', r.error) : `Lead not deleted — ${r.error}` });
     }, [setLeads, setUndoToast]);
@@ -1288,10 +1289,11 @@ export default function LeadsTab() {
         // No answer, or one that proves nothing, may have cancelled it (state §0.261, the unknown-save rule): said so.
         } catch (e) { if (stillOrg(askedOrg)) sayClaim(leadId, maybeSaid('The request', 'cancelled', failureWords(e))); return; }
         if (!stillOrg(askedOrg)) return;
-        if (res.ok) {
+        const refused = res.ok ? null : await res.json().catch(() => null);
+        // Gone already (state §0.271): an earlier Cancel landed — done, the request taken off.
+        if (res.ok || landedBefore(res.status, refused)) {
             setLeadRequests(prev => prev.filter(r => r.id !== id));
         } else {
-            const refused = await res.json().catch(() => null);
             const words = refusalWords(res, refused);
             if (stillOrg(askedOrg)) sayClaim(leadId, heardRefusal(res.status, refused) ? `Request not cancelled: ${words}` : maybeSaid('The request', 'cancelled', words));
         }

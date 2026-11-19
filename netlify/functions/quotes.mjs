@@ -463,6 +463,11 @@ export const handler = async (event) => {
             // the same save was refused above (quoteEditOutcome). A non-approver is 403,
             // a quote not waiting 409, a missing or overlong note 400.
             const sendBack = data.sendBack === true;
+            // Sent back already (state §0.271): a Draft holding this very note is an earlier press that landed, its answer lost —
+            // code 'already', which the screen reads as done, the quote read again as stored.
+            if (sendBack && from === 'Draft' && !!existing.approvalNote && existing.approvalNote === String(data.sendBackNote ?? '').trim()) {
+                return { statusCode: 409, headers, body: JSON.stringify({ error: 'This quote was already sent back with that note.', code: 'already' }) };
+            }
             if (sendBack) {
                 const refusal = quoteSendBackRefusal({ from, role: userRole, note: data.sendBackNote });
                 if (refusal) return refuse(from !== 'Pending Approval' ? 409 : !canApproveQuotes(userRole) ? 403 : 400, refusal);

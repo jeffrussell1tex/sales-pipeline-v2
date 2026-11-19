@@ -77,7 +77,8 @@ test('Revoke and Resend are real calls — Revoke withdraws the invitation in Cl
     assert.ok(revoke.includes("body:JSON.stringify({ action:'revoke-invite', email }),"), 'REGRESSION: Revoke calls nothing again');
     // Moved in §0.264 (the unknown-save rule, Part 5): thrown with whether it is the server's own refusal — its callers say
     // "Could not revoke" only for that, anything else may have revoked it.
-    assert.ok(revoke.includes("if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)\n    return res.json().catch(() => null);"), 'a refusal is shown, in the server\'s words (refusal sweep Part 12) — the body read only after the ok check');
+    // Moved in §0.271: nothing pending (404 code 'gone') is an earlier Revoke that landed — revoked, its answer unread (null).
+    assert.ok(revoke.includes("    if (!res.ok) {\n        const r = await writeRefusalOf(res);\n        if (landedBefore(res.status, r.body)) return null;\n        throw refusalError(r.words, r.heard);   // may have landed (state §0.264)\n    }\n    return res.json().catch(() => null);"), 'a refusal is shown, in the server\'s words (refusal sweep Part 12) — the body read only after the ok check');
     const resend = between(screen, 'const resendInvite = async (row) => {', '\n};');
     assert.ok(resend.includes("invites:[{ email: row.email, role: row.role || 'User', team: row.team || null, territory: row.territory || null }]"), 'the row\'s role travels with the resend');
     // Moved in §0.264 (the unknown-save rule, Part 5): a per-invite refusal (a 400 with `errors`, no top-level `error`) is

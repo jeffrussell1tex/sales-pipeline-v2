@@ -5714,8 +5714,11 @@ export default function DispatchTab() {
         const target = visit || planVisits.find(v => v.customerId === row.customer.id && v.planId === row.plan.id && v.dueDate === (row.occurrence || row.due));
         if (!target) return;
         setVisitActionError('');
-        const r = await dbWrite(`/.netlify/functions/dispatch-plan-visits?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
-        if (!r.ok) { setVisitActionError(r.unknown ? maybeSaid('It', 'undone', r.error) : `Not undone — ${r.error}`); return; }   // maybe (state §0.263)
+        // The occurrence with it (state §0.271's review): an id gone with a decision made again since is refused, not done.
+        const occurrence = `&customerId=${encodeURIComponent(target.customerId)}&planId=${encodeURIComponent(target.planId)}&dueDate=${encodeURIComponent(target.dueDate)}`;
+        const r = await dbWrite(`/.netlify/functions/dispatch-plan-visits?id=${encodeURIComponent(target.id)}${occurrence}`, { method: 'DELETE' });
+        // Undone already (state §0.271): an earlier press landed — done, the record taken off.
+        if (!r.ok && !r.landed) { setVisitActionError(r.unknown ? maybeSaid('It', 'undone', r.error) : `Not undone — ${r.error}`); return; }   // maybe (state §0.263)
         setPlanVisits(prev => prev.filter(v => v.id !== target.id));
     };
     // Twelve months from the CURRENT end date (an expired one renews from today),

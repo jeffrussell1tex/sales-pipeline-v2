@@ -465,7 +465,9 @@ One commit per verified batch; doc patch in the same commit.
   too — only a 4xx in the server's words (`heardRefusal`) is "Not saved"; any
   other answer keeps the change and says it may have been (`maybeSaid`); a
   create keeps one id, and a 409 `code: 'idInUse'` (this org only,
-  `ownIdTaken`) is an earlier press that landed (THE GUARD,
+  `ownIdTaken`) — since §0.271 a delete-like press answered 404
+  `code: 'gone'` or 409 `code: 'already'` too — is an earlier press
+  that landed (THE GUARD,
   tests/unknown-save.test.mjs; guide §18b134); since §0.262 Leads, Quotes,
   Reports and the Sales Manager too — a refusal puts back only its own row, a
   create with no form keeps its id by what it sends; since §0.263 Dispatch

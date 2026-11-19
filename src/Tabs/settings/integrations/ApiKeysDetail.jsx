@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid, landedBefore } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -446,7 +446,9 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch(`/.netlify/functions/api-keys?id=${keyRecord.id}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
-            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // the server's words, else its status (§0.243)
+            // Revoked already (state §0.271): an earlier press landed — done, the key shown revoked.
+            if (!res.ok) { const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body)) throw refusalError(r.words, r.heard); }   // the server's words, else its status (§0.243)
+            if (!stillOrg(askedOrg)) return;   // its body was read since the last check (§0.175)
             if (onRevoked) onRevoked(keyRecord.id);
             onClose();
         // An answer that proves nothing may have revoked it: said so (state §0.264, the unknown-save rule, Part 5).

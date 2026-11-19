@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocalLayer } from '../../../hooks/useLocalLayer';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid, landedBefore } from '../../../utils/refusalWords.js';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -239,7 +239,8 @@ export const WebhooksDetail = ({ onBack }) => {
         setDeleting(wh.id);
         try {
             const res = await dbFetch(`/.netlify/functions/webhooks?id=${wh.id}`, { method: 'DELETE' });
-            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
+            // Gone already (state §0.271): an earlier press landed — done, the row taken off.
+            if (!res.ok) { const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body)) throw refusalError(r.words, r.heard); }
             setWebhooks(prev => prev.filter(w => w.id !== wh.id));
         // An answer that proves nothing may have deleted it: said so (state §0.264, the unknown-save rule, Part 5).
         } catch (e) { setError(thrownSaid(e, wh.name ? `"${wh.name}"` : 'The endpoint', 'deleted')); }

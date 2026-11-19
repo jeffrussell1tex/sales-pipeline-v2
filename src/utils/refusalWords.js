@@ -47,7 +47,10 @@ export const heardRefusal = (status, body) => status >= 400 && status < 500
 // A create sent again with its id, answered that the id is already in use in THIS org (`code: 'idInUse'`), or an action
 // answered as already done (`code: 'already'`): it is stored — an earlier press landed (Part 6). The server sends the code
 // only for its own org's row, never for another org's id.
-export const landedBefore = (status, body) => status === 409 && !!body && (body.code === 'idInUse' || body.code === 'already');
+// Since §0.271 also a delete-like press answered that what it removes is not there in this org (404 `code: 'gone'`): the
+// outcome it asked for holds — an earlier press landed, its answer lost.
+export const landedBefore = (status, body) => !!body && ((status === 409 && (body.code === 'idInUse' || body.code === 'already'))
+    || (status === 404 && body.code === 'gone'));
 // The words for a write whose answer proves nothing (Q2: the screen keeps the change and says this, kept until closed).
 export const maybeSaid = (subject, verb, words, plural = false) =>
     `${subject} may have been ${verb} — reload the page to see whether ${plural ? 'they were' : 'it was'}${words ? `: ${words}` : '.'}`;

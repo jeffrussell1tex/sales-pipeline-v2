@@ -373,7 +373,8 @@ test('WIRING (Part 3): the Sales Manager\'s three throws say may-have; the quote
     assert.ok(tab.includes('await onSave(stored ? { ...changes, id: stored.id } : { ...changes, id: newProductId.current }, stored);'));
     const hook = read(QUOTES_HOOK);
     assert.ok(hook.includes(": { ...formData, id: formData.id || ('qt_' + crypto.randomUUID()) };") && hook.includes(": { ...formData, id: formData.id || ('prod_' + crypto.randomUUID()) };"), 'a create keeps its caller\'s id');
-    assert.equal((hook.match(/if \(!isEdit && landedBefore\(res\.status, refused\)\) \{/g) || []).length, 2, 'the quote and the product read an earlier press that landed');
+    // Moved in §0.271: the quote's reads a move made already too (a send back that landed — code 'already').
+    assert.ok(hook.includes("if (landedBefore(res.status, refused) && (!isEdit || refused.code === 'already')) {") && hook.includes('if (!isEdit && landedBefore(res.status, refused)) {'), 'the quote and the product read an earlier press that landed');
     const reports = read('src/Tabs/ReportsTab.jsx');
     assert.equal((reports.match(/const heldReportIds = React\.useRef\(\{\}\);/g) || []).length, 2, 'the library and Activity history');
     assert.equal((reports.match(/if \(!\(held && landedBefore\(res\.status, refused\)\)\) throw Object\.assign/g) || []).length, 2);

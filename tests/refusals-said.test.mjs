@@ -973,15 +973,17 @@ test('the four settings panels throw the words, reading the body only after the 
     const WRITE_THROW = '{ const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }';
     const IMPORTS = {
         'data/ExportDetail.jsx': "import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';",
-        'integrations/ApiKeysDetail.jsx': "import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';",
+        'integrations/ApiKeysDetail.jsx': "import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid, landedBefore } from '../../../utils/refusalWords.js';",
         'integrations/AutomationsDetail.jsx': "import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';",
-        'integrations/WebhooksDetail.jsx': "import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';",
+        'integrations/WebhooksDetail.jsx': "import { readRefusal, failureWords, writeRefusalOf, refusalError, unknownOf, thrownSaid, landedBefore } from '../../../utils/refusalWords.js';",
     };
     for (const [file, reads, writes, ownReads] of [['data/ExportDetail.jsx', 0, 2, 3], ['integrations/ApiKeysDetail.jsx', 1, 1, 0], ['integrations/AutomationsDetail.jsx', 2, 2, 0], ['integrations/WebhooksDetail.jsx', 1, 2, 0]]) {
         const s = code(read(S + file));
         assert.ok(s.includes(IMPORTS[file]), `${file}: the one helper`);
         assert.equal(s.split('throw new Error(await readRefusal(res));').length - 1, reads, `${file}: ${reads} read refusals said in the server's words`);
-        assert.equal(s.split(WRITE_THROW).length - 1, writes, `${file}: ${writes} write refusals said in the server's words, with whether they are its own`);
+        // Since §0.271 a Delete or Revoke throws unless the answer says it is done already (landedBefore) — the same refusal, counted.
+        const WRITE_THROW_UNLESS_DONE = '{ const r = await writeRefusalOf(res); if (!landedBefore(res.status, r.body)) throw refusalError(r.words, r.heard); }';
+        assert.equal(s.split(WRITE_THROW).length - 1 + s.split(WRITE_THROW_UNLESS_DONE).length - 1, writes, `${file}: ${writes} write refusals said in the server's words, with whether they are its own`);
         assert.equal(s.split('const refused = await res.json().catch(() => null);').length - 1, ownReads, `${file}: ${ownReads} writes that read the refused body themselves`);
         assert.ok(!/const (d|data)\s*= await res\.json\(\);\s*if \(!res\.ok\) throw new Error\(\1\.error\)/.test(s), `${file}: REGRESSION — the body read before the ok check, its words undefined`);
     }

@@ -368,7 +368,9 @@ export const handler = async (event) => {
             // name once the record is gone.
             const [deletedRow] = await db.delete(leads).where(and(eq(leads.id, id), eq(leads.orgId, orgId))).returning();
             // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            // Still a 404 (it deleted nothing) — with code 'gone' since §0.271: a Delete pressed again after one that landed, its
+            // answer lost, is read by the screen as done, never "Lead not deleted" over a lead that is gone.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };
             await writeAudit(orgId, deletionAudit('lead', deletedRow, { userId, byRole: 'Admin' }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

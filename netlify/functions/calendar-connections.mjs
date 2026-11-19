@@ -106,7 +106,9 @@ export const handler = async (event) => {
                     );
 
                 if (rows.length === 0) {
-                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Connection not found' }) };
+                    // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+                    // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Connection not found', code: 'gone' }) };
                 }
                 if (rows[0].userId !== userId) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'You can only disconnect your own calendar' }) };
@@ -136,7 +138,9 @@ export const handler = async (event) => {
                     );
 
                 if (rows.length === 0) {
-                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Connection not found' }) };
+                    // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+                    // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Connection not found', code: 'gone' }) };
                 }
 
                 await db

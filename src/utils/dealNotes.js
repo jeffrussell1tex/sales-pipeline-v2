@@ -84,7 +84,8 @@ export function applyNoteOp(stored, op, { me, now, newId, names } = {}) {
         return { list: [...list, note], note };
     }
     const at = list.findIndex((n) => n && n.id === op.id);
-    if (at < 0) return { error: NOTE_WORDS.gone, status: 409 };
+    // A delete of a note already gone (state §0.271): an earlier press landed — code 'already', which the screen reads as done.
+    if (at < 0) return { error: NOTE_WORDS.gone, status: 409, ...(op.op === 'delete' ? { code: 'already' } : {}) };
     if (!mayChangeNote(list[at], me)) return { error: NOTE_WORDS.notAuthor, status: 403 };
     if (op.op === 'delete') return { list: list.filter((_, i) => i !== at), note: null };
     const note = { ...list[at], text: op.text, mentions: mentionsIn(op.text, names), edited: true, editedAt: now };

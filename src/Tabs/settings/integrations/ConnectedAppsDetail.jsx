@@ -502,11 +502,13 @@ export const ConnectedAppsDetail = ({ settings, setSettings, onBack }) => {
             const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });
             // "Not disconnected" only for the server's own refusal; any other answer may have disconnected it — a wordless
             // 403 said as its status, never the permission sentence (state §0.264, the unknown-save rule, Part 5).
-            if (!r.ok) note('cal:' + provider, r.unknown
+            // Gone already (state §0.271): an earlier Disconnect landed — done, nothing said.
+            const done = r.ok || r.landed;
+            if (!done) note('cal:' + provider, r.unknown
                 ? maybeSaid('The calendar', 'disconnected', r.status === 403 ? 'The server returned 403.' : r.error)
                 : `Not disconnected — ${r.error}`);
             try { await reloadCal(); }
-            catch (e) { if (r.ok) note('cal:' + provider, `Disconnected — the connections could not be read again: ${failureWords(e)} Reload the page to see them.`); }
+            catch (e) { if (done) note('cal:' + provider, `Disconnected — the connections could not be read again: ${failureWords(e)} Reload the page to see them.`); }
         } finally {
             setBusy(null);
         }

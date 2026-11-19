@@ -325,6 +325,8 @@ export function useOpportunities(deps) {
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
         const notes = res.ok ? body?.opportunity?.comments : body?.comments;
         if (Array.isArray(notes)) setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments: notes } : o)));
+        // A delete of a note already gone (state §0.271): an earlier press landed — done, the notes as stored.
+        if (!res.ok && note?.op === 'delete' && landedBefore(res.status, body)) return { ok: true, comments: notes };
         // Only a 4xx in the server's words wrote nothing; any other refused answer may have (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe). A post's note id is the
         // server's: the window holds Post after one (OpportunityModal), never a second note.
         if (!res.ok && !heardRefusal(res.status, body)) return { ok: false, error: maybeSaid('The note', NOTE_DONE[note?.op] || 'saved', body?.error || `The server returned ${res.status}.`), unknown: true, comments: notes };

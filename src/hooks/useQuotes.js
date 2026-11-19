@@ -102,11 +102,12 @@ export function useQuotes() {
             if (!res.ok) {
                 const refused = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return null;
-                if (!isEdit && landedBefore(res.status, refused)) {
+                // A create stored already, or a move made already (state §0.271 — a send back that landed): the quote as stored.
+                if (landedBefore(res.status, refused) && (!isEdit || refused.code === 'already')) {
                     const stored = await storedRowOf('/.netlify/functions/quotes', 'quotes', payload.id);
                     if (!stillOrg(askedOrg)) return null;
                     if (!stored) return fail(maybeSaid('The quote', 'saved', 'It could not be read again.'), true);
-                    setQuotes(prev => [...prev.filter(q => q.id !== stored.id), stored]);
+                    setQuotes(prev => (prev.some(q => q.id === stored.id) ? prev.map(q => (q.id === stored.id ? stored : q)) : [...prev, stored]));
                     return stored;
                 }
                 const heard = heardRefusal(res.status, refused);

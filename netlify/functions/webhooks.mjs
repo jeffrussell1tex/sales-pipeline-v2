@@ -265,7 +265,9 @@ export const handler = async (event) => {
                 .from(webhookSubscriptions)
                 .where(and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.orgId, orgId)));
 
-            if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Webhook not found.' }) };
+            // Already gone (state §0.271): an earlier press landed though its answer was lost — said with code 'gone', which the
+            // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
+            if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Webhook not found.', code: 'gone' }) };
 
             await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
             await auditAs(orgId, userId, { action: 'webhook.deleted', entityType: 'webhook', entityId: existing.id, entityName: existing.name, detail: `${hostOf(existing.targetUrl)} · ${(existing.eventTypes || []).join(', ')}` });

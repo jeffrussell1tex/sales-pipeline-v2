@@ -692,7 +692,18 @@ export const handler = async (event) => {
                 }
                 const removeRow = isOpenInvitationRow(row);
                 if (!mine.length && !removeRow) {
-                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'No pending invitation for that email in this organization.' }) };
+                    // Accepted, not revoked (§0.271's review): an invitation made in Clerk, with no row here, accepted after the
+                    // page was read — they have joined. Said so, as a joined member's row says; never "revoked".
+                    let accepted;
+                    try {
+                        const done = await clerk.organizations.getOrganizationInvitationList({ organizationId: orgId, status: ['accepted'], limit: 500 });
+                        accepted = (done?.data || (Array.isArray(done) ? done : [])).some((inv) => inviteEmail(inv) === email);
+                    } catch (e) {
+                        return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not reach Clerk. Nothing was revoked.' }) };
+                    }
+                    if (accepted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'They have already joined. Deactivate them instead.' }) };
+                    // Nothing pending (state §0.271): an earlier Revoke landed though its answer was lost — code 'gone', read as done.
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'No pending invitation for that email in this organization.', code: 'gone' }) };
                 }
                 // The row goes, and its id off the org's team and territory lists, in one transaction (state §0.222 — Q9;
                 // an invitation's row has no Clerk id, isOpenInvitationRow). The answer carries the lists as written.

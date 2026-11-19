@@ -8,7 +8,7 @@ import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 // returned N."; a thrown failure in plain words — never "HTTP N" or a raw e.message ("Failed to fetch").
 import { readRefusal, refusalWords, failureWords } from '../../../utils/refusalWords.js';
 // Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
-import { heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
+import { heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, landedBefore } from '../../../utils/refusalWords.js';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 // A teams save names the token of the list it read (state §0.225): one sender, the latest taken on a refusal.
@@ -969,7 +969,12 @@ const revokeInvite = async (email) => {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ action:'revoke-invite', email }),
     });
-    if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }   // may have landed (state §0.264)
+    if (!res.ok) {
+        const r = await writeRefusalOf(res);
+        // Nothing pending (state §0.271): an earlier Revoke landed, its answer lost — revoked, its answer unread (null).
+        if (landedBefore(res.status, r.body)) return null;
+        throw refusalError(r.words, r.heard);   // may have landed (state §0.264)
+    }
     // Landed: its answer (the row taken off, the lists as written), or null when it cannot be read — said by the caller.
     return res.json().catch(() => null);
 };

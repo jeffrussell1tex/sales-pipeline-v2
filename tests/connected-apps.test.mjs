@@ -102,7 +102,7 @@ test('every card and row action reports on its own surface — no page banner: t
     // Moved in §0.264 (the unknown-save rule, Part 5): each "Not …" only for the server's own refusal; any other answer
     // says it may have landed, on the same card or row.
     assert.ok(s.includes("note('slack', settingsSaid(e, (e) => `Not disconnected — ${failureWords(e)}`))"), 'Slack Disconnect → the Slack card');
-    assert.ok(s.includes("if (!r.ok) note('cal:' + provider, r.unknown\n                ? maybeSaid('The calendar', 'disconnected', r.status === 403 ? 'The server returned 403.' : r.error)\n                : `Not disconnected — ${r.error}`);"), 'calendar Disconnect → that calendar card');
+    assert.ok(s.includes("if (!done) note('cal:' + provider, r.unknown\n                ? maybeSaid('The calendar', 'disconnected', r.status === 403 ? 'The server returned 403.' : r.error)\n                : `Not disconnected — ${r.error}`);"), 'calendar Disconnect → that calendar card');
     assert.ok(s.includes('note(app.id, unknownOf(e) ? maybeSaid(`The request for ${app.name}`, \'recorded\', failureWords(e)) : `Not requested — ${failureWords(e)}`);'), 'Request → that row');
     assert.ok(s.includes("setBusy('slack'); note('slack', '');"), 'each action clears its own note when it starts');
     assert.ok(s.includes("setBusy('cal'); note('cal:' + provider, '');"));
