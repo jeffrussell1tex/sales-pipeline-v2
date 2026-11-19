@@ -23489,10 +23489,16 @@ const mutations = [
         "src/Tabs/settings/people/UsersDetail.jsx",
         "if (!resp.ok) throw new Error(refusalWords(resp, d));",
         "if (!resp.ok) throw new Error(d.error || 'Invite failed');"],
+    // (§0.264 repointed "§0.249 Users: the invite's failure after an org switch said on the new org's screen": since §0.264
+    // a send that throws is said in its own catch — the may-have sentence, Send held — behind its own org check, and every
+    // other way into handleSend's outer catch has passed an org check with no await since (addToSettingsList never throws;
+    // its one throw, a second apply, runs after takeLatestSettings has stopped on a switch), so the outer check survived the
+    // scoped run of 18 Nov (base bd58dd5) as an equivalent mutant. The entry now breaks the check that carries what it names;
+    // the outer one stays as it was.)
     ["§0.249 Users: the invite's failure after an org switch said on the new org's screen",
         "src/Tabs/settings/people/UsersDetail.jsx",
-        "            if (!stillOrg(askedOrg)) return;   // a send that failed after an org switch says nothing here\n",
-        ""],
+        "                if (!stillOrg(askedOrg)) return;\n                setHeld(true);\n                setError(maybeSaid('The invitations', 'sent', failureWords(e), true));\n",
+        "                setHeld(true);\n                setError(maybeSaid('The invitations', 'sent', failureWords(e), true));\n"],
     ["§0.249 Users: the invite's failure says its raw message",
         "src/Tabs/settings/people/UsersDetail.jsx",
         "            setError(failureWords(err));\n        } finally { setSaving(false); }",
