@@ -161,14 +161,13 @@ export const handler = async (event) => {
                 updatedAt:       new Date(),
             };
 
-            await db.insert(dispatchServicePlans).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [inserted] = await db.insert(dispatchServicePlans).values(row)
                 .onConflictDoUpdate({
                     target: dispatchServicePlans.id, setWhere: eq(dispatchServicePlans.orgId, orgId),
                     set: { ...row, createdAt: undefined },
-                });
-
-            const [inserted] = await db.select().from(dispatchServicePlans)
-                .where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));
+                }).returning();
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That plan id is already in use.' }) };
@@ -218,11 +217,10 @@ export const handler = async (event) => {
                 updates.visitsPerYear = deriveVisits(cadence, interval);
             }
 
-            await db.update(dispatchServicePlans).set(updates)
-                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
-
-            const [updated] = await db.select().from(dispatchServicePlans)
-                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchServicePlans).set(updates)
+                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId))).returning();
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, auth.userId, { action: 'dispatch_plan.updated', entityType: 'dispatch_plan', entityId: updated.id, entityName: updated.name, detail: `${updated.cadence || 'custom'} · ${updated.active === false ? 'inactive' : 'active'}` });

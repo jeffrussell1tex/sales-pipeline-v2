@@ -285,7 +285,8 @@ test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoi
     const scalar = f.slice(f.indexOf('const scalarFields = ['), f.indexOf('];', f.indexOf('const scalarFields = [')));
     for (const k of ['quoteId', 'invoiceAmount', 'invoiceStatus', 'invoicePaidAt', 'jobNumber']) assert.ok(!scalar.includes(`'${k}'`), `${k} is not client-writable`);
     assert.ok(scalar.includes("'customerPoNumber'"), 'the PO stays writable');
-    assert.ok(f.includes('set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } });'),
+    // Moved in §0.268: the upsert answers its own row (.returning()).
+    assert.ok(f.includes('set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } })\n                    .returning();'),
         'an upsert of an existing job leaves the mirror alone');
     assert.ok(!/quoteId:\s+data\.quoteId/.test(f), 'the POST never takes a quote id from the body');
     const c = code(read('netlify/functions/dispatch-customers.mjs'));

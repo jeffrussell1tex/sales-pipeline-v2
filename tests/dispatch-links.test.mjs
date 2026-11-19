@@ -155,8 +155,15 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
         'body: JSON.stringify({ technicians: rows.map((r) => normalise({ ...r, memberId: memberOf.get(r.userId) || null })) }),'),
         "the list says which member each login names, by their app id — read in this org — for the screen's picker");
     assert.ok(t.includes('    const [member] = await db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), eq(users.clerkUserId, login)));'), "a login's member, read in this org");
-    assert.ok(t.includes('JSON.stringify({ technician: normalise({ ...inserted, memberId: await memberIdOf(orgId, inserted.userId) }) })')
-        && t.includes('JSON.stringify({ technician: normalise({ ...updated, memberId: await memberIdOf(orgId, updated.userId) }) })'),
+    // Moved in §0.268: the member is read before the write, from the login it writes — nothing is read after it.
+    assert.ok(t.includes('const memberId = await memberIdOf(orgId, row.userId);') && t.includes("const memberId = await memberIdOf(orgId, 'userId' in updates ? updates.userId : current.userId);")
+        && t.includes('JSON.stringify({ technician: normalise({ ...inserted, memberId }) })') && t.includes('JSON.stringify({ technician: normalise({ ...updated, memberId: memberNow }) })')
+        // Read BEFORE the write, by order (the §0.268 review: includes() alone let it move after); a kept login another save
+        // moved in between is read again for the login the row holds.
+        && t.indexOf('const memberId = await memberIdOf(orgId, row.userId);') < t.indexOf('const [inserted] = await db.insert(dispatchTechnicians)')
+        && t.indexOf("const memberId = await memberIdOf(orgId, 'userId' in updates ? updates.userId : current.userId);") < t.indexOf('const [updated] = await db.update(dispatchTechnicians)')
+        && t.includes("const memberNow = updated.userId === ('userId' in updates ? updates.userId : current.userId) ? memberId")
+        && t.includes(': await memberIdOf(orgId, updated.userId).catch(() => null);'),
         "a create's and an update's answer name the member, as the list does — the screen puts the answer in its list and its draft (a login just linked showed as no member's)");
 
     const v = fn('dispatch-vehicles');
@@ -214,7 +221,8 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
         '                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));',
         "            if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
         '            const linked = await checkLinks(PLAN_LINKS, data, current, orgId);', REFUSE,
-        '            const updates = { updatedAt: new Date() };', '            await db.update(dispatchServicePlans).set(updates)'),
+        // Moved in §0.268: the update answers its own row.
+        '            const updates = { updatedAt: new Date() };', '            const [updated] = await db.update(dispatchServicePlans).set(updates)'),
         "the update: the plan read before every write — an id naming no plan of this org 404 before anything is asked; what it holds held");
     assert.equal(count(sp, 'const [current] = await db.select()'), 1, 'one read of the plan per update — a cadence change reuses it');
     assert.ok(sp.includes('                coveredJobTypes: coveredToStore(data.coveredJobTypes),'), 'the create stores the list itself (JD2)');

@@ -204,10 +204,10 @@ export const handler = async (event) => {
                     createdAt:     new Date(),
                     updatedAt:     new Date(),
                 };
-                await db.insert(dispatchServiceLocations).values(row)
-                    .onConflictDoUpdate({ target: dispatchServiceLocations.id, setWhere: eq(dispatchServiceLocations.orgId, orgId), set: { ...row, createdAt: undefined } });
-                const [inserted] = await db.select().from(dispatchServiceLocations)
-                    .where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));
+                // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+                // took (census-D §2C).
+                const [inserted] = await db.insert(dispatchServiceLocations).values(row)
+                    .onConflictDoUpdate({ target: dispatchServiceLocations.id, setWhere: eq(dispatchServiceLocations.orgId, orgId), set: { ...row, createdAt: undefined } }).returning();
                 // An id another org holds: the upsert wrote nothing, and this crashed — a 500
                 // that said the id was taken elsewhere (state §0.166).
                 if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That location id is already in use.' }) };
@@ -224,10 +224,10 @@ export const handler = async (event) => {
                 ['name','address','city','state','zip','accessNotes','locationType',
                  'squareFeet','floors','isDefault','gateCode','contactOnSite','contactPhone','notes',
                 ].forEach(f => { if (f in data) updates[f] = data[f]; });
-                await db.update(dispatchServiceLocations).set(updates)
-                    .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)));
-                const [updated] = await db.select().from(dispatchServiceLocations)
-                    .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)));
+                // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+                // took (census-D §2C).
+                const [updated] = await db.update(dispatchServiceLocations).set(updates)
+                    .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId))).returning();
                 if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
                 await auditAs(orgId, auth.userId, { action: 'dispatch_location.updated', entityType: 'dispatch_customer', entityId: updated.customerId, entityName: updated.name, detail: Object.keys(updates).filter(k => k !== 'updatedAt').join(', ') || null });
                 return { statusCode: 200, headers, body: JSON.stringify({ location: normaliseLoc(updated) }) };
@@ -312,15 +312,16 @@ export const handler = async (event) => {
                 updatedAt:          new Date(),
             });
 
-            await withNumberRetry(async () => {
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const inserted = await withNumberRetry(async () => {
                 const customerNumber = priorCust?.customerNumber || await nextCustomerNumber(orgId);
                 const row = buildRow(customerNumber);
-                await db.insert(dispatchCustomers).values(row)
-                    .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } });
+                const [upserted] = await db.insert(dispatchCustomers).values(row)
+                    .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } })
+                    .returning();
+                return upserted;
             }, { label: 'customer number' });
-
-            const [inserted] = await db.select().from(dispatchCustomers)
-                .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That customer id is already in use.' }) };
@@ -357,10 +358,10 @@ export const handler = async (event) => {
              'paymentMethod','creditLimit','notes',
             ].forEach(f => { if (f in data) updates[f] = data[f]; });
             if ('tags' in data) updates.tags = JSON.stringify(data.tags);
-            await db.update(dispatchCustomers).set(updates)
-                .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
-            const [updated] = await db.select().from(dispatchCustomers)
-                .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchCustomers).set(updates)
+                .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId))).returning();
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, auth.userId, { action: 'dispatch_customer.updated', entityType: 'dispatch_customer', entityId: updated.id, entityName: updated.name, detail: Object.keys(updates).filter(k => k !== 'updatedAt').join(', ').slice(0, 300) || null });
             return { statusCode: 200, headers, body: JSON.stringify({ customer: normaliseCust(updated) }) };

@@ -124,6 +124,19 @@ function normaliseLineItem(row) {
 }
 
 // Write a status history record when a job status changes
+// The job as a notice left it — its status link and the trail of what was sent (_customerNotify.mjs writes both) — read
+// once more after the notice; a read that fails answers the job as written (state §0.268): the save landed, and a 500
+// would say it may not have.
+async function jobAfterNotice(orgId, jobId, written) {
+    try {
+        const [after] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId)));
+        return after || written;
+    } catch (e) {
+        console.warn('[dispatch-jobs] the job after its notice could not be read; answered as written', e?.message);
+        return written;
+    }
+}
+
 async function recordStatusChange(orgId, jobId, fromStatus, toStatus, changedBy, note) {
     await db.insert(dispatchJobStatusHistory).values({
         id:         `sh_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
@@ -249,10 +262,10 @@ export const handler = async (event) => {
                     createdAt:   new Date(),
                     updatedAt:   new Date(),
                 };
-                await db.insert(dispatchJobLineItems).values(row)
-                    .onConflictDoUpdate({ target: dispatchJobLineItems.id, setWhere: eq(dispatchJobLineItems.orgId, orgId), set: { ...row, createdAt: undefined } });
-                const [inserted] = await db.select().from(dispatchJobLineItems)
-                    .where(and(eq(dispatchJobLineItems.id, data.id), eq(dispatchJobLineItems.orgId, orgId)));
+                // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+                // took (census-D §2C).
+                const [inserted] = await db.insert(dispatchJobLineItems).values(row)
+                    .onConflictDoUpdate({ target: dispatchJobLineItems.id, setWhere: eq(dispatchJobLineItems.orgId, orgId), set: { ...row, createdAt: undefined } }).returning();
                 // An id another org holds: the upsert wrote nothing, and this crashed (§0.166).
                 if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That line item id is already in use.' }) };
                 await auditAs(orgId, userId, { action: 'dispatch_job.line_item_added', entityType: 'dispatch_job', entityId: data.jobId, entityName: inserted.description, detail: `${inserted.itemType} · qty ${inserted.quantity} · $${Number(inserted.totalPrice || 0).toLocaleString()}` });
@@ -386,25 +399,24 @@ export const handler = async (event) => {
                 updatedAt:        new Date(),
             });
 
-            const row = await withNumberRetry(async () => {
+            const { row, written } = await withNumberRetry(async () => {
                 const jobNumber = priorJob?.jobNumber || await nextJobNumber(orgId);
                 const r = buildRow(jobNumber);
                 // The three invoice_* columns mirror the job's live invoice and are
                 // written by invoices.mjs alone (§18b44); quote_id by quote-to-job.mjs.
                 // An upsert of an existing job must leave all four as they are.
-                await db.insert(dispatchJobs).values(r)
+                const [w] = await db.insert(dispatchJobs).values(r)
                     .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId),
-                        set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } });
-                return r;
+                        set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } })
+                    .returning();
+                return { row: r, written: w };
             }, { label: 'job number' });
 
             // A job id another org holds (state §0.166): the upsert writes nothing
             // for it, and the status history, customer notice and audit below went
             // on regardless — the first as a stray row against that org's job,
             // before a crash on the missing row (a 500 that said the id was taken
-            // elsewhere). The row is this org's, or the create is refused.
-            const [written] = await db.select().from(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            // elsewhere). The row is this org's, or the create is refused — the upsert's own answer (state §0.268).
             if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };
 
             // A create sent again with its id (New Job keeps one id across its presses — state §0.263) is an upsert of the
@@ -414,8 +426,7 @@ export const handler = async (event) => {
             else if (row.status !== priorJob.status) await recordStatusChange(orgId, data.id, priorJob.status, row.status, userId, null);
             // A job created already scheduled confirms the appointment (§0.111).
             await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
-            const [inserted] = await db.select().from(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            const inserted = await jobAfterNotice(orgId, data.id, written);
             // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
             await auditAs(orgId, userId, { action: priorJob ? 'dispatch_job.updated' : 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
 
@@ -457,19 +468,18 @@ export const handler = async (event) => {
                 }
                 TECH_WRITABLE.forEach(f => { if (f in data) updates[f] = data[f]; });
 
-                await db.update(dispatchJobs).set(updates)
-                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
-
-                const [written] = await db.select().from(dispatchJobs)
-                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+                // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+                // took (census-D §2C).
+                const [written] = await db.update(dispatchJobs).set(updates)
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).returning();
+                if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
 
                 if ('status' in data && data.status !== current.status) {
                     await recordStatusChange(orgId, id, current.status, data.status, userId, 'Updated in the field');
                 }
                 // "Start travel" from the truck is the on-the-way message (§0.111).
                 await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
-                const [updatedRow] = await db.select().from(dispatchJobs)
-                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+                const updatedRow = await jobAfterNotice(orgId, id, written);
                 await auditAs(orgId, userId, { action: 'dispatch_job.updated', entityType: 'dispatch_job', entityId: id, entityName: `${updatedRow.jobNumber} · ${updatedRow.title || 'Untitled'}`, detail: `in the field · ${'status' in data && data.status !== current.status ? `${current.status} → ${data.status}` : attempted.join(', ')}` });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
@@ -516,8 +526,11 @@ export const handler = async (event) => {
             if ('tags'         in data) updates.tags         = JSON.stringify(data.tags);
             if ('customFields' in data) updates.customFields = JSON.stringify(data.customFields);
 
-            await db.update(dispatchJobs).set(updates)
-                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [written] = await db.update(dispatchJobs).set(updates)
+                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).returning();
+            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
 
             // Write status history if status changed
             const fromStatus = current.status ?? current.status;
@@ -526,12 +539,9 @@ export const handler = async (event) => {
                 await recordStatusChange(orgId, id, fromStatus, toStatus, userId, data.statusNote ?? null);
             }
 
-            const [written] = await db.select().from(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
             // Scheduling (or re-scheduling) confirms; en_route announces (§0.111).
             await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
-            const [updated] = await db.select().from(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            const updated = await jobAfterNotice(orgId, id, written);
             {
                 const changed = Object.keys(updates).filter(k => k !== 'updatedAt');
                 const transition = toStatus && toStatus !== fromStatus ? `${fromStatus} → ${toStatus}` : null;
@@ -546,13 +556,16 @@ export const handler = async (event) => {
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             const [doomed] = await db.select({ jobNumber: dispatchJobs.jobNumber, title: dispatchJobs.title, status: dispatchJobs.status }).from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
-            // Cascade delete line items and history
-            await db.delete(dispatchJobLineItems)
-                .where(and(eq(dispatchJobLineItems.jobId, id), eq(dispatchJobLineItems.orgId, orgId)));
-            await db.delete(dispatchJobStatusHistory)
-                .where(and(eq(dispatchJobStatusHistory.jobId, id), eq(dispatchJobStatusHistory.orgId, orgId)));
-            await db.delete(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            // Its line items, its history and the job: one batch, all or none (state §0.268) — three statements before, a
+            // failure between them left a job with its lines or its history gone.
+            await db.batch([
+                db.delete(dispatchJobLineItems)
+                    .where(and(eq(dispatchJobLineItems.jobId, id), eq(dispatchJobLineItems.orgId, orgId))),
+                db.delete(dispatchJobStatusHistory)
+                    .where(and(eq(dispatchJobStatusHistory.jobId, id), eq(dispatchJobStatusHistory.orgId, orgId))),
+                db.delete(dispatchJobs)
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))),
+            ]);
             if (doomed) await auditAs(orgId, userId, { action: 'dispatch_job.deleted', entityType: 'dispatch_job', entityId: id, entityName: `${doomed.jobNumber} · ${doomed.title || 'Untitled'}`, detail: `was ${doomed.status}` });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }

@@ -111,19 +111,15 @@ export const handler = async (event) => {
             };
             // One record per occurrence: a second decision about the same date
             // replaces the first (the id and created_at move with it).
-            await db.insert(dispatchPlanVisits).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [saved] = await db.insert(dispatchPlanVisits).values(row)
                 .onConflictDoUpdate({
                     target: [dispatchPlanVisits.orgId, dispatchPlanVisits.customerId, dispatchPlanVisits.planId, dispatchPlanVisits.dueDate],
                     setWhere: eq(dispatchPlanVisits.orgId, orgId),   // the index carries org_id; the scanner's rule is stated anyway
                     set: { ...row },
-                });
-            const [saved] = await db.select().from(dispatchPlanVisits)
-                .where(and(
-                    eq(dispatchPlanVisits.orgId, orgId),
-                    eq(dispatchPlanVisits.customerId, data.customerId),
-                    eq(dispatchPlanVisits.planId, data.planId),
-                    eq(dispatchPlanVisits.dueDate, data.dueDate),
-                ));
+                })
+                .returning();
             await auditAs(orgId, userId, { action: 'dispatch_visit.logged', entityType: 'dispatch_customer', entityId: saved.customerId, entityName: cust ? cust.name : null, detail: `${saved.action} · due ${saved.dueDate}${saved.deferredTo ? ' → ' + saved.deferredTo : ''}${saved.reason ? ' · ' + saved.reason : ''}`.slice(0, 300) });
             return { statusCode: 201, headers, body: JSON.stringify({ visit: normalise(saved) }) };
         }

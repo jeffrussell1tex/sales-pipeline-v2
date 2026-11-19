@@ -11925,3 +11925,65 @@ test('§0.266 Dispatch: a create sent again writes "Job created" once — its ow
         '.where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));',
         'await db.insert(dispatchServiceLocations).values(row)');
 });
+
+// ── §0.268: every Dispatch write answers from its own write (OPEN_ITEMS §4.8, census-D §2C; Jeff, 19 Nov: "Dispatch re-reads") ──
+
+// THE CLASS: a Dispatch POST or PUT that read its row again after writing could answer 500 over a write that landed (a read
+// after the commit that failed). Each write answers from its own `.returning()`; the one read after a write that stays —
+// the job after its customer notice (its status link and trail) — answers the job as written when it fails.
+test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it writes; each answers from its own write — WIRING', () => {
+    const FILES = ['dispatch-customers', 'dispatch-equipment', 'dispatch-jobs', 'dispatch-plan-visits', 'dispatch-schedule-blocks',
+        'dispatch-service-plans', 'dispatch-technicians', 'dispatch-vehicles'];
+    let writes = 0;
+    for (const name of FILES) {
+        const s = code(read(`netlify/functions/${name}.mjs`));
+        // Each write branch: from its method's line to the next method's (or the handler's catch).
+        const marks = [...s.matchAll(/if \(event\.httpMethod === '(POST|PUT|DELETE|GET)'\) \{/g)].map((m) => ({ at: m.index, method: m[1] }));
+        assert.ok(marks.length, `${name}: its methods found`);
+        for (let i = 0; i < marks.length; i++) {
+            if (marks[i].method !== 'POST' && marks[i].method !== 'PUT') continue;
+            const body = s.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : s.indexOf('} catch (err)', marks[i].at));
+            const firstWrite = body.search(/db\.(insert|update)\(dispatch/);
+            if (firstWrite < 0) continue;
+            writes++;
+            const after = body.slice(firstWrite);
+            assert.ok(!/await db\.select\(\)\.from\(dispatch/.test(after),
+                `REGRESSION: ${name} ${marks[i].method} reads its row again after writing — a read that fails answers 500 over a write that landed`);
+            assert.ok(!/^\s*await db\.(insert|update)\(dispatch(?!JobStatusHistory)/m.test(after), `REGRESSION: ${name} ${marks[i].method}: a write whose answer is thrown away`);
+        }
+    }
+    assert.ok(writes >= 18, `the write branches scanned (${writes}) — a branch the scan stops reaching fails here (the §0.268 review)`);
+    // Each write that answers is answered by its own statement: it ends in .returning().
+    let answered = 0;
+    for (const name of FILES) {
+        for (const m of code(read(`netlify/functions/${name}.mjs`)).matchAll(/const \[\w+\] = await db\.(?:insert|update)\(dispatch\w+\)((?:(?!;\n)[\s\S])*?);\n/g)) {
+            answered++;
+            assert.ok(m[1].trimEnd().endsWith('.returning()'), `REGRESSION: ${name}: a write answered from nothing — ${m[0].slice(0, 80)}`);
+        }
+    }
+    assert.ok(answered >= 19, `the answered writes scanned (${answered}) — one the scan stops reaching fails here (the §0.268 review)`);
+    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 2, 'REGRESSION: an update whose job went goes on to its history and notice');
+    const jobs = code(read('netlify/functions/dispatch-jobs.mjs'));
+    const notice = between(jobs, 'async function jobAfterNotice(orgId, jobId, written) {', '\n}\n');
+    order(notice, 'try {', 'return after || written;', '} catch (e) {', 'return written;');
+    assert.equal(count(jobs, 'await jobAfterNotice('), 3, 'the create, the field update and the update — each answers the job as written when its read fails');
+    // A job another org holds still writes nothing past its upsert: refused before the status history.
+    order(jobs, '                    .returning();\n                return { row: r, written: w };', "if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };",
+        "if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');");
+    // An update whose row went since it was read: 404 before its status history or notice — each path by its own lines (the
+    // §0.268 review: 12-space needles also matched the field path's 16-space lines, so a 404 moved after the dispatcher's
+    // notice passed). A needle's leading newline holds it to its own indent.
+    const dispatcherPut = between(jobs, '\n            const [written] = await db.update(dispatchJobs).set(updates)', '\n            const updated = await jobAfterNotice(orgId, id, written);');
+    order(dispatcherPut, "\n            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+        '\n            if (toStatus && toStatus !== fromStatus) {', '\n            await notifyCustomer({ orgId, before: current, after: written,');
+    const fieldPut = between(jobs, '\n                const [written] = await db.update(dispatchJobs).set(updates)', '\n                const updatedRow = await jobAfterNotice(orgId, id, written);');
+    order(fieldPut, "\n                if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+        "\n                if ('status' in data && data.status !== current.status) {", '\n                await notifyCustomer({ orgId, before: current, after: written,');
+    // The job's DELETE is one batch.
+    const del = jobs.slice(jobs.lastIndexOf("if (event.httpMethod === 'DELETE') {"));
+    assert.ok(/await db\.batch\(\[\s*db\.delete\(dispatchJobLineItems\)[\s\S]*?db\.delete\(dispatchJobStatusHistory\)[\s\S]*?db\.delete\(dispatchJobs\)/.test(del)
+        && !/await db\.delete\(dispatchJob/.test(del.slice(0, del.indexOf("return { statusCode: 405"))), 'REGRESSION: a job\'s lines, history and row deleted apart');
+    // A technician's member is read before its write.
+    const techs = code(read('netlify/functions/dispatch-technicians.mjs'));
+    assert.ok(!techs.includes('memberId: await memberIdOf('), 'REGRESSION: a technician\'s member read after its write');
+});

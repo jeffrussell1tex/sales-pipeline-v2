@@ -103,14 +103,13 @@ export const handler = async (event) => {
                 updatedAt:           new Date(),
             };
 
-            await db.insert(dispatchEquipment).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [inserted] = await db.insert(dispatchEquipment).values(row)
                 .onConflictDoUpdate({
                     target: dispatchEquipment.id, setWhere: eq(dispatchEquipment.orgId, orgId),
                     set: { ...row, createdAt: undefined },
-                });
-
-            const [inserted] = await db.select().from(dispatchEquipment)
-                .where(and(eq(dispatchEquipment.id, data.id), eq(dispatchEquipment.orgId, orgId)));
+                }).returning();
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That equipment id is already in use.' }) };
@@ -168,11 +167,10 @@ export const handler = async (event) => {
                 if ('checkedOutAt' in data) updates.checkedOutAt = data.checkedOutAt ? new Date(data.checkedOutAt) : null;
             }
 
-            await db.update(dispatchEquipment).set(updates)
-                .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
-
-            const [updated] = await db.select().from(dispatchEquipment)
-                .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchEquipment).set(updates)
+                .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId))).returning();
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             // A check-out / check-in is its own event; a field edit is an update (§0.143).

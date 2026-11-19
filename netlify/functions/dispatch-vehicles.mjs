@@ -108,14 +108,13 @@ export const handler = async (event) => {
                 updatedAt:          new Date(),
             };
 
-            await db.insert(dispatchVehicles).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [inserted] = await db.insert(dispatchVehicles).values(row)
                 .onConflictDoUpdate({
                     target: dispatchVehicles.id, setWhere: eq(dispatchVehicles.orgId, orgId),
                     set: { ...row, createdAt: undefined },
-                });
-
-            const [inserted] = await db.select().from(dispatchVehicles)
-                .where(and(eq(dispatchVehicles.id, data.id), eq(dispatchVehicles.orgId, orgId)));
+                }).returning();
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That vehicle id is already in use.' }) };
@@ -148,11 +147,10 @@ export const handler = async (event) => {
             ];
             fields.forEach(f => { if (f in data) updates[f] = data[f]; });
 
-            await db.update(dispatchVehicles).set(updates)
-                .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)));
-
-            const [updated] = await db.select().from(dispatchVehicles)
-                .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchVehicles).set(updates)
+                .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId))).returning();
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.updated', entityType: 'dispatch_vehicle', entityId: updated.id, entityName: updated.name, detail: `${updated.status || 'active'}${updated.assignedTechId ? ' · assigned' : ''}` });

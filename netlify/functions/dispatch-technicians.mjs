@@ -152,22 +152,23 @@ export const handler = async (event) => {
                 createdAt:        new Date(),
                 updatedAt:        new Date(),
             };
+            // The member its login names, read before the write (state §0.268): nothing read after it.
+            const memberId = await memberIdOf(orgId, row.userId);
 
-            await db.insert(dispatchTechnicians).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [inserted] = await db.insert(dispatchTechnicians).values(row)
                 .onConflictDoUpdate({
                     target: dispatchTechnicians.id, setWhere: eq(dispatchTechnicians.orgId, orgId),
                     set: { ...row, createdAt: undefined },
-                });
-
-            const [inserted] = await db.select().from(dispatchTechnicians)
-                .where(and(eq(dispatchTechnicians.id, data.id), eq(dispatchTechnicians.orgId, orgId)));
+                }).returning();
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That technician id is already in use.' }) };
 
             // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
             await auditAs(orgId, userId, { action: prior ? 'dispatch_technician.updated' : 'dispatch_technician.created', entityType: 'dispatch_technician', entityId: inserted.id, entityName: techName(inserted), detail: `${inserted.employmentType || 'employee'} · ${inserted.status || 'active'}` });
-            return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise({ ...inserted, memberId: await memberIdOf(orgId, inserted.userId) }) }) };
+            return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise({ ...inserted, memberId }) }) };
         }
 
         // ── PUT: update technician ────────────────────────────────────────────
@@ -198,17 +199,23 @@ export const handler = async (event) => {
 
             const jsonFields = ['serviceZones','skills','certifications','workingHours'];
             jsonFields.forEach(f => { if (f in data) updates[f] = JSON.stringify(data[f]); });
+            // The member its login names, read before the write (state §0.268): nothing read after it.
+            const memberId = await memberIdOf(orgId, 'userId' in updates ? updates.userId : current.userId);
 
-            await db.update(dispatchTechnicians)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchTechnicians)
                 .set(updates)
-                .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
-
-            const [updated] = await db.select().from(dispatchTechnicians)
-                .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
+                .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId))).returning();
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, userId, { action: 'dispatch_technician.updated', entityType: 'dispatch_technician', entityId: updated.id, entityName: techName(updated), detail: `${updated.employmentType || 'employee'} · ${updated.status || 'active'}` });
-            return { statusCode: 200, headers, body: JSON.stringify({ technician: normalise({ ...updated, memberId: await memberIdOf(orgId, updated.userId) }) }) };
+            // A login the save kept, moved by another save between this one's read and its write (§0.268 review): the member
+            // read before is the old login's — read the one the row holds, an unread member answered as none (never a 500
+            // over a save that landed).
+            const memberNow = updated.userId === ('userId' in updates ? updates.userId : current.userId) ? memberId
+                : await memberIdOf(orgId, updated.userId).catch(() => null);
+            return { statusCode: 200, headers, body: JSON.stringify({ technician: normalise({ ...updated, memberId: memberNow }) }) };
         }
 
         // ── DELETE: remove technician ─────────────────────────────────────────

@@ -117,16 +117,15 @@ export const handler = async (event) => {
                 updatedAt: new Date(),
             };
 
-            await db.insert(dispatchScheduleBlocks).values(row)
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [inserted] = await db.insert(dispatchScheduleBlocks).values(row)
                 .onConflictDoUpdate({
                     target: dispatchScheduleBlocks.id,
                     setWhere: eq(dispatchScheduleBlocks.orgId, orgId),
                     // its technician and its author are the first create's (the PUT's rule)
                     set: { ...row, createdAt: undefined, techId: undefined, createdBy: undefined },
-                });
-
-            const [inserted] = await db.select().from(dispatchScheduleBlocks)
-                .where(and(eq(dispatchScheduleBlocks.id, data.id), eq(dispatchScheduleBlocks.orgId, orgId)));
+                }).returning();
             // An id another org holds: the upsert wrote nothing, and this crashed — a 500
             // that said the id was taken elsewhere (state §0.166).
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That block id is already in use.' }) };
@@ -152,11 +151,10 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'endDate cannot be before startDate' }) };
             }
 
-            await db.update(dispatchScheduleBlocks).set(updates)
-                .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)));
-
-            const [updated] = await db.select().from(dispatchScheduleBlocks)
-                .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)));
+            // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
+            // took (census-D §2C).
+            const [updated] = await db.update(dispatchScheduleBlocks).set(updates)
+                .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId))).returning();
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             await auditAs(orgId, userId, { action: 'dispatch_block.updated', entityType: 'dispatch_block', entityId: updated.id, entityName: updated.title || updated.blockType, detail: `${updated.blockType} · ${updated.startDate}${updated.endDate && updated.endDate !== updated.startDate ? ' → ' + updated.endDate : ''}` });
