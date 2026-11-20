@@ -390,7 +390,8 @@ test("T9 — the restore's clean-up, pinned (_links.mjs — state §0.205): a qu
     const lines = between(l, 'async function clearLineProducts(orgId, restored, failed) {', '\n}\n');
     order(lines, ind(4, 'const ids = (restored && restored.get(quotes)) || [];'), ind(4, 'if (!ids.length) return 0;'),
         ind(12, '.where(and(eq(quotes.orgId, orgId), inArray(quotes.id, ids)));'), ind(12, 'const done = lineProductsCleared(q.lineItems, live);'),
-        ind(12, 'writes.push(db.update(quotes).set({ lineItems: done.lines }).where(and(eq(quotes.orgId, orgId), eq(quotes.id, q.id))));'),
+        // Moved pin (§0.277, the review): its edit stamped, so a quote save read before it is refused (rowAsRead).
+        ind(12, 'writes.push(db.update(quotes).set({ lineItems: done.lines, updatedAt: new Date() }).where(and(eq(quotes.orgId, orgId), eq(quotes.id, q.id))));'),
         ind(8, 'if (writes.length) await db.batch(writes);'), ind(8, "failed.push('quotes.lineItems');"));
     const mem = between(l, 'async function clearMemberLinks(orgId, restored, failed) {', '\n}\n');
     order(mem, ind(4, 'const ids = (restored && restored.get(users)) || [];'),
@@ -473,7 +474,9 @@ test("T11 — the restore's clean-up, run on made-up rows (_links.mjs's own clea
     const qFailed = [];
     assert.equal(await q.clearLineProducts('org_A', restored, qFailed), 2, "a line's product that names no product of this org, one each");
     assert.deepEqual(q.asks, [{ kind: 'product', ids: ['p_a', 'p_b', undefined, 'p_a', 'p_gone'], orgId: 'org_A' }], 'one ask, of the products the lines name');
-    assert.deepEqual(q.writes, [
+    // Moved pin (§0.277, the review): each write stamps its edit — a time — beside the lines it clears.
+    assert.ok(q.writes.every((w) => w.set.updatedAt instanceof Date), 'its edit stamped');
+    assert.deepEqual(q.writes.map((w) => ({ ...w, set: (({ updatedAt: _t, ...rest }) => rest)(w.set) })), [
         { table: 'quotes', set: { lineItems: [{ productId: 'p_a', qty: 1 }, { productId: null, productName: 'Widget', quantity: 2 }, { description: 'Custom' }] }, ids: ['q1'] },
         { table: 'quotes', set: { lineItems: [{ productId: 'p_a' }, { productId: null }] }, ids: ['q2'] },
     ], 'only the quotes it cleared, each its own row of this org — the line kept, every other key as filed');

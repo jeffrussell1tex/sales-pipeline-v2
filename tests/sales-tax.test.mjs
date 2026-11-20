@@ -108,10 +108,10 @@ test('quotes.mjs: its money is quoteTotals\'s; the rate stored on the quote, the
         "merged.taxExempt = 'taxExempt' in data ? cleanTaxExempt(data.taxExempt) : existing.taxExempt;",
         'const totals = calcTotals(lineItems, merged.dealDiscount ?? 0, merged.taxRate, merged.taxExempt);',
         'const termsChanged = quoteTermsChanged(existing, merged);',
-        'await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);',
         '...totals,',
         'taxRate: merged.taxRate == null ? null : String(merged.taxRate),',
-        'taxExempt: merged.taxExempt ?? null,');
+        'taxExempt: merged.taxExempt ?? null,',
+        '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),');   // moved pin (§0.277): the deal's sync in the save's batch, its pre-tax total
     assert.ok(!put.includes('getDefaultTaxRate('), 'a save never reads the default — a default change never reprices a stored quote');
     assert.ok(!/syncToOpportunity\([^)]*(grandTotal|taxAmount)/.test(s), 'the deal\'s arr never takes the tax');
 });

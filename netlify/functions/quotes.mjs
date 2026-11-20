@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { quotes, opportunities, auditLog, users, settings as settingsTable, accounts, dispatchCustomers } from '../../db/schema.js';
-import { eq, asc, and, desc, sql, inArray, gte } from 'drizzle-orm';
+import { eq, asc, and, desc, sql, inArray, gte, getTableColumns } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId, ownerWriteFilter, ownerClaim, claimRefused, rowAsRead } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 // A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
 // quote is who may read or change the deal — the deals list's own rule, imported
@@ -216,12 +216,23 @@ function approvalStamp(quote, tiers) {
     return { approvalTier: tier.label, approvalReason: `Avg discount ${Math.round(disc)}% > ${threshold}% ${prevTier?.label || 'rep'} tier` };
 }
 
-// When a quote is accepted, push its totalValue to the linked opportunity's arr field
-async function syncToOpportunity(orgId, opportunityId, totalValue) {
-    if (!opportunityId) return;
-    await db.update(opportunities)
-        .set({ arr: String(totalValue), updatedAt: new Date() })
-        .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
+// When a quote is accepted, push its totalValue to the linked opportunity's arr field — a statement of the accept's
+// batch (state §0.277), behind its claims: the deal still the caller's or nobody's, the quote as read.
+const syncToOpportunity = (orgId, opportunityId, totalValue) => db.update(opportunities)
+    .set({ arr: String(totalValue), updatedAt: new Date() })
+    .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
+
+// A quote write that missed its claims (state §0.277): what stands now decides — the quote gone: not found; its deal no
+// longer the caller's to change: the deal's refusal; else the quote changed since it was read: said, nothing written.
+async function missedQuote(auth, id, forbidden, moveTo = null) {
+    const [now] = await db.select({ opportunityId: quotes.opportunityId, status: quotes.status }).from(quotes).where(and(eq(quotes.id, id), eq(quotes.orgId, auth.orgId))).limit(1);
+    if (!now) return refuse(404, NOT_FOUND);
+    const access = await dealAccess(auth, now.opportunityId);
+    if (!access.canRead) return refuse(404, NOT_FOUND);
+    if (!access.canWrite) return refuse(403, forbidden);
+    // The move it asked for stands — a press in flight with this one made it (the review): done, code 'already'.
+    if (moveTo && now.status === moveTo) return { statusCode: 409, headers, body: JSON.stringify({ error: `This quote is ${moveTo} already.`, code: 'already' }) };
+    return refuse(409, `This quote changed since it was opened — it is ${now.status || 'Draft'} now. Nothing was saved; reload it to see it.`);
 }
 
 const refuse = (statusCode, error) => ({ statusCode, headers, body: JSON.stringify({ error }) });
@@ -381,13 +392,25 @@ export const handler = async (event) => {
             // Resolved inside the retry so a collision re-reads the maximum. Note a
             // NEW VERSION reuses its predecessor's number by design, and the unique
             // index is on (org, number, version) — so versioning cannot trip it.
-            const [inserted] = await withNumberRetry(async () => {
-                const quoteNumber = await resolveQuoteNumber(orgId, data);
-                // A taken id — another org's or this org's — writes nothing and is answered 409 (state §0.204 —
-                // Jeff: "Fix these 3"); it was retried as a number collision, then a 500. The arbiter is the id
-                // alone: a number taken is still a unique violation on (org, number, version), retried as before.
-                return db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning();
-            }, { label: 'quote number' });
+            // Only while the deal is still the caller's or nobody's (state §0.277): the insert rides behind the deal's claim —
+            // a deal handed to another rep since the check gets no quote of this caller's. None for an Admin or Manager.
+            const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId: auth.userId, userRole });
+            let inserted;
+            try {
+                [inserted] = await withNumberRetry(async () => {
+                    const quoteNumber = await resolveQuoteNumber(orgId, data);
+                    // A taken id — another org's or this org's — writes nothing and is answered 409 (state §0.204 —
+                    // Jeff: "Fix these 3"); it was retried as a number collision, then a 500. The arbiter is the id
+                    // alone: a number taken is still a unique violation on (org, number, version), retried as before.
+                    const claim = ownerClaim(opportunities, access.deal.id, orgId, dealMine);
+                    const done = await db.batch([...claim, db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning()]);
+                    return done[claim.length];
+                }, { label: 'quote number' });
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                const now = await dealAccess(auth, data.opportunityId);
+                return now.canRead ? refuse(403, 'Forbidden: you can only quote your own or unassigned deals') : refuse(404, 'Deal not found');
+            }
             // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
             // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
             if (!inserted && await ownIdTaken(quotes, basePayload.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That quote id is already in use.', code: 'idInUse' }) };
@@ -407,8 +430,11 @@ export const handler = async (event) => {
             // The stored quote, in this org. A PUT no longer CREATES one: it was an
             // upsert, so a PUT could make a quote in any status and skip the POST's
             // forced Draft. New quotes are POSTed (useQuotes does).
-            const [existing] = await db.select().from(quotes)
+            // Read with its last edit as text (state §0.277): the save's claim asserts the quote is still as read.
+            const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)
                 .where(and(eq(quotes.id, String(data.id)), eq(quotes.orgId, orgId))).limit(1);
+            const stamp = read?.stamp;
+            const existing = read ? (({ stamp: _stamp, ...row }) => row)(read) : null;
             if (!existing) return refuse(404, NOT_FOUND);
             // Its DEAL decides who may change it — the stored deal, never the body's.
             const access = await dealAccess(auth, existing.opportunityId);
@@ -518,11 +544,10 @@ export const handler = async (event) => {
             }
             if (sendBack) stamps.approvalNote = String(data.sendBackNote).trim();
             if (moved && to === 'Sent to Customer') stamps.sentAt = new Date();
-            if (moved && to === 'Accepted') {
+            const accepting = moved && to === 'Accepted';
+            if (accepting) {
                 stamps.acceptedAt = new Date();
                 stamps.syncedToOpp = true;
-                // The accepted value is the deal's — the STORED deal, never the body's.
-                await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);
             }
 
             const { id: _id, ...fields } = sanitize(merged);
@@ -537,9 +562,24 @@ export const handler = async (event) => {
                 ...stamps,
                 updatedAt: new Date(),
             };
-            const [updated] = await db.update(quotes).set(payload)
-                .where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId)))
-                .returning();
+            // One batch, all or nothing (state §0.277): the quote as read (its move and terms were decided on that read), its
+            // deal still the caller's or nobody's, the accepted value to the deal — the STORED deal, never the body's — and
+            // the quote. A deal handed to another rep, or a quote another save changed, since the checks: nothing written.
+            const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId: auth.userId, userRole });
+            const dealClaim = ownerClaim(opportunities, existing.opportunityId, orgId, dealMine);
+            let wrote;
+            try {
+                wrote = await db.batch([
+                    rowAsRead(quotes, existing.id, orgId, stamp),   // the quote as read: its move and terms were decided on that read
+                    ...dealClaim,
+                    ...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),
+                    db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),
+                ]);
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                return missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);
+            }
+            const [updated] = wrote[wrote.length - 1];
             // Pending Approval → Draft is a send-back or a withdrawal — the record the
             // approval numbers read tells them apart (§0.156). A send-back's note ends
             // its detail, after SENT_BACK_MARK.

@@ -476,7 +476,7 @@ test("quotes.mjs: its lines are a list of product lines (D5: 400, naming lineIte
         ind(12, "const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, null, orgId);"),
         ind(12, ONE('lined')),
         ind(12, 'const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];'),
-        ind(16, 'return db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning();'),
+        ind(20, 'const done = await db.batch([...claim, db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning()]);'),   // moved pin (§0.277): behind the deal's claim
         ind(12, "if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That quote id is already in use.' }) };"),
         ind(12, 'await auditAs(orgId, auth.userId, {'));
     const put = between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
@@ -487,7 +487,7 @@ test("quotes.mjs: its lines are a list of product lines (D5: 400, naming lineIte
         ind(12, "const lined = await checkLinks(QUOTE_LINES, 'lineItems' in data ? { lineItems: productIdsOf(data.lineItems) } : {}, { lineItems: productIdsOf(existing.lineItems) }, orgId);"),
         ind(12, ONE('lined')),
         ind(12, 'const merged = {'),
-        ind(16, 'await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);'));
+        ind(20, '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),'));   // moved pin (§0.277): in the save's batch
     assert.ok(!put.includes('db.insert('), 'a save never creates a quote');
 });
 

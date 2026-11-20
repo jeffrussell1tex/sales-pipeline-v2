@@ -526,11 +526,14 @@ test("a Manager, who may change Ravi's quote, meets the product's refusal on it 
 test('a quote number another save takes between the read and the write is still retried, and the quote created (the 409 answers a taken id only)', async () => {
     const NEW = ID('n_q_race'), RACER = ID('q_racer');
     assert.equal(Object.hasOwn(db, 'insert'), false, 'precondition: db.insert is the prototype\'s');
-    const state = { attempts: 0, taken: null };
+    assert.equal(Object.hasOwn(db, 'batch'), false, 'precondition: db.batch is the prototype\'s');
+    const state = { attempts: 0, taken: null, race: null };
     const realInsert = db.insert;
+    const realBatch = db.batch;
     // The race, staged: the first time this quote is written, another quote of the org takes the same number
     // and version a moment before the write lands — what a second rep's save does between the read of the
-    // highest number and the insert.
+    // highest number and the insert. Moved (§0.277): a rep's create is written in a batch behind its deal's claim, so
+    // the racer lands just before the batch that carries the first write — the collision inside the batch, retried.
     db.insert = function (table) {
         const builder = realInsert.call(db, table);
         if (table !== quotes) return builder;
@@ -541,21 +544,24 @@ test('a quote number another save takes between the read and the write is still 
             state.attempts += 1;
             if (state.taken) return q;
             state.taken = { quoteNumber: v.quoteNumber, version: v.version };
-            const execute = q.execute;
-            q.execute = async (...a) => {
-                await realInsert.call(db, quotes).values({ id: RACER, orgId: A, opportunityId: DEAL_K, quoteNumber: v.quoteNumber, version: v.version,
-                    name: 'the racer', status: 'Draft', lineItems: [], createdBy: 'Ravi Slinks' });
-                return execute(...a);
-            };
+            state.race = () => realInsert.call(db, quotes).values({ id: RACER, orgId: A, opportunityId: DEAL_K, quoteNumber: v.quoteNumber, version: v.version,
+                name: 'the racer', status: 'Draft', lineItems: [], createdBy: 'Ravi Slinks' });
             return q;
         };
         return builder;
+    };
+    db.batch = async function (list) {
+        const race = state.race;
+        state.race = null;
+        if (race) await race();
+        return realBatch.call(db, list);
     };
     let r;
     try {
         r = await call('quotes', WHO.karen, 'POST', newQuote(NEW, [line(PROD_ON)]));
     } finally {
         delete db.insert;
+        delete db.batch;
     }
     assert.equal(r.status, 201, `REGRESSION: a number collision was answered as a taken id, or not retried: ${JSON.stringify(r.body)}`);
     assert.ok(state.taken, 'the race was staged');

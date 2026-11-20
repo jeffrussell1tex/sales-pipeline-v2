@@ -680,6 +680,11 @@ export async function missedWrite({ table, id, orgId, headers, gone }) {
 // (merge.mjs writesItsRow). `filter` is ownerWriteFilter's; no claim when it is undefined (an Admin or Manager).
 export const ownerClaim = (table, id, orgId, filter) => (filter === undefined ? [] : [db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${filter} for update) select 1 / count(*) from c`)]);
 
+// A row as read, by its last edit as text (state §0.277; as a merge's claim — merge.mjs stamped): a batch's first
+// statement when what it writes was decided on a read — the row, in this org, unchanged since, locked for the batch —
+// else the whole batch aborts (1 / 0: 22012). `stamp` is the read's `${table.updatedAt}::text`.
+export const rowAsRead = (table, id, orgId, stamp) => db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${table.updatedAt}::text = ${stamp} for update) select 1 / count(*) from c`);
+
 // Whether a batch was refused by its claim (ownerClaim) — the code the abort carries, on the error or its cause.
 export const claimRefused = (e) => String(e?.cause?.code || e?.code || '') === '22012';
 

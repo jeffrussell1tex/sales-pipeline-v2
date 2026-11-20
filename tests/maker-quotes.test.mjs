@@ -81,7 +81,7 @@ test('the create\'s stamp by scan: the exact line, after the body\'s spread, bef
         'const basePayload = {',
         '...sanitize(data),',
         STAMP,
-        'return db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning();');
+        'const done = await db.batch([...claim, db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning()]);');   // moved pin (§0.277): behind the deal's claim
     assert.ok(!/data\.createdBy|data\[['"]createdBy['"]\]/.test(code(SRC)), 'REGRESSION: quotes.mjs reads a body\'s maker');
 });
 
@@ -112,8 +112,7 @@ test('the save by scan: merged over the stored row with the stored maker; the up
         '...existing, ...sanitize(data),',
         'createdBy: existing.createdBy,',
         'const { id: _id, ...fields } = sanitize(merged);',
-        'const [updated] = await db.update(quotes).set(payload)',
-        '.where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId)))');
+        'db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),');   // moved pin (§0.277): the batch's last statement, behind the quote's and the deal's claims
     assert.ok(!/\.insert\(quotes\)|onConflictDoUpdate/.test(put), 'a save never creates');
     assert.ok(!/createdBy:(?!\s*existing\.createdBy,)/.test(put), 'no other maker in the save');
 });

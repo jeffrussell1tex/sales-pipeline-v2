@@ -19,10 +19,10 @@
 
 import { db } from '../../db/index.js';
 import { quotes, opportunities, contacts, accounts, users } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, getTableColumns } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
-import { serverErrorBody, auditAs } from './_lib.mjs';
+import { serverErrorBody, auditAs, ownerWriteFilter, ownerClaim, claimRefused, rowAsRead } from './_lib.mjs';
 import { dealAccess } from './_dealAccess.mjs';
 import { getApprovalTiers } from './quotes.mjs';
 import { quoteTransitionRefusal, quoteNeedsApproval } from '../../src/utils/quoteRules.js';
@@ -82,8 +82,12 @@ export const handler = async (event) => {
 
     try {
         // ── 1. Load quote ─────────────────────────────────────────────────────
-        const [quote] = await db.select().from(quotes)
+        // Read with its last edit as text (state §0.277): the send is claimed on the quote as read — its lines, its terms
+        // and its recipient are what the email says, and the send rule was decided on them.
+        const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)
             .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)));
+        const stamp = read?.stamp;
+        const quote = read ? (({ stamp: _stamp, ...row }) => row)(read) : null;
 
         if (!quote) {
             return { statusCode: 404, headers: responseHeaders, body: JSON.stringify({ error: 'Quote not found' }) };
@@ -263,19 +267,53 @@ export const handler = async (event) => {
 </body>
 </html>`;
 
-        // ── 5. Send email ─────────────────────────────────────────────────────
-        await sendEmail({
-            to: customerEmail,
-            subject: `Your Quote ${quoteNum}${accountName ? ` — ${accountName}` : ''}`,
-            html: emailHtml,
-            fromName: org.name,
-            replyTo,
-        });
+        // ── 5. The send claimed, BEFORE the email (state §0.277) ──────────────
+        // An email cannot be taken back: the quote moves to Sent first, in one batch that lands only while the quote is
+        // as read — its status, lines, terms and recipient, which the email carries (the review: a Draft edited since kept
+        // its status, and was marked Sent holding terms no one approved while the customer got the old ones) — and its
+        // deal still the caller's or nobody's: the quote locked first, then the deal, as the save locks them (one order —
+        // the review: opposite orders deadlocked). Changed, sent by a press in flight with this one, or a deal handed to
+        // another rep since: no email, nothing written, said. A sent quote sent again later is a resend the rules allow.
+        const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId, userRole: auth.userRole });
+        const sentAt = new Date();
+        const claim = ownerClaim(opportunities, quote.opportunityId, orgId, dealMine);
+        let claimed = null;
+        try {
+            const done = await db.batch([rowAsRead(quotes, quoteId, orgId, stamp), ...claim, db.update(quotes)
+                .set({ status: 'Sent to Customer', sentAt, updatedAt: sentAt })
+                .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)))
+                .returning({ id: quotes.id })]);
+            [claimed] = done[done.length - 1];
+        } catch (e) {
+            if (!claimRefused(e)) throw e;
+        }
+        if (!claimed) {
+            const [now] = await db.select({ status: quotes.status }).from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)));
+            const nowAccess = now ? await dealAccess(auth, quote.opportunityId) : null;
+            if (!now || !nowAccess.canRead) return { statusCode: 404, headers: responseHeaders, body: JSON.stringify({ error: 'Quote not found' }) };
+            if (!nowAccess.canWrite) return { statusCode: 403, headers: responseHeaders, body: JSON.stringify({ error: 'Forbidden: you can only send quotes on your own or unassigned deals' }) };
+            // Sent by a press in flight with this one (the review): it went — code 'already', read as done.
+            if (now.status === 'Sent to Customer') return { statusCode: 409, headers: responseHeaders, body: JSON.stringify({ error: 'This quote was just sent — it went once.', code: 'already' }) };
+            return { statusCode: 409, headers: responseHeaders, body: JSON.stringify({ error: `This quote is ${now.status || 'Draft'} now — it changed since it was opened. Nothing was sent.` }) };
+        }
 
-        // ── 6. Update quote status to "Sent to Customer" ──────────────────────
-        await db.update(quotes)
-            .set({ status: 'Sent to Customer', sentAt: new Date(), updatedAt: new Date() })
-            .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)));
+        // ── 6. Send email ─────────────────────────────────────────────────────
+        // A send that fails puts the quote back as it was (state §0.277) — only while it still holds this send's mark.
+        try {
+            await sendEmail({
+                to: customerEmail,
+                subject: `Your Quote ${quoteNum}${accountName ? ` — ${accountName}` : ''}`,
+                html: emailHtml,
+                fromName: org.name,
+                replyTo,
+            });
+        } catch (e) {
+            await db.update(quotes)
+                .set({ status: quote.status, sentAt: quote.sentAt ?? null, updatedAt: new Date() })
+                .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId), eq(quotes.status, 'Sent to Customer'), eq(quotes.sentAt, sentAt)))
+                .catch((undo) => console.error('quote-email: the send failed and the quote could not be put back —', undo.message));
+            throw e;
+        }
         // A quote left the app for a customer's inbox (§0.143).
         await auditAs(orgId, userId, { action: 'quote.emailed', entityType: 'quote', entityId: quoteId, entityName: quoteNum, detail: `To ${customerEmail} · ${accountName}` });
 

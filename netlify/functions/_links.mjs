@@ -344,7 +344,8 @@ async function clearLineProducts(orgId, restored, failed) {
             const done = lineProductsCleared(q.lineItems, live);
             if (!done.cleared) continue;
             cleared += done.cleared;
-            writes.push(db.update(quotes).set({ lineItems: done.lines }).where(and(eq(quotes.orgId, orgId), eq(quotes.id, q.id))));
+            // Its edit stamped (§0.277): a quote save read before it is refused (rowAsRead), never writes the ids back.
+            writes.push(db.update(quotes).set({ lineItems: done.lines, updatedAt: new Date() }).where(and(eq(quotes.orgId, orgId), eq(quotes.id, q.id))));
         }
         if (writes.length) await db.batch(writes);
         return cleared;

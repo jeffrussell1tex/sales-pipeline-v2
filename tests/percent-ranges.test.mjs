@@ -117,8 +117,9 @@ test('quotes.mjs: the deal discount and each line\'s discount are refused, namin
         "merged.dealDiscount = 'dealDiscount' in data ? (cleanDealDiscount(data.dealDiscount) ?? existing.dealDiscount) : (existing.dealDiscount ?? 0);",
         'const totals = calcTotals(lineItems, merged.dealDiscount ?? 0, merged.taxRate, merged.taxExempt);',
         'const termsChanged = quoteTermsChanged(existing, merged);',
-        'await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);',
         'dealDiscount: String(merged.dealDiscount ?? 0),',
+        // Moved pin (§0.277): the deal's sync rides in the save's batch, after the payload is built — still after every refusal.
+        '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),',
         'db.update(quotes).set(payload)');
     assert.ok(!put.includes('merged.dealDiscount ||'), 'REGRESSION: a refused discount read as 0 and written');
 });

@@ -184,6 +184,48 @@ test("§0.276 THE GUARD: a SPIFF claim's save writes only what it names; a rep's
     order.forEach((line, i) => { assert.ok(missed.includes(line), line.slice(0, 60)); if (i) assert.ok(missed.indexOf(line) > missed.indexOf(order[i - 1]), 'in order'); });
 });
 
+test("§0.277 THE GUARD: a quote's save is one batch — the quote as read, its deal still the caller's or nobody's, then the deal's value and the quote; a create rides behind the deal's claim; a miss is read again", () => {
+    const src = read('netlify/functions/quotes.mjs');
+    const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
+    assert.ok(put.includes('const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)'), 'read with its last edit as text');
+    assert.ok(put.includes("const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId: auth.userId, userRole });"));
+    const batch = between(put, 'wrote = await db.batch([\n', '                ]);');
+    const order = ['rowAsRead(quotes, existing.id, orgId, stamp),', '...dealClaim,', '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),', 'db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),'];
+    order.forEach((line, i) => { assert.ok(batch.includes(line), line); if (i) assert.ok(batch.indexOf(line) > batch.indexOf(order[i - 1]), `in order: ${line}`); });
+    assert.ok(!put.includes('await syncToOpportunity('), 'the deal\'s value never written apart from the quote');
+    assert.ok(put.includes("if (!claimRefused(e)) throw e;\n                return missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);"));
+    // The review: the claim's own lines whole — an empty claim (its filter dropped) passes every other pin.
+    assert.ok(put.includes('const dealClaim = ownerClaim(opportunities, existing.opportunityId, orgId, dealMine);'));
+    const missed = between(src, 'async function missedQuote(auth, id, forbidden, moveTo = null) {', '\n}\n');
+    assert.ok(missed.includes('if (!now) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canRead) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canWrite) return refuse(403, forbidden);'));
+    assert.ok(missed.includes("if (moveTo && now.status === moveTo) return { statusCode: 409, headers, body: JSON.stringify({ error: `This quote is ${moveTo} already.`, code: 'already' }) };"), 'the move it asked for made by a press in flight with it: done (the review)');
+    assert.ok(missed.indexOf('return refuse(409,') > missed.indexOf('if (moveTo && now.status === moveTo)'), 'changed since read: 409, last');
+    const post = between(src, "if (event.httpMethod === 'POST') {", "if (event.httpMethod === 'PUT') {");
+    assert.ok(post.includes('const claim = ownerClaim(opportunities, access.deal.id, orgId, dealMine);') && post.includes('const done = await db.batch([...claim, db.insert(quotes)'), 'a create behind the deal\'s claim');
+    assert.ok(post.includes("return now.canRead ? refuse(403, 'Forbidden: you can only quote your own or unassigned deals') : refuse(404, 'Deal not found');"));
+    const lib = read('netlify/functions/_lib.mjs');
+    assert.ok(lib.includes('export const rowAsRead = (table, id, orgId, stamp) => db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${table.updatedAt}::text = ${stamp} for update) select 1 / count(*) from c`);'));
+});
+
+test('§0.277 THE GUARD: the quote email is claimed before it is sent — the quote in the status the checks read, its deal still the caller\'s or nobody\'s — and a send that fails puts the quote back', () => {
+    const src = read('netlify/functions/quote-email.mjs');
+    const claimAt = src.indexOf('const done = await db.batch([rowAsRead(quotes, quoteId, orgId, stamp), ...claim, db.update(quotes)');
+    const sendAt = src.indexOf('await sendEmail({');
+    assert.ok(claimAt > 0 && sendAt > claimAt, 'the claim before the email — an email cannot be taken back');
+    assert.ok(src.includes("const claim = ownerClaim(opportunities, quote.opportunityId, orgId, dealMine);"));
+    assert.ok(src.includes("const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId, userRole: auth.userRole });"), 'the deal\'s filter, whole (the review)');
+    // The review: claimed on the quote as read — its stamp, not its status alone (a Draft edited since kept its status) —
+    // and the quote locked before the deal, as the save locks them (opposite orders deadlocked).
+    assert.ok(src.includes('const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)'), 'read with its last edit as text');
+    assert.ok(src.includes('[claimed] = done[done.length - 1];'));
+    assert.ok(src.includes("if (now.status === 'Sent to Customer') return { statusCode: 409, headers: responseHeaders, body: JSON.stringify({ error: 'This quote was just sent — it went once.', code: 'already' }) };"), 'a press in flight with one that sent it: done');
+    assert.ok(src.includes('        if (!claimed) {') && src.indexOf('        if (!claimed) {') < sendAt, 'no claim, no email');
+    assert.ok(src.includes('return { statusCode: 409, headers: responseHeaders, body: JSON.stringify({ error: `This quote is ${now.status || \'Draft\'} now — it changed since it was opened. Nothing was sent.` }) };'));
+    const undo = between(src, '        } catch (e) {\n            await db.update(quotes)', 'throw e;');
+    assert.ok(undo.includes('.set({ status: quote.status, sentAt: quote.sentAt ?? null, updatedAt: new Date() })') && undo.includes("eq(quotes.status, 'Sent to Customer'), eq(quotes.sentAt, sentAt)"), 'put back as it was — only while it still holds this send\'s mark');
+    assert.ok(!/await db\.update\(quotes\)\s*\.set\(\{ status: 'Sent to Customer', sentAt: new Date\(\)/.test(src), 'REGRESSION: the status written after the email');
+});
+
 test('§0.275 _lib: the filter is no filter for an Admin or Manager, the caller\'s mayMutate in SQL for anyone else; a missed write is 403 while the row stands, the caller\'s 404 when gone', () => {
     const lib = read('netlify/functions/_lib.mjs');
     const fn = between(lib, 'export async function ownerWriteFilter(', '\n}\n');

@@ -357,7 +357,8 @@ test('THE GUARD: each single create answers 409 for an id another org holds — 
     for (const [name, table, noun] of [['contacts', 'contacts', 'contact'], ['activities', 'activities', 'activity'], ['tasks', 'tasks', 'task'], ['opportunities', 'opportunities', 'deal'], ['accounts', 'accounts', 'account'],
         ['spiff-claims', 'spiffClaims', 'claim'], ['quotes', 'quotes', 'quote']]) {
         const s = fn(name);
-        assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id }).returning();`), `${name}: the create writes nothing for a taken id`);
+        // Moved pin (§0.277): a quote's create rides in its deal's claim batch — the same insert, the batch's last statement.
+        assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id }).returning()${name === 'quotes' ? ']);' : ';'}`), `${name}: the create writes nothing for a taken id`);
         assert.ok(s.includes(`if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${noun} id is already in use.' }) };`), name);
     }
 });

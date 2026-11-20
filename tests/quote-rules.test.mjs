@@ -146,7 +146,7 @@ test('quotes.mjs: a quote reaches the caller where its deal does; a POST and a P
     assert.ok(put.includes('approvalTier: existing.approvalTier, approvalReason: existing.approvalReason,'), 'the approval stamp is the server\'s');
     assert.ok(put.includes('const edit = quoteEditOutcome({ status: from, termsChanged });') && put.includes('if (edit.refusal) return refuse(409, edit.refusal);'));
     assert.ok(put.includes('const moveRefusal = quoteTransitionRefusal({'));
-    assert.ok(put.includes('await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);'), 'an accept syncs the stored deal');
+    assert.ok(put.includes('...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),'), 'an accept syncs the stored deal — in the save\'s batch (§0.277)');
     assert.ok(put.includes("stamps.approvedBy = (await getCallerName(auth.userId, orgId)) || 'Approver';"), 'the approver by name');
     assert.ok(put.includes("if (moved && to === 'Sent to Customer') stamps.sentAt = new Date();"));
     assert.ok(s.includes("'Sent to Customer': 'quote.sent',") && s.includes("'Rejected / Lost':  'quote.rejected',"), 'the audit words are the stored words');
@@ -163,7 +163,8 @@ test('quote-email.mjs: the writers, the deal\'s writer, the send rule; every val
     }
     const html = s.replace(/subject:[^\n]*/g, '').replace(/detail:[^\n]*/g, '');
     assert.ok(!/\$\{(quote\.notes|customerName|accountName|quote\.paymentTerms|raw)\}/.test(html), 'nothing typed by a person reaches the HTML raw');
-    assert.ok(s.includes('sentAt: new Date()'));
+    // Moved pin (§0.277): the send claimed before the email, its time the claim's.
+    assert.ok(s.includes('const sentAt = new Date();') && s.includes(".set({ status: 'Sent to Customer', sentAt, updatedAt: sentAt })"));
 });
 
 test('quote-to-job.mjs: the card\'s GET and the POST answer only for a quote whose deal the caller can see', () => {
