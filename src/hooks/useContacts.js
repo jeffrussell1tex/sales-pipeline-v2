@@ -37,8 +37,10 @@ export function useContacts(deps) {
     // This hook's delete had no caller: the row menu deleted at once, without a
     // confirm and without the open-deal check, and the bulk Delete skipped the check.
     //
-    // opts.admin: the caller is an Admin — every contact in the org going, none kept,
-    // clears them in one request. opts.onConfirm runs when the user confirms.
+    // Every Delete sends the ids pressed, one DELETE each — never the org-wide clear (state §0.274): an Admin's Delete
+    // of as many contacts as the list held when it loaded sent `clear=true`, and the server wiped every contact of the
+    // org — one another tab or member added since, or one this screen never loaded, with them; the Undo re-POSTs only
+    // the screen's. opts.onConfirm runs when the user confirms.
     const handleDeleteContacts = (ids, opts = {}) => {
         const wanted = contacts.filter(c => (ids || []).includes(c.id));
         if (!wanted.length) return;
@@ -68,21 +70,15 @@ export function useContacts(deps) {
             setContacts(prev => prev.filter(c => !goingIds.includes(c.id)));
             const failed = [];
             const goneIds = [];   // gone already (§0.273): done, never in this press's Undo
-            if (opts.admin && !kept.length && goingIds.length === contacts.length) {
-                const r = await dbWrite('/.netlify/functions/contacts?clear=true', { method: 'DELETE' });
-                if (!stillOrg(askedOrg)) return;
-                if (!r.ok) failed.push(...going.map(c => ({ c, error: r.error, unknown: r.unknown })));
-            } else {
-                for (const c of going) {
-                    if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                    const r = await dbWrite(`/.netlify/functions/contacts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
-                    // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
-                    // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
-                    if (!r.ok && r.landed) { goneIds.push(c.id); continue; }
-                    if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown });
-                }
-                if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
+            for (const c of going) {
+                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
+                const r = await dbWrite(`/.netlify/functions/contacts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+                // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
+                // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
+                if (!r.ok && r.landed) { goneIds.push(c.id); continue; }
+                if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown });
             }
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
                 // What the server refused is put back, and the first refusal is shown — the server's open-deal refusal

@@ -240,7 +240,8 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                // Org-wide wipe — Admin only. Non-admin bulk deletes use per-id DELETEs (see ContactsTab).
+                // Org-wide wipe — Admin only, for a direct request. No screen sends it since §0.274: every contacts Delete
+                // goes by id, an Admin's too (it wiped contacts another tab added since, past the Undo).
                 const forbidden = requireRole(auth, ['Admin'], headers);
                 if (forbidden) return forbidden;
                 // A contact on an open deal is kept (state §0.178): the wipe is refused while any is.

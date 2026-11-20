@@ -5420,13 +5420,15 @@ const mutations = [
         "src/hooks/useOpportunities.js",
         "                    if (!stillOrg(askedOrg)) return;\n                    if (data) setOpportunities(prev => [...prev, data.opportunity || newOpp]);",
         "                    if (data) setOpportunities(prev => [...prev, data.opportunity || newOpp]);"],
+    // (repointed §0.274) the clear's branch is gone since §0.274, its loop a level out: the same break.
     ['late answer: a bulk delete sends its next DELETE with the new org\'s token',
         'src/hooks/useContacts.js',
-        "                    if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token\n",
+        "                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token\n",
         ''],
+    // (repointed §0.274) the clear's branch is gone since §0.274, its loop a level out: the same break.
     ['late answer: an Undo for the last org\'s contact on the new org\'s screen',
         'src/hooks/useContacts.js',
-        "                if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen\n",
+        "            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen\n",
         ''],
     ['late answer: Log from calendar opens with the last org\'s meetings',
         'src/App.jsx',
@@ -5681,12 +5683,14 @@ const mutations = [
         "((_, go) => go())(`Delete ${what}? You'll have a few seconds to undo.${keptLine}`, async () => {"],
     ['deletes: the Contacts row menu deletes on its own again',
         'src/Tabs/ContactsTab.jsx',
-        "const handleDeleteOne = (contact) => handleDeleteContacts([contact.id], { admin: userRole === 'Admin' });",
+        "const handleDeleteOne = (contact) => handleDeleteContacts([contact.id]);",   // (repointed §0.274) no admin option since §0.274: the same own DELETE
         "const handleDeleteOne = (contact) => dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' });"],
-    ['deletes: the one-request clear runs with a contact kept',
-        'src/hooks/useContacts.js',
-        'if (opts.admin && !kept.length && goingIds.length === contacts.length) {',
-        'if (opts.admin && goingIds.length === contacts.length) {'],
+    // (retired §0.274) 'deletes: the one-request clear runs with a contact kept' — the clear it guarded is gone: a
+    // contacts Delete sends the ids pressed, never clear=true. Its successor, below, puts the clear back.
+    ["§0.274 contacts: a Delete of as many contacts as the list holds sends the org-wide clear — wiping one another tab added since",
+        "src/hooks/useContacts.js",
+        "            for (const c of going) {\n                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token\n",
+        "            if (goingIds.length === contacts.length) { const r = await dbWrite('/.netlify/functions/contacts?clear=true', { method: 'DELETE' }); if (!r.ok) failed.push(...going.map(c => ({ c, error: r.error, unknown: r.unknown }))); }\n            else for (const c of going) {\n                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token\n"],
     ['deletes: an account with an open deal is deleted',
         'src/hooks/useAccounts.js',
         'const kept = wanted.map(a => ({ a, deal: openDealOf(a) })).filter(k => k.deal);',
@@ -13144,7 +13148,7 @@ const mutations = [
         "netlify/functions/accounts.mjs",
         ".where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.name));",
         ".where(and(eq(accounts.orgId, orgId), eq(accounts.mergeArchived, false))).orderBy(asc(accounts.name));"],
-    ["§0.206 contacts GET: merged-away contacts left out — a chip or a deal's committee loses its survivor, and an Admin's Select all + Delete equals the whole list and sends clear=true, deleting them (their Undo lost)",
+    ["§0.206 contacts GET: merged-away contacts left out — a chip or a deal's committee loses its survivor",   // (renamed §0.274: no Delete sends clear=true now)
         "netlify/functions/contacts.mjs",
         ".where(eq(contacts.orgId, orgId)).orderBy(asc(contacts.lastName));",
         ".where(and(eq(contacts.orgId, orgId), eq(contacts.mergeArchived, false))).orderBy(asc(contacts.lastName));"],
@@ -13160,7 +13164,7 @@ const mutations = [
         "src/hooks/useAccounts.js",
         "setAccounts(data.accounts || []); })",
         "setAccounts(data.accounts?.filter(a => !a.mergeArchived) ?? []); })"],
-    ["§0.206 contacts load: merged-away contacts dropped as they load — an Admin's Select all + Delete then equals the whole list and sends clear=true, deleting them (their Undo lost)",
+    ["§0.206 contacts load: merged-away contacts dropped as they load — a link to one reads \"can't open\", a chip or a deal's committee loses its survivor",   // (renamed §0.274: no Delete sends clear=true now)
         "src/hooks/useContacts.js",
         "setContacts(data.contacts || []); })",
         "setContacts(data.contacts?.filter(c => !c.mergeArchived) ?? []); })"],
@@ -13212,7 +13216,7 @@ const mutations = [
         "netlify/functions/accounts.mjs",
         ".where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.name));",
         ".where(and(eq(accounts.orgId, orgId), isNull(accounts.archivedAt))).orderBy(asc(accounts.name));"],
-    ["§0.206 contacts GET: merged-away contacts dropped through archived_at as they are read — a chip or a deal's committee loses its survivor, and an Admin's Select all + Delete equals the whole list and sends clear=true, deleting them (their Undo lost)",
+    ["§0.206 contacts GET: merged-away contacts dropped through archived_at as they are read — a chip or a deal's committee loses its survivor",   // (renamed §0.274: no Delete sends clear=true now)
         "netlify/functions/contacts.mjs",
         ".where(eq(contacts.orgId, orgId)).orderBy(asc(contacts.lastName));",
         ".where(eq(contacts.orgId, orgId)).orderBy(asc(contacts.lastName)).then(rows => rows.filter(r => !r.archivedAt));"],
@@ -28592,7 +28596,7 @@ const mutations = [
         ""],
     ["§0.273 contacts screen: a contact gone already put back and said as not deleted",
         "src/hooks/useContacts.js",
-        "                    if (!r.ok && r.landed) { goneIds.push(c.id); continue; }\n",
+        "                if (!r.ok && r.landed) { goneIds.push(c.id); continue; }\n",   // (repointed §0.274) a level out: the same break
         ""],
     ["§0.273 deals screen: a deal gone already put back and said as not deleted",
         "src/hooks/useOpportunities.js",

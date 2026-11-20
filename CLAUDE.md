@@ -417,8 +417,8 @@ One commit per verified batch; doc patch in the same commit.
   screens draw — the Accounts and Contacts tabs, Sub-Accounts, an account's
   People and the contact counts — through `unarchived` / `getSubAccounts`;
   the app's `accounts` and `contacts`, their loads and both GETs keep the
-  merged-away rows (links name the survivor through them; the one-request
-  contacts clear compares the whole list). A new read of the app's whole
+  merged-away rows (links name the survivor through them; since §0.274 no
+  Delete clears the org in one request — each sends the ids pressed). A new read of the app's whole
   lists in any file that imports `useApp`, or in any component a list is
   handed to, fails THE GUARD (tests/merged-away-lists.test.mjs) unless it
   is a shape the guard names or is named with its reason; App.jsx's own

@@ -322,3 +322,14 @@ test('§0.273 WIRING: every DELETE to the five CRM functions under src/ sends it
     };
     for (const [f, line] of Object.entries(hooks)) assert.ok(read(f).includes(line), `${f} reads landed`);
 });
+
+// ── §0.274: no org-wide clear from a contacts Delete ──
+test('§0.274 RUN contacts: an Admin\'s Delete of every contact the list holds sends one DELETE per id — never the org-wide clear, which wiped contacts another tab added since', async () => {
+    const r = runContacts([]);
+    r.del(['c1', 'c2', 'c3'], { admin: true });   // what the tab sent an Admin's press with before §0.274: ignored now
+    await r.did.pending;
+    assert.deepEqual(r.did.sent.filter(([m]) => m === 'DELETE').map(([, u]) => u),
+        ['/.netlify/functions/contacts?id=c1', '/.netlify/functions/contacts?id=c2', '/.netlify/functions/contacts?id=c3']);
+    assert.ok(!r.did.sent.some(([, u]) => u.includes('clear=true')), 'no clear');
+    assert.equal(r.did.undo.label, '3 contacts');
+});

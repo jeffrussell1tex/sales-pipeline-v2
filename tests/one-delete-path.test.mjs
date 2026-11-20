@@ -125,14 +125,19 @@ test('contacts: a contact on an open deal is kept and named; the rest go after a
     assert.ok(fn.indexOf('showBlockedDelete(') < fn.indexOf('showConfirm('), 'all kept: refused before any confirm');
     assert.ok(fn.includes("showConfirm(`Delete ${what}? You'll have a few seconds to undo.${keptLine}`, async () => {"), 'a confirm, naming what is kept');
     assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('), 'nothing sent before the confirm');
-    assert.ok(fn.includes("if (opts.admin && !kept.length && goingIds.length === contacts.length) {"), 'the one-request clear only when nothing is kept');
+    // Moved pin (§0.274): no one-request clear — every Delete sends the ids pressed, an Admin's too (it wiped the org's
+    // contacts another tab added since). tests/stale-deletes.test.mjs runs it.
+    assert.ok(!fn.includes('clear=true') && !fn.includes('opts.admin'), 'no org-wide clear from a Delete');
+    assert.equal(fn.split("method: 'DELETE'").length - 1, 1, 'one DELETE, by id');
     assert.ok(fn.indexOf('softDelete(') > fn.lastIndexOf("method: 'DELETE'"), 'Undo once the DELETEs have landed');
     assert.ok(!src.includes('const handleDeleteContact = '), 'the old handler is gone');
 });
 
 test('contacts: the tab\'s row menus and bulk Delete call the hook', () => {
     const src = read('src/Tabs/ContactsTab.jsx');
-    assert.ok(src.includes("const handleDeleteOne = (contact) => handleDeleteContacts([contact.id], { admin: userRole === 'Admin' });"));
+    // Moved pin (§0.274): no `admin` — a Delete goes by id, whoever presses it.
+    assert.ok(src.includes('const handleDeleteOne = (contact) => handleDeleteContacts([contact.id]);'));
+    assert.ok(!src.includes('admin: userRole'), 'the tab asks for no clear');
     assert.ok(src.includes('handleDeleteContacts(selectedIds, {'));
     assert.ok(!/method:\s*'DELETE'/.test(src), 'the tab sends no DELETE of its own');
 });

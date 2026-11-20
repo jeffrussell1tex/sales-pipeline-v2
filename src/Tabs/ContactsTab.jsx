@@ -784,11 +784,10 @@ export default function ContactsTab() {
     // path (state §0.178): a confirm, a contact on an open deal kept, Undo. The row menu
     // deleted at once, with no confirm and no open-deal check, and the bulk Delete
     // skipped the check.
-    const handleDeleteOne = (contact) => handleDeleteContacts([contact.id], { admin: userRole === 'Admin' });
+    const handleDeleteOne = (contact) => handleDeleteContacts([contact.id]);   // by id, an Admin's too (state §0.274)
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
         handleDeleteContacts(selectedIds, {
-            admin: userRole === 'Admin',
             onConfirm: () => { setSelectedIds([]); setSelectMode(false); },
         });
     };

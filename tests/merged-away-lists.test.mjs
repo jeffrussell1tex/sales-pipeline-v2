@@ -20,8 +20,8 @@
 // Now each of those screens draws its list through unarchived / isMergeArchived (src/utils/pickLink.js). The app's
 // `accounts` and `contacts` — both GETs, both hooks' loads, the context that hands them on — keep every row: a link
 // to a merged-away record names its survivor through it, the account picker offers no Create for the name the merge
-// removed, the import names a parent through it, and the Admin's one-request clear of the contacts compares the
-// whole list — so a Select all of the listed contacts never clears a merged-away one (useContacts.js).
+// removed, the import names a parent through it; and since §0.274 no Delete clears the org's contacts in one request —
+// each sends the ids pressed, so a Select all of the listed contacts never reaches a merged-away one (useContacts.js).
 //
 // Run here, on made-up rows in the shapes Jeff met (Resinall and "Resinall, Inc."; Evonik's two Lafayette sites, one
 // merged into the other): each screen's list, read from its file and run as written — and the lines as they stood
@@ -207,9 +207,10 @@ test("T2 — the Contacts tab: a merged-away contact is not listed, in All or in
         '    }, [visibleContacts, search, contactsSortBy]);',
     ]) once(tab, line);
     assert.ok(tab.includes('        const csvRows = sorted.map(c => ['), 'Export: the list shown');
-    // The hook clears the whole org in one request only when the ids going are as many as the whole loaded list.
+    // Moved pin (§0.274): the hook clears nothing in one request — every Delete sends the ids pressed, so a Select all
+    // of the listed contacts reaches no merged-away one (nor one another tab added since).
     const hook = code(read('src/hooks/useContacts.js'));
-    assert.ok(hook.includes('if (opts.admin && !kept.length && goingIds.length === contacts.length) {'), 'the clear compares the whole list');
+    assert.ok(!hook.includes('clear=true'), 'no one-request clear');
     const goingIds = ids(listed('all', 'usr_admin', CONTACTS));
     assert.notEqual(goingIds.length, CONTACTS.length, "a Select all of the listed contacts is not the whole list: the merged-away contact is not cleared, and its merge's Undo stays");
 });
@@ -379,14 +380,14 @@ test("T6 — the record is kept: both GETs answer every row of the org, narrowed
         const get = between(code(read(`netlify/functions/${table}.mjs`)), "        if (event.httpMethod === 'GET') {",
             `            return { statusCode: 200, headers, body: JSON.stringify({ ${table}: results }) };`);
         assert.equal(get, GET_CODE(table, sortBy),
-            `REGRESSION: the ${table} GET leaves rows out — a link to a merged-away one reads "can't open", the picker offers Create for the name a merge removed${table === 'contacts' ? ", and an Admin's Select all + Delete equals the whole list and sends clear=true, deleting them (their Undo lost)" : ''} (guide §18b99)`);
+            `REGRESSION: the ${table} GET leaves rows out — a link to a merged-away one reads "can't open", the picker offers Create for the name a merge removed${table === 'contacts' ? ", and the contact counts and lists lose what names it" : ''} (guide §18b99)`);
     }
     // The load keeps every row the GET answers, and the context hands the whole lists on: a filter at either layer
     // passes every other pin and brings back every break the GET pins name.
     once(code(read('src/hooks/useAccounts.js')), LOAD_ACCOUNTS,
         "REGRESSION: the accounts load leaves rows out — a link to a merged-away account reads \"can't open\", the picker offers Create for its name");
     once(code(read('src/hooks/useContacts.js')), LOAD_CONTACTS,
-        "REGRESSION: the contacts load leaves merged-away rows out — an Admin's Select all + Delete then sends clear=true and deletes them (their Undo lost)");
+        "REGRESSION: the contacts load leaves merged-away rows out — a link to one reads \"can't open\", and a chip or a deal's committee loses its survivor");
     assert.deepEqual(ids(load(LOAD_ACCOUNTS, 'setAccounts', { accounts: ACCOUNTS })), ids(ACCOUNTS), 'the accounts load: every row answered, merged-away included');
     assert.deepEqual(ids(load(LOAD_CONTACTS, 'setContacts', { contacts: CONTACTS })), ids(CONTACTS), 'the contacts load: every row answered, merged-away included');
     assert.deepEqual(load(LOAD_ACCOUNTS, 'setAccounts', {}), [], 'an answer with no list: none');
@@ -1466,7 +1467,7 @@ test('T9 — the guard sees a view, count or hand-off pointed at the whole list 
 const KEEP = 'keep whole';
 const SERVER_READS = {
     'netlify/functions/accounts.mjs': [`${KEEP}: the GET answers every row of the org, narrowed by the read scope alone (T6), and the Admin's clear reads every account of the org (everyAccount — an open deal on any refuses the clear); the rest read by id — a save's prior row, a delete's lift, a batch's own ids — and the parent rule's names (a merged-away namesake counted as one of the name — found by the cleanup batch's maps, 18 Oct, for batch 3); since §0.261 the create's taken id asked of this org (ownIdTaken — a yes or no, no row answered)`, 9, 8],
-    'netlify/functions/contacts.mjs': [`${KEEP}: the GET answers every row (T6), and the one-request clear compares the whole list; the rest by id; since §0.261 the create's taken id asked of this org (ownIdTaken — a yes or no, no row answered)`, 6, 8],
+    'netlify/functions/contacts.mjs': [`${KEEP}: the GET answers every row (T6), and the Admin's clear=true (no screen sends it since §0.274); the rest by id; since §0.261 the create's taken id asked of this org (ownIdTaken — a yes or no, no row answered)`, 6, 8],
     'netlify/functions/backup.mjs': [`${KEEP}: an org's backup holds every row`, 2, 2],
     'netlify/functions/export-runs.mjs': [`${KEEP}: a Settings → Data export run exports every row of the scope (its SCOPE_TABLE)`, 0, 2],
     'netlify/functions/merge.mjs': [`${KEEP}: the merge and its Undo (state §0.207) read both records, the ones merged away included, by id; since §0.218 the contacts on the record merged away by its id, the live accounts of the merge's old names (Q16), each account a contact merge carries followed to the live one (liveAccountOf), and the batch's claim read again; since its review, each record read with its stamp (stamped) and its claim asserting it (asStamped) — two hand-offs of each table in each merge; since §0.219 the org's accounts (treeOf, the Undo's read, merged-away rows with their mark) handed to the parent rule's merge placement (mergePlacement — it judges live rows only, Q19, and walks a chain through any row), the sub-accounts taken from that same tree with their mark (a merged-away one moves unjudged; their own select gone — the review: a second read let a change in between pass), and the D22 namesakes through 3c's live read; since §0.270 the survivor answered by its own update in the batch — its two reads again after it gone`, 13, 25],
