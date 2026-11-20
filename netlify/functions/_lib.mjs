@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
+import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert, ownerMayWrite } from './_bulk.mjs';
 import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBIDDEN, isAppUserId, keepsOwner } from './_ownership.mjs';
 // Audit streaming (state §0.87): every row written here is delivered to the
 // org's destinations after the insert. _auditStream.mjs must not import this file.
@@ -649,6 +649,39 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
 
     return { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) };
 }
+
+// ── The write's own half (state §0.275) ──────────────────────────────────────
+//
+// assertOwnership answers from a read; the write ran after it with no owner in its filter, so a reassignment landing
+// between (an Admin or Manager moving the row to another rep) let a rep delete or save over a row no longer theirs
+// (OPEN_ITEMS §4.8, §0.273's found (1); the census of 20 Nov: every write the check gates). Each such write now carries
+// this in its own WHERE — or an upsert in its setWhere, or a batch in its claim — so the row is touched only while it
+// is still the caller's or nobody's: mayMutate, in SQL (ownerMayWrite, _bulk.mjs). undefined for an Admin or Manager
+// (drizzle's and() drops it): ownership does not apply to them. Read after assertOwnership has passed, so a caller
+// it refused never reaches it.
+export async function ownerWriteFilter({ table, entity, orgId, userId, userRole }) {
+    if (canSeeAllRole(userRole)) return undefined;
+    return ownerMayWrite(ownerColumnOf(table, entity), await getCallerId(userId, orgId));
+}
+
+// A gated write that touched no row (state §0.275): the row as it stands now decides. Still in this org — another's
+// since the check: the ownership refusal, as assertOwnership gives it. Gone: `gone`, the caller's own not-found answer
+// (a delete's 404 `code: 'gone'`). A single PUT is an upsert: a row deleted since its read has no conflict, so its
+// insert arm writes it again (OPEN_ITEMS §4.8, §0.273's found (3)) and its `gone` fires only for an id another org
+// holds — the accounts PUT alone refuses that, by its claim.
+export async function missedWrite({ table, id, orgId, headers, gone }) {
+    const [row] = await db.select({ id: table.id }).from(table).where(and(eq(table.id, id), eq(table.orgId, orgId)));
+    return row ? { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) } : gone;
+}
+
+// A batch's first statement when a rep's write is more than one statement (state §0.275; the accounts PUT — its deal
+// lifts and tier writes ride with the account): the row, in this org, still the caller's or nobody's, locked for the
+// rest of the batch — else the whole batch aborts (1 / 0: 22012) and nothing of it lands, as a merge's claim does
+// (merge.mjs writesItsRow). `filter` is ownerWriteFilter's; no claim when it is undefined (an Admin or Manager).
+export const ownerClaim = (table, id, orgId, filter) => (filter === undefined ? [] : [db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${filter} for update) select 1 / count(*) from c`)]);
+
+// Whether a batch was refused by its claim (ownerClaim) — the code the abort carries, on the error or its cause.
+export const claimRefused = (e) => String(e?.cause?.code || e?.code || '') === '22012';
 
 // ── First sign-in provisioning (state §0.108) ────────────────────────────────
 //

@@ -276,7 +276,8 @@ test('§0.273 RUN accounts: a Delete while their own Undo is out sends nothing a
 
 // ── the servers ──
 test('§0.273 THE CLASS: each of the five DELETEs answers its 404 `gone`; no PUT 404 says it', () => {
-    const del404 = "statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };";
+    // Moved pin (§0.275): contacts, activities and tasks hand theirs to missedWrite as `gone` — the same answer.
+    const del404 = "statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' })";
     for (const [f, n] of [['accounts', 2], ['contacts', 1], ['opportunities', 1], ['activities', 1], ['tasks', 1]]) {
         const src = read(`netlify/functions/${f}.mjs`);
         const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");

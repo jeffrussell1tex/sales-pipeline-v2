@@ -13,9 +13,26 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 // The ownership POLICY lives in one place and is applied here too. Both modules
 // are pure, so importing costs nothing and removes the possibility of the bulk
 // path and the single-record path disagreeing -- which is exactly what happened.
-import { mayMutate } from './_ownership.mjs';
+import { mayMutate, isAppUserId } from './_ownership.mjs';
 
 export const BULK_CHUNK = 400;
+
+// ── ownerMayWrite ────────────────────────────────────────────────────────────
+// mayMutate, in the write's own SQL (state §0.275; OPEN_ITEMS §4.8, §0.273's found (1)): the row as it stands when
+// the write runs is unassigned, or the caller's. A rep's write was checked by a read (assertOwnership, or the bulk
+// path's read below) and then ran with no owner in its filter — a reassignment landing between let a rep delete or
+// save over a row no longer theirs. With this in the write's WHERE (or an upsert's setWhere), a row reassigned since
+// the check is touched by nothing. The same rule as mayMutate, case for case: blank or spaces only is unassigned; an
+// owned row needs a caller with an app id, compared trimmed; a caller with no app id writes only unassigned rows.
+// btrim trims spaces where JS trim() trims every whitespace: an owner id padded with a tab reads as owned here, and the
+// write refuses where mayMutate would allow; and mayMutate compares the caller's id as given, the SQL too — so an owner
+// and a caller both ending in a tab match here and not there. Neither can arise from the app (every id is 'usr_' and
+// a UUID), and the write never runs alone: mayMutate's read has passed first, so the two together never allow more
+// than mayMutate does. Never for an Admin or Manager (canSeeAll): the caller passes no filter.
+export function ownerMayWrite(column, callerId) {
+    const unassigned = sql`coalesce(btrim(${column}), '') = ''`;
+    return isAppUserId(callerId) ? sql`(${unassigned} or btrim(${column}) = ${callerId})` : unassigned;
+}
 
 // ── bulkInsert ───────────────────────────────────────────────────────────────
 // The INSERT half of the same problem. bulkUpsert fixed the PUT path last
@@ -247,13 +264,19 @@ export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, calle
         return out;
     };
 
+    // A rep's rows are written only while still theirs or nobody's (state §0.275): the read above is the check, and
+    // a row reassigned since is touched by nothing — counted forbidden, as the read would have found it.
+    const mine = (ownerColumn && !canSeeAll) ? ownerMayWrite(ownerColumn, callerId) : undefined;
     let updated = 0;
+    const written = new Set();
     for (let i = 0; i < eligible.length; i += BULK_CHUNK) {
         const chunk = eligible.slice(i, i + BULK_CHUNK).map(backfill);
         const done = await db.insert(table).values(chunk)
-            .onConflictDoUpdate({ target: table.id, setWhere: eq(table.orgId, orgId), set })
+            .onConflictDoUpdate({ target: table.id, setWhere: and(eq(table.orgId, orgId), mine), set })
             .returning({ id: table.id });
         updated += done.length;
+        for (const d of done) written.add(d.id);
     }
+    for (const row of eligible) if (!written.has(row.id)) forbidden.push(row.id);
     return { updated, notFound, forbidden };
 }

@@ -9,7 +9,7 @@ import { taskEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { checkLinks } from './_links.mjs';
@@ -149,9 +149,11 @@ export const handler = async (event) => {
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'task', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
+            const mine = await ownerWriteFilter({ table: tasks, entity: 'task', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: tasks.id, setWhere: eq(tasks.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: tasks.id, setWhere: and(eq(tasks.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            if (!upserted) return missedWrite({ table: tasks, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Task not found' }) } });
 
             // Webhook: task.completed — only fires the first time completed flips to true
             if (!wasCompleted && upserted.completed) {
@@ -198,9 +200,11 @@ export const handler = async (event) => {
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a
             // name once the record is gone.
-            const [deletedRow] = await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId))).returning();
-            // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            const mine = await ownerWriteFilter({ table: tasks, entity: 'task', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
+            const [deletedRow] = await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId), mine)).returning();
+            // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
+            // check: still here, the ownership refusal (missedWrite); gone, the 404.
+            if (!deletedRow) return missedWrite({ table: tasks, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('task', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

@@ -192,7 +192,8 @@ test('WIRING: the endpoint applies a note by compare-and-set, stamps it from the
     assert.ok(branch.includes("if (Object.keys(data).some(k => k !== 'id' && k !== 'note')) return { statusCode: 400"), 'a note alone');
     assert.ok(branch.includes('const me = await resolveCaller(userId, orgId);'), 'the caller from the session, never the body');
     assert.ok(branch.includes("const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });"));
-    assert.ok(branch.includes('.where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments)))'), 'the compare-and-set, in this org');
+    // Moved pin (§0.275): only while the deal is still the caller's or nobody's.
+    assert.ok(branch.includes('.where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments), mine))'), 'the compare-and-set, in this org, while still the caller\'s or nobody\'s');
     assert.ok(branch.includes('[stored] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));'), 'a moved list read again');
     assert.ok(branch.includes("body: JSON.stringify({ error: applied.error, ...(applied.code ? { code: applied.code } : {}), comments: notesOf(stored.comments) })"), 'a refusal answers the notes as stored (its code with it since §0.271)');
     assert.ok(s.includes("? isNull(opportunities.comments)\n    : sql`${opportunities.comments} = ${JSON.stringify(stored)}::jsonb`);"));

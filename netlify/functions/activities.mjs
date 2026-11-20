@@ -6,7 +6,7 @@ import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -176,12 +176,11 @@ export const handler = async (event) => {
             // it leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'activity', orgId, stored: target });
             if (ownPut.change) { clean.ownerId = ownPut.ownerId; updateData.ownerId = ownPut.ownerId; }
+            const mine = await ownerWriteFilter({ table: activities, entity: 'activity', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: activities.id, setWhere: and(eq(activities.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
-            if (!upserted) {
-                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) };
-            }
+            if (!upserted) return missedWrite({ table: activities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) } });
             if (upserted.leadId) { try { await rescoreLead(orgId, upserted.leadId); } catch (e) { console.warn('lead rescore (put) failed:', e.message); } }
             // The deal it names now, and the one it named before when the edit moved it.
             return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted, dealScores: await rescoreDeals(orgId, [upserted.opportunityId, target.opportunityId]) }) };
@@ -212,9 +211,11 @@ export const handler = async (event) => {
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a
             // name once the record is gone.
-            const [deletedRow] = await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId))).returning();
-            // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            const mine = await ownerWriteFilter({ table: activities, entity: 'activity', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
+            const [deletedRow] = await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId), mine)).returning();
+            // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
+            // check: still here, the ownership refusal (missedWrite); gone, the 404.
+            if (!deletedRow) return missedWrite({ table: activities, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('activity', deletedRow, { userId }));
             if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ success: true, dealScores: await rescoreDeals(orgId, [deletedRow.opportunityId]) }) };

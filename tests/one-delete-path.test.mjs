@@ -243,7 +243,8 @@ test('server: accounts.mjs refuses an account with an open deal — after its ga
 test('a delete\'s audit line is the server\'s — each DELETE writes <record>.deleted once the row is gone, and no screen writes its own', () => {
     for (const [file, entity] of [['contacts', 'contact'], ['accounts', 'account'], ['opportunities', 'opportunity'], ['tasks', 'task'], ['activities', 'activity']]) {
         const del = between(read(`netlify/functions/${file}.mjs`), "if (event.httpMethod === 'DELETE') {", 'return { statusCode: 405');
-        const gone = del.indexOf('if (!deletedRow) return { statusCode: 404');
+        // Moved pin (§0.275): a rep's three DELETEs answer a missed row through missedWrite (403 still there, 404 gone).
+        const gone = Math.max(del.indexOf('if (!deletedRow) return { statusCode: 404'), del.indexOf('if (!deletedRow) return missedWrite({'));
         assert.ok(gone > 0 && del.indexOf(`deletionAudit('${entity}', deletedRow`) > gone, `${file}.mjs: its audit line, after the row is gone`);
     }
     // The hooks' own 'delete' lines ran before the answer: a refused delete was logged

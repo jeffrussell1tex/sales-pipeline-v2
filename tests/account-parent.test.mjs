@@ -701,10 +701,13 @@ test("accounts.mjs: a parent is checked against THIS org's rows when a create na
     assert.ok(put.includes('const placed = placeAccount(tree, { selfId: clean.id, selfName: clean.name, parentId: clean.parentAccountId, tier: data.accountTier, branch: true });'), "the body's tier first, then the stored one (D21)");
     assert.ok(put.includes('                if (placed.error) return refusedPlace(placed, headers);\n                clean.accountTier = placed.tiers.get(clean.id);\n                retiered = tierChanges(tree, placed.tiers, clean.id);\n'), 'refused, or the branch re-fitted');
     assert.ok(put.includes('            } else {\n                clean.accountTier = sanitize(prior).accountTier;\n            }'), "the parent as stored: the tier as stored, whatever the body says (a screen loaded before another session's move)");
-    const batch = between(put, 'const [[upserted], ...lifts] = await db.batch([', ']);');
+    // Moved pin (§0.275): a rep's batch opens with its owner claim, the account's write after it.
+    const batch = between(put, 'wrote = await db.batch([', ']);');
+    assert.ok(batch.startsWith('wrote = await db.batch([\n                    ...claim,\n                    db.insert(accounts)'), "the owner claim first (state §0.275): a rep's account reassigned since the check aborts the whole batch");
     assert.ok(batch.includes('db.insert(accounts).values({ ...mergedPut, orgId })'), 'one write: the account,');
     assert.ok(batch.includes('...dealLifts(orgId, made),\n'), 'the deals moved up (D22),');
     assert.ok(batch.includes('...tierWrites(orgId, retiered),\n'), 'and the tiers re-fitted under it — all or nothing');
+    assert.ok(put.includes('const [[upserted], ...lifts] = wrote.slice(claim.length);'), 'the claim\'s answer set aside (§0.275)');
     assert.ok(put.includes('const liftedDeals = lifts.slice(0, made.length).flat();'));
     assert.ok(put.includes('JSON.stringify({ account: upserted, renamed, retiered, liftedDeals })'), 'and handed back for the screen');
     const del = between(src, "if (event.httpMethod === 'DELETE') {", 'return { statusCode: 405');

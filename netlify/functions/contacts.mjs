@@ -7,7 +7,7 @@ import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
     rosterUserById,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor } from './_ownership.mjs';
 import { restoredOwner } from '../../src/utils/restoreOwner.js';
@@ -233,9 +233,11 @@ export const handler = async (event) => {
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             Object.assign(clean, linked.set);
             Object.assign(updateData, linked.set);
+            const mine = await ownerWriteFilter({ table: contacts, entity: 'contact', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
             const [upserted] = await db.insert(contacts).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: contacts.id, setWhere: eq(contacts.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: contacts.id, setWhere: and(eq(contacts.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            if (!upserted) return missedWrite({ table: contacts, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) } });
             return { statusCode: 200, headers, body: JSON.stringify({ contact: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
@@ -278,9 +280,11 @@ export const handler = async (event) => {
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a
             // name once the record is gone.
-            const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId))).returning();
-            // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            const mine = await ownerWriteFilter({ table: contacts, entity: 'contact', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
+            const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId), mine)).returning();
+            // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
+            // check: still here, the ownership refusal (missedWrite); gone, the 404.
+            if (!deletedRow) return missedWrite({ table: contacts, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('contact', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

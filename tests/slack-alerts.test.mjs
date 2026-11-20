@@ -181,9 +181,10 @@ test('the bulk stage move posts ONE line for the batch, under the stageChanged s
     const opp = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(opp.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"));
     assert.ok(opp.includes("import { bulkStageSummary } from '../../src/utils/slackAlerts.js';"));
-    const call = '                    await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });';
+    // Moved pin (§0.275, the review): the summary of the rows written, never of a row the batch refused.
+    const call = '                    await postBulkStageMove(orgId, { summary: bulkStageSummary(movedRows, priors), total: data.length, mover: await getCallerName(userId, orgId) });';
     assert.ok(opp.includes(call), 'REGRESSION: the batch branch posts the summary');
     const audit = opp.indexOf("action: 'opportunity.stage_changed_bulk'");
-    assert.ok(audit > 0 && opp.indexOf(call) > audit && opp.indexOf(call) - audit < 700, 'inside the same `if (staged.changedCount > 0)` block as the bulk audit');
+    assert.ok(audit > 0 && opp.indexOf(call) > audit && opp.indexOf(call) - audit < 700, 'inside the same `if (movedRows.length > 0)` block as the bulk audit');
     assert.equal((opp.match(/postDealEvents\(/g) || []).length, 1, 'the per-deal event post stays on the single save only — never inside the batch loop');
 });

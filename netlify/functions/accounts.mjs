@@ -6,7 +6,7 @@ import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, rosterUserById,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite, ownerClaim, claimRefused,
 } from './_lib.mjs';
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -450,13 +450,27 @@ export const handler = async (event) => {
             const { id: _putId, ...updateDataMerged } = mergedPut;
             // One write: the account; the deals of any account the move made a site, moved up
             // (D22); the accounts under a moved one, with the tiers the move gave them (D17, D21).
-            const [[upserted], ...lifts] = await db.batch([
-                db.insert(accounts).values({ ...mergedPut, orgId })
-                    .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
-                    .returning(),
-                ...dealLifts(orgId, made),
-                ...tierWrites(orgId, retiered),
-            ]);
+            // Only while still the caller's or nobody's (state §0.275): a rep's batch opens with its claim on the account —
+            // reassigned (or deleted) since the check, the whole batch aborts: no deal lifted, no tier moved, nothing saved.
+            const mine = await ownerWriteFilter({ table: accounts, entity: 'account', orgId, userId, userRole });
+            const claim = ownerClaim(accounts, data.id, orgId, mine);
+            const missedPut = () => missedWrite({ table: accounts, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Account not found' }) } });
+            let wrote;
+            try {
+                wrote = await db.batch([
+                    ...claim,
+                    db.insert(accounts).values({ ...mergedPut, orgId })
+                        .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })   // the claim holds the row for the batch (§0.275)
+                        .returning(),
+                    ...dealLifts(orgId, made),
+                    ...tierWrites(orgId, retiered),
+                ]);
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                return missedPut();
+            }
+            const [[upserted], ...lifts] = wrote.slice(claim.length);
+            if (!upserted) return missedPut();
             const liftedDeals = lifts.slice(0, made.length).flat();
             // Cascade rename: opportunities.account and contacts.company are denormalized
             // display labels keyed by accountId. Keep them in sync so a rename never

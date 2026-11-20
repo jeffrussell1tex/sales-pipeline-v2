@@ -9,7 +9,7 @@ import { leadEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, resolveOwnerId, ambiguousOwnerResponse,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
@@ -304,15 +304,15 @@ export const handler = async (event) => {
             Object.assign(clean, await scoreColumns(orgId, clean, cfgPut));
 
             const { id, ...updateData } = clean;
+            const mine = await ownerWriteFilter({ table: leads, entity: 'lead', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: leads.id, setWhere: eq(leads.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: leads.id, setWhere: and(eq(leads.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
 
             // Org-scoped upsert returns nothing if the row isn't in this org
-            // (e.g. a cross-tenant id) — treat as not-found instead of crashing.
-            if (!upserted) {
-                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found in your organization' }) };
-            }
+            // (e.g. a cross-tenant id) — treat as not-found instead of crashing. Nor, since §0.275, for a rep's
+            // write on a lead reassigned since the check: still here, the ownership refusal.
+            if (!upserted) return missedWrite({ table: leads, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found in your organization' }) } });
 
             // Webhook: lead.converted — only fires the first time status flips to Converted
             if (!wasConverted && upserted.status === 'Converted') {

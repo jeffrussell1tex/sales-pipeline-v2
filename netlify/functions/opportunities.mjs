@@ -14,12 +14,12 @@ import {
     serverErrorBody, writeAudit, auditAs, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse, importerOwners,
     resolveCaller, memberNamesOf,
-    ownIdTaken,
+    ownIdTaken, ownerWriteFilter, missedWrite,
 } from './_lib.mjs';
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
-import { applyStageChanges, moveDayOf, stageMoveOf } from './_stage.mjs';
+import { applyStageChanges, moveDayOf, stageMoveOf, resolveStageChange } from './_stage.mjs';
 // A deal's team notes, one operation at a time (state §0.236): the rules, shared with the deal window.
 import { noteOpOf, applyNoteOp, notesOf, NOTE_WORDS } from '../../src/utils/dealNotes.js';
 // A deal's close-date history (state §0.239): the words a refusal says, and a move's from → to.
@@ -560,21 +560,24 @@ export const handler = async (event) => {
                     });
                 }
                 // One audit record for the batch, not one per deal. A 500-row
-                // import moving 200 deals is one action by one person.
-                if (staged.changedCount > 0) {
+                // import moving 200 deals is one action by one person. Its moves are the rows written (state §0.275, the
+                // review): a row refused or not found — one reassigned since its read among them — moved nothing, and
+                // is neither counted nor posted, by the import's own rule (resolveStageChange).
+                const movedRows = staged.rows.filter(r => !unwritten.has(r.id) && resolveStageChange(r, priors.get(r.id), importDate).changed);
+                if (movedRows.length > 0) {
                     await writeAudit(orgId, {
                         action: 'opportunity.stage_changed_bulk', entityType: 'opportunity', entityId: 'BATCH',
-                        entityName: `${staged.changedCount} deals`,
-                        detail: `CSV import moved ${staged.changedCount} of ${data.length} deals to a new stage`,
+                        entityName: `${movedRows.length} deals`,
+                        detail: `CSV import moved ${movedRows.length} of ${data.length} deals to a new stage`,
                         userId,
                     });
                     // One Slack post for the batch too (state §0.106) — under the org's
                     // 'stageChanged' switch, never one post per deal. Never throws.
-                    await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });
+                    await postBulkStageMove(orgId, { summary: bulkStageSummary(movedRows, priors), total: data.length, mover: await getCallerName(userId, orgId) });
                 }
                 // Each deal written scored again (AI scoring batch 2A); a row refused or not found is not.
                 await rescoreDeals(orgId, keyed.rows.map(r => r.id).filter(id => !unwritten.has(id)));
-                return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: movedRows.length, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
             }
 
             if (!data.id) {
@@ -608,13 +611,14 @@ export const handler = async (event) => {
                 if (op.error) return { statusCode: 400, headers, body: JSON.stringify({ error: op.error }) };
                 const me = await resolveCaller(userId, orgId);
                 const names = (await memberNamesOf(orgId)).map(u => u.name).filter(Boolean);
+                const mine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
                 let stored = existing;
                 for (let attempt = 0; attempt < 3; attempt++) {
                     const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });
                     if (applied.error) return { statusCode: applied.status, headers, body: JSON.stringify({ error: applied.error, ...(applied.code ? { code: applied.code } : {}), comments: notesOf(stored.comments) }) };
                     const [written] = await db.update(opportunities)
                         .set({ comments: applied.list, updatedAt: new Date() })
-                        .where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments)))
+                        .where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId), notesStill(stored.comments), mine))
                         .returning();
                     if (written) {
                         // The deal's rep hears of a note by someone else (the "new note" email, as before §0.236).
@@ -633,6 +637,10 @@ export const handler = async (event) => {
                     }
                     [stored] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));
                     if (!stored) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
+                    // A deal reassigned since the check (state §0.275): the write above touched nothing — refused as
+                    // assertOwnership refuses, never tried again.
+                    const refusedNow = await assertOwnership({ table: opportunities, entity: 'opportunity', id: data.id, orgId, userId, userRole, headers, row: stored });
+                    if (refusedNow) return refusedNow;
                 }
                 return { statusCode: 409, headers, body: JSON.stringify({ error: NOTE_WORDS.busy, comments: notesOf(stored.comments) }) };
             }
@@ -711,10 +719,11 @@ export const handler = async (event) => {
             const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
             if (!closeNamed) { delete updateData.forecastedCloseDate; if (!('closeQuarter' in data)) delete updateData.closeQuarter; }
             // §0.250: a save that lands as an insert (the deal deleted between its read and its write) keeps the maker it read; the body never names it.
+            const mine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
             const [upserted] = await db.insert(opportunities)
                 .values({ ...clean, createdBy: existing.createdBy ?? null, orgId })
                 .onConflictDoUpdate({
-                    target: opportunities.id, setWhere: eq(opportunities.orgId, orgId),
+                    target: opportunities.id, setWhere: and(eq(opportunities.orgId, orgId), mine),
                     set: {
                         ...updateData,
                         ...(move ? { stageHistory: historyWith(move) } : {}),
@@ -723,6 +732,8 @@ export const handler = async (event) => {
                     }
                 })
                 .returning();
+            // A rep's save on a deal reassigned since the check wrote nothing (state §0.275): the ownership refusal.
+            if (!upserted) return missedWrite({ table: opportunities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) } });
             // The move this write made, by its time (Jeff's Q4): one audit row, from → to.
             const closeMoves = Array.isArray(upserted?.closeDateHistory) ? upserted.closeDateHistory : [];
             const closeMove = closeNamed ? closeMoves[closeMoves.length - 1] : null;
