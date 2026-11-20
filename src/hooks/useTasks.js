@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { taskWriteAnswer } from '../utils/taskWrite.js';
 import { failureWords, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
+import { isRestoring, undoWhileOut, stillRestoringWords } from '../utils/restoring.js';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -55,12 +56,17 @@ export function useTasks(deps) {
         const title = task.title || task.subject || 'Untitled';
         showConfirm(`Delete the task "${title}"? You'll have a few seconds to undo.`, async () => {
             opts.onConfirm?.();
+            // Its own Undo still re-POSTing it: not deleted under it (state §0.273) — said, and nothing sent.
+            if (isRestoring('task', taskId)) { setUndoToast({ error: stillRestoringWords([title]) }); return; }
             const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             setTasks(prev => prev.filter(t => t.id !== taskId));
-            const r = await dbWrite(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' });
+            const r = await dbWrite(`/.netlify/functions/tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
             // One whose answer proves nothing may be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe — no Undo offered.
             if (!r.ok && r.unknown) { setUndoToast({ error: maybeSaid(`The task "${title}"`, 'deleted', r.error) }); return; }
+            // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
+            // no Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
+            if (!r.ok && r.landed) return;
             if (!r.ok) {
                 setTasks(prev => (prev.some(t => t.id === taskId) ? prev : [...prev, task]));
                 setUndoToast({ error: `Task not deleted — ${r.error}` });
@@ -69,7 +75,7 @@ export function useTasks(deps) {
             softDelete(
                 `Task "${title}"`,
                 () => {},
-                async () => {
+                undoWhileOut('task', [taskId], async () => {   // marked out until it ends (§0.273)
                     setUndoToast(null);
                     setTasks(prev => (prev.some(t => t.id === taskId) ? prev : [...prev, task]));
                     // Undo puts the row back on screen and re-POSTs it; a refused restore
@@ -84,7 +90,7 @@ export function useTasks(deps) {
                     if (rr.unknown) { setUndoToast({ error: maybeSaid('The task', 'restored', rr.error) }); return; }
                     setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
                     setUndoToast({ error: `Could not restore the task — ${rr.error}` });
-                }
+                })
             );
         });
     };

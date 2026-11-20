@@ -3,6 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
+import { isRestoring, undoWhileOut, stillRestoringWords } from '../utils/restoring.js';
 
 // A quiet save's Activity rail setters (state §0.199's fifth re-check): the task rail's completion notes leave the
 // Activity rail's banner and wait alone — they are that rail's own save's, and a notes save that ended first let go
@@ -43,12 +44,17 @@ export function useActivities(deps) {
         const activity = activities.find(a => a.id === activityId);
         if (!activity) return;
         showConfirm('Delete this activity? You\'ll have a few seconds to undo.', async () => {
+            // Its own Undo still re-POSTing it: not deleted under it (state §0.273) — said, and nothing sent.
+            if (isRestoring('activity', activityId)) { setUndoToast({ error: stillRestoringWords([activity.type || 'Activity']) }); return; }
             const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             setActivities(prev => prev.filter(a => a.id !== activityId));
-            const r = await dbWrite(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' });
+            const r = await dbWrite(`/.netlify/functions/activities?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' });
             if (!stillOrg(askedOrg)) return;
             // One whose answer proves nothing may be gone (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept off, said as maybe — no Undo offered.
             if (!r.ok && r.unknown) { setUndoToast({ error: maybeSaid('The activity', 'deleted', r.error) }); return; }
+            // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
+            // no Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
+            if (!r.ok && r.landed) return;
             if (!r.ok) {
                 setActivities(prev => (prev.some(a => a.id === activityId) ? prev : [...prev, activity]));
                 setUndoToast({ error: `Activity not deleted — ${r.error}` });
@@ -58,7 +64,7 @@ export function useActivities(deps) {
             softDelete(
                 `Activity "${activity.type || 'Activity'}"`,
                 () => {},
-                async () => {
+                undoWhileOut('activity', [activityId], async () => {   // marked out until it ends (§0.273)
                     setUndoToast(null);
                     setActivities(prev => (prev.some(a => a.id === activityId) ? prev : [...prev, activity]));
                     // Undo puts the row back on screen and re-POSTs it; a refused restore
@@ -74,7 +80,7 @@ export function useActivities(deps) {
                     if (rr.unknown) { setUndoToast({ error: maybeSaid('The activity', 'restored', rr.error) }); return; }   // kept (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)
                     setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
                     setUndoToast({ error: `Could not restore the activity — ${rr.error}` });
-                }
+                })
             );
         });
     };

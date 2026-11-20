@@ -60,7 +60,8 @@ test('useActivities: a delete asks, waits for its DELETE, and offers Undo only a
     assert.ok(del.includes('const activity = activities.find(a => a.id === activityId);'), 'read from state, not through an updater');
     assert.ok(!del.includes('setActivities(prev => { activity ='), 'the updater read');
     assert.ok(del.includes("showConfirm('Delete this activity? You\\'ll have a few seconds to undo.', async () => {"));
-    const awaitAt = del.indexOf("const r = await dbWrite(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' });");
+    // Moved pin (§0.273): the id sent encoded.
+    const awaitAt = del.indexOf("const r = await dbWrite(`/.netlify/functions/activities?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' });");
     assert.ok(awaitAt > 0, 'the DELETE awaited');
     assert.ok(del.indexOf('softDelete(') > awaitAt, 'Undo once the DELETE has landed');
     assert.ok(del.indexOf("setUndoToast({ error: `Activity not deleted — ${r.error}` });") > awaitAt, 'a refused delete says so');

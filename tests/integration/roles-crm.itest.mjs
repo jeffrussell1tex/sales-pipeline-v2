@@ -97,6 +97,7 @@ const cleanup = async () => {
     for (const o of [A, B]) {
         for (const [, , table] of Object.values(ENTITIES)) await db.delete(table).where(eq(table.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
+        await db.delete(schema.auditLog).where(eq(schema.auditLog.orgId, o));   // §0.273's deletes write their audit rows
     }
 };
 
@@ -186,6 +187,35 @@ test('a Dispatcher WRITES nothing: POST, PUT and DELETE refused by name on all s
         assert.equal(created.length, 0, `${ent}: nothing was created`);
     }
     assert.equal(mails.length, 0, 'no refused write sent anything');
+});
+
+// ── §0.273: a Delete of a row gone already ───────────────────────────────────
+
+test('§0.273 a Delete pressed again answers 404 `gone`; another org\'s id is the same 404 and its row untouched; a rep\'s Delete of a missing account or deal is a 403, never gone', async () => {
+    const GONE = { error: 'Not found', code: 'gone' };
+    for (const ent of ['account', 'contact', 'task', 'activity', 'opportunity']) {
+        const [fn, , table, base] = ENTITIES[ent];
+        const twice = `itest_roles_${ent}_twice`;
+        await db.insert(table).values({ id: twice, orgId: A, ownerId: null, ...base(twice) });
+        const first = await FN[fn](ev(A, 'Admin', 'clerk_itest_roles_admin', 'DELETE', undefined, { id: twice }));
+        assert.equal(first.statusCode, 200, `${ent} first Delete: ${first.body}`);
+        const again = await FN[fn](ev(A, 'Admin', 'clerk_itest_roles_admin', 'DELETE', undefined, { id: twice }));
+        assert.equal(again.statusCode, 404, `${ent} pressed again: ${again.body}`);
+        assert.deepEqual(JSON.parse(again.body), GONE, `${ent}: gone — none of that id in this org`);
+        // Org A naming org B's row: the 404 an unknown id gets — nothing deleted, nothing about B said.
+        const bId = idsOf(ent).b;
+        const cross = await FN[fn](ev(A, 'Admin', 'clerk_itest_roles_admin', 'DELETE', undefined, { id: bId }));
+        assert.equal(cross.statusCode, 404, `${ent} another org's id: ${cross.body}`);
+        assert.deepEqual(JSON.parse(cross.body), GONE);
+        assert.equal((await db.select().from(table).where(eq(table.id, bId))).length, 1, `${ent}: org B's row untouched`);
+    }
+    // A missing row reaches the accounts and deals 404 only past the Admin gate: a rep's is the role's 403.
+    for (const ent of ['account', 'opportunity']) {
+        const [fn] = ENTITIES[ent];
+        const res = await FN[fn](ev(A, 'User', CLERK.rep, 'DELETE', undefined, { id: `itest_roles_${ent}_twice` }));
+        assert.equal(res.statusCode, 403, `${ent}: a rep's Delete of a missing row — ${res.body}`);
+        assert.equal(JSON.parse(res.body).code, undefined, 'never gone');
+    }
 });
 
 // ── the directory ────────────────────────────────────────────────────────────

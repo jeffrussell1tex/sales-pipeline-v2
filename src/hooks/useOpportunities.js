@@ -92,8 +92,9 @@ export function useOpportunities(deps) {
             const failed = [];
             for (const o of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/opportunities?id=${o.id}`, { method: 'DELETE' });
-                if (!r.ok) failed.push({ o, error: r.error, unknown: r.unknown });
+                const r = await dbWrite(`/.netlify/functions/opportunities?id=${encodeURIComponent(o.id)}`, { method: 'DELETE' });
+                // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done — kept off, nothing said.
+                if (!r.ok && !r.landed) failed.push({ o, error: r.error, unknown: r.unknown });
             }
             if (!stillOrg(askedOrg)) return;
             if (failed.length) {

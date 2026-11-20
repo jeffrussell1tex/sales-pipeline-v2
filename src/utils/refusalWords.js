@@ -49,6 +49,9 @@ export const heardRefusal = (status, body) => status >= 400 && status < 500
 // only for its own org's row, never for another org's id.
 // Since §0.271 also a delete-like press answered that what it removes is not there in this org (404 `code: 'gone'`): the
 // outcome it asked for holds — an earlier press landed, its answer lost.
+// Since §0.273 the CRM's five deletes too (accounts, contacts, deals, activities, tasks): `gone` there means no row of
+// that id in the caller's org — another org's id gets the same 404 an unknown id gets, revealing nothing, and the
+// screens send only their own org's ids, encoded.
 export const landedBefore = (status, body) => !!body && ((status === 409 && (body.code === 'idInUse' || body.code === 'already'))
     || (status === 404 && body.code === 'gone'));
 // The words for a write whose answer proves nothing (Q2: the screen keeps the change and says this, kept until closed).

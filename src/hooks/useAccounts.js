@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
 import { tierUnder, branchTiers, parentRefusal, withTiers, withRows, parentsFirst, undoOfDeletes } from '../utils/accountParent.js';
 import { isMergeArchived } from '../utils/pickLink.js';
+import { isRestoring, undoWhileOut, stillRestoringWords } from '../utils/restoring.js';
 import { refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 
 // The accounts by id, as the tier rule reads them.
@@ -82,19 +83,28 @@ export function useAccounts(deps) {
         const keptLine = kept.length ? `\n\nKept — open deals: ${kept.map(k => k.a.name).join(', ')}.` : '';
         showConfirm(`Delete ${what}? You'll have a few seconds to undo.${subLine}${keptLine}`, async () => {
             opts.onConfirm?.();
+            // One its own Undo is still re-POSTing is not deleted under it (state §0.273): its DELETE would find nothing, then
+            // the Undo would land it again — live on the server, off this screen. Said, and nothing sent.
+            const stillOut = going.filter(a => isRestoring('account', a.id));
+            if (stillOut.length) { setUndoToast({ error: stillRestoringWords(stillOut.map(a => a.name)) }); return; }
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             setAccounts(prev => prev.filter(a => !goingIds.includes(a.id)));
             const failed = [];
+            let goneBefore = false;   // one gone already (§0.273): its delete lifted its sub-accounts — the list read again
             const lifted = [];   // what the server lifted, with the tiers it gave them (D18)
             const answers = [];  // what each delete answered: the row and its sub-accounts as stored
             for (const a of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/accounts?id=${a.id}`, { method: 'DELETE' });
+                const r = await dbWrite(`/.netlify/functions/accounts?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
+                // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
+                // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
+                if (!r.ok && r.landed) { goneBefore = true; continue; }
                 if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown });
                 else lifted.push(...(r.data?.retiered || []));
                 if (r.ok) answers.push(r.data || {});
             }
             if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
+            if (goneBefore) loadAccounts(() => {});   // the sub-accounts another delete lifted, as the server has them (§0.273)
             // What the Undo re-sends is what the server answered, never this screen's copies (state
             // §0.198): each row deleted as stored, and each sub-account it promoted as stored
             // before — accountParent.js undoOfDeletes.
@@ -122,10 +132,11 @@ export function useAccounts(deps) {
                 setUndoToast({ error: failNote });
                 if (!deleted.length) return;   // nothing deleted, nothing to undo
             }
+            if (!deleted.length) return;   // each one gone already (§0.273): nothing this press deleted, nothing to undo
             softDelete(
                 deleted.length === 1 ? `Account "${deleted[0].name}"` : `${deleted.length} accounts`,
                 () => {},
-                async () => {
+                undoWhileOut('account', deleted.map(a => a.id), async () => {   // its rows marked out until it ends (§0.273)
                     setUndoToast(null);
                     setAccounts(prev => {
                         const have = new Set(prev.map(a => a.id));
@@ -186,8 +197,10 @@ export function useAccounts(deps) {
                         const first = notRestored[0];
                         setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });
                     }
-                    if (notRestored.length || reread) loadAccounts(() => {});
-                }
+                    // A press that found one gone read the list again (§0.273); that read can answer after this Undo put
+                    // its rows back, and wipe them off — this read, later, overtakes it (loadGen).
+                    if (notRestored.length || reread || goneBefore) loadAccounts(() => {});
+                })
             );
             if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
         });

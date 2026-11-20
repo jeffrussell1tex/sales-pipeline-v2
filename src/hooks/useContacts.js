@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { failureWords, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
+import { isRestoring, undoWhileOut, stillRestoringWords } from '../utils/restoring.js';
 
 export function useContacts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
@@ -61,8 +62,12 @@ export function useContacts(deps) {
             opts.onConfirm?.();
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const goingIds = going.map(c => c.id);
+            // One its own Undo is still re-POSTing is not deleted under it (state §0.273): said, and nothing sent.
+            const stillOut = going.filter(c => isRestoring('contact', c.id));
+            if (stillOut.length) { setUndoToast({ error: stillRestoringWords(stillOut.map(nameOf)) }); return; }
             setContacts(prev => prev.filter(c => !goingIds.includes(c.id)));
             const failed = [];
+            const goneIds = [];   // gone already (§0.273): done, never in this press's Undo
             if (opts.admin && !kept.length && goingIds.length === contacts.length) {
                 const r = await dbWrite('/.netlify/functions/contacts?clear=true', { method: 'DELETE' });
                 if (!stillOrg(askedOrg)) return;
@@ -70,7 +75,10 @@ export function useContacts(deps) {
             } else {
                 for (const c of going) {
                     if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                    const r = await dbWrite(`/.netlify/functions/contacts?id=${c.id}`, { method: 'DELETE' });
+                    const r = await dbWrite(`/.netlify/functions/contacts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+                    // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
+                    // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
+                    if (!r.ok && r.landed) { goneIds.push(c.id); continue; }
                     if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown });
                 }
                 if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
@@ -93,11 +101,12 @@ export function useContacts(deps) {
                 setUndoToast({ error: failNote });
                 if (failed.length === going.length) return;   // nothing deleted, nothing to undo
             }
-            const deleted = going.filter(c => !failed.some(f => f.c.id === c.id));
+            const deleted = going.filter(c => !failed.some(f => f.c.id === c.id) && !goneIds.includes(c.id));
+            if (!deleted.length) return;   // each one gone already (§0.273): nothing this press deleted, nothing to undo
             softDelete(
                 deleted.length === 1 ? `Contact "${nameOf(deleted[0])}"` : `${deleted.length} contacts`,
                 () => {},
-                async () => {
+                undoWhileOut('contact', deleted.map(c => c.id), async () => {   // its rows marked out until it ends (§0.273)
                     setUndoToast(null);
                     setContacts(prev => {
                         const have = new Set(prev.map(c => c.id));
@@ -129,7 +138,7 @@ export function useContacts(deps) {
                                 ? `Could not restore ${nameOf(first.c)} — ${first.error}`
                                 : `${notRestored.length} contacts could not be restored — ${first.error}` });
                     }
-                }
+                })
             );
             if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
         });

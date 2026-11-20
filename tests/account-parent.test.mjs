@@ -652,7 +652,8 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     // Moved in §0.261 (the unknown-save rule): a failure carries whether its answer proved nothing; one that did is said as maybe.
     assert.ok(del.includes("if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error, unknown: rp.unknown });"), "L4: a refused re-save's toast names the account refused — its name the screen's row's — not the parent put back");
     assert.ok(del.includes("setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });"), 'a refusal says so');
-    assert.ok(del.includes('if (notRestored.length || reread) loadAccounts(() => {});'), 'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
+    // Moved pin (§0.273): a press that found one gone reads the list again at the Undo's end too.
+    assert.ok(del.includes('if (notRestored.length || reread || goneBefore) loadAccounts(() => {});'),'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
 });
 
 test("accounts.mjs: a parent is checked against THIS org's rows when a create names one and when a save moves it — after the ownership check, before the write; the tiers fit, written to this org's rows only and handed back; a save that leaves the parent keeps the stored tier", () => {
@@ -707,7 +708,8 @@ test("accounts.mjs: a parent is checked against THIS org's rows when a create na
     assert.ok(put.includes('const liftedDeals = lifts.slice(0, made.length).flat();'));
     assert.ok(put.includes('JSON.stringify({ account: upserted, renamed, retiered, liftedDeals })'), 'and handed back for the screen');
     const del = between(src, "if (event.httpMethod === 'DELETE') {", 'return { statusCode: 405');
-    const unknown = del.indexOf("if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };");
+    // Moved pin (§0.273): its 404 says `gone` — none of this id in this org.
+    const unknown = del.indexOf("if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };");
     const read1 = del.indexOf('const tree = await orgTreeOf(orgId);');
     const delWrite = del.indexOf('const [storedKids, gone, ...written] = await db.batch([');
     assert.ok(unknown > del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;') && unknown < read1, 'an unknown id: 404 before anything is read or written');

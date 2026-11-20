@@ -523,7 +523,7 @@ export const handler = async (event) => {
             }
             // An unknown id used to return success:true. It deleted nothing — and now
             // nothing is written for it.
-            if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
 
             // Its sub-accounts are lifted to the top level (below): each becomes an account, and
             // the accounts under them keep what still fits (state §0.198; Jeff, 11 Oct, D18: "Yes,
@@ -577,7 +577,7 @@ export const handler = async (event) => {
             const [deletedRow] = gone;
             // Gone before this write (another session's delete, which lifted its sub-accounts
             // itself): nothing was written — a 404, as for any id not found.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             const promotedIds = new Set(promoted.map((r) => r.id));
             const children = storedKids.filter((c) => promotedIds.has(c.id));
             // What the delete wrote, for the screen: each sub-account it lifted that was not an

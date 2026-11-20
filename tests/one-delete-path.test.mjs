@@ -167,7 +167,8 @@ test('deals: confirmed, one DELETE each by id, no Undo — and an Admin\'s', () 
     const fn = between(src, 'const handleDeleteDeals = (ids, opts = {}) => {', 'const handleSave = (');
     assert.ok(fn.includes('showConfirm(`Delete ${what}? This cannot be undone.`, async () => {'));
     assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('));
-    assert.ok(fn.includes("const r = await dbWrite(`/.netlify/functions/opportunities?id=${o.id}`, { method: 'DELETE' });"));
+    // Moved pin (§0.273): the id sent encoded.
+    assert.ok(fn.includes("const r = await dbWrite(`/.netlify/functions/opportunities?id=${encodeURIComponent(o.id)}`, { method: 'DELETE' });"));
     assert.ok(!fn.includes('softDelete('), 'no Undo: a deal re-POSTed is a new deal to the server');
     const pipeline = read('src/Tabs/PipelineTab.jsx');
     assert.ok(pipeline.includes('{isAdmin && selectableView && selectMode && selectedOpps.length > 0 && ('), 'and where rows can be ticked (§0.179)');
@@ -184,7 +185,8 @@ test('tasks: the task rail\'s Delete — a confirm, the DELETE, then Undo; a wri
     assert.ok(fn.includes('const task = tasks.find(t => t.id === taskId);'), 'read from the list, not through an updater');
     assert.ok(!src.includes('setTasks(prev => { task ='), 'the updater read');
     assert.ok(fn.includes("showConfirm(`Delete the task \"${title}\"? You'll have a few seconds to undo.`, async () => {"));
-    const del = fn.indexOf("const r = await dbWrite(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' });");
+    // Moved pin (§0.273): the id sent encoded.
+    const del = fn.indexOf("const r = await dbWrite(`/.netlify/functions/tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });");
     assert.ok(del > fn.indexOf('showConfirm('), 'the DELETE awaited, after the confirm');
     assert.ok(fn.indexOf('softDelete(') > del, 'Undo once the DELETE has landed');
     assert.match(fn, /if \(!r\.ok\) \{\s*setTasks\(prev => \(prev\.some\(t => t\.id === taskId\) \? prev : \[\.\.\.prev, task\]\)\);\s*setUndoToast\(\{ error: `Task not deleted — \$\{r\.error\}` \}\);/, 'a refused delete puts the task back and says why');

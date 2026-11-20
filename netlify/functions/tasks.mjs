@@ -200,7 +200,7 @@ export const handler = async (event) => {
             // name once the record is gone.
             const [deletedRow] = await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId))).returning();
             // An unknown id used to return success:true. It deleted nothing.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('task', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

@@ -466,7 +466,9 @@ One commit per verified batch; doc patch in the same commit.
   other answer keeps the change and says it may have been (`maybeSaid`); a
   create keeps one id, and a 409 `code: 'idInUse'` (this org only,
   `ownIdTaken`) — since §0.271 a delete-like press answered 404
-  `code: 'gone'` or 409 `code: 'already'` too — is an earlier press
+  `code: 'gone'` or 409 `code: 'already'` too, since §0.273 the CRM's
+  five deletes (off, unsaid, never in the Undo; ids encoded; none sent
+  under its own Undo, `restoring.js`) — is an earlier press
   that landed (THE GUARD,
   tests/unknown-save.test.mjs; guide §18b134); since §0.262 Leads, Quotes,
   Reports and the Sales Manager too — a refusal puts back only its own row, a
