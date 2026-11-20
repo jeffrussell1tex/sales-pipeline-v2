@@ -381,7 +381,7 @@ test("spiff-claims PUT: an id that is no text is 400; a claim this org does not 
         ind(16, '.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));'),
         ind(12, NOT_HELD),
         ind(12, 'let changes = data;'),
-        ind(12, 'if (!isAdmin && !isManager) {'),
+        ind(12, 'if (isRep) {'),   // moved pin (§0.276): isRep, asked once
         ind(16, 'changes = ownFields;'),
         BLANK,
         BLANK_REFUSAL,
@@ -389,12 +389,13 @@ test("spiff-claims PUT: an id that is no text is 400; a claim this org does not 
         ind(12, ONE('linked')),
         ind(12, 'const clean = sanitize({ ...(existing || {}), ...changes });'),
         ind(12, 'const { id, ...updateData } = clean;'),
-        ind(12, 'const [updated] = await db.update(spiffClaims).set({ ...updateData, updatedAt: new Date() })'),
-        ind(16, '.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id)))'),
+        // Moved pin (§0.276): only the keys named are written, a rep's only while still pending and theirs.
+        ind(12, 'const [updated] = await db.update(spiffClaims).set({ ...named, updatedAt: new Date() })'),
+        ind(16, '.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen))'),
         ind(16, '.returning();'),
-        ind(12, "if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
+        ind(16, "if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
     assert.equal(count(put, NOT_HELD), 1, "one 404 for a claim this org does not hold — every role's");
-    assert.ok(!between(put, ind(12, 'if (!isAdmin && !isManager) {'), 'changes = ownFields;').includes('if (!existing)'), "not the rep's alone: a manager's save of an unknown id created a claim");
+    assert.ok(!between(put, ind(12, 'if (isRep) {'), 'changes = ownFields;').includes('if (!existing)'), "not the rep's alone: a manager's save of an unknown id created a claim");
     assert.ok(!between(put, NOT_HELD, BLANK.trim()).includes('checkLinks('), "(1) first: nothing is asked before a SPIFF or rep turned blank is refused — a SPIFF of spaces was asked as an id, a 404 'not in your organization' (review F2)");
     assert.ok(!put.includes('db.insert(') && !put.includes('onConflictDoUpdate'), 'REGRESSION: a save creates a claim — an unknown id, or one deleted while the save was out (the upsert put it back)');
     assert.equal(count(s, ONE('linked')), 2, "each check's refusal answered — the create's and the save's");
@@ -704,7 +705,8 @@ test("a claim's Approve and Reject send only the change (D2) and say the server'
     const upd = between(m, '    const updateClaimStatus = async (claim, status) => {', '\n    };');
     order(upd,
         ind(8, 'const approvedAt = new Date().toISOString(), approvedBy = currentUser;'),
-        ind(16, "method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy }),"),
+        // Moved pin (§0.276): the status the list shows sent with the move — held in the write, a claim moved since refused.
+        ind(16, "method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy, fromStatus: claim.status || 'pending' }),"),
         // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, only a refusal's body read.
         ind(12, 'if (!res.ok) {'),
         ind(16, 'const d = await res.json().catch(() => ({}));'),
@@ -715,11 +717,13 @@ test("a claim's Approve and Reject send only the change (D2) and say the server'
         ind(16, 'return;'),
         ind(12, '}'),
         ind(12, 'if (!stillOrg(askedOrg)) return;'),
-        ind(12, 'setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));'),
+        // Moved pin (§0.276, the review): the change over the row as the list holds it now, never the row at the press.
+        ind(12, 'setSpiffClaims(prev => prev.map(c => c.id === claim.id ? { ...c, status, approvedAt, approvedBy } : c));'),
         ind(12, "setSaveState({ status: 'saved', msg: '' });"),
         ind(8, '} catch (err) {'),
         ind(12, "if (stillOrg(askedOrg)) setSaveState({ status: 'error', msg: claimUnanswered('saved') });"));
-    assert.ok(upd.includes('const u = { ...claim, status, approvedAt, approvedBy };'), "the list's own copy takes the same change");
+    assert.ok(!upd.includes('const u = { ...claim'), "the list's own copy takes the same change — over its row now, never the press's copy (§0.276)");
+    assert.ok(upd.includes("if (res.status === 409 && ownRefusal(res.status, d)) {") && upd.includes('if (stillOrg(askedOrg) && Array.isArray(data?.spiffClaims)) setSpiffClaims(data.spiffClaims);'), 'a claim moved since the list loaded (409 in the server\'s words): the claims read again, in the org asked (§0.276)');
     assert.ok(!upd.includes('JSON.stringify(u)'), 'REGRESSION: the whole claim sent — a stale copy put back');
     assert.ok(!m.includes('only Admins can approve'), 'the server says who may');
     order(m,

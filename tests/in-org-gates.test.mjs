@@ -153,13 +153,15 @@ test('SPIFF PUT: over the stored claim; a rep edits their own, while pending, an
     const s = code(read('netlify/functions/spiff-claims.mjs'));
     const put = between(s, "if (event.httpMethod === 'PUT') {", '.returning();');
     assert.ok(put.includes('.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));'), 'the stored claim, in this org');
-    const rep = between(put, 'if (!isAdmin && !isManager) {', 'changes = ownFields;');
+    // Moved pin (§0.276): the rep's block names the rep once (isRep, me — asked once, and written into the WHERE).
+    const rep = between(put, 'if (isRep) {', 'changes = ownFields;');
     // A claim this org does not hold is not found for every role (§0.204 — "(1) and (2) now"): after the stored
     // claim is read, before the rep's block — a manager's save of an unknown id created a claim.
     before(put, '.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));', "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'after the stored claim is read');
-    before(put, "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'if (!isAdmin && !isManager) {', "every role's 404, before the rep's block");
+    before(put, "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'if (isRep) {', "every role's 404, before the rep's block");
+    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? await getCallerName(auth.userId, orgId) : null;'));
     assert.ok(!rep.includes('if (!existing)'), "not the rep's alone");
-    assert.ok(rep.includes('if (!sameName(existing.repName, await getCallerName(auth.userId, orgId))) {'), 'their own claim');
+    assert.ok(rep.includes('if (!sameName(existing.repName, me)) {'), 'their own claim');
     assert.ok(rep.includes("if ((existing.status || 'pending') !== 'pending') {"), 'while pending');
     assert.ok(rep.includes('const { status: _status, approvedAt: _approvedAt, approvedBy: _approvedBy, paidAt: _paidAt, repName: _repName, ...ownFields } = data;'),
         'status, approval, payment and the rep are not a rep’s to set');
@@ -167,7 +169,9 @@ test('SPIFF PUT: over the stored claim; a rep edits their own, while pending, an
     assert.ok(!s.includes('const clean = sanitize(data);'), 'the full-row build from the body alone is gone');
     // The §0.166 answer stays — a manager naming an id another org holds writes nothing — and the write is an update
     // now (§0.204): a claim deleted while the save was out is not found, never put back.
-    assert.ok(s.includes("if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
+    // Moved pin (§0.276): a write that touched nothing reads the claim again — gone, the 404 (a rep's approved or another's
+    // since the check, the check's own words).
+    assert.ok(s.includes('            if (!updated) {\n') && s.includes("                if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };\n"));   // the review of §0.276: the claim read again, gone first
 });
 
 test('SPIFF: a claim is a rep’s by name — trimmed, any case, never an empty name', () => {

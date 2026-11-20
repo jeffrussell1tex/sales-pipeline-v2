@@ -11744,7 +11744,7 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
     assert.equal(lines.filter((l) => l === P12FXF4_OWN).length, 1, 'the test, whole, at column 0');
     assert.ok(s.indexOf(`\n${P12FXF4_OWN}\n`) < s.indexOf('\nfunction AdminTab({'), 'module scope, above the tabs');
     assert.equal(count(s, "typeof d?.error === 'string'"), 1, 'REGRESSION: a second copy of the test');
-    assert.equal(count(s, 'ownRefusal('), 7, 'claimRefused, the 404, saveUser (twice), saveExtra, sendQuotas, noteNotDeleted');
+    assert.equal(count(s, 'ownRefusal('), 8, 'claimRefused, the 404, the 409 read again (§0.276), saveUser (twice), saveExtra, sendQuotas, noteNotDeleted');
     assert.equal(lines.filter((l) => l === "const saidOf = (status, words) => (typeof words === 'string' && words !== `The server returned ${status}.` ? { error: words } : null);").length, 1, 'saidOf, whole');
     const quotas = between(s, '    const sendQuotas = async () => {', '\n    };');
     order(quotas, 'if (!res.ok) {', 'const refused = await res.json().catch(() => ({}));', 'if (!stillOrg(askedOrg)) return;',

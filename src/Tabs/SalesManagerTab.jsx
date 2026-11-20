@@ -488,13 +488,15 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
     // changed, and an Approve names no deal or SPIFF to be asked. The list's own copy takes
     // the same change. A refusal says the server's words: a claim deleted since the list
     // loaded is a 404 (the Delete below).
+    // The status the list shows is sent with the move (fromStatus, state §0.276): the server moves the claim only while it
+    // is still that — one another Manager approved, rejected or paid since, or a second press after the first landed, is
+    // refused in its words (409), and the list is read again to show what it is now.
     const updateClaimStatus = async (claim, status) => {
         const approvedAt = new Date().toISOString(), approvedBy = currentUser;
-        const u = { ...claim, status, approvedAt, approvedBy };   // the list's own copy
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res = await dbFetch('/.netlify/functions/spiff-claims', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy }),
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: claim.id, status, approvedAt, approvedBy, fromStatus: claim.status || 'pending' }),
             });
             // The ok check first (state §0.249, docs/design/refusal-sweep Part 12): only a refusal's body is read, for its
             // words; a landed change reads none — the list takes the change it sent.
@@ -505,11 +507,20 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, isAdmin, oppor
                 // deleted since the list loaded is gone — its row goes too. A 404 with no words (a gateway's page) proves
                 // nothing: the row stays, and the words say to reload and see (§0.249, the last pass).
                 if (res.status === 404 && ownRefusal(res.status, d)) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
+                // Changed since the list loaded (409 in the server's words, §0.276): the claims read again, to show it as it is.
+                if (res.status === 409 && ownRefusal(res.status, d)) {
+                    dbFetch('/.netlify/functions/spiff-claims')
+                        .then(r => (r.ok ? r.json() : null))
+                        .then(data => { if (stillOrg(askedOrg) && Array.isArray(data?.spiffClaims)) setSpiffClaims(data.spiffClaims); })
+                        .catch(() => { /* the list as it was; the words say to reload */ });
+                }
                 setSaveState({ status: 'error', msg: claimRefused('saved', d, res.status) });
                 return;
             }
             if (!stillOrg(askedOrg)) return;
-            setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));
+            // The change it sent, over the row as the list holds it now — never the row as it was at the press (§0.276, the
+            // review: a list read again while the save was out kept its newer amount and note).
+            setSpiffClaims(prev => prev.map(c => c.id === claim.id ? { ...c, status, approvedAt, approvedBy } : c));
             setSaveState({ status: 'saved', msg: '' });
         } catch (err) {
             console.error('[SalesManagerTab] claim ' + status, err);

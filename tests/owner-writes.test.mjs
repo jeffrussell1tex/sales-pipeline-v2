@@ -163,6 +163,27 @@ test("§0.275 the review: the deals bulk import's stage moves are the rows writt
     assert.ok(!bulk.includes('staged.changedCount'), 'no count of the rows sent');
 });
 
+test("§0.276 THE GUARD: a SPIFF claim's save writes only what it names; a rep's only while the claim is still pending and still theirs, in the write's own WHERE; a missed write read again and answered in the check's words", () => {
+    const src = read('netlify/functions/spiff-claims.mjs');
+    const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
+    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? await getCallerName(auth.userId, orgId) : null;'), 'the rep named once — the name the check and the write both read');
+    assert.ok(put.includes('if (!sameName(existing.repName, me)) {'), 'the check reads that name');
+    assert.ok(put.includes('const named = Object.fromEntries(Object.entries(updateData).filter(([k]) => Object.hasOwn(changes, k)));'), 'the keys the save names, as sanitize stores them');
+    assert.ok(put.includes('db.update(spiffClaims).set({ ...named, updatedAt: new Date() })') && !put.includes('set({ ...updateData'), 'never the whole row as read');
+    // The review of §0.276: compared as the check read it — never normalised again in SQL, whose trim and case are not
+    // sameName's — and for a rep alone (isRep: a Manager's save under it would match no rep and write nothing).
+    assert.ok(put.includes('const stillTheirs = isRep\n                ? and(eq(spiffClaims.repName, existing.repName), eq(spiffClaims.status, existing.status))\n                : undefined;'), 'its rep and status as the check read them — for a rep alone');
+    assert.ok(put.includes("const seen = Object.hasOwn(data, 'fromStatus') ? sql`coalesce(nullif(${spiffClaims.status}, ''), 'pending') = ${data.fromStatus || 'pending'}` : undefined;"), 'the status a screen saw, held');
+    assert.ok(put.includes("if (Object.hasOwn(data, 'fromStatus') && typeof data.fromStatus !== 'string') return { statusCode: 400,"), 'a status is text');
+    assert.ok(put.includes('.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen))'), 'in the write\'s own WHERE');
+    const missed = between(put, '            if (!updated) {\n', '\n            }\n');
+    assert.ok(missed.includes("const [now] = await db.select().from(spiffClaims).where(and(eq(spiffClaims.id, id), eq(spiffClaims.orgId, orgId)));"), 'a missed write reads the claim again, in this org');
+    const order = ['if (!now) return { statusCode: 404,', "if (isRep && (now.status || 'pending') !== 'pending') return { statusCode: 403, headers, body: JSON.stringify({ error: 'A claim can only be edited while it is pending.' }) };",
+        "if (isRep && !sameName(now.repName, me)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'You can only edit your own claims.' }) };",
+        'return { statusCode: 409, headers, body: JSON.stringify({ error: `This claim is ${now.status || \'pending\'} now — it changed since it was loaded. Nothing was saved; reload to see it.` }) };'];
+    order.forEach((line, i) => { assert.ok(missed.includes(line), line.slice(0, 60)); if (i) assert.ok(missed.indexOf(line) > missed.indexOf(order[i - 1]), 'in order'); });
+});
+
 test('§0.275 _lib: the filter is no filter for an Admin or Manager, the caller\'s mayMutate in SQL for anyone else; a missed write is 403 while the row stands, the caller\'s 404 when gone', () => {
     const lib = read('netlify/functions/_lib.mjs');
     const fn = between(lib, 'export async function ownerWriteFilter(', '\n}\n');
