@@ -107,9 +107,11 @@ One commit per verified batch; doc patch in the same commit.
   `assertOwnership()` / `ownerColumnOf()`. `resolveOwnerId` 409s on ambiguity.
   Since §0.275 every write the check gates also carries the owner in its
   own SQL (`ownerWriteFilter`; a batch opens with `ownerClaim`; a missed
-  write answers through `missedWrite`) — a row reassigned between the
+  write answers through `missedWrite`, awaited) — a row reassigned between the
   check and the write is never touched (THE GUARD,
-  tests/owner-writes.test.mjs; guide §18b135).
+  tests/owner-writes.test.mjs; guide §18b135). Since §0.278 a
+  technician's job update too: the job's last edit as read in its own
+  WHERE (`missedTechJob`; guide §18b135 rule 8).
 - The `null === null` collision: an unresolvable caller and an unassigned row
   both read `null` — guard with `!!row.ownerId` wherever it matters.
 - Role gate is an allowlist (`APP_ROLES` / `isAppRole`); unrecognised values

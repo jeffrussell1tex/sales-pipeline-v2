@@ -180,7 +180,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: and(eq(activities.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
-            if (!upserted) return missedWrite({ table: activities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) } });
+            if (!upserted) return await missedWrite({ table: activities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) } });
             if (upserted.leadId) { try { await rescoreLead(orgId, upserted.leadId); } catch (e) { console.warn('lead rescore (put) failed:', e.message); } }
             // The deal it names now, and the one it named before when the edit moved it.
             return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted, dealScores: await rescoreDeals(orgId, [upserted.opportunityId, target.opportunityId]) }) };
@@ -215,7 +215,7 @@ export const handler = async (event) => {
             const [deletedRow] = await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId), mine)).returning();
             // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
             // check: still here, the ownership refusal (missedWrite); gone, the 404.
-            if (!deletedRow) return missedWrite({ table: activities, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            if (!deletedRow) return await missedWrite({ table: activities, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('activity', deletedRow, { userId }));
             if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ success: true, dealScores: await rescoreDeals(orgId, [deletedRow.opportunityId]) }) };

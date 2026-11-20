@@ -237,7 +237,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(contacts).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: contacts.id, setWhere: and(eq(contacts.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
-            if (!upserted) return missedWrite({ table: contacts, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) } });
+            if (!upserted) return await missedWrite({ table: contacts, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) } });
             return { statusCode: 200, headers, body: JSON.stringify({ contact: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
@@ -284,7 +284,7 @@ export const handler = async (event) => {
             const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId), mine)).returning();
             // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
             // check: still here, the ownership refusal (missedWrite); gone, the 404.
-            if (!deletedRow) return missedWrite({ table: contacts, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            if (!deletedRow) return await missedWrite({ table: contacts, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('contact', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

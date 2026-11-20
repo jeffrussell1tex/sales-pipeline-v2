@@ -30,6 +30,17 @@ export function coTechIdsOf(job) {
 export const techOnJob = (job, techId) =>
     !!techId && (job?.assignedTechId === techId || coTechIdsOf(job).includes(techId));
 
+// Whether a job as stored already holds every field a technician's write names (state §0.278) — so a write that missed
+// the job as its check read it, beaten by a press in flight that made the same change, is done rather than refused.
+// Compared as text, an absent value as empty; a value told apart only by its type (false and none) is not the same,
+// so the answer is never "done" over a change that did not land — which holds only on the row as stored: missedTechJob
+// hands it the row, never normaliseJob's copy (that reads a NULL signature as false). The id is not a field.
+const heldText = (v) => (v == null ? '' : String(v));
+export const techPatchHolds = (job, patch) => {
+    const keys = Object.keys(patch || {}).filter((k) => k !== 'id');
+    return !!job && keys.length > 0 && keys.every((k) => heldText(job[k]) === heldText(patch[k]));
+};
+
 // A job's reserved equipment units (§0.116) — written through JSON.stringify as
 // the co-tech list is, so read by the same parser. A job's equipmentIds, despite
 // the name, holds the KINDS it needs (dispatch_equipment.category values), not

@@ -153,7 +153,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: tasks.id, setWhere: and(eq(tasks.orgId, orgId), mine), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
-            if (!upserted) return missedWrite({ table: tasks, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Task not found' }) } });
+            if (!upserted) return await missedWrite({ table: tasks, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Task not found' }) } });
 
             // Webhook: task.completed — only fires the first time completed flips to true
             if (!wasCompleted && upserted.completed) {
@@ -204,7 +204,7 @@ export const handler = async (event) => {
             const [deletedRow] = await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId), mine)).returning();
             // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
             // check: still here, the ownership refusal (missedWrite); gone, the 404.
-            if (!deletedRow) return missedWrite({ table: tasks, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            if (!deletedRow) return await missedWrite({ table: tasks, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('task', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

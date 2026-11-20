@@ -467,10 +467,10 @@ export const handler = async (event) => {
                 ]);
             } catch (e) {
                 if (!claimRefused(e)) throw e;
-                return missedPut();
+                return await missedPut();
             }
             const [[upserted], ...lifts] = wrote.slice(claim.length);
-            if (!upserted) return missedPut();
+            if (!upserted) return await missedPut();
             const liftedDeals = lifts.slice(0, made.length).flat();
             // Cascade rename: opportunities.account and contacts.company are denormalized
             // display labels keyed by accountId. Keep them in sync so a rename never

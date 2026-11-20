@@ -312,7 +312,7 @@ export const handler = async (event) => {
             // Org-scoped upsert returns nothing if the row isn't in this org
             // (e.g. a cross-tenant id) — treat as not-found instead of crashing. Nor, since §0.275, for a rep's
             // write on a lead reassigned since the check: still here, the ownership refusal.
-            if (!upserted) return missedWrite({ table: leads, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found in your organization' }) } });
+            if (!upserted) return await missedWrite({ table: leads, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found in your organization' }) } });
 
             // Webhook: lead.converted — only fires the first time status flips to Converted
             if (!wasConverted && upserted.status === 'Converted') {

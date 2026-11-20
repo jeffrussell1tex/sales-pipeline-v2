@@ -17,7 +17,7 @@
 // The race itself, on the real test database: tests/integration/owner-race.itest.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { pgTable, text } from 'drizzle-orm/pg-core';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { ownerMayWrite, bulkUpsert } from '../netlify/functions/_bulk.mjs';
@@ -107,7 +107,8 @@ test('§0.275 THE GUARD: each single PUT writes its row only while still the cal
         const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
         const mine = put.lastIndexOf(`ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole })`);
         assert.ok(mine > put.lastIndexOf('assertOwnership({') || f === 'opportunities', `${f}: the filter read after the check`);
-        assert.ok(put.includes(`if (!upserted) return missed`), `${f}: a PUT that touched no row answers by missedWrite (403 still there, 404 gone)`);
+        // Moved in §0.278 (the review): every missed write's answer awaited — THE GUARD's scan below.
+        assert.ok(put.includes(`if (!upserted) return await missed`), `${f}: a PUT that touched no row answers by missedWrite (403 still there, 404 gone)`);
     }
 });
 
@@ -125,7 +126,7 @@ test('§0.275 THE GUARD: the contacts, activities and tasks DELETEs delete only 
         } else {
             assert.ok(del.includes(`db.delete(${T}).where(and(eq(${T}.id, id), eq(${T}.orgId, orgId), mine)).returning();`), `${f}: the delete names the owner filter`);
             assert.ok(del.indexOf(`const mine = await ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole });`) > del.indexOf('assertOwnership({'), `${f}: read after the check`);
-            assert.ok(del.includes(`if (!deletedRow) return missedWrite({ table: ${T}, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });`), `${f}: a missed delete — 403 still there, 404 gone`);
+            assert.ok(del.includes(`if (!deletedRow) return await missedWrite({ table: ${T}, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });`), `${f}: a missed delete — 403 still there, 404 gone`);
         }
     }
 });
@@ -145,7 +146,7 @@ test("§0.275 THE GUARD: the accounts PUT's batch opens with the owner claim —
     const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
     assert.ok(put.includes("const claim = ownerClaim(accounts, data.id, orgId, mine);"));
     assert.ok(put.includes('wrote = await db.batch([\n                    ...claim,\n                    db.insert(accounts)'), 'the claim first, then the account, its deal lifts and tier writes');
-    assert.ok(put.includes('                if (!claimRefused(e)) throw e;\n                return missedPut();\n'), 'the claim\'s refusal answered as a missed write; anything else thrown');
+    assert.ok(put.includes('                if (!claimRefused(e)) throw e;\n                return await missedPut();\n'), 'the claim\'s refusal answered as a missed write; anything else thrown');
     assert.ok(put.includes('const [[upserted], ...lifts] = wrote.slice(claim.length);'));
     const lib = read('netlify/functions/_lib.mjs');
     assert.ok(lib.includes("export const ownerClaim = (table, id, orgId, filter) => (filter === undefined ? [] : [db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${filter} for update) select 1 / count(*) from c`)]);"), 'the claim: the row in this org, still the caller\'s or nobody\'s, locked for the batch — else 1 / 0');
@@ -193,7 +194,7 @@ test("§0.277 THE GUARD: a quote's save is one batch — the quote as read, its 
     const order = ['rowAsRead(quotes, existing.id, orgId, stamp),', '...dealClaim,', '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),', 'db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),'];
     order.forEach((line, i) => { assert.ok(batch.includes(line), line); if (i) assert.ok(batch.indexOf(line) > batch.indexOf(order[i - 1]), `in order: ${line}`); });
     assert.ok(!put.includes('await syncToOpportunity('), 'the deal\'s value never written apart from the quote');
-    assert.ok(put.includes("if (!claimRefused(e)) throw e;\n                return missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);"));
+    assert.ok(put.includes("if (!claimRefused(e)) throw e;\n                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);"));
     // The review: the claim's own lines whole — an empty claim (its filter dropped) passes every other pin.
     assert.ok(put.includes('const dealClaim = ownerClaim(opportunities, existing.opportunityId, orgId, dealMine);'));
     const missed = between(src, 'async function missedQuote(auth, id, forbidden, moveTo = null) {', '\n}\n');
@@ -226,6 +227,47 @@ test('§0.277 THE GUARD: the quote email is claimed before it is sent — the qu
     assert.ok(!/await db\.update\(quotes\)\s*\.set\(\{ status: 'Sent to Customer', sentAt: new Date\(\)/.test(src), 'REGRESSION: the status written after the email');
 });
 
+test("§0.278 THE GUARD: a technician's job update lands only on the job as its check read it — read with its last edit as text, the write claiming it; a miss read again: 404 off the job or gone, 409 'already' with the job when it holds what was sent, else 409 changed", () => {
+    const src = read('netlify/functions/dispatch-jobs.mjs');
+    const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
+    assert.ok(put.includes('const [read] = await db.select({ ...getTableColumns(dispatchJobs), stamp: sql`${dispatchJobs.updatedAt}::text` }).from(dispatchJobs)'), 'read with its last edit as text');
+    assert.ok(put.includes('const stamp = read?.stamp;') && put.includes('const current = read ? (({ stamp: _stamp, ...row }) => row)(read) : null;'), 'the stamp kept off the job the history and the notice read');
+    const tech = between(put, 'if (tech) {', '// Each link it names anew');
+    const checkAt = tech.indexOf('if (!techOnJob(currentJob, myTechId)) {');
+    const writeAt = tech.indexOf('const [written] = await db.update(dispatchJobs).set(updates)\n                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), sql`${dispatchJobs.updatedAt}::text = ${stamp}`)).returning();');
+    assert.ok(checkAt > 0 && writeAt > checkAt, 'the write claims the job as the check read it');
+    assert.ok(tech.includes('if (!written) return await missedTechJob(orgId, id, myTechId, data);'));
+    const historyAt = tech.indexOf("await recordStatusChange(orgId, id, current.status, data.status, userId, 'Updated in the field');");
+    const noticeAt = tech.indexOf('await notifyCustomer({ orgId, before: current, after: written,');
+    assert.ok(historyAt > writeAt && noticeAt > writeAt, 'the history and the notice only after the claimed write');
+    const missed = between(src, 'async function missedTechJob(orgId, id, myTechId, data) {', '\n}\n');
+    const order = ['const [now] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));',
+        "if (!job || !techOnJob(job, myTechId)) return { statusCode: 404, headers, body: JSON.stringify({ error: 'This job is no longer assigned to you. Nothing was saved; reload to see your jobs.' }) };",
+        // The review: compared against the row as stored, never normaliseJob's copy (a NULL signature read as false).
+        "if (techPatchHolds(now, data)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in data ? `This job is ${status} already.` : 'This job holds what you sent already.', code: 'already', job }) };",
+        'return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved; reload to see it.` }) };'];
+    order.forEach((line, i) => { assert.ok(missed.includes(line), line.slice(0, 70)); if (i) assert.ok(missed.indexOf(line) > missed.indexOf(order[i - 1]), 'in order'); });
+    // The screen reads the 'already' as done, the job as stored — never "not saved" over a change that landed.
+    const screen = read('src/Tabs/DispatchTab.jsx');
+    const mine = between(screen, 'const updateMyJob = async (jobId, patch) => {', '    };\n');
+    assert.ok(mine.includes('if (landedBefore(res.status, r.body)) { if (r.body.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? r.body.job : j)); return; }'));
+    assert.ok(mine.indexOf('if (landedBefore(') < mine.indexOf('throw refusalError(r.words, r.heard);'));
+});
+
+test("§0.278 techPatchHolds: done only when the job as stored holds every field sent — as text, absent as empty; a type-only match (false and none) or any field short is not done; the id is no field; an empty body is never done", async () => {
+    const { techPatchHolds } = await import('../netlify/functions/_techJobs.mjs');
+    const job = { id: 'j1', status: 'en_route', techNotes: 'gate', completionNotes: null, photosCount: 3, customerSignature: true };
+    assert.equal(techPatchHolds(job, { id: 'j1', status: 'en_route' }), true);
+    assert.equal(techPatchHolds(job, { status: 'en_route', techNotes: 'gate', photosCount: 3, customerSignature: true }), true);
+    assert.equal(techPatchHolds(job, { status: 'en_route', completionNotes: '' }), true, 'none stored, none sent');
+    assert.equal(techPatchHolds(job, { status: 'en_route', techNotes: 'gate code' }), false, 'a field short');
+    assert.equal(techPatchHolds(job, { status: 'on_site' }), false);
+    assert.equal(techPatchHolds({ ...job, customerSignature: null }, { customerSignature: false }), false, 'false is not none');
+    assert.equal(techPatchHolds(job, { id: 'j1' }), false, 'nothing sent: never done');
+    assert.equal(techPatchHolds(job, {}), false);
+    assert.equal(techPatchHolds(null, { status: 'en_route' }), false);
+});
+
 test('§0.275 _lib: the filter is no filter for an Admin or Manager, the caller\'s mayMutate in SQL for anyone else; a missed write is 403 while the row stands, the caller\'s 404 when gone', () => {
     const lib = read('netlify/functions/_lib.mjs');
     const fn = between(lib, 'export async function ownerWriteFilter(', '\n}\n');
@@ -238,4 +280,17 @@ test('§0.275 _lib: the filter is no filter for an Admin or Manager, the caller\
     assert.ok(bulk.includes('const mine = (ownerColumn && !canSeeAll) ? ownerMayWrite(ownerColumn, callerId) : undefined;'));
     assert.ok(bulk.includes('.onConflictDoUpdate({ target: table.id, setWhere: and(eq(table.orgId, orgId), mine), set })'));
     assert.ok(bulk.includes('for (const row of eligible) if (!written.has(row.id)) forbidden.push(row.id);'));
+});
+
+test("§0.278 THE GUARD (the review): every missed write's answer is awaited where it is returned — a promise returned unawaited from a handler's try settles after it, so a failed re-read skipped the catch: no house 500, no headers", () => {
+    const dir = new URL('netlify/functions/', ROOT);
+    let seen = 0;
+    for (const f of readdirSync(dir).filter((n) => n.endsWith('.mjs'))) {
+        const src = read('netlify/functions/' + f);
+        for (const m of src.matchAll(/\breturn\s+(await\s+)?(missed\w*)\(/g)) {
+            seen += 1;
+            assert.ok(m[1], `${f}: \`return ${m[2]}(\` unawaited — return await ${m[2]}(...)`);
+        }
+    }
+    assert.ok(seen >= 12, `the missed writes scanned (${seen}) — eight missedWrite, two missedPut, missedQuote, missedTechJob`);
 });

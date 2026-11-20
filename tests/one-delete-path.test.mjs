@@ -244,7 +244,7 @@ test('a delete\'s audit line is the server\'s — each DELETE writes <record>.de
     for (const [file, entity] of [['contacts', 'contact'], ['accounts', 'account'], ['opportunities', 'opportunity'], ['tasks', 'task'], ['activities', 'activity']]) {
         const del = between(read(`netlify/functions/${file}.mjs`), "if (event.httpMethod === 'DELETE') {", 'return { statusCode: 405');
         // Moved pin (§0.275): a rep's three DELETEs answer a missed row through missedWrite (403 still there, 404 gone).
-        const gone = Math.max(del.indexOf('if (!deletedRow) return { statusCode: 404'), del.indexOf('if (!deletedRow) return missedWrite({'));
+        const gone = Math.max(del.indexOf('if (!deletedRow) return { statusCode: 404'), del.indexOf('if (!deletedRow) return await missedWrite({'));   // awaited since §0.278 (the review)
         assert.ok(gone > 0 && del.indexOf(`deletionAudit('${entity}', deletedRow`) > gone, `${file}.mjs: its audit line, after the row is gone`);
     }
     // The hooks' own 'delete' lines ran before the answer: a refused delete was logged

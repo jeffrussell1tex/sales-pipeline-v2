@@ -5,7 +5,7 @@ import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
-import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore } from '../utils/refusalWords.js';
 import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
@@ -6484,8 +6484,13 @@ export default function DispatchTab() {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: jobId, ...patch }),
             });
-            // The ok check first, the house words (state §0.248, Part 11) — the job card says them.
-            if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
+            // The ok check first, the house words (state §0.248, Part 11) — the job card says them. A press beaten by one in
+            // flight that made the same change (state §0.278, code 'already'): done, the job as stored, nothing said.
+            if (!res.ok) {
+                const r = await writeRefusalOf(res);
+                if (landedBefore(res.status, r.body)) { if (r.body.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? r.body.job : j)); return; }
+                throw refusalError(r.words, r.heard);
+            }
             const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before
             if (data.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? data.job : j));
         } finally {

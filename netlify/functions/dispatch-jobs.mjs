@@ -5,7 +5,7 @@ import {
     dispatchJobStatusHistory,
     dispatchTechnicians,
 } from '../../db/schema.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, getTableColumns } from 'drizzle-orm';
 import { verifyAuth, isTechnician } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, getCallerName, auditAs } from './_lib.mjs';
@@ -14,7 +14,7 @@ import { serverErrorBody, withNumberRetry, getCallerName, auditAs } from './_lib
 import { notifyCustomer } from './_customerNotify.mjs';
 // Whose jobs a Technician's are — one definition for every dispatch read (§0.169).
 import { resolveTechnicianId } from './_techScope.mjs';
-import { techOnJob } from './_techJobs.mjs';
+import { techOnJob, techPatchHolds } from './_techJobs.mjs';
 import { checkLinks } from './_links.mjs';
 
 // A job's customer, service location, CRM account and deal: live rows of this org when a write names
@@ -186,6 +186,21 @@ const TECH_WRITABLE = ['status', 'techNotes', 'completionNotes', 'photosCount', 
 // through their own day and pause it; they may not cancel it or return it to
 // unscheduled, both of which are dispatch decisions.
 const TECH_STATUS_ALLOWED = ['en_route', 'on_site', 'paused', 'completed'];
+
+// A technician's write that missed the job as its check read it (state §0.278): what stands now decides. The job gone,
+// or no longer theirs — a dispatcher took them off it after the check — answers 404, as every technician read of a job
+// not theirs answers. What the body names already stored — a press in flight with this one made it — is done: code
+// 'already', with the job as stored (theirs to read) — compared against the row itself, never its normalised copy (the
+// review: normaliseJob reads a stored NULL signature as false, so a false sent over it read as done). Else the job
+// changed since it was read: said, nothing written. Its callers await it: a failed re-read is the handler's 500.
+async function missedTechJob(orgId, id, myTechId, data) {
+    const [now] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+    const job = now ? normaliseJob(now) : null;
+    if (!job || !techOnJob(job, myTechId)) return { statusCode: 404, headers, body: JSON.stringify({ error: 'This job is no longer assigned to you. Nothing was saved; reload to see your jobs.' }) };
+    const status = String(job.status || 'unscheduled').replace(/_/g, ' ');
+    if (techPatchHolds(now, data)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in data ? `This job is ${status} already.` : 'This job holds what you sent already.', code: 'already', job }) };
+    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved; reload to see it.` }) };
+}
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -437,9 +452,12 @@ export const handler = async (event) => {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
 
-            // Fetch current status before update (for history)
-            const [current] = await db.select().from(dispatchJobs)
+            // Fetch current status before update (for history) — with its last edit as text, the stamp a technician's
+            // write claims the job by (state §0.278).
+            const [read] = await db.select({ ...getTableColumns(dispatchJobs), stamp: sql`${dispatchJobs.updatedAt}::text` }).from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            const stamp = read?.stamp;
+            const current = read ? (({ stamp: _stamp, ...row }) => row)(read) : null;
             if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
 
             const data    = JSON.parse(event.body || '{}');
@@ -469,10 +487,12 @@ export const handler = async (event) => {
                 TECH_WRITABLE.forEach(f => { if (f in data) updates[f] = data[f]; });
 
                 // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
-                // took (census-D §2C).
+                // took (census-D §2C). It lands only on the job as its check read it (state §0.278): that they are on it, the
+                // status the history moves from and the job the customer's notice compares were all decided on that read — a
+                // dispatcher who took them off it, cancelled or moved it since, and the write went on with the id alone.
                 const [written] = await db.update(dispatchJobs).set(updates)
-                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).returning();
-                if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), sql`${dispatchJobs.updatedAt}::text = ${stamp}`)).returning();
+                if (!written) return await missedTechJob(orgId, id, myTechId, data);
 
                 if ('status' in data && data.status !== current.status) {
                     await recordStatusChange(orgId, id, current.status, data.status, userId, 'Updated in the field');

@@ -1847,7 +1847,8 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     // Moved pin (§0.248, Part 11): New Job's saves read a refusal's body once, for its words and its field (refusalWords).
     // Moved in §0.263 (the unknown-save rule, Part 4): and the helpers that tell the server's own refusal from an answer
     // that proves nothing; the jobs that may have been returned said by maybeFreedWords.
-    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../utils/refusalWords.js';"));
+    // Moved in §0.278: and landedBefore — the job card's press beaten by one in flight that made the same change is done.
+    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore } from '../utils/refusalWords.js';"));
     assert.ok(d.includes("import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';"));
     const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
     // Moved in §0.263 (the unknown-save rule, Part 4): a refusal carries whether it was the server's own (refusalError);
@@ -5508,8 +5509,9 @@ test('Part 11: the shift pattern\'s save and the job card\'s update throw the ho
         const did = { sent: [], busy: [] };
         const start = [{ id: 'job_1', status: 'scheduled' }, { id: 'job_2' }];
         const raw = stateOf(start);
-        const fn = p10Fn(DISPATCH, '    const updateMyJob = async (jobId, patch) => {', '\n    };', ['setTechBusyId', 'dbFetch', 'readRefusal', 'setJobsRaw', ...U4_NAMES], 'updateMyJob')(
-            (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set, ...U4);
+        // Moved in §0.278: landedBefore bound — a 409 'already' is done, the job as stored.
+        const fn = p10Fn(DISPATCH, '    const updateMyJob = async (jobId, patch) => {', '\n    };', ['setTechBusyId', 'dbFetch', 'readRefusal', 'setJobsRaw', ...U4_NAMES, 'landedBefore'], 'updateMyJob')(
+            (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, raw.set, ...U4, landedBefore);
         let thrown = null;
         try { await fn('job_1', { status: 'en_route' }); } catch (e) { thrown = e; }
         return { ...did, said: thrown ? failureWords(thrown) : null, unknown: thrown ? unknownOf(thrown) : null, raw: raw.value, same: raw.value === start };
@@ -5524,6 +5526,13 @@ test('Part 11: the shift pattern\'s save and the job card\'s update throw the ho
         const c = await card(answer);
         assert.deepEqual([c.said, c.unknown, c.same, c.busy], [words, !heard, true, ['job_1', null]], `the job card: REGRESSION — ${words}`);
     }
+    // §0.278: a press beaten by one in flight that made the same change (409 'already') is done — nothing said, the job as
+    // stored put in the list; without the job, the list as it was. A 409 with no code is still said (above).
+    const stored = { id: 'job_1', status: 'en_route' };
+    const al = await card(onceOf(409, { error: 'This job is en route already.', code: 'already', job: stored }));
+    assert.deepEqual([al.said, al.raw, al.busy], [null, [stored, { id: 'job_2' }], ['job_1', null]], 'REGRESSION: a change that landed said as not saved');
+    const bare = await card(onceOf(409, { error: 'This job holds what you sent already.', code: 'already' }));
+    assert.deepEqual([bare.said, bare.same], [null, true]);
     const hl = await hours(onceOf(200, { technician: { id: 'dtech_1', workingHours: { mon: null } } }));
     assert.deepEqual([hl.said, hl.raw[0].workingHours, hl.sent[0][2]], [null, { mon: null }, { id: 'dtech_1', workingHours: { mon: null } }]);
     const hu = await hours(P11_UNREADABLE());
@@ -11981,7 +11990,10 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
         }
     }
     assert.ok(answered >= 19, `the answered writes scanned (${answered}) — one the scan stops reaching fails here (the §0.268 review)`);
-    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 2, 'REGRESSION: an update whose job went goes on to its history and notice');
+    // Moved in §0.278: the field update's miss is read again (missedTechJob — the job gone is a 404 there, before its history
+    // and notice, THE GUARD tests/owner-writes.test.mjs); the office's update keeps its own.
+    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 1, 'REGRESSION: an update whose job went goes on to its history and notice');
+    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), 'if (!written) return await missedTechJob(orgId, id, myTechId, data);'), 1, 'REGRESSION: a field update whose job went goes on to its history and notice');
     const jobs = code(read('netlify/functions/dispatch-jobs.mjs'));
     const notice = between(jobs, 'async function jobAfterNotice(orgId, jobId, written) {', '\n}\n');
     order(notice, 'try {', 'return after || written;', '} catch (e) {', 'return written;');
@@ -11996,7 +12008,8 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     order(dispatcherPut, "\n            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
         '\n            if (toStatus && toStatus !== fromStatus) {', '\n            await notifyCustomer({ orgId, before: current, after: written,');
     const fieldPut = between(jobs, '\n                const [written] = await db.update(dispatchJobs).set(updates)', '\n                const updatedRow = await jobAfterNotice(orgId, id, written);');
-    order(fieldPut, "\n                if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+    // Moved in §0.278: the field update's miss is missedTechJob's — gone, off the job or changed, all before the history.
+    order(fieldPut, '\n                if (!written) return await missedTechJob(orgId, id, myTechId, data);',
         "\n                if ('status' in data && data.status !== current.status) {", '\n                await notifyCustomer({ orgId, before: current, after: written,');
     // The job's DELETE is one batch.
     const del = jobs.slice(jobs.lastIndexOf("if (event.httpMethod === 'DELETE') {"));

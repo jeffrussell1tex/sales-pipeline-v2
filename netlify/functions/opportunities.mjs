@@ -733,7 +733,7 @@ export const handler = async (event) => {
                 })
                 .returning();
             // A rep's save on a deal reassigned since the check wrote nothing (state §0.275): the ownership refusal.
-            if (!upserted) return missedWrite({ table: opportunities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) } });
+            if (!upserted) return await missedWrite({ table: opportunities, id: data.id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) } });
             // The move this write made, by its time (Jeff's Q4): one audit row, from → to.
             const closeMoves = Array.isArray(upserted?.closeDateHistory) ? upserted.closeDateHistory : [];
             const closeMove = closeNamed ? closeMoves[closeMoves.length - 1] : null;

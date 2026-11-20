@@ -577,7 +577,7 @@ export const handler = async (event) => {
                 ]);
             } catch (e) {
                 if (!claimRefused(e)) throw e;
-                return missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);
+                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);
             }
             const [updated] = wrote[wrote.length - 1];
             // Pending Approval → Draft is a send-back or a withdrawal — the record the

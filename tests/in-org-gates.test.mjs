@@ -92,7 +92,8 @@ test('techJobRefs: the jobs, customers and locations of their own jobs only', ()
 test('one definition: dispatch-jobs reads the shared rules, its own copy is gone; the scope resolves within the org', () => {
     const jobs = code(read('netlify/functions/dispatch-jobs.mjs'));
     assert.ok(jobs.includes("import { resolveTechnicianId } from './_techScope.mjs';"));
-    assert.ok(jobs.includes("import { techOnJob } from './_techJobs.mjs';"));
+    // Moved in §0.278: and the rule that tells a technician's missed write done (techPatchHolds).
+    assert.ok(jobs.includes("import { techOnJob, techPatchHolds } from './_techJobs.mjs';"));
     assert.ok(!/const techOnJob\s*=|function techOnJob|async function resolveTechnicianId/.test(jobs), 'no local copy');
     const scope = code(read('netlify/functions/_techScope.mjs'));
     assert.ok(scope.includes('.where(and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, userId)));'), 'the caller’s row, in this org');
