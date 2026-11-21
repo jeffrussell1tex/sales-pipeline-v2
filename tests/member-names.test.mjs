@@ -501,7 +501,9 @@ export const usersWrites = (file, src) => {
 };
 // Each decided through memberName.js (the test below names the decider of each).
 // _links.mjs clearMemberLinks: reads the members a restore landed; its .set names no name (state §0.205)
-const LISTED = ['_lib.mjs ensureRosterRow .values', '_links.mjs clearMemberLinks value', 'backup.mjs handler value', 'users-sync.mjs handler .set', 'users-sync.mjs handler .values',
+const LISTED = ['_lib.mjs ensureRosterRow .values', '_links.mjs clearMemberLinks value', 'backup.mjs handler value',
+    'lead-requests.mjs handler value',   // an approve claims its requester's row (ownerClaim — a select for update, it writes nothing; state §0.279)
+    'users-sync.mjs handler .set', 'users-sync.mjs handler .values',
     'users.mjs handler .set', 'users.mjs upsertUser .onConflictDoUpdate set',   // the self-save's insert went (state §0.202)
     'users.mjs upsertUser .set',   // the PUT's update-only write (state §0.202) — its name decided above it (putNameTaken)
     'users.mjs upsertUser .values'];
@@ -523,6 +525,10 @@ test('THE GUARD: every write of a name to the users table is a listed site, and 
     assert.ok(sync.includes('firstFreeName(named, numbered(name))'), 'users-sync.mjs: the create');
     assert.ok(!/\bpatch\.name\s*=|patch\[['"]name['"]\]/.test(sync), 'users-sync.mjs: the update takes no name');
     assert.ok(fn('backup.mjs').includes('restorableMembers(await memberNamesOf(orgId), ents.users)'), 'backup.mjs: the restore');
+    // §0.279: the approve's claim on its requester names no name — the table handed to ownerClaim alone, a select for update.
+    assert.ok(fn('lead-requests.mjs').includes('...ownerClaim(users, requester.id, orgId, sql`true`),'), 'lead-requests.mjs: the requester claimed');
+    assert.ok(fn('_lib.mjs').includes('export const ownerClaim = (table, id, orgId, filter) => (filter === undefined ? [] : [db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${filter} for update) select 1 / count(*) from c`)]);'),
+        'ownerClaim reads and locks the row — it writes nothing');
     for (const f of files) {
         const src = code(readFileSync(new URL(f, dir), 'utf8'));
         assert.ok(!/\busers\s+as\s+\w+/.test(src), `${f}: the users table under another name`);

@@ -268,6 +268,47 @@ test("§0.278 techPatchHolds: done only when the job as stored holds every field
     assert.equal(techPatchHolds(null, { status: 'en_route' }), false);
 });
 
+test("§0.279 THE GUARD: a lead request's writes land only on what their checks read — a cancel and a deny only while still pending, in their own WHERE; an approve one batch claiming the request pending, the lead's owner as read and the requester, then the three writes; a miss read again", () => {
+    const src = read('netlify/functions/lead-requests.mjs');
+    assert.ok(src.includes("const PENDING = eq(leadClaimRequests.status, 'pending');"));
+    // The cancel.
+    const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");
+    assert.ok(del.includes('const [cancelled] = await db.delete(leadClaimRequests)\n                .where(and(eq(leadClaimRequests.id, id), eq(leadClaimRequests.orgId, orgId), PENDING))'), 'a cancel deletes only a pending request');
+    assert.ok(del.indexOf("if (!cancelled) return await missedRequest(orgId, id, 'cancel');") > del.indexOf('const [cancelled] = '), 'a miss read again');
+    // The deny.
+    const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
+    const deny = between(put, "if (data.action === 'deny') {", '// approve');
+    assert.ok(deny.includes('.where(and(eq(leadClaimRequests.id, data.id), eq(leadClaimRequests.orgId, orgId), PENDING))'), 'a deny writes only a pending request');
+    assert.ok(deny.indexOf("if (!denied) return await missedRequest(orgId, data.id, 'deny');") < deny.indexOf('await writeAudit('), 'a missed deny is read again before its audit');
+    // The approve: the claims in order, then the writes, in one batch; no write of it apart.
+    const approve = put.slice(put.indexOf('// approve'));
+    // The lead first (the review): two approves of sibling requests locked their own request, then the lead, then each
+    // other's request — a deadlock, a 500. Lead, request, requester: the second waits on the lead holding nothing.
+    const claims = ['...ownerClaim(leads, lead.id, orgId, sql`${leads.ownerId} is not distinct from ${lead.ownerId}`),',
+        '...ownerClaim(leadClaimRequests, request.id, orgId, PENDING),',
+        '...ownerClaim(users, requester.id, orgId, sql`true`),'];
+    claims.forEach((line, i) => { assert.ok(approve.includes(line), line); if (i) assert.ok(approve.indexOf(line) > approve.indexOf(claims[i - 1]), 'in order: lead, request, requester'); });
+    const batch = between(approve, 'done = await db.batch([', ']);');
+    const writes = ['...claims,', 'db.update(leads)', "set({ status: 'approved', ...resolution })",
+        '.where(and(eq(leadClaimRequests.orgId, orgId), eq(leadClaimRequests.leadId, request.leadId), PENDING, ne(leadClaimRequests.id, request.id))),'];
+    writes.forEach((line, i) => { assert.ok(batch.includes(line), line); if (i) assert.ok(batch.indexOf(line) > batch.indexOf(writes[i - 1]), 'in order'); });
+    assert.ok(approve.includes("if (!claimRefused(e)) throw e;\n                return await missedRequest(orgId, data.id, 'approve');"));
+    assert.ok(approve.includes('const [approved] = done[claims.length + 1];'), 'the approved request answered from its own write');
+    const outside = approve.slice(0, approve.indexOf('done = await db.batch(')) + approve.slice(approve.indexOf('const [approved] = done['));
+    assert.ok(!/await db\.update\(/.test(outside) && !/for \(const s of siblings\)/.test(approve), 'REGRESSION: an approve write outside its batch');
+    // The miss: what stands now, in the checks' words.
+    const missed = between(src, 'async function missedRequest(orgId, id, action) {', '\n}\n');
+    const order = ['const [now] = await db.select().from(leadClaimRequests).where(and(eq(leadClaimRequests.id, id), eq(leadClaimRequests.orgId, orgId)));',
+        "? { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) }",
+        "if (action === 'cancel') return { statusCode: 409, headers, body: JSON.stringify({ error: `This request was ${now.status} since — resolved requests are history. Nothing was cancelled.`, leadRequest: now }) };",
+        "const again = (action === 'approve' && now.status === 'approved') || (action === 'deny' && now.status === 'denied');",
+        "if (!lead) return { statusCode: 409, headers, body: JSON.stringify({ error: 'The requested lead no longer exists — deny the request instead.' }) };",   // the review
+        "if (lead.ownerId && lead.ownerId !== now.requesterId) return",
+        "if (!requester) return",
+        "error: 'This request changed since it was read. Nothing was saved; reload to see it.'"];
+    order.forEach((line, i) => { assert.ok(missed.includes(line), line.slice(0, 70)); if (i) assert.ok(missed.indexOf(line) > missed.indexOf(order[i - 1]), 'in order'); });
+});
+
 test('§0.275 _lib: the filter is no filter for an Admin or Manager, the caller\'s mayMutate in SQL for anyone else; a missed write is 403 while the row stands, the caller\'s 404 when gone', () => {
     const lib = read('netlify/functions/_lib.mjs');
     const fn = between(lib, 'export async function ownerWriteFilter(', '\n}\n');
@@ -292,5 +333,6 @@ test("§0.278 THE GUARD (the review): every missed write's answer is awaited whe
             assert.ok(m[1], `${f}: \`return ${m[2]}(\` unawaited — return await ${m[2]}(...)`);
         }
     }
-    assert.ok(seen >= 12, `the missed writes scanned (${seen}) — eight missedWrite, two missedPut, missedQuote, missedTechJob`);
+    // Moved in §0.279: and missedRequest's three (the lead request's cancel, deny and approve).
+    assert.ok(seen >= 15, `the missed writes scanned (${seen}) — eight missedWrite, two missedPut, missedQuote, missedTechJob, three missedRequest`);
 });

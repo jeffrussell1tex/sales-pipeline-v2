@@ -111,7 +111,9 @@ One commit per verified batch; doc patch in the same commit.
   check and the write is never touched (THE GUARD,
   tests/owner-writes.test.mjs; guide §18b135). Since §0.278 a
   technician's job update too: the job's last edit as read in its own
-  WHERE (`missedTechJob`; guide §18b135 rule 8).
+  WHERE (`missedTechJob`; guide §18b135 rule 8). Since §0.279 a lead
+  request's cancel, deny and approve: pending in their own WHERE, an
+  approve one batch claiming the lead first (`missedRequest`; rule 9).
 - The `null === null` collision: an unresolvable caller and an unassigned row
   both read `null` — guard with `!!row.ownerId` wherever it matters.
 - Role gate is an allowlist (`APP_ROLES` / `isAppRole`); unrecognised values

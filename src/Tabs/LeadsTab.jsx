@@ -1295,9 +1295,23 @@ export default function LeadsTab() {
             setLeadRequests(prev => prev.filter(r => r.id !== id));
         } else {
             const words = refusalWords(res, refused);
-            if (stillOrg(askedOrg)) sayClaim(leadId, heardRefusal(res.status, refused) ? `Request not cancelled: ${words}` : maybeSaid('The request', 'cancelled', words));
+            // Resolved since the list was read (state §0.279, a 409 in the server's words, the request as stored): the request
+            // shows as it stands — never still pending with its Cancel — and an approve that landed shows the lead as the
+            // rep's, as a landed Approve does (the review: the lead was left drawn unassigned, offering Request again);
+            // a lead another rep was given is the reload's to show, and the words say so.
+            const resolved = res.status === 409 && heardRefusal(res.status, refused) ? refused.leadRequest : null;
+            if (stillOrg(askedOrg)) sayClaim(leadId, heardRefusal(res.status, refused) ? `Request not cancelled: ${words}${resolved ? ' Reload the page to see the lead as stored.' : ''}` : maybeSaid('The request', 'cancelled', words));
+            if (resolved?.id === id && stillOrg(askedOrg)) {
+                setLeadRequests(prev => prev.map(r => r.id === id ? resolved : r));
+                if (resolved.status === 'approved') {
+                    const requester = reps.find(r => r.id === resolved.requesterId);
+                    setLeads(prev => prev.map(l => l.id === resolved.leadId
+                        ? { ...l, ownerId: resolved.requesterId, assignedTo: requester?.name || l.assignedTo }
+                        : l));
+                }
+            }
         }
-    }, [leadRequests, sayClaim]);
+    }, [leadRequests, sayClaim, reps, setLeads]);
 
     const resolveRequest = useCallback(async (id, action) => {
         const askedOrg = requestOrg();

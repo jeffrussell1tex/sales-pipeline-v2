@@ -8378,7 +8378,7 @@ test('Part 12 fixes (L): Leads\' Cancel request and Approve / Deny — refusals 
     for (let i = 0; i < p12bRefused().length; i++) {
         const words = p12bRefused()[i][1];
         // Moved in §0.262 (the unknown-save rule, Part 3): only the server's own refusal (the first) is "not"; any other may have.
-        const c = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer: p12bRefused()[i][0], leadRequests: P12FXL_REQ });
+        const c = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer: p12bRefused()[i][0], leadRequests: P12FXL_REQ });
         const cancelSaid = i === 0 ? `Request not cancelled: ${words}` : `The request may have been cancelled — reload the page to see whether it was: ${words}`;
         assert.deepEqual([c.said, c.lists.value], [[['l1', cancelSaid]], P12FXL_REQ], `REGRESSION: ${words}`);
         for (const [action, verb] of [['approve', 'approved'], ['deny', 'denied']]) {
@@ -8387,8 +8387,18 @@ test('Part 12 fixes (L): Leads\' Cancel request and Approve / Deny — refusals 
             assert.deepEqual([r.said, r.lists.value, r.leads.value[0].ownerId], [[['l1', said]], P12FXL_REQ, null], `REGRESSION: ${verb} — ${words}`);
         }
     }
-    const cancelled = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer: onceOf(200, {}), leadRequests: P12FXL_REQ });
+    const cancelled = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer: onceOf(200, {}), leadRequests: P12FXL_REQ });
     assert.deepEqual([cancelled.said, cancelled.lists.value], [[], []]);
+    // §0.279: a Cancel refused because a manager resolved the request since (a 409 in the server's words, the request as
+    // stored) shows the request as it stands — never still pending with its Cancel; an approve that landed shows the lead
+    // as the rep's, as a landed Approve does (the review); the words send the rep to a reload for the lead as stored.
+    const resolved = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer: onceOf(409, { error: 'This request was approved since — resolved requests are history. Nothing was cancelled.', leadRequest: { id: 'lcr_1', leadId: 'l1', requesterId: 'usr_2', status: 'approved' } }), leadRequests: P12FXL_REQ });
+    assert.deepEqual([resolved.said, resolved.lists.value, resolved.leads.value[0].ownerId, resolved.leads.value[0].assignedTo], [[['l1', 'Request not cancelled: This request was approved since — resolved requests are history. Nothing was cancelled. Reload the page to see the lead as stored.']], [{ id: 'lcr_1', leadId: 'l1', requesterId: 'usr_2', status: 'approved' }], 'usr_2', 'Karen']);
+    const denied = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer: onceOf(409, { error: 'This request was denied since.', leadRequest: { ...P12FXL_REQ[0], status: 'denied' } }), leadRequests: P12FXL_REQ });
+    assert.deepEqual([denied.lists.value[0].status, denied.leads.value[0].ownerId], ['denied', null], 'a denied request: shown denied, the lead not given to the rep');
+    for (const [answer] of p12bRefused()) assert.deepEqual((await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer, leadRequests: P12FXL_REQ })).lists.value, P12FXL_REQ, 'only a 409 in words carrying the request changes the list');
+    const switched = await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer: onceOf(409, { error: 'x', leadRequest: { id: 'lcr_1', leadId: 'l1', requesterId: 'usr_2', status: 'approved' } }), switchAt: true, leadRequests: P12FXL_REQ });
+    assert.deepEqual([switched.said, switched.lists.value, switched.leads.value[0].ownerId], [[], P12FXL_REQ, null], 'after an org switch, nothing changed or said');
     const unread = await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim, loadRequests', ['lcr_1', 'approve'], { answer: P11_UNREADABLE(), leadRequests: P12FXL_REQ });
     assert.deepEqual(unread.said, [['l1', 'Request approved — Its answer could not be read. Reload the page to see the lead and its requests.']],
         'REGRESSION: a landed Approve, its answer unread, said as nothing (or thrown)');
@@ -8396,7 +8406,7 @@ test('Part 12 fixes (L): Leads\' Cancel request and Approve / Deny — refusals 
         { answer: onceOf(200, { leadRequest: { ...P12FXL_REQ[0], status: 'approved' } }), leadRequests: P12FXL_REQ });
     assert.deepEqual([approved.said, approved.leads.value[0].ownerId, approved.leads.value[0].assignedTo, approved.lists.value[0].status], [[], 'usr_2', 'Karen', 'approved']);
     for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) {
-        assert.deepEqual((await p12fxLPress('cancelRequest', 'leadRequests, sayClaim', ['lcr_1'], { answer, switchAt: true, leadRequests: P12FXL_REQ })).said, []);
+        assert.deepEqual((await p12fxLPress('cancelRequest', 'leadRequests, sayClaim, reps, setLeads', ['lcr_1'], { answer, switchAt: true, leadRequests: P12FXL_REQ })).said, []);
         assert.deepEqual((await p12fxLPress('resolveRequest', 'reps, setLeads, leadRequests, sayClaim, loadRequests', ['lcr_1', 'deny'], { answer, switchAt: true, leadRequests: P12FXL_REQ })).said, []);
     }
     // The press notice's title: the lead as the panel names it.
@@ -8428,7 +8438,8 @@ test('Part 12 fixes (L): WIRING — Leads\' claim requests: the panel says a fai
     // Moved in §0.271: the Cancel reads its refusal before asking whether it is gone already (an earlier press that landed).
     assert.equal(count(presses, 'const refused = await res.json().catch(() => null);') + count(presses, 'const refused = res.ok ? null : await res.json().catch(() => null);'), 3, 'each refusal read once');
     assert.equal(count(presses, 'failureWords(e))'), 3, 'each failure in failureWords\'');
-    assert.equal(count(presses, 'heardRefusal(res.status, refused)'), 3, 'each asks whether it is the server\'s own refusal');
+    // Moved in §0.279: and the Cancel asks it once more — its 409 in the server's words (resolved since) shows the request as stored.
+    assert.equal(count(presses, 'heardRefusal(res.status, refused)'), 4, 'each asks whether it is the server\'s own refusal');
 });
 
 // ── Part 12 — the review's fixes (G — THE GUARD floors) ──
