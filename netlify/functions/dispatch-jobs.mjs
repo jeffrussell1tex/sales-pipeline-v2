@@ -206,6 +206,28 @@ async function missedTechJob(orgId, id, myTechId, data) {
     return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved.`, code: 'stale', job }) };
 }
 
+// The office's write and the job it replaced, in one transaction (state §0.285; OPEN_ITEMS §4.8, §0.278's found (a)): the
+// row locked and read, then written — the history's from-status, the customer notice's `before` and the audit's move were
+// decided on the PUT's read, and a move another member made between (a second dispatcher, a technician's Start travel)
+// was written over unseen in them: a move recorded from a status the job no longer held, the customer told twice. Under
+// the lock a second write waits and reads the first's job. The save still lands, as before. One statement (the review): a
+// select and an update in a batch each took their own snapshot, so a job deleted and made again with its id between them
+// came back written with nothing replaced — the PUT's 500 over a save that landed; here the update writes only the row its
+// own locked read found. `before` is the job as written, its status and appointment as they were (all the history, the
+// notice's plan and the audit read of it). → { before, written }, both null when the job is gone. Its callers await it.
+async function officeWrite(orgId, id, updates) {
+    const was = db.$with('replaced').as(db.select({
+        wasId: dispatchJobs.id, wasStatus: dispatchJobs.status, wasDate: dispatchJobs.scheduledDate,
+        wasStart: dispatchJobs.scheduledStart, wasSlot: dispatchJobs.timeSlot,
+    }).from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).for('update'));
+    const [row] = await db.with(was).update(dispatchJobs).set(updates).from(was)
+        .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), eq(dispatchJobs.id, was.wasId)))
+        .returning({ ...getTableColumns(dispatchJobs), wasStatus: was.wasStatus, wasDate: was.wasDate, wasStart: was.wasStart, wasSlot: was.wasSlot });
+    if (!row) return { before: null, written: null };
+    const { wasStatus, wasDate, wasStart, wasSlot, ...written } = row;
+    return { before: { ...written, status: wasStatus, scheduledDate: wasDate, scheduledStart: wasStart, timeSlot: wasSlot }, written };
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -564,20 +586,19 @@ export const handler = async (event) => {
             if ('customFields' in data) updates.customFields = JSON.stringify(data.customFields);
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
-            // took (census-D §2C).
-            const [written] = await db.update(dispatchJobs).set(updates)
-                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).returning();
+            // took (census-D §2C). Written with the job it replaced, read under the write's own lock (state §0.285).
+            const { before: replaced, written } = await officeWrite(orgId, id, updates);
             if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
 
-            // Write status history if status changed
-            const fromStatus = current.status ?? current.status;
+            // Write status history if status changed — from the job the write replaced, never the PUT's read (state §0.285)
+            const fromStatus = replaced.status;
             const toStatus   = data.status;
             if (toStatus && toStatus !== fromStatus) {
                 await recordStatusChange(orgId, id, fromStatus, toStatus, userId, data.statusNote ?? null);
             }
 
-            // Scheduling (or re-scheduling) confirms; en_route announces (§0.111).
-            await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
+            // Scheduling (or re-scheduling) confirms; en_route announces (§0.111) — compared with the job the write replaced.
+            await notifyCustomer({ orgId, before: replaced, after: written, actorName: await getCallerName(userId, orgId) });
             const updated = await jobAfterNotice(orgId, id, written);
             {
                 const changed = Object.keys(updates).filter(k => k !== 'updatedAt');

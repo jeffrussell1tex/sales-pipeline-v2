@@ -101,7 +101,10 @@ test('dispatch-jobs: every write that can schedule or start travel tells the cus
     assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: /g) || []).length, 3, 'create, the technician path, the dispatcher path');
     assert.ok(s.includes('await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });'), 'create — an upsert may be a re-schedule, so the prior row is the whole row');
     assert.ok(s.includes('            const [priorJob] = await db.select()\n                .from(dispatchJobs)'), 'the prior row is selected whole');
-    assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: current, after: written, actorName: await getCallerName\(userId, orgId\) \}\);/g) || []).length, 2, 'both update paths');
+    // Moved in §0.285: the office's update tells the customer by the job its write replaced, read under the write's lock —
+    // never the PUT's read (OPEN_ITEMS §4.8, §0.278's found (a)); the field path by the job its stamped write claimed.
+    assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: current, after: written, actorName: await getCallerName\(userId, orgId\) \}\);/g) || []).length, 1, 'the field path');
+    assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: replaced, after: written, actorName: await getCallerName\(userId, orgId\) \}\);/g) || []).length, 1, 'the office path: by the job the write replaced');
     assert.ok(s.includes('publicToken:      row.publicToken       ?? row.public_token       ?? null,'));
     assert.ok(s.includes('customerNotifications: Array.isArray(row.customerNotifications ?? row.customer_notifications) ? (row.customerNotifications ?? row.customer_notifications) : [],'));
 });
@@ -109,7 +112,12 @@ test('dispatch-jobs: every write that can schedule or start travel tells the cus
 test('_customerNotify: the token is random and issued once, SMS without credentials is recorded not attempted, every read is by the job\'s org, nothing throws', () => {
     const s = code(read('netlify/functions/_customerNotify.mjs'));
     assert.ok(s.includes("export const newPublicToken = () => randomBytes(24).toString('base64url');"));
-    assert.ok(s.includes('if (cfg.statusLink && !token) {\n            token = newPublicToken();'), 'issued only when missing, only when the link is on');
+    // Moved in §0.285: minted only where the job holds none, in the write itself — two notices at once kept the first's link.
+    assert.ok(s.includes('if (cfg.statusLink && !token) {\n            const [held] = await db.update(dispatchJobs).set({ publicToken: sql`coalesce(${dispatchJobs.publicToken}, ${newPublicToken()})` })'), 'issued only when missing, only when the link is on');
+    assert.ok(s.includes('.returning({ publicToken: dispatchJobs.publicToken });\n            token = held?.publicToken || null;'), 'the notice sends the link the job holds');
+    // §0.285: the trail appended as stored, in the write — no notice writes back its caller's read of it.
+    assert.ok(!s.includes('[...prior, ...added]'), 'REGRESSION: a notice writes back the trail its caller read — a notice at the same moment lost');
+    assert.ok(s.includes("case when jsonb_typeof(${cn}) = 'array' then ${cn} when jsonb_typeof(${cn}) = 'string' and (${cn} #>> '{}') is json array then (${cn} #>> '{}')::jsonb else '[]'::jsonb end) || ${JSON.stringify(added)}::jsonb)::text)"), 'appended to the trail as stored, kept as JSON text; a text that is no list starts afresh');
     assert.ok(s.includes("else if (!smsConfigured()) entry(type, 'sms', to, false, { error: 'SMS not configured on this site' });"));
     assert.ok(s.includes('.where(and(eq(dispatchCustomers.id, after.customerId), eq(dispatchCustomers.orgId, orgId)));'), 'the customer by org');
     assert.ok(s.includes('.where(and(eq(dispatchTechnicians.id, after.assignedTechId), eq(dispatchTechnicians.orgId, orgId)))'), 'the technician by org');

@@ -11,7 +11,7 @@
 // read BY THIS JOB'S ORG; nothing here takes an id from a request body.
 import { db } from '../../db/index.js';
 import { dispatchJobs, dispatchCustomers, dispatchTechnicians, settings } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms } from './send-sms.mjs';
@@ -50,12 +50,14 @@ export async function notifyCustomer({ orgId, before, after, actorName = null })
                 .where(and(eq(dispatchTechnicians.id, after.assignedTechId), eq(dispatchTechnicians.orgId, orgId)))
             : [];
 
-        // The status link: issued once, kept for the life of the job.
+        // The status link: issued once, kept for the life of the job — minted only where the job holds none, in the write
+        // itself (state §0.285): two notices at once each minted one and the second wrote over the first, so the link the
+        // first message carried stopped resolving. This notice sends the one the job holds.
         let token = after.publicToken || null;
         if (cfg.statusLink && !token) {
-            token = newPublicToken();
-            await db.update(dispatchJobs).set({ publicToken: token })
-                .where(and(eq(dispatchJobs.id, after.id), eq(dispatchJobs.orgId, orgId)));
+            const [held] = await db.update(dispatchJobs).set({ publicToken: sql`coalesce(${dispatchJobs.publicToken}, ${newPublicToken()})` })
+                .where(and(eq(dispatchJobs.id, after.id), eq(dispatchJobs.orgId, orgId))).returning({ publicToken: dispatchJobs.publicToken });
+            token = held?.publicToken || null;
         }
         const statusUrl = cfg.statusLink && token ? `${siteUrl()}${publicStatusPath(token)}` : null;
 
@@ -73,7 +75,6 @@ export async function notifyCustomer({ orgId, before, after, actorName = null })
             statusUrl,
         };
 
-        const prior = Array.isArray(after.customerNotifications) ? after.customerNotifications : [];
         const added = [];
         const at = new Date().toISOString();
         const entry = (type, channel, to, ok, extra = {}) => added.push({ type, channel, to: to || null, at, ok, by: actorName || null, ...extra });
@@ -107,8 +108,15 @@ export async function notifyCustomer({ orgId, before, after, actorName = null })
             }
         }
 
+        // Appended to the trail as stored, in the write itself (state §0.285): each notice wrote back the trail its caller's
+        // write had read plus its own, so two at once on one job kept only the later's — an attempt lost from the record.
+        // Stored as the app has always written it: JSON text in the jsonb column (a jsonb string whose text is the array —
+        // drizzle reads it back as the array); an array stored by any other writer is read alike, none as empty. A string
+        // whose text is no list (a restored file's, say) starts the list afresh, as the read-and-write did (the review: a
+        // cast of it threw, and every later notice's record was lost).
         if (added.length) {
-            await db.update(dispatchJobs).set({ customerNotifications: JSON.stringify([...prior, ...added]) })
+            const cn = dispatchJobs.customerNotifications;
+            await db.update(dispatchJobs).set({ customerNotifications: sql`to_jsonb(((case when jsonb_typeof(${cn}) = 'array' then ${cn} when jsonb_typeof(${cn}) = 'string' and (${cn} #>> '{}') is json array then (${cn} #>> '{}')::jsonb else '[]'::jsonb end) || ${JSON.stringify(added)}::jsonb)::text)` })
                 .where(and(eq(dispatchJobs.id, after.id), eq(dispatchJobs.orgId, orgId)));
         }
         return { sent: added, token };

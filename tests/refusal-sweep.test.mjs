@@ -12002,7 +12002,16 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
             assert.ok(m[1].trimEnd().endsWith('.returning()'), `REGRESSION: ${name}: a write answered from nothing — ${m[0].slice(0, 80)}`);
         }
     }
-    assert.ok(answered >= 19, `the answered writes scanned (${answered}) — one the scan stops reaching fails here (the §0.268 review)`);
+    // Moved in §0.285 (19 → 18): the office's job update answers from its own write through officeWrite — one statement, the
+    // job's locked read a with-list the update joins, returning the job as written and as it was — pinned here by its lines.
+    assert.ok(answered >= 18, `the answered writes scanned (${answered}) — one the scan stops reaching fails here (the §0.268 review)`);
+    {
+        const ow = between(code(read('netlify/functions/dispatch-jobs.mjs')), 'async function officeWrite(orgId, id, updates) {', '\n}\n');
+        order(ow, "const was = db.$with('replaced').as(db.select({", ".where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).for('update'));",
+            'const [row] = await db.with(was).update(dispatchJobs).set(updates).from(was)',
+            '.where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), eq(dispatchJobs.id, was.wasId)))',
+            '.returning({ ...getTableColumns(dispatchJobs), wasStatus: was.wasStatus,', 'if (!row) return { before: null, written: null };');
+    }
     // Moved in §0.278: the field update's miss is read again (missedTechJob — the job gone is a 404 there, before its history
     // and notice, THE GUARD tests/owner-writes.test.mjs); the office's update keeps its own.
     assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 1, 'REGRESSION: an update whose job went goes on to its history and notice');
@@ -12017,9 +12026,10 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     // An update whose row went since it was read: 404 before its status history or notice — each path by its own lines (the
     // §0.268 review: 12-space needles also matched the field path's 16-space lines, so a 404 moved after the dispatcher's
     // notice passed). A needle's leading newline holds it to its own indent.
-    const dispatcherPut = between(jobs, '\n            const [written] = await db.update(dispatchJobs).set(updates)', '\n            const updated = await jobAfterNotice(orgId, id, written);');
+    // Moved in §0.285: the office's write is officeWrite's, with the job it replaced; history and notice decide on that job.
+    const dispatcherPut = between(jobs, '\n            const { before: replaced, written } = await officeWrite(orgId, id, updates);', '\n            const updated = await jobAfterNotice(orgId, id, written);');
     order(dispatcherPut, "\n            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
-        '\n            if (toStatus && toStatus !== fromStatus) {', '\n            await notifyCustomer({ orgId, before: current, after: written,');
+        '\n            const fromStatus = replaced.status;', '\n            if (toStatus && toStatus !== fromStatus) {', '\n            await notifyCustomer({ orgId, before: replaced, after: written,');
     const fieldPut = between(jobs, '\n                const [written] = await db.update(dispatchJobs).set(updates)', '\n                const updatedRow = await jobAfterNotice(orgId, id, written);');
     // Moved in §0.278: the field update's miss is missedTechJob's — gone, off the job or changed, all before the history.
     order(fieldPut, '\n                if (!written) return await missedTechJob(orgId, id, myTechId, data);',

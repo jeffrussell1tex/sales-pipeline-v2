@@ -45,7 +45,9 @@ function findViolations(file, src) {
     // chain split across lines (`db`, then `.delete(` on the next) included. Until
     // §0.160 the pattern needed `db.delete(` on one line, and three writes by id
     // alone — an API-key revoke and two calendar disconnects — passed unseen.
-    const re = /db\s*\.\s*(delete|update)\s*\(/g;
+    // Since §0.285 a write behind a with-list too (`db.with(cte).update(` — the office's job write, its locked read and its
+    // update one statement): the pattern needed `db.` directly before the verb, and the statement passed unseen.
+    const re = /db\s*(?:\.\s*with\s*\([^)]*\)\s*)?\.\s*(delete|update)\s*\(/g;
     let m;
     while ((m = re.exec(src))) {
         const stmt = statementAt(src, m.index);
@@ -81,6 +83,10 @@ test('the guard sees a db chain split across lines and a raw SQL write', () => {
     assert.equal(findViolations('x.mjs', 'await sql`DELETE FROM t WHERE id = ${id}`;').length, 1, 'a raw DELETE by id alone');
     assert.equal(findViolations('x.mjs', 'await sql`UPDATE t SET updated_at = ${n} WHERE id = ${id} AND org_id = ${o}`;').length, 0);
     assert.equal(findViolations('x.mjs', 'await sql`SELECT id FROM t WHERE id = ${id}`;').length, 0, 'a read is not this guard\'s');
+    // §0.285: a write behind a with-list.
+    assert.equal(findViolations('x.mjs', 'const [r] = await db.with(was).update(t).set(s).from(was).where(eq(t.id, id));').length, 1, 'a with-list update by id alone');
+    assert.equal(findViolations('x.mjs', 'const [r] = await db.with(was).update(t).set(s).from(was).where(and(eq(t.id, id), eq(t.orgId, orgId)));').length, 0);
+    assert.equal(findViolations('x.mjs', 'await db.with(old).delete(t).where(eq(t.id, id));').length, 1, 'a with-list delete by id alone');
 });
 
 test('every tenant mutation in netlify/functions is org-scoped', () => {
