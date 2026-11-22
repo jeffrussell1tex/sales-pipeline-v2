@@ -248,7 +248,8 @@ test("§0.278 THE GUARD: a technician's job update lands only on the job as its 
         "if (!job || !techOnJob(job, myTechId)) return { statusCode: 404, headers, body: JSON.stringify({ error: 'This job is no longer assigned to you. Nothing was saved; reload to see your jobs.' }) };",
         // The review: compared against the row as stored, never normaliseJob's copy (a NULL signature read as false).
         "if (techPatchHolds(now, data)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in data ? `This job is ${status} already.` : 'This job holds what you sent already.', code: 'already', job }) };",
-        'return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved; reload to see it.` }) };'];
+        // Moved in §0.281: with the job as stored, code 'stale' — the card shows it, its buttons what the job now offers.
+        'return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved.`, code: \'stale\', job }) };'];
     order.forEach((line, i) => { assert.ok(missed.includes(line), line.slice(0, 70)); if (i) assert.ok(missed.indexOf(line) > missed.indexOf(order[i - 1]), 'in order'); });
     // The screen reads the 'already' as done, the job as stored — never "not saved" over a change that landed.
     const screen = read('src/Tabs/DispatchTab.jsx');

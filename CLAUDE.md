@@ -114,6 +114,9 @@ One commit per verified batch; doc patch in the same commit.
   WHERE (`missedTechJob`; guide §18b135 rule 8). Since §0.279 a lead
   request's cancel, deny and approve: pending in their own WHERE, an
   approve one batch claiming the lead first (`missedRequest`; rule 9).
+  Since §0.281 a technician's status move: one the field makes from
+  where the job stands (`techMoves.js`, the card's and the server's
+  rule), else a 409 `stale` with the job (rule 11).
 - The `null === null` collision: an unresolvable caller and an unassigned row
   both read `null` — guard with `!!row.ownerId` wherever it matters.
 - Role gate is an allowlist (`APP_ROLES` / `isAppRole`); unrecognised values

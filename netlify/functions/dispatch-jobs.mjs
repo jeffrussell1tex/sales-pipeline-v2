@@ -15,6 +15,7 @@ import { notifyCustomer } from './_customerNotify.mjs';
 // Whose jobs a Technician's are — one definition for every dispatch read (§0.169).
 import { resolveTechnicianId } from './_techScope.mjs';
 import { techOnJob, techPatchHolds } from './_techJobs.mjs';
+import { techMoveRefusal } from '../../src/utils/techMoves.js';   // a technician's move, from where the job stands (state §0.281)
 import { checkLinks } from './_links.mjs';
 
 // A job's customer, service location, CRM account and deal: live rows of this org when a write names
@@ -186,6 +187,8 @@ const TECH_WRITABLE = ['status', 'techNotes', 'completionNotes', 'photosCount', 
 // through their own day and pause it; they may not cancel it or return it to
 // unscheduled, both of which are dispatch decisions.
 const TECH_STATUS_ALLOWED = ['en_route', 'on_site', 'paused', 'completed'];
+// And where each comes from (state §0.281): the job card's moves, one rule (src/utils/techMoves.js) — checked on the job as
+// read, which the write then claims by its stamp (§0.278).
 
 // A technician's write that missed the job as its check read it (state §0.278): what stands now decides. The job gone,
 // or no longer theirs — a dispatcher took them off it after the check — answers 404, as every technician read of a job
@@ -199,7 +202,8 @@ async function missedTechJob(orgId, id, myTechId, data) {
     if (!job || !techOnJob(job, myTechId)) return { statusCode: 404, headers, body: JSON.stringify({ error: 'This job is no longer assigned to you. Nothing was saved; reload to see your jobs.' }) };
     const status = String(job.status || 'unscheduled').replace(/_/g, ' ');
     if (techPatchHolds(now, data)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in data ? `This job is ${status} already.` : 'This job holds what you sent already.', code: 'already', job }) };
-    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved; reload to see it.` }) };
+    // With the job as stored (state §0.281), theirs to read: the card shows it — and its buttons what the job now offers.
+    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job changed since you opened it — it is ${status} now. Nothing was saved.`, code: 'stale', job }) };
 }
 
 export const handler = async (event) => {
@@ -483,6 +487,19 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({
                         error: `Technicians may set status to: ${TECH_STATUS_ALLOWED.join(', ')}`,
                     }) };
+                }
+                // The move from where the job stands as read (state §0.281; OPEN_ITEMS §4.8, §0.278's found (b)): one the field
+                // makes — never a cancelled, unscheduled or completed job moved on, never a step skipped. Refused with the job as
+                // stored, which the card shows: a card that had not seen a dispatcher's change offered its old moves again.
+                const moveRefused = 'status' in data ? techMoveRefusal(current.status, data.status) : null;
+                if (moveRefused) return { statusCode: 409, headers, body: JSON.stringify({ error: moveRefused, code: 'stale', job: currentJob }) };
+                // A status the job already holds (the review): a press sent again — the job holding everything it names — is
+                // done ('already'); any other is a card behind the job — a Complete over a job completed since would write its
+                // old notes over the completion. Refused with the job as stored.
+                if ('status' in data && data.status === (current.status || 'unscheduled')) {
+                    const kept = String(current.status).replace(/_/g, ' ');
+                    if (techPatchHolds(current, data)) return { statusCode: 409, headers, body: JSON.stringify({ error: `This job is ${kept} already.`, code: 'already', job: currentJob }) };
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job is ${kept} already — it changed since you opened it. Nothing was saved.`, code: 'stale', job: currentJob }) };
                 }
                 TECH_WRITABLE.forEach(f => { if (f in data) updates[f] = data[f]; });
 

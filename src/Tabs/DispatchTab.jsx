@@ -5414,7 +5414,9 @@ const TechJobCard = ({ job, customerName, blocks, onUpdate, busyId }) => {
                         Save notes
                     </button>
 
-                    {(job.status === 'on_site' || done) && (
+                    {/* Drawn while the job is on site or done — and while it holds typed words the job does not (the review): a
+                        Complete refused keeps them on the card, never hidden. */}
+                    {(job.status === 'on_site' || done || completion !== (job.completionNotes || '')) && (
                         <>
                             <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.inkMid,
                                 textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4, fontFamily: T.sans }}>
@@ -5454,6 +5456,22 @@ const TechJobCard = ({ job, customerName, blocks, onUpdate, busyId }) => {
     );
 };
 
+// One list of a technician's job cards (state §0.281, the review; OPEN_ITEMS §4.8, §0.278's found (c)): at module scope, as
+// the house rule says — defined inside TechnicianView it was a new component on every render, so each press remounted
+// every card: its open state, its typed notes and the words a refusal said were all lost.
+const TechJobSection = ({ title, list, empty, custName, blocks, onUpdate, busyId }) => (
+    <div style={{ marginBottom: 22 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase',
+            letterSpacing: 0.6, marginBottom: 8, fontFamily: T.sans }}>{title}</div>
+        {list.length === 0
+            ? <div style={{ fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>{empty}</div>
+            : list.map(j => (
+                <TechJobCard key={j.id} job={j} customerName={custName(j.customerId)}
+                    blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
+            ))}
+    </div>
+);
+
 const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate, busyId }) => {
     const todayStr = ymd(new Date());
     const custName = (id) => (customers || []).find(c => c.id === id)?.name || 'Customer';
@@ -5470,19 +5488,6 @@ const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate,
 
     const myBlocks = (blocks || []).filter(b => b.endDate >= todayStr).slice(0, 3);
 
-    const Section = ({ title, list, empty }) => (
-        <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase',
-                letterSpacing: 0.6, marginBottom: 8, fontFamily: T.sans }}>{title}</div>
-            {list.length === 0
-                ? <div style={{ fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>{empty}</div>
-                : list.map(j => (
-                    <TechJobCard key={j.id} job={j} customerName={custName(j.customerId)}
-                        blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
-                ))}
-        </div>
-    );
-
     return (
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 2px', maxWidth: 640 }}>
             {myTech && (
@@ -5493,10 +5498,10 @@ const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate,
             )}
 
             {earlier.length > 0 && (
-                <Section title="Overdue" list={earlier} empty=""/>
+                <TechJobSection title="Overdue" list={earlier} empty="" custName={custName} blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
             )}
-            <Section title="Today" list={today} empty="Nothing scheduled for today."/>
-            <Section title="Coming up" list={upcoming} empty="Nothing scheduled yet."/>
+            <TechJobSection title="Today" list={today} empty="Nothing scheduled for today." custName={custName} blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
+            <TechJobSection title="Coming up" list={upcoming} empty="Nothing scheduled yet." custName={custName} blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
 
             {myBlocks.length > 0 && (
                 <div style={{ marginBottom: 22 }}>
@@ -5514,7 +5519,7 @@ const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate,
             )}
 
             {finished.length > 0 && (
-                <Section title="Recently completed" list={finished} empty=""/>
+                <TechJobSection title="Recently completed" list={finished} empty="" custName={custName} blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
             )}
         </div>
     );
@@ -6489,6 +6494,9 @@ export default function DispatchTab() {
             if (!res.ok) {
                 const r = await writeRefusalOf(res);
                 if (landedBefore(res.status, r.body)) { if (r.body.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? r.body.job : j)); return; }
+                // The job moved since the card read it (state §0.281, code 'stale'): the job as stored takes the card's place —
+                // its buttons what the job now offers — and the words are said.
+                if (res.status === 409 && r.body?.code === 'stale' && r.body.job?.id === jobId) setJobsRaw(prev => prev.map(j => j.id === jobId ? r.body.job : j));
                 throw refusalError(r.words, r.heard);
             }
             const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read changes nothing, as before

@@ -133,7 +133,10 @@ test("§0.278 a technician's Complete on a job a dispatcher cancelled after the 
     armed = dispatcher(id, { status: 'cancelled' });
     const res = await jobsFn(ev(CLERK.lead, { id, status: 'completed', completionNotes: 'all done', techNotes: 'as filed' }));
     assert.equal(res.statusCode, 409, res.body);
-    assert.equal(said(res), 'This job changed since you opened it — it is cancelled now. Nothing was saved; reload to see it.');
+    // Moved in §0.281: with the job as stored, for the card to show — no "reload to see it".
+    assert.equal(said(res), 'This job changed since you opened it — it is cancelled now. Nothing was saved.');
+    assert.equal(JSON.parse(res.body).code, 'stale');
+    assert.equal(JSON.parse(res.body).job.status, 'cancelled');
     const job = await jobOf(id);
     assert.equal(job.status, 'cancelled');
     assert.equal(job.completionNotes, null);
@@ -145,7 +148,8 @@ test("§0.278 a co-technician's notes over a job a dispatcher moved to another d
     armed = dispatcher(id, { scheduledDate: '2026-11-24' });
     const res = await jobsFn(ev(CLERK.co, { id, techNotes: 'gate code 1234' }));
     assert.equal(res.statusCode, 409, res.body);
-    assert.equal(said(res), 'This job changed since you opened it — it is scheduled now. Nothing was saved; reload to see it.');
+    assert.equal(said(res), 'This job changed since you opened it — it is scheduled now. Nothing was saved.');   // moved in §0.281
+    assert.equal(JSON.parse(res.body).job.scheduledDate, '2026-11-24', 'the job as stored');
     const job = await jobOf(id);
     assert.equal(job.scheduledDate, '2026-11-24');
     assert.equal(job.techNotes, 'as filed');
@@ -166,7 +170,10 @@ test("§0.278 a press beaten by one in flight that made the same change is done 
     armed = dispatcher(id2, { status: 'completed' });
     const res2 = await jobsFn(ev(CLERK.lead, { id: id2, status: 'completed', completionNotes: 'mine' }));
     assert.equal(res2.statusCode, 409, res2.body);
-    assert.equal(JSON.parse(res2.body).code, undefined, 'the notes never landed: not done');
+    // Moved in §0.281: refused as changed, code 'stale' with the job as stored — never 'already'.
+    assert.equal(JSON.parse(res2.body).code, 'stale', 'the notes never landed: not done');
+    // The review: the stamp's miss, never the move rule — its own words (the move check answers the same code).
+    assert.equal(JSON.parse(res2.body).error, 'This job changed since you opened it — it is completed now. Nothing was saved.');
     assert.equal((await jobOf(id2)).completionNotes, null);
 
     // The review: compared against the job as stored, never its normalised copy — a signature stored NULL and a false
@@ -176,7 +183,7 @@ test("§0.278 a press beaten by one in flight that made the same change is done 
     armed = dispatcher(id3, { techNotes: 'the office' });
     const res3 = await jobsFn(ev(CLERK.lead, { id: id3, customerSignature: false, photosCount: 0 }));
     assert.equal(res3.statusCode, 409, res3.body);
-    assert.equal(JSON.parse(res3.body).code, undefined, 'none stored is not false sent: not done');
+    assert.equal(JSON.parse(res3.body).code, 'stale', 'none stored is not false sent: not done');   // moved in §0.281: refused as changed, never 'already'
     const row3 = await jobOf(id3);
     assert.deepEqual([row3.customerSignature, row3.photosCount], [null, null], 'nothing written');
 });
