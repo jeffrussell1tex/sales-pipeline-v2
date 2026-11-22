@@ -69,16 +69,33 @@ export function useContacts(deps) {
             if (stillOut.length) { setUndoToast({ error: stillRestoringWords(stillOut.map(nameOf)) }); return; }
             setContacts(prev => prev.filter(c => !goingIds.includes(c.id)));
             const failed = [];
+            const send = (id) => dbWrite(`/.netlify/functions/contacts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });   // the one sender (§0.274)
             const goneIds = [];   // gone already (§0.273): done, never in this press's Undo
             for (const c of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/contacts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+                const r = await send(c.id);
                 // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
                 // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
                 if (!r.ok && r.landed) { goneIds.push(c.id); continue; }
-                if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown });
+                // Merged away since this list was read (state §0.282, code 'merged'): refused, said — never put back as live.
+                if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });
             }
             if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
+            // One refused as merged into a contact this same press deleted (the review): that merge can no longer be undone,
+            // so the server deletes it as any contact — sent again once.
+            if (failed.some(f => f.merged) && going.some(c => !failed.some(f => f.c.id === c.id) && !goneIds.includes(c.id))) {
+                for (const f of failed.filter(f => f.merged)) {
+                    if (!stillOrg(askedOrg)) return;
+                    const again = await send(f.c.id);
+                    if (again.ok) f.retried = true;
+                    else if (again.landed) { f.retried = true; goneIds.push(f.c.id); }
+                }
+                failed.splice(0, failed.length, ...failed.filter(f => !f.retried));
+            }
+            if (!stillOrg(askedOrg)) return;
+            // The list read again for one merged away (below) can answer after this press's Undo put its rows back — the
+            // Undo reads it again too, later, and that read overtakes it (loadGen; the review).
+            const mergedReload = failed.some(f => f.merged);
             let failNote = null;   // said on the Undo toast too (state §0.240): softDelete's toast replaced it at once
             if (failed.length) {
                 // What the server refused is put back, and the first refusal is shown — the server's open-deal refusal
@@ -86,11 +103,17 @@ export function useContacts(deps) {
                 const refused = failed.filter(f => !f.unknown), unsure = failed.filter(f => f.unknown);
                 setContacts(prev => {
                     const have = new Set(prev.map(c => c.id));
-                    return [...prev, ...refused.map(f => f.c).filter(c => !have.has(c.id))];
+                    return [...prev, ...refused.filter(f => !f.merged).map(f => f.c).filter(c => !have.has(c.id))];
                 });
+                // One merged away since: the list read again — it leaves the list, and the contact it lives on in shows as stored.
+                if (failed.some(f => f.merged)) loadContacts(() => {});
+                // Said apart (the review): a merged refusal's row leaves the list, so its own words say why.
+                const heard = refused.filter(f => !f.merged), merged = refused.filter(f => f.merged);
                 failNote = [
-                    refused.length ? (going.length === 1 ? `Contact not deleted — ${refused[0].error}`
-                        : `${refused.length} of ${going.length} contacts not deleted — ${refused[0].error}`) : '',
+                    heard.length ? (going.length === 1 ? `Contact not deleted — ${heard[0].error}`
+                        : `${heard.length} of ${going.length} contacts not deleted — ${heard[0].error}`) : '',
+                    merged.length ? (going.length === 1 ? `Contact not deleted — ${merged[0].error}`
+                        : `${merged.length} of ${going.length} contacts not deleted — ${merged[0].error}`) : '',
                     unsure.length ? (going.length === 1 ? maybeSaid('The contact', 'deleted', unsure[0].error)
                         : maybeSaid(`${unsure.length} of ${going.length} contacts`, 'deleted', unsure[0].error, true)) : '',
                 ].filter(Boolean).join(' ');
@@ -123,6 +146,7 @@ export function useContacts(deps) {
                         if (!rr.ok && !rr.landed) notRestored.push({ c, error: rr.error, unknown: rr.unknown });
                     }
                     if (!stillOrg(askedOrg)) return;
+                    if (mergedReload) loadContacts(() => {});   // overtakes the press's own read (above)
                     if (notRestored.length) {
                         // One whose answer proves nothing may be back (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept, said as maybe.
                         const gone = notRestored.filter(n => !n.unknown).map(n => n.c.id);

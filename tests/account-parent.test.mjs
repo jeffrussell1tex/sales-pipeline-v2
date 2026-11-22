@@ -635,7 +635,8 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(del.includes('const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id) && !isMergeArchived(a));'), "the screen's live sub-accounts: the confirm counts them (state §0.210)");
     assert.ok(!/children\.(filter|map|find|some)\(/.test(del), "the screen's copies are never what the Undo re-sends (H2)");
     // Moved in §0.261: a failure carries whether its answer proved nothing (the unknown-save rule).
-    assert.ok(del.includes('if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown });\n                else lifted.push(...(r.data?.retiered || []));'), 'the tiers the server gave what it lifted (D18)');
+    // Moved in §0.282: and whether it was refused as merged away (never put back as live).
+    assert.ok(del.includes("if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });\n                else lifted.push(...(r.data?.retiered || []));"), 'the tiers the server gave what it lifted (D18)');
     assert.ok(del.includes('                if (r.ok) answers.push(r.data || {});\n'), 'what each delete answered: the row and its sub-accounts as stored');
     assert.ok(del.includes('const { deleted, promoted } = undoOfDeletes(answers);'), 'H2: the Undo re-sends what the server answered');
     assert.ok(del.indexOf('setAccounts(prev => withTiers(prev, lifted));') > del.indexOf('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'));
@@ -653,7 +654,8 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(del.includes("if (!rp.ok) notRestored.push({ a: accounts.find(x => x.id === c.id) || { id: c.id, name: 'a sub-account' }, error: rp.error, unknown: rp.unknown });"), "L4: a refused re-save's toast names the account refused — its name the screen's row's — not the parent put back");
     assert.ok(del.includes("setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });"), 'a refusal says so');
     // Moved pin (§0.273): a press that found one gone reads the list again at the Undo's end too.
-    assert.ok(del.includes('if (notRestored.length || reread || goneBefore) loadAccounts(() => {});'),'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
+    // Moved in §0.282: and when this press was refused as merged away (its own read, overtaken).
+    assert.ok(del.includes('if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts(() => {});'),'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
 });
 
 test("accounts.mjs: a parent is checked against THIS org's rows when a create names one and when a save moves it — after the ownership check, before the write; the tiers fit, written to this org's rows only and handed back; a save that leaves the parent keeps the stored tier", () => {
@@ -714,19 +716,25 @@ test("accounts.mjs: a parent is checked against THIS org's rows when a create na
     // Moved pin (§0.273): its 404 says `gone` — none of this id in this org.
     const unknown = del.indexOf("if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };");
     const read1 = del.indexOf('const tree = await orgTreeOf(orgId);');
-    const delWrite = del.indexOf('const [storedKids, gone, ...written] = await db.batch([');
+    const delWrite = del.indexOf('batched = await db.batch([...claim,');   // moved in §0.282: the batch opens with its claim
     assert.ok(unknown > del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;') && unknown < read1, 'an unknown id: 404 before anything is read or written');
     assert.ok(read1 > 0 && read1 < delWrite, 'what a lift re-fits below the lifted accounts is worked out before the write');
     assert.ok(del.includes('const below = liftedBelow(tree, id);'), 'J3: only the rows below a lifted account whose tier changes, each with the chain it stands on');
     assert.ok(!del.includes('tierWrites('), 'J3: no tier written by an id read before the write');
-    const one = between(del, 'const [storedKids, gone, ...written] = await db.batch([', '            ]);');
-    assert.ok(one.startsWith('const [storedKids, gone, ...written] = await db.batch([\n                db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier })\n                    .from(accounts).where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId))),\n                db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning(),\n'), "J3: each sub-account as stored — its parent and its tier, this org's alone — read in the batch before the delete; then the delete");
-    assert.ok(one.includes('                ...below.map((b) => db.update(accounts).set({ accountTier: b.accountTier })\n                    .where(and(eq(accounts.orgId, orgId), eq(accounts.id, b.id), standsOn(orgId, b.chain)))\n                    .returning({ id: accounts.id, accountTier: accounts.accountTier })),\n'), 'J3: each account below re-fitted in this org, only while it stands on its chain');
-    assert.ok(one.endsWith("                db.update(accounts)\n                    .set({ parentAccountId: null, accountTier: 'account' })\n                    .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))\n                    .returning({ id: accounts.id }),\n"), 'J3: the lift last — one update of what still names the deleted account, each an account (D18); after a delete that took nothing it lifts nothing');
+    // Moved in §0.282: the batch opens with its claim (the account still not merged away), the delete carries the same
+    // condition, every statement one step in (inside its try); the order is the same.
+    const one = between(del, 'batched = await db.batch([...claim,', '                ]);');
+    assert.ok(del.includes('const claim = ownerClaim(accounts, id, orgId, notMerged(accounts));'));
+    assert.ok(one.startsWith('batched = await db.batch([...claim,\n                    db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier })\n                        .from(accounts).where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId))),\n                    db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId), notMerged(accounts))).returning(),\n'), "J3: each sub-account as stored — its parent and its tier, this org's alone — read in the batch before the delete; then the delete");
+    assert.ok(one.includes('                    ...below.map((b) => db.update(accounts).set({ accountTier: b.accountTier })\n                        .where(and(eq(accounts.orgId, orgId), eq(accounts.id, b.id), standsOn(orgId, b.chain)))\n                        .returning({ id: accounts.id, accountTier: accounts.accountTier })),\n'), 'J3: each account below re-fitted in this org, only while it stands on its chain');
+    assert.ok(one.endsWith("                    db.update(accounts)\n                        .set({ parentAccountId: null, accountTier: 'account' })\n                        .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))\n                        .returning({ id: accounts.id }),\n"), 'J3: the lift last — one update of what still names the deleted account, each an account (D18); after a delete that took nothing it lifts nothing');
     const stands = between(src, 'const standsOn = (orgId, [parentId, ...up]) => and(eq(accounts.parentAccountId, parentId), up.length\n', ';\n');
     assert.ok(stands.includes('    ? inArray(accounts.parentAccountId, db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.id, parentId), standsOn(orgId, up))))\n    : undefined)'), "J3: its parent, and that one's own chain up to the deleted account, read in the statement, in this org");
     assert.equal(del.split('db.delete(accounts)').length - 1, 2, 'the clear, and the one delete in the batch — none of its own');
-    assert.ok(del.includes("const promoted = written[written.length - 1];\n            const [deletedRow] = gone;\n            // Gone before this write (another session's delete, which lifted its sub-accounts\n            // itself): nothing was written — a 404, as for any id not found.\n            if (!deletedRow) return { statusCode: 404"), "404 when the batch's delete took nothing");
+    // Moved in §0.282: gone before the write now aborts the batch at its claim — the catch answers the 404 (merged first);
+    // past the claim the row is locked and the delete takes it, so the post-batch 404 is gone.
+    assert.ok(del.includes("return (await mergedDeleteRefusal({ kind: 'account', id, orgId, headers })) || { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };"), "404 when the batch's delete would take nothing");
+    assert.ok(del.includes('const promoted = written[written.length - 1];') && del.includes('const [deletedRow] = gone;') && !del.includes('if (!deletedRow) return'), 'no post-batch 404 left behind the claim');
     assert.ok(del.includes("const retiered = [...children.filter((c) => c.accountTier !== 'account').map((c) => ({ id: c.id, accountTier: 'account' })), ...written.slice(0, -1).flat()];"), 'what it wrote, for the screen: the lifted that were not accounts, and each row below it re-fitted');
     assert.ok(del.includes('const children = storedKids.filter((c) => promotedIds.has(c.id));'), 'the sub-accounts the promotion took, as stored before');
     assert.ok(del.includes('JSON.stringify({ success: true, deleted: deletedRow, children, promoted: promoted.length, retiered })'), 'the row as stored and its sub-accounts as stored before: the Undo re-sends exactly these');

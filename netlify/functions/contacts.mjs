@@ -13,6 +13,7 @@ import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor } from './_ownership.mjs';
 import { restoredOwner } from '../../src/utils/restoreOwner.js';
 import { deletionAudit } from './_audit.mjs';
 import { openDealNamingContact, openDealNamingAnyContact, openDealRefusal } from './_openDeals.mjs';
+import { notMerged, mergedDeleteRefusal } from './_mergedDelete.mjs';   // a merged-away contact is never deleted (state §0.282)
 import { partialRows } from './_sanitize.mjs';
 import { checkLinks, checkBulkLinks, clearStrayLinks } from './_links.mjs';
 
@@ -268,6 +269,14 @@ export const handler = async (event) => {
                 table: contacts, entity: 'contact', id, orgId, userId, userRole, headers,
             });
             if (forbiddenDel) return forbiddenDel;
+            // A contact merged away is kept (state §0.282; OPEN_ITEMS §4.8, §0.273's found (2); Jeff, 21 Nov: "Refuse it"): a tab
+            // loaded before the merge still lists it, and deleting it ended the merge's Undo for good. Refused 409 'merged' in
+            // words naming the contact it lives on in; asked again in the delete's own SQL (notMerged) and on a miss.
+            // A rep is told the contact it lives on in only where they may read it — theirs or nobody's (the review).
+            const delCaller = canSeeAll(userRole) ? null : await getCallerId(userId, orgId);
+            const nameable = canSeeAll(userRole) ? undefined : (r) => !r.ownerId || (!!delCaller && r.ownerId === delCaller);
+            const mergedAway = await mergedDeleteRefusal({ kind: 'contact', id, orgId, headers, nameable });
+            if (mergedAway) return mergedAway;
             // A contact on an open deal is kept (state §0.178; Jeff: "Block it") — the deal
             // would name a contact that is gone. Asked here as well as on the screen: a rep's
             // screen holds only the deals the rep may see, so the refusal names no deal.
@@ -281,10 +290,10 @@ export const handler = async (event) => {
             // statement that removes it. An id alone cannot be resolved back to a
             // name once the record is gone.
             const mine = await ownerWriteFilter({ table: contacts, entity: 'contact', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
-            const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId), mine)).returning();
+            const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId), mine, notMerged(contacts))).returning();
             // An unknown id used to return success:true. It deleted nothing. Nor, since §0.275, a row reassigned since the
             // check: still here, the ownership refusal (missedWrite); gone, the 404.
-            if (!deletedRow) return await missedWrite({ table: contacts, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
+            if (!deletedRow) return (await mergedDeleteRefusal({ kind: 'contact', id, orgId, headers, nameable })) || await missedWrite({ table: contacts, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });   // merged since the check (state §0.282): refused as merged   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             await writeAudit(orgId, deletionAudit('contact', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

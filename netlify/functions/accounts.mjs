@@ -11,6 +11,7 @@ import {
 import { ownerColumnOf, mayMutate } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { openDealOfAccount, openDealOfAnyAccount, openDealRefusal, dealLabel } from './_openDeals.mjs';
+import { notMerged, mergedDeleteRefusal } from './_mergedDelete.mjs';   // a merged-away account is never deleted (state §0.282)
 import { partialRows } from './_sanitize.mjs';
 import { checkBulkLinks, clearStrayLinks } from './_links.mjs';
 import { placeAccount, placeBulkRows, restorePlace, liftedBelow, tierChanges, sitesMade, movedSinceDelete } from '../../src/utils/accountParent.js';
@@ -526,6 +527,11 @@ export const handler = async (event) => {
             // always been gated; this one never was.
             const forbiddenDelete = requireRole(auth, ['Admin'], headers);
             if (forbiddenDelete) return forbiddenDelete;
+            // An account merged away is kept (state §0.282; OPEN_ITEMS §4.8, §0.273's found (2); Jeff, 21 Nov: "Refuse it"): a tab
+            // loaded before the merge still lists it, and deleting it ended the merge's Undo for good. Refused 409 'merged' in
+            // words naming the account it lives on in; the batch below opens with a claim on it not merged.
+            const mergedAway = await mergedDeleteRefusal({ kind: 'account', id, orgId, headers });
+            if (mergedAway) return mergedAway;
             // An account with an open deal is kept (state §0.178; Jeff: "Block it"). Its
             // sub-accounts are not deleted with it — they are promoted below — so its own
             // deals are what hold it.
@@ -575,23 +581,33 @@ export const handler = async (event) => {
             // Promotion is a CONSEQUENCE of a deletion, so it is conditional on one:
             // a 403 and a 404 both return before reaching this, and it runs after the
             // delete in the same batch, so it stands or falls with it.
-            const [storedKids, gone, ...written] = await db.batch([
-                db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier })
-                    .from(accounts).where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId))),
-                db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning(),
-                ...below.map((b) => db.update(accounts).set({ accountTier: b.accountTier })
-                    .where(and(eq(accounts.orgId, orgId), eq(accounts.id, b.id), standsOn(orgId, b.chain)))
-                    .returning({ id: accounts.id, accountTier: accounts.accountTier })),
-                db.update(accounts)
-                    .set({ parentAccountId: null, accountTier: 'account' })
-                    .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))
-                    .returning({ id: accounts.id }),
-            ]);
+            // It opens with a claim (state §0.282): the account, in this org, still not merged away, locked for the batch —
+            // merged or gone since the check, the batch aborts and nothing of it lands (the lift included).
+            const claim = ownerClaim(accounts, id, orgId, notMerged(accounts));
+            let batched;
+            try {
+                batched = await db.batch([...claim,
+                    db.select({ id: accounts.id, parentAccountId: accounts.parentAccountId, accountTier: accounts.accountTier })
+                        .from(accounts).where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId))),
+                    db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId), notMerged(accounts))).returning(),
+                    ...below.map((b) => db.update(accounts).set({ accountTier: b.accountTier })
+                        .where(and(eq(accounts.orgId, orgId), eq(accounts.id, b.id), standsOn(orgId, b.chain)))
+                        .returning({ id: accounts.id, accountTier: accounts.accountTier })),
+                    db.update(accounts)
+                        .set({ parentAccountId: null, accountTier: 'account' })
+                        .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))
+                        .returning({ id: accounts.id }),
+                ]);
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                // Merged since the check: refused as merged; else gone (another session's delete came first): the 404.
+                return (await mergedDeleteRefusal({ kind: 'account', id, orgId, headers })) || { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };
+            }
+            const [storedKids, gone, ...written] = batched.slice(claim.length);
             const promoted = written[written.length - 1];
+            // Past its claim the row is locked as it stood and the delete takes it (state §0.282, the review): gone before the
+            // write (another session's delete) or merged since, the claim aborted the batch — the catch's answer above.
             const [deletedRow] = gone;
-            // Gone before this write (another session's delete, which lifted its sub-accounts
-            // itself): nothing was written — a 404, as for any id not found.
-            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };   // none of this id in this org: a Delete pressed after one that landed reads it as done (state §0.273)
             const promotedIds = new Set(promoted.map((r) => r.id));
             const children = storedKids.filter((c) => promotedIds.has(c.id));
             // What the delete wrote, for the screen: each sub-account it lifted that was not an

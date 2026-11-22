@@ -121,7 +121,8 @@ export const dbWrite = async (url, options) => {
         const res = await dbFetch(url, options);
         if (res.ok) return { ok: true, status: res.status, error: null, data: await bodyOf(res) };
         const body = await bodyOf(res);
-        return { ok: false, status: res.status, error: refusalFrom(res, body), unknown: !heardRefusal(res.status, body), landed: landedBefore(res.status, body) };
+        // The refusal's code too (state §0.282): a Delete refused as 'merged' reads its list again, never puts its stale row back.
+        return { ok: false, status: res.status, code: body?.code ?? null, error: refusalFrom(res, body), unknown: !heardRefusal(res.status, body), landed: landedBefore(res.status, body) };
     } catch (err) {
         return { ok: false, status: 0, error: NETWORK_ERROR, unknown: true, landed: false };
     }

@@ -124,9 +124,10 @@ test('§0.275 THE GUARD: the contacts, activities and tasks DELETEs delete only 
             assert.ok(gate > del.indexOf('assertOwnership({') && gate < del.indexOf(`db.delete(${T}).where(and(eq(${T}.id, id)`), `${f}: no rep reaches the delete — the Admin gate before it (were it opened to reps, its delete takes the owner filter)`);
             assert.ok(del.includes('if (forbiddenDelete) return forbiddenDelete;'));
         } else {
-            assert.ok(del.includes(`db.delete(${T}).where(and(eq(${T}.id, id), eq(${T}.orgId, orgId), mine)).returning();`), `${f}: the delete names the owner filter`);
+            // Moved in §0.282: a contact's also names the merged-away condition.
+            assert.ok(del.includes(`db.delete(${T}).where(and(eq(${T}.id, id), eq(${T}.orgId, orgId), mine${T === 'contacts' ? ', notMerged(contacts)' : ''})).returning();`), `${f}: the delete names the owner filter`);
             assert.ok(del.indexOf(`const mine = await ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole });`) > del.indexOf('assertOwnership({'), `${f}: read after the check`);
-            assert.ok(del.includes(`if (!deletedRow) return await missedWrite({ table: ${T}, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });`), `${f}: a missed delete — 403 still there, 404 gone`);
+            assert.ok(del.includes(`if (!deletedRow) return ${T === 'contacts' ? "(await mergedDeleteRefusal({ kind: 'contact', id, orgId, headers, nameable })) || " : ''}await missedWrite({ table: ${T}, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });`), `${f}: a missed delete — 403 still there, 404 gone`);   // moved in §0.282: a contact's miss asked as merged first
         }
     }
 });
@@ -332,7 +333,7 @@ test("§0.278 THE GUARD (the review): every missed write's answer is awaited whe
     let seen = 0;
     for (const f of readdirSync(dir).filter((n) => n.endsWith('.mjs'))) {
         const src = read('netlify/functions/' + f);
-        for (const m of src.matchAll(/\breturn\s+(await\s+)?(missed\w*)\(/g)) {
+        for (const m of src.matchAll(/(?:\breturn|\|\|)\s+(await\s+)?(missed\w*)\(/g)) {   // moved in §0.282: one after `||` (a merged-away answer first) counted too
             seen += 1;
             assert.ok(m[1], `${f}: \`return ${m[2]}(\` unawaited — return await ${m[2]}(...)`);
         }

@@ -90,20 +90,34 @@ export function useAccounts(deps) {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             setAccounts(prev => prev.filter(a => !goingIds.includes(a.id)));
             const failed = [];
+            const send = (id) => dbWrite(`/.netlify/functions/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });   // the one sender (§0.274)
             let goneBefore = false;   // one gone already (§0.273): its delete lifted its sub-accounts — the list read again
             const lifted = [];   // what the server lifted, with the tiers it gave them (D18)
             const answers = [];  // what each delete answered: the row and its sub-accounts as stored
             for (const a of going) {
                 if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/accounts?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
+                const r = await send(a.id);
                 // Gone already in this org (404 'gone' — another tab's or member's delete came first, state §0.273): done, nothing said,
                 // and not in this press's Undo — it wrote nothing, and a re-POST would bring back what someone else deleted.
                 if (!r.ok && r.landed) { goneBefore = true; continue; }
-                if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown });
+                // Merged away since this list was read (state §0.282, code 'merged'): refused, said — never put back as live.
+                if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });
                 else lifted.push(...(r.data?.retiered || []));
                 if (r.ok) answers.push(r.data || {});
             }
             if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
+            // One refused as merged into an account this same press deleted (the review): that merge can no longer be undone,
+            // so the server deletes it as any account — sent again once, its answer taken as the others'.
+            if (failed.some(f => f.merged) && answers.length) {
+                for (const f of failed.filter(f => f.merged)) {
+                    if (!stillOrg(askedOrg)) return;
+                    const again = await send(f.a.id);
+                    if (again.ok) { f.retried = true; lifted.push(...(again.data?.retiered || [])); answers.push(again.data || {}); }
+                    else if (again.landed) { f.retried = true; goneBefore = true; }
+                }
+                failed.splice(0, failed.length, ...failed.filter(f => !f.retried));
+            }
+            if (!stillOrg(askedOrg)) return;
             if (goneBefore) loadAccounts(() => {});   // the sub-accounts another delete lifted, as the server has them (§0.273)
             // What the Undo re-sends is what the server answered, never this screen's copies (state
             // §0.198): each row deleted as stored, and each sub-account it promoted as stored
@@ -121,11 +135,17 @@ export function useAccounts(deps) {
                 const refused = failed.filter(f => !f.unknown), unsure = failed.filter(f => f.unknown);
                 setAccounts(prev => {
                     const have = new Set(prev.map(a => a.id));
-                    return [...prev, ...refused.map(f => f.a).filter(a => !have.has(a.id))];
+                    return [...prev, ...refused.filter(f => !f.merged).map(f => f.a).filter(a => !have.has(a.id))];
                 });
+                // One merged away since: the list read again — it leaves the list, and the account it lives on in shows as stored.
+                if (failed.some(f => f.merged)) loadAccounts(() => {});
+                // Said apart (the review): a merged refusal's row leaves the list, so its own words say why.
+                const heard = refused.filter(f => !f.merged), merged = refused.filter(f => f.merged);
                 failNote = [
-                    refused.length ? (going.length === 1 ? `Account not deleted — ${refused[0].error}`
-                        : `${refused.length} of ${going.length} accounts not deleted — ${refused[0].error}`) : '',
+                    heard.length ? (going.length === 1 ? `Account not deleted — ${heard[0].error}`
+                        : `${heard.length} of ${going.length} accounts not deleted — ${heard[0].error}`) : '',
+                    merged.length ? (going.length === 1 ? `Account not deleted — ${merged[0].error}`
+                        : `${merged.length} of ${going.length} accounts not deleted — ${merged[0].error}`) : '',
                     unsure.length ? (going.length === 1 ? maybeSaid('The account', 'deleted', unsure[0].error)
                         : maybeSaid(`${unsure.length} of ${going.length} accounts`, 'deleted', unsure[0].error, true)) : '',
                 ].filter(Boolean).join(' ');
@@ -199,7 +219,8 @@ export function useAccounts(deps) {
                     }
                     // A press that found one gone read the list again (§0.273); that read can answer after this Undo put
                     // its rows back, and wipe them off — this read, later, overtakes it (loadGen).
-                    if (notRestored.length || reread || goneBefore) loadAccounts(() => {});
+                    // A press refused as merged away read it again too (§0.282, the review) — the same race.
+                    if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts(() => {});
                 })
             );
             if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));

@@ -29,7 +29,7 @@ const turns = async (n = 6) => { for (let i = 0; i < n; i += 1) await new Promis
 // landed on landedBefore.
 const answerOf = (status, body = null) => (status >= 200 && status < 300
     ? { ok: true, status, error: null, data: body }
-    : { ok: false, status, error: (body && body.error) || `The server returned ${status}.`, unknown: !heardRefusal(status, body), landed: landedBefore(status, body) });
+    : { ok: false, status, code: body?.code ?? null, error: (body && body.error) || `The server returned ${status}.`, unknown: !heardRefusal(status, body), landed: landedBefore(status, body) });   // its code too, since §0.282
 const GONE = [404, { error: 'Not found', code: 'gone' }];
 const NOT_FOUND = [404, { error: 'Not found' }];   // the same status with no code: still the server's own refusal
 
@@ -60,6 +60,7 @@ const screen = (answers) => {
         maybeSaid, isRestoring, undoWhileOut, stillRestoringWords, deps: {}, showBlockedDelete: () => { did.blocked = true; },
         isOpenDeal, activeDealsOf, isMergeArchived, undoOfDeletes, withTiers, withRows, parentsFirst,
         adoptScores: () => {}, loadAccounts: () => { did.reread = (did.reread || 0) + 1; },
+        loadContacts: () => { did.recontacts = (did.recontacts || 0) + 1; },   // since §0.282: a merged refusal reads the list again
     };
     return { did, env };
 };
@@ -188,7 +189,7 @@ test('§0.273 RUN deals: one gone is off and unsaid; one refused with no code pu
 });
 
 // ── contacts ──
-const CONTACT_NAMES = ['contacts', 'deps', 'activeDealsOf', 'showBlockedDelete', 'showConfirm', 'requestOrg', 'stillOrg', 'setContacts', 'dbWrite', 'setUndoToast', 'maybeSaid', 'softDelete', 'isRestoring', 'undoWhileOut', 'stillRestoringWords'];
+const CONTACT_NAMES = ['contacts', 'deps', 'activeDealsOf', 'showBlockedDelete', 'showConfirm', 'requestOrg', 'stillOrg', 'setContacts', 'dbWrite', 'setUndoToast', 'maybeSaid', 'softDelete', 'isRestoring', 'undoWhileOut', 'stillRestoringWords', 'loadContacts'];   // loadContacts since §0.282
 const contactDelete = build('src/hooks/useContacts.js', 'const handleDeleteContacts = (ids, opts = {}) => {', '\n    const handleSaveContact = async', CONTACT_NAMES);
 const runContacts = (answers) => {
     const s = screen(answers);
@@ -196,6 +197,61 @@ const runContacts = (answers) => {
     const del = contactDelete({ ...s.env, deps: { opportunities: [] }, contacts: contacts.v, setContacts: contacts.set });
     return { ...s, contacts, del };
 };
+
+// ── §0.282: a Delete refused as merged away (the review's RUN cases) ──
+const MERGED = [409, { error: '“Ann” was merged into “Ann Kept” — nothing was deleted.', code: 'merged', mergedIntoId: 'cX' }];
+const seq = (...as) => { let i = 0; return () => as[Math.min(i++, as.length - 1)]; };   // one answer after another
+
+test('§0.282 RUN contacts: one refused as merged is never put back, its words said, the list read again, no Undo; in a mixed press said apart, the Undo reading the list again too', async () => {
+    const r = runContacts([['DELETE', /id=c1$/, MERGED]]);
+    r.del(['c1']); await r.did.pending;
+    assert.ok(!r.contacts.v.some((c) => c.id === 'c1'), 'never put back as live');
+    assert.deepEqual(said(r.did), ['Contact not deleted — “Ann” was merged into “Ann Kept” — nothing was deleted.']);
+    assert.equal(r.did.recontacts, 1, 'the list read again');
+    assert.equal(r.did.undo, null, 'nothing deleted, no Undo');
+    // Mixed: c1 merged (still, sent again), c2 a heard refusal, c3 deleted — each refusal said, the merged one apart.
+    const m = runContacts([['DELETE', /id=c1$/, MERGED], ['DELETE', /id=c2$/, NOT_FOUND], ['DELETE', /id=c3$/, [200, { success: true }]]]);
+    m.del(['c1', 'c2', 'c3']); await m.did.pending;
+    assert.deepEqual(m.contacts.v.map((c) => c.id), ['c2'], 'the heard refusal put back; the merged one not');
+    assert.deepEqual(said(m.did)[0], '1 of 3 contacts not deleted — Not found 1 of 3 contacts not deleted — “Ann” was merged into “Ann Kept” — nothing was deleted.');
+    assert.equal(m.did.sent.filter(([meth, u]) => meth === 'DELETE' && /id=c1$/.test(u)).length, 2, 'sent again once: this press deleted something');
+    assert.equal(m.did.recontacts, 1);
+    await m.did.undo.restore();
+    assert.equal(m.did.recontacts, 2, 'the Undo reads the list again — later, it overtakes the press\'s own read');
+});
+
+test('§0.282 RUN contacts and accounts: one refused as merged into a record the same press deleted is sent again, and deletes — then in the Undo', async () => {
+    const c = runContacts([]);
+    const next = seq([409, MERGED[1]], [200, { success: true }]);
+    c.env.dbWrite = async (url, opts = {}) => { c.did.sent.push([opts.method, url]); return /id=c1$/.test(url) ? answerOf(...next()) : answerOf(200, { success: true }); };
+    const del = contactDelete({ ...c.env, deps: { opportunities: [] }, contacts: c.contacts.v, setContacts: c.contacts.set });
+    del(['c1', 'c2']); await c.did.pending;
+    assert.deepEqual(said(c.did), [], 'sent again, deleted: nothing said');
+    assert.equal(c.did.undo.label, '2 contacts', 'both in the Undo');
+    const a = runAccounts([]);
+    const nextA = seq([409, MERGED[1]], [200, { success: true, deleted: { id: 'a2', name: 'Beta' }, children: [], retiered: [] }]);
+    a.env.dbWrite = async (url, opts = {}) => { a.did.sent.push([opts.method, url]); return /id=a2$/.test(url) ? answerOf(...nextA()) : answerOf(200, { success: true, deleted: { id: 'a1', name: 'Acme' }, children: [], retiered: [] }); };
+    const delA = accountDelete({ ...a.env, deps: { opportunities: [] }, accounts: a.accts.v, setAccounts: a.accts.set });
+    delA(['a2', 'a1']); await a.did.pending;
+    assert.deepEqual(said(a.did), []);
+    assert.equal(a.did.undo.label, '2 accounts', 'both in the Undo — the retried one\'s answer taken as the others\'');
+});
+
+test('§0.282 RUN accounts: one refused as merged is never put back, its words said, the list read again; the Undo of a mixed press reads it again too', async () => {
+    const r = runAccounts([['DELETE', /id=a2$/, MERGED]]);
+    r.del(['a2']); await r.did.pending;
+    assert.ok(!r.accts.v.some((a) => a.id === 'a2'), 'never put back as live');
+    assert.deepEqual(said(r.did), ['Account not deleted — “Ann” was merged into “Ann Kept” — nothing was deleted.']);
+    assert.equal(r.did.reread, 1, 'the list read again');
+    assert.equal(r.did.undo, null);
+    const m = runAccounts([['DELETE', /id=a2$/, MERGED], ['DELETE', /id=a1$/, [200, { success: true, deleted: { id: 'a1', name: 'Acme' }, children: [], retiered: [] }]]]);
+    m.del(['a1', 'a2']); await m.did.pending;
+    assert.equal(m.did.sent.filter(([meth, u]) => meth === 'DELETE' && /id=a2$/.test(u)).length, 2, 'sent again once');
+    assert.equal(m.did.reread, 1);
+    await m.did.undo.restore();
+    assert.equal(m.did.reread, 2, 'the Undo reads the list again');
+});
+
 
 test('§0.273 RUN contacts: one gone is off, unsaid, and out of the Undo — the Undo re-POSTs only what this press deleted', async () => {
     const r = runContacts([['DELETE', /id=c1$/, GONE]]);
@@ -278,6 +334,7 @@ test('§0.273 RUN accounts: a Delete while their own Undo is out sends nothing a
 test('§0.273 THE CLASS: each of the five DELETEs answers its 404 `gone`; no PUT 404 says it', () => {
     // Moved pin (§0.275): contacts, activities and tasks hand theirs to missedWrite as `gone` — the same answer.
     const del404 = "statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' })";
+    // Moved in §0.282: accounts' second is now its claim's miss with the row gone (the post-batch 404 it made unreachable, removed).
     for (const [f, n] of [['accounts', 2], ['contacts', 1], ['opportunities', 1], ['activities', 1], ['tasks', 1]]) {
         const src = read(`netlify/functions/${f}.mjs`);
         const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");

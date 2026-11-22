@@ -64,13 +64,15 @@ test('RUN: dbWrite answers unknown and landed — a throw, a 5xx, a page and a w
     console.error = () => {};
     try {
         const run = async (answer) => { globalThis.fetch = async () => { if (answer instanceof Error) throw answer; return answer; }; return dbWrite('/x', { method: 'PUT' }); };
-        assert.deepEqual(await run(answerOf(400, { error: 'Bad' })), { ok: false, status: 400, error: 'Bad', unknown: false, landed: false });
-        assert.deepEqual(await run(answerOf(403, { error: 'Forbidden' })), { ok: false, status: 403, error: 'You do not have permission to make this change.', unknown: false, landed: false });
-        assert.deepEqual(await run(answerOf(409, { error: 'That id is already in use.', code: 'idInUse' })), { ok: false, status: 409, error: 'That id is already in use.', unknown: false, landed: true });
-        assert.deepEqual(await run(answerOf(500, { error: 'Internal server error', requestId: 'r1' })), { ok: false, status: 500, error: 'Internal server error (ref r1)', unknown: true, landed: false });
-        assert.deepEqual(await run(answerOf(502, new SyntaxError('<html>'))), { ok: false, status: 502, error: 'The server returned 502.', unknown: true, landed: false });
-        assert.deepEqual(await run(answerOf(400, {})), { ok: false, status: 400, error: 'The server returned 400.', unknown: true, landed: false });
+        assert.deepEqual(await run(answerOf(400, { error: 'Bad' })), { ok: false, status: 400, code: null, error: 'Bad', unknown: false, landed: false });
+        assert.deepEqual(await run(answerOf(403, { error: 'Forbidden' })), { ok: false, status: 403, code: null, error: 'You do not have permission to make this change.', unknown: false, landed: false });
+        assert.deepEqual(await run(answerOf(409, { error: 'That id is already in use.', code: 'idInUse' })), { ok: false, status: 409, code: 'idInUse', error: 'That id is already in use.', unknown: false, landed: true });
+        assert.deepEqual(await run(answerOf(500, { error: 'Internal server error', requestId: 'r1' })), { ok: false, status: 500, code: null, error: 'Internal server error (ref r1)', unknown: true, landed: false });
+        assert.deepEqual(await run(answerOf(502, new SyntaxError('<html>'))), { ok: false, status: 502, code: null, error: 'The server returned 502.', unknown: true, landed: false });
+        assert.deepEqual(await run(answerOf(400, {})), { ok: false, status: 400, code: null, error: 'The server returned 400.', unknown: true, landed: false });
         assert.deepEqual(await run(new TypeError('Failed to fetch')), { ok: false, status: 0, error: 'The server could not be reached.', unknown: true, landed: false });
+        // Since §0.282 the refusal's code is handed on (a Delete refused as merged reads its list again); a throw has none.
+        assert.deepEqual(await run(answerOf(409, { error: 'merged words', code: 'merged', mergedIntoId: 'c_1' })), { ok: false, status: 409, code: 'merged', error: 'merged words', unknown: false, landed: false });
         assert.equal((await run(answerOf(200, { ok: true }))).ok, true);
     } finally {
         console.error = quiet;
@@ -484,9 +486,9 @@ test('RUN (Part 5): refusalFrom — the permission sentence only for the server\
     try {
         const { dbWrite } = await import('../src/utils/storage.js');
         globalThis.fetch = async () => answerOf(403, {});
-        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, error: 'The server returned 403.', unknown: true, landed: false });
+        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, code: null, error: 'The server returned 403.', unknown: true, landed: false });
         globalThis.fetch = async () => answerOf(403, new SyntaxError('<html>'));
-        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, error: 'The server returned 403.', unknown: true, landed: false });
+        assert.deepEqual(await dbWrite('/x', { method: 'DELETE' }), { ok: false, status: 403, code: null, error: 'The server returned 403.', unknown: true, landed: false });
     } finally {
         console.error = quiet;
         globalThis.fetch = hadFetch;
