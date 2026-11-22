@@ -108,7 +108,9 @@ const ev = (org, body, user = CLERK_REP, role = 'Admin') => ({
 const pdfText = (b64) => {
     const raw = Buffer.from(b64, 'base64').toString('latin1');
     const lines = [];
-    for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    // pdfkit writes "stream\n", the bytes, "\nendstream" (state §0.283): a stream whose compressed bytes end in a CR (byte
+    // 13 — one day's date in 256) lost it to a "\r?\n" here, failed to inflate and read as no text.
+    for (const m of raw.matchAll(/stream\n([\s\S]*?)\nendstream/g)) {
         let s;
         try { s = inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { s = m[1]; }
         for (const t of s.matchAll(/\[([^\]]*)\]\s*TJ/g)) {

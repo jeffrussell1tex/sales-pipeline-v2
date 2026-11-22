@@ -1220,11 +1220,16 @@ export default function SalesManagerTab() {
     const cancelSpiffBoard = () => setSpiffsDraft(null);
     // A part refused as stale after an earlier part landed is `partial` (state §0.228 — JB3-5): App's guard says
     // LEAVE_STALE_PART — that change was not saved, the ones saved before it stay saved.
+    // Each part after the first checks the org (state §0.283): putSettings reads the org as it is sent, so a part sent
+    // after a switch would carry the new org's token with this org's draft.
     const saveAdminDrafts = async () => {
+        const askedOrg = requestOrg();
         let landedOne = false;
         try {
             if (Object.keys(quotaDrafts).length) { await saveQuotas(); landedOne = true; }
+            if (!stillOrg(askedOrg)) return;   // the commission plan would go with the new org's token
             if (tiersDraft !== null) { await saveCommission(); landedOne = true; }
+            if (!stillOrg(askedOrg)) return;   // the SPIFF board would go with the new org's token
             if (spiffsDraft !== null) await saveSpiffBoard();
         } catch (e) { if (e.tookLatest && landedOne) e.partial = true; throw e; }
     };

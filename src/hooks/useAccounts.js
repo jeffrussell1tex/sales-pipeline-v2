@@ -105,9 +105,9 @@ export function useAccounts(deps) {
                 else lifted.push(...(r.data?.retiered || []));
                 if (r.ok) answers.push(r.data || {});
             }
-            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             // One refused as merged into an account this same press deleted (the review): that merge can no longer be undone,
-            // so the server deletes it as any account — sent again once, its answer taken as the others'.
+            // so the server deletes it as any account — sent again once, its answer taken as the others' (its loop checks
+            // the org before each send).
             if (failed.some(f => f.merged) && answers.length) {
                 for (const f of failed.filter(f => f.merged)) {
                     if (!stillOrg(askedOrg)) return;
@@ -117,7 +117,7 @@ export function useAccounts(deps) {
                 }
                 failed.splice(0, failed.length, ...failed.filter(f => !f.retried));
             }
-            if (!stillOrg(askedOrg)) return;
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             if (goneBefore) loadAccounts(() => {});   // the sub-accounts another delete lifted, as the server has them (§0.273)
             // What the Undo re-sends is what the server answered, never this screen's copies (state
             // §0.198): each row deleted as stored, and each sub-account it promoted as stored

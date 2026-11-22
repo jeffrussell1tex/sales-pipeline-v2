@@ -29346,6 +29346,22 @@ const mutations = [
         "src/hooks/useAccounts.js",
         "|| goneBefore || failed.some(f => f.merged)) loadAccounts(() => {});",
         "|| goneBefore) loadAccounts(() => {});"],
+    ["§0.283 late answer: an accounts bulk delete sends its next DELETE with the new org's token",
+        "src/hooks/useAccounts.js",
+        "                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token\n",
+        ""],
+    ["§0.283 late answer: an Undo for the last org's accounts on the new org's screen",
+        "src/hooks/useAccounts.js",
+        "            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen\n",
+        ""],
+    ["§0.283 late answer: the Sales Manager's save-all sends the commission plan with the new org's token",
+        "src/Tabs/SalesManagerTab.jsx",
+        "            if (!stillOrg(askedOrg)) return;   // the commission plan would go with the new org's token\n",
+        ""],
+    ["§0.283 late answer: the Sales Manager's save-all sends the SPIFF board with the new org's token",
+        "src/Tabs/SalesManagerTab.jsx",
+        "            if (!stillOrg(askedOrg)) return;   // the SPIFF board would go with the new org's token\n",
+        ""],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

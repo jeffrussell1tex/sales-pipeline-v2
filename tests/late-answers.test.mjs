@@ -73,11 +73,12 @@ const CALLBACK = /^on(?!(Close|Cancel|Back|Progress|Error)$)[A-Z]\w*$/;
 // retired here, named in the state section.
 const WRITING_HELPERS = /^(addAudit|fireMentionSms|putSettings|writeSettings|addToSettingsList)$/;
 
-const writeRequest = (call) => {
+const writeRequest = (call, helpers = new Set()) => {
     const c = call.callee;
     if (c.type !== 'Identifier') return null;
     if (c.name === 'dbWrite') return 'dbWrite';
     if (WRITING_HELPERS.test(c.name)) return c.name;
+    if (helpers.has(c.name)) return c.name;
     if (c.name !== 'dbFetch' && c.name !== 'fetchFn') return null;
     const opts = call.arguments[1];
     if (!opts || opts.type !== 'ObjectExpression') return null;
@@ -122,6 +123,40 @@ export const scan = () => {
     return srcFiles().flatMap((file) => scanText(file, read(file), shared));
 };
 
+// A file's own writing helpers (state §0.283): a function it declares by name whose own body sends a write —
+// `const send = (id) => dbWrite(…)` — is a write where it is called, through helpers of helpers too. §0.282 put each
+// delete hook's DELETE behind one sender; the scan saw no write in the loop, and its org check survived the harness.
+export const localWriters = (ast) => {
+    const decls = [];   // [name, body]
+    const walk = (n) => {
+        if (!n || typeof n.type !== 'string') return;
+        if (n.type === 'VariableDeclarator' && n.id && n.id.type === 'Identifier' && isFn(n.init)) decls.push([n.id.name, n.init.body]);
+        if (n.type === 'FunctionDeclaration' && n.id) decls.push([n.id.name, n.body]);
+        for (const k of Object.keys(n)) {
+            if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra') continue;
+            const v = n[k];
+            if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v.type === 'string') walk(v);
+        }
+    };
+    walk(ast.program);
+    const helpers = new Set();
+    const sends = (n) => {
+        if (!n || typeof n.type !== 'string') return false;
+        if ((n.type === 'CallExpression' || n.type === 'OptionalCallExpression') && writeRequest(n, helpers)) return true;
+        for (const k of Object.keys(n)) {
+            if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra') continue;
+            const v = n[k];
+            if (Array.isArray(v) ? v.some(sends) : (v && typeof v.type === 'string' && sends(v))) return true;
+        }
+        return false;
+    };
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const [name, body] of decls) if (!helpers.has(name) && sends(body)) { helpers.add(name); grew = true; }
+    }
+    return helpers;
+};
+
 // One file's late sets and writes that no org check precedes.
 export const scanText = (file, src, shared = sharedSetters()) => {
     const out = [];
@@ -129,6 +164,7 @@ export const scanText = (file, src, shared = sharedSetters()) => {
         const owner = OWNERS.test(file);
         const local = new Set(owner ? [] : [...src.matchAll(/const \[\w+,\s*(set\w+)\]\s*=\s*(?:React\.)?useState\(/g)].map((m) => m[1]));
         const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+        const helpers = localWriters(ast);
         const points = [];   // { node, what, fn, path }
         const visit = (node, path, fns, parent) => {
             if (!node || typeof node.type !== 'string') return;
@@ -157,7 +193,7 @@ export const scanText = (file, src, shared = sharedSetters()) => {
             if ((node.type === 'CallExpression' || node.type === 'OptionalCallExpression') && fns.length) {
                 const name = node.callee.type === 'Identifier' ? node.callee.name : null;
                 const what = (name && shared.has(name) && !local.has(name)) ? name
-                    : (name && CALLBACK.test(name)) ? name : writeRequest(node);
+                    : (name && CALLBACK.test(name)) ? name : writeRequest(node, helpers);
                 if (what) points.push({ node, what, fn: fns[fns.length - 1], fns: [...fns], path: here });
             }
             for (const key of Object.keys(node)) {
@@ -214,6 +250,22 @@ test('T1 — the scan sees an optional call — x?.() after an await, and p?.the
     assert.deepEqual(late('export const f = () => { p?.then(() => setAccounts([])); };'), ['setAccounts']);
     assert.deepEqual(late('export const f = () => { p?.then(() => { addAudit?.(\'merge\', \'account\'); }); };'), ['addAudit']);
     assert.deepEqual(late('export const f = async () => { const askedOrg = requestOrg(); await x(); if (!stillOrg(askedOrg)) return; setAccounts?.([]); };'), [], 'checked first: none');
+});
+
+test('T2 — the scan sees a write sent through the file\'s own helper — in an awaiting loop, after an await, through a helper of a helper (state §0.283: §0.282\'s one sender per delete hook hid the DELETE loop\'s org check)', () => {
+    const late = (src) => scanText('src/hooks/useMade.js', src).map((v) => v.what);
+    const send = 'const send = (id) => dbWrite(`/x?id=${id}`, { method: \'DELETE\' });';
+    assert.deepEqual(late(`export const f = async (rows) => { ${send} for (const r of rows) { await send(r); } };`), ['send'], 'a write in an awaiting loop');
+    assert.deepEqual(late(`export const f = async () => { ${send} await x(); await send(1); };`), ['send'], 'a write after an await');
+    assert.deepEqual(late(`export const f = async () => { ${send} const again = (id) => send(id); await x(); again(1); };`), ['again'], 'a helper of a helper');
+    // Declared before the helper it calls (the review): found only by localWriters' second pass — a single pass misses it.
+    assert.deepEqual(late(`export const f = async () => { const again = (id) => send(id); ${send} await x(); again(1); };`), ['again'], 'a helper declared before the one it calls');
+    assert.deepEqual(late(`export const f = async (rows) => { const askedOrg = requestOrg(); ${send} for (const r of rows) { if (!stillOrg(askedOrg)) return; await send(r); } };`), [], 'checked first: none');
+    assert.deepEqual(late('export const f = async () => { const fmt = (x) => String(x); await x(); fmt(1); };'), [], 'a helper that sends nothing: none');
+    // The two delete hooks as written: each one sender, each loop checked before its DELETE.
+    for (const file of ['src/hooks/useContacts.js', 'src/hooks/useAccounts.js']) {
+        assert.ok(localWriters(parse(read(file), { sourceType: 'module', plugins: ['jsx'] })).has('send'), `${file}: its sender is a write`);
+    }
 });
 
 test('every allowed late point is still in the code — a stale entry hides nothing', () => {

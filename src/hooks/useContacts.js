@@ -80,9 +80,8 @@ export function useContacts(deps) {
                 // Merged away since this list was read (state §0.282, code 'merged'): refused, said — never put back as live.
                 if (!r.ok) failed.push({ c, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });
             }
-            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             // One refused as merged into a contact this same press deleted (the review): that merge can no longer be undone,
-            // so the server deletes it as any contact — sent again once.
+            // so the server deletes it as any contact — sent again once (its loop checks the org before each send).
             if (failed.some(f => f.merged) && going.some(c => !failed.some(f => f.c.id === c.id) && !goneIds.includes(c.id))) {
                 for (const f of failed.filter(f => f.merged)) {
                     if (!stillOrg(askedOrg)) return;
@@ -92,7 +91,7 @@ export function useContacts(deps) {
                 }
                 failed.splice(0, failed.length, ...failed.filter(f => !f.retried));
             }
-            if (!stillOrg(askedOrg)) return;
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             // The list read again for one merged away (below) can answer after this press's Undo put its rows back — the
             // Undo reads it again too, later, and that read overtakes it (loadGen; the review).
             const mergedReload = failed.some(f => f.merged);

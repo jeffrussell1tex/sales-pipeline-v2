@@ -2425,14 +2425,17 @@ test('S10 — the Sales Manager\'s saveExtra, run as written (JB3-5): the tokens
 });
 
 test('S10 — the Sales Manager\'s saveAdminDrafts, run as written (JB3-5): a part refused as stale after an earlier part landed is partial — the guard says those stay saved; refused first, or refused otherwise, it is not', async () => {
-    const run = async ({ quotas = false, tiers = false, spiffs = false, fail = null }) => {
+    // switchAfter: the org on screen changes once that part has answered (state §0.283).
+    const run = async ({ quotas = false, tiers = false, spiffs = false, fail = null, switchAfter = null }) => {
         const order = [];
-        const part = (name) => async () => { order.push(name); if (fail && fail[0] === name) throw Object.assign(new Error(name), fail[1]); };
+        let org = 'org_A';
+        const part = (name) => async () => { order.push(name); if (name === switchAfter) org = 'org_B'; if (fail && fail[0] === name) throw Object.assign(new Error(name), fail[1]); };
         let thrown = null;
         try {
             await runAs(handlerIn(read(SALES_MANAGER), 'SalesManagerTab', 'saveAdminDrafts'), {
                 quotaDrafts: quotas ? { usr_a: {} } : {}, tiersDraft: tiers ? [] : null, spiffsDraft: spiffs ? [] : null,
                 saveQuotas: part('quotas'), saveCommission: part('tiers'), saveSpiffBoard: part('spiffs'),
+                requestOrg: () => org, stillOrg: (asked) => asked === org,
             });
         } catch (e) { thrown = e; }
         return { order, thrown };
@@ -2447,6 +2450,10 @@ test('S10 — the Sales Manager\'s saveAdminDrafts, run as written (JB3-5): a pa
     assert.equal((await run({ quotas: true, tiers: true, fail: ['tiers', {}] })).thrown?.partial, undefined, 'a refusal that took no latest: the guard\'s own words');
     const clean = await run({ quotas: true, tiers: true, spiffs: true });
     assert.deepEqual([clean.order, clean.thrown], [['quotas', 'tiers', 'spiffs'], null]);
+    // An org switch while a part is out (state §0.283): no later part is sent — putSettings would carry the new org's token.
+    assert.deepEqual((await run({ quotas: true, tiers: true, spiffs: true, switchAfter: 'quotas' })).order, ['quotas'], 'REGRESSION (§0.283): the commission plan sent after the switch');
+    assert.deepEqual((await run({ quotas: true, tiers: true, spiffs: true, switchAfter: 'tiers' })).order, ['quotas', 'tiers'], 'REGRESSION (§0.283): the SPIFF board sent after the switch');
+    assert.deepEqual((await run({ tiers: true, spiffs: true, switchAfter: 'tiers' })).order, ['tiers'], 'no quotas: the SPIFF board still checked');
 });
 
 // A component's const, as written, or null when it has none — today's names kept, so old code fails on what it sends,
