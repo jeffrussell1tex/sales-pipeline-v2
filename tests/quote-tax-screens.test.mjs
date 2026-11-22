@@ -260,8 +260,10 @@ test('QuotesTab: the builder edits the rate and the "Tax exempt" switch, and eac
     const save = between(editor, 'const handleSave = async () => {', '\n    };');
     order(save,
         'if (typedRate.error) { setError(typedRate.error); return; }',
-        'const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };',
-        'await onSave(payload);');
+        // Moved in §0.280: the form names the rate and the switch; what changed of it is sent, with the stamp.
+        'const form = { lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };',
+        'const payload = { id: opened.id, ...Object.fromEntries(changed.map(k => [k, form[k]])), ifStamp: opened.stamp };',
+        'await onSave(payload, opened);');
 });
 
 test('QuotesTab: a New version copies the rate and the switch as stored — none named as none — and the lines with their Taxable (R2)', () => {

@@ -122,7 +122,10 @@ test("§0.277 a rep's save of a quote another save changed after it was read wri
     armed = touch(quote, { notes: 'the other save' });
     const res = await quotesFn(ev('User', CLERK.rep, 'PUT', { id: quote, notes: 'rep edit' }));
     assert.equal(res.statusCode, 409, res.body);
-    assert.equal(said(res), 'This quote changed since it was opened — it is Draft now. Nothing was saved; reload it to see it.');
+    // Moved in §0.280: the quote as it stands comes with the refusal, for the screen to show — no "reload it to see it".
+    assert.equal(said(res), 'This quote changed since it was opened — it is Draft now. Nothing was saved.');
+    assert.equal(JSON.parse(res.body).code, 'stale');
+    assert.equal(JSON.parse(res.body).quote.notes, 'the other save');
     assert.equal((await quoteOf(quote)).notes, 'the other save');
 });
 

@@ -15,6 +15,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { heardRefusal, landedBefore, maybeSaid, alreadySaid, writeRefusal, failureWords, refusalWords,
     writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
 import { maybeFreedWords, notFreedWords } from '../src/utils/dispatchUnassign.js';
+import { quoteTermsEditable, quoteIsHeld } from '../src/utils/quoteRules.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
 import { emptyReceipt, receiptFromInsert, receiptFromUpdate, isClean, describeReceipt, mergeReceipts } from '../src/utils/importReceipt.js';
 import { makeBulkClient } from '../src/utils/bulkClient.js';
@@ -338,12 +339,20 @@ test('RUN (Part 6): a new quote or version keeps its id after an answer that pro
     await create({ ...BODY, name: 'Acme v2' });
     assert.deepEqual(sent.slice(2), ['q_1', 'q_2', 'q_3'], 'after the server\'s own refusal a fresh id; another body its own');
     // The line editor's words: the hook's — the server's own refusal "Not saved", any other its may-have sentence.
-    const lines = new Function('setSaving', 'handleSaveQuote',
-        `${between(read(QUOTES_TAB), '    const handleSaveLineItems   = async (payload) => {', '\n    };')}\n    };\nreturn handleSaveLineItems;`);
+    // Moved in §0.280: the save is made on the quote as the editor opened it; a stale refusal holds the editor open.
+    const editorHeld = [];
+    const lines = (a, b, c) => linesOf(a, b, c, quoteTermsEditable, quoteIsHeld);   // the review: its next step by the quote's status
+    const linesOf = new Function('setSaving', 'handleSaveQuote', 'setEditorHeld', 'quoteTermsEditable', 'quoteIsHeld',
+        `${between(read(QUOTES_TAB), '    const handleSaveLineItems   = async (payload, opened) => {', '\n    };')}\n    };\nreturn handleSaveLineItems;`);
     for (const [failure, words] of [[{ words: 'Approved quotes are locked.', unknown: false }, 'Not saved — Approved quotes are locked.'],
         [{ words: 'The quote may have been saved — reload the page to see whether it was: x', unknown: true }, 'The quote may have been saved — reload the page to see whether it was: x']]) {
-        await assert.rejects(lines(() => {}, async (p, e, { onFailure }) => { onFailure(failure); return null; })({ id: 'q_1' }), { message: words });
+        await assert.rejects(lines(() => {}, async (p, e, { onFailure }) => { onFailure(failure); return null; }, (id) => editorHeld.push(id))({ id: 'q_1' }, { id: 'q_1' }), { message: words });
     }
+    assert.deepEqual(editorHeld, [], 'a refusal that is not stale holds nothing');
+    // A stale refusal (state §0.280): the server's words, how to go on, and the editor editorHeld open on its quote.
+    await assert.rejects(lines(() => {}, async (p, e, { onFailure }) => { onFailure({ words: 'This quote changed since it was opened — it is Approved now. Nothing was saved.', unknown: false, stale: true }); return null; }, (id) => editorHeld.push(id))({ id: 'q_1' }, { id: 'q_1' }),
+        { message: 'Not saved — This quote changed since it was opened — it is Approved now. Nothing was saved. Close the editor and open it again to edit the quote as it stands.' });
+    assert.deepEqual(editorHeld, ['q_1']);
 });
 
 test('RUN (Part 3): a saved report\'s Delete — the server\'s own refusal "Report not deleted"; any other answer may have deleted it, the card kept', async () => {

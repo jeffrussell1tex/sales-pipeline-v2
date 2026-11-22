@@ -183,12 +183,16 @@ test('the Quotes tab: a rep\'s list is what the server sends; the buttons and th
     assert.ok(s.includes("const canSend   = !!canEdit && quoteMoveAllowed({ from: status, to: 'Sent to Customer', role: userRole, needsApproval });"));
     assert.ok(s.includes("const canSubmit = !!canEdit && needsApproval && quoteMoveAllowed({ from: status, to: 'Pending Approval', role: userRole, needsApproval });"), 'never "Submit" on a quote already submitted');
     assert.ok(s.includes('const activeCanSend = !!activeQuote && canEdit && quoteMoveAllowed({'), 'nor the preview\'s Send on one already sent');
-    assert.ok(s.includes('{(canSend || canSubmit) && (') && s.includes('{canSave && <button onClick={onSaveDraft}'), 'Send / Submit / Save only where the rule allows');
+    // Moved in §0.280 (Jeff, 21 Nov: "Remove the button"): Save draft is gone — it sent the screen's whole copy back; the line
+    // editor's Save is the one save, and opens only where the rule allows (below).
+    assert.ok(s.includes('{(canSend || canSubmit) && (') && !s.includes('onSaveDraft') && !s.includes('handleSaveDraft') && !s.includes('>Save draft<'), 'Send / Submit only where the rule allows; no Save draft');
     assert.ok(!s.includes('onClick={tier.approver ? onSubmitApproval : onSendToCustomer}'), 'the Send that showed on an accepted quote is gone');
     assert.ok(s.includes('{activeCanSend && <button onClick={handleSendToCustomer}'), 'the preview\'s Send too');
     assert.ok(s.includes('editable={canEdit && quoteTermsEditable(activeQuote.status)}'), 'a locked or held quote opens no editor (§0.156)');
-    assert.ok(s.includes('const canSave   = !!canEdit && quoteTermsEditable(status);'), 'no Save on a quote waiting for approval');
-    assert.ok(s.includes('if (!editQ || !quoteTermsEditable(editQ.status)) return null;'), 'an editor left open closes once the quote is held');
+    // Moved in §0.280: an editor left open closes once the quote is held — unless its save was refused as stale, when it
+    // stays open on what was typed until its Close (Jeff, 21 Nov: "Keep editor open").
+    assert.ok(s.includes('if (!editQ || (!quoteTermsEditable(editQ.status) && editorHeld !== editQ.id)) return null;'), 'an editor left open closes once the quote is held');
+    assert.ok(s.includes('onClose={() => { setEditingQuoteId(null); setEditorHeld(null); }}'), 'its Close lets it go');
     assert.ok(s.includes('const isApprover = canApproveQuotes(userRole);'), 'Approve by the server\'s rule');
     assert.ok(s.includes('{(error || quoteModalError) && <div'), 'a refused save says why');
     const panel = s.slice(s.indexOf('const ConfiguratorPanel'), s.indexOf('function calcProductIntelligence'));

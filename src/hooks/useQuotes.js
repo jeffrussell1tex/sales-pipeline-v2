@@ -81,7 +81,10 @@ export function useQuotes() {
     // Since §0.261 (the unknown-save rule, Part 3 — Jeff's Q1, Q2; Part 6): a create keeps the id its caller sends (a
     // press after an answer that proved nothing sends the same one), and the server's answer that the id is already this
     // org's is the earlier press landed — the quote read again and taken as saved. Only the server's own refusal says its
-    // words alone; any other failure says the quote may have been saved. `onFailure` hears { words, unknown }.
+    // words alone; any other failure says the quote may have been saved. `onFailure` hears { words, unknown, stale }.
+    // Since §0.280 an edit names what it changes and the stamp its quote was loaded with (`ifStamp`); a quote changed
+    // since is refused 409 `stale` with the quote as stored, which takes the list's place — the screen shows it.
+    // `editingQuote` is the quote the press was made on: its id, and the row an answer that cannot be read is laid over.
     const handleSaveQuote = useCallback(async (formData, editingQuote = null, { onFailure } = {}) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setQuoteModalError(null);
@@ -111,11 +114,20 @@ export function useQuotes() {
                     return stored;
                 }
                 const heard = heardRefusal(res.status, refused);
-                return fail(heard ? refusalWords(res, refused) : maybeSaid('The quote', 'saved', refusalWords(res, refused)), !heard);
+                const stale = isEdit && res.status === 409 && refused?.code === 'stale' && refused.quote?.id === payload.id;
+                if (stale) setQuotes(prev => prev.map(q => (q.id === refused.quote.id ? refused.quote : q)));
+                const words = heard ? refusalWords(res, refused) : maybeSaid('The quote', 'saved', refusalWords(res, refused));
+                setQuoteModalError(words);
+                if (onFailure) onFailure({ words, unknown: !heard, stale, quote: stale ? refused.quote : null });
+                return null;
             }
-            const data = await res.json().catch(() => ({}));   // a landed answer that cannot be read: saved, the copy sent shown
+            // A landed answer that cannot be read: saved — a create shows the copy sent; an edit lays what it sent over the
+            // quote it was made on; the stamp of either not known (null), so its next press is refused as stale with the quote
+            // as stored — never sent with no stamp, which is not checked (the review).
+            const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return null;
-            const saved = data.quote || payload;
+            const { ifStamp: _sent, ...sent } = payload;
+            const saved = data.quote || (isEdit ? { ...editingQuote, ...sent, stamp: null } : { ...payload, stamp: null });
             setQuotes(prev =>
                 isEdit
                     ? prev.map(q => q.id === saved.id ? saved : q)

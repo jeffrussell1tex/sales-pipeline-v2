@@ -399,7 +399,8 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
     assert.ok(s.includes("const canCreateJob = dispatchAccessOf(userRole, settings) === 'full';"));
     // The accept names only the status since §0.156 — the server merges over the stored quote.
     assert.ok(s.includes("const handleAccept          = () => moveQuote(activeQuote, 'Accepted');"));
-    assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'), 'a move carries no copy of the lines');
+    // Moved in §0.280: with the stamp its screen's copy holds — still no copy of the lines.
+    assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra, ifStamp: q.stamp }, q); }'), 'a move carries no copy of the lines');
     // Moved in §0.249 (the refusal sweep, Part 12): the ok check first, the refusal read once — RUN in tests/refusal-sweep.test.mjs Part 12b.
     assert.ok(s.includes("if (res.status === 409 && refused?.job) { setLinkedJob(refused.job); setJobUnread(false); return; }"), 'an existing job is adopted');
     // Moved in §0.262 (the unknown-save rule, Part 3): only the server's own refusal is "not created"; any other may have made it.

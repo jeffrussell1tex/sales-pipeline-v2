@@ -323,7 +323,11 @@ One commit per verified batch; doc patch in the same commit.
   deal or saved report is the server's, never a body's (§0.242; quotes,
   deals and saved reports §0.250); the Price
   Book sends only what changed (`src/utils/productChanges.js`) and says
-  a refusal. A new insert or upsert in a PUT or PATCH block fails THE
+  a refusal. Since §0.280 every Quotes press names the stamp its copy
+  holds (`ifStamp`; every quote handed out `STAMPED`): a quote changed
+  since is a 409 `stale` with the quote as it stands, nothing written;
+  the line editor sends only what changed; Save draft is gone (THE GUARD,
+  tests/quote-stale.test.mjs; guide §18b135 rule 10). A new insert or upsert in a PUT or PATCH block fails THE
   GUARD (tests/put-upserts.test.mjs) until named with its reason. A
   percent a request names anew — a quote's deal and line discounts, the
   default tax rate, a service plan's discount — is none or 0-100, else a

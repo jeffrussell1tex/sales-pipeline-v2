@@ -198,7 +198,8 @@ test('the Approvals tab and a quote\'s history read the record; the words say wh
     assert.ok(tab.includes("{isApprover ? 'Waiting for approval' : 'Your quotes waiting for approval'}"));
     assert.ok(s.includes("const handleSendBack        = async (q, note) => !!(await moveQuote(q, 'Draft', { sendBack: true, sendBackNote: note }));"));
     assert.ok(s.includes("const handleApprove         = (q) => moveQuote(q, 'Approved');") && s.includes("const handleWithdraw        = (q) => moveQuote(q, 'Draft');"));
-    assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'));
+    // Moved in §0.280: a move names the stamp its screen's copy holds too — a quote changed since is refused, never moved.
+    assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra, ifStamp: q.stamp }, q); }'));
     assert.ok(!/handleSaveQuote\(\{ \.\.\.(activeQuote|q), status:/.test(s), 'no move sends the screen\'s copy of the lines');
     assert.ok(!s.includes('function buildActivityLog') && s.includes('const log = historyLines(events);'), 'the history is the record\'s');
     assert.ok(s.includes("await dbFetch('/.netlify/functions/quotes?activity=true')") && s.includes("'/.netlify/functions/quotes?activity=true&quoteId=' + encodeURIComponent(activeQuote.id)"));

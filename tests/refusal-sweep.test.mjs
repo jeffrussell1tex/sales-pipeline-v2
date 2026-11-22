@@ -6624,7 +6624,9 @@ test('Part 12b: WIRING — Quotes: the job card draws neither "No job yet" nor C
     assert.ok(s.includes("setLinkedJob(null); setJobError(''); setJobUnread(false);"), 'cleared with the job, on any other quote');
     for (const w of ["} catch (err) { setError(`The quote was not created — ${failureWords(err)}`); }", "} catch (err) { setError(`The version was not created — ${failureWords(err)}`); }",
         'catch (err) { setError(failureWords(err)); return null; }']) assert.ok(s.includes(w), w);
-    assert.equal(count(s, 'catch (err) { setError(failureWords(err)); }'), 3, 'the line editor, the Price Book and Save draft');
+    // Moved in §0.280: Save draft is gone (Jeff, 21 Nov: "Remove the button") — its catch with it.
+    assert.equal(count(s, 'catch (err) { setError(failureWords(err)); }'), 2, 'the line editor and the Price Book');
+    assert.ok(!s.includes('handleSaveDraft'), 'Save draft gone');
     assert.ok(!/HTTP \$\{|'HTTP '|check your connection/.test(s), 'REGRESSION: "HTTP N" or "check your connection" said');
     assert.ok(!P12B_NO_RAW.test(s), 'REGRESSION: a raw e.message said');
 });

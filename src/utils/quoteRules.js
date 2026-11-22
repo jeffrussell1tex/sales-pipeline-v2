@@ -260,15 +260,29 @@ export function quoteEditOutcome({ status, termsChanged }) {
 // customer's copy, 0 shows "Tax (0%)", so a move between them is a change — and
 // "Tax exempt" as on or not (a quote written before tax holds none: not exempt).
 export function quoteTermsChanged(stored, next) {
-    for (const k of QUOTE_TERMS_FIELDS) {
-        const a = stored?.[k], b = next?.[k];
-        if (k === 'dealDiscount') { if ((Number(a) || 0) !== (Number(b) || 0)) return true; continue; }
-        if (k === 'taxRate') { if (cleanTaxRate(a) !== cleanTaxRate(b)) return true; continue; }
-        if (k === 'taxExempt') { if (isOn(a) !== isOn(b)) return true; continue; }
-        if (k === 'lineItems') { if (JSON.stringify(normLines(a)) !== JSON.stringify(normLines(b))) return true; continue; }
-        if ((a ?? '') !== (b ?? '')) return true;
-    }
-    return false;
+    return quoteTermChanges(stored, next).length > 0;
+}
+// WHICH terms differ, by the same comparison (state §0.280): the line editor sends only these, measured against the
+// quote as it opened; the PUT reads a press sent again over a quote that holds what it asked as done.
+export function quoteTermChanges(stored, next) {
+    return QUOTE_TERMS_FIELDS.filter((k) => termDiffers(k, stored?.[k], next?.[k]));
+}
+function termDiffers(k, a, b) {
+    if (k === 'dealDiscount') return (Number(a) || 0) !== (Number(b) || 0);
+    if (k === 'taxRate') return cleanTaxRate(a) !== cleanTaxRate(b);
+    if (k === 'taxExempt') return isOn(a) !== isOn(b);
+    if (k === 'lineItems') return JSON.stringify(normLines(a)) !== JSON.stringify(normLines(b));
+    return (a ?? '') !== (b ?? '');
+}
+// A quote press sent again (state §0.280): does the stored quote already hold everything the body asks — its move (a
+// send-back: a Draft holding this note) and every term it names? A body that asks nothing holds nothing.
+export function quoteHoldsBody(stored, body) {
+    if (!stored || !body) return false;
+    if (body.sendBack === true) return (stored.status || 'Draft') === 'Draft' && !!stored.approvalNote && stored.approvalNote === String(body.sendBackNote ?? '').trim();
+    const named = QUOTE_TERMS_FIELDS.filter((k) => k in body);
+    if (!('status' in body) && !named.length) return false;
+    if ('status' in body && (body.status || 'Draft') !== (stored.status || 'Draft')) return false;
+    return named.every((k) => !termDiffers(k, stored[k], body[k]));
 }
 const isOn = (v) => v === true || v === 'true';
 

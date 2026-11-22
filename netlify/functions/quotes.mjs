@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { quotes, opportunities, auditLog, users, settings as settingsTable, accounts, dispatchCustomers } from '../../db/schema.js';
-import { eq, asc, and, desc, sql, inArray, gte, getTableColumns } from 'drizzle-orm';
+import { eq, ne, asc, and, desc, sql, inArray, gte, getTableColumns } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId, ownerWriteFilter, ownerClaim, claimRefused, rowAsRead } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
@@ -15,7 +15,7 @@ import { sendApprovalNotices } from './_approvalMail.mjs';
 import {
     DEFAULT_QUOTE_APPROVAL_TIERS, approvalTierFor, quoteDiscountPct, quoteNeedsApproval,
     quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes, quoteSendBackRefusal,
-    mayDecideQuote, decidedByWords,
+    mayDecideQuote, decidedByWords, quoteHoldsBody,
 } from '../../src/utils/quoteRules.js';
 // What the approvals DID is read from the record (state §0.156): the audit log's
 // quote events, which this function writes as it moves a quote.
@@ -218,21 +218,41 @@ function approvalStamp(quote, tiers) {
 
 // When a quote is accepted, push its totalValue to the linked opportunity's arr field — a statement of the accept's
 // batch (state §0.277), behind its claims: the deal still the caller's or nobody's, the quote as read.
+// A quote as every answer hands it out (state §0.280): its columns and its last edit as text — `stamp`, the value a
+// screen names back as `ifStamp` on its next press, compared as text exactly as the save's own claim compares it.
+const STAMPED = () => ({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` });
+// A press from a screen that loaded the quote before another change (state §0.280): refused, nothing written, with the
+// quote as it stands so the screen shows it — the save's own claim (missedQuote) answers a change in its window the same.
+const changedSince = (quote) => ({ statusCode: 409, headers, body: JSON.stringify({ error: `This quote changed since it was opened — it is ${quote.status || 'Draft'} now. Nothing was saved.`, code: 'stale', quote }) });
+// A press that already landed (state §0.280, the review): the quote holds everything it asks AND its last recorded change
+// is the caller's — an earlier press of theirs whose answer was lost. Another member's same move (an Admin's approval of
+// lines this approver never saw, a send-back over a rep's Withdraw) is a change since: stale, never 'already'.
+async function pressLanded(auth, quote, body) {
+    if (!quoteHoldsBody(quote, body) || !auth.userId) return false;
+    const [last] = await db.select({ userId: auditLog.userId }).from(auditLog)
+        .where(and(eq(auditLog.orgId, auth.orgId), eq(auditLog.entityType, 'quote'), eq(auditLog.entityId, quote.id), ne(auditLog.action, 'quote.reminded')))
+        .orderBy(desc(auditLog.timestamp)).limit(1);
+    return !!last && last.userId === auth.userId;
+}
+const heldAlready = (quote) => ({ statusCode: 409, headers, body: JSON.stringify({ error: `This quote holds that already — it is ${quote.status || 'Draft'}.`, code: 'already' }) });
+
 const syncToOpportunity = (orgId, opportunityId, totalValue) => db.update(opportunities)
     .set({ arr: String(totalValue), updatedAt: new Date() })
     .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
 
 // A quote write that missed its claims (state §0.277): what stands now decides — the quote gone: not found; its deal no
 // longer the caller's to change: the deal's refusal; else the quote changed since it was read: said, nothing written.
-async function missedQuote(auth, id, forbidden, moveTo = null) {
-    const [now] = await db.select({ opportunityId: quotes.opportunityId, status: quotes.status }).from(quotes).where(and(eq(quotes.id, id), eq(quotes.orgId, auth.orgId))).limit(1);
+async function missedQuote(auth, id, forbidden, moveTo = null, body = null) {
+    const [now] = await db.select(STAMPED()).from(quotes).where(and(eq(quotes.id, id), eq(quotes.orgId, auth.orgId))).limit(1);
     if (!now) return refuse(404, NOT_FOUND);
     const access = await dealAccess(auth, now.opportunityId);
     if (!access.canRead) return refuse(404, NOT_FOUND);
     if (!access.canWrite) return refuse(403, forbidden);
     // The move it asked for stands — a press in flight with this one made it (the review): done, code 'already'.
     if (moveTo && now.status === moveTo) return { statusCode: 409, headers, body: JSON.stringify({ error: `This quote is ${moveTo} already.`, code: 'already' }) };
-    return refuse(409, `This quote changed since it was opened — it is ${now.status || 'Draft'} now. Nothing was saved; reload it to see it.`);
+    // A save sent again whose first send landed in this one's window (state §0.280, the review): done, as the stamp check says it.
+    if (body && await pressLanded(auth, now, body)) return heldAlready(now);
+    return changedSince(now);
 }
 
 const refuse = (statusCode, error) => ({ statusCode, headers, body: JSON.stringify({ error }) });
@@ -313,12 +333,12 @@ export const handler = async (event) => {
             if (oppId) {
                 // All versions for a specific opportunity
                 rows = visible.has(oppId)
-                    ? await db.select().from(quotes)
+                    ? await db.select(STAMPED()).from(quotes)
                         .where(and(eq(quotes.orgId, orgId), eq(quotes.opportunityId, oppId)))
                         .orderBy(asc(quotes.quoteNumber), asc(quotes.version))
                     : [];
             } else {
-                rows = (await db.select().from(quotes)
+                rows = (await db.select(STAMPED()).from(quotes)
                     .where(eq(quotes.orgId, orgId))
                     .orderBy(desc(quotes.createdAt)))
                     .filter(q => visible.has(q.opportunityId));
@@ -403,7 +423,7 @@ export const handler = async (event) => {
                     // Jeff: "Fix these 3"); it was retried as a number collision, then a 500. The arbiter is the id
                     // alone: a number taken is still a unique violation on (org, number, version), retried as before.
                     const claim = ownerClaim(opportunities, access.deal.id, orgId, dealMine);
-                    const done = await db.batch([...claim, db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning()]);
+                    const done = await db.batch([...claim, db.insert(quotes).values({ ...basePayload, quoteNumber }).onConflictDoNothing({ target: quotes.id }).returning(STAMPED())]);
                     return done[claim.length];
                 }, { label: 'quote number' });
             } catch (e) {
@@ -431,7 +451,7 @@ export const handler = async (event) => {
             // upsert, so a PUT could make a quote in any status and skip the POST's
             // forced Draft. New quotes are POSTed (useQuotes does).
             // Read with its last edit as text (state §0.277): the save's claim asserts the quote is still as read.
-            const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)
+            const [read] = await db.select(STAMPED()).from(quotes)
                 .where(and(eq(quotes.id, String(data.id)), eq(quotes.orgId, orgId))).limit(1);
             const stamp = read?.stamp;
             const existing = read ? (({ stamp: _stamp, ...row }) => row)(read) : null;
@@ -440,6 +460,17 @@ export const handler = async (event) => {
             const access = await dealAccess(auth, existing.opportunityId);
             if (!access.canRead) return refuse(404, NOT_FOUND);
             if (!access.canWrite) return refuse(403, 'Forbidden: you can only change quotes on your own or unassigned deals');
+
+            // The quote as the screen loaded it (state §0.280; OPEN_ITEMS §4.8, §0.277's found (a); Jeff, 21 Nov: "Refuse if
+            // changed"): a press names the stamp its copy holds (`ifStamp`); a quote changed since — an approval, a send-back,
+            // another tab's lines — is refused with the quote as it stands, nothing written: a stale screen never moves a quote
+            // it never saw, nor writes its copy back. One that already holds everything the press asks, its last change the
+            // caller's, is an earlier press that landed — 'already' (pressLanded). A body naming no stamp (the public API) is
+            // decided as before.
+            if ('ifStamp' in data && data.ifStamp !== stamp) {
+                if (await pressLanded(auth, existing, data)) return heldAlready(existing);
+                return changedSince(read);
+            }
 
             // Its lines (state §0.204), before anything is written — the deal's sync below included: a list of
             // product lines, and a product a line names anew is one of this org's; one the stored lines hold (a
@@ -573,11 +604,11 @@ export const handler = async (event) => {
                     rowAsRead(quotes, existing.id, orgId, stamp),   // the quote as read: its move and terms were decided on that read
                     ...dealClaim,
                     ...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),
-                    db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),
+                    db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(STAMPED()),
                 ]);
             } catch (e) {
                 if (!claimRefused(e)) throw e;
-                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);
+                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null, data);
             }
             const [updated] = wrote[wrote.length - 1];
             // Pending Approval → Draft is a send-back or a withdrawal — the record the

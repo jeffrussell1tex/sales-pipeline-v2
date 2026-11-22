@@ -910,7 +910,7 @@
       <span class="endpoint-desc">Update a quote</span>
     </div>
     <div class="endpoint-body">
-      <p>Updates the quote with this <code>id</code>. A quote this organization does not hold is a <code>404</code>: a PUT never creates a quote (create one with POST). Setting <code>status: "Accepted"</code> automatically syncs <code>totalValue</code> to the linked opportunity's <code>arr</code> field.</p>
+      <p>Updates the quote with this <code>id</code>. A quote this organization does not hold is a <code>404</code>: a PUT never creates a quote (create one with POST). Setting <code>status: "Accepted"</code> automatically syncs <code>totalValue</code> to the linked opportunity's <code>arr</code> field. Every quote the API returns carries <code>stamp</code>, its last edit; a PUT that names it back as <code>ifStamp</code> is refused with a <code>409</code> (<code>code: "stale"</code>, the quote as it stands, nothing written) when the quote changed since — a PUT naming no <code>ifStamp</code> is not checked.</p>
     </div>
   </div>
 

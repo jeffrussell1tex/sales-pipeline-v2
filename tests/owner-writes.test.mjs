@@ -188,19 +188,22 @@ test("§0.276 THE GUARD: a SPIFF claim's save writes only what it names; a rep's
 test("§0.277 THE GUARD: a quote's save is one batch — the quote as read, its deal still the caller's or nobody's, then the deal's value and the quote; a create rides behind the deal's claim; a miss is read again", () => {
     const src = read('netlify/functions/quotes.mjs');
     const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
-    assert.ok(put.includes('const [read] = await db.select({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` }).from(quotes)'), 'read with its last edit as text');
+    // Moved in §0.280: the read's selection is STAMPED — the columns and the last edit as text, the one every answer hands out.
+    assert.ok(put.includes('const [read] = await db.select(STAMPED()).from(quotes)'), 'read with its last edit as text');
+    assert.ok(src.includes('const STAMPED = () => ({ ...getTableColumns(quotes), stamp: sql`${quotes.updatedAt}::text` });'), 'the stamp is the last edit as text');
     assert.ok(put.includes("const dealMine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId: auth.userId, userRole });"));
     const batch = between(put, 'wrote = await db.batch([\n', '                ]);');
-    const order = ['rowAsRead(quotes, existing.id, orgId, stamp),', '...dealClaim,', '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),', 'db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(),'];
+    const order = ['rowAsRead(quotes, existing.id, orgId, stamp),', '...dealClaim,', '...(accepting ? [syncToOpportunity(orgId, existing.opportunityId, totals.totalValue)] : []),', 'db.update(quotes).set(payload).where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId))).returning(STAMPED()),'];   // moved in §0.280: answered with its stamp
     order.forEach((line, i) => { assert.ok(batch.includes(line), line); if (i) assert.ok(batch.indexOf(line) > batch.indexOf(order[i - 1]), `in order: ${line}`); });
     assert.ok(!put.includes('await syncToOpportunity('), 'the deal\'s value never written apart from the quote');
-    assert.ok(put.includes("if (!claimRefused(e)) throw e;\n                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null);"));
+    assert.ok(put.includes("if (!claimRefused(e)) throw e;\n                return await missedQuote(auth, existing.id, 'Forbidden: you can only change quotes on your own or unassigned deals', moved ? to : null, data);"));   // moved in §0.280: the body, for a save sent again
     // The review: the claim's own lines whole — an empty claim (its filter dropped) passes every other pin.
     assert.ok(put.includes('const dealClaim = ownerClaim(opportunities, existing.opportunityId, orgId, dealMine);'));
-    const missed = between(src, 'async function missedQuote(auth, id, forbidden, moveTo = null) {', '\n}\n');
+    const missed = between(src, 'async function missedQuote(auth, id, forbidden, moveTo = null, body = null) {', '\n}\n');   // moved in §0.280: the body, for a save sent again
     assert.ok(missed.includes('if (!now) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canRead) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canWrite) return refuse(403, forbidden);'));
     assert.ok(missed.includes("if (moveTo && now.status === moveTo) return { statusCode: 409, headers, body: JSON.stringify({ error: `This quote is ${moveTo} already.`, code: 'already' }) };"), 'the move it asked for made by a press in flight with it: done (the review)');
-    assert.ok(missed.indexOf('return refuse(409,') > missed.indexOf('if (moveTo && now.status === moveTo)'), 'changed since read: 409, last');
+    // Moved in §0.280: changed since read is the stale answer, the quote as it stands with it (changedSince).
+    assert.ok(missed.includes('const [now] = await db.select(STAMPED()).from(quotes)') && missed.indexOf('return changedSince(now);') > missed.indexOf('if (moveTo && now.status === moveTo)'), 'changed since read: 409 stale with the quote, last');
     const post = between(src, "if (event.httpMethod === 'POST') {", "if (event.httpMethod === 'PUT') {");
     assert.ok(post.includes('const claim = ownerClaim(opportunities, access.deal.id, orgId, dealMine);') && post.includes('const done = await db.batch([...claim, db.insert(quotes)'), 'a create behind the deal\'s claim');
     assert.ok(post.includes("return now.canRead ? refuse(403, 'Forbidden: you can only quote your own or unassigned deals') : refuse(404, 'Deal not found');"));

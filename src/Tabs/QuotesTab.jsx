@@ -17,7 +17,7 @@ import { esc } from '../utils/customerNotifications';
 import { quoteCanBeAccepted, quoteCanBecomeJob, invoiceStatusLabel, fmtMoney, cleanProductTypes, productTypeLabel, DEFAULT_PRODUCT_TYPES } from '../utils/invoices.js';
 // What may happen to a quote (§0.155): the server's one rule — the buttons, the gauge
 // and the "needs approval" words read it, so a click is never one the server refuses.
-import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteTermsEditable, quoteMoveAllowed, canApproveQuotes, SEND_BACK_NOTE_MAX, mayDecideQuote, tierApproverWords } from '../utils/quoteRules.js';
+import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteTermsEditable, quoteMoveAllowed, canApproveQuotes, SEND_BACK_NOTE_MAX, mayDecideQuote, tierApproverWords, quoteTermChanges, quoteIsHeld } from '../utils/quoteRules.js';
 // What the approvals DID (§0.156): the server's record of each submission and
 // decision — the Approvals cards, the decisions and a quote's history read it.
 import { approvalSummary, formatHours, sendBackNoteOf } from '../utils/approvalStats.js';
@@ -592,6 +592,11 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
 
 // ─── Inline line item editor — opens when "Edit in builder" is clicked ────────
 const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
+    // The quote as this editor opened on it (state §0.280): the stamp its Save names; and the form as it opened — what
+    // the Save is measured against, so a value the editor only shows (the default terms over none) is never a change (the review).
+    const [opened] = useState(quote);
+    const [openedForm] = useState(() => ({ lineItems: (quote.lineItems || []).map(({ _key, ...li }) => li), paymentTerms: quote.paymentTerms || 'Net 30 · Annual',
+        validUntil: quote.validUntil || '', notes: quote.notes || '', taxRate: taxRateFromInput(taxRateInputOf(quote.taxRate)).rate, taxExempt: quote.taxExempt === true }));
     const [lineItems,     setLineItems]     = useState(() => (quote.lineItems || []).map((li, i) => ({ ...li, _key: li._key || (Date.now() + i) })));
     const [catalogSearch, setCatalogSearch] = useState('');
     const [paymentTerms,  setPaymentTerms]  = useState(quote.paymentTerms || 'Net 30 · Annual');
@@ -662,8 +667,14 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
         // as stored is never asked again — the server's rule, one function.
         const lineRefusal = lineDiscountRefusal(lineItems, quote.lineItems);
         if (lineRefusal) { setError(lineRefusal); return; }
-        const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };
-        try { await onSave(payload); onClose(); }
+        const form = { lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes, taxRate: typedRate.rate, taxExempt };
+        // Only what changed from the quote as it opened, with the stamp it was loaded with (state §0.280; Jeff, 21 Nov:
+        // "Refuse if changed") — never its copy of the rest, nor its status: a quote changed since is refused as stale,
+        // the editor kept open with what was typed ("Keep editor open"). Nothing changed sends nothing.
+        const changed = quoteTermChanges({ ...opened, ...openedForm }, { ...opened, ...form });
+        if (!changed.length) { onClose(); return; }
+        const payload = { id: opened.id, ...Object.fromEntries(changed.map(k => [k, form[k]])), ifStamp: opened.stamp };
+        try { await onSave(payload, opened); onClose(); }
         catch (err) { setError(failureWords(err)); }
     };
 
@@ -888,7 +899,7 @@ const SendBackForm = ({ onSend, onCancel, saving, tone = 'light' }) => {
     );
 };
 
-const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
+const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, saving,
     onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, jobUnread, onCreateJob, canEdit, userRole, tiers,
     onApprove, onSendBack, onWithdraw, sentBackBy, userId }) => {
     const { approverNames } = useQuoteConfig();
@@ -904,9 +915,6 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
     // "Send" on one already sent (quoteMoveAllowed).
     const canSend   = !!canEdit && quoteMoveAllowed({ from: status, to: 'Sent to Customer', role: userRole, needsApproval });
     const canSubmit = !!canEdit && needsApproval && quoteMoveAllowed({ from: status, to: 'Pending Approval', role: userRole, needsApproval });
-    // Save only where the lines and terms may change — not once sent or closed, nor
-    // while the quote waits for approval (held — Jeff, 2 Oct; §0.156).
-    const canSave   = !!canEdit && quoteTermsEditable(status);
     // An approval stamped before §0.155 holds a Clerk id, not a name — not shown.
     const approver  = quote.approvedBy && !/^user_/.test(quote.approvedBy) ? quote.approvedBy : null;
     // A quote waiting for approval (§0.156): an approver decides it here — approve, or
@@ -1041,8 +1049,7 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                         {status === 'Accepted' ? 'Accepted — this quote is final.' : `${status} — its lines and terms are final.`} Use “+ New version” to change it.
                     </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: canSave ? '1fr 1fr' : '1fr', gap: 6 }}>
-                    {canSave && <button onClick={onSaveDraft} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Save draft</button>}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
                     <button onClick={onPreviewPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Preview PDF</button>
                 </div>
             </div>
@@ -1844,17 +1851,19 @@ export default function QuotesTab() {
     // so a body carrying the screen's copy of the lines could write an older copy back
     // — an approver's screen loaded before the rep's last change, approving lines the
     // rep had already replaced. Resolves to the saved quote, or null on a refusal
-    // (handleSaveQuote shows it).
+    // (handleSaveQuote shows it). Since §0.280 with the stamp the screen's copy holds: a quote changed since it
+    // loaded — approved, sent back, its lines changed — is refused, nothing moved, and shown as it stands.
     const moveQuote = async (q, status, extra = {}) => {
         if (!q) return null;
         setSaving(true);
-        try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }
+        try { return await handleSaveQuote({ id: q.id, status, ...extra, ifStamp: q.stamp }, q); }
         catch (err) { setError(failureWords(err)); return null; }
         finally { setSaving(false); }
     };
     const handleSubmitApproval  = () => moveQuote(activeQuote, 'Pending Approval');
     const handleSendToCustomer  = () => moveQuote(activeQuote, 'Sent to Customer');
-    const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(failureWords(err)); } finally { setSaving(false); } };
+    // Save draft is gone (state §0.280; Jeff, 21 Nov: "Remove the button"): it changed nothing of its own and sent the
+    // screen's whole copy back — a stale tab's undid an approval. The line editor's Save saves the lines and terms.
     // The customer's decision (state §0.149): the server stamps acceptedAt and syncs the deal.
     const handleAccept          = () => moveQuote(activeQuote, 'Accepted');
     // Quote → job: written server-side first, the server's job adopted; a refusal
@@ -1895,11 +1904,25 @@ export default function QuotesTab() {
     // back empty with no error anywhere. Convert the null into a throw so the
     // editor stays open and shows why — in the hook's words (state §0.261, the unknown-save rule): the server's own
     // refusal "Not saved", any other failure that it may have been saved. It said "nothing was written" for both.
-    const handleSaveLineItems   = async (payload) => {
+    // A save refused as stale (state §0.280) keeps the editor open on what was typed — even over a quote now held or
+    // sent, which would close it — until its Close; the quote beside it shows as stored.
+    const [editorHeld, setEditorHeld] = useState(null);
+    // Let go whenever the editor leaves its quote by any path — Compare versions, a deal opened, a deep link (the review).
+    useEffect(() => { setEditorHeld(null); }, [editingQuoteId]);
+    const handleSaveLineItems   = async (payload, opened) => {
         setSaving(true);
         try {
             let failure = null;
-            const saved = await handleSaveQuote(payload, payload, { onFailure: (f) => { failure = f; } });
+            const saved = await handleSaveQuote(payload, opened, { onFailure: (f) => { failure = f; } });
+            if (!saved && failure?.stale) {
+                setEditorHeld(opened.id);
+                // What the rep can do next, by where the quote stands now (the review): open it again while its lines may
+                // change; a quote now waiting for approval is withdrawn first; a sent or closed one changes by a new version.
+                const now = failure.quote?.status || 'Draft';
+                const next = quoteTermsEditable(now) ? 'Close the editor and open it again to edit the quote as it stands.'
+                    : quoteIsHeld(now) ? 'Close the editor; withdraw the quote to change it.' : 'Close the editor; use “+ New version” to change it.';
+                throw new Error(`Not saved — ${failure.words} ${next}`);
+            }
             if (!saved) throw new Error(!failure ? 'The quote was not saved.' : failure.unknown ? failure.words : `Not saved — ${failure.words}`);
             return saved;
         } finally { setSaving(false); }
@@ -2249,14 +2272,15 @@ export default function QuotesTab() {
                                     {editingQuoteId && (() => {
                                         const editQ = configuratorQuotes.find(q => q.id === editingQuoteId);
                                         // An editor left open closes once the quote is held or sent (§0.156).
-                                        if (!editQ || !quoteTermsEditable(editQ.status)) return null;
+                                        if (!editQ || (!quoteTermsEditable(editQ.status) && editorHeld !== editQ.id)) return null;
                                         return (
                                             <div style={{ marginBottom: 14 }}>
                                                 <LineItemEditor
+                                                    key={editQ.id}
                                                     quote={editQ}
                                                     products={products || []}
                                                     onSave={handleSaveLineItems}
-                                                    onClose={() => setEditingQuoteId(null)}
+                                                    onClose={() => { setEditingQuoteId(null); setEditorHeld(null); }}
                                                     saving={saving}
                                                 />
                                             </div>
@@ -2276,7 +2300,7 @@ export default function QuotesTab() {
                                                 onEdit={() => setEditingQuoteId(activeQuote.id)}
                                             />
                                         )}
-                                        {activeQuote && <ConfiguratorPanel key={activeQuote.id} quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
+                                        {activeQuote && <ConfiguratorPanel key={activeQuote.id} quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} saving={saving}
                                             onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled} canEdit={canEdit} userRole={userRole} tiers={approvalTiers}
                                             onApprove={handleApprove} onSendBack={handleSendBack} onWithdraw={canEdit ? handleWithdraw : null} sentBackBy={sentBackBy} userId={currentUserId}
                                             job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} jobUnread={jobUnread} onCreateJob={canCreateJob ? handleCreateJob : null} />}

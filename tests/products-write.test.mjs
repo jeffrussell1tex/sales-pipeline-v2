@@ -233,8 +233,10 @@ test('the builder checks the lines at Save, after the rate and before anything i
         'if (typedRate.error) { setError(typedRate.error); return; }',
         'const lineRefusal = lineDiscountRefusal(lineItems, quote.lineItems);',
         'if (lineRefusal) { setError(lineRefusal); return; }',
-        'const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li),',
-        'try { await onSave(payload); onClose(); }');
+        // Moved in §0.280: only what changed from the quote as the editor opened, with its stamp.
+        'const changed = quoteTermChanges({ ...opened, ...openedForm }, { ...opened, ...form });',   // the review: against the form as it opened
+        'const payload = { id: opened.id, ...Object.fromEntries(changed.map(k => [k, form[k]])), ifStamp: opened.stamp };',
+        'try { await onSave(payload, opened); onClose(); }');
     assert.ok(!/setLineItems/.test(save), 'the typed value is kept — never clamped at Save');
     // The box keeps what was typed (no clamp on change), and the refusal is drawn beside Save.
     assert.ok(editor.includes("onChange={e => updateLine(item._key, 'discountPct', Number(e.target.value))}"));
