@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import ActivityRowText from './ActivityRowText';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import RecordDocuments from '../documents/RecordDocuments';
 import AccountPicker from './AccountPicker';
 import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';
@@ -355,11 +355,15 @@ export default function ContactRail() {
             buyerPersona: personaSearch,
         }, !isNew && link.untouched ? ['company', 'accountId'] : []);
 
+        // The org this Save began in (state §0.284): handleSaveContact takes the org at its own start, so called after a
+        // switch it wrote this rail's contact in the org switched to.
+        const askedOrg = requestOrg();
         // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
             checkingDupRef.current = true; setCheckingDup(true);
             let dups;
             try { dups = await checkDuplicate(saveData); } finally { checkingDupRef.current = false; setCheckingDup(false); }
+            if (!stillOrg(askedOrg)) return;   // switched while the check was out: the save would go to the new org
             if (dups) { setDupWarning(dups); return; }
         }
 

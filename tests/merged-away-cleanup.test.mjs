@@ -631,15 +631,20 @@ test("C12 — an account's or contact's Documents tab lists a document linked to
     assert.deepEqual(runSlice(OLD, { documents: DOCS, recordType: 'account', recordId: 'acc_resinall' })().map((d) => d.id), ['doc_both'], 'the old memo: by its own id alone');
     // Unlink: every link of the document to the records this one stands for, stopping at a refusal.
     const unlinkText = initOf(src, 'RecordDocuments', 'unlinkHere');
-    const unlink = async (doc, answers) => {
+    // The org on screen (state §0.284): `switchAfter` switches it once that many unlinks have answered.
+    const unlink = async (doc, answers, switchAfter = Infinity) => {
         const calls = [];
-        const unlinkDocument = async (docId, linkId) => { calls.push(`${docId}/${linkId}`); return { ok: answers.shift() ?? true }; };
-        await runSlice(unlinkText, { recordType: 'account', ids: tab('account', 'acc_resinall').ids, unlinkDocument })(doc);
+        let onScreen = 'org_A';
+        const unlinkDocument = async (docId, linkId) => { calls.push(`${docId}/${linkId}`); if (calls.length >= switchAfter) onScreen = 'org_B'; return { ok: answers.shift() ?? true }; };
+        const requestOrg = () => onScreen;
+        const stillOrg = (asked) => !!asked && asked === onScreen;
+        await runSlice(unlinkText, { recordType: 'account', ids: tab('account', 'acc_resinall').ids, unlinkDocument, requestOrg, stillOrg })(doc);
         return calls;
     };
     assert.deepEqual(await unlink(DOCS[1], []), ['doc_both/dl_a', 'doc_both/dl_b'], 'both links off');
     assert.deepEqual(await unlink(DOCS[1], [false]), ['doc_both/dl_a'], 'a refusal stops it');
     assert.deepEqual(await unlink(DOCS[2], []), [], 'nothing of this record');
+    assert.deepEqual(await unlink(DOCS[1], [], 1), ['doc_both/dl_a'], 'REGRESSION (state §0.284): a switch after the first unlink — the next goes with the new org\'s token');
 });
 
 test("C13 — an account's rail: a contact linked by id to an account merged into this one is in its People list and CONTACTS, and its activities roll up here; an Undo gives it back (run as written)", () => {

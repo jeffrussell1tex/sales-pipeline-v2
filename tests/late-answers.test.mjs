@@ -126,11 +126,17 @@ export const scan = () => {
 // A file's own writing helpers (state §0.283): a function it declares by name whose own body sends a write —
 // `const send = (id) => dbWrite(…)` — is a write where it is called, through helpers of helpers too. §0.282 put each
 // delete hook's DELETE behind one sender; the scan saw no write in the loop, and its org check survived the harness.
-export const localWriters = (ast) => {
+// Since §0.284 a function wrapped in useCallback is read as itself, and `seed` names writers the file takes from
+// elsewhere (takenWriters) — a helper of the file's that calls one sends a write too.
+const isUseCallback = (c) => (c.type === 'Identifier' && c.name === 'useCallback')
+    || (c.type === 'MemberExpression' && c.object.type === 'Identifier' && c.object.name === 'React' && c.property.name === 'useCallback');
+const fnOf = (init) => (isFn(init) ? init
+    : (init && init.type === 'CallExpression' && isUseCallback(init.callee) && isFn(init.arguments[0])) ? init.arguments[0] : null);
+export const localWriters = (ast, seed = new Set()) => {
     const decls = [];   // [name, body]
     const walk = (n) => {
         if (!n || typeof n.type !== 'string') return;
-        if (n.type === 'VariableDeclarator' && n.id && n.id.type === 'Identifier' && isFn(n.init)) decls.push([n.id.name, n.init.body]);
+        if (n.type === 'VariableDeclarator' && n.id && n.id.type === 'Identifier' && fnOf(n.init)) decls.push([n.id.name, fnOf(n.init).body]);
         if (n.type === 'FunctionDeclaration' && n.id) decls.push([n.id.name, n.body]);
         for (const k of Object.keys(n)) {
             if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra') continue;
@@ -139,7 +145,7 @@ export const localWriters = (ast) => {
         }
     };
     walk(ast.program);
-    const helpers = new Set();
+    const helpers = new Set(seed);
     const sends = (n) => {
         if (!n || typeof n.type !== 'string') return false;
         if ((n.type === 'CallExpression' || n.type === 'OptionalCallExpression') && writeRequest(n, helpers)) return true;
@@ -157,6 +163,83 @@ export const localWriters = (ast) => {
     return helpers;
 };
 
+// Writers handed across files (state §0.284; §0.283's review (a) and (c)): a screen takes `handleSaveContact` from
+// useApp(), and App takes it from useContacts() — the function sends a write in another file, so a scan of the
+// screen's own writers saw nothing late. The contact rail awaited its duplicate check and then called it with no
+// org check; the handler takes the org at its own start, so after a switch it wrote in the org switched to.
+const parseFile = (file) => parse(read(file), { sourceType: 'module', plugins: ['jsx'] });
+const walkAll = (n, f) => {
+    if (!n || typeof n.type !== 'string') return;
+    f(n);
+    for (const k of Object.keys(n)) {
+        if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra') continue;
+        const v = n[k];
+        if (Array.isArray(v)) v.forEach((c) => walkAll(c, f)); else if (v && typeof v.type === 'string') walkAll(v, f);
+    }
+};
+// Each hook of src/hooks, by its name: the writers its file declares. Every hook there is an `export function`
+// (a test below holds that each one the folder exports is read here). Known outside the writer set: useDocuments'
+// createDocument and addDocumentVersion send through documentsStorage's uploadNewDocument / uploadNewVersion, handed
+// dbFetch — and those never settle once the org has changed (the upload test below), so awaiting one opens no window.
+let hookCache = null;
+export const hookWriters = () => {
+    if (hookCache) return hookCache;
+    hookCache = new Map();
+    for (const e of readdirSync(new URL('src/hooks/', ROOT), { withFileTypes: true })) {
+        if (!/\.jsx?$/.test(e.name)) continue;
+        const ast = parseFile('src/hooks/' + e.name);
+        const writers = localWriters(ast);
+        walkAll(ast.program, (n) => {
+            if (n.type === 'FunctionDeclaration' && n.id && /^use[A-Z]/.test(n.id.name)) hookCache.set(n.id.name, writers);
+        });
+    }
+    return hookCache;
+};
+// The names a file takes, by destructuring, from a hook's call or useApp(): local name → the writer's own name.
+const taken = (ast, from) => {
+    const out = new Map();
+    walkAll(ast.program, (n) => {
+        if (n.type !== 'VariableDeclarator' || !n.init || n.init.type !== 'CallExpression' || n.init.callee.type !== 'Identifier') return;
+        const set = from(n.init.callee.name);
+        if (!set) return;
+        if (n.id.type === 'ObjectPattern') {
+            for (const p of n.id.properties) {
+                if (p.type !== 'ObjectProperty') continue;
+                const key = p.key.name || p.key.value;
+                const local = p.value.type === 'Identifier' ? p.value.name : (p.value.type === 'AssignmentPattern' && p.value.left.type === 'Identifier') ? p.value.left.name : null;
+                if (local && set.has(key)) out.set(local, key);
+            }
+        } else if (n.id.type === 'Identifier') out.set('@' + n.id.name, n.init.callee.name);   // kept whole: a spread of it
+    });
+    return out;
+};
+// The writers App hands its screens (appContextValue): App's own and the hooks', by the key a screen reads.
+export const contextWritersIn = (ast, hooks) => {
+    const fromHooks = taken(ast, (name) => hooks.get(name));
+    const own = localWriters(ast, new Set([...fromHooks.keys()].filter((k) => !k.startsWith('@'))));
+    const out = new Set();
+    walkAll(ast.program, (n) => {
+        if (n.type !== 'VariableDeclarator' || n.id.name !== 'appContextValue' || !n.init || n.init.type !== 'ObjectExpression') return;
+        for (const p of n.init.properties) {
+            if (p.type === 'SpreadElement' && p.argument.type === 'Identifier') {
+                const hook = fromHooks.get('@' + p.argument.name);   // ...documentsHook — the hook's writers, by their names
+                if (hook) for (const w of hooks.get(hook)) out.add(w);
+            } else if (p.type === 'ObjectProperty' && p.value.type === 'Identifier' && own.has(p.value.name)) out.add(p.key.name || p.key.value);
+        }
+    });
+    return out;
+};
+let ctxCache = null;
+export const contextWriters = () => (ctxCache ||= contextWritersIn(parseFile('src/App.jsx'), hookWriters()));
+// The writers one file takes from elsewhere: from useApp() (a screen) or a hook's call (App, a hook of hooks).
+export const takenWriters = (ast) => {
+    const hooks = hookWriters();
+    const ctx = contextWriters();
+    const out = new Set();
+    for (const [local, key] of taken(ast, (name) => (name === 'useApp' ? ctx : hooks.get(name)))) if (!local.startsWith('@')) out.add(local);
+    return out;
+};
+
 // One file's late sets and writes that no org check precedes.
 export const scanText = (file, src, shared = sharedSetters()) => {
     const out = [];
@@ -164,7 +247,7 @@ export const scanText = (file, src, shared = sharedSetters()) => {
         const owner = OWNERS.test(file);
         const local = new Set(owner ? [] : [...src.matchAll(/const \[\w+,\s*(set\w+)\]\s*=\s*(?:React\.)?useState\(/g)].map((m) => m[1]));
         const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
-        const helpers = localWriters(ast);
+        const helpers = localWriters(ast, takenWriters(ast));
         const points = [];   // { node, what, fn, path }
         const visit = (node, path, fns, parent) => {
             if (!node || typeof node.type !== 'string') return;
@@ -265,6 +348,100 @@ test('T2 — the scan sees a write sent through the file\'s own helper — in an
     // The two delete hooks as written: each one sender, each loop checked before its DELETE.
     for (const file of ['src/hooks/useContacts.js', 'src/hooks/useAccounts.js']) {
         assert.ok(localWriters(parse(read(file), { sourceType: 'module', plugins: ['jsx'] })).has('send'), `${file}: its sender is a write`);
+    }
+});
+
+test('T3 — the scan sees a write handed across files — a writer a screen takes from useApp(), or App from a hook, called late (state §0.284: the contact rail\'s Save, the documents link and unlink loops)', () => {
+    const late = (src) => scanText('src/components/Made.jsx', src).map((v) => v.what);
+    const ctx = contextWriters();
+    for (const w of ['handleSaveContact', 'handleDeleteContacts', 'handleSaveQuote', 'addAudit', 'linkDocument', 'unlinkDocument', 'removeDocument']) assert.ok(ctx.has(w), `${w}: a writer the app hands its screens`);
+    for (const w of ['showConfirm', 'loadContacts', 'setContactRailId', 'getSubAccounts', 'downloadDoc']) assert.ok(!ctx.has(w), `${w}: sends no write`);
+    const take = 'const { handleSaveContact, showConfirm } = useApp();';
+    assert.deepEqual(late(`export default function R() { ${take} const s = async () => { await x(); await handleSaveContact({}, {}); }; }`), ['handleSaveContact'], 'a context writer after an await');
+    assert.deepEqual(late('export default function R() { const { handleSaveContact: save } = useApp(); const s = async () => { await x(); save({}); }; }'), ['save'], 'taken under another name');
+    assert.deepEqual(late('export default function R() { const { unlinkDocument } = useApp(); const s = async (ls) => { for (const l of ls) { await unlinkDocument(1, l); } }; }'), ['unlinkDocument'], 'in an awaiting loop');
+    assert.deepEqual(late(`export default function R() { ${take} const go = (d) => handleSaveContact(d, {}); const s = async () => { await x(); go({}); }; }`), ['go'], 'through the screen\'s own helper');
+    assert.deepEqual(late(`export default function R() { ${take} const s = async () => { await x(); showConfirm('Sure?'); }; }`), [], 'a context name that sends nothing: none');
+    assert.deepEqual(late(`export default function R() { ${take} const s = async () => { const askedOrg = requestOrg(); await x(); if (!stillOrg(askedOrg)) return; await handleSaveContact({}, {}); }; }`), [], 'checked first: none');
+    assert.deepEqual(late('export default function A() { const { handleSaveContact } = useContacts({}); const s = async () => { await x(); handleSaveContact({}); }; }'), ['handleSaveContact'], 'a writer taken from a hook\'s call');
+    assert.deepEqual(late('export default function A() { const send = useCallback(async (id) => dbWrite(`/x?id=${id}`, { method: \'DELETE\' }), []); const s = async () => { await x(); send(1); }; }'), ['send'], 'the file\'s own writer wrapped in useCallback');
+    // The review's survivors: each a wrong version of the read that today's tree alone would not show.
+    assert.deepEqual(late('export default function A() { const send = React.useCallback(async () => dbWrite(\'/x\', { method: \'PUT\' }), []); const s = async () => { await x(); send(); }; }'), ['send'], 'wrapped in React.useCallback');
+    assert.deepEqual(late('export default function R() { const { handleSaveContact = null } = useApp(); const s = async () => { await x(); handleSaveContact({}, {}); }; }'), ['handleSaveContact'], 'taken with a default');
+    const app = parse([
+        'export default function App() {',
+        '  const { handleSaveContact } = useContacts({});',
+        '  const documentsHook = useDocuments({});',
+        '  const save = async () => { await dbWrite(\'/x\', { method: \'PUT\' }); };',
+        '  const look = () => 1;',
+        '  const appContextValue = { saveIt: save, saveContact: handleSaveContact, lookIt: look, ...documentsHook };',
+        '}',
+    ].join('\n'), { sourceType: 'module', plugins: ['jsx'] });
+    const made = contextWritersIn(app, hookWriters());
+    for (const k of ['saveIt', 'saveContact', 'linkDocument', 'unlinkDocument']) assert.ok(made.has(k), `${k}: a writer, by the key a screen reads`);
+    for (const k of ['save', 'handleSaveContact', 'lookIt', 'look']) assert.ok(!made.has(k), `${k}: not a key a screen reads as a writer`);
+});
+
+test('every hook src/hooks exports is read for its writers — a hook the read skipped would hand its writers to screens unseen', () => {
+    const exported = [];
+    for (const e of readdirSync(new URL('src/hooks/', ROOT), { withFileTypes: true })) {
+        if (!/\.jsx?$/.test(e.name)) continue;
+        for (const m of read('src/hooks/' + e.name).matchAll(/export\s+(?:default\s+)?(?:function|const|let)\s+(use[A-Z]\w*)/g)) exported.push(m[1]);
+    }
+    assert.ok(exported.length >= 10, 'the hooks folder read');
+    const read_ = hookWriters();
+    assert.deepEqual(exported.filter((h) => !read_.has(h)), [], 'a hook declared another way than `export function` — read it in hookWriters');
+});
+
+// The link picker's Done, run as written (state §0.284, the review): cut by a switch at any of its requests it sends
+// nothing more and closes nothing — close() sets the new org's picker state (showDocLinkPicker, its context).
+test('the link picker\'s Done, cut by an org switch, sends no further request and never closes the new org\'s picker (run as written)', async () => {
+    const src = read('src/components/documents/DocumentLinkPicker.jsx');
+    const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+    let init = null;
+    walkAll(ast.program, (n) => { if (n.type === 'VariableDeclarator' && n.id.type === 'Identifier' && n.id.name === 'done') init = n.init; });
+    assert.ok(init, 'done() found');
+    const text = src.slice(init.start, init.end);
+    const run = async ({ removed = 2, add = true, switchAt = Infinity, refuse = Infinity } = {}) => {
+        const sent = [];
+        let onScreen = 'org_A', closed = 0;
+        const answer = () => { sent.length >= switchAt && (onScreen = 'org_B'); return { ok: sent.length !== refuse }; };
+        const scope = {
+            busyRef: { current: false }, setBusy: () => {}, close: () => { closed++; },
+            selected: add ? { 'account:a1': { type: 'account', recordId: 'a1' } } : {},
+            ctx: { documentId: 'doc_1', currentLinks: Array.from({ length: removed }, (_, i) => ({ id: 'dl_' + i, type: 'contact', recordId: 'c' + i })) },
+            linkDocument: async (id, links) => { sent.push('link'); return answer(); },
+            unlinkDocument: async (id, linkId) => { sent.push(linkId); return answer(); },
+            requestOrg: () => onScreen, stillOrg: (o) => !!o && o === onScreen,
+        };
+        await new Function(...Object.keys(scope), `return (${text});`)(...Object.values(scope))();
+        return { sent, closed };
+    };
+    assert.deepEqual(await run(), { sent: ['link', 'dl_0', 'dl_1'], closed: 1 }, 'no switch: every request, then closed');
+    assert.deepEqual(await run({ refuse: 2 }), { sent: ['link', 'dl_0'], closed: 0 }, 'a refusal stops it, open');
+    assert.deepEqual(await run({ switchAt: 2 }), { sent: ['link', 'dl_0'], closed: 0 }, 'REGRESSION: a switch while the first unlink was out — the next went with the new org\'s token');
+    assert.deepEqual(await run({ switchAt: 3 }), { sent: ['link', 'dl_0', 'dl_1'], closed: 0 }, 'REGRESSION (the review): a switch during the last unlink — close() shut the new org\'s picker');
+    assert.deepEqual(await run({ removed: 0, switchAt: 1 }), { sent: ['link'], closed: 0 }, 'a switch during the link alone: nothing closed');
+});
+
+// The four points the cross-file read found (state §0.284): as written, each checked; each check taken out, the scan
+// reports its call. A check line is found by its own words, once in its file.
+test('the contact rail\'s Save and the documents link and unlink loops send nothing after a switch: as written, clean; each check taken out, the scan reports the call (state §0.284)', () => {
+    const CASES = [
+        ['src/components/rails/ContactRail.jsx', 'if (!stillOrg(askedOrg)) return;   // switched while the check was out', 'handleSaveContact'],
+        ['src/components/documents/DocumentLinkPicker.jsx', 'if (!stillOrg(askedOrg)) break;   // the next unlink would carry', 'unlinkDocument'],
+        ['src/components/documents/RecordDocuments.jsx', 'if (!stillOrg(askedOrg)) return;   // the next unlink would carry', 'unlinkDocument'],
+        ['src/components/documents/RecordDocuments.jsx', 'if (!stillOrg(askedOrg)) return;   // the next link would carry', 'linkDocument'],
+    ];
+    for (const [file, check, call] of CASES) {
+        const src = read(file);
+        assert.deepEqual(scanText(file, src).filter((v) => !ALLOWED.some((a) => a.file === v.file && v.line.includes(a.line))), [], `${file}: as written, every late point checked`);
+        const lines = src.split('\n');
+        const at = lines.map((l, i) => (l.includes(check) ? i : -1)).filter((i) => i >= 0);
+        assert.equal(at.length, 1, `${file}: the check "${check}" once`);
+        const cut = lines.filter((_, i) => i !== at[0]).join('\n');
+        const misses = scanText(file, cut).filter((v) => !ALLOWED.some((a) => a.file === v.file && v.line.includes(a.line)));
+        assert.deepEqual(misses.map((v) => v.what), [call], `REGRESSION: ${file} — with "${check}" taken out the scan misses the late ${call}`);
     }
 });
 

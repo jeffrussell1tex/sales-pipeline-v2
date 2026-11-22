@@ -6,6 +6,7 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import { requestOrg, stillOrg } from '../../utils/storage';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill, baseName } from './atoms';
 import DocumentPicker from './DocumentPicker';
 import { validateFile } from '../../utils/documentsStorage';
@@ -133,8 +134,13 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
 
     // Every link of the document to the records this one stands for — its own and a record merged into it — stopping
     // at a refusal, which the app's message says (useDocuments). A merge's Undo does not put such a link back.
+    // Cut by an org switch, each loop stops (state §0.284): a link or unlink takes the org at its own start, so the next
+    // one after a switch went with the new org's token — an unlink answered 200 ("unlinked already"), nothing written; a
+    // link 404'd and "Link not added — Not found" was said on the new org's screen.
     const unlinkHere = async (doc) => {
+        const askedOrg = requestOrg();
         for (const l of (doc.links || []).filter((x) => x.type === recordType && ids.has(x.recordId))) {
+            if (!stillOrg(askedOrg)) return;   // the next unlink would carry the new org's token
             if (l.id && unlinkDocument && !(await unlinkDocument(doc.id, l.id)).ok) return;
         }
     };
@@ -142,8 +148,10 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
     // A refused link says so in the app's message (useDocuments); the rest are not sent
     // (state §0.181).
     const linkExisting = async (picked) => {
+        const askedOrg = requestOrg();
         setShowPicker(false);
         for (const d of picked) {
+            if (!stillOrg(askedOrg)) return;   // the next link would carry the new org's token
             if (linkDocument && !(await linkDocument(d.id, [recordLink])).ok) return;
         }
     };

@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import { requestOrg, stillOrg } from '../../utils/storage';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtDate, EntityGlyph, ENTITY_META } from './atoms';
 import { unarchived, survivorOf, isMergeArchived, HIDDEN_ACCOUNT, HIDDEN_DEAL } from '../../utils/pickLink.js';
@@ -163,15 +164,20 @@ export default function DocumentLinkPicker() {
             // A refused link or unlink says so in the app's message (useDocuments) and leaves
             // the picker open with the choice, to try again or close (state §0.181). It was
             // logged to the console, and the picker closed as if it had saved.
+            // Cut by an org switch, it stops (state §0.284): each unlink takes the org at its own start, so the next one after
+            // a switch went with the new org's token — answered 200 ("unlinked already"), nothing written, the rest unsaid.
+            const askedOrg = requestOrg();
             busyRef.current = true; setBusy(true);
             let landed = true;
             try {
                 if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) landed = false;
                 for (const r of removed) {
                     if (!landed) break;
+                    if (!stillOrg(askedOrg)) break;   // the next unlink would carry the new org's token
                     if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) landed = false;
                 }
             } finally { busyRef.current = false; setBusy(false); }
+            if (!stillOrg(askedOrg)) return;   // switched while a request was out: close() would shut the new org's picker
             if (!landed) return;
         }
         close();
