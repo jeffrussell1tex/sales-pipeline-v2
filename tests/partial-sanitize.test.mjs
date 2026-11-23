@@ -227,7 +227,7 @@ for (const [file, merge, why] of [
         const src = readFileSync(new URL(`../netlify/functions/${file}.mjs`, import.meta.url), 'utf8');
         assert.equal(src.split(merge).length - 1, 1, 'the PUT sanitizes the body overlaid on the stored row, exactly once');
         assert.equal(src.includes('const clean = sanitize(data);'), false, 'the bare full-row build from the body alone must not return');
-        assert.ok(src.indexOf('await db.select().from(') < src.indexOf(merge), 'the stored row is read whole before the merge');
+        assert.ok(src.includes('await db.select().from(') && src.indexOf('await db.select().from(') < src.indexOf(merge), 'the stored row is read whole before the merge');
     });
 }
 

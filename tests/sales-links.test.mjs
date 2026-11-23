@@ -356,7 +356,7 @@ test("spiff-claims POST: an id and a SPIFF are required — a SPIFF of spaces is
 test("a claim's SPIFF or rep is blank as its write would store it (blankText, run): text empty or spaces, or what sanitize's `|| null` stores as none — 0 and false too (they read as set through String() and met the NOT NULL, a 500); an object or a number is not blank — the link check refuses it — and never throws (String() threw on an object with no usable toString; re-check R1)", () => {
     const s = fn('spiff-claims');
     once(s, BLANK_TEXT);
-    assert.ok(s.indexOf('\n' + BLANK_TEXT) >= 0 && s.indexOf(BLANK_TEXT) < s.indexOf('export const handler'), 'module scope, before the handler');
+    assert.ok(s.indexOf('\n' + BLANK_TEXT) >= 0 && s.includes(BLANK_TEXT) && s.indexOf(BLANK_TEXT) < s.indexOf('export const handler'), 'module scope, before the handler');
     assert.equal(count(s, 'blankText('), 4, "the POST's SPIFF and rep, and the PUT's two sides — each blank test the claim's");
     assert.ok(!s.includes("String(data.spiffId ?? '')") && !s.includes("String(claim.repName ?? '')") && !s.includes("String(changes[k] ?? '')"), 'REGRESSION: a blank test reads the raw value through String()');
     const blankText = new Function(`${BLANK_TEXT}\nreturn blankText;`)();
@@ -826,7 +826,8 @@ test("the suites: every suite's 'graded by the harness' pin reads the SUITES val
             pins.push({ f, src, line: src.slice(from, src.indexOf('\n', hit.index)).trim() });
         }
     }
-    assert.ok(pins.length >= 32, `the scan finds the suites' pins — seventeen since §0.211 (a scan that finds none proves nothing): ${pins.length}`);
+    // 33 since §0.287 (23 Nov): re-measured; at 32 one pin could go unseen.
+    assert.ok(pins.length >= 33, `the scan finds the suites' pins — seventeen since §0.211 (a scan that finds none proves nothing): ${pins.length}`);
     for (const { f, src, line } of pins) {
         assert.equal(line, `assert.ok(suites.includes('tests/${f}'), 'SUITES runs this file');`, `${f}: its own path, looked for in the SUITES value`);
         assert.ok(src.includes(SUITES_PARSE), `${f}: suites is the SUITES line's value, split on spaces`);

@@ -247,7 +247,7 @@ test('ai-score.mjs: the Admin\'s model, then once more on the fallback — the s
     assert.ok(ask.includes("'anthropic-version': '2023-06-01',"));
     assert.ok(ask.includes('body: JSON.stringify(scoreRequestBody(m, prompt)),'), 'the same prompt each time');
     assert.ok(ask.includes('signal: AbortSignal.timeout(attemptTime(Date.now() - startedAt)),'), 'each attempt has its time, inside the budget');
-    assert.ok(s.indexOf('const startedAt = Date.now();') < s.indexOf('const auth = await verifyAuth(event);'), "the budget counts from the request's start");
+    assert.ok(s.includes('const startedAt = Date.now();') && s.indexOf('const startedAt = Date.now();') < s.indexOf('const auth = await verifyAuth(event);'), "the budget counts from the request's start");
     assert.ok(ask.includes("if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw e; return null;"), 'a body cut by the time is busy, not unreadable');
     assert.ok(ask.includes('catch (thrown) {\n                return attemptOutcome({ thrown });'), 'a network failure is an outcome, not a 500');
     assert.ok(s.includes('const model = modelOf(aiSettings);') && s.includes('const fallback = fallbackOf(aiSettings);'));

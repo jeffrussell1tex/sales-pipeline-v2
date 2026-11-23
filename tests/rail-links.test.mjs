@@ -336,7 +336,7 @@ test('Log Activity: the rail opens with activitySeed (taken once), holds each pi
     // F10: a refused Save scrolls its banner into view — the same words twice too
     assert.ok(a.includes('    const errorRef = useRef(null);\n    const [refusals, setRefusals] = useState(0);\n    const refuse = (why) => { setSaveError(why); setRefusals(n => n + 1); };\n'));
     assert.ok(a.includes("    useEffect(() => {\n        if (refusals || activityModalError) errorRef.current?.scrollIntoView?.({ block: 'nearest' });\n    }, [refusals, activityModalError]);\n"), "each refusal, and the server's");
-    assert.ok(a.indexOf('}, [refusals, activityModalError]);') < a.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
+    assert.ok(a.includes('}, [refusals, activityModalError]);') && a.indexOf('}, [refusals, activityModalError]);') < a.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
     assert.ok(a.includes('{(activityModalError || saveError) && (\n                    <div ref={errorRef} style={{ background:'), 'the banner is what is scrolled to');
     assert.equal(a.split('setSaveError(links.error)').length - 1, 0, 'no refusal set without the scroll');
     assert.ok(between(a, 'function ContactMultiSelect(', '\n}\n').includes('.filter(c => !selected.includes(c.id) && !isMergeArchived(c))'), 'a contact merged away is not offered (D12)');

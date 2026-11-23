@@ -78,6 +78,6 @@ test('THE GUARD: dbWrite hands on the refusal\'s code; each delete hook reads it
         assert.ok(src.includes(`if (!r.ok) failed.push({ ${v}, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });`), `${file}: the refusal marked as merged`);
         assert.ok(src.includes(`return [...prev, ...refused.filter(f => !f.merged).map(f => f.${v}).filter(${v} => !have.has(${v}.id))];`), `${file}: a merged refusal never put back as live`);
         assert.ok(src.includes(`if (failed.some(f => f.merged)) ${load}(() => {});`), `${file}: the ${ns} read again`);
-        assert.ok(src.indexOf(`if (failed.some(f => f.merged)) ${load}(() => {});`) > src.indexOf('refused.filter(f => !f.merged)'));
+        assert.ok(src.includes('refused.filter(f => !f.merged)') && src.indexOf(`if (failed.some(f => f.merged)) ${load}(() => {});`) > src.indexOf('refused.filter(f => !f.merged)'));
     }
 });

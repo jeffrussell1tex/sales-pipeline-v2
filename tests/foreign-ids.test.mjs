@@ -38,7 +38,7 @@ test('a document create never takes over an id, and every key must be one the se
     assert.ok(!create.includes('onConflictDoUpdate') && !create.includes('onConflictDoNothing({ target: documents.id })'), 'REGRESSION: the create upserts again, or skips a taken id inside the batch');
     assert.ok(create.includes('const [taken] = await db.select({ id: documents.id }).from(documents).where(eq(documents.id, row.id));'));
     assert.ok(create.includes("if (taken) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };"), 'REGRESSION: a taken id not refused');
-    assert.ok(create.indexOf('if (taken) return') < create.indexOf('const made = await db.batch(['), 'refused before anything is written');
+    assert.ok(create.includes('if (taken) return') && create.indexOf('if (taken) return') < create.indexOf('const made = await db.batch(['), 'refused before anything is written');
     const batch = create.slice(create.indexOf('const made = await db.batch(['), create.indexOf(']);', create.indexOf('const made = await db.batch([')));
     assert.ok(batch.includes('db.insert(documents).values(row),') && batch.includes('db.insert(documentVersions).values({') && batch.includes('...(linkRows.length ? [insertLinkRows(linkRows)] : []),'), 'REGRESSION: the version or the links written outside the document\'s batch');
     assert.ok(!create.includes('await db.insert(') && !create.includes('await insertLinks('), 'nothing written on its own');

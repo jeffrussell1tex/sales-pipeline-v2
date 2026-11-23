@@ -106,7 +106,7 @@ test('§0.275 THE GUARD: each single PUT writes its row only while still the cal
         }
         const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
         const mine = put.lastIndexOf(`ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole })`);
-        assert.ok(mine > put.lastIndexOf('assertOwnership({') || f === 'opportunities', `${f}: the filter read after the check`);
+        assert.ok((put.includes('assertOwnership({') && mine > put.lastIndexOf('assertOwnership({')) || f === 'opportunities', `${f}: the filter read after the check`);
         // Moved in §0.278 (the review): every missed write's answer awaited — THE GUARD's scan below.
         assert.ok(put.includes(`if (!upserted) return await missed`), `${f}: a PUT that touched no row answers by missedWrite (403 still there, 404 gone)`);
     }
@@ -121,12 +121,12 @@ test('§0.275 THE GUARD: the contacts, activities and tasks DELETEs delete only 
         assert.equal(byId, 1, `${f}: one delete by id`);
         if (ADMIN_ONLY_DELETE.has(f)) {
             const gate = del.indexOf("const forbiddenDelete = requireRole(auth, ['Admin'], headers);");
-            assert.ok(gate > del.indexOf('assertOwnership({') && gate < del.indexOf(`db.delete(${T}).where(and(eq(${T}.id, id)`), `${f}: no rep reaches the delete — the Admin gate before it (were it opened to reps, its delete takes the owner filter)`);
+            assert.ok(del.includes('assertOwnership({') && gate > del.indexOf('assertOwnership({') && gate < del.indexOf(`db.delete(${T}).where(and(eq(${T}.id, id)`), `${f}: no rep reaches the delete — the Admin gate before it (were it opened to reps, its delete takes the owner filter)`);
             assert.ok(del.includes('if (forbiddenDelete) return forbiddenDelete;'));
         } else {
             // Moved in §0.282: a contact's also names the merged-away condition.
             assert.ok(del.includes(`db.delete(${T}).where(and(eq(${T}.id, id), eq(${T}.orgId, orgId), mine${T === 'contacts' ? ', notMerged(contacts)' : ''})).returning();`), `${f}: the delete names the owner filter`);
-            assert.ok(del.indexOf(`const mine = await ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole });`) > del.indexOf('assertOwnership({'), `${f}: read after the check`);
+            assert.ok(del.includes('assertOwnership({') && del.indexOf(`const mine = await ownerWriteFilter({ table: ${T}, entity: '${ENTITY[f]}', orgId, userId, userRole });`) > del.indexOf('assertOwnership({'), `${f}: read after the check`);
             assert.ok(del.includes(`if (!deletedRow) return ${T === 'contacts' ? "(await mergedDeleteRefusal({ kind: 'contact', id, orgId, headers, nameable })) || " : ''}await missedWrite({ table: ${T}, id, orgId, headers, gone: { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) } });`), `${f}: a missed delete — 403 still there, 404 gone`);   // moved in §0.282: a contact's miss asked as merged first
         }
     }
@@ -158,7 +158,7 @@ test("§0.275 the review: the deals bulk import's stage moves are the rows writt
     const src = read('netlify/functions/opportunities.mjs');
     const bulk = between(src, 'const staged = applyStageChanges(', "if (!data.id) {");
     assert.ok(bulk.includes('const movedRows = staged.rows.filter(r => !unwritten.has(r.id) && resolveStageChange(r, priors.get(r.id), importDate).changed);'), 'the moves written, by the import\'s own rule');
-    assert.ok(bulk.indexOf('const movedRows') > bulk.indexOf('const unwritten = new Set('), 'after the write answered');
+    assert.ok(bulk.includes('const unwritten = new Set(') && bulk.indexOf('const movedRows') > bulk.indexOf('const unwritten = new Set('), 'after the write answered');
     assert.ok(bulk.includes('if (movedRows.length > 0) {') && bulk.includes('entityName: `${movedRows.length} deals`,') && bulk.includes('detail: `CSV import moved ${movedRows.length} of ${data.length} deals to a new stage`,'), 'the audit line counts them');
     assert.ok(bulk.includes('summary: bulkStageSummary(movedRows, priors)'), 'the Slack post summarises them');
     assert.ok(bulk.includes('stageChanged: movedRows.length,'), 'the answer counts them');
@@ -204,7 +204,7 @@ test("§0.277 THE GUARD: a quote's save is one batch — the quote as read, its 
     assert.ok(missed.includes('if (!now) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canRead) return refuse(404, NOT_FOUND);') && missed.includes('if (!access.canWrite) return refuse(403, forbidden);'));
     assert.ok(missed.includes("if (moveTo && now.status === moveTo) return { statusCode: 409, headers, body: JSON.stringify({ error: `This quote is ${moveTo} already.`, code: 'already' }) };"), 'the move it asked for made by a press in flight with it: done (the review)');
     // Moved in §0.280: changed since read is the stale answer, the quote as it stands with it (changedSince).
-    assert.ok(missed.includes('const [now] = await db.select(STAMPED()).from(quotes)') && missed.indexOf('return changedSince(now);') > missed.indexOf('if (moveTo && now.status === moveTo)'), 'changed since read: 409 stale with the quote, last');
+    assert.ok(missed.includes('const [now] = await db.select(STAMPED()).from(quotes)') && missed.includes('if (moveTo && now.status === moveTo)') && missed.indexOf('return changedSince(now);') > missed.indexOf('if (moveTo && now.status === moveTo)'), 'changed since read: 409 stale with the quote, last');
     const post = between(src, "if (event.httpMethod === 'POST') {", "if (event.httpMethod === 'PUT') {");
     assert.ok(post.includes('const claim = ownerClaim(opportunities, access.deal.id, orgId, dealMine);') && post.includes('const done = await db.batch([...claim, db.insert(quotes)'), 'a create behind the deal\'s claim');
     assert.ok(post.includes("return now.canRead ? refuse(403, 'Forbidden: you can only quote your own or unassigned deals') : refuse(404, 'Deal not found');"));
@@ -256,7 +256,7 @@ test("§0.278 THE GUARD: a technician's job update lands only on the job as its 
     const screen = read('src/Tabs/DispatchTab.jsx');
     const mine = between(screen, 'const updateMyJob = async (jobId, patch) => {', '    };\n');
     assert.ok(mine.includes('if (landedBefore(res.status, r.body)) { if (r.body.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? r.body.job : j)); return; }'));
-    assert.ok(mine.indexOf('if (landedBefore(') < mine.indexOf('throw refusalError(r.words, r.heard);'));
+    assert.ok(mine.includes('if (landedBefore(') && mine.indexOf('if (landedBefore(') < mine.indexOf('throw refusalError(r.words, r.heard);'));
 });
 
 test("§0.278 techPatchHolds: done only when the job as stored holds every field sent — as text, absent as empty; a type-only match (false and none) or any field short is not done; the id is no field; an empty body is never done", async () => {
@@ -279,12 +279,12 @@ test("§0.279 THE GUARD: a lead request's writes land only on what their checks 
     // The cancel.
     const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");
     assert.ok(del.includes('const [cancelled] = await db.delete(leadClaimRequests)\n                .where(and(eq(leadClaimRequests.id, id), eq(leadClaimRequests.orgId, orgId), PENDING))'), 'a cancel deletes only a pending request');
-    assert.ok(del.indexOf("if (!cancelled) return await missedRequest(orgId, id, 'cancel');") > del.indexOf('const [cancelled] = '), 'a miss read again');
+    assert.ok(del.includes('const [cancelled] = ') && del.indexOf("if (!cancelled) return await missedRequest(orgId, id, 'cancel');") > del.indexOf('const [cancelled] = '), 'a miss read again');
     // The deny.
     const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
     const deny = between(put, "if (data.action === 'deny') {", '// approve');
     assert.ok(deny.includes('.where(and(eq(leadClaimRequests.id, data.id), eq(leadClaimRequests.orgId, orgId), PENDING))'), 'a deny writes only a pending request');
-    assert.ok(deny.indexOf("if (!denied) return await missedRequest(orgId, data.id, 'deny');") < deny.indexOf('await writeAudit('), 'a missed deny is read again before its audit');
+    assert.ok(deny.includes("if (!denied) return await missedRequest(orgId, data.id, 'deny');") && deny.indexOf("if (!denied) return await missedRequest(orgId, data.id, 'deny');") < deny.indexOf('await writeAudit('), 'a missed deny is read again before its audit');
     // The approve: the claims in order, then the writes, in one batch; no write of it apart.
     const approve = put.slice(put.indexOf('// approve'));
     // The lead first (the review): two approves of sibling requests locked their own request, then the lead, then each
@@ -339,5 +339,8 @@ test("§0.278 THE GUARD (the review): every missed write's answer is awaited whe
         }
     }
     // Moved in §0.279: and missedRequest's three (the lead request's cancel, deny and approve).
-    assert.ok(seen >= 15, `the missed writes scanned (${seen}) — eight missedWrite, two missedPut, missedQuote, missedTechJob, three missedRequest`);
+    // Moved in §0.287 (15 → 16): §0.286's missedOfficeJob is the sixteenth. At 15 the floor had one to spare, and the scoped
+    // run before the push of §0.284-§0.286 found the deny's `return await missedRequest(` deleted passing it (and the deny's
+    // order pin, -1 before everything — tests/order-pins.test.mjs).
+    assert.ok(seen >= 16, `the missed writes scanned (${seen}) — eight missedWrite, two missedPut, missedQuote, missedTechJob, three missedRequest, missedOfficeJob`);
 });

@@ -519,6 +519,9 @@ One commit per verified batch; doc patch in the same commit.
 - A test waits by `setImmediate` turns, never a timer: on Windows `setTimeout(r, 0)`
   waits ~15 ms, and every harness mutant reruns all of SUITES (state §0.251;
   THE GUARD, tests/test-waits.test.mjs; guide §18b126).
+- An order pin in a test holds its earlier line present — `s.includes(x) && s.indexOf(x) < s.indexOf(y)`
+  (-1 is before everything; THE GUARD, tests/order-pins.test.mjs) — and a floor on a count of code stands at its
+  count, raised by the batch that adds to it (refusal-sweep's G4 and G5 hold the recorded ones; guide §18b136).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with
   asserted occurrence counts, dry-run default, `--apply` flag, write once,
   re-read FROM DISK to verify. `App.jsx` is CRLF — preserve it.

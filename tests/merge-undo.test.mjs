@@ -643,7 +643,7 @@ test("T9 — merge.mjs's Undo, each pin in its own function: the merge logs each
         ind(4, 'const statusNow = new Map(again.map((l) => [l.id, l]));'),
         ind(4, 'const merges = shown.map((read) => {'),
         ind(8, 'const l = { ...read, ...(statusNow.get(read.id) || {}) };'));
-    assert.ok(lm.indexOf('const rows = ids.length ? await db.select()') < lm.indexOf('const again = shown.length'), 'after the records');
+    assert.ok(lm.includes('const rows = ids.length ? await db.select()') && lm.indexOf('const rows = ids.length ? await db.select()') < lm.indexOf('const again = shown.length'), 'after the records');
     // Isolation (CLAUDE.md): every read and write the Undo and Past merges make names this org; none deletes
     const fresh = between(g, 'const undoRowsOf = async (table, log, orgId) => {', 'const reverseContactMerge = ') + lm;
     const at = [...fresh.matchAll(/db\.(update|select|insert|delete)\(/g)].map((m) => m.index);
@@ -735,7 +735,7 @@ test("T11 — the toast: four shapes in one slot — an error, a notice, a merge
     order(a, ind(4, 'const softDelete = (label, deleteFunc, restoreFunc) => {'), ind(8, 'deleteFunc();'), ind(8, 'offerUndo({ label, restore: restoreFunc });'));
     const USE_MERGE = ind(8, 'useMerge({ setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser: { name: currentUser } });');
     once(a, USE_MERGE, 'REGRESSION: the merge hook is handed no toast, or no deal, task or activity load');
-    assert.ok(a.indexOf(USE_MERGE) > a.indexOf(ind(4, 'const offerUndo = (toast) => {')), 'called after offerUndo: named before its declaration it is read in its TDZ');
+    assert.ok(a.includes(ind(4, 'const offerUndo = (toast) => {')) && a.indexOf(USE_MERGE) > a.indexOf(ind(4, 'const offerUndo = (toast) => {')), 'called after offerUndo: named before its declaration it is read in its TDZ');
     order(a, ind(4, 'const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge,'), ind(8, 'findContactDuplicates, handleContactMerge, findMerges, undoMerge, listsRead } ='), USE_MERGE);
     assert.equal(count(a, '\n        findMerges, undoMerge,\n'), 1, 'REGRESSION: the screens are handed no Undo — Past merges cannot list or undo');
     assert.ok(!/\breverse(Contact)?Merge\b/.test(a), 'the old reverses, which no screen called, gone from the context');

@@ -388,7 +388,7 @@ test('every hook src/hooks exports is read for its writers — a hook the read s
         if (!/\.jsx?$/.test(e.name)) continue;
         for (const m of read('src/hooks/' + e.name).matchAll(/export\s+(?:default\s+)?(?:function|const|let)\s+(use[A-Z]\w*)/g)) exported.push(m[1]);
     }
-    assert.ok(exported.length >= 10, 'the hooks folder read');
+    assert.ok(exported.length >= 20, 'the hooks folder read');   // Moved in §0.287 (a floor with room to spare passes a deletion — the scoped run's survivor): 10 → 20, measured
     const read_ = hookWriters();
     assert.deepEqual(exported.filter((h) => !read_.has(h)), [], 'a hook declared another way than `export function` — read it in hookWriters');
 });

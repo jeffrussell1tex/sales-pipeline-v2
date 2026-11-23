@@ -164,7 +164,7 @@ test('THE CLASS — every removal applies the server\'s lists inside its own han
         const asked = body.indexOf('const askedOrg = requestOrg();');
         assert.ok(asked >= 0 && asked < body.indexOf('await '), `REGRESSION: no org asked before the request — ${file}: ${call}`);
         const before = body.slice(0, at);
-        assert.ok(before.lastIndexOf('if (!stillOrg(askedOrg)) return;') > before.lastIndexOf('await '), `REGRESSION: an answer after an org switch reaches this org's copy — ${file}: ${call}`);
+        assert.ok(before.includes('await ') && before.lastIndexOf('if (!stillOrg(askedOrg)) return;') > before.lastIndexOf('await '), `REGRESSION: an answer after an org switch reaches this org's copy — ${file}: ${call}`);
         const answer = call.match(/, (\w+)\)$/)[1];
         const after = body.slice(at);
         assert.ok(after.includes(`removalNote(${answer})`), `REGRESSION: the lists-left note is not said — ${file}: ${call}`);

@@ -92,5 +92,5 @@ test('the Performance sub-tab lists the sliced rep\'s won and lost deals with to
     const sect = src.indexOf('{reportsRep && (() => {');
     const next = src.indexOf("{reportSubTab === 'activity' && (");
     assert.ok(perf > 0 && perf < sect && sect < next, 'inside the Performance sub-tab');
-    assert.ok(src.indexOf('Quota attainment — leaderboard') < sect, 'below the leaderboard');
+    assert.ok(src.includes('Quota attainment — leaderboard') && src.indexOf('Quota attainment — leaderboard') < sect, 'below the leaderboard');
 });

@@ -331,7 +331,7 @@ test('Part 1a/1b/1d: WIRING — the drag writes through dbWrite and says a refus
     assert.ok(drop.includes('const today = todayLocal();') && !drop.includes('getFullYear'), '1d: the member\'s day through todayLocal');
     // The chain's start (the review): one map at module scope, outside the component — every render shares it.
     assert.equal(count(k, 'const dragBase = new WeakMap();'), 1);
-    assert.ok(k.indexOf('const dragBase = new WeakMap();') < k.indexOf('export default function KanbanView('), 'at module scope');
+    assert.ok(k.includes('const dragBase = new WeakMap();') && k.indexOf('const dragBase = new WeakMap();') < k.indexOf('export default function KanbanView('), 'at module scope');
     assert.ok(k.includes('\nconst dragBase = new WeakMap();'), 'not inside a function');
     // 1b (Q2): the card is draggable, and a drag starts, only for canEdit — canEditCrm, PipelineTab's.
     assert.equal(count(k, 'draggable={canEdit}'), 1);
@@ -2145,7 +2145,7 @@ test('Part 7a: WIRING — the PDF\'s words under Download PDF with a Close; the 
         'setPdfBusy(false);', 'URL.createObjectURL(answer.blob)');
     // The org check is the first thing after the answer — before any setter.
     const after = fn.slice(fn.indexOf('quotePdfOf('));
-    assert.ok(after.indexOf('if (!stillOrg(askedOrg)) return;') < after.indexOf('setPdf'), 'REGRESSION: a setter before the org check');
+    assert.ok(after.includes('if (!stillOrg(askedOrg)) return;') && after.indexOf('if (!stillOrg(askedOrg)) return;') < after.indexOf('setPdf'), 'REGRESSION: a setter before the org check');
     assert.ok(!fn.includes('window.open') && !fn.includes('printQuoteCopy') && !fn.includes('catch'), 'REGRESSION: the print copy opened on a failure, with no word');
     assert.ok(!s.includes("'PDF generation failed'"), 'REGRESSION: the server\'s words dropped');
     assert.equal(count(s, 'window.open('), 1, 'one tab opened, by the print copy');
@@ -11709,6 +11709,8 @@ test('Part 12 fixes, round 4 (S4): WIRING — claimRefused reads the server\'s o
 });
 
 // ── Part 12 — the review's fixes, round 4 (G4 — THE GUARD floors) ──
+// Moved in §0.287 (23 Nov): refusals-said's (iii) 228 body reads and (iv) 188 catch clauses, re-measured — the test below
+// holds those (its name keeps the round 4 counts).
 // Re-measured after every round 4 fix (§0.249), with the guard's own functions in memory (node:test stubbed, the module
 // piped through stdin): (iii) 192 body reads over the 242 sources under src/ — the Audit log's Add and Remove read a
 // refusal's body inside their ok checks too, judged by destRefusedOwn (A4), two checked reads where readRefusal read them
@@ -11730,12 +11732,14 @@ const p12fxG4Floor = (s, needle) => {
 test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts measured after round 4: (iii) 192 body reads over 242 sources, (iv) 188 catch clauses over 54 files, the list held, (i) 126 error states', () => {
     const s = read('tests/refusals-said.test.mjs');
     const iii = between(s, "test('(iii) under src/,", "test('(iii) self-test (§0.248)");
-    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 192, 'REGRESSION: scan (iii)\'s floor below the 192 body reads measured after round 4');
+    // Moved in §0.287: 192 -> 228, 187 -> 188 — refusals-said's floors raised to the counts measured 23 Nov (a floor with room
+    // to spare passes a deletion: the scoped run's survivor).
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 228, 'REGRESSION: scan (iii)\'s floor below the 228 body reads measured 23 Nov (§0.287)');
     assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
     // 187 since AI scoring batch 2B took "Score all deals" and its catch out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
-    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 187, 'REGRESSION: scan (iv)\'s floor below the 187 catch clauses measured after AI scoring batch 2B');
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 188, 'REGRESSION: scan (iv)\'s floor below the 188 catch clauses measured 23 Nov (§0.287)');
     assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 54, 'REGRESSION: scan (iv)\'s list no longer held at its 54 files');
     assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
     order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
@@ -12300,7 +12304,7 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
     const s = code(read(P12FXF4_SMT));
     const lines = s.split('\n');
     assert.equal(lines.filter((l) => l === P12FXF4_OWN).length, 1, 'the test, whole, at column 0');
-    assert.ok(s.indexOf(`\n${P12FXF4_OWN}\n`) < s.indexOf('\nfunction AdminTab({'), 'module scope, above the tabs');
+    assert.ok(s.includes(`\n${P12FXF4_OWN}\n`) && s.indexOf(`\n${P12FXF4_OWN}\n`) < s.indexOf('\nfunction AdminTab({'), 'module scope, above the tabs');
     assert.equal(count(s, "typeof d?.error === 'string'"), 1, 'REGRESSION: a second copy of the test');
     assert.equal(count(s, 'ownRefusal('), 8, 'claimRefused, the 404, the 409 read again (§0.276), saveUser (twice), saveExtra, sendQuotas, noteNotDeleted');
     assert.equal(lines.filter((l) => l === "const saidOf = (status, words) => (typeof words === 'string' && words !== `The server returned ${status}.` ? { error: words } : null);").length, 1, 'saidOf, whole');
@@ -12342,7 +12346,7 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
 // operand logged; nothing written), and set to the count: only the number moved. A floor written `>` holds one under
 // the count (`files.length > 241` holds the 242 sources under src/; `> 347` the 348 under src/ and netlify/functions/);
 // a floor inside a loop holds the least of its rounds (app-links' templates 11 of 21/11/12; audit-close's tables, the
-// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188) and this file's (242, 242, 6)
+// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188; (iii) 228 since §0.287) and this file's (242, 242, 6)
 // were re-measured after this pass and already stood at their counts (G4 holds them). This test holds every floor this
 // pass raised: lowered, it fails here — say the new count, and why, in both places.
 const P12FXG5_FLOORS = [
@@ -12357,9 +12361,9 @@ const P12FXG5_FLOORS = [
     ['tests/deal-engagement.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under src/ and netlify/functions/'],
     ['tests/deal-fields.test.mjs', 'assert.ok(files.length > ', [347], 'the 348 sources under src/ and netlify/functions/'],
     ['tests/forecast-call.test.mjs', 'assert.ok(tags.length >= ', [24], 'the Sales Manager tab\'s 24 buttons'],
-    ['tests/invoices.test.mjs', 'assert.ok((f.match(/eq\\(invoices\\.orgId, orgId\\)/g) || []).length >= ', [9], 'the 9 invoice statements by org'],
+    ['tests/invoices.test.mjs', 'assert.ok((f.match(/eq\\(invoices\\.orgId, orgId\\)/g) || []).length >= ', [10], 'the 10 invoice statements by org'],   // 9 -> 10, §0.287
     ['tests/itest-targets-test-db.test.mjs', 'assert.ok(suites.length >= ', [65], 'the 65 integration suites'],
-    ['tests/job-roster.test.mjs', 'assert.ok(SCHEDULED_JOBS.length >= ', [6], 'the 6 scheduled jobs'],
+    ['tests/job-roster.test.mjs', 'assert.ok(SCHEDULED_JOBS.length >= ', [7], 'the 7 scheduled jobs'],   // 6 -> 7, §0.287
     ['tests/merge-undo.test.mjs', 'assert.ok(at.length >= ', [26], 'the Undo\'s and Past merges\' 26 statements'],
     ['tests/merge-undo.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
     ['tests/merged-away-lists.test.mjs', 'assert.ok(g.files.length >= ', [58], 'the 58 files that import useApp'],
@@ -12373,7 +12377,7 @@ const P12FXG5_FLOORS = [
     ['tests/resize-targets.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
     ['tests/resize-targets.test.mjs', 'assert.ok(all.length >= ', [12], 'the 12 window listeners'],   // 12 since AI scoring batch 2B took the bulkScore listener out
     ['tests/rounded-scrollers.test.mjs', 'assert.ok(files.length > ', [241], 'the 242 sources under src/'],
-    ['tests/sales-links.test.mjs', 'assert.ok(pins.length >= ', [32], 'the suites\' 32 "graded by the harness" pins'],
+    ['tests/sales-links.test.mjs', 'assert.ok(pins.length >= ', [33], 'the suites\' 33 "graded by the harness" pins'],   // 32 -> 33, §0.287
     ['tests/search-match.test.mjs', 'assert.ok(SRC.length > ', [241], 'the 242 sources under src/'],
     ['tests/self-profile.test.mjs', 'assert.ok(keys.size >= ', [11], 'the profile panel\'s 11 saved keys'],
     ['tests/settings-hygiene.test.mjs', 'assert.ok(resolved.length >= ', [7], 'users.mjs\'s 7 caller-name reads'],
@@ -12383,11 +12387,19 @@ const P12FXG5_FLOORS = [
     // The main session, last pass: the two function-file walks the fixer left at `> 0` (the verifier's G5 residuals).
     ['tests/org-scoping.test.mjs', 'assert.ok(files.length > ', [97], 'the 98 function files the org-scoping guard scans (106, less its 8 skipped)'],
     ['tests/function-imports.test.mjs', 'assert.ok(files.length > ', [105], 'the 106 function files whose imports must resolve'],
+    // §0.287 (23 Nov): the code counts a deletion lowers, each raised to its count — the scoped run's survivor passed a
+    // floor with one to spare (owner-writes' missed writes, 15 of 16).
+    ['tests/owner-writes.test.mjs', 'assert.ok(seen >= ', [16], 'the 16 missed writes\' awaited answers'],
+    ['tests/settings-links.test.mjs', 'assert.ok(keys.length >= ', [81], 'the settings PUT\'s 81 keys'],
+    ['tests/settings-revs.test.mjs', 'assert.ok(keys.length >= ', [81], 'the settings PUT\'s 81 keys'],
+    ['tests/escape-layers.test.mjs', 'assert.ok(all.length >= ', [11], 'the 11 key listeners'],
+    ['tests/escape-layers.test.mjs', 'assert.ok(escapes.length >= ', [10], 'the 10 Escape listeners'],
+    ['tests/late-answers.test.mjs', 'assert.ok(exported.length >= ', [20], 'the hooks folder\'s 20 exported hooks'],
 ];
 const p12fxG5Floors = (s, needle) => s.split(needle).slice(1).map((after) => Number(/^\d+/.exec(after)?.[0]));
 
 test('Part 12 fixes, last pass (G5): WIRING — every source walk\'s floor across tests/ is held at the count its own walk measured after the last pass (single-token-file 113 T readers, the itest guard 65 suites, the Settings save slots 26, the src/ walks 242, the src/ and functions walks 348, and the rest), so a walk that lost files fails its own suite', () => {
-    assert.equal(P12FXG5_FLOORS.length, 35, 'the floors this pass raised, each listed once');
+    assert.equal(P12FXG5_FLOORS.length, 41, 'the floors this pass raised (and §0.287\'s six), each listed once');
     for (const [file, needle, floors, what] of P12FXG5_FLOORS) {
         const got = p12fxG5Floors(read(file), needle);
         assert.equal(got.length, floors.length, `${file}: ${needle.trim()} — ${floors.length} floor(s), found ${got.length}`);

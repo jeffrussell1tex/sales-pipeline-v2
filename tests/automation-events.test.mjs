@@ -165,7 +165,7 @@ test('the engine refuses an unknown trigger, builds the task from the shared mod
     assert.ok(s.includes("import { resolveOwnerId, rosterUserById } from './_lib.mjs';"));
     assert.ok(s.includes("} from '../../src/utils/automationEvents.js';"));
     assert.ok(s.includes('        if (!isAutomationTrigger(triggerEvent)) {'), 'fail closed on a trigger outside the vocabulary');
-    assert.ok(s.indexOf('if (!isAutomationTrigger(triggerEvent))') < s.indexOf('.from(automations)'), 'before any read');
+    assert.ok(s.includes('if (!isAutomationTrigger(triggerEvent))') && s.indexOf('if (!isAutomationTrigger(triggerEvent))') < s.indexOf('.from(automations)'), 'before any read');
     // create_task
     assert.ok(s.includes('            const row = taskFromAction(action, triggerEvent, data);'));
     assert.ok(s.includes('                    ownerId = await resolveOwnerId(row.assignedTo, orgId);'), 'the assignee\'s id from the org roster');
@@ -490,7 +490,7 @@ test('the modal\'s error renders on WHICHEVER step raised it — "Name is requir
     const errLine = "                {(error || held) && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error || held}</div>}";
     const at = modal.indexOf(errLine);
     assert.ok(at > 0, 'one error line, in the modal body');
-    assert.ok(at > modal.lastIndexOf('{step === 4 && (<>'), 'after the last step block — not inside any of them');
+    assert.ok(modal.includes('{step === 4 && (<>') && at > modal.lastIndexOf('{step === 4 && (<>'), 'after the last step block — not inside any of them');
     assert.ok(!modal.includes("                        {error && <div style={{ fontSize:12, color:T.danger }}>{error}</div>}"), 'REGRESSION: the step-4-only render is gone');
     assert.equal((modal.match(/\{\(?error( \|\| held\))? &&/g) || []).length, 1, 'exactly one render, shared by every step');
     assert.equal((modal.match(/\{held &&/g) || []).length, 0, 'no second render for the held words (state §0.264)');

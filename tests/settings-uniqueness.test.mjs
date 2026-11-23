@@ -47,7 +47,7 @@ test("backup.mjs: a restored settings row is the restoring org's — its id, no 
 test('email-inbound.mjs: no BCC_SECRET, no dropbox — the POST refuses before it reads a recipient', () => {
     const s = code(read('netlify/functions/email-inbound.mjs'));
     const guard = s.indexOf('        if (!process.env.BCC_SECRET) {');
-    assert.ok(guard > s.indexOf('if (!sharedOk && !verifySvix(event)) {'), 'after the signature check');
+    assert.ok(s.includes('if (!sharedOk && !verifySvix(event)) {') && guard > s.indexOf('if (!sharedOk && !verifySvix(event)) {'), 'after the signature check');
     assert.ok(guard > 0 && guard < s.indexOf('const viaUser = await userFromRecipients(toList);'), 'before any recipient is read');
     assert.ok(s.includes("            return { statusCode: 503, headers, body: JSON.stringify({ error: 'Inbound email is not configured' }) };"));
 });

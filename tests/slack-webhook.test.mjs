@@ -70,7 +70,7 @@ test('send-slack: the handler is Admin-only, and a typed test URL is checked bef
     assert.ok(s.includes("import { validateSlackWebhookUrl } from './_slackWebhook.mjs';"));
     assert.ok(s.includes("    const forbidden = requireRole(auth, ['Admin'], HEADERS);"), 'the Admin gate');
     assert.ok(s.includes('    if (forbidden) return forbidden;'));
-    assert.ok(s.indexOf("requireRole(auth, ['Admin'], HEADERS)") < s.indexOf('JSON.parse(event.body'), 'the gate sits before the body is read');
+    assert.ok(s.includes("requireRole(auth, ['Admin'], HEADERS)") && s.indexOf("requireRole(auth, ['Admin'], HEADERS)") < s.indexOf('JSON.parse(event.body'), 'the gate sits before the body is read');
     assert.ok(s.includes('            const checked = validateSlackWebhookUrl(url);'));
     assert.ok(s.includes('            if (!checked.ok) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: checked.error }) };'));
     assert.ok(s.includes('await sendSlack({ webhookUrl: url, text: text || slackTemplates.test({}).text, blocks });'), 'the org path is untouched');
@@ -94,7 +94,7 @@ test('settings: an Admin cannot save a webhook that sendSlack would refuse', () 
     assert.ok(s.includes("            if ('slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl) {"));
     assert.ok(s.includes('                const checked = validateSlackWebhookUrl(data.slackConfig.webhookUrl);'));
     assert.ok(s.includes('                if (!checked.ok) return { statusCode: 400, headers, body: JSON.stringify({ error: checked.error }) };'));
-    assert.ok(s.indexOf("'slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl") < s.indexOf('const existingExtra = existing.length > 0'), 'checked before the row is read');
+    assert.ok(s.includes("'slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl") && s.indexOf("'slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl") < s.indexOf('const existingExtra = existing.length > 0'), 'checked before the row is read');
     assert.ok(s.includes("                slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},"), 'the merge half is unchanged (18b12)');
 });
 

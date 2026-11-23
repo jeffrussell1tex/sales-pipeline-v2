@@ -37,7 +37,7 @@ test('ModalLayer: the deal modal logs, deletes and notes through the hooks — n
     for (const setter of ['setActivities(', 'setOpportunities(']) assert.ok(!props.includes(setter), `${setter} in the deal modal's props`);
     const notes = between(src, 'const saveNotes = async (oppId, note) => {', 'return (');
     assert.ok(notes.includes('const r = await saveDealNote(oppId, note);'));
-    assert.ok(notes.indexOf('if (!stillOrg(askedOrg)) return stopped();') < notes.indexOf('setEditingOpp('), 'the open deal takes the notes after the org check');
+    assert.ok(notes.includes('if (!stillOrg(askedOrg)) return stopped();') && notes.indexOf('if (!stillOrg(askedOrg)) return stopped();') < notes.indexOf('setEditingOpp('), 'the open deal takes the notes after the org check');
     assert.ok(notes.includes('if (Array.isArray(r.comments)) setEditingOpp('), 'and only the notes the server answered');
 });
 
@@ -49,7 +49,7 @@ test('useActivities: a logged activity is POSTed and shown only once the server 
     // Moved in §0.261: an answer that proves nothing is said as maybe; one saying it is already stored landed with an earlier press.
     const refusedAt = log.indexOf("if (!r.ok) return { ok: false, error: r.unknown ? maybeSaid('The activity', 'saved', r.error) : r.error, unknown: r.unknown };");
     assert.ok(refusedAt > 0, 'a refused POST answers its error');
-    assert.ok(log.indexOf('if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }') > 0 && log.indexOf('if (!r.ok && r.landed)') < refusedAt, 'already stored: landed, the list read again');
+    assert.ok(log.indexOf('if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }') > 0 && log.includes('if (!r.ok && r.landed)') && log.indexOf('if (!r.ok && r.landed)') < refusedAt, 'already stored: landed, the list read again');
     assert.ok(refusedAt < log.indexOf('setActivities(prev => [...prev, activity]);'), 'shown only after the POST landed');
     assert.ok(src.includes('handleLogActivity,'), 'returned');
 });
@@ -82,7 +82,7 @@ test('useOpportunities: a note is PUT alone, one operation, and the list takes t
     assert.ok(save.includes("method: 'PUT',"));
     assert.ok(save.includes('body: JSON.stringify({ id: oppId, note }),'), 'the operation alone (state §0.236)');
     assert.ok(/if \(!stillOrg\(askedOrg\)\) return stopped\(\);   \/\/ the deal modal was remounted by the switch\r?\n        const notes = res\.ok/.test(save), 'the org checked after the answer, before its notes are read');
-    assert.ok(save.indexOf('// the deal modal was remounted by the switch') < save.indexOf('setOpportunities('), 'and before the list is set');
+    assert.ok(save.includes('// the deal modal was remounted by the switch') && save.indexOf('// the deal modal was remounted by the switch') < save.indexOf('setOpportunities('), 'and before the list is set');
     assert.ok(save.includes('const notes = res.ok ? body?.opportunity?.comments : body?.comments;'), 'the notes as stored — on a refusal too');
     assert.ok(save.includes("if (!res.ok) return { ok: false, error: body?.error"), 'a refused PUT answers its error');
 });
@@ -100,10 +100,10 @@ test('OpportunityModal: the History tab and the notes wait for the save — a fa
     assert.ok(post.indexOf("if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }") < post.indexOf("setCommentDraft(''); setMentionQuery(null);"), 'the draft clears only after a save');
     const edit = between(src, 'const saveNoteEdit = async (commentId) => {', 'const deleteNote');
     assert.ok(edit.includes("if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }"), 'a failed edit stays open');
-    assert.ok(edit.indexOf('return; }') < edit.indexOf('setEditingCommentId(null);'), 'the edit closes only after a save');
+    assert.ok(edit.includes('return; }') && edit.indexOf('return; }') < edit.indexOf('setEditingCommentId(null);'), 'the edit closes only after a save');
     // Moved in §0.261: a post whose answer proved nothing holds Post — its note id is the server's, never a second note.
     assert.ok(src.includes('<PrimaryBtn type="button" saving={noteState.saving} disabled={notePostHeld} onClick={postNote}>Post Note</PrimaryBtn>'));
-    assert.ok(post.includes('if (!text || noteState.saving || notePostHeld || !onSaveComment) return;') && post.indexOf('if (r?.unknown) setNotePostHeld(true);') < post.indexOf("if (!r?.ok) { setNoteState("), 'held before the error is said');
+    assert.ok(post.includes('if (!text || noteState.saving || notePostHeld || !onSaveComment) return;') && post.includes('if (r?.unknown) setNotePostHeld(true);') && post.indexOf('if (r?.unknown) setNotePostHeld(true);') < post.indexOf("if (!r?.ok) { setNoteState("), 'held before the error is said');
     assert.ok(src.includes('<PrimaryBtn type="button" saving={noteState.saving} onClick={() => saveNoteEdit(c.id)}>Save</PrimaryBtn>'));
     assert.ok(src.includes('<button type="button" onClick={() => deleteNote(c.id)} title="Delete"'));
     assert.ok(src.includes('{noteState.error && ('));

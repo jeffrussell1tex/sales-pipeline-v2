@@ -328,7 +328,7 @@ test('THE GUARD: App\'s two checkers and the bell decide through taskAlerts.js, 
     assert.equal(count(app, GUARD_LINE), 2, 'one guard in each checker');
     assert.ok(app.includes('    const listsOrgRef  = React.useRef(null);   // the org whose lists are on screen (state §0.173)'), 'the ref naming the org whose lists are loaded');
     assert.ok(app.includes('    const uiOrgRef = useRef(null);   // the org the open UI belongs to'), 'the ref the switch moves in its own effects');
-    assert.ok(app.indexOf('    const listsOnScreen = (org) =>') > app.indexOf('    const uiOrgRef = useRef(null);'), 'the helper after the refs it reads');
+    assert.ok(app.includes('    const uiOrgRef = useRef(null);') && app.indexOf('    const listsOnScreen = (org) =>') > app.indexOf('    const uiOrgRef = useRef(null);'), 'the helper after the refs it reads');
     assert.ok(app.includes('        snoozedReminders, setSnoozedReminders, taskReminderQueue, setTaskReminderQueue,\n'), 'App takes the reminder\'s snooze and queue from the modal state');
     assert.ok(app.includes('        taskReminderQueue, setTaskReminderQueue,\n        setSnoozedReminders,\n'), 'and hands ModalLayer the queue and the snooze');
     // Every place either popup's setter is named — called, handed on or destructured: useModalState declares and

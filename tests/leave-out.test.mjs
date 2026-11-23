@@ -141,7 +141,7 @@ test('the deal window: an edit leaves out an untouched Account (and its Site Nam
 test('THE GUARD (the fix review): the activities PUT keeps both contact columns as stored when the body names neither — sanitize rebuilds contactId from the list', () => {
     const s = code(read('netlify/functions/activities.mjs'));
     const at = s.indexOf("            if (!('contactIds' in data) && !('contactId' in data)) { delete updateData.contactIds; delete updateData.contactId; }");
-    assert.ok(at > s.indexOf('const { id, ...updateData } = clean;'), 'after the row is built');
+    assert.ok(s.includes('const { id, ...updateData } = clean;') && at > s.indexOf('const { id, ...updateData } = clean;'), 'after the row is built');
     assert.ok(at < s.indexOf('set: { ...updateData, updatedAt: new Date() }'), 'before the write');
 });
 

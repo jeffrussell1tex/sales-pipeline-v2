@@ -54,7 +54,7 @@ test('reports gain Win chance — the deal\'s kept score, a percent; "health sco
     assert.equal(formatMetric(41.6, 'percent'), '42%');
     const p = read('src/utils/reportPrompt.js');
     assert.ok(p.includes("        ['win_chance',    /\\b(win chance|win %|win percent(?:age)?|chance of winning|health score|deal health)\\b/],"));
-    assert.ok(p.indexOf("['win_chance',") < p.indexOf("['ai_score',"), 'read before the AI score');
+    assert.ok(p.includes("['win_chance',") && p.indexOf("['win_chance',") < p.indexOf("['ai_score',"), 'read before the AI score');
     assert.ok(!/\['ai_score',[^\n]*health score/.test(p), 'REGRESSION: "health score" asks for Claude\'s own number');
 });
 

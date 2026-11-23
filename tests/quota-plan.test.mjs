@@ -380,7 +380,7 @@ test('users.mjs: PUT ?quotas=true — above the generic PUT, its checks in order
         '                    for (const row of auditRows) await streamAudit(orgId, row);   // state §0.87',
         '            return { statusCode: 200, headers, body: JSON.stringify({ users: answer, removed }) };');
     assert.equal((u.match(/'user\.quota_set'/g) || []).length, 1);
-    assert.ok(u.indexOf("event.queryStringParameters?.quotas === 'true'") < u.indexOf("        if (event.httpMethod === 'PUT') {"), 'above the generic PUT — a server without it answers that PUT\'s 400 and writes nothing');
+    assert.ok(u.includes("event.queryStringParameters?.quotas === 'true'") && u.indexOf("event.queryStringParameters?.quotas === 'true'") < u.indexOf("        if (event.httpMethod === 'PUT') {"), 'above the generic PUT — a server without it answers that PUT\'s 400 and writes nothing');
 });
 
 test('settings.mjs: the company\'s quota periods in both halves, quarters when absent, and anything else refused', () => {
@@ -476,7 +476,7 @@ test('Home and Reports read the member\'s own plan for the year they show', () =
         '        const repUserSC = quotaUsersS.find(u=>u.name===repNameSC);',
     ]) assert.ok(rep.includes(line), `a rep reads their own plan here, not the member list's $0: ${line.trim()}`);
     assert.ok(rep.includes('                const forecast = userQuotaFor(u, `Q${qt.q}`, qt.fiscalYear);'), 'the per-rep accuracy cell: a past quarter reads its own year');
-    assert.ok(rep.indexOf('        const fiscalStartSC = fiscalStartOf(settings.fiscalYearStart);') < rep.indexOf('        const repQuota = userQuotaFor(repUserSC, \'FY\', fyNowSC);'), 'the start is declared before the ring reads it (a TDZ otherwise)');
+    assert.ok(rep.includes('        const fiscalStartSC = fiscalStartOf(settings.fiscalYearStart);') && rep.indexOf('        const fiscalStartSC = fiscalStartOf(settings.fiscalYearStart);') < rep.indexOf('        const repQuota = userQuotaFor(repUserSC, \'FY\', fyNowSC);'), 'the start is declared before the ring reads it (a TDZ otherwise)');
     assert.ok(rep.includes('        const attainPct = repQuota>0 ? repClosedFY/repQuota : 0;'), 'this year\'s wins against this year\'s plan');
     assert.ok(rep.includes("    const closedWonRev = allWon.filter(o=>closeDayInRange(o, paceRange.from, paceRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);"), 'quota pacing counts this fiscal year\'s wins');
     assert.ok(!rep.includes('getOppFiscalQtr'), 'the dead quarter copy is gone');

@@ -142,11 +142,12 @@ test('THE GUARD — every keydown listener under src that reacts to Escape leave
     // each takes its Escape through useLocalLayer — and the hook's one listener is counted.
     // 9 since §0.232: Settings' needs-attention menu's, PolicySelect's, Audit's anchored menu's, the API docs popover's
     // and Edit brand's own listeners are gone too — each through useLocalLayer.
-    assert.ok(all.length >= 9, `the walk finds the listeners (${all.length})`);
+    // 11 since §0.287 (23 Nov): re-measured — the listeners added since §0.232; at 9 two could go unseen.
+    assert.ok(all.length >= 11, `the walk finds the listeners (${all.length})`);
     const unread = all.filter((l) => l.body === null);
     assert.deepEqual(unread.map((l) => `${l.file}:${l.line}`), [], 'every handler found');
     const escapes = all.filter((l) => l.body.includes("'Escape'"));
-    assert.ok(escapes.length >= 7, `the Escape listeners (${escapes.length}; 14 since §0.189 — the lost-reason window takes its Escape through useEscapeLayer; 12 since §0.230 — the drawer's and the Leads pickers' three gone, useLocalLayer's one in; 7 since §0.232 — Settings' five gone)`);
+    assert.ok(escapes.length >= 10, `the Escape listeners (${escapes.length}; 14 since §0.189 — the lost-reason window takes its Escape through useEscapeLayer; 12 since §0.230 — the drawer's and the Leads pickers' three gone, useLocalLayer's one in; 7 since §0.232 — Settings' five gone; 10 since §0.287 — re-measured 23 Nov, three added since)`);
     const blind = escapes.filter((l) => !l.body.includes('defaultPrevented'));
     assert.deepEqual(blind.map((l) => `${l.file}:${l.line}`), []);
 });

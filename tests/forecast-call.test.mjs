@@ -117,7 +117,7 @@ test('the Commit and Best case cells write withForecastCall for the quarter, thr
     assert.ok(sm.includes("updateRepField(rs.rep.id, 'forecastCalls', withForecastCall(rs.rep, period.key, { bestCase: v }))"));
     assert.doesNotMatch(sm, /updateRepField\(rs\.rep\.id,'commit'/, 'the old write of a key the server dropped');
     assert.ok(sm.includes('function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color })'), 'one cell component, module scope');
-    assert.ok(sm.indexOf('function CallCell(') < sm.indexOf('function ForecastTab('), 'declared at module scope above the tab');
+    assert.ok(sm.includes('function CallCell(') && sm.indexOf('function CallCell(') < sm.indexOf('function ForecastTab('), 'declared at module scope above the tab');
     assert.ok(sm.includes('period={curQ}'), 'the ledger is handed the current fiscal quarter');
 });
 
@@ -174,7 +174,7 @@ test('Home: the quota is the quarter\'s own figure and closed is won by close da
     assert.doesNotMatch(home, /\['Negotiation','Closing'/, 'a typed stage list naming stages no deal is in');
     assert.ok(home.includes('const commitStages   = commitFallbackStages(openStagesOf(settings));'));
     assert.ok(home.includes("o.forecastCategory === 'commit' || (!o.forecastCategory && commitStages.includes(o.stage))"));
-    assert.ok(home.indexOf('const quarterStart = ') < home.indexOf('const quarterlyQuota'), 'the window is computed before the figures that use it');
+    assert.ok(home.includes('const quarterStart = ') && home.indexOf('const quarterStart = ') < home.indexOf('const quarterlyQuota'), 'the window is computed before the figures that use it');
     assert.equal((home.match(/const quarterStart = /g) || []).length, 1, 'one window, not two');
     assert.ok(home.includes('const qLabel = todayQk ? `Q${todayQk.q} FY${todayQk.fiscalYear}` : `Q${quarter}`;'), 'the card is labelled with the quarter it measures');
     assert.doesNotMatch(home, /getQuarterLabel\(q, opp\.forecastedCloseDate\)/, 'the first-forecast-bucket label');

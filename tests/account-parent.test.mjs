@@ -567,7 +567,7 @@ test("the account rail: its Parent field is the shared picker, fed the accounts 
     assert.ok(src.includes('    const selfId = isNew ? null : accountRailId;'));
     assert.ok(src.includes('    const accountsById = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);'));
     assert.ok(src.includes('    const parentIds = useMemo(() => parentChoices(accounts, selfId, accountsById), [accounts, accountsById, selfId]);'));
-    assert.ok(src.indexOf('const parentIds = useMemo(') < src.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
+    assert.ok(src.includes('const parentIds = useMemo(') && src.indexOf('const parentIds = useMemo(') < src.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
     const field = between(src, '<FieldGroup label="Parent Account" wide>', '</FieldGroup>');
     assert.equal(field.split('<AccountPicker').length - 1, 1, 'the shared picker');
     assert.ok(!field.includes('<Typeahead'), 'not the bare-name list');
@@ -626,8 +626,8 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(sub.includes('const tier = tierUnder(parentAccountForSub.id, byIdOf(accounts));'));
     assert.ok(sub.includes('payload = { ...formData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: tier };'));
     const after = save.indexOf('setAccounts(prev => withTiers(prev, data.retiered));');
-    assert.ok(after > save.indexOf('setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));'), 'the accounts under a moved one, as the server wrote them');
-    assert.ok(after > save.indexOf('if (!stillOrg(askedOrg)) return;'), 'only for the org that asked');
+    assert.ok(save.includes('setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));') && after > save.indexOf('setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));'), 'the accounts under a moved one, as the server wrote them');
+    assert.ok(save.includes('if (!stillOrg(askedOrg)) return;') && after > save.indexOf('if (!stillOrg(askedOrg)) return;'), 'only for the org that asked');
     const deals = save.indexOf("if (liftedDeals.size) setOpportunities && setOpportunities(prev => prev.map(o => (liftedDeals.has(o.id) ? { ...o, ...liftedDeals.get(o.id) } : o)));");
     assert.ok(deals > after, 'the deals of an account the move made a site, as the server moved them (D22)');
     assert.ok(save.includes('const liftedDeals = new Map((Array.isArray(data.liftedDeals) ? data.liftedDeals : []).map(d => [d.id, d]));'));
@@ -639,7 +639,7 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(del.includes("if (!r.ok) failed.push({ a, error: r.error, unknown: r.unknown, merged: r.code === 'merged' });\n                else lifted.push(...(r.data?.retiered || []));"), 'the tiers the server gave what it lifted (D18)');
     assert.ok(del.includes('                if (r.ok) answers.push(r.data || {});\n'), 'what each delete answered: the row and its sub-accounts as stored');
     assert.ok(del.includes('const { deleted, promoted } = undoOfDeletes(answers);'), 'H2: the Undo re-sends what the server answered');
-    assert.ok(del.indexOf('setAccounts(prev => withTiers(prev, lifted));') > del.indexOf('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'));
+    assert.ok(del.includes('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));') && del.indexOf('setAccounts(prev => withTiers(prev, lifted));') > del.indexOf('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'));
     assert.ok(del.includes('for (const a of parentsFirst(deleted)) {'), 'Undo: an account deleted with its own sub-account is posted back first');
     assert.ok(del.includes('                            body: JSON.stringify({ ...a, restore: true }),\n'), 'Undo: the stored row posted back, marked a restore — its parent and tier as stored');
     assert.ok(del.includes('if (rr.data?.account) answered.push(rr.data.account);'), 'Undo: the account posted back, as the server wrote it (L5)');
@@ -647,7 +647,7 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(del.includes('return c ? { ...a, parentAccountId: c.parentId, ...(c.tier ? { accountTier: c.tier } : {}) } : a;'), 'and the screen shows it so at once');
     assert.ok(del.includes('else restored.push(...(rp.data?.account ? [rp.data.account] : []), ...(rp.data?.retiered || []));'), "and each re-saved parent's branch, as the server re-fitted it");
     const back = del.indexOf('setAccounts(prev => withTiers(prev, restored));');
-    assert.ok(back > del.indexOf("method: 'PUT',") && back < del.indexOf('if (notRestored.length) {'), 'once the Undo has run, before what did not take is reloaded');
+    assert.ok(del.includes("method: 'PUT',") && back > del.indexOf("method: 'PUT',") && back < del.indexOf('if (notRestored.length) {'), 'once the Undo has run, before what did not take is reloaded');
     const rows = del.indexOf('                    setAccounts(prev => withRows(prev, answered));\n');
     assert.ok(rows > back && rows < del.indexOf('if (notRestored.length) {'), 'L5: each account posted back shown as the server wrote it — an owner the restore dropped shows dropped, without a reload');
     // Moved in §0.261 (the unknown-save rule): a failure carries whether its answer proved nothing; one that did is said as maybe.
@@ -678,7 +678,7 @@ test("accounts.mjs: a parent is checked against THIS org's rows when a create na
     assert.ok(lifts.includes(': eq(opportunities.accountId, s.id)))'), 'a name another account shares: by id only');
     assert.ok(src.includes('const refusedPlace = (placed, headers) => ({ statusCode: placed.status, headers, body: JSON.stringify({ error: placed.error }) });'));
     assert.ok(src.includes("    const mayRestore = userRole === 'Admin';\n"), 'H1: the restore mark is honoured for an Admin alone — only an Admin deletes');
-    assert.ok(src.indexOf("const mayRestore = userRole === 'Admin';") > src.indexOf('    if (forbidden) return forbidden;\n'), 'beside the write gate');
+    assert.ok(src.includes('    if (forbidden) return forbidden;\n') && src.indexOf("const mayRestore = userRole === 'Admin';") > src.indexOf('    if (forbidden) return forbidden;\n'), 'beside the write gate');
     const post = between(src, '// Single insert', "if (event.httpMethod === 'PUT') {");
     assert.ok(post.includes('const placed = data.restore === true && mayRestore\n'), "a delete's Undo posts the stored row back marked a restore — an Admin's; anyone else's marked POST is placed as any create");
     assert.ok(post.includes('? restorePlace(await orgTreeOf(orgId), { selfId: asked.id, selfName: asked.name, parentId: asked.parentAccountId, tier: asked.accountTier })'), "restored: the parent and tier as stored, checked for the org, loops and a site over accounts — the org's rows read whatever the parent (J1)");
@@ -717,7 +717,7 @@ test("accounts.mjs: a parent is checked against THIS org's rows when a create na
     const unknown = del.indexOf("if (!target) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found', code: 'gone' }) };");
     const read1 = del.indexOf('const tree = await orgTreeOf(orgId);');
     const delWrite = del.indexOf('batched = await db.batch([...claim,');   // moved in §0.282: the batch opens with its claim
-    assert.ok(unknown > del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;') && unknown < read1, 'an unknown id: 404 before anything is read or written');
+    assert.ok(del.includes('const holding = target ? await openDealOfAccount(orgId, target) : null;') && unknown > del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;') && unknown < read1, 'an unknown id: 404 before anything is read or written');
     assert.ok(read1 > 0 && read1 < delWrite, 'what a lift re-fits below the lifted accounts is worked out before the write');
     assert.ok(del.includes('const below = liftedBelow(tree, id);'), 'J3: only the rows below a lifted account whose tier changes, each with the chain it stands on');
     assert.ok(!del.includes('tierWrites('), 'J3: no tier written by an id read before the write');

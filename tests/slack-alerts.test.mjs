@@ -82,7 +82,7 @@ test('sendSlackToOrg takes the alert type and asks the selection before it posts
     assert.ok(s.includes("import { slackAlertEnabled, dealSlackEvents } from '../../src/utils/slackAlerts.js';"));
     assert.ok(s.includes('export async function sendSlackToOrg(orgId, { text, blocks }, alertType) {'));
     assert.ok(s.includes('        if (!slackAlertEnabled(slackConfig, alertType)) return false;'), 'the gate');
-    assert.ok(s.indexOf('if (!slackAlertEnabled(slackConfig, alertType)) return false;') < s.indexOf('await sendSlack({ webhookUrl, text, blocks });'), 'before the post');
+    assert.ok(s.includes('if (!slackAlertEnabled(slackConfig, alertType)) return false;') && s.indexOf('if (!slackAlertEnabled(slackConfig, alertType)) return false;') < s.indexOf('await sendSlack({ webhookUrl, text, blocks });'), 'before the post');
     assert.ok(s.includes('        signal:  AbortSignal.timeout(4000),'), 'an event post sits inside the deal save — a hung Slack must not hang it');
 });
 
@@ -102,7 +102,7 @@ test('the deal save posts the events the moment a stage changes, naming who move
     const s = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(s.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"), 'the per-deal poster and, since §0.106, the batch poster');
     assert.ok(s.includes('                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });'));
-    assert.ok(s.indexOf('await postDealEvents(orgId,') > s.indexOf('if (stageChanged) {'), 'inside the stage-changed branch');
+    assert.ok(s.includes('if (stageChanged) {') && s.indexOf('await postDealEvents(orgId,') > s.indexOf('if (stageChanged) {'), 'inside the stage-changed branch');
     assert.ok(s.indexOf('await postDealEvents(orgId,') < s.indexOf("const autoEvt = upserted.stage === 'Closed Won'"), 'beside the webhooks, before the automations');
 });
 
@@ -130,7 +130,7 @@ test('settings PUT stores the selection as booleans, whatever the client sent', 
     const s = code(read('netlify/functions/settings.mjs'));
     assert.ok(s.includes("import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';"));
     assert.ok(s.includes('                data.slackConfig = { ...data.slackConfig, alerts: cleanSlackAlerts(data.slackConfig.alerts) };'));
-    assert.ok(s.indexOf('alerts: cleanSlackAlerts(data.slackConfig.alerts)') > s.indexOf('if (!checked.ok) return { statusCode: 400, headers, body: JSON.stringify({ error: checked.error }) };'), 'after the URL check, inside the same guard');
+    assert.ok(s.includes('if (!checked.ok) return { statusCode: 400, headers, body: JSON.stringify({ error: checked.error }) };') && s.indexOf('alerts: cleanSlackAlerts(data.slackConfig.alerts)') > s.indexOf('if (!checked.ok) return { statusCode: 400, headers, body: JSON.stringify({ error: checked.error }) };'), 'after the URL check, inside the same guard');
 });
 
 test('the Configure Slack modal renders the two groups as checkboxes, says the company decides, saves them, and the card counts them', () => {

@@ -987,7 +987,7 @@ test('S15 (P14) the readers name the manager as the org names them now — the m
 test('S16 (P14, D15) the Manager box is a type-ahead of one pick at module scope — the shared matcher with its count, a portaled list, Escape marked handled, the chip\'s × clearing the pick', () => {
     const s = code(read(UD));
     const box = between(s, 'const MemberTypeahead = ', '\n};');
-    assert.ok(s.indexOf('const MemberTypeahead = ') < s.indexOf('const UserProfilePage = '), 'declared at module scope, before the page that draws it');
+    assert.ok(s.includes('const MemberTypeahead = ') && s.indexOf('const MemberTypeahead = ') < s.indexOf('const UserProfilePage = '), 'declared at module scope, before the page that draws it');
     once(box, 'const MemberTypeahead = ({ options, chosenName, held, onPick, inputStyle, placeholder }) => {');
     once(box, ind(4, 'const { shown, more } = peopleMatching(options, query);'), 'the shared matcher (the search guard holds its "N more" line)');
     // Placed from the field, closed by a scroll or a resize but not by its own scrollbar or its field's own scroll, a press

@@ -706,7 +706,9 @@ test('(iii) under src/, no body is read before its response\'s ok check, unless 
     // Remove read a refusal's body inside their ok checks too, judged by destRefusedOwn (A4) — two checked reads where
     // readRefusal read them before. SWEPT is still the 242 sources.
     assert.ok(SWEPT.length >= 242 && SWEPT.includes('src/App.jsx') && SWEPT.includes('src/utils/storage.js'), `every source under src/ (${SWEPT.length})`);
-    assert.ok(reads >= 192, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
+    // 228 since §0.287 (23 Nov): re-measured — the body reads the batches since §0.249 added. At 192 the floor had 36 to
+    // spare, and a floor with room passes a deletion (the scoped run's survivor passed owner-writes' at one to spare).
+    assert.ok(reads >= 228, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
     for (const b of BODY_FIRST) assert.equal(lineCount[`${b.file} ${b.text}`], 1, `${b.file}: the named text "${b.text}" is one line of its file — a second would pass under its name`);
     const named = (x) => BODY_FIRST.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
@@ -877,7 +879,8 @@ test('(iv) in the files the sweep owns, no catch says its raw `.message` — fai
     assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');
     for (const f of MESSAGE_SCANNED) { const r = caughtMessagesOf(read(f)); catches += r.catches; for (const x of r.found) found.push({ file: f, ...x }); }
     // 187 since AI scoring batch 2B: "Score all deals" and its catch were taken out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
-    assert.ok(catches >= 187, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
+    // 188 since §0.287 (23 Nov): re-measured — one catch added since AI scoring batch 2B; at 187 a catch deleted passed.
+    assert.ok(catches >= 188, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
     const named = (x) => CAUGHT_MESSAGES.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
     assert.deepEqual(unnamed, [], `a caught failure said in its raw words — "Failed to fetch", "Unexpected token '<'" — say failureWords(e) (src/utils/refusalWords.js), or name it in CAUGHT_MESSAGES:\n${unnamed.map((x) => `  ${x.file}:${x.line} ${x.text}`).join('\n')}`);

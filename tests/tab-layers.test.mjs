@@ -143,7 +143,7 @@ test('useLocalLayer: registered before paint and only when it opens, on document
     const onKey = between(h, '        const onKey = (e) => {', '\n        };');
     assert.ok(onKey.includes("if (e.key !== 'Escape' || e.defaultPrevented) return;"), 'a marked Escape is left alone');
     assert.ok(onKey.includes('if (now && now.localLayerBlocked && now.localLayerBlocked(id, place)) return;'), 'held at key time: a layer above its place, or not the top of its place');
-    assert.ok(onKey.indexOf('e.preventDefault();') > onKey.indexOf('localLayerBlocked(id, place)') && onKey.includes('requestClose();'), 'marked, then the one close');
+    assert.ok(onKey.includes('localLayerBlocked(id, place)') && onKey.indexOf('e.preventDefault();') > onKey.indexOf('localLayerBlocked(id, place)') && onKey.includes('requestClose();'), 'marked, then the one close');
     const rc = between(h, '    const requestClose = useCallback(() => {', '\n    }, []);');
     assert.ok(rc.includes("if (decided === 'none') return;"), 'nothing while a save is out');
     assert.ok(rc.includes('a.showConfirm(DISCARD_MESSAGE, () => {') && rc.includes('}, true, DISCARD_LABELS);'), 'typed work: App\'s confirm, Discard / Keep editing');
@@ -211,7 +211,7 @@ test('the header is its own stacking context at 150: its panels draw there, unde
     assert.ok(read('src/components/layout/AppHeader.jsx').includes("fontFamily: T.sans, position: 'sticky', top: 0, zIndex: 150,"));
     const names = ESCAPE_ORDER.map(([n]) => n);
     assert.deepEqual(names.slice(-4), ['tabLayer', 'search', 'profile', 'notifications']);
-    assert.ok(names.indexOf('tabPopover') < names.indexOf('linkPicker') && names.indexOf('tabPopover') > names.indexOf('leaveGuard'), 'the popovers: over every rail and window, under the leave guard and the app\'s dialogs');
+    assert.ok(names.indexOf('tabPopover') < names.indexOf('linkPicker') && names.includes('leaveGuard') && names.indexOf('tabPopover') > names.indexOf('leaveGuard'), 'the popovers: over every rail and window, under the leave guard and the app\'s dialogs');
 });
 
 // ── each layer of batch 1, read ─────────────────────────────────────────────
@@ -312,7 +312,7 @@ test('Dispatch\'s layers each take their Escape, and do what their own close doe
     assert.ok(sv.includes('    const requestEditClose = useLocalLayer(!!editing, { onClose: () => setEditing(null), dirty: !!editing && JSON.stringify(editing) !== editBaseRef.current, busy });'), 'the time-off dialog — typed work asks, nothing mid-save');
     assert.ok(sv.includes('    else if (editBaseRef.current === null) editBaseRef.current = JSON.stringify(editing);') && sv.includes('    if (!editing) editBaseRef.current = null;'), 'measured against the block as it opened');
     assert.ok(sv.includes('    const requestConflictClose = useLocalLayer(!!conflict, { onClose: () => setConflict(null), busy });'), '"Already scheduled", over it');
-    assert.ok(sv.indexOf('const requestEditClose') < sv.indexOf('const requestConflictClose'), 'declared in the order they open');
+    assert.ok(sv.includes('const requestEditClose') && sv.indexOf('const requestEditClose') < sv.indexOf('const requestConflictClose'), 'declared in the order they open');
     assert.equal(count(sv, 'onClick={requestEditClose}'), 2, 'the time-off dialog\'s backdrop and Cancel ask as Escape does');
     assert.equal(count(sv, 'onClick={requestConflictClose}'), 2, 'the conflict\'s backdrop and Reject');
     const sp = decl(d, 'ShiftPatternDialog');
@@ -433,12 +433,12 @@ test('every inline Escape in Settings leaves a marked one alone and marks the on
 test('batch 4 (§0.233): the document picker at its place, portaled; the people chooser\'s list a popover', () => {
     const picker = read('src/components/documents/DocumentPicker.jsx');
     assert.ok(picker.includes("    useLocalLayer(open, { onClose: () => onClose && onClose(), place: 'docPicker' });"), 'the picker: its place, in the one order');
-    assert.ok(picker.indexOf("place: 'docPicker'") < picker.indexOf('if (!open) return null;'), 'called before its early return');
+    assert.ok(picker.includes("place: 'docPicker'") && picker.indexOf("place: 'docPicker'") < picker.indexOf('if (!open) return null;'), 'called before its early return');
     assert.ok(!/useEscapeLayer\(/.test(picker) && !picker.includes('confirmModal') && !picker.includes('promptModal'), 'not a list of its own of what is above it');
     assert.ok(picker.includes('    return createPortal(\n        <>\n') && picker.includes('        </>,\n        document.body,\n    );'), 'portaled to the page: the rail or window it opens from draws under it');
     const names = ESCAPE_ORDER.map(([n]) => n);
-    for (const under of ['uploadRail', 'documentRail', 'accountRail', 'contactRail', 'draggable']) assert.ok(names.indexOf('docPicker') < names.indexOf(under), `docPicker above ${under}`);
-    for (const over of ['tabPopover', 'leaveGuard', 'confirm']) assert.ok(names.indexOf('docPicker') > names.indexOf(over), `docPicker under ${over}`);
+    for (const under of ['uploadRail', 'documentRail', 'accountRail', 'contactRail', 'draggable']) assert.ok(names.includes('docPicker') && names.indexOf('docPicker') < names.indexOf(under), `docPicker above ${under}`);
+    for (const over of ['tabPopover', 'leaveGuard', 'confirm']) assert.ok(names.includes(over) && names.indexOf('docPicker') > names.indexOf(over), `docPicker under ${over}`);
     const pc = decl(read('src/components/documents/atoms.jsx'), 'PeopleChooser');
     assert.ok(pc.includes("    useLocalLayer(open && !!pos, { onClose: () => setOpen(false), place: 'tabPopover' });"), 'Escape closes the list alone — it closed the whole rail');
     assert.ok(pc.includes('{open && pos && createPortal(') && pc.includes("<div ref={listRef} style={{ position: 'fixed', left: pos.left, width: pos.width, bottom: pos.bottom,") && pc.includes('zIndex: 12000,'), 'portaled at 12000, above the rail, from the field\'s rect');

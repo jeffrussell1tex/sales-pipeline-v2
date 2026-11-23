@@ -74,7 +74,7 @@ test('THE GUARD (the review): the technician\'s job cards are listed by a compon
     const tab = read('src/Tabs/DispatchTab.jsx');
     const view = between(tab, 'const TechnicianView = (', '\n};\n');
     assert.ok(!/\bconst\s+[A-Z]\w*\s*=\s*\(/.test(view.slice('const TechnicianView = ('.length)), 'REGRESSION: a component defined inside TechnicianView');
-    assert.ok(tab.indexOf('const TechJobSection = ({ title, list, empty, custName, blocks, onUpdate, busyId }) => (') < tab.indexOf('const TechnicianView = ('));
+    assert.ok(tab.includes('const TechJobSection = ({ title, list, empty, custName, blocks, onUpdate, busyId }) => (') && tab.indexOf('const TechJobSection = ({ title, list, empty, custName, blocks, onUpdate, busyId }) => (') < tab.indexOf('const TechnicianView = ('));
     assert.equal((view.match(/<TechJobSection /g) || []).length, 4);
     assert.ok(tab.includes("{(job.status === 'on_site' || done || completion !== (job.completionNotes || '')) && ("));
 });

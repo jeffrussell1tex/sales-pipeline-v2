@@ -81,7 +81,7 @@ test('the deals load reads getQuarter when its answer lands', () => {
     assert.ok(src.includes('    const { addAudit, showConfirm, softDelete, setUndoToast } = deps;'), 'the hook\'s top copies no quarter helper');
     const load = src.slice(src.indexOf('const loadOpportunities = (setDbOffline) => {'), src.indexOf(".catch(err => console.error('Failed to load opportunities:'"));
     assert.ok(load.includes('if (!data || !stillOrg(askedOrg)) return;'));
-    assert.ok(load.indexOf('const { getQuarter, getQuarterLabel } = deps;') > load.indexOf('.then(data => {'), 'read in the answer, not before the request');
+    assert.ok(load.includes('.then(data => {') && load.indexOf('const { getQuarter, getQuarterLabel } = deps;') > load.indexOf('.then(data => {'), 'read in the answer, not before the request');
 });
 
 test('the contact delete check reads the deals as they are now', () => {

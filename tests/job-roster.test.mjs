@@ -221,7 +221,7 @@ const NAME_KEYED = [
 ];
 
 test('no scheduled job finds a person by display name — guide §18b52, over every job in SCHEDULED_JOBS', () => {
-    assert.ok(SCHEDULED_JOBS.length >= 6);
+    assert.ok(SCHEDULED_JOBS.length >= 7);   // Moved in §0.287 (a floor with room to spare passes a deletion — the scoped run's survivor): 6 → 7, measured
     for (const { job } of SCHEDULED_JOBS) {
         const s = code(read(`netlify/functions/${job}.mjs`));
         for (const [re, what] of NAME_KEYED) assert.ok(!re.test(s), `${job}.mjs: ${what} — ${(s.match(re) || [])[0]}`);

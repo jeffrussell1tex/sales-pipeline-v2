@@ -1728,7 +1728,7 @@ test('S10 — Customer types\' save, run as written: the tokens it opened with; 
     assert.deepEqual(put[1], { customerTypeTiers: tiers });
     assert.equal(put[2], ok.opened, 'REGRESSION: the save names no tokens, or not the ones the panel opened with');
     const k = kindsOf(ok);
-    assert.ok(k.indexOf('put') < k.indexOf('set') && k.indexOf('set') < k.indexOf('landed'), `the send, the mirror, then landed: ${k}`);
+    assert.ok(k.includes('put') && k.indexOf('put') < k.indexOf('set') && k.indexOf('set') < k.indexOf('landed'), `the send, the mirror, then landed: ${k}`);
     assert.equal(stepOf(ok, 'landed')[1], answer, 'REGRESSION: landed handed something other than the send\'s answer');
     assert.deepEqual(ok.copy.customerTypeTiers, tiers);
     assert.deepEqual([ok.thrown, ok.said, ok.handed], [null, [], []]);
@@ -1758,7 +1758,7 @@ test('S10 — a flat list\'s save (a function component, its key computed), run 
     assert.ok(put && put[2] === ok.opened, 'REGRESSION: the list sent with no tokens, or not the ones it opened with');
     assert.deepEqual(put[1], { competitors: items });
     assert.deepEqual(ok.copy.competitors, items);
-    assert.ok(kindsOf(ok).indexOf('landed') > kindsOf(ok).indexOf('set'), 'REGRESSION: the computed key\'s token never merged — the next save refused against its own');
+    assert.ok(kindsOf(ok).includes('set') && kindsOf(ok).indexOf('landed') > kindsOf(ok).indexOf('set'), 'REGRESSION: the computed key\'s token never merged — the next save refused against its own');
     const refusal = await staleRefusal('competitors');
     const taken = await run({ refusal, took: true });
     assert.deepEqual([taken.thrown, taken.handed.length, taken.said], [refusal, 1, []]);

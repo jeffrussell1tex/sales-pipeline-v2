@@ -152,7 +152,7 @@ test('RULE: the import\'s new deals each carry the importer\'s member name, neve
         assert.deepEqual(asked, [[userId, 'org_A']], 'read once for the batch, in the caller\'s org');
     }
     const post = between(raw, '// Bulk insert — body is an array', '// Single insert');
-    assert.ok(post.indexOf('owned.rows = importer.stamp(owned.rows);') < post.indexOf('owned.rows = owned.rows.map(r => ({ ...r, createdBy: maker || null }));')
+    assert.ok(post.includes('owned.rows = importer.stamp(owned.rows);') && post.indexOf('owned.rows = importer.stamp(owned.rows);') < post.indexOf('owned.rows = owned.rows.map(r => ({ ...r, createdBy: maker || null }));')
         && post.indexOf('owned.rows = owned.rows.map(r => ({ ...r, createdBy: maker || null }));') < post.indexOf('const result = await bulkInsert('), 'stamped after the owners, before the insert');
 });
 

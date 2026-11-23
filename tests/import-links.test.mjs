@@ -232,7 +232,7 @@ test('THE GUARD: accounts.mjs places a bulk create by placeBulkRows before anyth
     const s = read('netlify/functions/accounts.mjs');
     const post = s.slice(s.indexOf('// Bulk insert — body is an array'), s.indexOf('// Single insert'));
     assert.ok(post.includes('const repeated = [...new Set(batchIds.filter((id, k) => batchIds.indexOf(id) !== k))];'));
-    assert.ok(post.indexOf("if (repeated.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.', field: 'id', ids: repeated }) };") >= 0 && post.indexOf('if (repeated.length) return') < post.indexOf('const parents = await checkBulkLinks('), 'an id twice refuses the batch before anything is read (the review of 3a)');
+    assert.ok(post.indexOf("if (repeated.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'A row id is sent twice in one batch.', field: 'id', ids: repeated }) };") >= 0 && post.includes('if (repeated.length) return') && post.indexOf('if (repeated.length) return') < post.indexOf('const parents = await checkBulkLinks('), 'an id twice refuses the batch before anything is read (the review of 3a)');
     const at = (t) => { const i = post.indexOf(t); assert.ok(i >= 0, `missing: ${t.slice(0, 70)}`); return i; };
     assert.ok(at('const placed = placeBulkRows(data.some(d => d.parentAccountId) ? await orgTreeOf(orgId) : [], data, newIds);') > at('if (parents.error) return'), 'after the parents are known to be live rows of this org');
     assert.ok(at("if (placed.error) return { statusCode: placed.status, headers, body: JSON.stringify({ error: placed.error, field: 'parentAccountId', ids: placed.ids }) };") < at('const result = await bulkInsert('), 'refused whole, naming its rows, before the insert');
@@ -461,7 +461,7 @@ test("IMPORTED CONTACTS BECOME THE OWNERS (state §0.217; Jeff, 30 Oct): a new c
     const ml = code(read('src/components/layout/ModalLayer.jsx'));
     const contacts = ml.slice(ml.indexOf('onImportContacts={async'), ml.indexOf('onImportAccounts={async'));
     assert.ok(contacts.includes('owned = res.landed.some((c) => c.ownerId);') && contacts.includes('if (owned) loadContacts(() => {});'), 'the app reads back the names the server stamped');
-    assert.ok(contacts.indexOf('if (owned) loadContacts(() => {});') > contacts.indexOf('phases.push(receiptFromUpdate(ow));'), 'once the overwrite is answered');
+    assert.ok(contacts.includes('phases.push(receiptFromUpdate(ow));') && contacts.indexOf('if (owned) loadContacts(() => {});') > contacts.indexOf('phases.push(receiptFromUpdate(ow));'), 'once the overwrite is answered');
     assert.ok(!contacts.slice(contacts.indexOf('const overwritesWithIds')).slice(0, 300).includes('newContactRow'), 'an overwrite keeps its owner');
 });
 
@@ -518,7 +518,7 @@ test("THE GUARD (state §0.216): the modal plans the contact and deal imports at
     const deals = ml.slice(ml.indexOf('onImportOpportunities={async'), ml.indexOf('onImportUsers={async'));
     assert.ok(deals.includes('const { _link: link, ...csv } = o;') && deals.includes('return { ...row, account: link.name, accountId: link.id, ...(link.site ? { site: link.site } : {}) };'), "each deal by its account's id and own name, a site typed in full its Site Name");
     assert.ok(deals.includes('currentUserId,'), 'Q11: the importer by id');
-    assert.ok(deals.includes('if (created) loadOpportunities(() => {});') && deals.indexOf('if (created) loadOpportunities(() => {});') > deals.indexOf('phases.push(receiptFromUpdate(ow));'), 'the deals read again as stored — the owner and name the server stamped — once the overwrite is answered (the review of 3b)');
+    assert.ok(deals.includes('if (created) loadOpportunities(() => {});') && deals.includes('phases.push(receiptFromUpdate(ow));') && deals.indexOf('if (created) loadOpportunities(() => {});') > deals.indexOf('phases.push(receiptFromUpdate(ow));'), 'the deals read again as stored — the owner and name the server stamped — once the overwrite is answered (the review of 3b)');
     assert.ok(deals.includes('if (!isClean(receipt) && created) loadOpportunities(() => {});'), 'and before a failure is said');
 });
 
@@ -537,7 +537,7 @@ test("THE GUARD (state §0.216, §0.217): the deals and contacts bulk creates st
     ]) {
         const src = read(file);
         const post = src.slice(src.indexOf(from), src.indexOf('// Single insert'));
-        assert.ok(post.includes(`const importer = await importerOwners(${rows}, orgId, '${entity}');`) && post.indexOf('const importer = await importerOwners(') < post.indexOf('const result = await bulkInsert('), `${file}: asked before anything is written`);
+        assert.ok(post.includes(`const importer = await importerOwners(${rows}, orgId, '${entity}');`) && post.includes('const importer = await importerOwners(') && post.indexOf('const importer = await importerOwners(') < post.indexOf('const result = await bulkInsert('), `${file}: asked before anything is written`);
         assert.ok(post.includes('if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };'), `${file}: the refusal is answered, naming its rows — never a 500 from a stranger's id`);
         assert.ok(post.includes('owned.rows = importer.stamp(owned.rows);') && post.indexOf('owned.rows = importer.stamp(owned.rows);') < post.indexOf('const result = await bulkInsert('), `${file}: the member stamped on the rows written`);
     }

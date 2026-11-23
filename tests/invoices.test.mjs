@@ -356,7 +356,7 @@ test('invoices.mjs: technician 403, every read and write by org, totals recomput
     assert.ok(f.includes("if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot view invoices.' });"));
     assert.ok(f.includes("const prefix = `INV-${year}-`;"));
     assert.ok(f.includes("return prefix + String(max + 1).padStart(4, '0');"));
-    assert.ok((f.match(/eq\(invoices\.orgId, orgId\)/g) || []).length >= 9, 'every invoice statement carries the org');
+    assert.ok((f.match(/eq\(invoices\.orgId, orgId\)/g) || []).length >= 10, 'every invoice statement carries the org');   // Moved in §0.287 (a floor with room to spare passes a deletion — the scoped run's survivor): 9 → 10, measured
     assert.ok(f.includes('lineItems: lines, ...totalsFor(lines, taxRate),'), 'the client never sets a total');
     assert.ok(f.includes("if (editing.length && !isInvoiceEditable(current.status)) {"));
     assert.ok(f.includes('if (!canTransition(current.status, to)) {'));

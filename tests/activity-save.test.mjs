@@ -66,7 +66,7 @@ test('handleSaveActivity: both catches leave — no follow-up, no QuickLog reset
         assert.ok(block.includes("const error = maybeSaid('The activity', 'saved', failureWords(err));   // a throw proves nothing (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe)") && block.includes('setActivityModalError(error);'), 'the error is shown');
         assert.ok(block.some((l) => l.startsWith('return { ok: false, error, unknown: true };')), 'and the handler leaves');
     }
-    assert.ok(fn.indexOf('setFollowUpPrompt({') > fn.lastIndexOf('} finally { setActivityModalSaving(false); }'), 'the follow-up is the success tail');
+    assert.ok(fn.includes('} finally { setActivityModalSaving(false); }') && fn.indexOf('setFollowUpPrompt({') > fn.lastIndexOf('} finally { setActivityModalSaving(false); }'), 'the follow-up is the success tail');
 });
 
 test('THE GUARD — in the data hooks, a catch leaves (the settings load\'s storage sweep falls back by design)', () => {

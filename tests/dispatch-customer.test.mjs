@@ -226,7 +226,7 @@ test('New Job\'s list holds the customers a refusal names: first, by id; the res
     const start = d.indexOf('    const leads = refusal ? (placeholderLeads || NO_LEADS)\n');
     const end = d.indexOf('    const custMatches = [...leadRows, ...custFound];\n');
     assert.ok(start > 0 && end > start, 'REGRESSION: the list no longer led by the customers a refusal names');
-    assert.ok(d.indexOf('    const typed = q ? customerForText(query, customers, accounts) : null;\n') < start, 'the typed name before the list that reads it');
+    assert.ok(d.includes('    const typed = q ? customerForText(query, customers, accounts) : null;\n') && d.indexOf('    const typed = q ? customerForText(query, customers, accounts) : null;\n') < start, 'the typed name before the list that reads it');
     const lines = d.slice(start, d.indexOf('\n', end) + 1);
     assert.equal(lines.split('\n').filter(Boolean).length, 8);
     assert.ok(lines.includes('matchSearch((customers || []).filter(c => !leadSet.has(c.id)), query, { ...byName, also: c => [byId.get(c.accountId)?.name] });'),
@@ -510,7 +510,7 @@ test('the readers: quote -> job, the placeholder, New Job\'s field and Save, the
     assert.ok(q.includes("import { customerForDeal, dealCustomerRefusal } from '../../src/utils/dispatchCustomer.js';"));
     assert.ok(q.includes('        const found = customerForDeal(orgCustomers, opp, orgAccounts);\n        // The 409 names what it refuses over: the customers, or — a deal on no account whose name two live accounts\n        // have, or only accounts merged into others — those accounts.\n        if (found.refusal) {'), 'refused, nothing written, before the customer or the job');
     // Moved in §0.269: the customer it makes is inserted inside the job's batch.
-    assert.ok(q.indexOf('const found = customerForDeal(orgCustomers, opp, orgAccounts);') < q.indexOf('db.insert(dispatchCustomers).values({'));
+    assert.ok(q.includes('const found = customerForDeal(orgCustomers, opp, orgAccounts);') && q.indexOf('const found = customerForDeal(orgCustomers, opp, orgAccounts);') < q.indexOf('db.insert(dispatchCustomers).values({'));
     assert.ok(q.includes("        const orgAccounts = await db.select({ id: accounts.id, name: accounts.name, mergeArchived: accounts.mergeArchived,\n            mergedIntoId: accounts.mergedIntoId, parentAccountId: accounts.parentAccountId })\n            .from(accounts).where(eq(accounts.orgId, orgId));"), "the deal's account from THIS org's accounts, merge marks included, as the screen finds it");
     assert.ok(q.includes("[found.refusal === 'many' && found.of !== 'account' ? 'customers' : 'accounts']: named });"), 'the 409 names customers, or the accounts it refuses over');
     assert.ok(q.includes('        const linkTo = orgAccounts.some((a) => a.id === found.accountId && a.mergeArchived !== true) ? found.accountId : null;'),

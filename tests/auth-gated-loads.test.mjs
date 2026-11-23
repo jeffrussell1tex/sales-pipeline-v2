@@ -29,7 +29,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
 test('App.jsx derives one activeOrgId from a signed-in user and an active org', () => {
     const app = read('src/App.jsx');
     assert.equal(count(app, "const activeOrgId = (clerkUser && organization?.id) || null;"), 1);
-    assert.ok(app.indexOf('const clerkUser = isSignedIn ? rawClerkUser : null;') < app.indexOf('const activeOrgId ='), 'the user it reads is the ACTIVE-session user (0.65), declared first');
+    assert.ok(app.includes('const clerkUser = isSignedIn ? rawClerkUser : null;') && app.indexOf('const clerkUser = isSignedIn ? rawClerkUser : null;') < app.indexOf('const activeOrgId ='), 'the user it reads is the ACTIVE-session user (0.65), declared first');
 });
 
 test('spiff claims: no load before an org is active; reloaded per org, the previous org\'s rows cleared first', () => {
@@ -39,7 +39,7 @@ test('spiff claims: no load before an org is active; reloaded per org, the previ
     const block = app.slice(start, app.indexOf('}, [activeOrgId]);', start) + '}, [activeOrgId]);'.length);
     assert.ok(block.includes("if (!activeOrgId) return;                 // spiff claims: signed in with an org, or nothing"), 'the gate');
     assert.ok(block.includes('setSpiffClaims(prev => (prev.length ? [] : prev));'), 'a switch clears the last org\'s claims before the new load');
-    assert.ok(block.indexOf('setSpiffClaims(prev =>') < block.indexOf('if (!activeOrgId) return;'), 'cleared before the gate, so a sign-out empties them too');
+    assert.ok(block.includes('setSpiffClaims(prev =>') && block.indexOf('setSpiffClaims(prev =>') < block.indexOf('if (!activeOrgId) return;'), 'cleared before the gate, so a sign-out empties them too');
     assert.ok(block.includes("dbFetch('/.netlify/functions/spiff-claims')"), 'the same endpoint');
     assert.ok(block.includes('.then(r => (r.ok ? r.json() : null))'), 'a refused response is not parsed as claims');
     assert.ok(block.includes('return () => { cancelled = true; };'), 'a load in flight when the org changes is dropped');
@@ -55,7 +55,7 @@ test('coaching notes: the hook is told the org and loads for it, nothing before,
     assert.ok(hook.includes('export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } = {})'), 'orgId is a parameter, null by default');
     assert.ok(hook.includes('        if (!enabled || !orgId) return;'), 'no org, no load');
     assert.ok(hook.includes('setCoachingNotes(prev => (prev.length ? [] : prev));'), 'the previous org\'s notes are cleared');
-    assert.ok(hook.indexOf('setCoachingNotes(prev =>') < hook.indexOf('if (!enabled || !orgId) return;'), 'cleared before the gate');
+    assert.ok(hook.includes('setCoachingNotes(prev =>') && hook.indexOf('setCoachingNotes(prev =>') < hook.indexOf('if (!enabled || !orgId) return;'), 'cleared before the gate');
     assert.ok(hook.includes('    }, [enabled, orgId, waitForToken, reload]);'), 'the effect re-runs per org');
     assert.equal(count(hook, '    }, [enabled, waitForToken, reload]);'), 0, 'the mount-only deps are gone');
 });
@@ -103,6 +103,6 @@ test('waitForToken resolves at once with a getter, later when one appears, and s
     const src = read('src/utils/storage.js');
     const giveUp = src.slice(src.indexOf('} else if (attempts > 80) {'), src.indexOf('resolve();', src.indexOf('} else if (attempts > 80) {')) + 'resolve();'.length);
     assert.ok(giveUp.includes("console.warn('waitForToken: no Clerk token after 8 s — the request will go out unauthenticated (401)');"), 'the give-up is loud');
-    assert.ok(giveUp.indexOf('console.warn(') < giveUp.indexOf('resolve();'), 'warned before it resolves');
+    assert.ok(giveUp.includes('console.warn(') && giveUp.indexOf('console.warn(') < giveUp.indexOf('resolve();'), 'warned before it resolves');
     assert.equal(count(src, 'resolve anyway'), 0, 'the old silent comment is gone');
 });

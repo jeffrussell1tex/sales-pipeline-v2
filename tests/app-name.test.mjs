@@ -32,7 +32,7 @@ test('HOME: the signed-out screen names Accelerep and says what the app does', (
     }
     assert.ok(signedOut.includes('Connect your Google Calendar to see your meetings beside your deals and tasks.'),
         'it says what the Google data is for (calendar is the scope Google checks)');
-    assert.ok(signedOut.indexOf('CRM and crew-dispatching software') < signedOut.indexOf('<SignIn '),
+    assert.ok(signedOut.includes('CRM and crew-dispatching software') && signedOut.indexOf('CRM and crew-dispatching software') < signedOut.indexOf('<SignIn '),
         'the purpose is above the sign-in box, seen without scrolling');
 });
 

@@ -188,7 +188,7 @@ test('WIRING: the endpoint applies a note by compare-and-set, stamps it from the
     const s = code(read('netlify/functions/opportunities.mjs'));
     const branch = s.slice(s.indexOf("if ('note' in data) {"), s.indexOf("if ('comments' in data) return"));
     assert.ok(branch.length > 0, 'the note branch, before the whole-list refusal');
-    assert.ok(s.indexOf("if ('note' in data) {") > s.indexOf('if (forbiddenPut) return forbiddenPut;'), 'after the ownership check');
+    assert.ok(s.includes('if (forbiddenPut) return forbiddenPut;') && s.indexOf("if ('note' in data) {") > s.indexOf('if (forbiddenPut) return forbiddenPut;'), 'after the ownership check');
     assert.ok(branch.includes("if (Object.keys(data).some(k => k !== 'id' && k !== 'note')) return { statusCode: 400"), 'a note alone');
     assert.ok(branch.includes('const me = await resolveCaller(userId, orgId);'), 'the caller from the session, never the body');
     assert.ok(branch.includes("const applied = applyNoteOp(stored.comments, op, { me, now: new Date().toISOString(), newId: 'note_' + crypto.randomUUID(), names });"));

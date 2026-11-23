@@ -329,7 +329,7 @@ test('_lib.mjs: memberNamesOf reads this org\'s members fresh; a first sign-in w
     assert.ok(fn.includes("    if (!orgId) throw new Error('_lib.memberNamesOf: orgId is required.');"));
     assert.ok(fn.includes('.from(users).where(eq(users.orgId, orgId));'), 'this org\'s rows, every one of them');
     assert.ok(!/orgRoster|rosterCache/.test(fn), 'never the 30 s roster cache: a write decides on it');
-    assert.ok(l.indexOf('export async function memberNamesOf(') < l.indexOf('export async function ensureRosterRow('), 'outside ensureRosterRow (org-roles.test reads its body for users.name)');
+    assert.ok(l.includes('export async function memberNamesOf(') && l.indexOf('export async function memberNamesOf(') < l.indexOf('export async function ensureRosterRow('), 'outside ensureRosterRow (org-roles.test reads its body for users.name)');
     const ens = between(l, 'export async function ensureRosterRow(', "console.warn('_lib.ensureRosterRow:', e.message);");
     order(ens,
         "        const clerkName = ((cu?.firstName || '') + ' ' + (cu?.lastName || '')).trim();",

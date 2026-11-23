@@ -191,10 +191,14 @@ test('the Company view\'s "Add contact" opens the contact rail, as the list\'s "
     const tab = read('src/Tabs/ContactsTab.jsx');
     assert.ok(tab.includes("    const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };"), 'a new contact, in the rail');
     assert.ok(tab.includes('                            onAddContact={handleAddContact}'), 'handed to the Company view');
-    const pane = tab.slice(tab.indexOf('function CompanyTwoPane({'), tab.indexOf('\nfunction ', tab.indexOf('function CompanyTwoPane({') + 10));
+    // Moved in §0.287: the slice ended at the next `\nfunction `, and none follows the Company view (the tab is `export
+    // default function`) — the end read -1 and the pane ran to the file's last character but one, the whole tab with it.
+    const paneAt = tab.indexOf('function CompanyTwoPane({'), paneEnd = tab.indexOf('\nexport default function ContactsTab(', paneAt);
+    assert.ok(paneAt >= 0 && paneEnd > paneAt, 'the Company view, up to the tab');
+    const pane = tab.slice(paneAt, paneEnd);
     assert.ok(pane.includes('    onAddContact,\n'), 'the Company view takes it');
     assert.ok(pane.includes('                                onClick={onAddContact}'), 'its "Add contact" calls it');
-    assert.ok(!/setShowContactModal|setEditingContact/.test(pane), 'nothing of the modal the rail replaced');
+    assert.ok(!/setShowContactModal|setEditingContact/.test(tab.slice(paneAt)), 'nothing of the modal the rail replaced, in the Company view or the tab below it');
 });
 
 test('the header\'s search results open the rails — App hands the header the context\'s openers', () => {

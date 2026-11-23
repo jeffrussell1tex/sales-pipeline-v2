@@ -84,7 +84,9 @@ test('R2 — every key a token covers is a key the settings PUT stores (but inte
     const s = code(read('netlify/functions/settings.mjs'));
     const block = s.slice(s.indexOf('const extra = {'), s.indexOf('anthropicApiKey:  encryptedApiKey,') + 'anthropicApiKey:'.length);
     const keys = [...block.matchAll(/^\s{16}([A-Za-z]+):/gm)].map((m) => m[1]);
-    assert.ok(keys.length >= 80, `the PUT's keys read: ${keys.length}`);
+    // 81 since §0.287 (23 Nov): the PUT's keys as measured — at 80 one key could leave the list unseen, and a key the
+    // PUT's list leaves out is reset on every save.
+    assert.ok(keys.length >= 81, `the PUT's keys read: ${keys.length}`);
     assert.deepEqual([...REV_KEYS].sort(), [...keys.filter((k) => k !== 'integrationRequests' && k !== 'dealModel'), ...COLUMN_KEYS].sort());
     assert.deepEqual(COLUMN_KEYS, ['companyName', 'companyLogo', 'fiscalYearStart', 'taskTypes', 'verticalMarkets']);
     for (const k of COLUMN_KEYS) assert.match(s, new RegExp(`'${k}'\\s+in data\\s*\\?`), `${k} is a column the PUT writes when sent`);

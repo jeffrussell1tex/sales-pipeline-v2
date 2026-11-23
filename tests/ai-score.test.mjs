@@ -180,7 +180,7 @@ test("every detail tab's Save saves the deal — none submits the form a detail 
     const save = between(m, 'const saveDeal = () => {', 'const handleSubmit = ');
     const at = save.indexOf('setDetailTab(null);');
     // The first return after the errors are set (state §0.252: a save already out returns before any check).
-    assert.ok(at > save.indexOf('setValidationErrors(errors);') && at < save.indexOf('return;', save.indexOf('setValidationErrors(errors);')), 'the errors show where their fields are');
+    assert.ok(save.includes('setValidationErrors(errors);') && at > save.indexOf('setValidationErrors(errors);') && at < save.indexOf('return;', save.indexOf('setValidationErrors(errors);')), 'the errors show where their fields are');
     const guard = save.indexOf('        if (saving) return;');
     assert.ok(guard >= 0 && guard < save.indexOf('const errors = {};'), 'a second press while the save is out sends nothing (state §0.252)');
     assert.ok(save.includes('onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id,'));

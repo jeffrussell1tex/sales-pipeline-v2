@@ -108,7 +108,7 @@ test('settings.mjs: the mode in both halves; the tiers cleaned for it; a named p
     assert.ok(s.includes("error: 'An approver must be an active Admin or Manager in this workspace.'"));
     assert.ok(s.includes("error: 'Choose who approves: by role or by person.'"));
     const put = s.slice(s.indexOf("if (event.httpMethod === 'PUT') {"));
-    assert.ok(put.indexOf("const forbidden = requireRole(auth, ['Admin'], headers);") < put.indexOf("if ('approvalTiers' in data || 'approvalRouting' in data) {"), 'an Admin\'s save');
+    assert.ok(put.includes("const forbidden = requireRole(auth, ['Admin'], headers);") && put.indexOf("const forbidden = requireRole(auth, ['Admin'], headers);") < put.indexOf("if ('approvalTiers' in data || 'approvalRouting' in data) {"), 'an Admin\'s save');
 });
 
 test('quotes.mjs: an approval or a send-back is the tier\'s approver\'s, backup\'s or an Admin\'s — by the caller\'s APP id', () => {
@@ -132,8 +132,11 @@ test('the Quotes tab decides by the same rule and names who decides; the gauge i
         assert.ok(s.includes(k), `the tiers carry ${k}`);
     }
     assert.ok(s.includes('userId={currentUserId}'), 'the caller\'s app id from the app');
-    const gauge = s.slice(s.indexOf('const ApprovalGauge'), s.indexOf('// ─── Activity log'));
-    assert.ok(gauge.includes('const { approvalTiers: tiers } = useQuoteConfig();') && !gauge.includes('30% VP') && !gauge.includes('[0.10, 0.20, 0.30]'), 'no fixed bands');
+    // Moved in §0.287: the slice ended at a comment `code()` strips — the end read -1 and the gauge ran to the file's end.
+    const gaugeAt = s.indexOf('const ApprovalGauge'), gaugeEnd = s.indexOf('\nfunction historyLines(', gaugeAt);
+    assert.ok(gaugeAt >= 0 && gaugeEnd > gaugeAt, 'the gauge, up to the activity log');
+    const gauge = s.slice(gaugeAt, gaugeEnd);
+    assert.ok(gauge.includes('const { approvalTiers: tiers } = useQuoteConfig();') && !s.slice(gaugeAt).includes('30% VP') && !s.slice(gaugeAt).includes('[0.10, 0.20, 0.30]'), 'no fixed bands, in the gauge or below it');
     assert.ok(s.includes('{tierNeedsApproval(tier) && <span') && s.includes('{approverWordsOf(tier, approverNames)}</span>}'), 'the quote card names the routed approver, not the old text');
 });
 

@@ -15,7 +15,9 @@ import {
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
-const between = (s, a, b) => s.slice(s.indexOf(a), s.indexOf(b));
+// Moved in §0.287: it asserted neither anchor — a start gone read '' or the file's tail, an end gone the start to the
+// file's last character but one; every pin on the slice then read the wrong text. Both anchors now, the end after the start.
+const between = (s, a, b) => { const i = s.indexOf(a); assert.ok(i >= 0, `missing: ${a}`); const j = s.indexOf(b, i); assert.ok(j > i, `missing after it: ${b}`); return s.slice(i, j); };
 
 const H = 3600000, D = 24 * H;
 const NOW = Date.parse('2026-10-02T12:00:00Z');
@@ -149,7 +151,7 @@ test('quotes.mjs: a send-back is an approver\'s, from the queue, with a note, th
     assert.ok(put.includes("if (refusal) return refuse(from !== 'Pending Approval' ? 409 : !canApproveQuotes(userRole) ? 403 : 400, refusal);"));
     // A send-back that edits the lines is refused by the HOLD before it gets here
     // (quoteEditOutcome — tests/quote-rules.test.mjs; the 409 in the integration suite).
-    assert.ok(put.indexOf('if (edit.refusal) return refuse(409, edit.refusal);') < put.indexOf('const sendBack = data.sendBack === true;'), 'the hold is judged first');
+    assert.ok(put.includes('if (edit.refusal) return refuse(409, edit.refusal);') && put.indexOf('if (edit.refusal) return refuse(409, edit.refusal);') < put.indexOf('const sendBack = data.sendBack === true;'), 'the hold is judged first');
     assert.ok(put.includes("const requested = sendBack ? 'Draft' : (data.status ?? from);"));
     assert.ok(put.includes('approvalTier: existing.approvalTier, approvalReason: existing.approvalReason, approvalNote: existing.approvalNote,'), 'a save cannot write the note');
     assert.ok(put.includes('stamps.approvalNote = null;') && put.includes('if (sendBack) stamps.approvalNote = String(data.sendBackNote).trim();'));
@@ -160,7 +162,7 @@ test('quotes.mjs: a send-back is an approver\'s, from the queue, with a note, th
 test('quotes.mjs: the record reaches a caller for the quotes she can see — one quote\'s history 404s like a missing quote; the flow is filtered to hers; the tier statistics are the record\'s', () => {
     const s = code(read('netlify/functions/quotes.mjs'));
     const get = between(s, "if (event.httpMethod === 'GET') {", "if (event.httpMethod === 'POST') {");
-    assert.ok(get.indexOf('const visible = new Set(') < get.indexOf("if (qs.activity === 'true') {"), 'the deal rule first');
+    assert.ok(get.includes('const visible = new Set(') && get.indexOf('const visible = new Set(') < get.indexOf("if (qs.activity === 'true') {"), 'the deal rule first');
     assert.ok(get.includes('if (!q || !visible.has(q.opportunityId)) return refuse(404, NOT_FOUND);'));
     assert.ok(get.includes("eq(auditLog.orgId, orgId), eq(auditLog.entityType, 'quote'), eq(auditLog.entityId, String(qs.quoteId))"));
     assert.ok(get.includes('.filter(q => visible.has(q.opportunityId)).map(q => q.id));') && get.includes('.filter(e => seen.has(e.quoteId));'));

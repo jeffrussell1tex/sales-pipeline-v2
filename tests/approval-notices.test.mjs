@@ -98,7 +98,7 @@ test('quotes.mjs: a submission, an approval or a send-back sends its notice — 
     const s = code(read('netlify/functions/quotes.mjs'));
     const put = s.slice(s.indexOf("if (event.httpMethod === 'PUT') {"), s.indexOf("if (event.httpMethod === 'DELETE') {"));
     assert.ok(put.includes("const notice = sendBack ? 'sentBack'") && put.includes(": moved && to === 'Approved' ? 'approved'") && put.includes(": moved && to === 'Pending Approval' ? 'submitted' : null;"));
-    assert.ok(put.indexOf('await auditAs(orgId, auth.userId, {') < put.indexOf('await sendApprovalNotices({'), 'after the record');
+    assert.ok(put.includes('await auditAs(orgId, auth.userId, {') && put.indexOf('await auditAs(orgId, auth.userId, {') < put.indexOf('await sendApprovalNotices({'), 'after the record');
     assert.ok(put.includes("console.error('quotes: approval notices failed —', e.message);"), 'a failed send is logged, and the save stands');
     assert.ok(put.includes('actorId: await getCallerId(auth.userId, orgId), actorName: await getCallerName(auth.userId, orgId),'));
 });

@@ -139,7 +139,7 @@ test('Closed and Quota are quarter-to-date: won by close day inside the quarter,
     assert.match(smt, /buildRepStats\(rep, opportunities, activities, tasks, curQ\)/, 'the memo hands the current quarter in');
     assert.match(smt, /\[visibleReps, opportunities, activities, tasks, curQ\.key\]/, 'and re-runs when the quarter turns');
     // The quarter is computed before the memo that consumes it (a TDZ otherwise).
-    assert.ok(smt.indexOf('const curQ      = currentQuarter(fiscalStart);') < smt.indexOf('const repStats = useMemo('), 'curQ is declared above repStats');
+    assert.ok(smt.includes('const curQ      = currentQuarter(fiscalStart);') && smt.indexOf('const curQ      = currentQuarter(fiscalStart);') < smt.indexOf('const repStats = useMemo('), 'curQ is declared above repStats');
 });
 
 test('the Administration board shows a fiscal year\'s plan and measures that year to date against it', () => {

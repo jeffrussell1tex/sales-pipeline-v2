@@ -164,7 +164,7 @@ test('THE SERVER (state §0.219): the merge reads its place before anything is b
     const merge = between(g, '        // Resolve the surviving field values (whitelist only).', '        // ── Build the atomic batch');
     const at = merge.indexOf('const placement = mergePlacement(tree, { survivorId, archivedId });');
     assert.ok(merge.includes('        const tree = await treeOf(orgId);\n        const placement = mergePlacement(tree, { survivorId, archivedId });'));
-    assert.ok(at > merge.indexOf('if (owner?.error) return') && at < merge.indexOf('const rewrites = [];'), 'read in this org (treeOf), before the snapshot reads');
+    assert.ok(merge.includes('if (owner?.error) return') && at > merge.indexOf('if (owner?.error) return') && at < merge.indexOf('const rewrites = [];'), 'read in this org (treeOf), before the snapshot reads');
     assert.ok(merge.includes('if (placement) return { statusCode: 409, headers, body: JSON.stringify({ error: placement.error }) };'), 'REGRESSION: a merge that closes a loop, or leaves a sub-account under a site or at a tier the rule would not give it, lands');
     assert.ok(merge.includes('const kids = tree.filter((a) => a.parentAccountId === archivedId).map((a) => ({ id: a.id, accountTier: a.accountTier, mergeArchived: a.mergeArchived }));'),
         'the rows the placement judged (the review: a second read let a child added, moved under it or re-tiered in between pass both checks)');
@@ -178,7 +178,7 @@ test('THE SERVER (state §0.219): the merge reads its place before anything is b
         'REGRESSION: a sub-account added under the record merged away, or re-tiered, after the placement read lands unplaced');
     assert.ok(batch.includes('if (childIds.length) ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(inArray(accounts.id, childIds), eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));'),
         'by the ids read, each still under it (REGRESSION: by its parent at batch time, whatever stood there)');
-    assert.ok(batch.indexOf('const liveKids') < batch.indexOf('if (childIds.length) ops.push(db.update(accounts)'), 'asked before the move');
+    assert.ok(batch.includes('const liveKids') && batch.indexOf('const liveKids') < batch.indexOf('if (childIds.length) ops.push(db.update(accounts)'), 'asked before the move');
     assert.ok(!g.includes('ops.push(db.update(accounts).set({ parentAccountId: survivorId, updatedAt: now }).where(and(eq(accounts.parentAccountId, archivedId), eq(accounts.orgId, orgId))));'));
 });
 

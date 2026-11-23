@@ -453,7 +453,7 @@ test("THE ENDPOINT: a deal keeps the account id; a new one must be this org's ac
     assert.ok(link.includes('id: accounts.id, name: accounts.name, accountTier: accounts.accountTier, parentAccountId: accounts.parentAccountId,'));
     assert.ok(link.includes('for (let next = id; next && !seen.has(next) && seen.size <= MERGE_HOPS;) {'), 'at most MERGE_HOPS merges on; a loop ends');
     const hop = link.indexOf('        if (storedId && next === storedId) return { keep: true };\n        seen.add(next);\n');
-    assert.ok(hop > link.indexOf('for (let next = id;') && hop < link.indexOf('await db.select({'), 'G2: a walk that reaches the id the deal holds is untouched — asked before the row is read, so a survivor deleted since is kept too (D13)');
+    assert.ok(link.includes('for (let next = id;') && hop > link.indexOf('for (let next = id;') && hop < link.indexOf('await db.select({'), 'G2: a walk that reaches the id the deal holds is untouched — asked before the row is read, so a survivor deleted since is kept too (D13)');
     const lifted = link.indexOf("if (acct.accountTier === 'site' && storedId && acct.parentAccountId === storedId) return { keep: true, lifted: true };");
     assert.ok(lifted > 0 && lifted < link.indexOf("if (acct.accountTier === 'site') return { status: 400, error: ACCOUNT_IS_SITE };"), 'a site whose account the deal holds (where D22 moved it): untouched, before the site refusal');
     const through = link.indexOf("if (acct.accountTier === 'site' && storedId && storedSite && storedSite === acct.name && !(await heldSite(storedId, orgId))) return { keep: true, lifted: true };");
@@ -550,9 +550,11 @@ test('THE CLOSED LOST SAVE: the list takes the deal as stored, not the copy sent
     const edit = 'if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id ? r.data.opportunity : o)));';
     const made = 'if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));';
     assert.ok(fn.includes(edit), 'an edit');
-    assert.ok(fn.indexOf(edit) > fn.indexOf('if (!r.ok) {') && fn.indexOf(edit) < fn.indexOf("addAudit('update', 'opportunity', editingOppRef.id"), 'once stored, before the audit');
+    assert.ok(fn.includes('if (!r.ok) {') && fn.indexOf(edit) > fn.indexOf('if (!r.ok) {') && fn.indexOf(edit) < fn.indexOf("addAudit('update', 'opportunity', editingOppRef.id"), 'once stored, before the audit');
     const post = fn.slice(fn.indexOf("const newId = formData.id || ('id_' + crypto.randomUUID());"));
-    assert.ok(post.includes(made) && post.indexOf(made) > post.indexOf('if (!r.ok) {'), 'a new deal, once stored');
+    // Moved in §0.287: the create's refusal reads `if (!r.ok && !r.landed) {` since the unknown-save rule (§0.261) — this pin
+    // read `if (!r.ok) {`, gone from the create, and passed on its -1 (an order pin with its earlier line missing).
+    assert.ok(post.includes(made) && post.includes('if (!r.ok && !r.landed) {') && post.indexOf(made) > post.indexOf('if (!r.ok && !r.landed) {'), 'a new deal, once stored');
     const st = read('src/utils/storage.js');
     assert.ok(st.includes('const bodyOf = async (res) => { try { return await res.json(); } catch { return null; } };'));
     assert.ok(st.includes('if (res.ok) return { ok: true, status: res.status, error: null, data: await bodyOf(res) };'));
@@ -592,7 +594,7 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(g.includes("{ name: 'opportunities', table: opportunities, column: 'account', col: opportunities.account, scope: dealsOfMerge },"));
     assert.ok(g.includes('const ids = await snapIds(t.table, and(eq(t.col, oldVal), eq(t.table.orgId, orgId), ...(t.scope ? [t.scope()] : [])));'), 'the snapshot, the same deals: the undo puts back exactly what was renamed');
     assert.ok(g.includes('ops.push(db.update(opportunities).set({ account: survName, updatedAt: now }).where(and(inArray(opportunities.account, nameOldValues), eq(opportunities.orgId, orgId), dealsOfMerge())));'));
-    assert.ok(g.indexOf('ops.push(db.update(opportunities).set({ accountId: survivorId') < g.indexOf('ops.push(db.update(opportunities).set({ account: survName'), "the ids move first in the batch, so the archived account's deals are the survivor's when renamed");
+    assert.ok(g.includes('ops.push(db.update(opportunities).set({ accountId: survivorId') && g.indexOf('ops.push(db.update(opportunities).set({ accountId: survivorId') < g.indexOf('ops.push(db.update(opportunities).set({ account: survName'), "the ids move first in the batch, so the archived account's deals are the survivor's when renamed");
     assert.ok(g.includes('ops.push(db.update(contacts).set({ company: survName, updatedAt: now }).where(and(inArray(contacts.company, nameOldValues), eq(contacts.orgId, orgId), contactsOfMerge())));'), "contacts by name only where their id is the survivor's or none (state §0.218)");
     assert.ok(g.includes('if (moving.length) ops.push(db.update(contacts).set({ accountId: survivorId, company: survName, updatedAt: now }).where(and(inArray(contacts.id, moving.map((c) => c.id)), eq(contacts.accountId, archivedId), eq(contacts.orgId, orgId))));'), "the record merged away's contacts by id, with the survivor's name (state §0.218 — REGRESSION: left on it by id)");
     assert.ok(g.includes('const table = TABLE_BY_NAME[rw.table];') && between(g, 'const TABLE_BY_NAME = {', '};').includes('opportunities'), 'the undo reverses every snapshotted rewrite, this one too');
@@ -616,10 +618,10 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     // H6: a survivor lifted to the top level is an account; the undo puts its stored tier back where the house parent
     // rule lets it and no deal stands on it (mergeUndo.js undoPlaces — state §0.207; Jeff, 18 Oct)
     const top = g.indexOf("        if (surv.parentAccountId === archivedId && !arch.parentAccountId) survSet.accountTier = 'account';\n");
-    assert.ok(top > g.indexOf('if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;') && top < g.indexOf('ops.push(db.update(accounts).set(survSet)'), "H6: lifted to the top level, the survivor is an account — the deals it takes are not left on a site");
+    assert.ok(g.includes('if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;') && top > g.indexOf('if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;') && top < g.indexOf('ops.push(db.update(accounts).set(survSet)'), "H6: lifted to the top level, the survivor is an account — the deals it takes are not left on a site");
     const mu = read('src/utils/mergeUndo.js');
     const back = mu.indexOf("            if (!arch.parentAccountId) wrote.accountTier = 'account';\n");
-    assert.ok(back > mu.indexOf('        if (snap.parentAccountId === log.archivedId) {') && back < mu.indexOf('    const set = {}, keptFields = [];'), 'and its undo puts the stored tier back (survivorRestore: what the merge wrote, while it still holds it)');
+    assert.ok(mu.includes('        if (snap.parentAccountId === log.archivedId) {') && back > mu.indexOf('        if (snap.parentAccountId === log.archivedId) {') && back < mu.indexOf('    const set = {}, keptFields = [];'), 'and its undo puts the stored tier back (survivorRestore: what the merge wrote, while it still holds it)');
     const u = read('src/hooks/useMerge.js');
     assert.ok(u.includes('const { setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser } = deps || {};'));
     assert.ok(u.includes("try { loadOpportunities?.(() => {}); } catch (e) { console.error('Deal refresh failed after merge:', e); }"));

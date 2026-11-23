@@ -157,8 +157,8 @@ test('the wrapper stamps start and finish, never breaks the job, and returns or 
     // Item 36: the flag is the first thing after the site — before any stamp, before the run.
     assert.ok(s.includes('        if (!jobsEnabled(process.env)) {'), 'REGRESSION (item 36): the wrapper gates on JOBS_ENABLED, or both sites run every job against the one database');
     assert.ok(s.includes("            return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'JOBS_ENABLED is not \"true\" on this site' }) };"), 'a disabled site answers 200 and says why');
-    assert.ok(s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('const startedAt = new Date();'), 'the gate is before the start stamp — a disabled site leaves no row');
-    assert.ok(s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('await run(event, context)'), 'and before the run');
+    assert.ok(s.includes('if (!jobsEnabled(process.env))') && s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('const startedAt = new Date();'), 'the gate is before the start stamp — a disabled site leaves no row');
+    assert.ok(s.includes('if (!jobsEnabled(process.env))') && s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('await run(event, context)'), 'and before the run');
     // The org-scoping scan exempts this file (tests/org-scoping.test.mjs SKIP) because
     // it writes only the site-scoped site_job_heartbeats table. Keep that true.
     assert.ok(s.includes("import { siteJobHeartbeats } from '../../db/schema.js';"), 'the one table it may touch');

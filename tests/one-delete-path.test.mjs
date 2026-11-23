@@ -122,14 +122,14 @@ test('contacts: a contact on an open deal is kept and named; the rest go after a
     const fn = between(src, 'const handleDeleteContacts = (ids, opts = {}) => {', 'const handleSaveContact');
     assert.ok(fn.includes('const kept = wanted.map(c => ({ c, deal: activeDealsOf(c, deps.opportunities)[0] })).filter(k => k.deal);'));
     assert.ok(fn.includes('const going = wanted.filter(c => !kept.some(k => k.c.id === c.id));'));
-    assert.ok(fn.indexOf('showBlockedDelete(') < fn.indexOf('showConfirm('), 'all kept: refused before any confirm');
+    assert.ok(fn.includes('showBlockedDelete(') && fn.indexOf('showBlockedDelete(') < fn.indexOf('showConfirm('), 'all kept: refused before any confirm');
     assert.ok(fn.includes("showConfirm(`Delete ${what}? You'll have a few seconds to undo.${keptLine}`, async () => {"), 'a confirm, naming what is kept');
     assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('), 'nothing sent before the confirm');
     // Moved pin (§0.274): no one-request clear — every Delete sends the ids pressed, an Admin's too (it wiped the org's
     // contacts another tab added since). tests/stale-deletes.test.mjs runs it.
     assert.ok(!fn.includes('clear=true') && !fn.includes('opts.admin'), 'no org-wide clear from a Delete');
     assert.equal(fn.split("method: 'DELETE'").length - 1, 1, 'one DELETE, by id');
-    assert.ok(fn.indexOf('softDelete(') > fn.lastIndexOf("method: 'DELETE'"), 'Undo once the DELETEs have landed');
+    assert.ok(fn.includes("method: 'DELETE'") && fn.indexOf('softDelete(') > fn.lastIndexOf("method: 'DELETE'"), 'Undo once the DELETEs have landed');
     assert.ok(!src.includes('const handleDeleteContact = '), 'the old handler is gone');
 });
 
@@ -149,7 +149,7 @@ test('accounts: an account with an open deal is kept; its sub-accounts move to t
     const fn = between(src, 'const handleDeleteAccounts = (ids, opts = {}) => {', 'const handleSaveAccount');
     assert.ok(fn.includes('isOpenDeal(o) && (o.accountId ? o.accountId === a.id : o.account === a.name));'), 'by id, or by name where a deal has no id');
     assert.ok(fn.includes('const kept = wanted.map(a => ({ a, deal: openDealOf(a) })).filter(k => k.deal);'));
-    assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('), 'nothing sent before the confirm');
+    assert.ok(fn.includes('showConfirm(') && fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('), 'nothing sent before the confirm');
     assert.ok(fn.includes("will move to the top level."), 'the confirm says what happens to the sub-accounts');
     assert.ok(fn.includes('setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));'), 'the screen promotes them as the server does');
     assert.ok(fn.includes('body: JSON.stringify({ id: c.id, parentAccountId: c.parentId, accountTier: c.tier, restore: true }),'), 'Undo puts each back under its account with the tier it had there, marked a restore (§0.198, D21)');
@@ -171,7 +171,7 @@ test('deals: confirmed, one DELETE each by id, no Undo — and an Admin\'s', () 
     const src = read('src/hooks/useOpportunities.js');
     const fn = between(src, 'const handleDeleteDeals = (ids, opts = {}) => {', 'const handleSave = (');
     assert.ok(fn.includes('showConfirm(`Delete ${what}? This cannot be undone.`, async () => {'));
-    assert.ok(fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('));
+    assert.ok(fn.includes('showConfirm(') && fn.indexOf('showConfirm(') < fn.indexOf('dbWrite('));
     // Moved pin (§0.273): the id sent encoded.
     assert.ok(fn.includes("const r = await dbWrite(`/.netlify/functions/opportunities?id=${encodeURIComponent(o.id)}`, { method: 'DELETE' });"));
     assert.ok(!fn.includes('softDelete('), 'no Undo: a deal re-POSTed is a new deal to the server');
@@ -192,7 +192,7 @@ test('tasks: the task rail\'s Delete — a confirm, the DELETE, then Undo; a wri
     assert.ok(fn.includes("showConfirm(`Delete the task \"${title}\"? You'll have a few seconds to undo.`, async () => {"));
     // Moved pin (§0.273): the id sent encoded.
     const del = fn.indexOf("const r = await dbWrite(`/.netlify/functions/tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });");
-    assert.ok(del > fn.indexOf('showConfirm('), 'the DELETE awaited, after the confirm');
+    assert.ok(fn.includes('showConfirm(') && del > fn.indexOf('showConfirm('), 'the DELETE awaited, after the confirm');
     assert.ok(fn.indexOf('softDelete(') > del, 'Undo once the DELETE has landed');
     assert.match(fn, /if \(!r\.ok\) \{\s*setTasks\(prev => \(prev\.some\(t => t\.id === taskId\) \? prev : \[\.\.\.prev, task\]\)\);\s*setUndoToast\(\{ error: `Task not deleted — \$\{r\.error\}` \}\);/, 'a refused delete puts the task back and says why');
     const rail = read('src/components/rails/TaskRail.jsx');
@@ -223,18 +223,18 @@ test('server: contacts.mjs refuses a contact on an open deal — after its gates
     const src = read('netlify/functions/contacts.mjs');
     const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");
     const check = del.indexOf('if (target && await openDealNamingContact(orgId, target)) {');
-    assert.ok(check > del.indexOf('if (forbiddenDel) return forbiddenDel;'), 'after the ownership check');
+    assert.ok(del.includes('if (forbiddenDel) return forbiddenDel;') && check > del.indexOf('if (forbiddenDel) return forbiddenDel;'), 'after the ownership check');
     assert.ok(check < del.indexOf('const [deletedRow] = await db.delete(contacts)'), 'before the delete');
     assert.ok(del.includes("return openDealRefusal(headers, 'This contact is on an open deal. Take them off the deal, or close it, before deleting.');"), 'names no deal — a rep may not see it');
     const clear = del.indexOf('if (await openDealNamingAnyContact(orgId, everyone)) {');
-    assert.ok(clear > del.indexOf("const forbidden = requireRole(auth, ['Admin'], headers);") && clear < del.indexOf('const deleted = await db.delete(contacts).where(eq(contacts.orgId, orgId))'), 'the clear too');
+    assert.ok(del.includes("const forbidden = requireRole(auth, ['Admin'], headers);") && clear > del.indexOf("const forbidden = requireRole(auth, ['Admin'], headers);") && clear < del.indexOf('const deleted = await db.delete(contacts).where(eq(contacts.orgId, orgId))'), 'the clear too');
 });
 
 test('server: accounts.mjs refuses an account with an open deal — after its gates, before the delete', () => {
     const src = read('netlify/functions/accounts.mjs');
     const del = between(src, "if (event.httpMethod === 'DELETE') {", "return { statusCode: 405");
     const check = del.indexOf('const holding = target ? await openDealOfAccount(orgId, target) : null;');
-    assert.ok(check > del.indexOf('if (forbiddenDelete) return forbiddenDelete;'), 'after the Admin gate');
+    assert.ok(del.includes('if (forbiddenDelete) return forbiddenDelete;') && check > del.indexOf('if (forbiddenDelete) return forbiddenDelete;'), 'after the Admin gate');
     // Moved in §0.282: the delete carries the merged-away condition.
     assert.ok(check < del.indexOf('db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId), notMerged(accounts))).returning(),'), 'before the delete (one write with its promotion, §0.198)');
     const clear = del.indexOf('const holding = await openDealOfAnyAccount(orgId, everyAccount);');
@@ -261,4 +261,28 @@ test('server: _openDeals.mjs reads the org\'s deals with the screens\' own rule'
     assert.ok(src.includes('or(eq(opportunities.accountId, account.id), and(isNull(opportunities.accountId), eq(opportunities.account, account.name))),'));
     assert.ok(src.includes('return rows.find(isOpenDeal) || null;'));
     assert.ok(src.includes("const likeLiteral = (s) => String(s).replace(/[\\\\%_]/g, (c) => '\\\\' + c);"), 'a name\'s % and _ are literal');
+});
+
+// §0.287 review (23 Nov): every org-wide wipe (`?clear=true`) opens with its own Admin gate. The six CRM endpoints hold
+// the wipe inside their DELETE, under a request-wide `const forbidden = requireWrite(...)` that a Sales Rep or Manager
+// passes (users.mjs's stands under an Admin/Manager check, with no outer `forbidden`; it is read here the same way): deleting the wipe's inner `const forbidden = requireRole(auth, ['Admin'], headers);` leaves its
+// `if (forbidden) return forbidden;` reading the outer one, and the whole org's rows open to every member who may write.
+// The review measured it: deleting the gate line in accounts, deals, activities, leads or tasks passed all 2,864 unit tests
+// (contacts' had one pin, an order pin that passed with the gate gone — tests/order-pins.test.mjs). Here each wipe's first
+// two statements are the gate and its return, read straight after the branch opens — never a match elsewhere in the file.
+test('§0.287 review: every org-wide wipe (?clear=true) under netlify/functions/ opens with its own Admin gate and its return, before anything it reads or deletes', () => {
+    const dir = new URL('netlify/functions/', ROOT);
+    const wipes = [];
+    for (const f of readdirSync(dir).filter((n) => n.endsWith('.mjs'))) {
+        const lines = read(`netlify/functions/${f}`).split(/\r?\n/);
+        lines.forEach((l, i) => {
+            if (!/^\s*if \((?:event\.queryStringParameters\?\.)?clear === 'true'\) \{$/.test(l)) return;
+            const next = lines.slice(i + 1).map((x) => x.trim()).filter((x) => x && !x.startsWith('//')).slice(0, 2);
+            wipes.push(f);
+            assert.deepEqual(next, ["const forbidden = requireRole(auth, ['Admin'], headers);", 'if (forbidden) return forbidden;'],
+                `REGRESSION: ${f}:${i + 1} — the org-wide wipe does not open with its own Admin gate; a request-wide \`forbidden\` would stand in for it`);
+        });
+    }
+    assert.deepEqual(wipes.sort(), ['accounts.mjs', 'activities.mjs', 'contacts.mjs', 'leads.mjs', 'opportunities.mjs', 'tasks.mjs', 'users.mjs'],
+        'the seven org-wide wipes, each read — a new one is read here too; one gone, take it out');
 });

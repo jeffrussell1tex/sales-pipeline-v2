@@ -230,8 +230,8 @@ test('ReportsTab: the prompt is read into the builder (every part a chip), the f
     assert.ok(s.includes("import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';"));
     const tabAt = s.indexOf('function SavedReportsTab(');
     assert.ok(tabAt > 0);
-    assert.ok(s.indexOf('const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {') < tabAt, 'the banner is module scope, data as props');
-    assert.ok(s.indexOf('const WhereEditor = ({ source, where, onChange }) => {') < tabAt, 'the filter editor is module scope — its inputs keep focus');
+    assert.ok(s.includes('const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {') && s.indexOf('const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {') < tabAt, 'the banner is module scope, data as props');
+    assert.ok(s.includes('const WhereEditor = ({ source, where, onChange }) => {') && s.indexOf('const WhereEditor = ({ source, where, onChange }) => {') < tabAt, 'the filter editor is module scope — its inputs keep focus');
     assert.ok(s.includes('const applyPrompt = async (text) => {'));   // async since §0.141 (Claude first when the switch is on)
     assert.ok(s.includes("const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });"), 'the org’s stages and roster are handed in');
     assert.ok(s.includes('setBuilderWhere(d.where);') && s.includes('setBuilderChart(d.chartType);') && s.includes('setBuilderName(r.name);'), 'the builder is seeded with the reading');
@@ -324,7 +324,7 @@ test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key 
     assert.ok(s.includes(".from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);"), 'the settings row by org');
     assert.ok(s.includes("if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });"), 'the Admin’s switch, checked before any key is read');
     assert.ok(s.includes("const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);") && s.includes("if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });"));
-    assert.ok(s.indexOf("reason: 'off'") < s.indexOf('resolveAnthropicKey(row?.extra)'), 'off before the key');
+    assert.ok(s.includes("reason: 'off'") && s.indexOf("reason: 'off'") < s.indexOf('resolveAnthropicKey(row?.extra)'), 'off before the key');
     assert.ok(s.includes(".from(users).where(eq(users.orgId, orgId));"), 'the roster by org');
     assert.ok(!/from\(opportunities\)|from\(leads\)|from\(accounts\)|from\(activities\)/.test(s), 'no CRM rows are read, so none can leave');
     assert.ok(s.includes("messages: [{ role: 'user', content: `Sentence: ${prompt}` }],"), 'the sentence is the whole user turn');
@@ -332,7 +332,7 @@ test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key 
     assert.ok(s.includes("output_config: { effort: 'low' },"), 'a sentence into a small object: low effort');
     assert.ok(s.includes("if (result?.stop_reason === 'refusal') { outcome = 'refused'; reply = { unavailable: true, reason: 'refused' }; }"));
     assert.ok(s.includes("reply = { unavailable: true, reason: 'unreadable' }; }") && s.includes("reply = { unavailable: true, reason: 'error', status: response.status };"), 'every failure is an unavailable the client falls back on');
-    assert.ok(s.includes("return answer(200, reply);") && s.indexOf("await auditAs(orgId, auth.userId, {") < s.indexOf("return answer(200, reply);"), 'one answer, one audit row, the audit before the answer (§0.143)');
+    assert.ok(s.includes("return answer(200, reply);") && s.includes("await auditAs(orgId, auth.userId, {") && s.indexOf("await auditAs(orgId, auth.userId, {") < s.indexOf("return answer(200, reply);"), 'one answer, one audit row, the audit before the answer (§0.143)');
     assert.ok(s.includes('const { definition, name, notes } = validateReading(call.input, prompt);'), 'the model’s answer is validated, never trusted');
     assert.ok(s.includes("import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';"), 'the pure half is the tested one');
     assert.ok(!s.includes('apiKey:') && !s.includes('apiKey }'), 'the key is never in a response body');

@@ -405,14 +405,14 @@ test('App\'s Escape closes the layer on top when it is App\'s, and leaves the Es
     for (const flag of ['setShowModal(false)', 'setShowUserModal(false)', 'setCoachingNoteModal(null)']) {
         assert.ok(!between(appEscape, 'switch (topLayer(', '\n                }').includes(flag), `${flag}: App's Escape closes it no more (state §0.252)`);
     }
-    assert.ok(appEscape.indexOf('if (undoToast)') > appEscape.indexOf('default: return;'), 'the undo toast once nothing is drawn over the page');
+    assert.ok(appEscape.includes('default: return;') && appEscape.indexOf('if (undoToast)') > appEscape.indexOf('default: return;'), 'the undo toast once nothing is drawn over the page');
     for (const flag of ['showAccountModal', 'showContactModal', 'showTaskModal', 'showActivityModal', 'taskRailId']) {
         assert.ok(!between(appEscape, 'switch (topLayer(', '\n                }').includes(flag), `${flag}: not a layer App closes`);
     }
     assert.ok(!appEscape.includes('if (taskRailId)') && !appEscape.includes('if (showActivityModal)'), 'the task and activity rails take their own: App closed them too — the task rail while it kept its draft');
     assert.ok(app.includes('    const openLayersRef = useRef(null);'));
     const assigned = app.indexOf('    openLayersRef.current = openLayers;');
-    assert.ok(assigned > app.indexOf('    const openLayers = {') && assigned < app.indexOf('    if (!clerkLoaded || !orgLoaded) {'), 'the open layers handed over every render, before the early returns');
+    assert.ok(app.includes('    const openLayers = {') && assigned > app.indexOf('    const openLayers = {') && assigned < app.indexOf('    if (!clerkLoaded || !orgLoaded) {'), 'the open layers handed over every render, before the early returns');
 });
 
 test('THE GUARD: a layer\'s own listener decides by the order — escapeBlocked(its name), never a list of its own — and marks the Escape it takes', () => {

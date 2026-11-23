@@ -109,7 +109,7 @@ test('WIRING: the single save — a body naming the list refused; the move appen
     assert.ok(put.includes("const closeNamed = 'forecastedCloseDate' in data;"));
     assert.ok(put.includes("if (!closeNamed) { delete updateData.forecastedCloseDate; if (!('closeQuarter' in data)) delete updateData.closeQuarter; }"), 'Q2: a save that does not name the date keeps it as stored, never the copy read');
     assert.ok(put.includes("...(closeNamed ? { closeDateHistory: closeDatesWith({ day: moveDayOf(sentCloseDay, serverDay), author: me.name || '', authorId: me.id ?? null, now, source: 'deal' }) } : {}),"));
-    assert.ok(put.indexOf("delete updateData.forecastedCloseDate") > put.indexOf('const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;'), 'after the update is built');
+    assert.ok(put.includes('const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;') && put.indexOf("delete updateData.forecastedCloseDate") > put.indexOf('const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;'), 'after the update is built');
     assert.ok(put.includes("const closeMove = closeNamed ? closeMoves[closeMoves.length - 1] : null;\n            if (closeMove && closeMove.timestamp === now) {"), 'the move this write made, by its time');
     assert.ok(put.includes("action: 'opportunity.close_date_moved', entityType: 'opportunity', entityId: upserted.id,"));
     assert.ok(put.includes('detail: moveWords(closeMove),'), 'from → to (§18b42 rule 4)');
@@ -129,7 +129,7 @@ test('WIRING: the import — a row naming the list refused; the batch\'s moves a
     const bulk = code(read('netlify/functions/_bulk.mjs'));
     assert.ok(bulk.includes("export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerId = null, canSeeAll = false, client, extraSet = null }) {"));
     assert.ok(bulk.includes('for (const [k, expr] of Object.entries(extraSet || {})) if (table[k]?.name) set[k] = expr;'), 'only a column of the table');
-    assert.ok(bulk.indexOf('set[k] = expr;') < bulk.indexOf('set.updatedAt = sql`now()`;'));
+    assert.ok(bulk.includes('set[k] = expr;') && bulk.indexOf('set[k] = expr;') < bulk.indexOf('set.updatedAt = sql`now()`;'));
     const stage = code(read('netlify/functions/_stage.mjs'));
     assert.ok(stage.includes("const DERIVED_KEYS = ['stageChangedDate'];"), 'REGRESSION (Q4): the import writes no history list — the list as read, written whole, lost a save landing between');
     assert.ok(!stage.includes('patch.stageHistory'));
@@ -143,7 +143,7 @@ test('WIRING: the screens — dealBody strips the list; the window leaves an unt
     assert.ok(m.includes("...((formData.forecastedCloseDate ?? '') === closeSeed ? ['forecastedCloseDate', 'closeQuarter'] : []),"), 'Q2');
     assert.ok(m.includes("import { closeDateMovesOf } from '../../utils/dealHistory.js';"));
     assert.ok(m.includes('function CloseDateMoves({ deal }) {\n    const moves = closeDateMovesOf(deal);'), 'at module scope (the house rule)');
-    assert.ok(m.indexOf('function CloseDateMoves(') < m.indexOf('function DealHistoryTab('), 'never inside the tab');
+    assert.ok(m.includes('function CloseDateMoves(') && m.indexOf('function CloseDateMoves(') < m.indexOf('function DealHistoryTab('), 'never inside the tab');
     assert.ok(m.includes('<CloseDateMoves deal={opportunity}/>'), 'Q3: shown in the History tab');
     assert.ok(m.includes("forecastedCloseDate: base.forecastedCloseDate ?? (opportunity?.id ? '' :"), 'an undated deal opens empty (Jeff: "Open with the date empty"); a new one on today');
     const ml = code(read('src/components/layout/ModalLayer.jsx'));

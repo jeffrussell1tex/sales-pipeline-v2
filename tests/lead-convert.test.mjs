@@ -191,10 +191,10 @@ test('WIRING: both creates keep the lead id out of the body and mark the lead af
     const at = save.indexOf('            const { fromLeadId, ...enrichedNew } = enrichedData;');
     assert.ok(at > 0 && save.indexOf('const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };', at) > at);
     const after = save.indexOf('                    if (fromLeadId) deps.onLeadConverted?.(fromLeadId);');
-    assert.ok(after > save.indexOf('                    setShowModal(false); setOppModalError(null);', at), 'after the landed deal closes the window');
+    assert.ok(save.indexOf('                    setShowModal(false); setOppModalError(null);', at) >= 0 && after > save.indexOf('                    setShowModal(false); setOppModalError(null);', at), 'after the landed deal closes the window');
     const lostFn = between(HOOK, '    const completeLostSave = async (', '\n    };\n');
     const la = lostFn.indexOf('            if (fromLeadId) deps.onLeadConverted?.(fromLeadId);');
-    assert.ok(la > lostFn.indexOf("addAudit('create', 'opportunity', newId"), 'after the create is stored');
+    assert.ok(lostFn.includes("addAudit('create', 'opportunity', newId") && la > lostFn.indexOf("addAudit('create', 'opportunity', newId"), 'after the create is stored');
     assert.equal(HOOK.split('deps.onLeadConverted?.(fromLeadId)').length - 1, 2, 'the two creates, never an edit');
     const app = code(read('src/App.jsx'));
     assert.ok(app.includes('        get onLeadConverted()     { return _onLeadConvertedRef.current; },') && app.includes('    _onLeadConvertedRef.current = markLeadConverted;'));

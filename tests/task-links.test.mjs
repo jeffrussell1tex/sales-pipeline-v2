@@ -272,7 +272,7 @@ test('the task rail: the seed taken once, each link field held by its id, and th
     // F10: the banner sits at the top of the body and Account is the last field: each refusal scrolls it into view
     assert.ok(r.includes('    const errorRef = useRef(null);\n    const [refusals, setRefusals] = useState(0);\n    const refuse = (why) => { setSaveError(why); setRefusals(n => n + 1); };\n'));
     assert.ok(r.includes("    useEffect(() => {\n        if (refusals || taskModalError) errorRef.current?.scrollIntoView?.({ block: 'nearest' });\n    }, [refusals, taskModalError]);\n"), "each refusal — the same words twice too — and the server's");
-    assert.ok(r.indexOf('}, [refusals, taskModalError]);') < r.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
+    assert.ok(r.includes('}, [refusals, taskModalError]);') && r.indexOf('}, [refusals, taskModalError]);') < r.indexOf('if (!isOpen) return null;'), 'a hook, before the rail returns early');
     assert.ok(r.includes('{(taskModalError || saveError) && (\n                    <div ref={errorRef} style={{ background:'), 'the banner is what is scrolled to');
     // F10 (checked): the deal list already shut on blur, and its rows and count hold the focus
     const ta = between(r, 'function Typeahead(', '\n}\n');

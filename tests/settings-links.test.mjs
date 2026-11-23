@@ -308,7 +308,9 @@ test('S12 — THE CLASS: every key the settings PUT stores is classified — che
     const s = code(read('netlify/functions/settings.mjs'));
     const block = s.slice(s.indexOf('const extra = {'), s.indexOf('anthropicApiKey:  encryptedApiKey,') + 'anthropicApiKey:'.length);
     const keys = [...block.matchAll(/^\s{16}([A-Za-z]+):/gm)].map((m) => m[1]);
-    assert.ok(keys.length >= 80, `the PUT's keys read: ${keys.length}`);
+    // 81 since §0.287 (23 Nov): the PUT's keys as measured — at 80 one key could leave the list unseen, and a key the
+    // PUT's list leaves out is reset on every save.
+    assert.ok(keys.length >= 81, `the PUT's keys read: ${keys.length}`);
     for (const k of keys) assert.ok(k in CLASSIFIED, `${k}: a settings key nobody classified — does it hold ids? (state §0.221)`);
     for (const k of Object.keys(CLASSIFIED)) assert.ok(keys.includes(k), `${k}: classified but no longer stored`);
     for (const k of Object.keys(SETTINGS_LINKS)) assert.equal(CLASSIFIED[k], 'links', k);
@@ -395,7 +397,7 @@ test('S16 — users.mjs: a team\'s name paired with its id on the PUT (before th
     ].map(at);
     assert.deepEqual(order, [...order].sort((a, b) => a - b), 'REGRESSION: the pairing after the stamp — a name that unlinks the team keeps its join date');
     const create = between(u, "const createRole = data.userType || data.role || 'User';", 'const result = await upsertUser(clean);');
-    assert.ok(create.indexOf('const newTeam = teamPaired(data, null, await teamNameLookup(data, orgId));') > create.indexOf('const teamed = await checkLinks(TEAM_LINK, data, null, orgId);'), 'the create pairs after its team check');
+    assert.ok(create.includes('const teamed = await checkLinks(TEAM_LINK, data, null, orgId);') && create.indexOf('const newTeam = teamPaired(data, null, await teamNameLookup(data, orgId));') > create.indexOf('const teamed = await checkLinks(TEAM_LINK, data, null, orgId);'), 'the create pairs after its team check');
     assert.ok(create.includes('if (newTeam) { clean.team = newTeam.team; clean.profile = { ...clean.profile, teamId: newTeam.teamId }; }'));
     assert.ok(u.includes('const teamNames = await teamNamesInOrg(orgId);'));
     assert.ok(u.includes("team:      (typeof invite.teamId === 'string' && liveTeams.has(invite.teamId) && teamNames.get(invite.teamId)) || invite.team || null,"), 'an invitation\'s team by the list\'s name');

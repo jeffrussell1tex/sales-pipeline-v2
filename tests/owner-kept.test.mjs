@@ -147,7 +147,7 @@ test('DIALOG: the Closed Lost save answers the dialog — refused, it says why a
     const opt = fn.indexOf('setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? shown : opp));');
     const rb = fn.indexOf('setOpportunities(prev => prev.map(o => (o === shown && before ? before : o)));');
     const kept = fn.indexOf('const shown = shownRow(updatedOpp);');
-    assert.ok(kept > cap && kept < opt, 'the copy shown is the one put back');
+    assert.ok(cap >= 0 && kept > cap && kept < opt, 'the copy shown is the one put back');
     const ret = fn.indexOf('return { ok: false, error: `Not saved as Closed Lost');
     assert.ok(cap >= 0 && opt > cap, 'the stored deal is taken before the optimistic write');
     assert.ok(rb > opt && rb < ret, 'rolled back before it answers');

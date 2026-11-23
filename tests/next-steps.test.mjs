@@ -44,7 +44,7 @@ test('each next action Claude gives is logged once — a fresh explanation with 
     const logAt = s.indexOf("repName: opp.salesRep || 'Unassigned', actionType: 'next_step', opportunityId, dealName: entityName,");
     assert.ok(logAt > -1);
     assert.ok(s.includes('        if (kept.outcome.ok && scoreData.recommendation) {'), 'never a blank next action');
-    assert.ok(logAt > s.indexOf('const stored = withHistory(cached, scoreData);'), 'after a fresh explanation — the cached answer returns before it');
+    assert.ok(s.includes('const stored = withHistory(cached, scoreData);') && logAt > s.indexOf('const stored = withHistory(cached, scoreData);'), 'after a fresh explanation — the cached answer returns before it');
     assert.ok(s.includes('signal: `${scoreData.recommendation} (win chance ${scoreData.explains.score}%)`,'), 'its words and the win chance then');
 });
 
