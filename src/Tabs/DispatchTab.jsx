@@ -14,6 +14,8 @@ import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';
 import { to12h } from '../utils/customerNotifications.js';
 // The week board's drop planner — the crew after a drop, the gates, the partial PUT (state §0.134).
 import { planWeekDrop } from '../utils/weekDrop.js';
+// An office save names only what it changed, a status move where it moved from (state §0.286).
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, jobAnswerOf, sentOf } from '../utils/jobChanges.js';
 // Quote → job → invoice (state §0.149): the vocabulary, the arithmetic and the transitions.
 import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines, isInvoiceEditable, isLiveInvoice,
     JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
@@ -93,11 +95,7 @@ const crewLine = (j, compact = false) => {
 // won opportunity both count. The queue lists exactly these; the board sends a
 // scheduled job to its record instead (Jeff, 11 Sep).
 const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;
-// 'HH:MM' plus a duration in hours, back to 'HH:MM' (wraps at midnight).
-const addHoursHHMM = (hhmm, hrs) => {
-    const mins = (Math.round((hhToNum(hhmm) + (Number(hrs) || 0)) * 60) % (24 * 60) + 24 * 60) % (24 * 60);
-    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-};
+// 'HH:MM' plus a duration in hours is the Jobs editor's end: jobChanges.js editorFields (state §0.286).
 
 // Weekly capacity implied by the shift pattern. Falls back to 40 only when no
 // pattern is set, rather than asserting 40 for everyone as before.
@@ -1012,7 +1010,7 @@ const CrewNextStep = ({ crewNames, addedCount, crewSlots, held, dateStr, onDate,
     );
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onHeld, onCreateBridgeJob, onOpenJob }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onHeld, onAdopt, onCreateBridgeJob, onOpenJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     // The list is what its heading says (Jeff, 11 Sep: "Doesn't it make more
     // sense to only show unscheduled jobs under that list"): jobs still to
@@ -1186,30 +1184,35 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             const endStr   = `${String(Math.floor(endMins / 60) % 24).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
 
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id:             selectedJob.id,
-                    status:         'scheduled',
-                    assignedTechId: leadId,
-                    coTechIds:      coIds,
-                    scheduledDate:  dateStr,
-                    scheduledStart: scheduleTime,
-                    scheduledEnd:   endStr,
-                    timeSlot:       'exact',
-                    assignedEquipmentIds: reservedUnits,
-                }),
-            });
-            // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): the server's words with
-            // their ref, else "The server returned N." — a 403 the role's sentence (Q13); it said "HTTP N", the ref dropped.
-            if (!res.ok) {
-                const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
+            // Only what the schedule changes from the job as this screen holds it, the status it moves from named (state
+            // §0.286): a screen behind another member's move is refused, never writing its copy back.
+            const body = jobChanges(selectedJob._raw, scheduleFields({ leadId, coIds, date: dateStr, start: scheduleTime, end: endStr, units: reservedUnits }), selectedJob.id, { checkStatus: true });
+            let data = {};
+            if (body) {
+                const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                // The ok check first, the house words (state §0.248, docs/design/refusal-sweep Part 11): the server's words with
+                // their ref, else "The server returned N." — a 403 the role's sentence (Q13); it said "HTTP N", the ref dropped.
+                if (!res.ok) {
+                    const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
+                    if (!stillOrg(askedOrg)) return;
+                    const answer = jobAnswerOf(res.status, r.body, selectedJob.id);
+                    // An earlier press that landed (state §0.286, 'already'): scheduled, the job as stored.
+                    if (answer === 'already') data = { job: r.body.job };
+                    else {
+                        // The job moved since this screen read it ('stale'): the job as stored takes its place, the words said,
+                        // naming it — the queue may move on from it while the words stay.
+                        if (answer === 'stale' && onAdopt) onAdopt(r.body.job);
+                        throw refusalError(answer === 'stale' ? `${selectedJob.title || selectedJob.customer}: ${r.words}` : r.words, r.heard);
+                    }
+                } else {
+                    data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the job as sent
+                }
                 if (!stillOrg(askedOrg)) return;
-                throw refusalError(r.words, r.heard);
             }
-            const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the job as sent
-            if (!stillOrg(askedOrg)) return;
 
             // Blockers ignored by an explicit override, named for the audit trail.
             const overridden = candidates
@@ -1221,6 +1224,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             onScheduled({
                 jobId:     selectedJob.id,
                 serverJob: data.job || null,
+                sent:      body ? sentOf(body) : null,   // kept as sent when the answer cannot be read (state §0.286)
                 jobName:   selectedJob.title || selectedJob.customer,
                 techIds:   addedIds,
                 crewNames,
@@ -1258,21 +1262,32 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         setScheduleNotice('');
         setSaving(true);
         try {
-            const [leadId = null, ...coIds] = ids;
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),
-            });
-            if (!res.ok) {   // as the schedule's (§0.248): the ok check first, the house words, a 403 the role's sentence
-                const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
+            // Only what the hold changes, the status it moves from named (state §0.286); its units released by name.
+            const body = jobChanges(selectedJob._raw, heldCrewFields(ids), selectedJob.id, { checkStatus: true });
+            let serverJob = null;
+            if (body) {
+                const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!res.ok) {   // as the schedule's (§0.248): the ok check first, the house words, a 403 the role's sentence
+                    const r = await writeRefusalOf(res, 'Your role cannot schedule jobs.');
+                    if (!stillOrg(askedOrg)) return;
+                    const answer = jobAnswerOf(res.status, r.body, selectedJob.id);
+                    if (answer === 'already') serverJob = r.body.job;   // an earlier press landed (state §0.286)
+                    else {
+                        if (answer === 'stale' && onAdopt) onAdopt(r.body.job);   // the job as stored, the words said
+                        throw refusalError(answer === 'stale' ? `${selectedJob.title || selectedJob.customer}: ${r.words}` : r.words, r.heard);
+                    }
+                } else {
+                    serverJob = (await res.json().catch(() => ({}))).job || null;   // as sent when it cannot be read
+                }
                 if (!stillOrg(askedOrg)) return;
-                throw refusalError(r.words, r.heard);
             }
-            if (!stillOrg(askedOrg)) return;
             const crewNames = ids.map(id => techs.find(t => t.id === id)?.name || id);
-            if (onHeld) onHeld({ jobId: selectedJob.id, jobName: selectedJob.title || selectedJob.customer, techIds: ids, crewNames });
+            if (onHeld) onHeld({ jobId: selectedJob.id, jobName: selectedJob.title || selectedJob.customer, techIds: ids, crewNames, serverJob, sent: body ? sentOf(body) : null });
             setAddedTechs(Object.fromEntries(ids.map(id => [id, true])));
             showNotice(ids.length
                 ? `Crew held — ${crewNames.join(', ')}. The job stays in Jobs to schedule; Mass-schedule next week will place them, or come back and Schedule now.`
@@ -4245,8 +4260,12 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 
     const selected = (jobsRaw || []).find(j => j.id === selectedId) || null;
 
+    // The job as the editor opened it (state §0.286): a Save sends only what the draft changed from it, and a status move the
+    // status it moved from. Taken again from each answer that holds the job — an invoice's mirror never resets it.
+    const opened = useRef(null);
     React.useEffect(() => {
         setDraft(selected ? { ...selected } : null);
+        opened.current = selected ? { ...selected } : null;
         setStatus(null);
         setLoc(null);
         setLocUnread(false);
@@ -4320,40 +4339,49 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
             subject = 'The job';
 
             if (!stillOrg(askedOrg)) return;   // the job's PUT would carry the new org's token
-            // 2 — the job
+            // 2 — the job: only what the draft changed from the job as opened, the status it moves from named (state §0.286).
+            // Each side through one builder (editorFields — the form's expressions as they always were), so an untouched field
+            // is never sent: a screen behind another member's change wrote its old status and schedule back.
+            const base = opened.current || draft;
+            const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id);
+            // Nothing of the job changed: no write — "Saved" when the address step above saved the address.
+            if (!body) { setStatus({ kind: 'ok', msg: loc && (loc.address || '').trim() ? 'Saved' : 'No changes to save.' }); return; }
             const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(draft.id), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id:              draft.id,
-                    title:           draft.title.trim(),
-                    description:     draft.description || null,
-                    priority:        draft.priority || 'normal',
-                    status:          draft.status || 'unscheduled',
-                    // Both columns are NOT NULL; '' is "none", as the create path writes (§0.113).
-                    jobType:         draft.jobType || '',
-                    trade:           draft.trade   || '',
-                    durationMinutes: Math.round((parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) * 60),
-                    crewSize:        parseInt(draft.crewSize, 10) || 1,
-                    minLicense:      draft.minLicense || null,
-                    needSkills:      draft.needSkills || [],
-                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [],
-                    scheduledDate:   draft.scheduledDate || null,
-                    // A preferred start makes the window exact and sets the end from the duration (§0.112).
-                    scheduledStart:  draft.scheduledStart || null,
-                    scheduledEnd:    draft.scheduledStart ? addHoursHHMM(draft.scheduledStart, parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) : null,
-                    timeSlot:        draft.scheduledStart ? 'exact' : (draft.timeSlot && draft.timeSlot !== 'exact' ? draft.timeSlot : 'anytime'),
-                    locationId,
-                }),
+                body: JSON.stringify(body),
             });
+            let data = {};
             if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
                 const r = await writeRefusalOf(res, 'Your role cannot edit jobs.');
                 if (!stillOrg(askedOrg)) return;
-                throw refusalError(r.words, r.heard);
+                const answer = jobAnswerOf(res.status, r.body, draft.id);
+                if (answer === 'already') data = { job: r.body.job };   // an earlier press landed (state §0.286)
+                else {
+                    // The job moved since the editor opened it ('stale'): the job as stored, with what the member typed over it
+                    // kept on screen — the editor stays open; its next Save sends their changes from the job as it is.
+                    if (answer === 'stale') {
+                        onSaved(r.body.job);
+                        // Functional (the review): what was typed while the request was out is kept too — and only while the
+                        // editor still shows this job (the list stays live: another job picked meanwhile is never rebased).
+                        setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job) : d));
+                        if (opened.current?.id === draft.id) opened.current = { ...r.body.job };
+                    }
+                    throw refusalError(r.words, r.heard);
+                }
+            } else {
+                data = await res.json().catch(() => ({}));
             }
-            const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (data.job) { onSaved(data.job); setSelectedId(data.job.id); }
+            // Landed: the draft rebased onto the job as stored too (the review) — a field another member changed since the
+            // editor opened, untouched here, takes the stored value; else the next Save sent the old one back, its status
+            // with a fromStatus that passed. One whose answer cannot be read is kept as sent, in both copies and the base.
+            const stored = data.job || { ...(selected || base), ...sentOf(body) };
+            onSaved(stored);
+            // Only while the editor still shows this job (the list stays live while a Save is out).
+            setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, stored) : d));
+            if (opened.current?.id === draft.id) opened.current = { ...stored };
+            if (data.job) setSelectedId(data.job.id);
             setStatus({ kind: 'ok', msg: 'Saved' });
         } catch (e) {
             setStatus({ kind: 'err', msg: thrownSaid(e, subject, 'saved') });   // maybe (state §0.263)
@@ -5526,6 +5554,68 @@ const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate,
 };
 
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
+// A job as the board and the crew builder read it, from the job as the server holds it (state §0.286: one mapping — the
+// load, and every job a write answers with, adopted into both copies by adoptJob; `_raw` the job as stored, what a
+// sender diffs against).
+const boardJobOf = (j, customers) => {
+    const cust = (customers || []).find(c => c.id === j.customerId);
+    // Convert scheduledStart "HH:MM" to decimal hour for timeline. Only a
+    // job that is actually scheduled has a placed start: an unscheduled
+    // job's scheduledStart is its PREFERRED time (§0.112), and a crew
+    // held on it (§0.115) must not read as booked at that hour.
+    let startHr = null;
+    if (j.scheduledStart && j.status !== 'unscheduled') {
+        const [hh, mm] = j.scheduledStart.split(':').map(Number);
+        startHr = hh + mm / 60;
+    }
+    return {
+        id:             j.id,
+        jobNumber:      j.jobNumber,
+        opportunityId:  j.opportunityId,
+        customer:       cust?.name || j.title,
+        address:        cust ? `${cust.billingAddress || ''}, ${cust.billingCity || ''}`.trim().replace(/^,\s*/, '') : '',
+        needSkills:     j.needSkills || [],
+        crewSize:       j.crewSize || ([j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1),
+        durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
+        priority:       normalisePriority(j.priority),
+        window:         queueWindow(j),
+        // equipment_ids stores required equipment CATEGORIES, not asset
+        // ids. Asset-level checkout is tracked the other way round, on
+        // dispatch_equipment.checkedOutJobId.
+        equipCategories: j.equipmentIds || [],
+        // …and the units reserved for it at scheduling (§0.116).
+        assignedEquipment: Array.isArray(j.assignedEquipmentIds) ? j.assignedEquipmentIds : [],
+        requiredVehicleType: j.requiredVehicleType || null,
+        servicePlanId:  j.servicePlanId || null,
+        planDueDate:    j.planDueDate   || null,
+        // Customer-facing notifications (state §0.111): the status
+        // link's token and the trail of what was sent, shown on the job.
+        publicToken:    j.publicToken || null,
+        customerNotifications: Array.isArray(j.customerNotifications) ? j.customerNotifications : [],
+        value:          parseFloat(j.invoiceAmount || 0),
+        // Was hardcoded 'Journeyman', discarding the stored requirement —
+        // so every licence blocker compared against a constant.
+        minLicense:     j.minLicense || null,
+        // Comes from the customer record, not the current assignment.
+        // Was `j.assignedTechId || null`, which made the crew-builder
+        // preference rule circular: null on every unassigned job — the
+        // only case the builder runs on — and on an assigned job it
+        // handed the bonus to the tech who was already on it.
+        preferredTechId: cust?.preferredTechId || null,
+        assignedTechIds: [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean),
+        start:          startHr,
+        status:         j.status,
+        trade:          j.trade,
+        jobType:        j.jobType,
+        scheduledDate:  j.scheduledDate,
+        scheduledStart: j.scheduledStart || null,
+        locationId:     j.locationId,
+        customerId:     j.customerId,
+        // raw DB fields preserved for saves
+        _raw:           j,
+    };
+};
+
 export default function DispatchTab() {
     const { settings, opportunities, accounts, addAudit, userRole, showConfirm } = useApp();
 
@@ -5613,6 +5703,22 @@ export default function DispatchTab() {
     const [planVisits, setPlanVisits] = useState([]);
     const [visitActionError, setVisitActionError] = useState('');
     const [customers,  setCustomers]  = useState([]);
+    // A job as the server answered with it (state §0.286): into both copies at once — the Jobs view's (jobsRaw) and the
+    // board's (jobs, its `_raw` too, which each sender diffs against). Schedule now, Hold, Mass-schedule and the time-off
+    // unassign set the board alone: a job scheduled and then opened in Jobs showed as it was loaded, and its Save wrote that
+    // back. A board row's own extras (a title the Jobs view set) are kept.
+    const adoptJob = (row) => {
+        if (!row?.id) return;
+        setJobsRaw(prev => prev.map(j => (j.id === row.id ? row : j)));
+        setJobs(prev => prev.map(j => (j.id === row.id ? { ...j, ...boardJobOf(row, customers) } : j)));
+    };
+    // A press that landed with an answer that cannot be read is kept as sent (state §0.263) — in both copies and the base
+    // each sender diffs against, not the board row alone (§0.286, the review: the next press could send nothing and say done).
+    const keepSent = (id, sent) => {
+        if (!id || !sent) return;
+        setJobsRaw(prev => prev.map(j => (j.id === id ? { ...j, ...sent } : j)));
+        setJobs(prev => prev.map(j => (j.id === id ? { ...j, _raw: { ...(j._raw || {}), ...sent } } : j)));
+    };
     const [loading,    setLoading]    = useState(true);
     const [loadError,  setLoadError]  = useState('');
 
@@ -5929,65 +6035,9 @@ export default function DispatchTab() {
                 });
                 dbTechs.forEach(t => { t.hoursThisWeek = Math.round((hoursMap[t.id] || 0) * 10) / 10; });
 
-                // Normalise jobs — map DB shape to what BoardView/CrewBuilder expect
-                const normJobs = dbJobs.map(j => {
-                    const cust = (custsData.customers || []).find(c => c.id === j.customerId);
-                    // Convert scheduledStart "HH:MM" to decimal hour for timeline. Only a
-                    // job that is actually scheduled has a placed start: an unscheduled
-                    // job's scheduledStart is its PREFERRED time (§0.112), and a crew
-                    // held on it (§0.115) must not read as booked at that hour.
-                    let startHr = null;
-                    if (j.scheduledStart && j.status !== 'unscheduled') {
-                        const [hh, mm] = j.scheduledStart.split(':').map(Number);
-                        startHr = hh + mm / 60;
-                    }
-                    return {
-                        id:             j.id,
-                        jobNumber:      j.jobNumber,
-                        opportunityId:  j.opportunityId,
-                        customer:       cust?.name || j.title,
-                        address:        cust ? `${cust.billingAddress || ''}, ${cust.billingCity || ''}`.trim().replace(/^,\s*/, '') : '',
-                        needSkills:     j.needSkills || [],
-                        crewSize:       j.crewSize || ([j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1),
-                        durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
-                        priority:       normalisePriority(j.priority),
-                        window:         queueWindow(j),
-                        // equipment_ids stores required equipment CATEGORIES, not asset
-                        // ids. Asset-level checkout is tracked the other way round, on
-                        // dispatch_equipment.checkedOutJobId.
-                        equipCategories: j.equipmentIds || [],
-                        // …and the units reserved for it at scheduling (§0.116).
-                        assignedEquipment: Array.isArray(j.assignedEquipmentIds) ? j.assignedEquipmentIds : [],
-                        requiredVehicleType: j.requiredVehicleType || null,
-                        servicePlanId:  j.servicePlanId || null,
-                        planDueDate:    j.planDueDate   || null,
-                        // Customer-facing notifications (state §0.111): the status
-                        // link's token and the trail of what was sent, shown on the job.
-                        publicToken:    j.publicToken || null,
-                        customerNotifications: Array.isArray(j.customerNotifications) ? j.customerNotifications : [],
-                        value:          parseFloat(j.invoiceAmount || 0),
-                        // Was hardcoded 'Journeyman', discarding the stored requirement —
-                        // so every licence blocker compared against a constant.
-                        minLicense:     j.minLicense || null,
-                        // Comes from the customer record, not the current assignment.
-                        // Was `j.assignedTechId || null`, which made the crew-builder
-                        // preference rule circular: null on every unassigned job — the
-                        // only case the builder runs on — and on an assigned job it
-                        // handed the bonus to the tech who was already on it.
-                        preferredTechId: cust?.preferredTechId || null,
-                        assignedTechIds: [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean),
-                        start:          startHr,
-                        status:         j.status,
-                        trade:          j.trade,
-                        jobType:        j.jobType,
-                        scheduledDate:  j.scheduledDate,
-                        scheduledStart: j.scheduledStart || null,
-                        locationId:     j.locationId,
-                        customerId:     j.customerId,
-                        // raw DB fields preserved for saves
-                        _raw:           j,
-                    };
-                });
+                // Normalise jobs — map DB shape to what BoardView/CrewBuilder expect (boardJobOf, state §0.286: the
+                // one mapping, which a job the server answers with is put through too — adoptJob)
+                const normJobs = dbJobs.map(j => boardJobOf(j, custsData.customers || []));
 
                 // Closed Won opportunities are surfaced as synthetic rows, but that
                 // derivation lives in a useMemo below — it reads job templates and
@@ -6221,7 +6271,8 @@ export default function DispatchTab() {
                 assignedTechIds: [],
                 start:           null,
                 status:          'unscheduled',
-                _raw:            data,
+                // The job as stored — what a sender diffs against (state §0.286); it held the whole answer, `{ job }`.
+                _raw:            saved,
             };
             setJobs(prev => [optimistic, ...prev]);
             // The Jobs view lists the jobs as stored (jobsRaw): the job made joins it as the server answered it — it showed
@@ -6315,6 +6366,9 @@ export default function DispatchTab() {
         let done = 0, failed = 0;
         let firstError = '';   // the server's words for the first job refused (state §0.201) — it said 'HTTP 404'
         const applied = [];
+        // The jobs as the server answered with them, and those that moved since the plan was made (state §0.286).
+        const adopted = [], moved = [];
+        const asSent = new Map();   // landed, its answer unreadable: kept as sent (state §0.286)
         // Units reserved earlier in this same pass are not offered again (§0.116).
         const reservedThisRun = [];
         for (const pr of massPlan.proposals) {
@@ -6327,23 +6381,33 @@ export default function DispatchTab() {
                 const dur    = pr.job.durationHrs || 2;
                 const startS = hhmm(pr.startHr);
                 const endS   = hhmm(pr.startHr + dur);
-                const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(pr.job.id), {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: pr.job.id, status: 'scheduled',
-                        // The whole crew is persisted, not just the lead. This used
-                        // to send `coTechIds: []`, so a three-tech proposal was
-                        // written as a one-tech job.
-                        assignedTechId: pr.tech.id,
-                        coTechIds: (pr.crew || []).slice(1).map(t => t.id),
-                        scheduledDate: pr.dateStr, scheduledStart: startS, scheduledEnd: endS,
-                        timeSlot: 'exact',
-                        assignedEquipmentIds: pr.assignedEquipment,
-                    }),
-                });
-                // The house words (state §0.248, Part 11): the server's with their ref, else "The server returned N."
-                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
+                // Only what the plan changes from the job as the board holds it now, the status it moves from named (state
+                // §0.286). The whole crew is persisted, not just the lead (it once sent `coTechIds: []`).
+                const held = (jobs.find(j => j.id === pr.job.id) || pr.job)._raw;
+                const body = jobChanges(held, scheduleFields({ leadId: pr.tech.id, coIds: (pr.crew || []).slice(1).map(t => t.id),
+                    date: pr.dateStr, start: startS, end: endS, units: pr.assignedEquipment }), pr.job.id, { checkStatus: true });
+                if (body) {
+                    const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(pr.job.id), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    // The house words (state §0.248, Part 11): the server's with their ref, else "The server returned N."
+                    if (!res.ok) {
+                        const r = await writeRefusalOf(res);
+                        const answer = jobAnswerOf(res.status, r.body, pr.job.id);
+                        if (answer === 'already') adopted.push(r.body.job);   // an earlier press landed
+                        else {
+                            // The job moved since the plan read it: the job as stored, and it leaves the panel — sent again
+                            // it would only be refused again; a new Mass-schedule plans it afresh.
+                            if (answer === 'stale') { adopted.push(r.body.job); moved.push(pr); }
+                            throw refusalError(r.words, r.heard);
+                        }
+                    } else {
+                        const saved = (await res.json().catch(() => ({}))).job;
+                        if (saved) adopted.push(saved); else asSent.set(pr.job.id, sentOf(body));
+                    }
+                }
                 applied.push(pr);
                 reservedThisRun.push(...pr.assignedEquipment);
                 done += 1;
@@ -6358,7 +6422,11 @@ export default function DispatchTab() {
         }
         if (!stillOrg(askedOrg)) return;   // no audit row filed in the new org
 
+        // The jobs as the server answered with them, into both copies (state §0.286); one whose answer could not be read, as sent.
+        adopted.forEach(adoptJob);
+        asSent.forEach((sent, id) => keepSent(id, sent));
         setJobs(prev => prev.map(j => {
+            if (adopted.some(a => a.id === j.id)) return j;
             const pr = applied.find(a => a.job.id === j.id);
             // Whole crew, not just the lead — otherwise the board shows a
             // one-tech job until the next reload contradicts it.
@@ -6378,8 +6446,9 @@ export default function DispatchTab() {
 
         setMassSaving(false);
         if (!failed) setMassPlan(null);
-        // What landed leaves the panel: a second press sends only the jobs still to schedule (state §0.201).
-        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr)) });
+        // What landed leaves the panel: a second press sends only the jobs still to schedule (state §0.201) — and a job that
+        // moved since the plan was made leaves it too (state §0.286).
+        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr) && !moved.includes(pr)) });
     };
 
     // Availability writes. Schedule blocks are dated exceptions; the weekly
@@ -6421,24 +6490,34 @@ export default function DispatchTab() {
         if (!unassignJobIds.length) return;
 
         const freed = [], notFreed = [], maybeFreed = [];
+        const adopted = [];   // the jobs as the server answered with them (state §0.286)
+        const asSent = new Map();   // landed, its answer unreadable: kept as sent
         for (const jobId of unassignJobIds) {
             if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
+            // Only what the time off changes from the job as the board holds it, the status it moves from named (state
+            // §0.286) — its units released by name. A job already back in the queue with no crew needs no write.
+            const body = jobChanges((jobs.find(j => j.id === jobId) || {})._raw, unassignFields(), jobId, { checkStatus: true });
+            if (!body) { freed.push(jobId); continue; }
             try {
                 const r = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(jobId), {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: jobId, status: 'unscheduled',
-                        assignedTechId: null, coTechIds: [],
-                        scheduledStart: null, scheduledEnd: null,
-                    }),
+                    body: JSON.stringify(body),
                 });
-                if (r.ok) freed.push(jobId);
-                else { const w = await writeRefusalOf(r); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }
+                if (r.ok) { freed.push(jobId); const saved = (await r.json().catch(() => ({}))).job; if (saved) adopted.push(saved); else asSent.set(jobId, sentOf(body)); }
+                else {
+                    const w = await writeRefusalOf(r);
+                    const answer = jobAnswerOf(r.status, w.body, jobId);
+                    if (answer === 'already') { freed.push(jobId); adopted.push(w.body.job); }   // an earlier press landed
+                    // The job moved since the board read it: the job as stored, and said by name, never returned unseen.
+                    else { if (answer === 'stale') adopted.push(w.body.job); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }
+                }
             } catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }
         }
 
         if (!stillOrg(askedOrg)) return;   // and no audit row filed in the new org
-        setJobs(prev => prev.map(j => freed.includes(j.id)
+        adopted.forEach(adoptJob);
+        asSent.forEach((sent, id) => keepSent(id, sent));
+        setJobs(prev => prev.map(j => freed.includes(j.id) && !adopted.some(a => a.id === j.id)
             ? { ...j, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] }
             : j));
 
@@ -6574,15 +6653,10 @@ export default function DispatchTab() {
 
         // The row moved as sent, or as the server stored it (`saved`): by a landed move, and by one whose answer proves
         // nothing (state §0.263, the unknown-save rule — Jeff's Q2: the change kept as sent, said as maybe).
-        const moveRow = (saved) => setJobs(prev => prev.map(j => j.id === job.id
-            ? { ...j,
-                scheduledDate:   saved?.scheduledDate ?? toDate,
-                assignedTechIds: plan.crew,
-                window:          saved ? queueWindow(saved) : j.window,
-                assignedEquipment: reserved ?? j.assignedEquipment,
-                // The server decided and recorded the customer notification (§0.111).
-                publicToken: saved?.publicToken ?? j.publicToken ?? null,
-                customerNotifications: Array.isArray(saved?.customerNotifications) ? saved.customerNotifications : (j.customerNotifications || []) }
+        // A move that landed with an answer that cannot be read, or whose answer proves nothing, moves the row as sent
+        // (state §0.263); one the server answered is adopted whole (adoptJob, state §0.286).
+        const moveRow = () => setJobs(prev => prev.map(j => j.id === job.id
+            ? { ...j, scheduledDate: toDate, assignedTechIds: plan.crew, assignedEquipment: reserved ?? j.assignedEquipment }
             : j));
         const commit = async (overridden) => {
             setWeekMove({ busy: true, error: '', notice: '' });
@@ -6601,8 +6675,9 @@ export default function DispatchTab() {
                 const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read moves the row as sent
                 if (!stillOrg(askedOrg)) return;
                 const saved = data.job || null;
-                moveRow(saved);
-                if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));
+                // The job as the server answered with it, into both copies (state §0.286: its `_raw` too, which the next
+                // sender diffs against); one whose answer could not be read, moved as sent.
+                if (saved) adoptJob(saved); else { moveRow(); keepSent(job.id, sentOf(payload)); }
                 if (addAudit) {
                     addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,
                         `Moved from ${job.scheduledDate}${fromTech ? ` · ${fromTech.name}` : ''} to ${where}`
@@ -6615,7 +6690,7 @@ export default function DispatchTab() {
                 weekMoveTimer.current = setTimeout(() => setWeekMove(st => ({ ...st, notice: '' })), 8000);
             } catch (e) {
                 if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
-                if (unknownOf(e)) { moveRow(null); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }
+                if (unknownOf(e)) { moveRow(); keepSent(job.id, sentOf(payload)); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }
                 setWeekMove({ busy: false, error: failureWords(e), notice: '' });   // plain words (state §0.248)
             }
         };
@@ -6915,25 +6990,9 @@ export default function DispatchTab() {
                         licenseLevels={licLevels}
                         categories={settings?.dispatchTrades || []}
                         jobTypes={settings?.dispatchJobTypes || []}
-                        onSaved={saved => {
-                            setJobsRaw(prev => prev.map(j => j.id === saved.id ? saved : j));
-                            // Keep the board in step without a reload.
-                            setJobs(prev => prev.map(j => j.id === saved.id
-                                ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
-                                    status: saved.status, scheduledDate: saved.scheduledDate,
-                                    scheduledStart: saved.scheduledStart || null,
-                                    window: queueWindow(saved),
-                                    equipCategories: Array.isArray(saved.equipmentIds) ? saved.equipmentIds : [],
-                                    assignedEquipment: Array.isArray(saved.assignedEquipmentIds) ? saved.assignedEquipmentIds : [],
-                                    start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,
-                                    durationHrs: (saved.durationMinutes || 120) / 60,
-                                    crewSize: saved.crewSize || j.crewSize,
-                                    minLicense: saved.minLicense || null,
-                                    // The invoice mirror (§0.149): invoices.mjs writes it, the board reads it.
-                                    value: parseFloat(saved.invoiceAmount || 0),
-                                    needSkills: saved.needSkills || [] }
-                                : j));
-                        }}/>
+                        // Both copies from the job as saved (state §0.286), the board's title kept in step; the invoice mirror
+                        // (§0.149) rides the same answer.
+                        onSaved={saved => { adoptJob(saved); setJobs(prev => prev.map(j => (j.id === saved.id ? { ...j, title: saved.title } : j))); }}/>
                 ) : view === 'invoices' ? (
                     <InvoicesView customers={customers} jobsRaw={jobsRaw} onOpenJob={openJobRecord}/>
                 ) : view === 'schedule' ? (
@@ -6998,24 +7057,30 @@ export default function DispatchTab() {
                         onSelectJob={setSelectedJobId}
                         onOpenJob={openJobRecord}
                         onBack={() => setView('board')}
-                        onHeld={({ jobId, jobName, techIds, crewNames }) => {
+                        onAdopt={adoptJob}
+                        onHeld={({ jobId, jobName, techIds, crewNames, serverJob, sent }) => {
                             // Crew on the job, no time: the week board shows it on their row as
-                            // TBD; the queue and the day board's rail still list it (§0.115).
-                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] } : j));
+                            // TBD; the queue and the day board's rail still list it (§0.115). The job as the server
+                            // answered with it, into both copies (state §0.286); one whose answer could not be read, as sent.
+                            if (serverJob) adoptJob(serverJob);
+                            else keepSent(jobId, sent);
+                            if (!serverJob) setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] } : j));
                             if (addAudit) {
                                 addAudit(techIds.length ? 'dispatch.crew.hold' : 'dispatch.crew.release', 'dispatch_job', jobId, jobName,
                                     techIds.length ? `Crew held for group schedule: ${crewNames.join(', ')}` : 'Held crew released');
                             }
                         }}
-                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob, assignedEquipment = [] }) => {
-                            setJobs(prev => prev.map(j => j.id === jobId
+                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob, sent, assignedEquipment = [] }) => {
+                            // The job as the server answered with it, into both copies (state §0.286); one whose answer
+                            // could not be read, as sent.
+                            if (serverJob) adoptJob(serverJob);
+                            else keepSent(jobId, sent);
+                            if (!serverJob) setJobs(prev => prev.map(j => j.id === jobId
                                 ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled',
                                     window: startTime, scheduledDate: startDate,
-                                    assignedEquipment,
-                                    // The server decided and recorded the customer notification (§0.111).
-                                    publicToken: serverJob?.publicToken ?? j.publicToken ?? null,
-                                    customerNotifications: Array.isArray(serverJob?.customerNotifications) ? serverJob.customerNotifications : (j.customerNotifications || []) }
+                                    assignedEquipment }
                                 : j));
+                            // The customer notification the server decided and recorded (§0.111) arrives with its job, adopted above.
                             if (addAudit) {
                                 addAudit(
                                     overridden.length ? 'dispatch.schedule.override' : 'dispatch.schedule',

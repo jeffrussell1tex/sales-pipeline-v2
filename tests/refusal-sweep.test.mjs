@@ -84,7 +84,8 @@ import { quotePdfOf } from '../src/utils/quotePdfAnswer.js';
 import { quoteTotals } from '../src/utils/quoteTotals.js';
 import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
 import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
-import { esc } from '../src/utils/customerNotifications.js';
+import { esc, to12h } from '../src/utils/customerNotifications.js';
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, jobAnswerOf, sentOf } from '../src/utils/jobChanges.js';
 import { T } from '../src/tokens.js';
 import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusal, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
 import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
@@ -1617,32 +1618,76 @@ test('Part 5b: WIRING — the Sync reads the ok check first; its failure is kept
 // Fragment), and saveBlock checks stillOrg before each PUT and before anything it says.
 const DISPATCH = 'src/Tabs/DispatchTab.jsx';
 const dispatchSrc = () => code(read(DISPATCH));
-const BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, _isNew: true });
+// Since §0.286 (Jeff, 22 Nov: "Do your recommended") every office save sends only what it changed from the job as the
+// board holds it (`_raw`), and adopts the job the server answers with into both copies through the parent's adoptJob over
+// the board's one mapping, boardJobOf. Both are extracted from DispatchTab.jsx and built over their own module-scope
+// helpers (PRIORITY_ALIASES, normalisePriority, queueWindow) and the real to12h — never stubs.
+let boardJobOfBuilt = null;
+const boardJobOfReal = () => {
+    if (!boardJobOfBuilt) {
+        const d = dispatchSrc();
+        const src = [between(d, 'const PRIORITY_ALIASES = ', ';\n') + ';', between(d, 'const normalisePriority = ', ';\n') + ';',
+            between(d, 'const queueWindow = (j) => {', '\n};') + '\n};', between(d, 'const boardJobOf = (j, customers) => {', '\n};') + '\n};'].join('\n');
+        boardJobOfBuilt = new Function('to12h', `${src}\nreturn boardJobOf;`)(to12h);
+    }
+    return boardJobOfBuilt;
+};
+// The parent's adoptJob over a test's setters; each row it is handed recorded in `adopted`.
+const adoptJobOf = ({ setJobsRaw = () => {}, setJobs, customers = [], adopted = [] }) => {
+    const fn = new Function('setJobsRaw', 'setJobs', 'boardJobOf', 'customers',
+        `${between(dispatchSrc(), '    const adoptJob = (row) => {', '\n    };')}\n    };\nreturn adoptJob;`)(setJobsRaw, setJobs, boardJobOfReal(), customers);
+    return (row) => { adopted.push(row); fn(row); };
+};
+// The parent's keepSent over a test's setters (state §0.286, the review): a press that landed with an answer that cannot
+// be read is kept as sent in both copies — the Jobs view's (jobsRaw) and the board row's `_raw`, the next sender's base.
+// Each call recorded in `kept` as [id, sent].
+const keepSentOf = ({ setJobsRaw = () => {}, setJobs, kept = [] }) => {
+    const fn = new Function('setJobsRaw', 'setJobs',
+        `${between(dispatchSrc(), '    const keepSent = (id, sent) => {', '\n    };')}\n    };\nreturn keepSent;`)(setJobsRaw, setJobs);
+    return (id, sent) => { kept.push([id, sent]); fn(id, sent); };
+};
+const BLOCK =Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, _isNew: true });
 const STORED_BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, notes: 'stored' });
-const TJ1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', assignedTechIds: ['tech_1'], status: 'scheduled', start: 9 });
-const TJ2 = Object.freeze({ id: 'job_2', title: '', customer: 'Gutter clean', assignedTechIds: ['tech_1'], status: 'scheduled', start: 11 });
-const TJ3 = Object.freeze({ id: 'job_3', title: 'Filter swap', customer: 'Beta', assignedTechIds: ['tech_1'], status: 'scheduled', start: 14 });
+// Since §0.286 each board row holds the job as stored (`_raw`), which the unassign diffs against: job_1 holds a reserved
+// unit (released by name), job_2 and job_3 none.
+const TJ1_RAW = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16',
+    scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: ['eq_1'] });
+const TJ2_RAW = Object.freeze({ id: 'job_2', title: '', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16',
+    scheduledStart: '11:00', scheduledEnd: '12:00', timeSlot: 'exact', assignedEquipmentIds: [] });
+const TJ3_RAW = Object.freeze({ id: 'job_3', title: 'Filter swap', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-17',
+    scheduledStart: '14:00', scheduledEnd: '15:00', timeSlot: 'exact', assignedEquipmentIds: [] });
+const TJ1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', assignedTechIds: ['tech_1'], status: 'scheduled', start: 9, _raw: TJ1_RAW });
+const TJ2 = Object.freeze({ id: 'job_2', title: '', customer: 'Gutter clean', assignedTechIds: ['tech_1'], status: 'scheduled', start: 11, _raw: TJ2_RAW });
+const TJ3 = Object.freeze({ id: 'job_3', title: 'Filter swap', customer: 'Beta', assignedTechIds: ['tech_1'], status: 'scheduled', start: 14, _raw: TJ3_RAW });
+// Each job as the server stores it once its unassign lands — the answer a landed PUT hands back.
+const FREED_JOB = Object.fromEntries([TJ1_RAW, TJ2_RAW, TJ3_RAW].map((r) => [r.id, Object.freeze({ ...r, status: 'unscheduled', assignedTechId: null, coTechIds: [],
+    scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [] })]));
 const TECHS = [{ id: 'tech_1', firstName: 'Ann', lastName: 'Lee' }];
 const timeOff = async ({ blk = BLOCK, unassign = [], blockAnswer = answerOf(200, { block: STORED_BLOCK }), jobAnswers = {}, switchAt = -1,
     blocks = [], jobs = [TJ1, TJ2, TJ3], banner = 'An earlier save\'s words', onPut } = {}) => {
     const fn = between(dispatchSrc(), '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };') + '\n    };';
-    const st = { sent: [], bannerSets: [], blockSets: [], audit: [], views: [], selected: [], org: 'org_a',
-        banner: stateOf(banner), blocks: stateOf(blocks), jobs: stateOf(jobs) };
+    const st = { sent: [], bannerSets: [], blockSets: [], audit: [], views: [], selected: [], adopted: [], kept: [], org: 'org_a',
+        banner: stateOf(banner), blocks: stateOf(blocks), jobs: stateOf(jobs), raw: stateOf(jobs.map((j) => j._raw).filter(Boolean)) };
     const dbFetch = async (url, opts) => {
         st.sent.push([url, opts.method, opts.body ? JSON.parse(opts.body) : undefined]);
         if (st.sent.length - 1 === switchAt) st.org = 'org_b';
         const id = new URL(url, 'http://x.test').searchParams.get('id');
-        const a = url.includes('dispatch-schedule-blocks') ? blockAnswer : (jobAnswers[id] || answerOf(200, { job: { id } }));
+        const a = url.includes('dispatch-schedule-blocks') ? blockAnswer : (jobAnswers[id] || answerOf(200, { job: FREED_JOB[id] || { id } }));
         if (onPut && !url.includes('dispatch-schedule-blocks')) onPut(st.banner);
         if (a instanceof Error) throw a;
         return a;
     };
+    // Since §0.286 it reads the board's jobs (`jobs`, their `_raw`), the helpers of jobChanges.js and the parent's adoptJob;
+    // since §0.286's review sentOf and the parent's keepSent (a landed unassign whose answer cannot be read, kept as sent).
     const saveBlock = new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'notFreedWords', 'setUnassignError',
-        'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', ...U4_NAMES, 'maybeFreedWords', `${fn}\nreturn saveBlock;`)(
+        'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', ...U4_NAMES, 'maybeFreedWords',
+        'jobs', 'jobChanges', 'unassignFields', 'jobAnswerOf', 'adoptJob', 'sentOf', 'keepSent', `${fn}\nreturn saveBlock;`)(
         () => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, notFreedWords,
         (v) => { st.banner.set(v); st.bannerSets.push(st.banner.value); },
         (u) => { st.blockSets.push(u); st.blocks.set(u); }, st.jobs.set, TECHS, jobs,
-        (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v), ...U4, maybeFreedWords);
+        (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v), ...U4, maybeFreedWords,
+        jobs, jobChanges, unassignFields, jobAnswerOf, adoptJobOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, adopted: st.adopted }),
+        sentOf, keepSentOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, kept: st.kept }));
     st.threw = null;
     try { await saveBlock(blk, unassign); } catch (e) { st.threw = e; }
     return st;
@@ -1751,6 +1796,80 @@ test('Part 6a: an org switch during the unassigns — nothing more sent, nothing
     }
 });
 
+// Added in §0.286 (Jeff, 22 Nov: "Do your recommended"): an unassign sends only what the time off changes from the job as
+// the board holds it, the status it moves from named; the job the server answers with is adopted into both copies.
+test('§0.286 Part 6a: each unassign sends only what the time off changes, the status it moves from named; a job needing no write is freed unsent; landed, the job as stored in both copies — RUN', async () => {
+    const st = await timeOff({ unassign: ['job_1', 'job_2'] });
+    assert.deepEqual(st.sent.slice(1).map(([u, m, b]) => [u, m, b]), [
+        ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT', { id: 'job_1', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null,
+            assignedEquipmentIds: [], fromStatus: 'scheduled' }],
+        ['/.netlify/functions/dispatch-jobs?id=job_2', 'PUT', { id: 'job_2', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null,
+            fromStatus: 'scheduled' }],
+    ], 'REGRESSION: the whole job sent, the status it moved from left out, or job_1\'s reserved unit not released by name');
+    assert.deepEqual(st.adopted, [FREED_JOB.job_1, FREED_JOB.job_2], 'each job as the server answered with it');
+    assert.deepEqual(st.raw.value, [FREED_JOB.job_1, FREED_JOB.job_2, TJ3_RAW], 'REGRESSION: the Jobs view\'s copy (jobsRaw) left as loaded — its next Save wrote the old job back');
+    assert.deepEqual([st.jobs.value[0]._raw, st.jobs.value[0].status, st.jobs.value[0].assignedTechIds, st.jobs.value[0].start, st.jobs.value[0].assignedEquipment],
+        [FREED_JOB.job_1, 'unscheduled', [], null, []], 'the board row from the job as stored, its `_raw` the next sender\'s base');
+    assert.equal(st.jobs.value[2], TJ3, 'a job not in the time off untouched');
+    assert.deepEqual([st.bannerSets, st.views, st.selected], [[''], ['queue'], ['job_1']]);
+    // A job already back in the queue with no crew: no request, freed as before.
+    const QUEUED = Object.freeze({ ...TJ1, assignedTechIds: [], status: 'unscheduled', start: null, _raw: FREED_JOB.job_1 });
+    const none = await timeOff({ unassign: ['job_1', 'job_2'], jobs: [QUEUED, TJ2, TJ3] });
+    assert.deepEqual(none.sent.slice(1).map(([u]) => u), ['/.netlify/functions/dispatch-jobs?id=job_2'], 'REGRESSION: a write that changes nothing sent');
+    assert.deepEqual([none.views, none.selected, none.bannerSets], [['queue'], ['job_1'], ['']]);
+    assert.match(none.audit[0][4], /— 2 job\(s\) returned to the queue$/);
+    // Landed with an answer that cannot be read: freed as sent, nothing adopted. Moved in §0.286's review (it pinned the
+    // stored copy as it was — and passed only because sentOf was not handed in: the ReferenceError fell to the loop's catch,
+    // which said the job "may have been returned"): kept as sent in both copies — the Jobs view's and the board row's
+    // `_raw` — through the parent's keepSent, nothing said.
+    const SENT_1 = { status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [] };
+    const unread = await timeOff({ unassign: ['job_1'], jobAnswers: { job_1: answerOf(200, new SyntaxError('Unexpected token \'<\'')) } });
+    assert.deepEqual([unread.adopted, unread.kept, unread.bannerSets], [[], [['job_1', SENT_1]], ['']],
+        'REGRESSION: an unreadable landed unassign said as maybe, or not kept as sent');
+    assert.deepEqual(unread.raw.value, [{ ...TJ1_RAW, ...SENT_1 }, TJ2_RAW, TJ3_RAW], 'REGRESSION: the Jobs view\'s copy left as loaded — its next Save wrote the old job back');
+    assert.deepEqual(unread.jobs.value[0], { ...TJ1, _raw: { ...TJ1_RAW, ...SENT_1 }, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] });
+    // A press after it diffs against the job as sent: job_1 needs no write — never the old job's crew and time sent back.
+    assert.deepEqual(unread.jobs.value.slice(1), [TJ2, TJ3]);
+    const after = await timeOff({ unassign: ['job_1', 'job_2'], jobs: unread.jobs.value });
+    assert.deepEqual(after.sent.slice(1).map(([u]) => u), ['/.netlify/functions/dispatch-jobs?id=job_2'], 'REGRESSION: the base left as loaded — the next press re-sent job_1');
+    // Added in §0.286's review (checkStatus): a job the board holds already unscheduled — a crew held on it, its preferred
+    // time kept — still names the status and where it saw the job, so a job another member scheduled since is refused.
+    const HELD_RAW = Object.freeze({ ...TJ1_RAW, status: 'unscheduled' });
+    const held = await timeOff({ unassign: ['job_1'], jobs: [{ ...TJ1, status: 'unscheduled', start: null, _raw: HELD_RAW }, TJ2, TJ3] });
+    assert.deepEqual(held.sent[1][2], { id: 'job_1', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null,
+        assignedEquipmentIds: [], fromStatus: 'unscheduled' }, 'REGRESSION: an unchanged status left out — a job scheduled since by another member unassigned unchecked');
+});
+
+test('§0.286 Part 6a: a 409 \'stale\' unassign adopts the job as stored and says it by name, never freed; a 409 \'already\' is freed with its job; a job of another id is never adopted — RUN', async () => {
+    const STALE_JOB = Object.freeze({ ...TJ1_RAW, status: 'en_route' });
+    const STALE_WORDS = 'This job is en route now — it changed since you opened it. Nothing was saved.';
+    const stale = await timeOff({ unassign: ['job_1', 'job_2'], jobAnswers: { job_1: answerOf(409, { error: STALE_WORDS, code: 'stale', job: STALE_JOB }) } });
+    assert.equal(stale.threw, null);
+    assert.deepEqual(stale.adopted, [STALE_JOB, FREED_JOB.job_2], 'REGRESSION: the job as stored left unshown — the board still showed it as it was loaded');
+    assert.deepEqual([stale.jobs.value[0]._raw, stale.jobs.value[0].status, stale.jobs.value[0].assignedTechIds], [STALE_JOB, 'en_route', ['tech_1']],
+        'REGRESSION: a job another member moved shown as returned to the queue');
+    assert.deepEqual(stale.raw.value, [STALE_JOB, FREED_JOB.job_2, TJ3_RAW]);
+    assert.deepEqual(stale.bannerSets, ['', notFreedWords([{ id: 'job_1', words: STALE_WORDS }], [TJ1, TJ2, TJ3], 'Ann Lee', 2)], 'said by name, in the server\'s words');
+    assert.ok(stale.banner.value.includes(`Boiler service: ${STALE_WORDS.slice(0, -1)}`), stale.banner.value);
+    assert.deepEqual([stale.views, stale.selected], [['queue'], ['job_2']], 'only the freed job taken to the Queue');
+    assert.match(stale.audit[0][4], /— 1 job\(s\) returned to the queue — 1 failed$/);
+    // An earlier press that landed (its answer lost): freed with the job as stored, nothing said.
+    const already = await timeOff({ unassign: ['job_1'], jobAnswers: { job_1: answerOf(409, { error: 'This job is unscheduled already.', code: 'already', job: FREED_JOB.job_1 }) } });
+    assert.deepEqual([already.bannerSets, already.adopted, already.views, already.selected], [[''], [FREED_JOB.job_1], ['queue'], ['job_1']],
+        'REGRESSION: a press that landed said as not returned');
+    assert.deepEqual([already.jobs.value[0]._raw, already.jobs.value[0].status, already.raw.value[0]], [FREED_JOB.job_1, 'unscheduled', FREED_JOB.job_1]);
+    assert.match(already.audit[0][4], /— 1 job\(s\) returned to the queue$/);
+    // A 409 naming another job (or none): never adopted — the server's own refusal, said as not returned.
+    for (const body of [{ error: 'Nope.', code: 'stale', job: { ...STALE_JOB, id: 'job_9' } }, { error: 'Nope.', code: 'already', job: { ...FREED_JOB.job_1, id: 'job_9' } }, { error: 'Nope.', code: 'stale' }]) {
+        const other = await timeOff({ unassign: ['job_1'], jobAnswers: { job_1: answerOf(409, body) } });
+        assert.deepEqual([other.adopted, other.jobs.value[0], other.raw.value[0], other.views], [[], TJ1, TJ1_RAW, []], `REGRESSION: a job not pressed adopted (${JSON.stringify(body)})`);
+        assert.deepEqual(other.bannerSets, ['', notFreedWords([{ id: 'job_1', words: 'Nope.' }], [TJ1, TJ2, TJ3], 'Ann Lee', 1)]);
+    }
+    // After an org switch during a stale answer: nothing adopted, nothing said.
+    const moved = await timeOff({ unassign: ['job_1'], jobAnswers: { job_1: answerOf(409, { error: STALE_WORDS, code: 'stale', job: STALE_JOB }) }, switchAt: 1 });
+    assert.deepEqual([moved.adopted, moved.bannerSets, moved.jobs.value[0], moved.audit], [[], [''], TJ1, []]);
+});
+
 test('Part 6b: a refused block save throws the server\'s words — a 403 the role\'s sentence — before any unassign; nothing set — RUN', async () => {
     // Moved in §0.263 (the unknown-save rule, Part 4): each refusal carries whether it was the server's own (heard) —
     // only a 4xx in words; a wordless 403 is no longer the role's sentence, its words the status. The dialog's catch
@@ -1850,15 +1969,31 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     // Moved in §0.278: and landedBefore — the job card's press beaten by one in flight that made the same change is done.
     assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore } from '../utils/refusalWords.js';"));
     assert.ok(d.includes("import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';"));
+    // Added in §0.286: the office saves' one rule, the real helpers (the RUN tests hand in these same exports).
+    // Moved in §0.286's review: and sentOf (a landed press whose answer cannot be read, kept as sent).
+    assert.ok(d.includes("import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, jobAnswerOf, sentOf } from '../utils/jobChanges.js';"));
     const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
     // Moved in §0.263 (the unknown-save rule, Part 4): a refusal carries whether it was the server's own (refusalError);
     // an unreadable landed block is said in full (saidError); an unassign refused in the server's words is notFreed, any
     // other answer or a throw maybeFreed — said after it, in the same banner.
     order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', "if (!res.ok) { const refused = await writeRefusalOf(res, 'Your role cannot change availability.'); throw refusalError(refused.words, refused.heard); }", 'const data = await res.json()',
         'if (!saved && !unassignJobIds.length) throw saidError(unread);', 'if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }',
-        'else setBlocks(', 'const freed = [], notFreed = [], maybeFreed = [];', 'if (r.ok) freed.push(jobId);',
-        'else { const w = await writeRefusalOf(r); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }',
-        '} catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }', '// and no audit row', 'const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length)',
+        'else setBlocks(', 'const freed = [], notFreed = [], maybeFreed = [];',
+        // Moved in §0.286: only what the time off changes from the job as the board holds it (its `_raw`), the status it moves
+        // from named; a job needing no write freed without a request; a landed answer's job adopted; a 409 'already' is freed
+        // with its job, a 'stale' one adopted and said by name like any refusal in the server's words.
+        // Moved in §0.286's review: the status named whenever it sends (checkStatus); an unreadable landed answer kept as
+        // sent (asSent → the parent's keepSent, after the adoptions).
+        'const adopted = [];', 'const asSent = new Map();',
+        'const body = jobChanges((jobs.find(j => j.id === jobId) || {})._raw, unassignFields(), jobId, { checkStatus: true });',
+        'if (!body) { freed.push(jobId); continue; }', 'body: JSON.stringify(body),',
+        'if (r.ok) { freed.push(jobId); const saved = (await r.json().catch(() => ({}))).job; if (saved) adopted.push(saved); else asSent.set(jobId, sentOf(body)); }',
+        'const w = await writeRefusalOf(r);', 'const answer = jobAnswerOf(r.status, w.body, jobId);',
+        "if (answer === 'already') { freed.push(jobId); adopted.push(w.body.job); }",
+        "else { if (answer === 'stale') adopted.push(w.body.job); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }",
+        '} catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }', '// and no audit row', 'adopted.forEach(adoptJob);',
+        'asSent.forEach((sent, id) => keepSent(id, sent));',
+        'setJobs(prev => prev.map(j => freed.includes(j.id) && !adopted.some(a => a.id === j.id)', 'const notFreedSaid = notFreed.length ? notFreedWords(notFreed, jobsWithBridge, techLabel, unassignJobIds.length)',
         'if (notFreed.length) setUnassignError(prev => (prev ? `${prev} ${notFreedSaid}` : notFreedSaid));',
         "const maybeFreedSaid = maybeFreed.length ? maybeFreedWords(maybeFreed, jobsWithBridge) : '';",
         'if (maybeFreed.length) setUnassignError(prev => (prev ? `${prev} ${maybeFreedSaid}` : maybeFreedSaid));', "setView('queue');");
@@ -4600,31 +4735,38 @@ const p11Effect = (start, end, params) => {
 };
 
 // handleSchedule and writeHeldCrew (CrewBuilderView), extracted and run.
-const SJOB = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, scheduledDate: '2026-11-16', equipCategories: [] });
+// Since §0.286 the job as the board holds it (`_raw`), which the schedule and the hold diff against: unscheduled, a crew
+// (tech_9) held on it, a unit still reserved — so the schedule, the hold of tech_1 and the release each change something.
+const SJOB_RAW = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'unscheduled', assignedTechId: 'tech_9', coTechIds: [], scheduledDate: '2026-11-16',
+    scheduledStart: null, scheduledEnd: null, timeSlot: 'anytime', assignedEquipmentIds: ['eq_1'] });
+const SJOB = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, scheduledDate: '2026-11-16', equipCategories: [], _raw: SJOB_RAW });
 const STORED_JOB = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'scheduled', scheduledStart: '09:00' });
-const crewSave = async ({ answer, held = null, switchAt = -1 }) => {
-    const did = { sent: [], errors: [], notices: [], saving: [], scheduled: [], heldSaid: [], added: [] };
+const crewSave = async ({ answer, held = null, switchAt = -1, job = SJOB }) => {
+    const did = { sent: [], errors: [], notices: [], saving: [], scheduled: [], heldSaid: [], added: [], adopted: [] };
     const org = { now: 'org_a' };
     const fetch = p11Fetch(did, answer, org, { switchAt });
     const stillOrg = (o) => o === org.now;
     const techs = [{ id: 'tech_1', name: 'Ann Lee' }];
+    // Since §0.286: jobChanges.js's helpers, and CrewBuilderView's onAdopt (the parent's adoptJob), recorded; since §0.286's
+    // review sentOf too — onScheduled and onHeld are handed what was sent (`sent`), kept by the parent when no job is read.
+    const onAdopt = (j) => did.adopted.push(j);
     if (held) {
         const writeHeldCrew = p10Fn(DISPATCH, '    const writeHeldCrew = async (ids) => {', '\n    };',
             ['selectedJob', 'setScheduleError', 'setScheduleNotice', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'techs', 'onHeld',
-                'setAddedTechs', 'showNotice', 'failureWords', ...U4_NAMES], 'writeHeldCrew')(
-            SJOB, (v) => did.errors.push(v), () => {}, (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, techs,
-            (h) => did.heldSaid.push(h), (v) => did.added.push(v), (v) => did.notices.push(v), failureWords, ...U4);
+                'setAddedTechs', 'showNotice', 'failureWords', ...U4_NAMES, 'jobChanges', 'heldCrewFields', 'jobAnswerOf', 'onAdopt', 'sentOf'], 'writeHeldCrew')(
+            job, (v) => did.errors.push(v), () => {}, (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, techs,
+            (h) => did.heldSaid.push(h), (v) => did.added.push(v), (v) => did.notices.push(v), failureWords, ...U4, jobChanges, heldCrewFields, jobAnswerOf, onAdopt, sentOf);
         await writeHeldCrew(held);
     } else {
         const handleSchedule = p10Fn(DISPATCH, '    const handleSchedule = async () => {', '\n    };',
             ['addedTechs', 'selectedJob', 'scheduleDate', 'scheduleTime', 'setScheduleError', 'techs', 'shiftForDate', 'hhToNum', 'blocksOnDate', 'blocks',
                 'blockTypes', 'equipmentConflicts', 'jobs', 'equipUnits', 'describeConflict', 'pickEquipmentFor', 'overlappingRivals', 'setScheduleNotice',
                 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'candidates', 'onScheduled', 'showNotice', 'to12h', 'unitLabel',
-                'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'failureWords', ...U4_NAMES], 'handleSchedule')(
-            { tech_1: true }, SJOB, '2026-11-16', '09:00', (v) => did.errors.push(v), techs, () => null, (s) => Number(String(s).split(':')[0]), () => [], [],
-            [], () => [], [SJOB], [], String, () => ({ picked: [] }), () => [], () => {},
+                'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'failureWords', ...U4_NAMES, 'jobChanges', 'scheduleFields', 'jobAnswerOf', 'onAdopt', 'sentOf'], 'handleSchedule')(
+            { tech_1: true }, job, '2026-11-16', '09:00', (v) => did.errors.push(v), techs, () => null, (s) => Number(String(s).split(':')[0]), () => [], [],
+            [], () => [], [job], [], String, () => ({ picked: [] }), () => [], () => {},
             (v) => did.saving.push(v), () => 'org_a', fetch, stillOrg, readRefusal, [{ tech: techs[0], blockers: [] }], (s) => did.scheduled.push(s),
-            (v) => did.notices.push(v), (t) => t, (id) => id, (v) => did.added.push(v), () => {}, () => {}, failureWords, ...U4);
+            (v) => did.notices.push(v), (t) => t, (id) => id, (v) => did.added.push(v), () => {}, () => {}, failureWords, ...U4, jobChanges, scheduleFields, jobAnswerOf, onAdopt, sentOf);
         await handleSchedule();
     }
     return did;
@@ -4643,10 +4785,65 @@ test('Part 11: the schedule and the held crew — each refusal in the house word
             assert.equal(did.saving[did.saving.length - 1], false, 'the Save is free again');
         }
     }
-    // The schedule's PUT as before: the job, the crew and the time.
+    // The schedule's PUT: the job, the crew and the time. Moved in §0.286 (it pinned the status alone, the whole job sent):
+    // only what the press changes from the job as the board holds it — the crew whole, the appointment whole, the unit the
+    // job held released — and the status it moves from.
     const did = await crewSave({ answer: onceOf(500, { error: 'x' }) });
     assert.deepEqual([did.sent[0][0], did.sent[0][1]], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']);
-    assert.equal(did.sent[0][2].status, 'scheduled');
+    assert.deepEqual(did.sent[0][2], { id: 'job_1', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16', scheduledStart: '09:00',
+        scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: [], fromStatus: 'unscheduled' });
+    // The hold and the release: the crew whole and the unit released by name. Moved in §0.286's review (checkStatus — it
+    // pinned "the status unchanged, so neither it nor where it was"): a hold names the status and where it saw the job
+    // even when unchanged — a job another member scheduled since, held over the screen's unscheduled copy, landed
+    // unchecked and stayed scheduled on the held crew.
+    const hold = await crewSave({ answer: onceOf(500, { error: 'x' }), held: ['tech_1'] });
+    assert.deepEqual(hold.sent[0][2], { id: 'job_1', status: 'unscheduled', assignedTechId: 'tech_1', coTechIds: [], assignedEquipmentIds: [], fromStatus: 'unscheduled' },
+        'REGRESSION: a hold over an unscheduled copy sent without the status it saw');
+    const release = await crewSave({ answer: onceOf(500, { error: 'x' }), held: [] });
+    assert.deepEqual(release.sent[0][2], { id: 'job_1', status: 'unscheduled', assignedTechId: null, coTechIds: [], assignedEquipmentIds: [], fromStatus: 'unscheduled' });
+    // Added in §0.286's review: a schedule over a copy already scheduled (another time, another crew) names the status and
+    // where it saw it — 'scheduled' from 'scheduled' — so a job another member moved on since (en route) is refused.
+    const SCHED_RAW = Object.freeze({ ...SJOB_RAW, status: 'scheduled', assignedTechId: 'tech_9', scheduledStart: '13:00', scheduledEnd: '15:00', timeSlot: 'exact', assignedEquipmentIds: [] });
+    const resched = await crewSave({ answer: onceOf(500, { error: 'x' }), job: { ...SJOB, _raw: SCHED_RAW } });
+    assert.deepEqual(resched.sent[0][2], { id: 'job_1', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16', scheduledStart: '09:00',
+        scheduledEnd: '11:00', timeSlot: 'exact', fromStatus: 'scheduled' }, 'REGRESSION: a schedule over a scheduled copy sent without the status it saw');
+    // A hold over a copy already holding that crew with its units released: nothing to change, nothing sent — the status
+    // alone never makes a write (held as before, no job read).
+    const HELD_RAW = Object.freeze({ ...SJOB_RAW, assignedTechId: 'tech_1', assignedEquipmentIds: [] });
+    const heldSame = await crewSave({ answer: onceOf(500, {}), held: ['tech_1'], job: { ...SJOB, _raw: HELD_RAW } });
+    assert.deepEqual([heldSame.sent, heldSame.errors, heldSame.heldSaid.map((h) => [h.serverJob, h.sent])], [[], [''], [[null, null]]],
+        'REGRESSION: a write that changes nothing sent');
+});
+
+// Added in §0.286: the job moved since the screen read it (409 'stale') is adopted and said by name; an earlier press that
+// landed (409 'already') is done with the job as stored; a 409 about another job is never adopted; a press that changes
+// nothing sends nothing.
+test('§0.286 Part 11: the schedule and the held crew — a 409 \'stale\' adopts the job and says the server\'s words by name; a 409 \'already\' is landed with its job; never another job\'s — RUN', async () => {
+    const STALE_JOB = Object.freeze({ ...SJOB_RAW, status: 'en_route', assignedTechId: 'tech_2' });
+    const WORDS = 'This job is en route now — it changed since you opened it. Nothing was saved.';
+    for (const [held, subject] of [[null, 'schedule'], [['tech_1'], 'hold'], [[], 'release']]) {
+        const stale = await crewSave({ answer: onceOf(409, { error: WORDS, code: 'stale', job: STALE_JOB }), held });
+        assert.deepEqual(stale.adopted, [STALE_JOB], `${subject}: REGRESSION — the job as stored left unshown`);
+        assert.deepEqual(stale.errors, ['', `Boiler service: ${WORDS}`], `${subject}: the server's words, naming the job`);
+        assert.deepEqual([stale.scheduled, stale.heldSaid, stale.notices, stale.added], [[], [], [], []], `${subject}: nothing shown as done`);
+        assert.equal(stale.saving[stale.saving.length - 1], false);
+        const already = await crewSave({ answer: onceOf(409, { error: 'This job holds what you sent already.', code: 'already', job: STORED_JOB }), held });
+        assert.deepEqual([already.errors, already.adopted], [[''], []], `${subject}: REGRESSION — an earlier press that landed said as refused`);
+        if (held) assert.deepEqual(already.heldSaid.map((h) => h.serverJob), [STORED_JOB], 'held with the job as stored');
+        else assert.deepEqual(already.scheduled.map((s) => s.serverJob), [STORED_JOB], 'scheduled with the job as stored');
+        // A 409 naming another job, or none: never adopted, the server's own refusal said as it is.
+        for (const body of [{ error: 'Nope.', code: 'stale', job: { ...STALE_JOB, id: 'job_9' } }, { error: 'Nope.', code: 'already', job: { ...STORED_JOB, id: 'job_9' } }]) {
+            const other = await crewSave({ answer: onceOf(409, body), held });
+            assert.deepEqual([other.adopted, other.errors, other.scheduled, other.heldSaid], [[], ['', 'Nope.'], [], []], `${subject}: REGRESSION — a job not pressed adopted`);
+        }
+        // After an org switch: nothing adopted, nothing said.
+        const moved = await crewSave({ answer: onceOf(409, { error: WORDS, code: 'stale', job: STALE_JOB }), held, switchAt: 0 });
+        assert.deepEqual([moved.adopted, moved.errors], [[], ['']], `${subject}: REGRESSION — the old org's job adopted`);
+    }
+    // The job already holds the schedule: nothing sent, scheduled as before (no job read).
+    const placed = { ...SJOB, _raw: { ...SJOB_RAW, status: 'scheduled', assignedTechId: 'tech_1', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: [] } };
+    const same = await crewSave({ answer: onceOf(500, {}), job: placed });
+    assert.deepEqual([same.sent, same.errors, same.scheduled.map((s) => s.serverJob)], [[], [''], [null]], 'REGRESSION: a write that changes nothing sent');
 });
 
 test('Part 11: the schedule and the held crew — landed, as before; a landed answer that cannot be read keeps the job as sent — RUN', async () => {
@@ -4658,9 +4855,79 @@ test('Part 11: the schedule and the held crew — landed, as before; a landed an
     const unreadable = await crewSave({ answer: P11_UNREADABLE() });
     assert.deepEqual(unreadable.errors, ['']);
     assert.equal(unreadable.scheduled[0].serverJob, null, 'landed: the board keeps the job as sent, as before');
+    // Added in §0.286's review: what was sent handed up (sentOf — the body without its id and fromStatus), for the parent's
+    // keepSent; a landed answer that holds the job hands it too (the parent adopts the job, never the guess).
+    assert.deepEqual(unreadable.scheduled[0].sent, sentOf(unreadable.sent[0][2]));
+    assert.deepEqual(Object.keys(unreadable.scheduled[0].sent).sort(), ['assignedEquipmentIds', 'assignedTechId', 'coTechIds', 'scheduledDate', 'scheduledEnd', 'scheduledStart', 'status', 'timeSlot']);
+    assert.deepEqual(landed.scheduled[0].sent, sentOf(landed.sent[0][2]));
     const held = await crewSave({ answer: onceOf(200, { job: STORED_JOB }), held: ['tech_1'] });
     assert.deepEqual([held.errors, held.heldSaid.map((h) => h.crewNames)], [[''], [['Ann Lee']]]);
     assert.match(held.notices[0], /^Crew held — Ann Lee\./);
+    // Added in §0.286's review: the hold hands up the job as stored and what was sent.
+    assert.deepEqual(held.heldSaid.map((h) => [h.serverJob, h.sent]), [[STORED_JOB, sentOf(held.sent[0][2])]]);
+    const heldUnread = await crewSave({ answer: P11_UNREADABLE(), held: ['tech_1'] });
+    assert.deepEqual([heldUnread.errors, heldUnread.heldSaid.map((h) => [h.serverJob, h.sent])],
+        [[''], [[null, { status: 'unscheduled', assignedTechId: 'tech_1', coTechIds: [], assignedEquipmentIds: [] }]]]);
+});
+
+// CrewBuilderView's parent (DispatchTab): onScheduled and onHeld, extracted from the JSX and run over the real adoptJob and
+// keepSent (state §0.286's review) — a landed answer holding the job is adopted into both copies; one that cannot be read
+// is kept as sent in both copies and the board row's `_raw`, the base the next press diffs against.
+const crewParent = (rows) => {
+    const d = dispatchSrc();
+    const st = { jobs: stateOf(rows), raw: stateOf(rows.map((j) => j._raw)), adopted: [], kept: [], audits: [], selected: [] };
+    const adoptJob = adoptJobOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, adopted: st.adopted });
+    const keepSent = keepSentOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, kept: st.kept });
+    const cb = (prop, end) => new Function('adoptJob', 'keepSent', 'setJobs', 'addAudit', 'setSelectedJobId',
+        `return ${between(d, `${prop}={`, end).slice(prop.length + 2)}\n};`)(
+        adoptJob, keepSent, st.jobs.set, (...a) => st.audits.push(a), (v) => st.selected.push(v));
+    st.onHeld = cb('onHeld', '\n                        }}');
+    st.onScheduled = cb('onScheduled', '\n                        }}/>');
+    return st;
+};
+
+test('§0.286 review Part 11: the schedule and the held crew — a landed answer that cannot be read is kept as sent in both copies; the next press diffs against it — RUN', async () => {
+    const row = boardJobOfReal()(SJOB_RAW, []);
+    // Schedule now, landed, its answer unread: both copies hold what was sent.
+    const s = await crewSave({ answer: P11_UNREADABLE(), job: row });
+    const SENT = { status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16', scheduledStart: '09:00', scheduledEnd: '11:00',
+        timeSlot: 'exact', assignedEquipmentIds: [] };
+    assert.deepEqual([s.errors, s.scheduled.map((x) => [x.serverJob, x.sent])], [[''], [[null, SENT]]]);
+    const p = crewParent([row]);
+    p.onScheduled(s.scheduled[0]);
+    assert.deepEqual([p.adopted, p.kept], [[], [['job_1', SENT]]]);
+    assert.deepEqual(p.raw.value, [{ ...SJOB_RAW, ...SENT }], 'REGRESSION: the Jobs view\'s copy left as loaded — its next Save wrote the old job back');
+    assert.deepEqual([p.jobs.value[0]._raw, p.jobs.value[0].status, p.jobs.value[0].assignedTechIds, p.jobs.value[0].start], [{ ...SJOB_RAW, ...SENT }, 'scheduled', ['tech_1'], 9],
+        'REGRESSION: the board row moved as sent while its base stayed the old job');
+    assert.deepEqual([p.audits.length, p.selected], [1, [null]]);
+    // The next press, from the board row as it now stands: a hold of the same crew moves the status alone, from where the
+    // job was sent to — never the old job's crew and unit, and never from 'unscheduled' (the server refused it as stale).
+    const next = await crewSave({ answer: onceOf(500, { error: 'x' }), held: ['tech_1'], job: p.jobs.value[0] });
+    assert.deepEqual(next.sent[0][2], { id: 'job_1', status: 'unscheduled', fromStatus: 'scheduled' }, 'REGRESSION: the next press diffed against the job as loaded');
+    // Schedule now again, the same: nothing to send — done as before.
+    const again = await crewSave({ answer: onceOf(500, { error: 'x' }), job: p.jobs.value[0] });
+    assert.deepEqual([again.sent, again.errors], [[], ['']]);
+    // The hold, landed, its answer unread: likewise.
+    const h = await crewSave({ answer: P11_UNREADABLE(), held: ['tech_1'], job: row });
+    const HSENT = { status: 'unscheduled', assignedTechId: 'tech_1', coTechIds: [], assignedEquipmentIds: [] };
+    const ph = crewParent([row]);
+    ph.onHeld(h.heldSaid[0]);
+    assert.deepEqual([ph.adopted, ph.kept, ph.raw.value], [[], [['job_1', HSENT]], [{ ...SJOB_RAW, ...HSENT }]]);
+    assert.deepEqual([ph.jobs.value[0]._raw, ph.jobs.value[0].assignedTechIds, ph.jobs.value[0].window, ph.jobs.value[0].assignedEquipment], [{ ...SJOB_RAW, ...HSENT }, ['tech_1'], 'TBD', []]);
+    const afterHold = await crewSave({ answer: onceOf(500, { error: 'x' }), job: ph.jobs.value[0] });
+    assert.deepEqual(afterHold.sent[0][2], { id: 'job_1', status: 'scheduled', scheduledDate: '2026-11-16', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact',
+        fromStatus: 'unscheduled' }, 'REGRESSION: the held crew and released unit sent again — the base left as loaded');
+    // Landed with the job: adopted into both copies, nothing kept as sent, no guess over it.
+    const STORED = Object.freeze({ ...SJOB_RAW, ...SENT, publicToken: 'tok_1', customerNotifications: [{ kind: 'scheduled' }] });
+    const l = await crewSave({ answer: onceOf(200, { job: STORED }), job: row });
+    const pl = crewParent([row]);
+    pl.onScheduled(l.scheduled[0]);
+    assert.deepEqual([pl.adopted, pl.kept, pl.raw.value], [[STORED], [], [STORED]]);
+    assert.deepEqual([pl.jobs.value[0]._raw, pl.jobs.value[0].publicToken, pl.jobs.value[0].customerNotifications, pl.jobs.value[0].window], [STORED, 'tok_1', [{ kind: 'scheduled' }], '09:00']);
+    const lh = await crewSave({ answer: onceOf(200, { job: { ...SJOB_RAW, ...HSENT } }), held: ['tech_1'], job: row });
+    const plh = crewParent([row]);
+    plh.onHeld(lh.heldSaid[0]);
+    assert.deepEqual([plh.adopted, plh.kept, plh.jobs.value[0]._raw], [[{ ...SJOB_RAW, ...HSENT }], [], { ...SJOB_RAW, ...HSENT }]);
 });
 
 test('Part 11: the schedule and the held crew — an answer after an org switch, refused, landed or unsent, says and writes nothing — RUN', async () => {
@@ -4880,12 +5147,13 @@ test('Part 11: the Invoices list — a refusal or an unreadable answer is said, 
 const SEL = Object.freeze({ id: 'job_1', title: 'Boiler service', customerId: 'cust_1', locationId: 'dloc_1' });
 const LOC = Object.freeze({ id: 'dloc_1', address: '1 Main St', city: 'Austin', state: 'TX', zip: '78701' });
 const addressRead = async ({ answer, selected = SEL, cancelFirst = false }) => {
-    const did = { sent: [], drafts: [], statuses: [], locs: [], unread: [] };
+    const did = { sent: [], drafts: [], statuses: [], locs: [], unread: [], opened: { current: 'unset' } };
     const gate = p11Gate();
+    // Since §0.286 the effect also takes the job as the editor opened it (`opened`, JobsView's ref) — what its Save diffs against.
     const effect = p11Effect("() => {\n        setDraft(selected ? { ...selected } : null);", '\n    }, [selectedId]);',
-        ['selected', 'setDraft', 'setStatus', 'setLoc', 'setLocUnread', 'dbFetch'])(
+        ['selected', 'setDraft', 'setStatus', 'setLoc', 'setLocUnread', 'dbFetch', 'opened'])(
         selected, (v) => did.drafts.push(v), (v) => did.statuses.push(v), (v) => did.locs.push(v), (v) => did.unread.push(v),
-        p11Fetch(did, answer, { now: 'org_a' }, { gate }));
+        p11Fetch(did, answer, { now: 'org_a' }, { gate }), did.opened);
     const cleanup = effect();
     if (cancelFirst && cleanup) cleanup();
     gate.release();
@@ -4910,6 +5178,10 @@ test('Part 11 (Q20): the job\'s address — a read that failed says so in the pa
     assert.deepEqual([noCust.sent, noCust.unread, noCust.locs], [[], [false], [null]]);
     const noJob = await addressRead({ answer: onceOf(500, {}), selected: null });
     assert.deepEqual([noJob.sent, noJob.unread, noJob.drafts], [[], [false], [null]]);
+    // Added in §0.286: the job as opened is taken as the editor opens it — a copy, never the list's row; no job, none.
+    assert.deepEqual([landed.opened.current, noJob.opened.current], [{ ...SEL }, null]);
+    assert.notEqual(landed.opened.current, SEL);
+    assert.notEqual(landed.opened.current, landed.drafts[0], 'the draft and the job as opened are two copies');
     // Another job picked before the answer: nothing said on it.
     for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) {
         const late = await addressRead({ answer, cancelFirst: true });
@@ -4919,20 +5191,39 @@ test('Part 11 (Q20): the job\'s address — a read that failed says so in the pa
 
 // Since §0.263 (the unknown-save rule, Part 4) the save holds a new address's id per job (`newLocIds`, the component's
 // ref — handed in so presses can share it), and a landed address becomes the form's (`setLoc`, an updater over `loc`).
+// Since §0.286 the Save sends only what the draft changed from the job as the editor opened it (`opened`, JobsView's ref),
+// each side through editorFields: the job as opened here is unscheduled, and the default draft moves it to scheduled.
+const SEL_OPENED = Object.freeze({ ...SEL, durationMinutes: 120, crewSize: 1, status: 'unscheduled' });
 const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer = onceOf(200, { location: LOC }), loc = null, switchAt = -1,
-    newLocIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID() }) => {
-    const did = { sent: [], statuses: [], saving: [], saved: [], selected: [], locs: [] };
+    newLocIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID(), draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'scheduled' },
+    opened = { current: { ...SEL_OPENED } }, selected = { ...SEL_OPENED }, whileOut = null, switchDraft = null }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], selected: [], locs: [], drafts: [], opened };
     const org = { now: 'org_a' };
-    const draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'unscheduled' };
+    // Since §0.286's review setDraft is handed an updater (what was typed while the request was out is kept): the draft is
+    // held as React would hold it (`draftNow`) and each value it is set to recorded in `drafts`. `whileOut` is typed into it
+    // as the job's PUT goes out — the member's keystrokes while the request is out; `switchDraft` replaces it then (another
+    // job picked in the list: the selectedId effect's draft).
+    const draftNow = stateOf(draft);
+    const answerFor = (url) => {
+        if (url.includes('resource=locations')) return typeof locAnswer === 'function' ? locAnswer() : locAnswer;
+        if (whileOut) draftNow.set((d) => ({ ...d, ...whileOut }));
+        if (switchDraft) draftNow.set(switchDraft());
+        return jobAnswer;
+    };
+    // Moved in §0.286: addHoursHHMM is no longer DispatchTab's (the editor's end is editorFields'); the save takes the job as
+    // opened, jobChanges.js's helpers and setDraft (a stale refusal shows the job as stored with what was typed over it).
+    // Moved in §0.286's review: and `selected` (the job as the list holds it) and sentOf — a landed save whose answer
+    // cannot be read is kept as sent.
     const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft) return;\n        if (!(draft.title || '').trim())", '\n    };',
-        ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'addHoursHHMM', 'onSaved', 'setSelectedId', 'failureWords',
-            'newLocIds', 'setLoc', 'crypto', ...U4_NAMES], 'save')(
+        ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'onSaved', 'setSelectedId', 'failureWords',
+            'newLocIds', 'setLoc', 'crypto', ...U4_NAMES, 'opened', 'jobChanges', 'editorFields', 'rebaseDraft', 'jobAnswerOf', 'setDraft', 'selected', 'sentOf'], 'save')(
         draft, loc, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a',
-        p11Fetch(did, (url) => (url.includes('resource=locations') ? (typeof locAnswer === 'function' ? locAnswer() : locAnswer) : jobAnswer), org, { switchAt }), readRefusal, (o) => o === org.now,
-        (h) => h, (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords,
-        newLocIds, (u) => did.locs.push(typeof u === 'function' ? u(loc) : u), { randomUUID: uuid }, ...U4);
+        p11Fetch(did, answerFor, org, { switchAt }), readRefusal, (o) => o === org.now,
+        (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords,
+        newLocIds, (u) => did.locs.push(typeof u === 'function' ? u(loc) : u), { randomUUID: uuid }, ...U4,
+        opened, jobChanges, editorFields, rebaseDraft, jobAnswerOf, (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, selected, sentOf);
     await save();
-    return did;
+    return { ...did, draftNow: draftNow.value };
 };
 
 test('Part 11: the job record\'s save — the job\'s refusal in the house words (a 403 the role\'s), the address\'s named; nothing saved — RUN', async () => {
@@ -4990,11 +5281,23 @@ test('§0.263 Part 4: the job record\'s new address keeps one id across presses 
 test('Part 11: the job record\'s save — landed, as stored and the address\'s id; after an org switch nothing said, no job sent — RUN', async () => {
     const landed = await jobSave({ loc: LOC });
     assert.deepEqual(landed.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']]);
-    assert.equal(landed.sent[1][2].locationId, 'dloc_1');
+    // Moved in §0.286 (it pinned `locationId: 'dloc_1'` in the whole job sent): only what the draft changed from the job as
+    // opened, the status it moves from named — the job already stands at dloc_1, so its location is not sent again (a new
+    // address's id is: §0.263 Part 4 above, 'dloc_u1' and 'dloc_k').
+    assert.deepEqual(landed.sent[1][2], { id: 'job_1', status: 'scheduled', fromStatus: 'unscheduled' });
     assert.deepEqual(landed.locs, [{ ...LOC }], 'since §0.263 the form\'s address holds the id stored');
     assert.deepEqual([landed.saved, landed.selected, landed.statuses], [[STORED_JOB], ['job_1'], [null, { kind: 'ok', msg: 'Saved' }]]);
+    assert.deepEqual(landed.opened.current, { ...STORED_JOB }, 'since §0.286 the job as saved is the job as opened — the next Save diffs against it');
+    // Added in §0.286's review: the draft rebased onto the job as stored (what the member changed kept over it).
+    assert.deepEqual(landed.drafts, [{ ...STORED_JOB }]);
+    // Moved in §0.286's review (it pinned nothing handed up — `saved` [] — "as before"): landed with no job read, the job
+    // is kept as sent — the list's row with the body over it — in both copies (onSaved), the base (opened) and the draft;
+    // the editor stays on the job (no setSelectedId without a job read). Still "Saved".
     const unreadable = await jobSave({ jobAnswer: P11_UNREADABLE() });
-    assert.deepEqual([unreadable.saved, unreadable.statuses[1]], [[], { kind: 'ok', msg: 'Saved' }], 'landed with no job read: as before');
+    const AS_SENT = { ...SEL_OPENED, status: 'scheduled' };
+    assert.deepEqual([unreadable.saved, unreadable.selected, unreadable.statuses[1]], [[AS_SENT], [], { kind: 'ok', msg: 'Saved' }],
+        'REGRESSION: a landed save whose answer cannot be read left both copies as loaded — the next press could send nothing and say done');
+    assert.deepEqual([unreadable.opened.current, unreadable.drafts], [AS_SENT, [AS_SENT]]);
     for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error' }), P11_PAGE(), onceOf(200, { job: STORED_JOB })]) {
         const did = await jobSave({ jobAnswer: answer, switchAt: 0 });
         assert.deepEqual([did.statuses, did.saved], [[null], []], 'the job: REGRESSION — an answer from the org left said or written');
@@ -5002,6 +5305,124 @@ test('Part 11: the job record\'s save — landed, as stored and the address\'s i
     for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'Internal server error' }), onceOf(200, { location: LOC })]) {
         const did = await jobSave({ loc: LOC, locAnswer: answer, switchAt: 0 });
         assert.deepEqual([did.statuses, did.sent.length], [[null], 1], 'the address: REGRESSION — said in the new org, or the job sent with its token');
+    }
+});
+
+// Added in §0.286 (Jeff, 22 Nov: "Do your recommended"): the job record's Save sends only what the draft changed; nothing
+// changed sends nothing; a 409 'stale' shows the job as stored with what was typed over it, the editor open; a 409 'already'
+// is saved with the job as stored; a 409 about another job is never adopted.
+test('§0.286 Part 11: the job record\'s save — only what changed, the status it moves from; nothing changed sends nothing; \'stale\' rebases the draft, \'already\' is saved — RUN', async () => {
+    // Each field the editor sends, changed alone, sends that field alone (the appointment whole, its end from the start).
+    const edited = await jobSave({ draft: { ...SEL_OPENED, durationHrs: 2, priority: 'high', title: 'Boiler service (annual)' } });
+    assert.deepEqual(edited.sent[0][2], { id: 'job_1', title: 'Boiler service (annual)', priority: 'high' }, 'REGRESSION: the whole job sent, an untouched status written back');
+    const timed = await jobSave({ draft: { ...SEL_OPENED, durationHrs: 2, scheduledDate: '2026-11-18', scheduledStart: '08:30' } });
+    assert.deepEqual(timed.sent[0][2], { id: 'job_1', scheduledDate: '2026-11-18', scheduledStart: '08:30', scheduledEnd: '10:30', timeSlot: 'exact' });
+    // Nothing changed: no PUT — "No changes to save."; after an address that saved, "Saved".
+    const same = await jobSave({ draft: { ...SEL_OPENED, durationHrs: 2 } });
+    assert.deepEqual([same.sent, same.statuses, same.saved], [[], [null, { kind: 'ok', msg: 'No changes to save.' }], []], 'REGRESSION: a write that changes nothing sent');
+    const addressOnly = await jobSave({ draft: { ...SEL_OPENED, durationHrs: 2 }, loc: LOC });
+    assert.deepEqual([addressOnly.sent.map(([u]) => u), addressOnly.statuses[1]], [['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_1'], { kind: 'ok', msg: 'Saved' }]);
+    // Stale: another member moved the job since the editor opened it. The job as stored is handed up (both copies), the draft
+    // shows it with what was typed over it (the status move kept, the stored title taken), the job as opened is the stored
+    // one, and the server's words are said — the editor stays open.
+    const STORED_NOW = Object.freeze({ ...SEL_OPENED, title: 'Boiler service — renamed', status: 'en_route', priority: 'high' });
+    const WORDS = 'This job is en route now — it changed since you opened it. Nothing was saved.';
+    const opened = { current: { ...SEL_OPENED } };
+    const draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'scheduled' };
+    const stale = await jobSave({ jobAnswer: onceOf(409, { error: WORDS, code: 'stale', job: STORED_NOW }), draft, opened });
+    assert.deepEqual(stale.sent[0][2], { id: 'job_1', status: 'scheduled', fromStatus: 'unscheduled' });
+    assert.deepEqual(stale.saved, [STORED_NOW], 'REGRESSION: the job as stored left unshown');
+    assert.deepEqual(stale.statuses, [null, { kind: 'err', msg: WORDS }], 'the server\'s words, as they are');
+    assert.deepEqual(stale.selected, [], 'the editor stays on the job');
+    assert.deepEqual(stale.drafts, [{ ...STORED_NOW, status: 'scheduled' }], 'REGRESSION: the typed change lost, or the stale draft kept over the stored job');
+    assert.deepEqual(opened.current, { ...STORED_NOW }, 'the job as opened is the job as stored now');
+    // Its next Save sends the member's change from the job as it is — from en_route, never the old status.
+    const again = await jobSave({ draft: { ...stale.drafts[0], locationId: 'dloc_1' }, opened });
+    assert.deepEqual(again.sent[0][2], { id: 'job_1', status: 'scheduled', fromStatus: 'en_route' });
+    // Already: an earlier press landed, its answer lost — saved with the job as stored.
+    const already = await jobSave({ jobAnswer: onceOf(409, { error: 'This job is scheduled already.', code: 'already', job: STORED_JOB }) });
+    // Moved in §0.286's review (drafts [] — the draft left as typed): a landed answer rebases the draft onto the job as stored.
+    assert.deepEqual([already.saved, already.selected, already.statuses, already.drafts], [[STORED_JOB], ['job_1'], [null, { kind: 'ok', msg: 'Saved' }], [{ ...STORED_JOB }]],
+        'REGRESSION: a press that landed said as not saved');
+    assert.deepEqual(already.opened.current, { ...STORED_JOB });
+    // A 409 naming another job, or none: never adopted, the server's own refusal said, the draft and the job as opened as they were.
+    for (const body of [{ error: 'Nope.', code: 'stale', job: { ...STORED_NOW, id: 'job_9' } }, { error: 'Nope.', code: 'already', job: { ...STORED_JOB, id: 'job_9' } }, { error: 'Nope.', code: 'stale' }]) {
+        const other = await jobSave({ jobAnswer: onceOf(409, body) });
+        assert.deepEqual([other.saved, other.drafts, other.selected, other.statuses], [[], [], [], [null, { kind: 'err', msg: 'Nope.' }]], `REGRESSION: a job not pressed adopted (${JSON.stringify(body)})`);
+        assert.deepEqual(other.opened.current, { ...SEL_OPENED });
+    }
+    // After an org switch while the job was out: nothing adopted, nothing said.
+    const moved = await jobSave({ jobAnswer: onceOf(409, { error: WORDS, code: 'stale', job: STORED_NOW }), switchAt: 0 });
+    assert.deepEqual([moved.saved, moved.drafts, moved.statuses, moved.opened.current], [[], [], [null], { ...SEL_OPENED }]);
+    // Added in §0.286's review: what the member typed while the stale request was out survives the rebase (functional setDraft).
+    const typedStale = await jobSave({ jobAnswer: onceOf(409, { error: WORDS, code: 'stale', job: STORED_NOW }), draft, opened: { current: { ...SEL_OPENED } },
+        whileOut: { description: 'Bring the ladder' } });
+    assert.deepEqual(typedStale.drafts, [{ ...STORED_NOW, status: 'scheduled', description: 'Bring the ladder' }], 'REGRESSION: keystrokes typed while the request was out lost');
+});
+
+// Added in §0.286's review: a landed Save rebases the draft onto the job as stored — a field another member changed since
+// the editor opened, untouched here, takes the stored value, so the next Save never sends the old one back (its status with a
+// fromStatus that passed); keystrokes typed while the request was out survive; an unreadable answer is kept as sent.
+test('§0.286 review Part 11: the job record\'s landed save rebases the draft onto the job as stored; the next Save sends only what is new; keystrokes typed meanwhile kept — RUN', async () => {
+    // A title-only edit lands; meanwhile another member moved the job en route and raised its priority.
+    const opened = { current: { ...SEL_OPENED } };
+    const TITLED = { ...SEL_OPENED, durationHrs: 2, title: 'Boiler service (annual)' };
+    const STORED_MOVED = Object.freeze({ ...SEL_OPENED, title: 'Boiler service (annual)', status: 'en_route', priority: 'high' });
+    const landed = await jobSave({ jobAnswer: onceOf(200, { job: STORED_MOVED }), draft: TITLED, opened });
+    assert.deepEqual(landed.sent[0][2], { id: 'job_1', title: 'Boiler service (annual)' }, 'a fields-only save names no status');
+    assert.deepEqual([landed.saved, landed.selected, landed.statuses[1]], [[STORED_MOVED], ['job_1'], { kind: 'ok', msg: 'Saved' }]);
+    assert.deepEqual(landed.drafts, [{ ...STORED_MOVED }], 'REGRESSION: the draft left as typed over the job as opened — the other member\'s status and priority lost on screen');
+    assert.deepEqual(opened.current, { ...STORED_MOVED });
+    // The next Save from the rebased draft: nothing changed — no PUT. The draft as it was (unrebased) sent the old status
+    // back from where it now stands — a write the server's fromStatus check passed.
+    const second = await jobSave({ draft: { ...landed.drafts[0] }, opened });
+    assert.deepEqual([second.sent, second.statuses[1]], [[], { kind: 'ok', msg: 'No changes to save.' }], 'REGRESSION: a second Save sent the old status');
+    assert.deepEqual(jobChanges(editorFields(opened.current, opened.current.locationId), editorFields(TITLED, TITLED.locationId), 'job_1'),
+        { id: 'job_1', status: 'unscheduled', priority: 'normal', fromStatus: 'en_route' }, 'the unrebased draft\'s next body — what the rebase prevents');
+    // A further edit sends that edit alone.
+    const third = await jobSave({ draft: { ...landed.drafts[0], description: 'Annual check' }, opened });
+    assert.deepEqual(third.sent[0][2], { id: 'job_1', description: 'Annual check' });
+    // Keystrokes typed while the request was out survive the rebase, and the next Save sends them.
+    const typedOpened = { current: { ...SEL_OPENED } };
+    const STORED_TITLED = Object.freeze({ ...SEL_OPENED, title: 'Boiler service (annual)' });
+    const typed = await jobSave({ jobAnswer: onceOf(200, { job: STORED_TITLED }), draft: TITLED, opened: typedOpened, whileOut: { description: 'Bring the ladder' } });
+    assert.deepEqual(typed.sent[0][2], { id: 'job_1', title: 'Boiler service (annual)' });
+    assert.deepEqual([typed.drafts, typed.draftNow], [[{ ...STORED_TITLED, description: 'Bring the ladder' }], { ...STORED_TITLED, description: 'Bring the ladder' }],
+        'REGRESSION: keystrokes typed while the request was out lost — the draft set from the press\'s copy');
+    const typedNext = await jobSave({ draft: { ...typed.draftNow }, opened: typedOpened });
+    assert.deepEqual(typedNext.sent[0][2], { id: 'job_1', description: 'Bring the ladder' });
+    // Landed with an answer that cannot be read: kept as sent over the list's row — another member's change the list holds
+    // (priority 'high', adopted since the editor opened) taken, untouched here — and the next Save sends nothing.
+    const unreadOpened = { current: { ...SEL_OPENED } };
+    const LISTED = Object.freeze({ ...SEL_OPENED, priority: 'high' });
+    const unread = await jobSave({ jobAnswer: P11_UNREADABLE(), draft: TITLED, opened: unreadOpened, selected: LISTED });
+    const KEPT = { ...LISTED, title: 'Boiler service (annual)' };
+    assert.deepEqual([unread.saved, unread.selected, unread.statuses[1], unreadOpened.current, unread.drafts], [[KEPT], [], { kind: 'ok', msg: 'Saved' }, KEPT, [KEPT]]);
+    const unreadNext = await jobSave({ draft: { ...unread.drafts[0] }, opened: unreadOpened });
+    assert.deepEqual(unreadNext.sent, [], 'REGRESSION: the base left as opened — the next Save re-sent what landed');
+    // No list row (the job gone from the list): kept as sent over the job as opened.
+    const noRow = await jobSave({ jobAnswer: P11_UNREADABLE(), draft: TITLED, opened: { current: { ...SEL_OPENED } }, selected: null });
+    assert.deepEqual(noRow.saved, [{ ...SEL_OPENED, title: 'Boiler service (annual)' }]);
+});
+
+// Added in §0.286's review (FOUND — left red on purpose: a bug in the code, not the test). The editor's list stays live
+// while a Save is out (a row's onClick={() => setSelectedId(j.id)} is not held by `saving`), and the selectedId effect then
+// sets the draft and the job as opened to the job picked. The functional setDraft of the landed-unread and stale paths
+// rebases WHATEVER draft is current onto the SAVED job: the other job's typed fields over job_1's stored row, with job_1's
+// id, and opened.current set back to job_1 — so the editor, on job_2 in the list, shows a hybrid whose next Save PUTs
+// ?id=job_1 with job_2's title, priority, status… (the landed-with-job path jumps back to job_1 by setSelectedId, whose
+// effect resets the draft — no hybrid there). Expected: an answer for a job the editor has left changes neither the draft
+// nor the job as opened (the copies — onSaved — may still take it).
+test('§0.286 review Part 11 (FOUND): the job record\'s save — an answer for a job the editor left never rebases the job now open — RUN', async () => {
+    const J2 = Object.freeze({ id: 'job_2', title: 'Roof check', customerId: 'cust_2', locationId: 'dloc_2', durationMinutes: 60, crewSize: 2, status: 'scheduled', priority: 'high' });
+    const TITLED = { ...SEL_OPENED, durationHrs: 2, title: 'Boiler service (annual)' };
+    const STORED_NOW = Object.freeze({ ...SEL_OPENED, status: 'en_route' });
+    for (const [jobAnswer, path] of [[P11_UNREADABLE(), 'landed, its answer unread'], [onceOf(409, { error: 'Moved.', code: 'stale', job: STORED_NOW }), 'stale']]) {
+        const opened = { current: { ...SEL_OPENED } };
+        // The member picks job_2 while the PUT is out: the selectedId effect sets the draft and the job as opened to it.
+        const did = await jobSave({ jobAnswer, draft: TITLED, opened, whileOut: null, switchDraft: () => { opened.current = { ...J2 }; return { ...J2 }; } });
+        assert.deepEqual([did.draftNow, opened.current], [{ ...J2 }, { ...J2 }],
+            `${path}: REGRESSION — the job now open rebased onto the saved job (its next Save writes job_2's fields onto job_1)`);
     }
 });
 
@@ -5229,10 +5650,12 @@ const loadAll = async ({ answers = {}, cancelFirst = false } = {}) => {
     const answerFor = (url) => { const k = url.split('/').pop(); return k in answers ? answers[k]() : onceOf(200, landed[k]); };
     const setter = (k) => (v) => { did.set[k] = v; };
     const effect = p11Effect("() => {\n        let cancelled = false;\n        (async () => {\n            setLoading(true);\n            setLoadError('');", '\n    }, []);',
-        ['setLoading', 'setLoadError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords', 'normaliseTech', 'fromYmd', 'normalisePriority', 'queueWindow',
+        // Moved in §0.286: the jobs' mapping is boardJobOf (module scope, the real one — it reads normalisePriority and
+        // queueWindow itself, so the effect no longer does).
+        ['setLoading', 'setLoadError', 'waitForToken', 'dbFetch', 'readRefusal', 'failureWords', 'normaliseTech', 'fromYmd', 'boardJobOf',
             'setTechs', 'setTechsRaw', 'setVehicles', 'setEquipment', 'setServicePlans', 'setPlanVisits', 'setCustomers', 'setJobs', 'setJobsRaw', 'setBlocks', 'console'])(
         (v) => did.loading.push(v), (v) => did.errors.push(v), async () => {}, p11Fetch(did, answerFor, { now: 'org_a' }, { gate }), readRefusal, failureWords,
-        (t) => ({ ...t }), (s) => new Date(`${s}T00:00:00`), (p) => p, () => 'TBD',
+        (t) => ({ ...t }), (s) => new Date(`${s}T00:00:00`), boardJobOfReal(),
         setter('techs'), setter('techsRaw'), setter('vehicles'), setter('equipment'), setter('plans'), setter('visits'), setter('customers'), setter('jobs'), setter('jobsRaw'), setter('blocks'), quiet);
     const cleanup = effect();
     if (cancelFirst) cleanup();
@@ -5278,6 +5701,9 @@ test('Part 11: the main load — landed, every list as before; a tab left before
     assert.deepEqual([did.set.vehicles, did.set.plans, did.set.visits, did.set.blocks, did.set.customers], [landed['dispatch-vehicles'].vehicles,
         landed['dispatch-service-plans'].plans, landed['dispatch-plan-visits'].visits, landed['dispatch-schedule-blocks'].blocks, landed['dispatch-customers'].customers]);
     assert.deepEqual([did.set.jobs.length, did.set.jobs[0].id, did.set.jobs[0].customer, did.set.techs[0].hoursThisWeek], [1, 'job_1', 'Acme', 0]);
+    // Added in §0.286: each board row holds the job as stored — the same row the Jobs view lists — which every sender diffs against.
+    assert.equal(did.set.jobs[0]._raw, did.set.jobsRaw[0]);
+    assert.deepEqual(did.set.jobsRaw, landed['dispatch-jobs'].jobs);
     for (const answers of [{ 'dispatch-jobs': () => onceOf(500, { error: 'x' }) }, { 'dispatch-vehicles': () => UNSENT() }, {}]) {
         const late = await loadAll({ answers, cancelFirst: true });
         assert.deepEqual([late.errors, late.set, late.loading], [[''], {}, [true]], 'REGRESSION: a tab left said or set its answer');
@@ -5454,22 +5880,32 @@ test('§0.263 Part 4: New Job — a customer, address or job create pressed agai
 });
 
 // The mass schedule: the first refusal's words, with the job they are about.
-const MJ_1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, equipCategories: [], status: 'unscheduled' });
-const MJ_2 = Object.freeze({ id: 'job_2', title: '', customer: 'Beta Co', durationHrs: 1, equipCategories: [], status: 'unscheduled' });
-const massRun = async (answers) => {
-    const did = { sent: [], prog: [], saving: [], plans: [], audits: [] };
+// Since §0.286 each holds the job as stored (`_raw`), which the plan's write diffs against.
+const MJ_1_RAW = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledDate: null,
+    scheduledStart: null, scheduledEnd: null, timeSlot: 'anytime', assignedEquipmentIds: [] });
+const MJ_2_RAW = Object.freeze({ ...MJ_1_RAW, id: 'job_2', title: '' });
+const MJ_1 = Object.freeze({ id: 'job_1', title: 'Boiler service', customer: 'Acme', durationHrs: 2, equipCategories: [], status: 'unscheduled', _raw: MJ_1_RAW });
+const MJ_2 = Object.freeze({ id: 'job_2', title: '', customer: 'Beta Co', durationHrs: 1, equipCategories: [], status: 'unscheduled', _raw: MJ_2_RAW });
+const massRun = async (answers, { board = [MJ_1, MJ_2], switchAt = -1 } = {}) => {
+    const did = { sent: [], prog: [], saving: [], plans: [], audits: [], adopted: [], kept: [] };
     const queue = [...answers];
-    const jobs = stateOf([MJ_1, MJ_2]);
+    const jobs = stateOf(board);
+    const raw = stateOf(board.map((j) => j._raw));
+    const org = { now: 'org_a' };
     const plan = { proposals: [MJ_1, MJ_2].map((job) => ({ job, tech: { id: 'tech_1' }, crew: [{ id: 'tech_1' }], dateStr: '2026-11-16', startHr: 9 })),
         skipped: [], fromStr: '2026-11-16', toStr: '2026-11-22' };
+    // Since §0.286: jobChanges.js's helpers and the parent's adoptJob (the real one, over these setters, recorded); since
+    // §0.286's review sentOf and the parent's keepSent (likewise real, recorded in `kept`).
     const confirm = p10Fn(DISPATCH, '    const confirmMassSchedule = async () => {', '\n    };',
         ['massPlan', 'setMassSaving', 'setMassProg', 'requestOrg', 'stillOrg', 'pickEquipmentFor', 'equipment', 'overlappingRivals', 'jobs', 'hhmm', 'dbFetch',
-            'readRefusal', 'failureWords', 'setJobs', 'addAudit', 'setMassPlan', ...U4_NAMES], 'confirmMassSchedule')(
-        plan, (v) => did.saving.push(v), (v) => did.prog.push(v), () => 'org_a', () => true, () => ({ picked: [] }), [], () => [], jobs.value,
-        (h) => `${String(h).padStart(2, '0')}:00`, p11Fetch(did, () => queue.shift(), { now: 'org_a' }), readRefusal, failureWords, jobs.set,
-        (...a) => did.audits.push(a), (u) => did.plans.push(typeof u === 'function' ? u(plan) : u), ...U4);
+            'readRefusal', 'failureWords', 'setJobs', 'addAudit', 'setMassPlan', ...U4_NAMES, 'jobChanges', 'scheduleFields', 'jobAnswerOf', 'adoptJob', 'sentOf', 'keepSent'], 'confirmMassSchedule')(
+        plan, (v) => did.saving.push(v), (v) => did.prog.push(v), () => 'org_a', (o) => o === org.now, () => ({ picked: [] }), [], () => [], jobs.value,
+        (h) => `${String(h).padStart(2, '0')}:00`, p11Fetch(did, () => queue.shift(), org, { switchAt }), readRefusal, failureWords, jobs.set,
+        (...a) => did.audits.push(a), (u) => did.plans.push(typeof u === 'function' ? u(plan) : u), ...U4,
+        jobChanges, scheduleFields, jobAnswerOf, adoptJobOf({ setJobsRaw: raw.set, setJobs: jobs.set, adopted: did.adopted }),
+        sentOf, keepSentOf({ setJobsRaw: raw.set, setJobs: jobs.set, kept: did.kept }));
     await confirm();
-    return { ...did, last: did.prog[did.prog.length - 1], jobs: jobs.value };
+    return { ...did, last: did.prog[did.prog.length - 1], jobs: jobs.value, raw: raw.value };
 };
 
 test('Part 11: the mass schedule — the first refusal or failure said with its job, in the house words; what landed leaves the panel — RUN', async () => {
@@ -5491,6 +5927,71 @@ test('Part 11: the mass schedule — the first refusal or failure said with its 
     assert.deepEqual([bothMaybe.last.failed, bothMaybe.last.error], [2, `Boiler service: ${maybeSaid('It', 'scheduled', 'first')}`], 'the first failure\'s words kept, as maybe');
     const landed = await massRun([onceOf(200, {}), onceOf(200, {})]);
     assert.deepEqual([landed.last, landed.plans], [{ done: 2, total: 2, failed: 0, error: '' }, [null]]);
+});
+
+// Added in §0.286 (Jeff, 22 Nov: "Do your recommended"): each job's write sends only what the plan changes from the job as
+// the board holds it NOW, the status it moves from named; the jobs answered adopted; a job moved since the plan was made
+// (409 'stale') is adopted and leaves the panel; one that landed earlier (409 'already') is done.
+test('§0.286 Part 11: the mass schedule — only what the plan changes, from the job as the board holds it now; \'stale\' adopted and out of the panel; \'already\' done — RUN', async () => {
+    const STORED_1 = Object.freeze({ ...MJ_1_RAW, status: 'scheduled', assignedTechId: 'tech_1', scheduledDate: '2026-11-16', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact' });
+    const STORED_2 = Object.freeze({ ...STORED_1, id: 'job_2', title: '', scheduledEnd: '10:00' });
+    const landed = await massRun([onceOf(200, { job: STORED_1 }), onceOf(200, { job: STORED_2 })]);
+    assert.deepEqual(landed.sent.map(([u, m, b]) => [u, m, b]), [
+        ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT', { id: 'job_1', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16',
+            scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', fromStatus: 'unscheduled' }],
+        ['/.netlify/functions/dispatch-jobs?id=job_2', 'PUT', { id: 'job_2', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16',
+            scheduledStart: '09:00', scheduledEnd: '10:00', timeSlot: 'exact', fromStatus: 'unscheduled' }],
+    ], 'REGRESSION: the whole job sent, or the status it moved from left out');
+    assert.deepEqual([landed.adopted, landed.raw], [[STORED_1, STORED_2], [STORED_1, STORED_2]], 'REGRESSION: the Jobs view\'s copy left as loaded');
+    assert.deepEqual(landed.jobs.map((j) => [j._raw, j.status, j.assignedTechIds, j.start, j.window]), [[STORED_1, 'scheduled', ['tech_1'], 9, '09:00'], [STORED_2, 'scheduled', ['tech_1'], 9, '09:00']]);
+    assert.deepEqual([landed.last, landed.plans], [{ done: 2, total: 2, failed: 0, error: '' }, [null]]);
+    // The board holds job_1 newer than the plan: its write is from the job as it stands — from en_route; one already
+    // holding the plan sends nothing and is done.
+    const enRoute = await massRun([onceOf(500, { error: 'x' }), onceOf(200, { job: STORED_2 })], { board: [{ ...MJ_1, _raw: { ...STORED_1, status: 'en_route', assignedTechId: 'tech_2' } }, MJ_2] });
+    assert.deepEqual(enRoute.sent[0][2], { id: 'job_1', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], fromStatus: 'en_route' },
+        'REGRESSION: the plan\'s old copy diffed — the status it moved from not the board\'s, or the appointment it already holds sent');
+    const placed = await massRun([onceOf(200, { job: STORED_2 })], { board: [{ ...MJ_1, _raw: STORED_1 }, MJ_2] });
+    assert.deepEqual([placed.sent.map(([u]) => u), placed.last], [['/.netlify/functions/dispatch-jobs?id=job_2'], { done: 2, total: 2, failed: 0, error: '' }], 'REGRESSION: a write that changes nothing sent');
+    // Added in §0.286's review (checkStatus): a job the board holds scheduled at another time — the status unchanged — still
+    // names it and where it saw the job, so one another member moved on since is refused.
+    const later = await massRun([onceOf(500, { error: 'x' }), onceOf(200, { job: STORED_2 })], { board: [{ ...MJ_1, _raw: { ...STORED_1, scheduledStart: '13:00', scheduledEnd: '15:00' } }, MJ_2] });
+    assert.deepEqual(later.sent[0][2], { id: 'job_1', status: 'scheduled', scheduledDate: '2026-11-16', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', fromStatus: 'scheduled' },
+        'REGRESSION: a schedule over a scheduled copy sent without the status it saw');
+    // Added in §0.286's review: landed with an answer that cannot be read — kept as sent in both copies (the parent's
+    // keepSent, after the adoptions), so a press after it sends nothing for that job.
+    const SENT_1 = sentOf(landed.sent[0][2]);
+    const unread = await massRun([P11_UNREADABLE(), onceOf(200, { job: STORED_2 })]);
+    assert.deepEqual([unread.last, unread.adopted, unread.kept], [{ done: 2, total: 2, failed: 0, error: '' }, [STORED_2], [['job_1', SENT_1]]],
+        'REGRESSION: an unreadable landed answer said as maybe, or not kept as sent');
+    assert.deepEqual(unread.raw, [{ ...MJ_1_RAW, ...SENT_1 }, STORED_2], 'REGRESSION: the Jobs view\'s copy left as loaded');
+    assert.deepEqual([unread.jobs[0]._raw, unread.jobs[0].status, unread.jobs[0].assignedTechIds, unread.jobs[0].start], [{ ...MJ_1_RAW, ...SENT_1 }, 'scheduled', ['tech_1'], 9],
+        'the board row moved as sent, its base with it');
+    const unreadNext = await massRun([], { board: unread.jobs });
+    assert.deepEqual([unreadNext.sent, unreadNext.last], [[], { done: 2, total: 2, failed: 0, error: '' }], 'REGRESSION: the base left as loaded — a press after it re-sent the plan');
+    // Stale: another member moved job_1 since the plan was made — adopted, said by name, out of the panel (a press again
+    // would only be refused again); job_2 landed.
+    const MOVED = Object.freeze({ ...STORED_1, assignedTechId: 'tech_2' });
+    const WORDS = 'This job is scheduled now — it changed since you opened it. Nothing was saved.';
+    const stale = await massRun([onceOf(409, { error: WORDS, code: 'stale', job: MOVED }), onceOf(200, { job: STORED_2 })]);
+    assert.deepEqual(stale.last, { done: 1, total: 2, failed: 1, error: `Boiler service: ${WORDS}` });
+    assert.deepEqual(stale.adopted, [MOVED, STORED_2]);
+    assert.deepEqual([stale.jobs[0]._raw, stale.jobs[0].assignedTechIds, stale.raw[0]], [MOVED, ['tech_2'], MOVED], 'REGRESSION: the job as stored left unshown, or shown as this plan placed it');
+    assert.deepEqual(stale.plans[stale.plans.length - 1].proposals, [], 'REGRESSION: a job moved since the plan kept in the panel — a press again re-sent it');
+    assert.match(stale.audits[0][4], /^Mass-scheduled 1 job 2026-11-16–2026-11-22 — 1 failed$/);
+    // Already: an earlier press landed, its answer lost — done with the job as stored, nothing said.
+    const already = await massRun([onceOf(409, { error: 'This job is scheduled already.', code: 'already', job: STORED_1 }), onceOf(200, { job: STORED_2 })]);
+    assert.deepEqual([already.last, already.plans, already.adopted], [{ done: 2, total: 2, failed: 0, error: '' }, [null], [STORED_1, STORED_2]],
+        'REGRESSION: a press that landed said as refused');
+    assert.equal(already.jobs[0]._raw, STORED_1);
+    // A 409 naming another job, or none: never adopted, said, the job left in the panel as any refusal.
+    for (const body of [{ error: 'Nope.', code: 'stale', job: { ...MOVED, id: 'job_9' } }, { error: 'Nope.', code: 'already', job: { ...STORED_1, id: 'job_9' } }]) {
+        const other = await massRun([onceOf(409, body), onceOf(200, { job: STORED_2 })]);
+        assert.deepEqual([other.last.error, other.adopted, other.jobs[0], other.raw[0]], ['Boiler service: Nope.', [STORED_2], MJ_1, MJ_1_RAW], `REGRESSION: a job not pressed adopted (${JSON.stringify(body)})`);
+        assert.deepEqual(other.plans[other.plans.length - 1].proposals.map((p) => p.job.id), ['job_1']);
+    }
+    // After an org switch during job_1's write: nothing more sent, nothing adopted.
+    const moved = await massRun([onceOf(409, { error: WORDS, code: 'stale', job: MOVED }), onceOf(200, { job: STORED_2 })], { switchAt: 0 });
+    assert.deepEqual([moved.sent.length, moved.adopted, moved.jobs, moved.audits], [1, [], [MJ_1, MJ_2], []]);
 });
 
 // The shift pattern's save (saveWorkingHours) and a technician's job card (updateMyJob): their throws are the house words.
@@ -5544,7 +6045,11 @@ test('Part 11: the shift pattern\'s save and the job card\'s update throw the ho
 });
 
 // The week board's move (handleWeekMove's commit).
-const WM_JOB = Object.freeze({ id: 'job_1', title: 'Boiler service', scheduledDate: '2026-11-16', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [] });
+const WM_RAW = Object.freeze({ id: 'job_1', title: 'Boiler service', status: 'scheduled', assignedTechId: 'tech_1', coTechIds: [], scheduledDate: '2026-11-16',
+    scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120 });
+// Since §0.286's review the board row holds the job as stored (`_raw`), as every board row from boardJobOf does — the base
+// keepSent patches with what a move sent.
+const WM_JOB = Object.freeze({ id: 'job_1', title: 'Boiler service', scheduledDate: '2026-11-16', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [], _raw: WM_RAW });
 const weekCommit = async ({ answer, switchAt = -1 }) => {
     const did = { sent: [], states: [], audits: [], raw: [] };
     const org = { now: 'org_a' };
@@ -5552,17 +6057,28 @@ const weekCommit = async ({ answer, switchAt = -1 }) => {
     const jobs = stateOf(start);
     // Since §0.263 (the unknown-save rule, Part 4) the row moves through moveRow — handleWeekMove's helper, extracted
     // beside commit over the same stubs; an answer that proves nothing moves it as sent.
-    const moveRow = p10Fn(DISPATCH, '        const moveRow = (saved) => setJobs(', '\n            : j));',
+    const moveRow = p10Fn(DISPATCH, '        const moveRow = () => setJobs(', '\n            : j));',
         ['setJobs', 'job', 'toDate', 'plan', 'queueWindow', 'reserved'], 'moveRow', '\n            : j));')(
         jobs.set, WM_JOB, '2026-11-17', { crew: ['tech_1'] }, () => '10:00', null);
+    // Since §0.286 a landed move's job is adopted into both copies by the parent's adoptJob (the real one, over these setters:
+    // the Jobs view's copy recorded in `raw`, each row it is handed in `adopted`) — no longer moveRow(saved) and setJobsRaw.
+    const rawCopy = stateOf([WM_RAW]);
+    const adopted = [];
+    const adoptJob = adoptJobOf({ setJobsRaw: (u) => { did.raw.push(u); rawCopy.set(u); }, setJobs: jobs.set, adopted });
+    // Since §0.286's review a move kept as sent (landed unread, or an answer that proves nothing) is kept in both copies by
+    // the parent's keepSent (the real one, over these setters: its jobsRaw writes go to `rawCopy` alone — `did.raw` stays
+    // the adoptions' — each call recorded in `kept`), with sentOf.
+    const kept = [];
+    const keepSent = keepSentOf({ setJobsRaw: rawCopy.set, setJobs: jobs.set, kept });
     const commit = p10Fn(DISPATCH, '        const commit = async (overridden) => {', '\n        };',
         ['setWeekMove', 'requestOrg', 'dbFetch', 'job', 'payload', 'stillOrg', 'readRefusal', 'failureWords', 'setJobs', 'plan', 'toDate', 'reserved', 'queueWindow',
-            'setJobsRaw', 'addAudit', 'name', 'fromTech', 'where', 'unitLabel', 'equipment', 'weekMoveTimer', 'clearTimeout', 'setTimeout', 'moveRow', ...U4_NAMES], 'commit')(
-        (v) => did.states.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), WM_JOB, { scheduledDate: '2026-11-17' }, (o) => o === org.now, readRefusal,
+            'setJobsRaw', 'addAudit', 'name', 'fromTech', 'where', 'unitLabel', 'equipment', 'weekMoveTimer', 'clearTimeout', 'setTimeout', 'moveRow', ...U4_NAMES, 'adoptJob',
+            'keepSent', 'sentOf'], 'commit')(
+        (v) => did.states.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), WM_JOB, { id: 'job_1', scheduledDate: '2026-11-17' }, (o) => o === org.now, readRefusal,
         failureWords, jobs.set, { crew: ['tech_1'] }, '2026-11-17', null, () => '10:00', (u) => did.raw.push(u), (...a) => did.audits.push(a), 'Boiler service', null,
-        '2026-11-17', (id) => id, [], { current: null }, () => {}, () => 1, moveRow, ...U4);
+        '2026-11-17', (id) => id, [], { current: null }, () => {}, () => 1, moveRow, ...U4, adoptJob, keepSent, sentOf);
     await commit([]);
-    return { ...did, jobs: jobs.value, same: jobs.value === start };
+    return { ...did, jobs: jobs.value, same: jobs.value === start, adopted, rawCopy: rawCopy.value, kept };
 };
 
 test('Part 11: the week board\'s move — a refusal in the house words, a 403 the role\'s sentence; nothing moved; after an org switch nothing said — RUN', async () => {
@@ -5574,21 +6090,41 @@ test('Part 11: the week board\'s move — a refusal in the house words, a 403 th
         const did = await weekCommit({ answer });
         const said = heard ? words : maybeSaid('Boiler service', 'moved', words);
         assert.deepEqual(did.states, [BUSY, { busy: false, error: said, notice: '' }], `REGRESSION — "HTTP N", "Failed to fetch", or an answer that proves nothing said as refused: ${said}`);
-        assert.deepEqual([did.audits, did.raw], [[], []]);
-        if (heard) assert.equal(did.same, true, 'the server\'s own refusal: nothing moved');
-        else {
+        assert.deepEqual([did.audits, did.raw], [[], []], 'no audit row, no stored row adopted');
+        if (heard) {
+            assert.equal(did.same, true, 'the server\'s own refusal: nothing moved');
+            assert.deepEqual([did.kept, did.rawCopy], [[], [WM_RAW]], 'REGRESSION: a refused move kept as sent');
+        } else {
             assert.equal(did.same, false, 'REGRESSION: a move that may have landed put back');
-            assert.deepEqual(did.jobs, [{ ...WM_JOB, scheduledDate: '2026-11-17', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [], publicToken: null, customerNotifications: [] },
-                { id: 'job_2' }], 'the row moved as sent — the window kept, no stored row read');
+            // Moved in §0.286: the row as sent keeps its own link and trail (a board row from boardJobOf always holds both;
+            // this fixture's has neither) — the server's answer is adopted whole, never through this mover.
+            // Moved in §0.286's review: and its base (`_raw`) and the Jobs view's copy hold what was sent (keepSent) — a
+            // move that may have landed is kept as sent everywhere the next sender reads (Jeff's Q2).
+            assert.deepEqual(did.jobs, [{ ...WM_JOB, scheduledDate: '2026-11-17', assignedTechIds: ['tech_1'], window: '09:00', assignedEquipment: [],
+                _raw: { ...WM_RAW, scheduledDate: '2026-11-17' } }, { id: 'job_2' }], 'the row moved as sent — the window kept, no stored row read');
+            assert.deepEqual([did.kept, did.rawCopy], [[['job_1', { scheduledDate: '2026-11-17' }]], [{ ...WM_RAW, scheduledDate: '2026-11-17' }]]);
         }
     }
-    const landed = await weekCommit({ answer: onceOf(200, { job: { id: 'job_1', scheduledDate: '2026-11-17', status: 'scheduled' } }) });
+    // Moved in §0.286: the landed job is adopted through the parent's adoptJob (the board's one mapping, boardJobOf, and the
+    // real queueWindow — it was a stub answering '10:00'), so the answer is the job as stored, its window read from it.
+    const STORED_MOVE = Object.freeze({ ...WM_RAW, scheduledDate: '2026-11-17', scheduledStart: '10:00', scheduledEnd: '12:00' });
+    const landed = await weekCommit({ answer: onceOf(200, { job: STORED_MOVE }) });
     assert.deepEqual([landed.states[1].error, landed.states[1].notice, landed.jobs[0].scheduledDate, landed.jobs[0].window, landed.audits.length], ['', 'Moved Boiler service to 2026-11-17.', '2026-11-17', '10:00', 1]);
+    // Added in §0.286: into both copies — the board row's `_raw` (the next sender's base) and the Jobs view's.
+    assert.deepEqual([landed.adopted, landed.rawCopy, landed.jobs[0]._raw, landed.jobs[0].start, landed.jobs[0].assignedTechIds], [[STORED_MOVE], [STORED_MOVE], STORED_MOVE, 10, ['tech_1']],
+        'REGRESSION: the moved job\'s `_raw` left as loaded — the next save diffed against the old day');
+    assert.equal(landed.jobs[1].id, 'job_2');
+    assert.deepEqual(landed.kept, [], 'a job read: adopted, never kept as sent');
     const unreadable = await weekCommit({ answer: P11_UNREADABLE() });
     assert.deepEqual([unreadable.states[1].notice, unreadable.jobs[0].scheduledDate, unreadable.raw], ['Moved Boiler service to 2026-11-17.', '2026-11-17', []], 'landed: the row moves as sent, as before');
+    assert.deepEqual([unreadable.adopted, unreadable.jobs[0].window], [[], '09:00'], 'nothing adopted; the window kept');
+    // Added in §0.286's review: landed, its answer unread — kept as sent (sentOf: the payload without its id) in both copies,
+    // the board row's base too, so the next sender diffs against the day it was moved to.
+    assert.deepEqual([unreadable.kept, unreadable.rawCopy, unreadable.jobs[0]._raw], [[['job_1', { scheduledDate: '2026-11-17' }]], [{ ...WM_RAW, scheduledDate: '2026-11-17' }],
+        { ...WM_RAW, scheduledDate: '2026-11-17' }], 'REGRESSION: the row moved as sent while its base stayed the old day');
     for (const answer of [onceOf(403, { error: 'Forbidden' }), onceOf(500, { error: 'x' }), P11_PAGE(), UNSENT(), onceOf(200, { job: { id: 'job_1' } })]) {
         const did = await weekCommit({ answer, switchAt: 0 });
-        assert.deepEqual([did.states, did.same, did.audits], [[BUSY], true, []], 'REGRESSION: an answer from the org left said or written');
+        assert.deepEqual([did.states, did.same, did.audits, did.kept], [[BUSY], true, [], []], 'REGRESSION: an answer from the org left said or written');
     }
 });
 
@@ -12006,16 +12542,31 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     // job's locked read a with-list the update joins, returning the job as written and as it was — pinned here by its lines.
     assert.ok(answered >= 18, `the answered writes scanned (${answered}) — one the scan stops reaching fails here (the §0.268 review)`);
     {
-        const ow = between(code(read('netlify/functions/dispatch-jobs.mjs')), 'async function officeWrite(orgId, id, updates) {', '\n}\n');
-        order(ow, "const was = db.$with('replaced').as(db.select({", ".where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).for('update'));",
+        // Moved in §0.286: officeWrite takes the status the save's screen saw the job in (`fromStatus`); its locked read finds
+        // the job only while it stands there (`seen`, none when the body names none) — still one statement, the same lines.
+        const ow = between(code(read('netlify/functions/dispatch-jobs.mjs')), 'async function officeWrite(orgId, id, updates, fromStatus) {', '\n}\n');
+        order(ow, "const seen = fromStatus === undefined ? undefined : sql`coalesce(nullif(${dispatchJobs.status}, ''), 'unscheduled') = ${fromStatus}`;",
+            "const was = db.$with('replaced').as(db.select({", ".where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), seen)).for('update'));",
             'const [row] = await db.with(was).update(dispatchJobs).set(updates).from(was)',
             '.where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), eq(dispatchJobs.id, was.wasId)))',
             '.returning({ ...getTableColumns(dispatchJobs), wasStatus: was.wasStatus,', 'if (!row) return { before: null, written: null };');
     }
     // Moved in §0.278: the field update's miss is read again (missedTechJob — the job gone is a 404 there, before its history
-    // and notice, THE GUARD tests/owner-writes.test.mjs); the office's update keeps its own.
-    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 1, 'REGRESSION: an update whose job went goes on to its history and notice');
+    // and notice, THE GUARD tests/owner-writes.test.mjs). Moved in §0.286: the office's too (missedOfficeJob) — the job gone
+    // a 404 there, before anything else it says; the bare 404 line it replaced is gone (count 1 -> 0, the office's alone held it).
+    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), "if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };"), 0, 'the office\'s miss is missedOfficeJob\'s');
+    assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), 'if (!written) return await missedOfficeJob(orgId, id, updates);'), 1, 'REGRESSION: an office update whose job went goes on to its history and notice');
     assert.equal(count(code(read('netlify/functions/dispatch-jobs.mjs')), 'if (!written) return await missedTechJob(orgId, id, myTechId, data);'), 1, 'REGRESSION: a field update whose job went goes on to its history and notice');
+    {
+        // missedOfficeJob: a read of the job as it stands (never a write), the job gone a 404 first, then 'already', then
+        // 'stale' — no status history, customer notice or audit in it (each is after the write that landed).
+        const missed = between(code(read('netlify/functions/dispatch-jobs.mjs')), 'async function missedOfficeJob(orgId, id, updates) {', '\n}\n');
+        order(missed, 'const [now] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));',
+            "if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+            "if (jobHolds(now, updates)) return { statusCode: 409, headers, body: JSON.stringify({", "code: 'already' }) };",
+            "return { statusCode: 409, headers, body: JSON.stringify({", "code: 'stale' }) };");
+        assert.ok(!/recordStatusChange|notifyCustomer|auditAs|db\.(insert|update|delete)\(/.test(missed), 'REGRESSION: a save that wrote nothing records, tells or writes');
+    }
     const jobs = code(read('netlify/functions/dispatch-jobs.mjs'));
     const notice = between(jobs, 'async function jobAfterNotice(orgId, jobId, written) {', '\n}\n');
     order(notice, 'try {', 'return after || written;', '} catch (e) {', 'return written;');
@@ -12027,8 +12578,10 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     // §0.268 review: 12-space needles also matched the field path's 16-space lines, so a 404 moved after the dispatcher's
     // notice passed). A needle's leading newline holds it to its own indent.
     // Moved in §0.285: the office's write is officeWrite's, with the job it replaced; history and notice decide on that job.
-    const dispatcherPut = between(jobs, '\n            const { before: replaced, written } = await officeWrite(orgId, id, updates);', '\n            const updated = await jobAfterNotice(orgId, id, written);');
-    order(dispatcherPut, "\n            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
+    // Moved in §0.286: officeWrite takes the status the screen saw (seenStatus); its miss answers through missedOfficeJob
+    // (gone a 404, else 'already' or 'stale') — still before the history and the notice.
+    const dispatcherPut = between(jobs, '\n            const { before: replaced, written } = await officeWrite(orgId, id, updates, seenStatus);', '\n            const updated = await jobAfterNotice(orgId, id, written);');
+    order(dispatcherPut, '\n            if (!written) return await missedOfficeJob(orgId, id, updates);',
         '\n            const fromStatus = replaced.status;', '\n            if (toStatus && toStatus !== fromStatus) {', '\n            await notifyCustomer({ orgId, before: replaced, after: written,');
     const fieldPut = between(jobs, '\n                const [written] = await db.update(dispatchJobs).set(updates)', '\n                const updatedRow = await jobAfterNotice(orgId, id, written);');
     // Moved in §0.278: the field update's miss is missedTechJob's — gone, off the job or changed, all before the history.

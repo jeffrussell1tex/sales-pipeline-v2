@@ -16,6 +16,7 @@ import { notifyCustomer } from './_customerNotify.mjs';
 import { resolveTechnicianId } from './_techScope.mjs';
 import { techOnJob, techPatchHolds } from './_techJobs.mjs';
 import { techMoveRefusal } from '../../src/utils/techMoves.js';   // a technician's move, from where the job stands (state §0.281)
+import { JOB_STATUSES, jobHolds } from '../../src/utils/jobChanges.js';   // an office save's fromStatus and 'already' (state §0.286)
 import { checkLinks } from './_links.mjs';
 
 // A job's customer, service location, CRM account and deal: live rows of this org when a write names
@@ -215,17 +216,34 @@ async function missedTechJob(orgId, id, myTechId, data) {
 // came back written with nothing replaced — the PUT's 500 over a save that landed; here the update writes only the row its
 // own locked read found. `before` is the job as written, its status and appointment as they were (all the history, the
 // notice's plan and the audit read of it). → { before, written }, both null when the job is gone. Its callers await it.
-async function officeWrite(orgId, id, updates) {
+// `fromStatus` (state §0.286): a save that moves the status names where its screen saw the job; the locked read finds the
+// job only while it stands there — a save behind another member's move writes nothing (missedOfficeJob says what).
+async function officeWrite(orgId, id, updates, fromStatus) {
+    const seen = fromStatus === undefined ? undefined : sql`coalesce(nullif(${dispatchJobs.status}, ''), 'unscheduled') = ${fromStatus}`;
     const was = db.$with('replaced').as(db.select({
         wasId: dispatchJobs.id, wasStatus: dispatchJobs.status, wasDate: dispatchJobs.scheduledDate,
         wasStart: dispatchJobs.scheduledStart, wasSlot: dispatchJobs.timeSlot,
-    }).from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId))).for('update'));
+    }).from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), seen)).for('update'));
     const [row] = await db.with(was).update(dispatchJobs).set(updates).from(was)
         .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), eq(dispatchJobs.id, was.wasId)))
         .returning({ ...getTableColumns(dispatchJobs), wasStatus: was.wasStatus, wasDate: was.wasDate, wasStart: was.wasStart, wasSlot: was.wasSlot });
     if (!row) return { before: null, written: null };
     const { wasStatus, wasDate, wasStart, wasSlot, ...written } = row;
     return { before: { ...written, status: wasStatus, scheduledDate: wasDate, scheduledStart: wasStart, timeSlot: wasSlot }, written };
+}
+
+// An office write that wrote nothing (state §0.286): what stands now decides. The job gone — 404, as before. The job
+// holding every value the save would set — an earlier press of it landed, its answer lost — is done: code 'already', the
+// job as stored (compared with the row itself, by jobChanges.js's one rule per column). Else the job moved since its screen
+// read it: code 'stale', the job as stored for the screen to show, nothing written — no history, no notice, no audit.
+// Its callers await it: a failed re-read is the handler's 500.
+async function missedOfficeJob(orgId, id, updates) {
+    const [now] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+    if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+    const job = normaliseJob(now);
+    const status = String(now.status || 'unscheduled').replace(/_/g, ' ');
+    if (jobHolds(now, updates)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in updates ? `This job is ${status} already.` : 'This job holds what you sent already.', job, code: 'already' }) };
+    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job is ${status} now — it changed since you opened it. Nothing was saved.`, job, code: 'stale' }) };
 }
 
 export const handler = async (event) => {
@@ -366,6 +384,11 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id || !data.customerId || !data.title) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, title required' }) };
+            }
+            // A status is one of the job's (state §0.286, the review): one stored outside them made every later move a 400 —
+            // a screen names it as the status it moved from, and no such status passes.
+            if (data.status != null && !JOB_STATUSES.includes(data.status)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };
             }
 
             // POST is an upsert, so reuse any number already issued for this id
@@ -544,6 +567,17 @@ export const handler = async (event) => {
                 return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
             }
 
+            // The status the save's screen saw the job in, when it moves the status (state §0.286): one of the job's statuses,
+            // never written — a body naming none is decided as before (a save that moves no status, a screen with no copy of the job, older screens).
+            const seenStatus = Object.hasOwn(data, 'fromStatus') ? data.fromStatus : undefined;
+            if (seenStatus !== undefined && !JOB_STATUSES.includes(seenStatus)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'fromStatus is the status the job was seen in — one of the job statuses.', field: 'fromStatus' }) };
+            }
+            // A status is one of the job's (the review): one stored outside them made every later move a 400.
+            if ('status' in data && !JOB_STATUSES.includes(data.status)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };
+            }
+
             // Each link it names anew is one of this org's; one the job already holds is not asked again
             // (state §0.199).
             const linked = await checkLinks(JOB_LINKS, data, current, orgId);
@@ -587,8 +621,8 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C). Written with the job it replaced, read under the write's own lock (state §0.285).
-            const { before: replaced, written } = await officeWrite(orgId, id, updates);
-            if (!written) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            const { before: replaced, written } = await officeWrite(orgId, id, updates, seenStatus);
+            if (!written) return await missedOfficeJob(orgId, id, updates);   // gone, already, or moved since (state §0.286)
 
             // Write status history if status changed — from the job the write replaced, never the PUT's read (state §0.285)
             const fromStatus = replaced.status;

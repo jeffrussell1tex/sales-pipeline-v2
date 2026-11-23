@@ -13,10 +13,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { editorFields, jobChanges } from '../src/utils/jobChanges.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
 const s = code(read('src/Tabs/DispatchTab.jsx'));
+const jc = code(read('src/utils/jobChanges.js'));
+const boardJobOf = s.slice(s.indexOf('const boardJobOf = (j, customers) => {'), s.indexOf('export default function DispatchTab()'));
 
 test('scoreTech: the clash check is same-day and needs a real start — no 9 AM assumption', () => {
     assert.ok(!s.includes('const ns = job.start || 9'), 'the 9 AM default is gone');
@@ -30,7 +33,8 @@ test('the crew builder hands the scorer its chosen start and re-scores when it c
     assert.ok(s.includes('start: scheduleTime ? hhToNum(scheduleTime) : (selectedJob.start ?? null) }) }))'));
     assert.ok(s.includes('    }, [selectedJob, techs, jobs, skills, blocks, blockTypes, scheduleDate, scheduleTime]);'), 'scheduleTime is a dependency');
     assert.ok(s.includes("        setScheduleTime(sel?.scheduledStart || '');"), 'the preferred start seeds the builder');
-    assert.ok(s.includes('                        scheduledStart: j.scheduledStart || null,'), 'the board job shape carries it');
+    // The board mapping is boardJobOf at module scope since §0.286 (the load's and every adopted answer's one mapping).
+    assert.ok(boardJobOf.includes('        scheduledStart: j.scheduledStart || null,'), 'the board job shape carries it');
 });
 
 test('normaliseTech carries the weekly shift pattern onto the board shape — the roster lookup reads it', () => {
@@ -47,8 +51,10 @@ test('normaliseTech carries the weekly shift pattern onto the board shape — th
 test('a queue card shows a time only for a SCHEDULED job; an unscheduled job shows its date and its preferred start as a note (§0.117)', () => {
     assert.ok(s.includes("    if (j.status !== 'unscheduled' && j.timeSlot === 'exact' && j.scheduledStart) return j.scheduledStart;"), 'the time only once the job is actually scheduled');
     assert.ok(s.includes("    return j.scheduledStart ? `${day} · prefers ${to12h(j.scheduledStart) || j.scheduledStart}` : day;"), 'a preferred start reads as a preference');
-    assert.ok(s.includes('                        window:         queueWindow(j),'), 'the board mapping');
-    assert.ok(s.includes('                                    window: queueWindow(saved),'), 'and the editor-save mapping, so a saved preferred time updates the card');
+    assert.ok(boardJobOf.includes('        window:         queueWindow(j),'), 'the board mapping');
+    // Since §0.286 the editor's save is put through that same mapping (adoptJob → boardJobOf), not a copy of its own.
+    assert.ok(s.includes('onSaved={saved => { adoptJob(saved); '), 'and the editor-save mapping — the same one, so a saved preferred time updates the card');
+    assert.ok(s.includes('setJobs(prev => prev.map(j => (j.id === row.id ? { ...j, ...boardJobOf(row, customers) } : j)));'), 'adoptJob maps the answer by boardJobOf');
     assert.ok(s.includes('<span>◷ {j.window}</span>'));
 });
 
@@ -56,10 +62,28 @@ test('the job editor offers a preferred start time and a time window, and saves 
     assert.ok(s.includes('<CustFieldRow label="Preferred start time">'));
     assert.ok(s.includes('<TimeDropdown value={draft.scheduledStart || \'\'} onChange={v => set(\'scheduledStart\', v)} stepMinutes={30} ariaLabel="Preferred start time"/>'));
     assert.ok(s.includes('<CustFieldRow label="Time window">'));
-    assert.ok(s.includes("                    scheduledStart:  draft.scheduledStart || null,"));
-    assert.ok(s.includes("                    timeSlot:        draft.scheduledStart ? 'exact' : (draft.timeSlot && draft.timeSlot !== 'exact' ? draft.timeSlot : 'anytime'),"), 'a start makes the window exact; otherwise the slot, never a stale exact');
-    assert.ok(s.includes('scheduledEnd:    draft.scheduledStart ? addHoursHHMM(draft.scheduledStart,'), 'the end follows the duration');
-    assert.ok(s.includes('const addHoursHHMM = (hhmm, hrs) => {'));
+    // Since §0.286 the Save's fields are jobChanges.js editorFields (the same expressions), diffed against the job as opened.
+    assert.ok(s.includes('const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id);'), 'the editor saves editorFields');
+    assert.ok(jc.includes("    scheduledStart:  job.scheduledStart || null,"));
+    assert.ok(jc.includes("    timeSlot:        job.scheduledStart ? 'exact' : (job.timeSlot && job.timeSlot !== 'exact' ? job.timeSlot : 'anytime'),"), 'a start makes the window exact; otherwise the slot, never a stale exact');
+    assert.ok(jc.includes('    scheduledEnd:    job.scheduledStart ? addHours(job.scheduledStart, hoursOf(job)) : null,'), 'the end follows the duration');
+    assert.ok(jc.includes('const addHours = (hhmm, hrs) => {'));
+    assert.ok(!s.includes('addHoursHHMM'), 'DispatchTab keeps no copy of its own');
+    // Run on the real builder: a start makes it exact with the end from the duration; none keeps the slot, never a stale exact.
+    const withStart = editorFields({ title: 'T', scheduledStart: '09:30', durationHrs: 1.5, timeSlot: 'morning' }, null);
+    assert.equal(withStart.scheduledStart, '09:30');
+    assert.equal(withStart.scheduledEnd, '11:00', 'the end follows the duration');
+    assert.equal(withStart.timeSlot, 'exact');
+    assert.equal(editorFields({ title: 'T', durationMinutes: 60, scheduledStart: '23:30' }, null).scheduledEnd, '00:30', 'wraps at midnight');
+    const noStart = editorFields({ title: 'T', timeSlot: 'afternoon' }, null);
+    assert.equal(noStart.scheduledStart, null);
+    assert.equal(noStart.scheduledEnd, null);
+    assert.equal(noStart.timeSlot, 'afternoon');
+    assert.equal(editorFields({ title: 'T', timeSlot: 'exact' }, null).timeSlot, 'anytime', 'a stale exact with no start reads anytime');
+    // A preferred start set in the editor sends the appointment whole (its group), nothing else.
+    const opened = { id: 'j1', title: 'T', status: 'unscheduled', durationMinutes: 120, timeSlot: 'anytime' };
+    assert.deepEqual(jobChanges(editorFields(opened, null), editorFields({ ...opened, scheduledStart: '08:00' }, null), 'j1'),
+        { id: 'j1', scheduledDate: null, scheduledStart: '08:00', scheduledEnd: '10:00', timeSlot: 'exact' });
 });
 
 test('the queue lists only jobs still to schedule; a scheduled job clicked on the board opens its record, never the queue (Jeff, 11 Sep)', () => {

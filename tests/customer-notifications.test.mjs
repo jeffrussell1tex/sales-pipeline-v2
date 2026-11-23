@@ -182,5 +182,7 @@ test('the panel, the catalogue and the routing exist; the dispatch tab shows the
     assert.ok(d.includes('<CustomerNotifyTrail job={selectedJob}/>'));
     assert.ok(d.includes('publicToken:    j.publicToken || null,'));
     assert.ok(d.includes('serverJob: data.job || null,'), 'the schedule handler hands the server row up');
-    assert.ok(d.includes('publicToken: serverJob?.publicToken ?? j.publicToken ?? null,'), 'and the parent adopts the token and trail');
+    // Moved in §0.286: the parent adopts the job the server answered with whole — its token and trail with it (boardJobOf).
+    assert.ok(d.includes('if (serverJob) adoptJob(serverJob);\n                            else keepSent(jobId, sent);\n                            if (!serverJob) setJobs(prev => prev.map(j => j.id === jobId\n                                ? { ...j, assignedTechIds: techIds, start: startHr,'), 'and the parent adopts the token and trail');
+    assert.ok(d.includes('publicToken:    j.publicToken || null,') && d.includes("customerNotifications: Array.isArray(j.customerNotifications) ? j.customerNotifications : [],"), 'boardJobOf carries them');
 });

@@ -426,7 +426,12 @@ test('DispatchTab: the invoice panel and the Invoices view at module scope; the 
     assert.ok(s.includes("                ) : view === 'invoices' ? (\n                    <InvoicesView customers={customers} jobsRaw={jobsRaw} onOpenJob={openJobRecord}/>"));
     assert.ok(s.includes('{selected && <JobInvoicePanel key={selected.id} job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}'));
     assert.ok(s.includes('openJobRequest={openJobRequest} showConfirm={showConfirm}'));
-    assert.ok(s.includes('                                    value: parseFloat(saved.invoiceAmount || 0),'), 'the board adopts the mirrored amount');
+    // Moved in §0.286: the editor's onSaved (the panel's onJobMirror) puts the job through adoptJob, which maps it by the
+    // board's one mapping (boardJobOf) — the mirrored amount is that mapping's `value`, no copy of its own.
+    assert.ok(s.includes('onSaved={saved => { adoptJob(saved); '), 'the mirror reaches the parent\'s adoptJob');
+    assert.ok(s.includes('setJobs(prev => prev.map(j => (j.id === row.id ? { ...j, ...boardJobOf(row, customers) } : j)));'), 'adoptJob maps it into the board');
+    const boardJobOf = s.slice(s.indexOf('const boardJobOf = (j, customers) => {'), s.indexOf('export default function DispatchTab()'));
+    assert.ok(boardJobOf.includes('        value:          parseFloat(j.invoiceAmount || 0),'), 'the board adopts the mirrored amount');
     assert.ok(s.includes('if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true, { confirm: \'Void invoice\' });'), 'the danger variant');
     // Moved pin (§0.272): its button says "Void invoice", never the danger default "Delete" (tests/house-dialogs.test.mjs).
     // Moved in §0.263 (the unknown-save rule, Part 4): the refusal's body read once (writeRefusalOf); only the server's own

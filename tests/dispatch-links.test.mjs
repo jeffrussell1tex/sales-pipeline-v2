@@ -327,9 +327,21 @@ test("THE GUARD: the Technicians screen picks a member by their app id and shows
     // ref), a failure in plain words (failureWords) — each with the job it is about.
     // Moved in §0.263 (the unknown-save rule, Part 4): the refusal carries whether it was the server's own (refusalError),
     // and the catch says one that proves nothing as may-have-been scheduled (thrownSaid).
-    assert.ok(inOrder(d, "        let firstError = '';", '                if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }',
+    // Moved in §0.286 (an office save sends only what it changed, a status move its fromStatus): the PUT is sent only when the
+    // plan changes the job as the board holds it; a 409 'already' is a press that landed, a 'stale' one adopts the job as
+    // stored and still throws the server's words — and that job leaves the panel too (a second press would only be refused).
+    assert.ok(inOrder(d, "        let firstError = '';", '        const adopted = [], moved = [];',
+        '                const held = (jobs.find(j => j.id === pr.job.id) || pr.job)._raw;',
+        '                const body = jobChanges(held, scheduleFields({ leadId: pr.tech.id, coIds: (pr.crew || []).slice(1).map(t => t.id),',
+        '                if (body) {', '                        body: JSON.stringify(body),',
+        '                    if (!res.ok) {', '                        const r = await writeRefusalOf(res);',
+        '                        const answer = jobAnswerOf(res.status, r.body, pr.job.id);',
+        "                        if (answer === 'already') adopted.push(r.body.job);",
+        "                            if (answer === 'stale') { adopted.push(r.body.job); moved.push(pr); }",
+        '                            throw refusalError(r.words, r.heard);',
         "                if (!firstError) firstError = `${pr.job.title || pr.job.customer || 'A job'}: ${thrownSaid(e, 'It', 'scheduled')}`;", '            setMassProg({ done, total: massPlan.proposals.length, failed, error: firstError });',
-        '        if (!failed) setMassPlan(null);', '        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr)) });'),
+        '        adopted.forEach(adoptJob);',
+        '        if (!failed) setMassPlan(null);', '        else setMassPlan(p => p && { ...p, proposals: p.proposals.filter(pr => !applied.includes(pr) && !moved.includes(pr)) });'),
         "the first refusal's words kept — the server's, with the job they are about — not 'HTTP 404'; what landed leaves the panel, so a second press sends only the rest");
     assert.ok(inOrder(d, '                {(saving || progress.failed > 0) && (',
         "                    <span style={{ fontSize: 12, color: saving ? T.inkMuted : T.danger, fontFamily: T.mono, marginRight: 'auto' }}>",

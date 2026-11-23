@@ -10,6 +10,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { planWeekDrop, nextCrewAfterDrop, dayNameOf, fmtHour } from '../src/utils/weekDrop.js';
+import { jobChanges, scheduleFields, sentOf } from '../src/utils/jobChanges.js';
+import { writeRefusalOf, refusalError, unknownOf, maybeSaid, failureWords } from '../src/utils/refusalWords.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
@@ -163,8 +165,16 @@ test('the parent’s handler: the planner’s refusal is shown, the equipment ga
     assert.ok(s.includes('reserved = pickEquipmentFor(job.equipCategories, equipment, overlappingRivals(job, jobs, toDate, probe)).picked;'), 'held units are re-picked for the new day');
     assert.ok(s.includes('body: JSON.stringify(payload),'), 'the body is the planner’s partial payload');
     assert.ok(!s.includes("payload = { ...payload, status:"), 'the handler never adds a status');
-    assert.ok(s.includes('assignedTechIds: plan.crew,') && s.includes('window:          saved ? queueWindow(saved) : j.window,'), 'the client row follows the plan and the server');
-    assert.ok(s.includes('if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));'), 'the Jobs view’s raw copy follows too');
+    // Moved in §0.286: the server's answer is adopted into both copies at once (adoptJob — the board row by boardJobOf, its
+    // _raw the job as stored, which the next sender diffs against; the Jobs view's raw copy too); an answer that could not
+    // be read moves the row as the plan sent it.
+    // Moved in the §0.286 review: an answer that could not be read keeps what was sent in both copies and the base too
+    // (keepSent over sentOf(payload)) beside the row moved as the plan sent it — run below.
+    assert.ok(s.includes('if (saved) adoptJob(saved); else { moveRow(); keepSent(job.id, sentOf(payload)); }'), 'the client row follows the server, else the plan — its base as sent');
+    assert.ok(s.includes('assignedTechIds: plan.crew,'), 'the row as the plan sent it');
+    assert.ok(s.includes('setJobsRaw(prev => prev.map(j => (j.id === row.id ? row : j)));'), 'the Jobs view’s raw copy follows too');
+    assert.ok(s.includes('setJobs(prev => prev.map(j => (j.id === row.id ? { ...j, ...boardJobOf(row, customers) } : j)));'), 'and the board row, its _raw with it');
+    assert.ok(!s.includes('if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));'), 'no raw copy of its own left behind');
     assert.ok(s.includes(".filter(b => !/^(Not rostered|Off ·|Double-booked)/.test(b))"), 'the soft blockers are the ones the builder overrides; the hard gates ran already');
     assert.ok(s.includes("showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), false);"), 'the app-wide confirm, like the builder’s Override — the INFO variant: its button reads Confirm; the danger variant’s reads Delete (seen in the pane, 14 Sep)');
     assert.ok(s.includes("addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,"));
@@ -172,6 +182,74 @@ test('the parent’s handler: the planner’s refusal is shown, the equipment ga
     // Moved in §0.263 (the unknown-save rule, Part 4): the server's own 403 the role's sentence; the refusal carries
     // whether it proves nothing was written, and one that does not moves the row as sent, said as maybe.
     assert.ok(s.includes("const r = await writeRefusalOf(res, 'Your role cannot reschedule jobs.');"));
-    assert.ok(s.includes("if (unknownOf(e)) { moveRow(null); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }"));
+    // Moved in the §0.286 review: a move whose answer proves nothing is kept as sent in the base too (keepSent).
+    assert.ok(s.includes("if (unknownOf(e)) { moveRow(); keepSent(job.id, sentOf(payload)); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }"));
     assert.ok(s.includes('onMove={handleWeekMove} moveState={weekMove}'), 'wired into the week range of the board');
+});
+
+// ── RUN (the §0.286 review): the parent's handleWeekMove and keepSent, extracted and run over stubs ─────────────────
+const between = (src, a, b) => { const i = src.indexOf(a); assert.ok(i >= 0, a); const j = src.indexOf(b, i + a.length); assert.ok(j > i, b); return src.slice(i, j); };
+const answerOf = (status, body) => ({ ok: status < 400, status, json: async () => { if (body instanceof Error) throw body; return body; } });
+const runWeekMove = async (move, rows, answer) => {
+    const s = code(read('src/Tabs/DispatchTab.jsx'));
+    const fn = between(s, '    const handleWeekMove = async ({ job, fromTechId, toTechId, toDate }) => {', '\n    if (loading) {');
+    const st = { raw: rows.map((r) => r._raw), jobs: rows, sent: [], kept: [], adopted: [], moves: [], audit: [] };
+    const setJobsRaw = (f) => { st.raw = typeof f === 'function' ? f(st.raw) : f; };
+    const setJobs = (f) => { st.jobs = typeof f === 'function' ? f(st.jobs) : f; };
+    const keepSentReal = new Function('setJobsRaw', 'setJobs', `${between(s, '    const keepSent = (id, sent) => {', '\n    };')}\n    };\nreturn keepSent;`)(setJobsRaw, setJobs);
+    const dbFetch = async (url, opts) => { st.sent.push([url, opts.method, JSON.parse(opts.body)]); if (answer instanceof Error) throw answer; return answer; };
+    const names = ['weekMove', 'settings', 'techs', 'shiftForDate', 'blocksOnDate', 'blocks', 'jobs', 'planWeekDrop', 'setWeekMove', 'equipmentConflicts',
+        'equipment', 'describeConflict', 'pickEquipmentFor', 'overlappingRivals', 'scoreTech', 'skills', 'vehicles', 'setJobs', 'requestOrg', 'dbFetch',
+        'writeRefusalOf', 'stillOrg', 'refusalError', 'adoptJob', 'keepSent', 'sentOf', 'addAudit', 'unitLabel', 'weekMoveTimer', 'setTimeout',
+        'clearTimeout', 'unknownOf', 'maybeSaid', 'failureWords', 'showConfirm'];
+    const handleWeekMove = new Function(...names, `${fn}\nreturn handleWeekMove;`)(
+        { busy: false }, { dispatchBlockTypes: blockTypes }, [ann, bob, cara], () => SHIFT, () => [], [], rows, planWeekDrop, (v) => st.moves.push(v),
+        () => [], [], () => '', () => ({ picked: [] }), () => [], () => ({ blockers: [] }), [], [], setJobs, () => 'org_a', dbFetch,
+        writeRefusalOf, () => true, refusalError, (row) => st.adopted.push(row), (id, sent) => { st.kept.push([id, sent]); keepSentReal(id, sent); }, sentOf,
+        (...a) => st.audit.push(a), (id) => id, { current: null }, () => 0, () => {}, unknownOf, maybeSaid, failureWords, null);
+    await handleWeekMove(move);
+    return st;
+};
+const RAW = Object.freeze({ id: 'j1', title: 'Boiler service', status: 'scheduled', assignedTechId: 't_ann', coTechIds: ['t_bob'], scheduledDate: '2026-09-15',
+    scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: [] });
+const ROW = Object.freeze({ ...job, equipCategories: [], assignedEquipment: [], _raw: RAW });
+const DAY_MOVE = { job: ROW, fromTechId: 't_ann', toTechId: 't_ann', toDate: '2026-09-17' };
+
+test('a week move that landed with an answer that cannot be read is kept as sent in both copies and the base; the next press diffs from it — RUN', async () => {
+    const st = await runWeekMove(DAY_MOVE, [ROW], answerOf(200, new SyntaxError("Unexpected token '<'")));
+    assert.deepEqual(st.sent, [['/.netlify/functions/dispatch-jobs?id=j1', 'PUT', { id: 'j1', scheduledDate: '2026-09-17' }]], 'the planner’s partial body, never status');
+    assert.deepEqual(st.adopted, []);
+    assert.deepEqual(st.kept, [['j1', { scheduledDate: '2026-09-17' }]], 'kept as sent: the body minus its id');
+    assert.equal(st.jobs[0].scheduledDate, '2026-09-17', 'the row moved as the plan sent it');
+    assert.deepEqual(st.jobs[0]._raw, { ...RAW, scheduledDate: '2026-09-17' }, 'and its base — what the next sender diffs against');
+    assert.deepEqual(st.raw, [{ ...RAW, scheduledDate: '2026-09-17' }], 'and the Jobs view’s copy');
+    assert.equal(st.moves.at(-1).error, '', 'a landed move, said as moved');
+    assert.match(st.moves.at(-1).notice, /^Moved Boiler service to 2026-09-17\./);
+    // The next press: Schedule now back on the 15th at 09:00 sends the day back with its status checked. From the old base
+    // it sent nothing and said done (the review), the job left on the 17th.
+    const back = scheduleFields({ leadId: 't_ann', coIds: ['t_bob'], date: '2026-09-15', start: '09:00', end: '11:00', units: [] });
+    assert.deepEqual(jobChanges(st.jobs[0]._raw, back, 'j1', { checkStatus: true }),
+        { id: 'j1', scheduledDate: '2026-09-15', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', status: 'scheduled', fromStatus: 'scheduled' });
+    assert.equal(jobChanges(RAW, back, 'j1', { checkStatus: true }), null, 'from the base as loaded it would have sent nothing');
+});
+
+test('a week move whose answer proves nothing is kept as sent too, said as maybe; one the server answered is adopted, never kept as sent — RUN', async () => {
+    const st = await runWeekMove(DAY_MOVE, [ROW], new TypeError('Failed to fetch'));
+    assert.deepEqual(st.kept, [['j1', { scheduledDate: '2026-09-17' }]]);
+    assert.deepEqual(st.jobs[0]._raw, { ...RAW, scheduledDate: '2026-09-17' });
+    assert.deepEqual(st.raw, [{ ...RAW, scheduledDate: '2026-09-17' }]);
+    assert.equal(st.moves.at(-1).error, maybeSaid('Boiler service', 'moved', 'The server could not be reached.'));
+    assert.deepEqual(st.audit, [], 'no audit row for a move not known to have landed');
+
+    const stored = { ...RAW, scheduledDate: '2026-09-17' };
+    const ok = await runWeekMove(DAY_MOVE, [ROW], answerOf(200, { job: stored }));
+    assert.deepEqual(ok.adopted, [stored]);
+    assert.deepEqual(ok.kept, [], 'an answer read is adopted whole');
+    assert.equal(ok.jobs[0], ROW, 'the row left to adoptJob');
+    assert.deepEqual(ok.audit[0].slice(0, 3), ['dispatch.reschedule', 'dispatch_job', 'j1']);
+
+    // The server's own refusal (a 4xx in words) proves nothing was written: nothing kept, the row unmoved.
+    const no = await runWeekMove(DAY_MOVE, [ROW], answerOf(403, { error: 'Forbidden: read-only role' }));
+    assert.deepEqual(no.kept, []); assert.equal(no.jobs[0], ROW);
+    assert.equal(no.moves.at(-1).error, 'Your role cannot reschedule jobs.');
 });

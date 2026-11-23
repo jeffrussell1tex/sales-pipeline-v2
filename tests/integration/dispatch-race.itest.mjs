@@ -68,13 +68,14 @@ QueryPromise.prototype.then = function (ok, bad) {
 const { db } = await import('../../db/index.js');
 const { handler: jobsFn } = await import('../../netlify/functions/dispatch-jobs.mjs');
 const { notifyCustomer } = await import('../../netlify/functions/_customerNotify.mjs');
-const { settings, dispatchJobs, dispatchJobStatusHistory, dispatchCustomers, auditLog } = await import('../../db/schema.js');
+const { settings, dispatchJobs, dispatchJobStatusHistory, dispatchCustomers, dispatchTechnicians, auditLog } = await import('../../db/schema.js');
 const { eq, and, sql } = await import('drizzle-orm');
 
 // ORG NAMESPACE: this file owns 'itest_dispatch_race_*', and only this file writes to it.
 const A = 'itest_dispatch_race_A';
 const B = 'itest_dispatch_race_B';
 const CUST = { [A]: 'dcust_itest_dispatch_race_a', [B]: 'dcust_itest_dispatch_race_b' };
+const TECHS = ['tech_itest_dispatch_race_lead', 'tech_itest_dispatch_race_co'];
 
 const put = (org, body, role = 'Dispatcher') => jobsFn({
     httpMethod: 'PUT',
@@ -103,6 +104,7 @@ const cleanup = async () => {
         await db.delete(dispatchJobStatusHistory).where(eq(dispatchJobStatusHistory.orgId, o));
         await db.delete(dispatchJobs).where(eq(dispatchJobs.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
+        await db.delete(dispatchTechnicians).where(eq(dispatchTechnicians.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
         await db.delete(auditLog).where(eq(auditLog.orgId, o));
     }
@@ -116,6 +118,10 @@ before(async () => {
     await db.insert(dispatchCustomers).values([
         { id: CUST[A], orgId: A, name: 'Itest Race Customer', contactEmail: 'race@itest-dispatch-race.local', customerType: 'commercial' },
         { id: CUST[B], orgId: B, name: 'Itest Other Customer', contactEmail: 'other@itest-dispatch-race.local', customerType: 'commercial' },
+    ]);
+    await db.insert(dispatchTechnicians).values([
+        { id: TECHS[0], orgId: A, firstName: 'Itest', lastName: 'Lead' },
+        { id: TECHS[1], orgId: A, firstName: 'Itest', lastName: 'Co' },
     ]);
 });
 after(async () => { armedAtRead = null; QueryPromise.prototype.then = realThen; await cleanup(); });
@@ -275,4 +281,133 @@ test("§0.285 the other org sees nothing: an office move from org B over org A's
     assert.equal((await jobOf(id)).status, 'scheduled', "org B's move never touches org A's job");
     assert.deepEqual(await movesOf(idB, B), ['scheduled->en_route'], "org B's own move, in org B");
     assert.ok(mails.length === 1 && mails[0].to === 'other@itest-dispatch-race.local', "only org B's customer told");
+});
+
+// ── §0.286: an office save names the status it moved from (OPEN_ITEMS §4.8, §0.285's found (i); Jeff, 22 Nov: "Do your
+// recommended") — refused 409 'stale' with the job when the job no longer stands there, nothing written; a press sent
+// again over a job that holds all it sent is 'already', with the job. A body naming no fromStatus is decided as before. ──
+
+const said = (res) => JSON.parse(res.body);
+
+test('§0.286 a status move from where the job stands lands and records its move; fromStatus is never written', async () => {
+    const id = await seed('from_ok', 'scheduled');
+    const res = await put(A, { id, status: 'en_route', fromStatus: 'scheduled' });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal((await jobOf(id)).status, 'en_route');
+    assert.deepEqual(await movesOf(id), ['scheduled->en_route']);
+});
+
+test("§0.286 a status move from a status the job no longer holds writes nothing — 409 'stale' with the job as stored, no move, no notice, no audit; staged at the read, and not", async () => {
+    const id = await seed('stale_raced', 'scheduled');
+    mails.length = 0; ranAtRead = false;
+    armedAtRead = otherMove(id, { status: 'en_route' });
+    const res = await put(A, { id, status: 'cancelled', fromStatus: 'scheduled' });
+    assert.equal(ranAtRead, true);
+    assert.equal(res.statusCode, 409, res.body);
+    assert.equal(said(res).code, 'stale');
+    assert.equal(said(res).job.status, 'en_route', 'the job as stored, for the screen to show');
+    assert.equal(said(res).error, 'This job is en route now — it changed since you opened it. Nothing was saved.');
+    assert.equal((await jobOf(id)).status, 'en_route', 'REGRESSION: a screen behind the move wrote its status back');
+    assert.deepEqual(await movesOf(id), [], 'no move recorded');
+    assert.equal(mails.length, 0, 'the customer told nothing');
+    const audits = await db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.entityId, id)));
+    assert.equal(audits.length, 0, 'no audit row');
+
+    const id2 = await seed('stale_plain', 'on_site');
+    const res2 = await put(A, { id: id2, status: 'completed', scheduledDate: '2026-12-01', fromStatus: 'scheduled' });
+    assert.equal(res2.statusCode, 409, res2.body);
+    assert.equal(said(res2).code, 'stale');
+    const job2 = await jobOf(id2);
+    assert.deepEqual([job2.status, job2.scheduledDate], ['on_site', '2026-11-26'], 'nothing of the save written — not even its other fields');
+});
+
+test("§0.286 a press sent again after it landed is 'already' with the job — one move, one notice; one that differs in a field is 'stale'", async () => {
+    const id = await seed('again', 'scheduled');
+    mails.length = 0;
+    const body = { id, status: 'en_route', fromStatus: 'scheduled' };
+    assert.equal((await put(A, body)).statusCode, 200);
+    const again = await put(A, body);
+    assert.equal(again.statusCode, 409, again.body);
+    assert.equal(said(again).code, 'already');
+    assert.equal(said(again).error, 'This job is en route already.');
+    assert.equal(said(again).job.status, 'en_route');
+    assert.deepEqual(await movesOf(id), ['scheduled->en_route'], 'one move');
+    assert.equal(onTheWay(), 1, 'told once');
+    const differs = await put(A, { ...body, scheduledStart: '09:00' });
+    assert.equal(differs.statusCode, 409, differs.body);
+    assert.equal(said(differs).code, 'stale', 'REGRESSION: a press that differs from the job as stored said done');
+    assert.equal((await jobOf(id)).scheduledStart, '08:00');
+});
+
+test("§0.286 two presses of one move at once: one lands, the other is 'already' — one move, one notice", async () => {
+    const id = await seed('pair', 'scheduled');
+    mails.length = 0;
+    const body = { id, status: 'en_route', fromStatus: 'scheduled' };
+    const answers = (await Promise.all([put(A, body), put(A, body)])).map((r) => (r.statusCode === 200 ? '200' : said(r).code));
+    assert.deepEqual(answers.sort(), ['200', 'already'], JSON.stringify(answers));
+    assert.deepEqual(await movesOf(id), ['scheduled->en_route']);
+    assert.equal(onTheWay(), 1);
+});
+
+test("§0.286 'already' reads the job as stored by one rule per column — a crew list held as JSON text, a cost held as a decimal", async () => {
+    const id = await seed('shapes', 'unscheduled');
+    const body = { id, status: 'scheduled', fromStatus: 'unscheduled', assignedTechId: TECHS[0], coTechIds: [TECHS[1]], laborCost: 12.5 };
+    const first = await put(A, body);
+    assert.equal(first.statusCode, 200, first.body);
+    const row = await jobOf(id);
+    assert.equal(String(row.laborCost), '12.50', 'the cost as the column stores it');
+    const again = await put(A, body);
+    assert.equal(again.statusCode, 409, again.body);
+    assert.equal(said(again).code, 'already', 'REGRESSION: a list held as text or a decimal read as changed');
+});
+
+test('§0.286 a fromStatus that is no status is a 400 naming the field, nothing written; a body naming none is decided as before', async () => {
+    const id = await seed('bad_from', 'scheduled');
+    for (const fromStatus of ['nope', 7, null, '']) {
+        const res = await put(A, { id, status: 'cancelled', fromStatus });
+        assert.equal(res.statusCode, 400, `${JSON.stringify(fromStatus)}: ${res.body}`);
+        assert.equal(said(res).field, 'fromStatus');
+    }
+    assert.equal((await jobOf(id)).status, 'scheduled');
+    const plain = await put(A, { id, status: 'cancelled' });
+    assert.equal(plain.statusCode, 200, 'no fromStatus: as before');
+    assert.deepEqual(await movesOf(id), ['scheduled->cancelled']);
+});
+
+test("§0.286 org B naming org A's job with a fromStatus is a 404 with no job in the body — nothing written in either org", async () => {
+    const id = await seed('org_from', 'scheduled');
+    const res = await put(B, { id, status: 'cancelled', fromStatus: 'scheduled' });
+    assert.equal(res.statusCode, 404, res.body);
+    assert.equal(said(res).job, undefined, 'nothing of org A handed to org B');
+    assert.equal((await jobOf(id)).status, 'scheduled');
+    assert.deepEqual(await movesOf(id), []);
+});
+
+test('§0.286 a time-off unassign from scheduled releases the units the job held (named, now an unchanged status is not sent)', async () => {
+    const id = await seed('release', 'scheduled');
+    await db.update(dispatchJobs).set({ assignedTechId: TECHS[0], assignedEquipmentIds: JSON.stringify(['eq_itest_dispatch_race_1']) }).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, A)));
+    const res = await put(A, { id, status: 'unscheduled', fromStatus: 'scheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [] });
+    assert.equal(res.statusCode, 200, res.body);
+    const job = await jobOf(id);
+    assert.equal(job.status, 'unscheduled');
+    assert.deepEqual(typeof job.assignedEquipmentIds === 'string' ? JSON.parse(job.assignedEquipmentIds) : job.assignedEquipmentIds, [], 'units released');
+});
+
+test('§0.286 review: a status outside the job statuses is a 400 naming the field on the PUT and the POST — nothing written; a hold from a screen that saw the job unscheduled, scheduled since, is stale', async () => {
+    const id = await seed('bad_status', 'scheduled');
+    const res = await put(A, { id, status: 'in_progress' });
+    assert.equal(res.statusCode, 400, res.body);
+    assert.equal(said(res).field, 'status');
+    assert.equal((await jobOf(id)).status, 'scheduled');
+    const post = await jobsFn({ httpMethod: 'POST', headers: { 'x-test-org': A, 'x-test-role': 'Dispatcher', 'x-test-user': 'clerk_itest_dispatch_race_office', 'content-type': 'application/json' },
+        body: JSON.stringify({ id: 'itest_dispatch_race_job_post_bad', customerId: CUST[A], title: 'Bad', status: 'in_progress' }), queryStringParameters: {} });
+    assert.equal(post.statusCode, 400, post.body);
+    assert.equal(said(post).field, 'status');
+    assert.equal(await jobOf('itest_dispatch_race_job_post_bad'), undefined, 'nothing made');
+    // The review: a hold names the status it saw even when unchanged — a job scheduled since is refused, never re-crewed unseen.
+    const held = await seed('hold_guard', 'scheduled');
+    const hold = await put(A, { id: held, status: 'unscheduled', fromStatus: 'unscheduled', assignedTechId: TECHS[0], coTechIds: [] });
+    assert.equal(hold.statusCode, 409, hold.body);
+    assert.equal(said(hold).code, 'stale');
+    assert.equal((await jobOf(held)).assignedTechId, null, 'the crew never written over the scheduled job');
 });
