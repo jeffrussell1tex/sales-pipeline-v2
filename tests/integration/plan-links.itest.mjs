@@ -191,11 +191,15 @@ test('HELD + READ (an update): the plan stored as text re-saved as it holds is t
     assert.deepEqual(row.coveredJobTypes, []);
 });
 
-test("HELD (a re-POST): a plan's create over itself holding another org's template is taken — the plan it overwrites is read first", async () => {
+test("HELD (a re-POST, reversed in §0.291): a plan's create over itself writes nothing — answered with the plan, its links not asked", async () => {
     await db.insert(dispatchServicePlans).values({ id: P('repost'), orgId: A, name: 'Re-posted', visitTemplateId: TM_B, coveredJobTypes: JSON.stringify([JT_B]) });
     const r = await call('POST', { id: P('repost'), name: 'Re-posted', visitTemplateId: TM_B, coveredJobTypes: [JT_B] });
-    assert.equal(r.status, 201, 'REGRESSION: the re-POST is refused for what the plan holds — ' + JSON.stringify(r.body));
-    refused(await call('POST', { id: P('repost'), name: 'Re-posted', visitTemplateId: TM_B, coveredJobTypes: [JT_B, GONE] }), 'jobType', 'coveredJobTypes');
+    assert.deepEqual([r.status, r.body.code, r.body.plan?.id], [409, 'idInUse', P('repost')], 'REGRESSION: the re-POST is refused for what the plan holds — ' + JSON.stringify(r.body));
+    const before = await one(P('repost'));
+    const more = await call('POST', { id: P('repost'), name: 'Changed', visitTemplateId: TM_B, coveredJobTypes: [JT_B, GONE], discountPercent: 150 });
+    assert.deepEqual([more.status, more.body.code], [409, 'idInUse'], 'neither its links nor its discount asked of a plan that landed');
+    assert.deepEqual(await one(P('repost')), before, 'nothing written');
+    refused(await call('POST', { id: P('repost_new'), name: 'New', visitTemplateId: TM_B, coveredJobTypes: [GONE] }), 'jobTemplate', 'visitTemplateId');
 });
 
 test("READ + ORG B: an update naming no plan of this org is 404 before anything is asked; org B's plan — 404 to an update, 409 to a create (with no link of B's named: 404 naming the link)", async () => {

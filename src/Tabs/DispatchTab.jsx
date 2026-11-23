@@ -7,7 +7,7 @@ import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/s
 // A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
 import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore, alreadySaid } from '../utils/refusalWords.js';
 // A create sent again with its id, answered with the row an earlier press made (state §0.290).
-import { heldCreate, overStored } from '../utils/createResend.js';
+import { heldCreate, overStored, keptSaid } from '../utils/createResend.js';
 import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
@@ -3196,7 +3196,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                     adopting.current = held.id;
                     setSelectedId(held.id);
                     setDraft(d => (d && d.id === held.id ? overStored({ ...d, name: (d.name || '').trim() }, held, bodies).draft : d));
-                    setStatus({ kind: 'err', msg: 'The customer was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.' });
+                    setStatus({ kind: 'err', msg: keptSaid('The customer') });
                     return;
                 }
                 if (shown.differs) onSaid(alreadySaid('The customer', 'created'));
@@ -3577,7 +3577,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
 const EMPLOYMENT_TYPES = ['employee', 'subcontractor'];
 const TECH_STATUSES    = ['active', 'inactive', 'on_leave'];
 
-const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved, confirmDiscard }) => {
+const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved, onSaid, confirmDiscard }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -3625,14 +3625,22 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
         setStatus(null);
         setDraft({ id: 'dtech_' + crypto.randomUUID(), _isNew: true, firstName: '', lastName: '',
             userId: '', email: '', phone: '', employmentType: 'employee', status: 'active',
-            homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek() });
+            homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek(),
+            licenseLevel: null, certifications: [], memberId: null });   // every field the form shows: another member's is told by it (§0.291)
     });
+
+    // A new technician's bodies whose answer proved nothing, by its id (state §0.291): any may be the one stored.
+    const unproven = useRef({});
+    const shownRef = useRef(true);   // the view tabs stay live while a Save is out: a form gone is said above every view
+    React.useEffect(() => { shownRef.current = true; return () => { shownRef.current = false; }; }, []);
 
     const save = async () => {
         if (!draft || !(draft.firstName || '').trim() || !(draft.lastName || '').trim()) {
             setStatus({ kind: 'err', msg: 'First and last name are required.' }); return;
         }
         setSaving(true); savingRef.current = true; setStatus(null);
+        let sentNew = null;
+        const keepSentNew = () => { if (sentNew) (unproven.current[sentNew.id] = unproven.current[sentNew.id] || []).push(sentNew); };
         try {
             const body = { ...draft,
                 firstName: draft.firstName.trim(),
@@ -3643,6 +3651,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 overtimeRate: draft.overtimeRate === '' ? null : draft.overtimeRate,
             };
             delete body._isNew;
+            if (draft._isNew) sentNew = body;
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const url = draft._isNew
                 ? '/.netlify/functions/dispatch-technicians'
@@ -3655,11 +3664,29 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
             if (!res.ok) {   // the ok check first, the house words; a 403 the role's sentence (state §0.248, Q13)
                 const r = await writeRefusalOf(res, 'Your role cannot change technicians.');
                 if (!stillOrg(askedOrg)) return;
-                throw refusalError(r.words, r.heard);
+                const held = sentNew ? heldCreate(res.status, r.body, 'technician', draft.id) : null;
+                if (!held) throw refusalError(r.words, r.heard);
+                // An earlier press of this create landed (state §0.291): the technician as stored, and what this member changed since
+                // over it, as an edit to save. A login is picked by the member's app id and stored as their Clerk identity: one value.
+                const asStored = (b) => (b && b.userId && b.userId === held.memberId ? { ...b, userId: held.userId } : b);
+                const shown = overStored(asStored(body), held, (unproven.current[draft.id] || []).map(asStored));
+                delete unproven.current[draft.id];
+                onSaved(held);
+                if (!shownRef.current) {
+                    if (shown.mine.length) onSaid('The technician was already created by an earlier press. What you changed since was not saved — open the technician to change it.');
+                    else if (shown.differs) onSaid(alreadySaid('The technician', 'created'));
+                    return;
+                }
+                setDraft(shown.draft); setSelectedId(held.id);
+                setStatus(shown.mine.length ? { kind: 'err', msg: keptSaid('The technician') }
+                    : { kind: 'ok', msg: shown.differs ? alreadySaid('The technician', 'created') : 'Technician created' });
+                return;
             }
             const data = await res.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
             const saved = data.technician;
+            if (!saved) keepSentNew();   // landed, its answer unreadable: the next press is answered with it
+            else delete unproven.current[saved.id];
             // The form takes the server's answer (state §0.201): the login stored is the member's Clerk identity
             // (the pick sent their app id), the row's updatedAt moved, a create is new no more — the form read as
             // unsaved after every save. Nothing changed it while the save was out (set, the picker and guarded
@@ -3667,6 +3694,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
             if (saved) { onSaved(saved); setDraft({ ...saved }); setSelectedId(saved.id); }
             setStatus({ kind: 'ok', msg: draft._isNew ? 'Technician created' : 'Saved' });
         } catch (e) {
+            if (unknownOf(e)) keepSentNew();
             setStatus({ kind: 'err', msg: thrownSaid(e, 'The technician', 'saved') });   // maybe (state §0.263)
         } finally {
             setSaving(false); savingRef.current = false;
@@ -5087,7 +5115,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
 
         setBusy(true); setErr('');
         try { await onSaveBlock(editing); setEditing(null); }
-        catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }   // maybe (state §0.263)
+        catch (e) { if (e.editing) setEditing(e.editing); setErr(thrownSaid(e, 'The time off', 'saved')); }   // maybe (state §0.263); one already made, an edit of it (§0.291)
         finally { setBusy(false); }
     };
 
@@ -5096,7 +5124,7 @@ const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNe
         try {
             await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));
             setConflict(null); setEditing(null);
-        } catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }
+        } catch (e) { if (e.editing) { setConflict(null); setEditing(e.editing); } setErr(thrownSaid(e, 'The time off', 'saved')); }
         finally { setBusy(false); }
     };
 
@@ -6565,24 +6593,58 @@ export default function DispatchTab() {
     // dialog open, and a second press re-saves the block and re-sends every unassign. The block's own refusal throws,
     // in the server's words (a 403 the role's sentence, Q13), the ok check before the body.
     const [unassignError, setUnassignError] = useState('');
+    // A new block's bodies whose answer proved nothing, by its id (state §0.291): any may be the one stored.
+    const unprovenBlocks = useRef({});
+    const keptBlock = useRef(null);   // the block whose jobs the banner says were not returned: its next landed save or delete clears it
     const saveBlock = async (blk, unassignJobIds = []) => {
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         const isNew = !!blk._isNew;
-        const body = { ...blk }; delete body._isNew;
-        if (unassignJobIds.length) setUnassignError('');
-        const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
-            + (isNew ? '' : '?id=' + encodeURIComponent(blk.id)), {
-            method: isNew ? 'POST' : 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        if (!res.ok) { const refused = await writeRefusalOf(res, 'Your role cannot change availability.'); throw refusalError(refused.words, refused.heard); }
-        const data = await res.json().catch(() => null);
+        // An all-day block has no hours (the dialog keeps those typed before "All day" was ticked again): sent as it is stored.
+        const body = { ...blk, ...(blk.allDay !== false ? { allDay: true, startTime: null, endTime: null } : {}) }; delete body._isNew;
+        const keepBody = () => { if (isNew) (unprovenBlocks.current[blk.id] = unprovenBlocks.current[blk.id] || []).push(body); };
+        if (unassignJobIds.length) { setUnassignError(''); keptBlock.current = null; }
+        let res;
+        try {
+            res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
+                + (isNew ? '' : '?id=' + encodeURIComponent(blk.id)), {
+                method: isNew ? 'POST' : 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        } catch (e) { keepBody(); throw e; }
+        let held = null;
+        if (!res.ok) {
+            const refused = await writeRefusalOf(res, 'Your role cannot change availability.');
+            if (!stillOrg(askedOrg)) return;
+            held = isNew ? heldCreate(res.status, refused.body, 'block', blk.id) : null;
+            if (!held) { if (!refused.heard) keepBody(); throw refusalError(refused.words, refused.heard); }
+        }
+        const data = held ? { block: held } : await res.json().catch(() => null);
+        if (held) {
+            // An earlier press of this create landed (state §0.291): the time off as stored. What this member changed since is an
+            // edit to save — the dialog's, no job returned yet; otherwise it stands, and the jobs returned are those inside it.
+            const bodies = unprovenBlocks.current[blk.id] || [];
+            const shown = overStored(body, held, bodies);
+            delete unprovenBlocks.current[blk.id];
+            if (shown.mine.length) {
+                setBlocks(prev => [...prev.filter(b => b.id !== held.id), held]);
+                // Kept above every view: the dialog's words go with it, and these jobs are still the technician's.
+                if (unassignJobIds.length) { keptBlock.current = blk.id; setUnassignError(`The time off was already created by an earlier press. ${unassignJobIds.length === 1 ? 'The job during it was' : `The ${unassignJobIds.length} jobs during it were`} not returned to the queue.`); }
+                throw Object.assign(saidError(keptSaid('The time off')), { editing: shown.draft });
+            }
+            if (shown.differs) {
+                setCreateSaid({ text: alreadySaid('The time off', 'created') });
+                const inside = new Set(jobsDuringBlock(jobs, held).map(j => j.id));
+                unassignJobIds = unassignJobIds.filter(id => inside.has(id));
+            }
+        }
         const saved = data && data.block;
+        if (keptBlock.current === blk.id) { keptBlock.current = null; setUnassignError(''); }
         // Landed (a 2xx) with an answer that cannot be read: with jobs to return they still go back to the queue, the
         // banner saying the time off shows after a refresh (any job left is added after it) — a throw here sent no
         // unassign and named no job (review, 11 Nov); with none to return the dialog says it.
         const unread = "The time off was saved, but its answer couldn't be read. Refresh to see it.";
+        if (!saved) keepBody();   // landed: the next press is answered with it
         if (!saved && !unassignJobIds.length) throw saidError(unread);
         if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }
         else setBlocks(prev => {
@@ -6635,7 +6697,7 @@ export default function DispatchTab() {
         if (addAudit) {
             addAudit('dispatch.timeoff.unassign', 'dispatch_technician', blk.techId,
                 `${techName.firstName || ''} ${techName.lastName || ''}`.trim() || blk.techId,
-                `Time off ${blk.startDate}–${blk.endDate} — ${freed.length} job(s) returned to the queue` +
+                `Time off ${(held || blk).startDate}–${(held || blk).endDate} — ${freed.length} job(s) returned to the queue` +
                 (noLonger.length ? ` — ${noLonger.length} no longer theirs` : '') +
                 (freed.length + noLonger.length !== unassignJobIds.length ? ` — ${unassignJobIds.length - freed.length - noLonger.length} failed` : ''));
         }
@@ -6657,6 +6719,7 @@ export default function DispatchTab() {
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks?id=' + encodeURIComponent(id), { method: 'DELETE' });
         if (!res.ok) { const r = await writeRefusalOf(res); throw refusalError(r.words, r.heard); }
         setBlocks(prev => prev.filter(b => b.id !== id));
+        if (keptBlock.current === id) { keptBlock.current = null; setUnassignError(''); }
     };
 
     const saveWorkingHours = async (techId, workingHours) => {
@@ -7152,6 +7215,7 @@ export default function DispatchTab() {
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
                         vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}
                         confirmDiscard={confirmDiscard}
+                        onSaid={text => setCreateSaid({ text })}
                         onSaved={saved => {
                             setTechsRaw(prev => {
                                 const i = prev.findIndex(t => t.id === saved.id);

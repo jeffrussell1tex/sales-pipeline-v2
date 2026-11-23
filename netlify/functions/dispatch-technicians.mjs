@@ -75,6 +75,17 @@ function normalise(row) {
     };
 }
 
+// A create's id this org holds already (state §0.291): an earlier press of the same create landed (its form keeps the id after
+// an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the technician as stored, for the
+// screen to take; nothing written. It was an upsert of the whole row: a login linked, a leave, a licence
+// set in between by another member was written over. null when this org holds none — another org's id is the words alone.
+// Its callers await it: a failed read is the handler's 500, never an answer with no row.
+async function heldTechnician(orgId, id) {
+    const [held] = await db.select().from(dispatchTechnicians).where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
+    const memberId = held ? await memberIdOf(orgId, held.userId) : null;
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That technician id is already in use.', code: 'idInUse', technician: normalise({ ...held, memberId }) }) } : null;
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -118,18 +129,18 @@ export const handler = async (event) => {
             if (!data.firstName) return { statusCode: 400, headers, body: JSON.stringify({ error: 'firstName required' }) };
             if (!data.lastName)  return { statusCode: 400, headers, body: JSON.stringify({ error: 'lastName required' }) };
 
-            // The create is an upsert: what the row already holds is held (state §0.201).
-            const [prior] = await db.select({ id: dispatchTechnicians.id, userId: dispatchTechnicians.userId, assignedVehicleId: dispatchTechnicians.assignedVehicleId })
-                .from(dispatchTechnicians).where(and(eq(dispatchTechnicians.id, data.id), eq(dispatchTechnicians.orgId, orgId)));
-            const linked = await checkLinks(TECH_LINKS, data, prior || null, orgId);
+            // A create only (state §0.291): an id this org holds is answered with its row before any link is asked.
+            const landed = await heldTechnician(orgId, data.id);
+            if (landed) return landed;
+            const linked = await checkLinks(TECH_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
-            const login = await loginOf(orgId, data.id, data, prior || null);
+            const login = await loginOf(orgId, data.id, data, null);
             if (login.status) return { statusCode: login.status, headers, body: JSON.stringify({ error: login.error, field: login.field }) };
 
             const row = {
                 id:               data.id,
                 orgId,
-                userId:           login.keep ? (prior ? prior.userId : null) : login.userId,
+                userId:           login.keep ? null : login.userId,
                 firstName:        data.firstName,
                 lastName:         data.lastName,
                 email:            data.email            ?? null,
@@ -157,17 +168,15 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C).
-            const [inserted] = await db.insert(dispatchTechnicians).values(row)
-                .onConflictDoUpdate({
-                    target: dispatchTechnicians.id, setWhere: eq(dispatchTechnicians.orgId, orgId),
-                    set: { ...row, createdAt: undefined },
-                }).returning();
-            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-            // that said the id was taken elsewhere (state §0.166).
+            const [inserted] = await db.insert(dispatchTechnicians).values(row).onConflictDoNothing({ target: dispatchTechnicians.id }).returning();
+            // Nothing written: the same create landed beside this one, or another org holds the id — the words alone (state §0.166).
+            if (!inserted) {
+                const beside = await heldTechnician(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That technician id is already in use.' }) };
 
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, userId, { action: prior ? 'dispatch_technician.updated' : 'dispatch_technician.created', entityType: 'dispatch_technician', entityId: inserted.id, entityName: techName(inserted), detail: `${inserted.employmentType || 'employee'} · ${inserted.status || 'active'}` });
+            await auditAs(orgId, userId, { action: 'dispatch_technician.created', entityType: 'dispatch_technician', entityId: inserted.id, entityName: techName(inserted), detail: `${inserted.employmentType || 'employee'} · ${inserted.status || 'active'}` });
             return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise({ ...inserted, memberId }) }) };
         }
 

@@ -5,13 +5,18 @@
 // React, no database.
 
 /** The stored row a refused create is answered with: 409 'idInUse' naming the very id sent — else null (another org's id,
- * a row of another id and a body with no row prove nothing of this create). `key` — job, customer or location. */
+ * a row of another id and a body with no row prove nothing of this create). `key` — the answer's: job, customer, location, technician, vehicle, item, block or plan. */
 export const heldCreate = (status, body, key, id) =>
     (status === 409 && body?.code === 'idInUse' && !!id && body[key]?.id === id ? body[key] : null);
 
-const same = (a, b) => {
-    const text = (v) => (v == null || v === '' ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
-    return text(a) === text(b);
+// One value whichever way it is held: none and '' are one; a list or an object by what it holds, keys in any order (a column
+// may sort them); a decimal column as its number ('120' typed, '120.00' stored) — those columns alone: a tag '1.10' is not '1.1'.
+const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.keys(v).sort().map((k) => [k, canon(v[k])]) : v);
+const DECIMALS = new Set(['laborRate', 'overtimeRate', 'purchasePrice', 'includedHours', 'discountPercent', 'price', 'creditLimit']);
+const same = (k, a, b) => {
+    const text = (v) => (v == null || v === '' ? '' : typeof v === 'object' ? JSON.stringify(canon(v)) : String(v));
+    const x = text(a), y = text(b);
+    return x === y || (DECIMALS.has(k) && !!x && !!y && Number(x) === Number(y));
 };
 
 /**
@@ -27,9 +32,12 @@ export function overStored(typed, stored, sent = []) {
     const mine = [];
     let differs = false;
     for (const k of Object.keys(typed || {})) {
-        if (k === 'id' || k.startsWith('_') || same(typed[k], stored?.[k])) continue;
+        if (k === 'id' || k.startsWith('_') || same(k, typed[k], stored?.[k])) continue;
         differs = true;
-        if (sent.length && (!sent.some((b) => same(b?.[k], typed[k])) || sent.some((b) => same(b?.[k], stored?.[k])))) { draft[k] = typed[k]; mine.push(k); }
+        if (sent.length && (!sent.some((b) => same(k, b?.[k], typed[k])) || sent.some((b) => same(k, b?.[k], stored?.[k])))) { draft[k] = typed[k]; mine.push(k); }
     }
     return { draft, mine, differs };
 }
+
+/** What a form says when the record it made stands with what was typed since over it, not written yet. */
+export const keptSaid = (subject) => `${subject} was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.`;

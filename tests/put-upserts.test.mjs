@@ -7,8 +7,8 @@
 // export-dsr) and became updates in this batch. This guard parses every function file (netlify/functions/*.mjs) and
 // finds every `.insert(` and `.onConflictDoUpdate(` call, by the method block that holds it:
 //   - in a PUT or PATCH block: each must be NAMED below (PUT_WRITES), with its reason and its count;
-//   - in a POST block: an `.onConflictDoUpdate(` must be named (POST_UPSERTS) — the designed create-upserts (§0.201),
-//     filed (a re-POST overwrites with defaults; OUT in the design); a plain insert is a create, never asked;
+//   - in a POST block: an `.onConflictDoUpdate(` must be named (POST_UPSERTS, with its reason) — the designed create-upserts
+//     of §0.201 are gone (§0.290, §0.291: a re-POST overwrote with defaults); a plain insert is a create, never asked;
 //   - outside any method block (a helper): an `.onConflictDoUpdate(` must be named (HELPER_UPSERTS).
 // A new one fails until it is named, with its reason; a named one that is gone fails until its name goes (no stale
 // names). A method block is an `if` whose test compares to 'PUT', 'PATCH', 'POST', 'GET' or 'DELETE' (`===`), or the
@@ -121,18 +121,20 @@ const PUT_WRITES = {
     'backup.mjs PATCH insert': [3, "the restore: a row already here is kept (onConflictDoNothing), never written over; and the import's snapshot row"],
     'users.mjs PUT insert': [1, "the quota writer's audit rows (audit_log) — a member's save is update-only (upsertUser's updateOnly, state §0.202)"],
 };
-// The designed create-upserts (§0.201: "The create is an upsert") — a re-POST overwrites with defaults; filed (OUT).
+// The designed create-upserts (§0.201: "The create is an upsert") — a re-POST overwrote with defaults.
 // Reversed in §0.290: a customer's, a location's and a job's create are creates (an id taken writes nothing, answered
-// 'idInUse' in this org) — dispatch-customers.mjs holds none, and dispatch-jobs.mjs's one is a job's line item.
+// 'idInUse' in this org) — dispatch-customers.mjs holds none, and dispatch-jobs.mjs's one is a job's line item. Reversed in
+// §0.291: a technician's, vehicle's, equipment unit's, time-off block's and service plan's create too. What is left is named.
 const POST_UPSERTS = {
-    'dispatch-equipment.mjs POST upsert': 1,
-    'dispatch-jobs.mjs POST upsert': 1,
-    'dispatch-plan-visits.mjs POST upsert': 1,
-    'dispatch-schedule-blocks.mjs POST upsert': 1,
-    'dispatch-service-plans.mjs POST upsert': 1,
-    'dispatch-technicians.mjs POST upsert': 1,
-    'dispatch-vehicles.mjs POST upsert': 1,
+    'dispatch-jobs.mjs POST upsert': 1,          // a job's line item, by its own id in this org
+    'dispatch-plan-visits.mjs POST upsert': 1,   // one decision per occurrence (org, customer, plan, due date): a second replaces the first
 };
+// The Dispatch creates that were upserts, by the table each inserts into (§0.290's three, §0.291's five).
+const DISPATCH_CREATES = [
+    ['dispatch-jobs.mjs', 'dispatchJobs'], ['dispatch-customers.mjs', 'dispatchCustomers'], ['dispatch-customers.mjs', 'dispatchServiceLocations'],
+    ['dispatch-technicians.mjs', 'dispatchTechnicians'], ['dispatch-vehicles.mjs', 'dispatchVehicles'], ['dispatch-equipment.mjs', 'dispatchEquipment'],
+    ['dispatch-schedule-blocks.mjs', 'dispatchScheduleBlocks'], ['dispatch-service-plans.mjs', 'dispatchServicePlans'],
+];
 // Upserts outside any method block, each with its reason.
 const HELPER_UPSERTS = {
     '_bulk.mjs helper upsert': [1, "bulkUpsert: the bulk PUTs' rows, each over its stored row read whole in the org (partialRows, guide §18b106 rule 8)"],
@@ -161,6 +163,19 @@ test('THE GUARD: the POST upserts and the helper upserts are the named ones', ()
     assert.deepEqual(posts, POST_UPSERTS, 'a create that upserts is named (POST_UPSERTS) — it overwrites what a re-POST leaves out');
     const helpers = Object.fromEntries([...found].filter(([k]) => k.endsWith(' helper upsert')));
     assert.deepEqual(helpers, Object.fromEntries(Object.entries(HELPER_UPSERTS).map(([k, [n]]) => [k, n])), 'an upsert outside a method block is named (HELPER_UPSERTS)');
+});
+
+test('RUN (§0.291): each of the eight Dispatch creates writes nothing over an id it finds — and one turned back into an upsert is one more than the guard names', () => {
+    for (const [file, table] of DISPATCH_CREATES) {
+        const src = readFileSync(new URL(file, FN_DIR), 'utf8');
+        const line = `.onConflictDoNothing({ target: ${table}.id }).returning();`;
+        assert.equal(src.split(line).length - 1, 1, `${file}: the create's insert, on its id alone (${table})`);
+        assert.equal(src.split(`db.insert(${table})`).length - 1, 1, `${file}: one insert of ${table}`);
+        const key = `${file} POST upsert`, named = POST_UPSERTS[key] || 0;
+        assert.equal(tally(file, src).get(key) || 0, named, `${file}: as named`);
+        const back = src.replace(line, () => `.onConflictDoUpdate({ target: ${table}.id, set: { ...row, createdAt: undefined } }).returning();`);
+        assert.equal(tally(file, back).get(key), named + 1, `${file}: a guard blind to the upsert put back (${table})`);
+    }
 });
 
 test('the three PUTs this batch made updates: the stored row read in the org, a 404 before anything is written, an update by id and org', () => {

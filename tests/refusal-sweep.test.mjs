@@ -86,7 +86,7 @@ import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
 import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
 import { esc, to12h } from '../src/utils/customerNotifications.js';
 import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, movedWords, jobHolds, JOB_STATUSES } from '../src/utils/jobChanges.js';
-import { heldCreate, overStored } from '../src/utils/createResend.js';
+import { heldCreate, overStored, keptSaid } from '../src/utils/createResend.js';
 import { T } from '../src/tokens.js';
 import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, alreadySaid, maybeSaid, writeRefusal, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
 import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
@@ -106,6 +106,9 @@ import { answerOf as settledBody, liveCountsOf, healthChecksOf, cardStateOf, hea
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+// A file's code, read once a run: the red runs build a handler from it hundreds of times (state §0.291).
+const codeRead = new Map();
+const codeOf = (p) => { if (!codeRead.has(p)) codeRead.set(p, code(read(p))); return codeRead.get(p); };
 const between = (s, a, b) => { const i = s.indexOf(a); assert.ok(i >= 0, a); const j = s.indexOf(b, i + a.length); assert.ok(j > i, b); return s.slice(i, j); };
 const count = (s, needle) => s.split(needle).length - 1;
 const order = (s, ...needles) => {
@@ -1618,7 +1621,7 @@ test('Part 5b: WIRING — the Sync reads the ok check first; its failure is kept
 // answers per URL (the block, then each job's PUT by its id). DispatchTab remounts on an org switch (App.jsx's keyed
 // Fragment), and saveBlock checks stillOrg before each PUT and before anything it says.
 const DISPATCH = 'src/Tabs/DispatchTab.jsx';
-const dispatchSrc = () => code(read(DISPATCH));
+const dispatchSrc = () => codeOf(DISPATCH);
 // Since §0.286 (Jeff, 22 Nov: "Do your recommended") every office save sends only what it changed from the job as the
 // board holds it (`_raw`), and adopts the job the server answers with into both copies through the parent's adoptJob over
 // the board's one mapping, boardJobOf. Both are extracted from DispatchTab.jsx and built over their own module-scope
@@ -1665,12 +1668,13 @@ const FREED_JOB = Object.fromEntries([TJ1_RAW, TJ2_RAW, TJ3_RAW].map((r) => [r.i
     scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [] })]));
 const TECHS = [{ id: 'tech_1', firstName: 'Ann', lastName: 'Lee' }];
 const timeOff = async ({ blk = BLOCK, unassign = [], blockAnswer = answerOf(200, { block: STORED_BLOCK }), jobAnswers = {}, switchAt = -1,
-    blocks = [], jobs = [TJ1, TJ2, TJ3], banner = 'An earlier save\'s words', onPut, edit = null } = {}) => {
+    blocks = [], jobs = [TJ1, TJ2, TJ3], banner = 'An earlier save\'s words', onPut, edit = null,
+    unprovenBlocks = { current: {} }, keptBlock = { current: null } } = {}) => {
     const whole = between(dispatchSrc(), '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };') + '\n    };';
     // Since §0.289 `edit` changes one line of the extracted source, in memory alone (the red runs) — there exactly once.
     if (edit) assert.equal(count(whole, edit[0]), 1, `the line taken out is there once: ${edit[0]}`);
     const fn = edit ? whole.replace(edit[0], () => edit[1]) : whole;
-    const st = { sent: [], bannerSets: [], blockSets: [], audit: [], views: [], selected: [], adopted: [], kept: [], org: 'org_a',
+    const st = { sent: [], bannerSets: [], blockSets: [], audit: [], views: [], selected: [], adopted: [], kept: [], org: 'org_a', createSaid: [], unprovenBlocks, keptBlock,
         banner: stateOf(banner), blocks: stateOf(blocks), jobs: stateOf(jobs), raw: stateOf(jobs.map((j) => j._raw).filter(Boolean)) };
     const dbFetch = async (url, opts) => {
         st.sent.push([url, opts.method, opts.body ? JSON.parse(opts.body) : undefined]);
@@ -1683,20 +1687,26 @@ const timeOff = async ({ blk = BLOCK, unassign = [], blockAnswer = answerOf(200,
     };
     // Since §0.286 it reads the board's jobs (`jobs`, their `_raw`), the helpers of jobChanges.js and the parent's adoptJob;
     // since §0.286's review sentOf and the parent's keepSent (a landed unassign whose answer cannot be read, kept as sent).
+    // Since §0.291 the create sent again (heldCreate, overStored, keptSaid, alreadySaid and jobsDuringBlock — the real ones), a
+    // new block's bodies not proven and the block the banner is about (handed in so presses share them), and the banner's words.
     const saveBlock = new Function('requestOrg', 'stillOrg', 'dbFetch', 'readRefusal', 'failureWords', 'notFreedWords', 'setUnassignError',
         'setBlocks', 'setJobs', 'techsRaw', 'jobsWithBridge', 'addAudit', 'setSelectedJobId', 'setView', ...U4_NAMES, 'maybeFreedWords',
-        'jobs', 'jobChanges', 'unassignFields', 'jobAnswerOf', 'adoptJob', 'sentOf', 'keepSent', 'listOf', `${fn}\nreturn saveBlock;`)(
+        'jobs', 'jobChanges', 'unassignFields', 'jobAnswerOf', 'adoptJob', 'sentOf', 'keepSent', 'listOf',
+        'heldCreate', 'overStored', 'keptSaid', 'alreadySaid', 'jobsDuringBlock', 'unprovenBlocks', 'keptBlock', 'setCreateSaid', `${fn}\nreturn saveBlock;`)(
         () => 'org_a', (o) => o === st.org, dbFetch, readRefusal, failureWords, notFreedWords,
         (v) => { st.banner.set(v); st.bannerSets.push(st.banner.value); },
         (u) => { st.blockSets.push(u); st.blocks.set(u); }, st.jobs.set, TECHS, jobs,
         (...a) => st.audit.push(a), (v) => st.selected.push(v), (v) => st.views.push(v), ...U4, maybeFreedWords,
         jobs, jobChanges, unassignFields, jobAnswerOf, adoptJobOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, adopted: st.adopted }),
-        sentOf, keepSentOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, kept: st.kept }), listOf);   // since §0.289 listOf (whose crew a stale job has)
+        sentOf, keepSentOf({ setJobsRaw: st.raw.set, setJobs: st.jobs.set, kept: st.kept }), listOf,   // since §0.289 listOf (whose crew a stale job has)
+        heldCreate, overStored, keptSaid, alreadySaid, jobsDuringBlockReal(), unprovenBlocks, keptBlock, (v) => st.createSaid.push(v));
     st.threw = null;
     try { await saveBlock(blk, unassign); } catch (e) { st.threw = e; }
     return st;
 };
 const UNSENT = () => new TypeError('Failed to fetch');
+// The jobs during a block, as Dispatch works them out (module scope, over its own hhToNum) — the real one.
+const jobsDuringBlockReal = () => new Function(`${between(dispatchSrc(), 'const hhToNum = ', '\n')}\n${between(dispatchSrc(), 'const jobsDuringBlock = ', '\n});')}\n});\nreturn jobsDuringBlock;`)();
 
 test('Part 6a: notFreedWords — each job by name and why, the technician named, singular and plural; none, no words — RUN', () => {
     const jobs = [TJ1, TJ2, TJ3];
@@ -1724,7 +1734,8 @@ test('Part 6a: every unassign refused — the banner names each job and the serv
     assert.equal(st.threw, null, 'REGRESSION: a throw keeps the dialog open — a second press re-saves the block and re-sends every unassign');
     assert.deepEqual(st.sent.map(([url, m]) => [url, m]), [['/.netlify/functions/dispatch-schedule-blocks', 'POST'],
         ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_2', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_3', 'PUT']]);
-    assert.deepEqual(st.sent[0][2], { id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true }, 'the block sent without _isNew');
+    assert.deepEqual(st.sent[0][2], { id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true,
+        startTime: null, endTime: null }, 'the block sent without _isNew — since §0.291 an all-day one with no hours, as it is stored');
     // Moved in §0.263 (the unknown-save rule, Part 4): only job_1's refusal is the server's own (a 4xx in words) — "not
     // returned"; job_2's 500 and job_3's page prove nothing, so each may have been returned — said after it, never "not".
     const NOT_1 = 'The time off was saved, but 1 of 3 jobs was not returned to the queue and is still assigned to Ann Lee — Boiler service: '
@@ -1967,6 +1978,10 @@ test('Part 6b: a refused block save throws the server\'s words — a 403 the rol
         assert.equal(thrownSaid(st.threw, 'The time off', 'saved'), heard ? why : maybeSaid('The time off', 'saved', why), 'the dialog\'s words');
         assert.equal(st.sent.length, 1, 'no unassign sent for a block not saved');
         assert.deepEqual([st.blockSets, st.views, st.audit], [[], [], []]);
+        // Added in §0.291: a create that may have landed is remembered as sent; one the server refused, and an edit, never.
+        assert.deepEqual([st.unprovenBlocks.current, st.createSaid], [heard ? {} : { dblk_1: [st.sent[0][2]] }, []], `the body an unproven create sent (${why})`);
+        const put = await timeOff({ blk: { ...STORED_BLOCK }, blockAnswer });
+        assert.deepEqual([put.sent[0][1], put.unprovenBlocks.current], ['PUT', {}], 'REGRESSION: an edit kept as a create');
     }
     // A real answer's body reads once: the ok check before the body, or the refusal's words are lost to "already read".
     let reads = 0;
@@ -1988,6 +2003,7 @@ test('Part 6b: a landed block whose answer cannot be read says so — setBlocks 
         // Moved in §0.263: said in full (saidError) — the dialog's catch says it as it is, never "may have been saved: …".
         assert.equal(thrownSaid(none.threw, 'The time off', 'saved'), UNREAD);
         assert.deepEqual([none.blockSets, none.sent.length, none.blocks.value], [[], 1, [STORED_BLOCK]]);
+        assert.deepEqual(none.unprovenBlocks.current, { dblk_1: [none.sent[0][2]] }, 'since §0.291: landed unread — its body remembered, the next press is answered with it');
         // Jobs to return: the block landed, so they still go back — a throw sent none and named none (review, 11 Nov).
         const st = await timeOff({ unassign: ['job_1'], blockAnswer, blocks: [STORED_BLOCK] });
         assert.equal(st.threw, null, 'REGRESSION: a landed block\'s unreadable answer stopped its jobs going back to the queue');
@@ -2017,8 +2033,10 @@ test('Part 6b: a refused Delete throws the server\'s words, else the status; a l
     const run = async (answer) => {
         const blocks = stateOf([STORED_BLOCK, { id: 'dblk_2' }]);
         const sent = [];
-        const deleteBlock = new Function('dbFetch', 'readRefusal', 'setBlocks', ...U4_NAMES, `${fn}\nreturn deleteBlock;`)(
-            async (url, opts) => { sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, blocks.set, ...U4);
+        // Since §0.291 it reads the block the banner is about and clears the banner's words of it (the §0.291 test below).
+        const deleteBlock = new Function('dbFetch', 'readRefusal', 'setBlocks', ...U4_NAMES, 'keptBlock', 'setUnassignError', `${fn}\nreturn deleteBlock;`)(
+            async (url, opts) => { sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; }, readRefusal, blocks.set, ...U4,
+            { current: null }, () => assert.fail('REGRESSION: a Delete of a block the banner is not about cleared it'));
         let threw = null;
         try { await deleteBlock('dblk_1'); } catch (e) { threw = e; }
         return { threw, sent, blocks: blocks.value };
@@ -2036,6 +2054,195 @@ test('Part 6b: a refused Delete throws the server\'s words, else the status; a l
     assert.deepEqual([ok.threw, ok.sent, ok.blocks], [null, [['/.netlify/functions/dispatch-schedule-blocks?id=dblk_1', 'DELETE']], [{ id: 'dblk_2' }]]);
 });
 
+// Added in §0.291 (Jeff, 23 Nov: the five Dispatch creates): a time off whose earlier press landed is answered with the block as
+// stored, nothing written. As this press sent it, or changed by another member alone: it stands, and the jobs inside it as stored
+// go back. Changed since by this member: an edit of it in the dialog, no job returned yet — said above every view while it stands.
+const NEW_BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, startTime: '', endTime: '', title: '', notes: '', _isNew: true });
+const HELD_BLOCK = Object.freeze({ id: 'dblk_1', techId: 'tech_1', blockType: 'pto', title: '', startDate: '2026-11-16', endDate: '2026-11-17', allDay: true, startTime: null, endTime: null, notes: '', createdBy: 'Ann Lee', updatedAt: 't1' });
+const BLOCK_IN_USE = (block, status = 409) => onceOf(status, { error: 'That block id is already in use.', code: 'idInUse', ...(block ? { block } : {}) });
+// The board's jobs with the day each is on (jobsDuringBlock reads it): job_1 at 9, job_2 at 11 on the 16th; job_3 at 14 on the 17th.
+const DAY_JOBS = [Object.freeze({ ...TJ1, scheduledDate: '2026-11-16' }), Object.freeze({ ...TJ2, scheduledDate: '2026-11-16' }), Object.freeze({ ...TJ3, scheduledDate: '2026-11-17' })];
+// A create pressed again: `sent` the answers its earlier presses met (none proving anything), then the block held.
+const heldPress = async (extra, held, { over = {}, sent = [UNSENT()], unassign = [], edit = null, unprovenBlocks = { current: {} }, keptBlock = { current: null }, banner = '', ...rest } = {}) => {
+    const typed = { ...NEW_BLOCK, ...over };
+    for (const blockAnswer of sent) await timeOff({ blk: typed, blockAnswer, unprovenBlocks, keptBlock, jobs: DAY_JOBS, edit });
+    return timeOff({ blk: { ...typed, ...extra }, blockAnswer: BLOCK_IN_USE(held), unassign, unprovenBlocks, keptBlock, banner, jobs: DAY_JOBS, blocks: [{ id: 'dblk_2' }], edit, ...rest });
+};
+const BLOCK_KEPT = 'The time off was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.';
+const BLOCK_ALREADY = { text: alreadySaid('The time off', 'created') };
+const jobPuts = (st) => st.sent.slice(1).map(([u, m]) => [u.split('?id=')[1], m]);
+
+test('§0.291 Part 6b: a time off an earlier press made — as stored, said where another member changed it, the jobs inside it as stored returned; never a row it did not send, an edit\'s, or one answered after an org switch — RUN', async () => {
+    const seen = (st) => [st.threw && [failureWords(st.threw), st.threw.editing], st.blocks.value, st.createSaid, jobPuts(st), st.bannerSets, st.views, st.selected, st.audit.map((a) => a[4]), st.unprovenBlocks.current, st.keptBlock.current];
+    // As stored, no jobs to return: listed, nothing said, one request; the banner another save left stands.
+    assert.deepEqual(seen(await heldPress({}, HELD_BLOCK)), [null, [{ id: 'dblk_2' }, HELD_BLOCK], [], [], [], [], [], [], {}, null], 'REGRESSION: a time off that landed said as refused');
+    // As stored, its jobs: returned, as a save that landed returns them.
+    const back = await heldPress({}, HELD_BLOCK, { unassign: ['job_1', 'job_3'] });
+    assert.deepEqual(seen(back), [null, [{ id: 'dblk_2' }, HELD_BLOCK], [], [['job_1', 'PUT'], ['job_3', 'PUT']], [''], ['queue'], ['job_1'], ['Time off 2026-11-16–2026-11-17 — 2 job(s) returned to the queue'], {}, null],
+        'REGRESSION: the jobs of a time off an earlier press made left on the technician');
+    assert.deepEqual(back.jobs.value.map((j) => j.status), ['unscheduled', 'scheduled', 'unscheduled']);
+    // Landed with an answer that could not be read, then pressed again (the dialog stayed): the same.
+    assert.deepEqual(seen(await heldPress({}, HELD_BLOCK, { sent: [P11_UNREADABLE()] })), [null, [{ id: 'dblk_2' }, HELD_BLOCK], [], [], [], [], [], [], {}, null]);
+    const unreadThen = await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { sent: [P11_UNREADABLE()] });
+    assert.deepEqual([failureWords(unreadThen.threw), unreadThen.threw.editing], [BLOCK_KEPT, { ...HELD_BLOCK, notes: 'Back Wed' }], 'REGRESSION: typed after an unread 201, then dropped');
+    // An all-day block is sent with no hours, whatever was typed before "All day" was ticked again: as stored, never a change.
+    const ticked = { over: { startTime: '09:00', endTime: '10:00' } };
+    const tickedSt = await heldPress({}, HELD_BLOCK, ticked);
+    assert.deepEqual([tickedSt.threw, tickedSt.createSaid, tickedSt.sent[0][2].allDay, tickedSt.sent[0][2].startTime, tickedSt.sent[0][2].endTime], [null, [], true, null, null], 'REGRESSION: hours left over said as a change');
+    const unset = await timeOff({ blk: { ...NEW_BLOCK, allDay: undefined, startTime: '09:00', endTime: '10:00' } });
+    assert.deepEqual([unset.sent[0][2].allDay, unset.sent[0][2].startTime, unset.sent[0][2].endTime], [true, null, null]);
+    const partly = await timeOff({ blk: { ...NEW_BLOCK, allDay: false, startTime: '09:00', endTime: '10:00' } });
+    assert.deepEqual([partly.sent[0][2].allDay, partly.sent[0][2].startTime, partly.sent[0][2].endTime], [false, '09:00', '10:00'], 'a partial day keeps its hours');
+    // Another member shortened it since, this one did not: theirs stands, said; only the jobs inside it as stored go back.
+    const SHORTER = Object.freeze({ ...HELD_BLOCK, endDate: '2026-11-16' });
+    assert.deepEqual(seen(await heldPress({}, SHORTER, { unassign: ['job_1', 'job_2', 'job_3'] })), [null, [{ id: 'dblk_2' }, SHORTER], [BLOCK_ALREADY], [['job_1', 'PUT'], ['job_2', 'PUT']], [''], ['queue'], ['job_1'],
+        ['Time off 2026-11-16–2026-11-16 — 2 job(s) returned to the queue'], {}, null], 'REGRESSION: a job outside the time off as it stands returned, or the audit row\'s dates the ones typed');
+    const MORNING = Object.freeze({ ...HELD_BLOCK, allDay: false, startTime: '09:00', endTime: '10:30' });
+    assert.deepEqual(jobPuts(await heldPress({}, MORNING, { unassign: ['job_1', 'job_2'] })), [['job_1', 'PUT']], 'a partial day: the job its hours overlap');
+    const ELSEWHERE = Object.freeze({ ...HELD_BLOCK, startDate: '2026-11-20', endDate: '2026-11-20' });
+    assert.deepEqual(seen(await heldPress({}, ELSEWHERE, { unassign: ['job_1', 'job_2'] })), [null, [{ id: 'dblk_2' }, ELSEWHERE], [BLOCK_ALREADY], [], [''], [], [], [], {}, null], 'none inside it: nothing returned, nothing filed');
+    assert.deepEqual(seen(await heldPress({}, SHORTER)), [null, [{ id: 'dblk_2' }, SHORTER], [BLOCK_ALREADY], [], [], [], [], [], {}, null]);
+    // A first press the server refused is not remembered: nothing typed is told from what is stored.
+    const refusedFirst = await heldPress({ notes: 'Back Wed' }, SHORTER, { sent: [answerOf(400, { error: 'startDate required' })] });
+    assert.deepEqual([refusedFirst.threw, refusedFirst.createSaid], [null, [BLOCK_ALREADY]]);
+    // Never a row this press did not send, a body with none, an edit, no code, or another status: thrown in its words, nothing listed or returned.
+    for (const [blockAnswer, blk] of [[BLOCK_IN_USE({ ...HELD_BLOCK, id: 'dblk_9' }), NEW_BLOCK], [BLOCK_IN_USE(null), NEW_BLOCK], [BLOCK_IN_USE(HELD_BLOCK), HELD_BLOCK], [answerOf(409, { error: 'That block id is already in use.', block: HELD_BLOCK }), NEW_BLOCK], [BLOCK_IN_USE(HELD_BLOCK, 500), NEW_BLOCK]]) {
+        const did = await timeOff({ blk, blockAnswer, unassign: ['job_1'], jobs: DAY_JOBS });
+        assert.deepEqual([failureWords(did.threw), did.threw.editing, did.blockSets, did.createSaid, did.sent.length, did.views, did.audit], ['That block id is already in use.', undefined, [], [], 1, [], []], 'REGRESSION: a row not proven this create\'s taken');
+        assert.equal(did.sent[0][1], blk === HELD_BLOCK ? 'PUT' : 'POST');
+    }
+    // After an org switch: nothing listed, said, returned or thrown — refused in any words, or held.
+    for (const extra of [{}, { notes: 'x' }]) {
+        const moved = await heldPress(extra, SHORTER, { unassign: ['job_1'], switchAt: 0 });
+        assert.deepEqual([moved.threw, moved.blockSets, moved.createSaid, moved.sent.length, moved.bannerSets, moved.keptBlock.current], [null, [], [], 1, [''], null], 'REGRESSION: an answer from the org left listed or said');
+    }
+    assert.deepEqual((await timeOff({ blk: NEW_BLOCK, blockAnswer: PAGE_502(), switchAt: 0 })).threw, null);
+    // Red, each over saveBlock as extracted with its one line changed in memory.
+    for (const [line, extra, held, rest] of [
+        [["held = isNew ? heldCreate(res.status, refused.body, 'block', blk.id) : null;", ''], {}, HELD_BLOCK, {}],
+        [['const data = held ? { block: held } :', 'const data ='], {}, HELD_BLOCK, {}],
+        [["setCreateSaid({ text: alreadySaid('The time off', 'created') });", ''], {}, SHORTER, {}],
+        [['unassignJobIds = unassignJobIds.filter(id => inside.has(id));', ''], {}, SHORTER, { unassign: ['job_1', 'job_2', 'job_3'] }],
+        [['jobsDuringBlock(jobs, held)', 'jobsDuringBlock(jobs, blk)'], {}, SHORTER, { unassign: ['job_1', 'job_2', 'job_3'] }],
+        [['Time off ${(held || blk).startDate}–${(held || blk).endDate}', 'Time off ${blk.startDate}–${blk.endDate}'], {}, SHORTER, { unassign: ['job_1'] }],
+        [['{ allDay: true, startTime: null, endTime: null }', '{}'], {}, HELD_BLOCK, { over: { startTime: '09:00', endTime: '10:00' } }],
+        [['delete unprovenBlocks.current[blk.id];', ''], {}, HELD_BLOCK, {}],
+        [['} catch (e) { keepBody(); throw e; }', '} catch (e) { throw e; }'], { notes: 'x' }, HELD_BLOCK, {}],
+        [['if (!refused.heard) keepBody();', ''], { notes: 'x' }, HELD_BLOCK, { page: true }],
+        [['if (!refused.heard) keepBody();', 'keepBody();'], { notes: 'x' }, SHORTER, { sent: [answerOf(400, { error: 'startDate required' })] }],
+        [['if (!saved) keepBody();', ''], { notes: 'x' }, HELD_BLOCK, { unread: true }],
+        [["            if (!stillOrg(askedOrg)) return;\n            held = isNew", '            held = isNew'], {}, SHORTER, { switchAt: 0 }],
+    ]) {
+        const { page, unread, ...opts } = rest;
+        const fresh = () => ({ ...opts, ...(page ? { sent: [PAGE_502()] } : {}), ...(unread ? { sent: [P11_UNREADABLE()] } : {}) });
+        assert.notDeepEqual(seen(await heldPress(extra, held, { ...fresh(), edit: line })), seen(await heldPress(extra, held, fresh())), `taken out, it is red: ${line[0]}`);
+    }
+    assert.deepEqual((await timeOff({ blk: HELD_BLOCK, blockAnswer: UNSENT(), edit: ['if (isNew) (unprovenBlocks', 'if (true) (unprovenBlocks'] })).unprovenBlocks.current.dblk_1.length, 1, 'taken out, it is red: an edit kept as a create');
+});
+
+test('§0.291 Part 6b: a time off changed since the press that made it — an edit of it in the dialog, its jobs said above every view as not returned until its Save or Delete lands; the dialog takes it, in its own step and the conflict step — RUN', async () => {
+    const SHORTER = Object.freeze({ ...HELD_BLOCK, endDate: '2026-11-16' });
+    // No jobs: thrown to the dialog in its own words, the edit with it — the block as stored, what was typed over it.
+    const none = await heldPress({ notes: 'Back Wed' }, SHORTER, { banner: 'An earlier save\'s words' });
+    assert.equal(thrownSaid(none.threw, 'The time off', 'saved'), BLOCK_KEPT, 'said as it is, never "may have been saved"');
+    assert.deepEqual(none.threw.editing, { ...SHORTER, notes: 'Back Wed' }, 'REGRESSION: what was typed lost, or written over another member\'s dates');
+    assert.ok(!('_isNew' in none.threw.editing), 'REGRESSION: the next Save sends a create again');
+    assert.deepEqual([none.blocks.value, none.createSaid, none.sent.length, none.bannerSets, none.audit, none.unprovenBlocks.current, none.keptBlock.current], [[{ id: 'dblk_2' }, SHORTER], [], 1, [], [], {}, null], 'listed as stored; no job sent; another save\'s words left as they stand');
+    // Once in the list, never twice.
+    const listed = await heldPress({ notes: 'Back Wed' }, SHORTER, { blocks: [{ ...HELD_BLOCK, notes: 'old' }, { id: 'dblk_2' }] });
+    assert.deepEqual(listed.blocks.value, [{ id: 'dblk_2' }, SHORTER]);
+    // Jobs to return: none sent — they are still the technician's, said above every view (the dialog's words go with it).
+    const ONE = 'The time off was already created by an earlier press. The job during it was not returned to the queue.';
+    const TWO = 'The time off was already created by an earlier press. The 2 jobs during it were not returned to the queue.';
+    for (const [unassign, words] of [[['job_1'], ONE], [['job_1', 'job_2'], TWO]]) {
+        const st = await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign });
+        assert.deepEqual([thrownSaid(st.threw, 'The time off', 'saved'), st.threw.editing, st.sent.length, st.bannerSets, st.keptBlock.current, st.jobs.value, st.audit, st.views], [BLOCK_KEPT, { ...HELD_BLOCK, notes: 'Back Wed' }, 1, ['', words], 'dblk_1', DAY_JOBS, [], []],
+            'REGRESSION: jobs returned for a time off not saved as shown, or left on the technician with nothing said');
+    }
+    // What clears it: that block's landed save, read or not, and its landed Delete — never a refused one, another block's save
+    // with no jobs, or another block's Delete.
+    const next = async (blk, extra) => {
+        const keptBlock = { current: null };
+        const st = await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign: ['job_1'], keptBlock });
+        const then = await timeOff({ blk, banner: st.banner.value, keptBlock, jobs: DAY_JOBS, ...extra });
+        return [then.banner.value, keptBlock.current];
+    };
+    const EDIT = { ...HELD_BLOCK, notes: 'Back Wed' };
+    assert.deepEqual(await next(EDIT, { blockAnswer: answerOf(200, { block: EDIT }) }), ['', null], 'REGRESSION: the words stand over the time off saved since');
+    assert.deepEqual(await next(EDIT, { blockAnswer: P11_UNREADABLE() }), ['', null], 'landed, its answer unread: the dialog says that');
+    assert.deepEqual(await next(EDIT, { blockAnswer: answerOf(403, { error: 'Forbidden' }) }), [ONE, 'dblk_1'], 'REGRESSION: cleared by a save that was refused');
+    assert.deepEqual(await next(EDIT, { blockAnswer: UNSENT() }), [ONE, 'dblk_1']);
+    assert.deepEqual(await next({ ...NEW_BLOCK, id: 'dblk_7' }, { blockAnswer: answerOf(201, { block: { ...HELD_BLOCK, id: 'dblk_7' } }) }), [ONE, 'dblk_1'], 'REGRESSION: cleared by another block\'s save');
+    // The next save with jobs to return clears the banner as it begins, and what it was about: a later save of the block clears no other words.
+    assert.deepEqual(await next({ ...NEW_BLOCK, id: 'dblk_7' }, { blockAnswer: answerOf(403, { error: 'Forbidden' }), unassign: ['job_2'] }), ['', null]);
+    const returned = await (async () => {
+        const keptBlock = { current: null };
+        const st = await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign: ['job_1'], keptBlock });
+        return timeOff({ blk: EDIT, banner: st.banner.value, keptBlock, jobs: DAY_JOBS, blockAnswer: answerOf(200, { block: EDIT }), unassign: ['job_1'], jobAnswers: { job_1: answerOf(403, { error: 'Forbidden' }) } });
+    })();
+    assert.deepEqual([jobPuts(returned), returned.bannerSets.length, returned.bannerSets[0], /^The time off was saved, but 1 of 1 job was not returned/.test(returned.banner.value), returned.keptBlock.current], [[['job_1', 'PUT']], 2, '', true, null], 'saved with its jobs: they go back now, one left said in its own words');
+    const deleteSrc = between(dispatchSrc(), '    const deleteBlock = async (id) => {', '\n    };') + '\n    };';
+    const del = async (id, answer, src = deleteSrc) => {
+        const keptBlock = { current: 'dblk_1' }, banner = stateOf(ONE), blocks = stateOf([HELD_BLOCK, { id: 'dblk_2' }]);
+        const deleteBlock = new Function('dbFetch', 'setBlocks', ...U4_NAMES, 'keptBlock', 'setUnassignError', `${src}\nreturn deleteBlock;`)(
+            async () => { if (answer instanceof Error) throw answer; return answer; }, blocks.set, ...U4, keptBlock, banner.set);
+        try { await deleteBlock(id); } catch { /* said by the dialog — the 6b Delete test above */ }
+        return [banner.value, keptBlock.current, blocks.value.map((b) => b.id)];
+    };
+    const DELETED = ['', null, ['dblk_2']];
+    assert.deepEqual(await del('dblk_1', answerOf(200, { ok: true })), DELETED, 'REGRESSION: the words stand over a time off deleted since');
+    assert.deepEqual(await del('dblk_2', answerOf(200, { ok: true })), [ONE, 'dblk_1', ['dblk_1']], 'another block\'s Delete');
+    for (const answer of [answerOf(403, { error: 'Forbidden' }), PAGE_502(), UNSENT()]) assert.deepEqual(await del('dblk_1', answer), [ONE, 'dblk_1', ['dblk_1', 'dblk_2']], 'a Delete not landed');
+    const DEL_LINE = 'if (keptBlock.current === id) { keptBlock.current = null; setUnassignError(\'\'); }';
+    assert.equal(count(deleteSrc, DEL_LINE), 1);
+    assert.notDeepEqual(await del('dblk_1', answerOf(200, { ok: true }), deleteSrc.replace(DEL_LINE, () => '')), DELETED, 'taken out, it is red: the Delete\'s clear');
+    // The dialog (ScheduleView): its own step and the conflict step, extracted and run over the throw as saveBlock makes it.
+    const sv = between(dispatchSrc(), 'const ScheduleView = ', 'const ShiftPatternDialog = ');
+    const step = async (name, thrown, edit = null) => {
+        const whole = between(sv, `    const ${name} = async () => {`, '\n    };') + '\n    };';
+        if (edit) assert.equal(count(whole, edit[0]), 1, `the line taken out is there once: ${edit[0]}`);
+        const did = { editing: [], conflict: [], err: [], busy: [], sent: [] };
+        const editing = { ...NEW_BLOCK, notes: 'Back Wed' };
+        await new Function('editing', 'conflict', 'jobs', 'jobsDuringBlock', 'setErr', 'setConflict', 'setBusy', 'onSaveBlock', 'setEditing', 'thrownSaid', `${edit ? whole.replace(edit[0], () => edit[1]) : whole}\nreturn ${name};`)(
+            editing, { block: editing, jobs: DAY_JOBS }, [], jobsDuringBlockReal(), (v) => did.err.push(v), (v) => did.conflict.push(v), (v) => did.busy.push(v),
+            async (...a) => { did.sent.push(a); if (thrown) throw thrown; }, (v) => did.editing.push(v), thrownSaid)();
+        return did;
+    };
+    const heldThrown = (await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign: ['job_1'] })).threw;
+    assert.deepEqual(await step('submit', heldThrown).then((d) => [d.editing, d.conflict, d.err, d.busy]), [[EDIT], [], ['', BLOCK_KEPT], [true, false]], 'REGRESSION: the dialog left a create — its next Save was refused for good');
+    assert.deepEqual(await step('confirmWithUnassign', heldThrown).then((d) => [d.editing, d.conflict, d.err, d.busy]), [[EDIT], [null], ['', BLOCK_KEPT], [true, false]], 'REGRESSION: the conflict step left over the create it was asked about');
+    assert.deepEqual((await step('confirmWithUnassign', heldThrown)).sent[0][1], ['job_1', 'job_2', 'job_3']);
+    // Any other failure leaves the dialog and the conflict step as they are, said; one that landed closes both.
+    for (const [thrown, words] of [[refusalError('Forbidden', true), 'Forbidden'], [UNSENT(), maybeSaid('The time off', 'saved', 'The server could not be reached.')]]) {
+        assert.deepEqual(await step('submit', thrown).then((d) => [d.editing, d.conflict, d.err]), [[], [], ['', words]]);
+        assert.deepEqual(await step('confirmWithUnassign', thrown).then((d) => [d.editing, d.conflict, d.err]), [[], [], ['', words]]);
+    }
+    assert.deepEqual(await step('submit', null).then((d) => [d.editing, d.err]), [[null], ['']]);
+    assert.deepEqual(await step('confirmWithUnassign', null).then((d) => [d.editing, d.conflict]), [[null], [null]]);
+    // Red, each with its one line changed in memory.
+    for (const [name, line] of [['submit', ['if (e.editing) setEditing(e.editing);', '']], ['confirmWithUnassign', ['setConflict(null); setEditing(e.editing);', 'setEditing(e.editing);']], ['confirmWithUnassign', ['setConflict(null); setEditing(e.editing);', 'setConflict(null);']]]) {
+        const of = (d) => [d.editing, d.conflict, d.err];
+        assert.notDeepEqual(of(await step(name, heldThrown, line)), of(await step(name, heldThrown)), `taken out, it is red: ${line[0]}`);
+    }
+    const seen = (st) => [st.threw && [thrownSaid(st.threw, 'The time off', 'saved'), st.threw.editing], st.blocks.value, st.bannerSets, st.keptBlock.current, jobPuts(st), st.unprovenBlocks.current];
+    for (const [line, unassign] of [
+        [['if (shown.mine.length) {', 'if (false) {'], ['job_1']],
+        [['setBlocks(prev => [...prev.filter(b => b.id !== held.id), held]);', ''], []],
+        [['if (unassignJobIds.length) { keptBlock.current = blk.id; setUnassignError(`The time off was already', 'if (false) { keptBlock.current = blk.id; setUnassignError(`The time off was already'], ['job_1']],
+        [['if (unassignJobIds.length) { keptBlock.current = blk.id; ', 'keptBlock.current = blk.id; if (unassignJobIds.length) { '], []],
+        [["unassignJobIds.length === 1 ? 'The job during it was'", "false ? 'The job during it was'"], ['job_1']],
+        [['keptBlock.current = blk.id;', ''], ['job_1']],
+        [[', { editing: shown.draft });', ', {});'], []],
+        [["saidError(keptSaid('The time off'))", "new Error(keptSaid('The time off'))"], []],
+        [['const bodies = unprovenBlocks.current[blk.id] || [];', 'const bodies = [];'], []],
+    ]) {
+        assert.notDeepEqual(seen(await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign, edit: line })), seen(await heldPress({ notes: 'Back Wed' }, HELD_BLOCK, { unassign })), `taken out, it is red: ${line[0]}`);
+    }
+    const CLEAR = ["if (keptBlock.current === blk.id) { keptBlock.current = null; setUnassignError(''); }", ''];
+    assert.notDeepEqual(await next(EDIT, { blockAnswer: answerOf(200, { block: EDIT }), edit: CLEAR }), ['', null], 'taken out, it is red: the landed save\'s clear');
+    assert.notDeepEqual(await next({ ...NEW_BLOCK, id: 'dblk_7' }, { blockAnswer: answerOf(403, { error: 'Forbidden' }), unassign: ['job_2'], edit: [' keptBlock.current = null; }\n        let res;', ' }\n        let res;'] }), ['', null], 'taken out, it is red: what the banner was about kept past it');
+});
+
 test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; no omission; ScheduleView says failureWords', () => {
     const raw = read(DISPATCH);
     const d = dispatchSrc();
@@ -2047,7 +2254,8 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     // Moved in §0.290: and alreadySaid — a create answered with the record an earlier press made; and the two helpers that
     // read that answer (createResend.js), the real ones the RUN tests hand in.
     assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore, alreadySaid } from '../utils/refusalWords.js';"));
-    assert.ok(d.includes("import { heldCreate, overStored } from '../utils/createResend.js';"));
+    // Moved in §0.291: and keptSaid — what a form says when the record it made stands with what was typed since over it.
+    assert.ok(d.includes("import { heldCreate, overStored, keptSaid } from '../utils/createResend.js';"));
     assert.ok(d.includes("import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';"));
     // Added in §0.286: the office saves' one rule, the real helpers (the RUN tests hand in these same exports).
     // Moved in §0.286's review: and sentOf (a landed press whose answer cannot be read, kept as sent).
@@ -2059,7 +2267,12 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     // Moved in §0.263 (the unknown-save rule, Part 4): a refusal carries whether it was the server's own (refusalError);
     // an unreadable landed block is said in full (saidError); an unassign refused in the server's words is notFreed, any
     // other answer or a throw maybeFreed — said after it, in the same banner.
-    order(save, "if (unassignJobIds.length) setUnassignError('');", 'await dbFetch(', "if (!res.ok) { const refused = await writeRefusalOf(res, 'Your role cannot change availability.'); throw refusalError(refused.words, refused.heard); }", 'const data = await res.json()',
+    // Moved in §0.291: a save with jobs to return clears the banner and what it was about; a request that never answered, a
+    // refusal that proves nothing and a landed answer unread each keep the body a create sent; a create answered with the block
+    // an earlier press made is landed as stored (its RUN cases: the §0.291 test below) — nothing said or kept after an org switch.
+    order(save, "if (unassignJobIds.length) { setUnassignError(''); keptBlock.current = null; }", 'res = await dbFetch(', '} catch (e) { keepBody(); throw e; }', 'if (!res.ok) {', "const refused = await writeRefusalOf(res, 'Your role cannot change availability.');",
+        'if (!stillOrg(askedOrg)) return;', "held = isNew ? heldCreate(res.status, refused.body, 'block', blk.id) : null;", 'if (!held) { if (!refused.heard) keepBody(); throw refusalError(refused.words, refused.heard); }',
+        'const data = held ? { block: held } : await res.json().catch(() => null);', 'if (!saved) keepBody();',
         'if (!saved && !unassignJobIds.length) throw saidError(unread);', 'if (!saved) { if (stillOrg(askedOrg)) setUnassignError(unread); }',
         'else setBlocks(', 'const freed = [], notFreed = [], maybeFreed = [], noLonger = [];',   // moved in §0.289: and those no longer theirs
         // Moved in §0.286: only what the time off changes from the job as the board holds it (its `_raw`), the status it moves
@@ -2088,7 +2301,8 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     assert.ok(!save.includes("'HTTP '"), 'REGRESSION: "HTTP N"');
     assert.ok(d.includes("const [unassignError, setUnassignError] = useState('');"));
     // Moved in §0.263: five — the may-have-been-returned words added beside the not-returned ones.
-    assert.equal(count(d, 'setUnassignError('), 5,'cleared as a save with jobs to return begins, an unreadable landed answer, set from the answer (not returned, may have been returned), the Close — none else');
+    // Moved in §0.291: eight — the jobs of a block already made, not returned; cleared by that block's landed save, and its Delete.
+    assert.equal(count(d, 'setUnassignError('), 8, 'cleared as a save with jobs to return begins, an unreadable landed answer, set from the answer (not returned, may have been returned), the Close, a block already made whose jobs were not returned, that block\'s landed save and its Delete — none else');
     assert.ok(!/setTimeout\([^;]*setUnassignError/.test(d), 'REGRESSION: the banner closed on a timer');
     // The banner: above {/* Main content */}, outside every view's branch, so it shows in every view.
     const banner = between(d, '{unassignError && (', '{/* Main content */}');
@@ -2103,12 +2317,13 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     assert.equal(count(sv, "setErr(thrownSaid(e, 'The time off', 'deleted'))"), 1, 'Delete');
     assert.equal(count(sv, 'setErr(failureWords(e))'), 0, 'REGRESSION: a time off failure said as refused whatever its answer');
     assert.ok(!sv.includes('setErr(e.message)'), 'REGRESSION: a raw e.message in the time off dialogs');
-    order(between(sv, '    const submit = async () => {', '\n    };'), 'try { await onSaveBlock(editing); setEditing(null); }', "catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }");
+    // Moved in §0.291: a block already made is taken as an edit first (run, in the §0.291 test below), the words after it.
+    order(between(sv, '    const submit = async () => {', '\n    };'), 'try { await onSaveBlock(editing); setEditing(null); }', "catch (e) { if (e.editing) setEditing(e.editing); setErr(thrownSaid(e, 'The time off', 'saved')); }");
     // The conflict step shares the dialog's error line: opening it clears the last attempt's words (pane, 11 Nov — a
     // refused Save's words stood in "Already scheduled" before anything there was pressed).
     assert.ok(between(sv, '    const submit = async () => {', '\n    };').includes("if (clashing.length > 0) { setErr(''); setConflict({ block: editing, jobs: clashing }); return; }"),
         'REGRESSION: the conflict step opens with the last refusal\'s words');
-    order(between(sv, '    const confirmWithUnassign = async () => {', '\n    };'), 'await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));', "} catch (e) { setErr(thrownSaid(e, 'The time off', 'saved')); }");
+    order(between(sv, '    const confirmWithUnassign = async () => {', '\n    };'), 'await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));', "} catch (e) { if (e.editing) { setConflict(null); setEditing(e.editing); } setErr(thrownSaid(e, 'The time off', 'saved')); }");
     assert.ok(sv.includes("try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(thrownSaid(e, 'The time off', 'deleted')); }"));
 });
 
@@ -3066,18 +3281,19 @@ test('Part 8 review fix: Webhooks — WIRING: the toggle drawn busy, titled "Sav
 // 8b Dispatch's vehicle and equipment Delete, extracted from DispatchVehiclesDetail.jsx: a refusal said "HTTP N". A 403
 // keeps the role's sentence (Q13); any other refusal says the server's words with their ref, else the status.
 const VEHICLES = 'src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx';
-const fleetDelete = async (kind, answer) => {
+const fleetDelete = async (kind, answer, busy = false) => {
     const v = kind === 'vehicle';
     const name = v ? 'deleteVehicle' : 'deleteEquipment';
     const fn = between(code(read(VEHICLES)), `    const ${name} = async () => {`, '\n    };') + '\n    };';
     const draft = v ? { id: 'veh_1', name: 'Van 1' } : { id: 'eq 1', name: 'Tester', category: 'Testers' };
     const did = { sent: [], said: [], loads: 0, drafts: [], busy: [] };
     // Moved in §0.264 (the unknown-save rule, Part 5): the Delete reads the unknown-save helpers — the real ones.
-    const del = new Function(v ? 'vDraft' : 'eDraft', v ? 'setVError' : 'setEError', v ? 'setVDraft' : 'setEDraft', 'setBusy', 'dbFetch',
-        'readRefusal', 'failureWords', 'load', ...U4_NAMES, `${fn}\nreturn ${name};`)(
+    // Moved in §0.291: each card has a busy of its own; a Delete while its card's press is out sends nothing (`busy`).
+    const del = new Function(v ? 'vDraft' : 'eDraft', v ? 'setVError' : 'setEError', v ? 'setVDraft' : 'setEDraft', v ? 'setVBusy' : 'setEBusy', 'dbFetch',
+        'readRefusal', 'failureWords', 'load', ...U4_NAMES, v ? 'vBusy' : 'eBusy', `${fn}\nreturn ${name};`)(
         draft, (x) => did.said.push(x), (x) => did.drafts.push(x), (x) => did.busy.push(x),
         async (url, opts) => { did.sent.push([url, opts.method]); if (answer instanceof Error) throw answer; return answer; },
-        readRefusal, failureWords, async () => { did.loads++; }, ...U4);
+        readRefusal, failureWords, async () => { did.loads++; }, ...U4, busy);
     await del();
     return did;
 };
@@ -3104,6 +3320,9 @@ test('Part 8b: a refused vehicle or equipment Delete says the server\'s words, a
         const landed = await fleetDelete(kind, answerOf(200, { ok: true }));
         assert.deepEqual([landed.said, landed.loads, landed.drafts], [[''], 1, [null]], `${kind}: landed — read again, the window closed`);
         assert.deepEqual(landed.sent, [[kind === 'vehicle' ? '/.netlify/functions/dispatch-vehicles?id=veh_1' : '/.netlify/functions/dispatch-equipment?id=eq%201', 'DELETE']]);
+        // Added in §0.291: its card's press out — nothing sent, nothing said.
+        const out = await fleetDelete(kind, answerOf(200, { ok: true }), true);
+        assert.deepEqual([out.sent, out.said, out.busy, out.drafts], [[], [], [], []], `REGRESSION (${kind}): a Delete sent while its card's Save is out`);
     }
 });
 
@@ -4203,7 +4422,7 @@ const p10Built = new Map();
 const p10Fn = (file, start, end, params, name, tail = end) => {
     const key = `${file}|${start}`;
     if (!p10Built.has(key)) {
-        const fn = between(code(read(file)), start, end) + tail;
+        const fn = between(codeOf(file), start, end) + tail;
         p10Built.set(key, new Function(...params, `${fn}\nreturn ${name};`));
     }
     return p10Built.get(key);
@@ -4212,7 +4431,7 @@ const p10Fn = (file, start, end, params, name, tail = end) => {
 // the line there exactly once — a red run whose line has gone or moved fails instead of passing. No edit, p10Fn itself.
 const p10Edited = (file, start, end, edit, params, name) => {
     if (!edit) return p10Fn(file, start, end, params, name);
-    const fn = between(code(read(file)), start, end) + end;
+    const fn = between(codeOf(file), start, end) + end;
     assert.equal(count(fn, edit[0]), 1, `the line taken out is there once: ${edit[0]}`);
     return new Function(...params, `${fn.replace(edit[0], () => edit[1])}\nreturn ${name};`);
 };
@@ -5092,24 +5311,27 @@ const custSave = async ({ answer, switchAt = -1, isNew = false, over = {}, unpro
     const fetch = p11Fetch(did, () => { did.outRef.push(savingRef.current); if (whileOut) draftNow.set((d) => ({ ...d, ...whileOut })); return answer; }, org, { switchAt });
     const save = p10Edited(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.name || '').trim())", '\n    };', edit,
         ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords', ...U4_NAMES,
-            'savingRef', 'heldCreate', 'overStored', 'alreadySaid', 'unproven', 'shownRef', 'adopting', 'onSaid'], 'save')(
+            'savingRef', 'heldCreate', 'overStored', 'alreadySaid', 'unproven', 'shownRef', 'adopting', 'onSaid', 'keptSaid'], 'save')(   // since §0.291 keptSaid — the words in one place
         draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a', fetch, (o) => o === org.now, readRefusal,
         (c) => did.saved.push(c), (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords, ...U4,
-        savingRef, heldCreate, overStored, alreadySaid, unproven, { current: shown }, adopting, (t) => did.said.push(t));
+        savingRef, heldCreate, overStored, alreadySaid, unproven, { current: shown }, adopting, (t) => did.said.push(t), keptSaid);
     await save();
     return { ...did, unproven, held: savingRef.current, adopting: adopting.current };
 };
-const techSave = async ({ answer, switchAt = -1 }) => {
-    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [] };
+// Since §0.291 a new technician's Save answered 'idInUse' takes the technician an earlier press made, as custSave's does.
+const techSave = async ({ answer, switchAt = -1, isNew = false, over = {}, unproven = { current: {} }, shown = true, edit = null }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [], said: [] };
     const org = { now: 'org_a' };
     const savingRef = { current: false };
-    const draft = { id: 'dtech_1', firstName: 'Ann ', lastName: 'Lee', userId: '', assignedVehicleId: '', laborRate: '', overtimeRate: '' };
-    const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.firstName || '').trim()", '\n    };',
-        ['draft', 'setStatus', 'setSaving', 'savingRef', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'failureWords', ...U4_NAMES], 'save')(
+    const draft = { ...(isNew ? { _isNew: true } : {}), id: 'dtech_1', firstName: 'Ann ', lastName: 'Lee', userId: '', assignedVehicleId: '', laborRate: '', overtimeRate: '', ...over };
+    const save = p10Edited(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.firstName || '').trim()", '\n    };', edit,
+        ['draft', 'setStatus', 'setSaving', 'savingRef', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'failureWords', ...U4_NAMES,
+            'heldCreate', 'overStored', 'alreadySaid', 'keptSaid', 'unproven', 'shownRef', 'onSaid'], 'save')(
         draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), savingRef, () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
-        (t) => did.saved.push(t), (v) => did.drafts.push(v), (v) => did.selected.push(v), failureWords, ...U4);
+        (t) => did.saved.push(t), (v) => did.drafts.push(v), (v) => did.selected.push(v), failureWords, ...U4,
+        heldCreate, overStored, alreadySaid, keptSaid, unproven, { current: shown }, (t) => did.said.push(t));
     await save();
-    return { ...did, held: savingRef.current };
+    return { ...did, unproven, held: savingRef.current };
 };
 
 test('Part 11: the customer and technician saves — each refusal in the house words, a 403 the role\'s sentence; nothing saved — RUN', async () => {
@@ -5128,11 +5350,17 @@ test('Part 11: the customer and technician saves — each refusal in the house w
             assert.deepEqual(did.unproven.current, isNew && !heard ? { cust_1: [did.sent[0][2]] } : {}, `the body an unproven create sent (${said})`);
         }
     }
-    for (const [answer, words, heard] of p11Writes('Your role cannot change technicians.')) {
-        const said = heard ? words : maybeSaid('The technician', 'saved', words);
-        const did = await techSave({ answer });
-        assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `technician: REGRESSION — ${said}`);
-        assert.deepEqual([did.saved, did.drafts, did.held], [[], [], false]);
+    // Moved in §0.291: a create too.
+    for (const isNew of [false, true]) {
+        for (const [answer, words, heard] of p11Writes('Your role cannot change technicians.')) {
+            const said = heard ? words : maybeSaid('The technician', 'saved', words);
+            const did = await techSave({ answer, isNew });
+            assert.deepEqual(did.statuses, [null, { kind: 'err', msg: said }], `technician: REGRESSION — ${said}`);
+            assert.deepEqual([did.saved, did.drafts, did.held], [[], [], false]);
+            // Added in §0.291: a create that may have landed is remembered as sent; one the server refused, and an edit, never.
+            assert.deepEqual([did.sent[0][1], did.sent[0][2].id, '_isNew' in did.sent[0][2], did.said], [isNew ? 'POST' : 'PUT', 'dtech_1', false, []]);
+            assert.deepEqual(did.unproven.current, isNew && !heard ? { dtech_1: [did.sent[0][2]] } : {}, `the body an unproven create sent (${said})`);
+        }
     }
 });
 
@@ -5228,6 +5456,112 @@ test('§0.290 Part 11: the customer\'s Save — a create an earlier press made: 
         };
         assert.notDeepEqual(await run(line), await run(null), `taken out, it is red: ${line[0]}`);
     }
+});
+
+// Added in §0.291 (Jeff, 23 Nov: the five Dispatch creates): a new technician's Save whose earlier press landed is answered with
+// the technician as stored. A login is picked by the member's app id and stored as their Clerk identity — one value, never a change.
+test('§0.291 Part 11: the technician\'s Save — a create an earlier press made: as stored, the login one value whichever way it is named, what was changed since in the form as an edit, said above every view when the form is gone; never a row it did not send — RUN', async () => {
+    const IN_USE = (technician, status = 409) => onceOf(status, { error: 'That technician id is already in use.', code: 'idInUse', ...(technician ? { technician } : {}) });
+    // The form "+ New" opens with, a login picked and the rest typed: numbers as typed, the hours' keys in the form's own order.
+    const TYPED = Object.freeze({ firstName: 'Ann ', lastName: 'Lee', userId: 'usr_1', memberId: 'usr_1', email: '', phone: '', employmentType: 'employee', status: 'active', homeZip: '', skills: ['sk_1'],
+        laborRate: '120', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: { mon: { start: '08:00', end: '17:00' } }, licenseLevel: null, certifications: [] });
+    const STORED = Object.freeze({ id: 'dtech_1', firstName: 'Ann', lastName: 'Lee', userId: 'user_clerk1', memberId: 'usr_1', email: '', phone: '', employmentType: 'employee', status: 'active', homeZip: '', skills: ['sk_1'],
+        serviceZones: [], laborRate: '120.00', overtimeRate: null, assignedVehicleId: null, notes: '', workingHours: { mon: { end: '17:00', start: '08:00' } }, licenseLevel: null, certifications: [], updatedAt: 't1' });
+    const SAID = 'The technician was already created by an earlier press.';
+    const KEPT = { kind: 'err', msg: `${SAID} What you changed since is in the form, not saved yet — Save to keep it.` };
+    const press = async (extra, held, { over = {}, sent = [UNSENT()], edit = null, ...rest } = {}) => {
+        const unproven = { current: {} };
+        const typed = { ...TYPED, ...over };
+        for (const [answer, since] of sent.map((x) => (Array.isArray(x) ? x : [x, {}]))) await techSave({ answer, isNew: true, unproven, over: { ...typed, ...since }, edit });   // `since` typed before that press
+        return techSave({ answer: IN_USE(held), isNew: true, unproven, over: { ...typed, ...extra }, edit, ...rest });
+    };
+    const seen = (d) => [d.saved, d.drafts, d.selected, d.statuses, d.said, d.unproven.current, d.sent.length, d.held, d.saving];
+    // As stored: this press's technician — "Technician created", the form the technician as stored, nothing said above it.
+    const AS_STORED = [[STORED], [STORED], ['dtech_1'], [null, { kind: 'ok', msg: 'Technician created' }], [], {}, 1, false, [true, false]];
+    assert.deepEqual(seen(await press({}, STORED)), AS_STORED, 'REGRESSION: a create that landed said as refused, or its own login, rate or hours said as another member\'s');
+    // Landed with an answer that could not be read (a 201): the same — the form stayed a create, and is answered with it.
+    const unread = { current: {} };
+    const first = await techSave({ answer: P11_UNREADABLE(), isNew: true, unproven: unread, over: TYPED });
+    assert.deepEqual([first.statuses[1], first.saved, unread.current], [{ kind: 'ok', msg: 'Technician created' }, [], { dtech_1: [first.sent[0][2]] }], 'its body remembered');
+    assert.deepEqual(seen(await press({}, STORED, { sent: [P11_UNREADABLE()] })), AS_STORED);
+    assert.deepEqual((await press({ notes: 'Nights' }, STORED, { sent: [P11_UNREADABLE()] })).drafts, [{ ...STORED, notes: 'Nights' }], 'REGRESSION: typed after an unread 201, then dropped');
+    // A create that landed, its answer read: nothing kept.
+    const read1 = { current: { dtech_1: [{ id: 'dtech_1' }] } };
+    const ok = await techSave({ answer: onceOf(201, { technician: STORED }), isNew: true, unproven: read1, over: TYPED });
+    assert.deepEqual([ok.saved, ok.statuses[1], read1.current], [[STORED], { kind: 'ok', msg: 'Technician created' }, {}]);
+    // Another member changed it since, this one did not: theirs stands, said.
+    const THEIRS = Object.freeze({ ...STORED, status: 'on_leave', licenseLevel: 'Master' });
+    assert.deepEqual(seen(await press({}, THEIRS)), [[THEIRS], [THEIRS], ['dtech_1'], [null, { kind: 'ok', msg: alreadySaid('The technician', 'created') }], [], {}, 1, false, [true, false]],
+        'REGRESSION: another member\'s leave written over in the form, or not said');
+    // This member changed it since: an edit to save, over the technician as stored — said, not saved; its next Save is a PUT.
+    const mine = await press({ notes: 'Nights', laborRate: '130' }, THEIRS);
+    assert.deepEqual(seen(mine), [[THEIRS], [{ ...THEIRS, notes: 'Nights', laborRate: '130' }], ['dtech_1'], [null, KEPT], [], {}, 1, false, [true, false]], 'REGRESSION: what was typed lost, or written over another member\'s change');
+    assert.ok(!('_isNew' in mine.drafts[0]), 'REGRESSION: the next Save sends a create again');
+    // The login: another picked since is a change, both halves of it; the one picked again, or taken off since, told apart.
+    const relinked = await press({ userId: 'usr_2', memberId: 'usr_2' }, STORED);
+    assert.deepEqual([relinked.drafts, relinked.statuses[1]], [[{ ...STORED, userId: 'usr_2', memberId: 'usr_2' }], KEPT], 'REGRESSION: a login picked since dropped');
+    // Two presses, the login picked between them: the first landed, the second wrote nothing — still this member's change.
+    const LOGIN_2 = { userId: 'usr_2', memberId: 'usr_2' };
+    const twoPresses = await press(LOGIN_2, STORED, { sent: [UNSENT(), [UNSENT(), LOGIN_2]] });
+    assert.deepEqual([twoPresses.drafts, twoPresses.statuses[1]], [[{ ...STORED, ...LOGIN_2 }], KEPT], 'REGRESSION: a login picked since, sent by a press that wrote nothing, dropped');
+    const unlinked = await press({ userId: '', memberId: null }, STORED);
+    assert.deepEqual([unlinked.drafts, unlinked.statuses[1]], [[{ ...STORED, userId: null, memberId: null }], KEPT], 'REGRESSION: a login taken off since dropped');
+    const mineAndLogin = await press({ notes: 'Nights' }, STORED);
+    assert.deepEqual(mineAndLogin.drafts, [{ ...STORED, notes: 'Nights' }], 'REGRESSION: the Clerk identity stored replaced by the picked app id');
+    // Another member linked another login: theirs.
+    const THEIR_LOGIN = Object.freeze({ ...STORED, userId: 'user_clerk9', memberId: 'usr_9' });
+    const theirLogin = await press({}, THEIR_LOGIN);
+    assert.deepEqual([theirLogin.drafts, theirLogin.statuses[1]], [[THEIR_LOGIN], { kind: 'ok', msg: alreadySaid('The technician', 'created') }]);
+    // A refused first press sent nothing that landed: not remembered, so nothing typed is told from what is stored.
+    const refusedFirst = await press({}, THEIRS, { sent: [onceOf(403, { error: 'Forbidden' })] });
+    assert.deepEqual([refusedFirst.drafts, refusedFirst.statuses[1].kind], [[THEIRS], 'ok']);
+    // The form gone meanwhile (another view): listed as stored, what it says above every view, no form opened.
+    for (const [extra, held, said] of [[{ notes: 'Nights' }, THEIRS, [`${SAID} What you changed since was not saved — open the technician to change it.`]], [{}, THEIRS, [alreadySaid('The technician', 'created')]], [{}, STORED, []]]) {
+        const gone = await press(extra, held, { shown: false });
+        assert.deepEqual(seen(gone), [[held], [], [], [null], said, {}, 1, false, [true, false]], 'REGRESSION: a change lost with nothing said, or a form put behind another view');
+    }
+    // Never a row this press did not send, a body with none, an edit, no code, or another status: the words, nothing listed.
+    for (const [answer, isNew] of [[IN_USE({ ...STORED, id: 'dtech_9' }), true], [IN_USE(null), true], [IN_USE(STORED), false], [onceOf(409, { error: 'That technician id is already in use.', technician: STORED }), true]]) {
+        const did = await techSave({ answer, isNew, over: TYPED });
+        assert.deepEqual(seen(did), [[], [], [], [null, { kind: 'err', msg: 'That technician id is already in use.' }], [], {}, 1, false, [true, false]], 'REGRESSION: a row not proven this create\'s taken');
+    }
+    const broken = await techSave({ answer: IN_USE(STORED, 500), isNew: true, over: TYPED });
+    assert.deepEqual([broken.saved, broken.statuses[1], Object.keys(broken.unproven.current)], [[], { kind: 'err', msg: maybeSaid('The technician', 'saved', 'That technician id is already in use.') }, ['dtech_1']]);
+    // After an org switch: nothing listed, said or opened.
+    for (const extra of [{}, { notes: 'x' }]) {
+        const moved = await press(extra, THEIRS, { switchAt: 0 });
+        assert.deepEqual([moved.saved, moved.said, moved.drafts, moved.statuses], [[], [], [], [null]], 'REGRESSION: an answer from the org left listed or said');
+    }
+    // Red, each over the Save as extracted with its one line changed in memory.
+    for (const [line, extra, held, rest] of [
+        [["const held = sentNew ? heldCreate(res.status, r.body, 'technician', draft.id) : null;", 'const held = null;'], {}, STORED, {}],
+        [['b.userId === held.memberId ? { ...b, userId: held.userId } : b);', 'false ? {} : b);'], {}, STORED, {}],
+        [['overStored(asStored(body), held,', 'overStored(body, held,'], {}, STORED, {}],
+        [['(unproven.current[draft.id] || []).map(asStored)', '(unproven.current[draft.id] || [])'], LOGIN_2, STORED, { sent: [UNSENT(), [UNSENT(), LOGIN_2]] }],
+        [['delete unproven.current[draft.id];', ''], {}, STORED, {}],
+        [['onSaved(held);', ''], {}, STORED, {}],
+        [['if (!shownRef.current) {', 'if (false) {'], { notes: 'x' }, THEIRS, { shown: false }],
+        [['if (shown.mine.length) onSaid(', 'if (false) onSaid('], { notes: 'x' }, THEIRS, { shown: false }],
+        [['else if (shown.differs) onSaid(', 'else if (false) onSaid('], {}, THEIRS, { shown: false }],
+        [['setDraft(shown.draft); setSelectedId(held.id);', 'setSelectedId(held.id);'], { notes: 'x' }, THEIRS, {}],
+        [['setDraft(shown.draft); setSelectedId(held.id);', 'setDraft(shown.draft);'], {}, STORED, {}],
+        [["setStatus(shown.mine.length ? { kind: 'err', msg: keptSaid('The technician') }", "setStatus(false ? { kind: 'err', msg: keptSaid('The technician') }"], { notes: 'x' }, THEIRS, {}],
+        [["msg: shown.differs ? alreadySaid('The technician', 'created') : 'Technician created' });", "msg: 'Technician created' });"], {}, THEIRS, {}],
+        [['if (!saved) keepSentNew();', 'if (!saved) {}'], { notes: 'x' }, STORED, { unread: true }],
+        [['if (unknownOf(e)) keepSentNew();', ''], { notes: 'x' }, STORED, {}],
+        [['if (draft._isNew) sentNew = body;', ''], {}, STORED, {}],
+        [["                if (!stillOrg(askedOrg)) return;\n                const held = sentNew", '                const held = sentNew'], {}, THEIRS, { switchAt: 0 }],
+    ]) {
+        const fresh = () => (rest.unread ? { sent: [P11_UNREADABLE()] } : rest);
+        assert.notDeepEqual(seen(await press(extra, held, { ...fresh(), edit: line })), seen(await press(extra, held, fresh())), `taken out, it is red: ${line[0]}`);
+    }
+    const kept = { current: { dtech_1: [{ id: 'dtech_1' }] } };
+    await techSave({ answer: onceOf(201, { technician: STORED }), isNew: true, unproven: kept, over: TYPED, edit: ['else delete unproven.current[saved.id];', ''] });
+    assert.notDeepEqual(kept.current, {}, 'taken out, it is red: the bodies of a create that landed kept');
+    // WIRING: the form shown follows the view's own mount; "+ New" opens every field the form shows, so another member's is told by it.
+    const view = between(dispatchSrc(), 'const TechniciansView = (', '    const save = async () => {');
+    order(view, 'const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved, onSaid, confirmDiscard }) => {', 'licenseLevel: null, certifications: [], memberId: null });',
+        'const unproven = useRef({});', 'const shownRef = useRef(true);', 'React.useEffect(() => { shownRef.current = true; return () => { shownRef.current = false; }; }, []);');
 });
 
 // The job's invoice panel (JobInvoicePanel): its read of the job's invoices (the effect) and its writes (write).
@@ -6546,7 +6880,10 @@ test('§0.290: New Job\'s banner — a create answered with a job that stands ot
     assert.equal(count(d, '{createSaid && ('), 1);
     assert.ok(d.includes('const [createSaid, setCreateSaid] = useState(null);'));
     // Cleared as a Save begins, set by the job held, Open job, Close, and the Customers view's words — none else, and no timer.
-    assert.equal(count(d, 'setCreateSaid('), 5);
+    // Moved in §0.291 (5 -> 7): and a time off already made that stands otherwise, and the Technicians view's words.
+    assert.equal(count(d, 'setCreateSaid('), 7);
+    assert.ok(between(d, '<TechniciansView techsRaw={techsRaw}', 'onSaved={saved').includes('onSaid={text => setCreateSaid({ text })}'), 'the Technicians view\'s words, with no job');
+    assert.ok(d.includes("setCreateSaid({ text: alreadySaid('The time off', 'created') });"), 'the time off\'s');
     assert.ok(!/setTimeout\([^;]*setCreateSaid/.test(d), 'REGRESSION: the banner closed on a timer');
     assert.ok(between(d, '<CustomersView customers={customers}', 'onSaved={saved').includes('onSaid={text => setCreateSaid({ text })}'), 'the Customers view\'s words, with no job');
     // Open job: the banner closed, the record opened — run, over the tab's own openJobRecord.
@@ -6939,7 +7276,7 @@ test('Part 11: WIRING — recordVisit to the end of DispatchTab: no "HTTP N", "c
 
 // The service plans panel (DispatchServicePlansDetail.jsx): its load, save, delete and the legacy seed.
 const SP = 'src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx';
-const spSrc = () => code(read(SP));
+const spSrc = () => codeOf(SP);
 const spLoad = async (answers = {}) => {
     const did = { sent: [], errors: [], loading: [], plans: [], custs: [] };
     const landed = { 'dispatch-service-plans': { plans: [{ id: 'plan_1', name: 'Gold' }] }, 'dispatch-customers': { customers: [{ id: 'cust_1' }] } };
@@ -6969,12 +7306,21 @@ test('Part 11: the service plans load — each refusal in the server\'s words, a
     assert.deepEqual([ok.errors, ok.plans, ok.custs], [[''], [ok.landed['dispatch-service-plans'].plans], [ok.landed['dispatch-customers'].customers]]);
 });
 
-const spPress = async (name, answer, draft = { id: 'plan_1', name: ' Gold ', cadence: 'annual' }) => {
-    const did = { sent: [], errors: [], busy: [], loads: 0, drafts: [] };
+// Since §0.291 a new plan's Save answered 'idInUse' takes the plan an earlier press made (heldCreate, overStored, the panel's
+// own cadences and keepSentNew — the real ones): `unproven` is handed in so presses share it, `plans` is the list drawn,
+// `whileOut` is typed into the form as the request goes out, `load` stands for the read after it, `edit` changes one line, in
+// memory alone (the red runs).
+const spPress = async (name, answer, draft = { id: 'plan_1', name: ' Gold ', cadence: 'annual' }, { unproven = { current: {} }, plans = [], busy = false, whileOut = null, load = null, edit = null } = {}) => {
+    const did = { sent: [], errors: [], busy: [], loads: 0, drafts: [], said: [], plans: stateOf(plans), unproven };
+    const draftNow = stateOf(draft);
+    const CADENCES = new Function(`${between(spSrc(), 'const CADENCES = [', '\n];')}\n];\nreturn CADENCES;`)();
+    const keepSentNew = new Function('unproven', `${between(spSrc(), '    const keepSentNew = (body) => {', '\n')}\nreturn keepSentNew;`)(unproven);
     // Moved in §0.264 (the unknown-save rule, Part 5): the save and delete read the unknown-save helpers — the real ones.
-    const fn = p10Fn(SP, `    const ${name} = async () => {`, '\n    };', ['draft', 'setError', 'setBusy', 'dbFetch', 'readRefusal', 'failureWords', 'load', 'setDraft', ...U4_NAMES], name)(
-        draft, (v) => did.errors.push(v), (v) => did.busy.push(v), p11Fetch(did, answer, { now: 'org_a' }), readRefusal, failureWords,
-        async () => { did.loads++; }, (v) => did.drafts.push(v), ...U4);
+    const fn = p10Edited(SP, `    const ${name} = async () => {`, '\n    };', edit, ['draft', 'setError', 'setBusy', 'dbFetch', 'readRefusal', 'failureWords', 'load', 'setDraft', ...U4_NAMES,
+        'busy', 'setSaidPlan', 'unproven', 'keepSentNew', 'heldCreate', 'overStored', 'keptSaid', 'alreadySaid', 'CADENCES', 'setPlans'], name)(
+        draft, (v) => did.errors.push(v), (v) => did.busy.push(v), p11Fetch(did, () => { if (whileOut) draftNow.set((d) => ({ ...d, ...whileOut })); return answer; }, { now: 'org_a' }), readRefusal, failureWords,
+        async () => { did.loads++; if (load) await load(did); }, (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, ...U4,
+        busy, (v) => did.said.push(v), unproven, keepSentNew, heldCreate, overStored, keptSaid, alreadySaid, CADENCES, did.plans.set);
     await fn();
     return did;
 };
@@ -6995,6 +7341,119 @@ test('Part 11: the service plans save and delete — a refusal in the house word
         const unreadable = await spPress(name, P11_UNREADABLE());
         assert.deepEqual([unreadable.errors, unreadable.loads, unreadable.drafts], [[''], 1, [null]], 'landed: no body read, as before');
     }
+    // Added in §0.291: a Delete while a press is out sends nothing.
+    const out = await spPress('remove', onceOf(200, { ok: true }), undefined, { busy: true });
+    assert.deepEqual([out.sent, out.errors, out.busy, out.drafts], [[], [], [], []], 'REGRESSION: a Delete sent while the Save is out');
+});
+
+// Added in §0.291: a new plan's Save whose earlier press landed is answered with the plan as stored. A named cadence's interval is
+// its own days, whatever was typed under Custom before it (the server's deriveInterval).
+test('§0.291 Part 11: the service plan\'s Save — a create an earlier press made: as stored, its interval as the server stores it, what was changed since in the form as an edit; listed though the read after it fails; never a row it did not send — RUN', async () => {
+    const IN_USE = (plan, status = 409) => onceOf(status, { error: 'That plan id is already in use.', code: 'idInUse', ...(plan ? { plan } : {}) });
+    // The form "+ New plan" opens with, its name and price typed.
+    const NEW = Object.freeze({ id: 'plan_1', _isNew: true, name: ' Gold ', cadence: 'annual', active: true, coveredJobTypes: ['jt_1'], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed', description: null, visitTemplateId: null,
+        includedHours: null, responseHours: null, price: 1200, billingPeriod: 'annual', discountPercent: null });
+    const STORED = Object.freeze({ id: 'plan_1', name: 'Gold', cadence: 'annual', intervalDays: 365, visitsPerYear: 1, active: true, coveredJobTypes: ['jt_1'], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed', description: null,
+        visitTemplateId: null, includedHours: null, responseHours: null, price: '1200.00', billingPeriod: 'annual', discountPercent: null, notes: null, updatedAt: 't1' });
+    const OTHER = Object.freeze({ id: 'plan_2', name: 'Silver' });
+    const KEPT = 'The plan was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.';
+    const ALREADY = alreadySaid('The plan', 'created');
+    const press = async (extra, held, { over = {}, sent = [UNSENT()], edit = null, ...rest } = {}) => {
+        const unproven = { current: {} };
+        for (const answer of sent) await spPress('save', answer, { ...NEW, ...over }, { unproven, plans: [OTHER], edit });
+        return spPress('save', IN_USE(held), { ...NEW, ...over, ...extra }, { unproven, plans: [OTHER], edit, ...rest });
+    };
+    const seen = (d) => [d.errors, d.said, d.drafts, d.plans.value, d.loads, d.busy, d.unproven.current, d.sent.length];
+    // As stored: this press's plan — listed, read again, the form closed, nothing said.
+    const AS_STORED = [[''], [''], [null], [OTHER, STORED], 1, [true, false], {}, 1];
+    assert.deepEqual(seen(await press({}, STORED)), AS_STORED, 'REGRESSION: a create that landed said as refused, or a price or interval of its own said as another member\'s');
+    // The interval: typed under Custom, then a named cadence — stored as that cadence's own days; Custom's as typed.
+    assert.deepEqual(seen(await press({}, STORED, { over: { intervalDays: 45 } })), AS_STORED, 'REGRESSION: an interval typed under Custom and left said as a change');
+    const CUSTOM = Object.freeze({ ...STORED, cadence: 'custom', intervalDays: 45, visitsPerYear: 8 });
+    assert.deepEqual(seen(await press({}, CUSTOM, { over: { cadence: 'custom', intervalDays: 45 } })), [[''], [''], [null], [OTHER, CUSTOM], 1, [true, false], {}, 1]);
+    const stretched = await press({ intervalDays: 60 }, CUSTOM, { over: { cadence: 'custom', intervalDays: 45 } });
+    assert.deepEqual([stretched.drafts, stretched.errors], [[{ ...CUSTOM, intervalDays: 60 }], ['', KEPT]]);
+    const toCustom = await press({ cadence: 'custom', intervalDays: 45 }, STORED);
+    assert.deepEqual([toCustom.drafts, toCustom.errors], [[{ ...STORED, cadence: 'custom', intervalDays: 45 }], ['', KEPT]], 'the cadence and its interval, both changed since');
+    const toNamed = await press({ cadence: 'monthly' }, CUSTOM, { over: { cadence: 'custom', intervalDays: 45 } });
+    assert.deepEqual(toNamed.drafts, [{ ...CUSTOM, cadence: 'monthly', intervalDays: 30 }]);
+    // Another member changed it since, this one did not: theirs stands, said until its Close; the form closed.
+    const THEIRS = Object.freeze({ ...STORED, price: '1500.00', active: false });
+    assert.deepEqual(seen(await press({}, THEIRS)), [[''], ['', ALREADY], [null], [OTHER, THEIRS], 1, [true, false], {}, 1], 'REGRESSION: another member\'s price shown as this member\'s own, or not said');
+    // This member changed it since: the form on the stored plan with that over it — not saved, said; its next Save is an edit.
+    const mine = await press({ description: 'Two visits' }, THEIRS);
+    assert.deepEqual(seen(mine), [['', KEPT], [''], [{ ...THEIRS, description: 'Two visits' }], [OTHER, THEIRS], 1, [true, false], {}, 1], 'REGRESSION: what was typed lost, or written over another member\'s price');
+    assert.ok(!('_isNew' in mine.drafts[0]), 'REGRESSION: the next Save sends a create again');
+    // Typed while the press was out: kept too. Another record's form by then, or none: left as it is.
+    const typing = await press({ description: 'Two visits' }, STORED, { whileOut: { responseHours: 4, name: ' Gold plus ' } });
+    assert.deepEqual(typing.drafts, [{ ...STORED, description: 'Two visits', responseHours: 4, name: 'Gold plus' }], 'REGRESSION: typed while it was out, and lost');
+    const left = await press({ description: 'Two visits' }, STORED, { whileOut: { id: 'plan_9' } });
+    assert.deepEqual([left.drafts[0].id, left.drafts[0].updatedAt], ['plan_9', undefined], 'REGRESSION: the stored plan put over another plan\'s form');
+    // The read after it fails: the plan is listed as stored all the same — this panel's own load, refused, changes no list.
+    const refusedLoad = async (did) => {
+        const load = new Function('setLoading', 'setLoadError', 'dbFetch', 'readRefusal', 'failureWords', 'setPlans', 'setCustomers',
+            `const load = ${between(spSrc(), "async () => {\n        setLoading(true); setLoadError('');", '\n    }, []);')}\n    };\nreturn load;`)(
+            () => {}, (v) => { did.loadError = v; }, async () => P11_PAGE(), readRefusal, failureWords, did.plans.set, () => {});
+        await load();
+    };
+    for (const [extra, drafts, errors] of [[{}, [null], ['']], [{ description: 'x' }, [{ ...STORED, description: 'x' }], ['', KEPT]]]) {
+        const failed = await press(extra, STORED, { load: refusedLoad });
+        assert.match(failed.loadError, /^Service plans did not load — /);
+        assert.deepEqual([failed.plans.value, failed.drafts, failed.errors, failed.busy], [[OTHER, STORED], drafts, errors, [true, false]], 'REGRESSION: a plan made, in no list');
+    }
+    // Once in the list, never twice.
+    const twice = await spPress('save', IN_USE(STORED), { ...NEW }, { plans: [{ ...STORED, name: 'Old' }, OTHER] });
+    assert.deepEqual(twice.plans.value, [OTHER, STORED]);
+    // A landed create forgets what it sent; so nothing typed later is measured by it.
+    const landed = { current: { plan_1: [{ id: 'plan_1' }] } };
+    await spPress('save', onceOf(201, { plan: STORED }), { ...NEW }, { unproven: landed });
+    assert.deepEqual(landed.current, {});
+    // The bodies remembered: a create whose answer proved nothing, as sent — never a refused one's, an edit's or a Delete's.
+    for (const [answer, , heard] of p11Writes()) {
+        const did = await spPress('save', answer, { ...NEW });
+        assert.deepEqual([did.unproven.current, did.sent[0][1], '_isNew' in did.sent[0][2]], [heard ? {} : { plan_1: [did.sent[0][2]] }, 'POST', false]);
+    }
+    assert.deepEqual((await spPress('save', UNSENT())).unproven.current, {}, 'an edit');
+    assert.deepEqual((await spPress('remove', UNSENT())).unproven.current, {}, 'a Delete');
+    // Never a row this press did not send, a body with none, an edit, no code, or another status: the words, the form open.
+    for (const [answer, draft] of [[IN_USE({ ...STORED, id: 'plan_9' }), NEW], [IN_USE(null), NEW], [IN_USE(STORED), { ...STORED }], [onceOf(409, { error: 'That plan id is already in use.', plan: STORED }), NEW]]) {
+        const did = await spPress('save', answer, { ...draft }, { plans: [OTHER] });
+        assert.deepEqual(seen(did), [['', 'That plan id is already in use.'], [''], [], [OTHER], 0, [true, false], {}, 1], 'REGRESSION: a row not proven this create\'s taken');
+    }
+    const broken = await spPress('save', IN_USE(STORED, 500), { ...NEW }, { plans: [OTHER] });
+    assert.deepEqual([broken.plans.value, broken.errors[1]], [[OTHER], maybeSaid('The plan', 'saved', 'That plan id is already in use.')]);
+    // Red, each over the Save as extracted with its one line changed in memory.
+    for (const [line, extra, held, rest] of [
+        [["const held = sentNew ? heldCreate(res.status, r.body, 'plan', draft.id) : null;", 'const held = null;'], {}, STORED, {}],
+        [['const shown = overStored(asStored(body), held, bodies.map(asStored));', 'const shown = overStored(body, held, bodies.map(asStored));'], {}, STORED, { over: { intervalDays: 45 } }],
+        [['const shown = overStored(asStored(body), held, bodies.map(asStored));', 'const shown = overStored(asStored(body), held, bodies);'], {}, CUSTOM, { over: { intervalDays: 45 } }],
+        [["b.cadence === 'custom' ? b.intervalDays : CADENCES", 'CADENCES'], { intervalDays: 60 }, CUSTOM, { over: { cadence: 'custom', intervalDays: 45 } }],
+        [['setPlans(prev => [...prev.filter(x => x.id !== held.id), held]);', ''], {}, STORED, {}],
+        [['held.id), held]);   // shown though the read after it fails\n                await load();', 'held.id), held]);'], {}, STORED, {}],
+        [['overStored(asStored({ ...d, name: (d.name || \'\').trim() }), held, bodies.map(asStored)).draft : d));', 'shown.draft : d));'], { description: 'x' }, STORED, { whileOut: { responseHours: 4 } }],
+        [['overStored(asStored({ ...d, name: (d.name || \'\').trim() }), held, bodies.map(asStored)).draft', 'overStored(asStored(d), held, bodies.map(asStored)).draft'], { description: 'x' }, STORED, {}],
+        [['setDraft(d => (d && d.id === held.id ?', 'setDraft(d => (true ?'], { description: 'x' }, STORED, { whileOut: { id: 'plan_9' } }],
+        [["setError(keptSaid('The plan')); ", ''], { description: 'x' }, STORED, {}],
+        [["setError(keptSaid('The plan')); setBusy(false); return; }", "setError(keptSaid('The plan')); return; }"], { description: 'x' }, STORED, {}],
+        [["setError(keptSaid('The plan')); setBusy(false); return; }", "setError(keptSaid('The plan')); setBusy(false); }"], { description: 'x' }, STORED, {}],
+        [["if (shown.differs) setSaidPlan(alreadySaid('The plan', 'created'));", ''], {}, THEIRS, {}],
+        [['setDraft(null); setBusy(false); return;', 'setDraft(null); return;'], {}, STORED, {}],
+        [['setDraft(null); setBusy(false); return;', 'setBusy(false); return;'], {}, STORED, {}],
+        [['if (unknownOf(err)) keepSentNew(sentNew);', ''], { description: 'x' }, STORED, {}],
+        [['if (draft._isNew) sentNew = body;', ''], {}, STORED, {}],
+        [["setBusy(true); setError(''); setSaidPlan('');", "setBusy(true); setError('');"], {}, STORED, {}],
+        [["bodies = unproven.current[draft.id] || [];", 'bodies = [];'], { description: 'x' }, STORED, {}],
+    ]) {
+        assert.notDeepEqual(seen(await press(extra, held, { ...rest, edit: line })), seen(await press(extra, held, rest)), `taken out, it is red: ${line[0]}`);
+    }
+    // WIRING: the words over the form until their Close; a press out holds the form — its Cancel, its Delete and the list's names.
+    const s = spSrc();
+    const banner = between(s, '{saidPlan && (', '{draft ? (');
+    order(banner, '<div role="status"', '{saidPlan}</span>', "<button onClick={() => setSaidPlan('')}", 'Close', '</button>');
+    assert.equal(count(s, 'setSaidPlan('), 3, 'cleared as a Save begins, set by the plan held, its Close — none else');
+    order(s, "const [saidPlan,  setSaidPlan]  = useState('');", 'const unproven = useRef({});');
+    assert.ok(s.includes('<button onClick={onCancel} disabled={busy}') && s.includes('<button onClick={onDelete} disabled={busy}'));
+    assert.ok(s.includes("onCancel={() => { if (busy) return; setDraft(null); setError(''); }}/>") && s.includes("onClick={() => { if (busy) return; setDraft({ ...p }); setError(''); }}>{p.name}</span>"));
 });
 
 const spSeed = async ({ answers, switchAt = -1, tiers = ['gold'] }) => {
@@ -7049,10 +7508,13 @@ test('Part 11: WIRING — the service plans panel: no "HTTP N" or raw .message; 
     assert.ok(!/\b(e|err)\??\.message\b/.test(s), 'REGRESSION: a raw err.message said');
     // Moved in §0.264 (the unknown-save rule, Part 5): the role's sentence only for the server's own 403; the save and
     // delete say thrownSaid (failureWords for the server's own refusal, else maybe).
-    assert.ok(s.includes("import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';"));
-    assert.ok(s.includes("if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change service plans.'); throw refusalError(r.words, r.heard); }"));
+    // Moved in §0.291: a create answered with the plan an earlier press made is read between the refusal and its throw.
+    assert.ok(s.includes("import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid, alreadySaid } from '../../../utils/refusalWords.js';"));
+    assert.ok(s.includes("import { heldCreate, overStored, keptSaid } from '../../../utils/createResend.js';"));
+    order(between(s, '    const save = async () => {', '\n    };'), '            if (!res.ok) {', "const r = await writeRefusalOf(res, 'Your role cannot change service plans.');",
+        "const held = sentNew ? heldCreate(res.status, r.body, 'plan', draft.id) : null;", 'if (!held) throw refusalError(r.words, r.heard);');
     assert.ok(s.includes("if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot delete service plans.'); throw refusalError(r.words, r.heard); }"));
-    assert.ok(s.includes("} catch (err) { setError(thrownSaid(err, 'The plan', 'saved')); }") && s.includes("} catch (err) { setError(thrownSaid(err, 'The plan', 'deleted')); }"));
+    assert.ok(s.includes("} catch (err) { if (unknownOf(err)) keepSentNew(sentNew); setError(thrownSaid(err, 'The plan', 'saved')); }") && s.includes("} catch (err) { setError(thrownSaid(err, 'The plan', 'deleted')); }"));
     assert.equal(count(s, 'failureWords(err)'), 3, 'the load, the seed read and each create say failureWords');
 });
 
@@ -12530,7 +12992,7 @@ test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
     // 187 since AI scoring batch 2B took "Score all deals" and its catch out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
-    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 188, 'REGRESSION: scan (iv)\'s floor below the 188 catch clauses measured 23 Nov (§0.287)');
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 189, 'REGRESSION: scan (iv)\'s floor below the 189 catch clauses measured 23 Nov (§0.291)');
     assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 54, 'REGRESSION: scan (iv)\'s list no longer held at its 54 files');
     assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
     order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
@@ -13285,7 +13747,9 @@ test('§0.266 a held Create is kept by its panel — API keys, Webhooks, a new A
 // Rewritten in §0.290 (reversed by design): the job, customer and location creates were upserts that audited an update of the
 // row they had made and, for a job, recorded its own status move; each is a create alone now — the row an earlier press made
 // is answered as stored, nothing written, recorded, told or audited. The other five Dispatch creates are as they were.
-test('§0.266 / §0.290 Dispatch: a job, customer or location create sent again writes nothing — answered with its row by id and org, before any link and again after a write that took nothing; "Job created" and the created audit are the create\'s alone; the other creates audit an update — WIRING', () => {
+// Reversed in §0.291: the other five (a technician, a vehicle, a unit of equipment, a schedule block, a service plan) were upserts
+// that audited an update; each is a create alone too, held to the same rows below — its create audits a create, never an update.
+test('§0.266 / §0.290 / §0.291 Dispatch: a create sent again writes nothing, all eight — answered with its row by id and org, before any link and again after a write that took nothing; "Job created" and the created audit are the create\'s alone — WIRING', () => {
     const fnSrc = (n) => code(read(`netlify/functions/${n}.mjs`));
     const jobs = fnSrc('dispatch-jobs'), cust = fnSrc('dispatch-customers');
     const jobPost = between(jobs, "\n        if (event.httpMethod === 'POST') {", "\n        if (event.httpMethod === 'PUT') {");
@@ -13312,11 +13776,38 @@ test('§0.266 / §0.290 Dispatch: a job, customer or location create sent again 
         "if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };", 'const [inserted] = await db.insert(dispatchServiceLocations).values(row)',
         '.onConflictDoNothing({ target: dispatchServiceLocations.id }).returning();', '\n                if (!inserted) {\n                    const beside = await heldLocation(orgId, data.id);\n                    if (beside) return beside;\n                }',
         `if (!inserted) ${inUse('location')}`, "await auditAs(orgId, auth.userId, { action: 'dispatch_location.created'");
-    for (const [name, post, held, table, entity, src, fn, words, key, normalise] of [
-        ['the job', jobPost, 'heldJob(', 'dispatchJobs', 'dispatch_job', jobs, 'heldJob', 'job', 'job', 'normaliseJob'],
-        ['the customer', custPost, 'heldCustomer(', 'dispatchCustomers', 'dispatch_customer', cust, 'heldCustomer', 'customer', 'customer', 'normaliseCust'],
-        ['the location', locPost, 'heldLocation(', 'dispatchServiceLocations', 'dispatch_location', cust, 'heldLocation', 'location', 'location', 'normaliseLoc']]) {
-        assert.ok(!/onConflictDoUpdate|db\.update\(|\bprior(Job|Cust|Loc)\b/.test(post), `REGRESSION: ${name}'s create writes over a row it finds`);
+    // Added in §0.291: the other five — the field checks, the held look, the links (a technician's login, a plan's percent) asked
+    // against nothing held, the insert on its id alone, held again, the words, the audit; then the row it wrote.
+    const postOf = (s) => between(s, "\n        if (event.httpMethod === 'POST') {", "\n        if (event.httpMethod === 'PUT') {");
+    const techs = fnSrc('dispatch-technicians'), vans = fnSrc('dispatch-vehicles'), units = fnSrc('dispatch-equipment'), blocks = fnSrc('dispatch-schedule-blocks'), plans = fnSrc('dispatch-service-plans');
+    const req = (words) => `return { statusCode: 400, headers, body: JSON.stringify({ error: '${words}' }) };`;
+    const FIVE = [
+        ['the technician', techs, 'heldTechnician', 'dispatchTechnicians', 'dispatch_technician', 'technician', 'technician', 'normalise({ ...held, memberId })', 'lastName required',
+            ['const linked = await checkLinks(TECH_LINKS, data, null, orgId);', 'if (linked.error) return', 'const login = await loginOf(orgId, data.id, data, null);', 'if (login.status) return', 'userId:           login.keep ? null : login.userId,'], 'userId', 'technician: normalise({ ...inserted, memberId })'],
+        ['the vehicle', vans, 'heldVehicle', 'dispatchVehicles', 'dispatch_vehicle', 'vehicle', 'vehicle', 'normalise(held)', 'name required',
+            ['const linked = await checkLinks(VEHICLE_LINKS, data, null, orgId);', 'if (linked.error) return'], 'auth.userId', 'vehicle: normalise(inserted)'],
+        ['the unit', units, 'heldEquipment', 'dispatchEquipment', 'dispatch_equipment', 'equipment', 'item', 'normalise(held)', 'name required',
+            ['const linked = await checkLinks(EQUIPMENT_LINKS, data, null, orgId);', 'if (linked.error) return'], 'auth.userId', 'item: normalise(inserted)'],
+        ['the block', blocks, 'heldBlock', 'dispatchScheduleBlocks', 'dispatch_block', 'block', 'block', 'normalise(held)', 'endDate cannot be before startDate',
+            ['const linked = await checkLinks(BLOCK_LINKS, data, null, orgId);', 'if (linked.error) return', 'const partial = data.allDay === false && !!(data.startTime && data.endTime);',
+                'allDay:    !partial,', 'startTime: partial ? data.startTime : null,', 'endTime:   partial ? data.endTime : null,'], 'userId', 'block: normalise(inserted)'],
+        ['the plan', plans, 'heldPlan', 'dispatchServicePlans', 'dispatch_plan', 'plan', 'plan', 'normalise(held)', 'name required',
+            ['const linked = await checkLinks(PLAN_LINKS, data, null, orgId);', 'if (linked.error) return', "if (percentRefused(data.discountPercent, null)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };"], 'auth.userId', 'plan: normalise(inserted)'],
+    ];
+    for (const [name, src, fn, table, entity, words, , , refused, asked, who, answered] of FIVE) {
+        const post = postOf(src);
+        order(post, req(refused), `\n            const landed = await ${fn}(orgId, data.id);\n            if (landed) return landed;`, ...asked,
+            `\n            const [inserted] = await db.insert(${table}).values(row).onConflictDoNothing({ target: ${table}.id }).returning();`,
+            `\n            if (!inserted) {\n                const beside = await ${fn}(orgId, data.id);\n                if (beside) return beside;\n            }`, `\n            if (!inserted) ${inUse(words)}`,
+            `\n            await auditAs(orgId, ${who}, { action: '${entity}.created'`, `return { statusCode: 201, headers, body: JSON.stringify({ ${answered} }) };`);
+    }
+    for (const [name, post, held, table, entity, src, fn, words, key, shown] of [
+        ['the job', jobPost, 'heldJob(', 'dispatchJobs', 'dispatch_job', jobs, 'heldJob', 'job', 'job', 'normaliseJob(held)'],
+        ['the customer', custPost, 'heldCustomer(', 'dispatchCustomers', 'dispatch_customer', cust, 'heldCustomer', 'customer', 'customer', 'normaliseCust(held)'],
+        ['the location', locPost, 'heldLocation(', 'dispatchServiceLocations', 'dispatch_location', cust, 'heldLocation', 'location', 'location', 'normaliseLoc(held)'],
+        // Moved in §0.291: and the five.
+        ...FIVE.map(([name, src, fn, table, entity, words, key, shown]) => [name, postOf(src), `${fn}(`, table, entity, src, fn, words, key, shown])]) {
+        assert.ok(!/onConflictDoUpdate|db\.update\(|\bprior(Job|Cust|Loc)?\b/.test(post), `REGRESSION: ${name}'s create writes over a row it finds`);
         assert.equal(count(post, 'db.insert('), 1, `${name}: one write`);
         assert.equal(count(post, `await ${held}`), 2, `${name}: looked for before its links and after a write that took nothing — none else`);
         assert.equal(count(post, 'auditAs('), 1, `${name}: one audit, the create's`);
@@ -13325,15 +13816,14 @@ test('§0.266 / §0.290 Dispatch: a job, customer or location create sent again 
         // The row it answers with: by its id AND the caller's org; nothing written in it, and none of this org's the plain null.
         const look = between(src, `async function ${fn}(orgId, id) {`, '\n}\n');
         order(look, `const [held] = await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));`,
-            `return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.', code: 'idInUse', ${key}: ${normalise}(held) }) } : null;`);
+            `return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.', code: 'idInUse', ${key}: ${shown} }) } : null;`);
         assert.ok(!/recordStatusChange|notifyCustomer|auditAs|db\.(insert|update|delete)\(|catch/.test(look), `REGRESSION: ${fn} writes, tells, or answers a failed read as none`);
     }
-    for (const [file, prior, entity] of [
-        ['dispatch-equipment', 'prior', 'dispatch_equipment'], ['dispatch-schedule-blocks', 'prior', 'dispatch_block'], ['dispatch-service-plans', 'prior', 'dispatch_plan'],
-        ['dispatch-technicians', 'prior', 'dispatch_technician'], ['dispatch-vehicles', 'prior', 'dispatch_vehicle']]) {
-        const s = fnSrc(file);
-        assert.ok(s.includes(`action: ${prior} ? '${entity}.updated' : '${entity}.created'`), `REGRESSION: ${file} audits a create sent again as a second ${entity} create`);
-        assert.ok(!s.includes(`{ action: '${entity}.created'`), `${file}: no create audited without its prior row read`);
+    // The technician answered with names its member: the login stored is their Clerk identity, the form's is their app id (§0.291).
+    order(between(techs, 'async function heldTechnician(orgId, id) {', '\n}\n'), 'const [held] = await db.select()', 'const memberId = held ? await memberIdOf(orgId, held.userId) : null;', 'return held ?');
+    // Reversed in §0.291: the five pinned an update audited for a create sent again (`prior ? '….updated' : '….created'`); none is written now.
+    for (const [name, src, , , entity] of FIVE) {
+        assert.ok(!src.includes(`? '${entity}.updated' : '${entity}.created'`), `REGRESSION: ${name}'s create sent again audited as an update`);
     }
 });
 

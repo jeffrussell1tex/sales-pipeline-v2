@@ -142,11 +142,17 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
         '.where(and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, member.clerkUserId), ne(dispatchTechnicians.id, techId)))',
         '    return loginDecided(member || null, taken ? techName(taken) : null);'),
         'the login: a member of THIS org — by the column the value names — never one another technician of the org holds');
-    assert.ok(inOrder(t, "            const [prior] = await db.select({ id: dispatchTechnicians.id, userId: dispatchTechnicians.userId, assignedVehicleId: dispatchTechnicians.assignedVehicleId })",
-        '            const linked = await checkLinks(TECH_LINKS, data, prior || null, orgId);', REFUSE,
-        '            const login = await loginOf(orgId, data.id, data, prior || null);',
+    // Reversed in §0.291: the create was an upsert, its vehicle and login held from the row it wrote over; it is a create only —
+    // the held look (this org's), then its vehicle and login asked with nothing held, refused before the insert.
+    assert.ok(inOrder(t, '            const landed = await heldTechnician(orgId, data.id);', '            if (landed) return landed;',
+        '            const linked = await checkLinks(TECH_LINKS, data, null, orgId);', REFUSE,
+        '            const login = await loginOf(orgId, data.id, data, null);',
         "            if (login.status) return { statusCode: login.status, headers, body: JSON.stringify({ error: login.error, field: login.field }) };",
-        '                userId:           login.keep ? (prior ? prior.userId : null) : login.userId,'), "the create: an upsert, its vehicle and login held from the row it overwrites");
+        '                userId:           login.keep ? null : login.userId,',
+        'await db.insert(dispatchTechnicians).values(row).onConflictDoNothing({ target: dispatchTechnicians.id }).returning();'), 'the create asks its vehicle and login with nothing held');
+    // §0.291: the technician answered for a taken id names its login's member too, read in this org — the screen reads the login
+    // as one value (the member's app id picked, their Clerk identity stored), and an answer without it reads as another login than the one sent.
+    assert.ok(inOrder(t, 'async function heldTechnician(orgId, id) {', '    const memberId = held ? await memberIdOf(orgId, held.userId) : null;', 'technician: normalise({ ...held, memberId })', '\n}'), "the held technician's member");
     assert.ok(inOrder(t, "            const [current] = await db.select({ id: dispatchTechnicians.id, userId: dispatchTechnicians.userId, assignedVehicleId: dispatchTechnicians.assignedVehicleId })",
         "            if (!current) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };",
         '            const linked = await checkLinks(TECH_LINKS, data, current, orgId);', REFUSE,
@@ -172,15 +178,19 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
 
     const v = fn('dispatch-vehicles');
     assert.ok(v.includes("const VEHICLE_LINKS = [{ key: 'assignedTechId', kind: 'technician' }];"));
-    assert.ok(inOrder(v, "            const [prior] = await db.select({ id: dispatchVehicles.id, assignedTechId: dispatchVehicles.assignedTechId })",
-        '            const linked = await checkLinks(VEHICLE_LINKS, data, prior || null, orgId);', REFUSE, '            const row = {'), 'the create: an upsert, its technician held');
+    // Reversed in §0.291: an upsert, its technician held from the row it wrote over; a create only now, nothing held.
+    assert.ok(inOrder(v, '            const landed = await heldVehicle(orgId, data.id);', '            if (landed) return landed;',
+        '            const linked = await checkLinks(VEHICLE_LINKS, data, null, orgId);', REFUSE, '            const row = {',
+        'await db.insert(dispatchVehicles).values(row).onConflictDoNothing({ target: dispatchVehicles.id }).returning();'), 'the create asks its technician with nothing held');
     assert.ok(inOrder(v, "            if ('assignedTechId' in data) {", "                const [held] = await db.select({ id: dispatchVehicles.id, assignedTechId: dispatchVehicles.assignedTechId })",
         '                const linked = await checkLinks(VEHICLE_LINKS, data, held, orgId);', REFUSE, '            const updates = { updatedAt: new Date() };'), 'the update');
 
     const e = fn('dispatch-equipment');
     assert.ok(e.includes("const EQUIPMENT_LINKS = [{ key: 'checkedOutToId', kind: 'technician' }, { key: 'checkedOutJobId', kind: 'job' }];"));
-    assert.ok(inOrder(e, "            const [prior] = await db.select({ id: dispatchEquipment.id, checkedOutToId: dispatchEquipment.checkedOutToId, checkedOutJobId: dispatchEquipment.checkedOutJobId })",
-        '            const linked = await checkLinks(EQUIPMENT_LINKS, data, prior || null, orgId);', REFUSE, '            const row = {'), 'the create');
+    // Reversed in §0.291: an upsert, its holder held from the row it wrote over; a create only now, nothing held.
+    assert.ok(inOrder(e, '            const landed = await heldEquipment(orgId, data.id);', '            if (landed) return landed;',
+        '            const linked = await checkLinks(EQUIPMENT_LINKS, data, null, orgId);', REFUSE, '            const row = {',
+        'await db.insert(dispatchEquipment).values(row).onConflictDoNothing({ target: dispatchEquipment.id }).returning();'), 'the create asks its holder with nothing held');
     assert.ok(inOrder(e, "            const named = action === 'checkin' ? null : data;",
         '            if (named && EQUIPMENT_LINKS.some((l) => l.key in named)) {',
         '                const [held] = await db.select({ id: dispatchEquipment.id, checkedOutToId: dispatchEquipment.checkedOutToId, checkedOutJobId: dispatchEquipment.checkedOutJobId })',
@@ -210,23 +220,29 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
 
     const b = fn('dispatch-schedule-blocks');
     assert.ok(b.includes("const BLOCK_LINKS = [{ key: 'techId', kind: 'technician' }];"));
-    assert.ok(inOrder(b, "            const [prior] = await db.select({ id: dispatchScheduleBlocks.id, techId: dispatchScheduleBlocks.techId })",
-        '            if (prior && prior.techId !== data.techId) {',
-        "                return { statusCode: 409, headers, body: JSON.stringify({ error: 'A block stays with its technician — add a new one for another.', field: 'techId' }) };",
-        '            const linked = await checkLinks(BLOCK_LINKS, data, prior || null, orgId);', REFUSE,
-        '                    set: { ...row, createdAt: undefined, techId: undefined, createdBy: undefined },'),
-        "a block stays with its technician on a re-POST, as the PUT keeps it — refused, never re-pointed — and its author stays the first create's");
+    // Reversed in §0.291: a re-POST was an upsert — one naming another technician refused in words of its own, the rest written
+    // over the block. A create only now: an id this org holds is answered with the block as stored, its technician and its author
+    // with it, nothing written — so nothing re-points one; and the PUT's own field list still holds neither.
+    assert.ok(inOrder(b, '            const landed = await heldBlock(orgId, data.id);', '            if (landed) return landed;',
+        '            const linked = await checkLinks(BLOCK_LINKS, data, null, orgId);', REFUSE, '            const row = {',
+        'await db.insert(dispatchScheduleBlocks).values(row).onConflictDoNothing({ target: dispatchScheduleBlocks.id }).returning();'),
+        'the create asks its technician with nothing held');
+    assert.ok(b.includes("            ['blockType', 'title', 'startDate', 'endDate', 'startTime', 'endTime', 'allDay', 'notes']\n                .forEach(f => { if (f in data) updates[f] = data[f]; });"),
+        "a block stays with its technician, and its author is the create's: the PUT writes neither");
 
     // A service plan's visit template and covered job types (state §0.223 — batch 4b-3, step D; Q11): entries of this
-    // org's job templates and job types lists; the create reads the plan it would overwrite in this org, the update reads
+    // org's job templates and job types lists; the create asks both with nothing held (§0.291), the update reads
     // the plan before every write; the list itself stored (JD2); the GET answers a list.
     const sp = fn('dispatch-service-plans');
     assert.ok(sp.includes("const PLAN_LINKS = [{ key: 'visitTemplateId', kind: 'jobTemplate' }, { key: 'coveredJobTypes', kind: 'jobType', shape: 'many' }];"));
-    // The read holds the plan's discount too (state §0.242: a stored discount is never asked again).
-    assert.ok(inOrder(sp, '            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, discountPercent: dispatchServicePlans.discountPercent, coveredJobTypes: dispatchServicePlans.coveredJobTypes })',
-        '                .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));',
-        '            const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);', REFUSE, '            const row = {'),
-        "the create (an upsert): the plan it would overwrite IN THIS ORG read first, its template and covered types held — another org's id reads none");
+    // Reversed in §0.291: the create (an upsert) held the template, covered types and discount of the plan it wrote over; a create
+    // only now — the held look IN THIS ORG first (another org's id reads none), then each link asked with nothing held. Its
+    // discount: tests/percent-ranges.test.mjs.
+    assert.ok(inOrder(sp, 'async function heldPlan(orgId, id) {', '.from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));', '\n}',
+        '            const landed = await heldPlan(orgId, data.id);', '            if (landed) return landed;',
+        '            const linked = await checkLinks(PLAN_LINKS, data, null, orgId);', REFUSE, '            const row = {',
+        'await db.insert(dispatchServicePlans).values(row).onConflictDoNothing({ target: dispatchServicePlans.id }).returning();'),
+        "the create: an id this org holds answered with its plan, else its template and covered types asked with nothing held — another org's id reads none");
     assert.ok(inOrder(sp, "            const data    = JSON.parse(event.body || '{}');",
         '            const [current] = await db.select().from(dispatchServicePlans)',
         '                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));',
@@ -245,6 +261,10 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
     for (const [name, n] of [['dispatch-jobs', 2], ['dispatch-technicians', 2], ['dispatch-vehicles', 2], ['dispatch-equipment', 2], ['dispatch-customers', 2], ['dispatch-plan-visits', 1], ['dispatch-schedule-blocks', 1], ['dispatch-service-plans', 2]]) {
         assert.equal(count(fn(name), REFUSE), n, `${name}: each check's refusal answered`);
         assert.ok(fn(name).includes("import { checkLinks } from './_links.mjs';"), name);
+    }
+    // Since §0.291 no Dispatch create reads a row it would write over: nothing is held from one, so every link it names is asked.
+    for (const name of ['dispatch-jobs', 'dispatch-technicians', 'dispatch-vehicles', 'dispatch-equipment', 'dispatch-customers', 'dispatch-plan-visits', 'dispatch-schedule-blocks', 'dispatch-service-plans']) {
+        assert.ok(!/\bprior\b/.test(fn(name)), `REGRESSION: ${name}'s create holds links from a row it found`);
     }
 });
 

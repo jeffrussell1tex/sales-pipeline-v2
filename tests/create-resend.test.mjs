@@ -2,20 +2,25 @@
 // Dispatch create sent again with its id wrote the create's values over the record an earlier press had made — another
 // member's schedule, plan or gate code set in between with them (an upsert of the whole row). The server's three POSTs
 // are creates now: an id this org holds is answered 409 'idInUse' with the row as stored, nothing written, and the screen
-// takes that row (src/utils/createResend.js).
-//   C1-C7   heldCreate and overStored, every shape;
+// takes that row (src/utils/createResend.js). §0.291: the five other Dispatch creates too — technicians, vehicles, equipment
+// units, schedule blocks, service plans.
+//   C1-C10  heldCreate, overStored and keptSaid, every shape (C8 decimals, C9 lists and objects, C10 the form's words);
 //   V1-V11  the customer form (CustomersView) — its state, its effects, its guarded and its save, as they stand in the
 //           source, run over a few lines of hooks with the real helpers and the parent's real list code;
-//   G1-G3   THE GUARD over netlify/functions: each held read by id and org, asked before any link and again after an
-//           insert that wrote nothing; the insert on its id alone; and the three creates' own blocks, RUN.
+//   G1-G5   THE GUARD over netlify/functions: each held read by id and org, asked before any link and again after an
+//           insert that wrote nothing; the insert on its id alone; the eight creates' own blocks, RUN; what each of §0.291's
+//           five refuses and stores; and every screen that reads a held create names its function's key.
 // New Job's and the Jobs editor's own steps: their own suites; the database's half: tests/integration/dispatch-create.itest.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from '@babel/parser';
-import { heldCreate, overStored } from '../src/utils/createResend.js';
+import { heldCreate, overStored, keptSaid } from '../src/utils/createResend.js';
 import { writeRefusalOf, refusalError, alreadySaid, unknownOf, thrownSaid, maybeSaid } from '../src/utils/refusalWords.js';
 import { defaultWorkWeek } from '../src/utils/workWeek.js';
+import { loginAsked, loginDecided } from '../src/utils/techLogin.js';
+import { coveredJobTypesOf, coveredToStore } from '../src/utils/planLinks.js';
+import { percentRefused } from '../src/utils/quoteTotals.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -47,6 +52,8 @@ test('C1 — heldCreate: the stored row of the very id sent, on a 409 \'idInUse\
     assert.equal(heldCreate(409, body, 'job', 'j1'), job, 'the row itself');
     assert.equal(heldCreate(409, { ...body, job: undefined, customer: { id: 'c1' } }, 'customer', 'c1').id, 'c1');
     assert.equal(heldCreate(409, { code: 'idInUse', location: { id: 'l1' } }, 'location', 'l1').id, 'l1');
+    for (const key of ['technician', 'vehicle', 'item', 'block', 'plan']) assert.equal(heldCreate(409, { code: 'idInUse', [key]: { id: 'x1' } }, key, 'x1').id, 'x1', key);   // §0.291
+    assert.equal(heldCreate(409, { code: 'idInUse', item: { id: 'x1' } }, 'equipment', 'x1'), null, 'an equipment unit is answered as its item');
     for (const [status, b, key, id, why] of [
         [200, body, 'job', 'j1', 'landed'], [400, body, 'job', 'j1', 'a 400'], [404, body, 'job', 'j1', 'a 404'], [500, body, 'job', 'j1', 'a 500 proves nothing'],
         ['409', body, 'job', 'j1', 'a status that is text'], [undefined, body, 'job', 'j1', 'no status'],
@@ -130,6 +137,79 @@ test('C7 — overStored hands back copies: neither the row, the form nor the bod
     assert.deepEqual([stored, typed.notes, sent[0]], [{ id: 'c1', notes: 'A' }, 'B', { notes: 'A' }]);
 });
 
+test('C8 — a decimal column is its number, however typed or stored; a code, a tag and a ZIP are their text — §0.291', () => {
+    for (const [a, b] of [['120', '120.00'], [120, '120.00'], ['120.00', '120'], ['0', '0.00'], [0, '0.00'], ['.5', '0.50'], ['1e2', '100.00'], ['', null], [undefined, ''], ['abc', 'abc']]) {
+        const row = { price: b };
+        assert.deepEqual(over({ price: a }, row, [{ price: 'else' }]), [row, [], false], `${a} typed, ${b} stored: one price, as stored`);
+    }
+    for (const [a, b] of [['120', '120.01'], ['', '0.00'], ['0', null], ['0.00', ''], [null, '0.00'], ['abc', '120.00'], ['120', 'abc'], ['12', '120.00']]) {
+        assert.deepEqual(over({ price: a }, { price: b }, [{ price: 'else' }]), [{ price: a }, ['price'], true], `${a} and ${b} are two prices`);
+    }
+    // Not a decimal column: a tag 1.1 is not 1.10, a ZIP keeps its leading zero, a plate is its letters.
+    for (const [k, a, b] of [['assetTag', '1.10', '1.1'], ['serialNumber', '007', '7'], ['homeZip', '01234', '1234'], ['zip', '01234', '1234'], ['licensePlate', '1e3', '1000'],
+        ['phone', '0555', '555'], ['name', '10', '10.0'], ['customerNumber', '5.0', '5'], ['serviceZones', ['01234'], ['1234']], ['tags', ['1.10'], ['1.1']], ['skills', ['1.10'], ['1.1']]]) {
+        assert.deepEqual(over({ [k]: a }, { [k]: b }, [{ [k]: b }]), [{ [k]: a }, [k], true], `REGRESSION — ${k}: ${a} read as ${b}, the member's change dropped`);
+    }
+    // A whole-number column is its text: typed '14', stored 14.
+    assert.deepEqual(over({ leadDays: '14', odometer: '120' }, { leadDays: 14, odometer: 120 }, [{}]), [{ leadDays: 14, odometer: 120 }, [], false]);
+    // The bodies are read the same way — as sent, stored otherwise: another member's price stands.
+    assert.deepEqual(over({ price: '120' }, { price: '130.00' }, [{ price: 120 }]), [{ price: '130.00' }, [], true]);
+    assert.deepEqual(over({ price: '120' }, { price: '130.00' }, [{ price: '120.0' }]), [{ price: '130.00' }, [], true], 'REGRESSION — what was sent read as typed since');
+    // …and the first of two presses is the one stored: the second's price is still the member's.
+    assert.deepEqual(over({ price: '125' }, { price: '120.00' }, [{ price: '120' }, { price: '125' }]), [{ price: '125' }, ['price'], true], 'REGRESSION — a later press that wrote nothing read as the one stored');
+    assert.deepEqual(over({ price: '' }, { price: '120.00' }, [{ price: '120' }]), [{ price: '' }, ['price'], true], 'cleared since');
+});
+
+test('C8b — THE GUARD: the decimal columns of every form overStored reads are the ones read as numbers, and no other column of them is', () => {
+    const schema = read('db/schema.ts');
+    const decimals = new Set(), others = [];
+    for (const table of ['dispatchTechnicians', 'dispatchVehicles', 'dispatchEquipment', 'dispatchCustomers', 'dispatchServicePlans', 'dispatchScheduleBlocks']) {
+        const at = schema.indexOf(`export const ${table} = pgTable(`);
+        assert.ok(at > 0, `${table} in the schema`);
+        const cols = [...schema.slice(at, schema.indexOf('\n}', at)).matchAll(/^ {4}(\w+):\s*(\w+)\(/gm)];
+        assert.ok(cols.length >= 14, `${table}: its columns (${cols.length})`);
+        for (const [, col, type] of cols) if (['decimal', 'numeric', 'real', 'doublePrecision'].includes(type)) decimals.add(col); else if (col !== 'id') others.push(col);
+    }
+    assert.deepEqual([...decimals].sort(), ['creditLimit', 'discountPercent', 'includedHours', 'laborRate', 'overtimeRate', 'price', 'purchasePrice']);
+    for (const k of decimals) assert.deepEqual(over({ [k]: '1.1' }, { [k]: '1.10' }, [{ [k]: 'else' }]), [{ [k]: '1.10' }, [], false], `REGRESSION — ${k}: the number as stored read as a change`);
+    for (const k of others) {
+        assert.ok(!decimals.has(k), `${k}: one kind of column in every form`);
+        assert.deepEqual(over({ [k]: '1.1' }, { [k]: '1.10' }, [{ [k]: '1.10' }]), [{ [k]: '1.1' }, [k], true], `REGRESSION — ${k} is no decimal column`);
+    }
+    assert.ok(others.length >= 117, `the other columns (${others.length})`);
+});
+
+test('C9 — a list or an object by what it holds: keys in any order, at any depth; a list in its own order; a changed value is a change — §0.291', () => {
+    const typed = { mon: { start: '08:00', end: '17:00' }, fri: { start: '08:00', end: '12:00' } };
+    const stored = { fri: { end: '12:00', start: '08:00' }, mon: { end: '17:00', start: '08:00' } };   // a jsonb column sorts its keys
+    assert.deepEqual(overStored({ workingHours: typed }, { workingHours: stored }, [{ workingHours: typed }]), { draft: { workingHours: stored }, mine: [], differs: false }, 'REGRESSION — the week as typed read as another');
+    assert.deepEqual(over({ certifications: [{ name: 'EPA', expires: '2027-01-01' }] }, { certifications: [{ expires: '2027-01-01', name: 'EPA' }] }, [{}]).slice(1), [[], false], 'objects within a list');
+    assert.deepEqual(over({ o: { a: { c: 1, b: [1, { y: 1, x: 2 }] } } }, { o: { a: { b: [1, { x: 2, y: 1 }], c: 1 } } }, [{}]).slice(1), [[], false], 'at any depth');
+    assert.deepEqual(over({ skills: ['b', 'a'] }, { skills: ['a', 'b'] }, [{ skills: ['a', 'b'] }]), [{ skills: ['b', 'a'] }, ['skills'], true], 'a list keeps its order');
+    const later = { ...typed, fri: { start: '08:00', end: '13:00' } };
+    assert.deepEqual(over({ workingHours: later }, { workingHours: stored }, [{ workingHours: typed }]), [{ workingHours: later }, ['workingHours'], true], 'an hour typed since');
+    assert.deepEqual(over({ workingHours: { mon: typed.mon } }, { workingHours: stored }, [{ workingHours: typed }]).slice(1), [['workingHours'], true], 'a day taken off');
+    assert.deepEqual(over({ workingHours: {} }, { workingHours: stored }, [{ workingHours: typed }]).slice(1), [['workingHours'], true], 'no working days is not none');
+    // As sent, in another order, and stored otherwise: another member's week stands.
+    assert.deepEqual(over({ workingHours: typed }, { workingHours: later }, [{ workingHours: stored }]), [{ workingHours: later }, [], true], 'REGRESSION — what was sent read as typed since');
+    // Nothing handed in is reordered.
+    assert.deepEqual([Object.keys(typed), Object.keys(stored)], [['mon', 'fri'], ['fri', 'mon']]);
+});
+
+test('C10 — keptSaid: what a form taken over says, its subject first; no screen types its own', () => {
+    assert.equal(keptSaid('The customer'), EDIT_WORDS);
+    assert.equal(keptSaid('The plan'), 'The plan was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.');
+    const said = [], typed = [];
+    for (const f of readdirSync(new URL('src/', ROOT), { recursive: true }).map((p) => String(p).replace(/\\/g, '/')).filter((p) => /\.jsx?$/.test(p)).sort()) {
+        const src = read(`src/${f}`);
+        if (src.includes('is in the form, not saved yet')) typed.push(f);
+        for (const m of src.matchAll(/keptSaid\(('[^']*')\)/g)) said.push(`${f} ${m[1]}`);
+    }
+    assert.deepEqual(typed, ['utils/createResend.js'], 'REGRESSION — the words typed on a screen');
+    assert.deepEqual(said, ["Tabs/DispatchTab.jsx 'The customer'", "Tabs/DispatchTab.jsx 'The technician'", "Tabs/DispatchTab.jsx 'The time off'",
+        "Tabs/settings/dispatch/DispatchServicePlansDetail.jsx 'The plan'", "Tabs/settings/dispatch/DispatchVehiclesDetail.jsx 'The vehicle'", "Tabs/settings/dispatch/DispatchVehiclesDetail.jsx 'The equipment'"]);
+});
+
 // ── V: the customer form, as it stands in the source ──────────────────────────────────────────────────────────────
 
 const DISPATCH = read('src/Tabs/DispatchTab.jsx');
@@ -198,7 +278,7 @@ const mountView = ({ customers = [], confirms = true } = {}) => {
         draftIsDirty, UNSAVED_MSG: UNSAVED,
         dbFetch: (url, init) => { did.sent.push([init.method, url, JSON.parse(init.body)]); return new Promise((res, rej) => { waiting = { res, rej }; }); },
         requestOrg: () => org.now, stillOrg: (asked) => asked === org.now,
-        writeRefusalOf, refusalError, alreadySaid, unknownOf, thrownSaid, heldCreate, overStored,
+        writeRefusalOf, refusalError, alreadySaid, unknownOf, thrownSaid, heldCreate, overStored, keptSaid,   // Moved in §0.291: the form's words are keptSaid's
     };
     const component = new Function(...Object.keys(env), VIEW_FN)(...Object.values(env));
     const setCustomers = (fn) => { props.customers = fn(props.customers); redraw(); };
@@ -545,17 +625,50 @@ test('V11 — nothing leaves the form while its Save is out: guarded is held, an
     assert.deepEqual([bare.did.sent, bare.v.status, bare.v.savingRef.current], [[], { kind: 'err', msg: 'Name is required.' }, false]);
 });
 
-// ── G: the three creates ──────────────────────────────────────────────────────────────────────────────────────────
+// ── G: the eight creates ──────────────────────────────────────────────────────────────────────────────────────────
 
+const sourceOf = (f) => { const src = read(`netlify/functions/${f}`); return { src, ast: parseOf(src) }; };
+const TECHS = sourceOf('dispatch-technicians.mjs'), VEHICLES = sourceOf('dispatch-vehicles.mjs'), EQUIPMENT = sourceOf('dispatch-equipment.mjs');
+const BLOCKS = sourceOf('dispatch-schedule-blocks.mjs'), PLANS = sourceOf('dispatch-service-plans.mjs');
+// asks — the create's first question; between — what is asked after the links and before the write; list — its links' name;
+// own — the file's own helpers the block reads, taken from the source; after — what its held answer reads besides the row.
 const CREATES = [
     { what: 'job', src: JOBS, ast: JOBS_AST, held: 'heldJob', table: 'dispatchJobs', key: 'job', normalise: 'normaliseJob', made: 'written', links: 'const linked = await checkLinks(JOB_LINKS, data, null, orgId);',
-        number: 'await nextJobNumber(orgId)', words: 'That job id is already in use.', first: "await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');" },
+        asks: 'if (!data.id ||', list: 'JOB_LINKS', number: 'await nextJobNumber(orgId)', words: 'That job id is already in use.', first: "await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');" },
     { what: 'customer', src: CUSTOMERS, ast: CUSTOMERS_AST, held: 'heldCustomer', table: 'dispatchCustomers', key: 'customer', normalise: 'normaliseCust', made: 'inserted', links: 'const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);',
-        number: 'await nextCustomerNumber(orgId)', words: 'That customer id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created'" },
+        asks: 'if (!data.id ||', list: 'CUSTOMER_LINKS', number: 'await nextCustomerNumber(orgId)', words: 'That customer id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created'" },
     { what: 'location', src: CUSTOMERS, ast: CUSTOMERS_AST, held: 'heldLocation', table: 'dispatchServiceLocations', key: 'location', normalise: 'normaliseLoc', made: 'inserted',
         links: 'const [ownCust] = await db.select({ id: dispatchCustomers.id }).from(dispatchCustomers) .where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));',
-        number: null, words: 'That location id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_location.created'" },
+        asks: 'if (!data.id ||', list: null, number: null, words: 'That location id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_location.created'" },
+    // §0.291's five.
+    { what: 'technician', ...TECHS, held: 'heldTechnician', table: 'dispatchTechnicians', key: 'technician', normalise: 'normalise', made: 'inserted', links: 'const linked = await checkLinks(TECH_LINKS, data, null, orgId);',
+        asks: 'if (!data.id) return { statusCode: 400,', list: 'TECH_LINKS', own: ['techName', 'loginOf', 'memberIdOf'], after: ['read'],
+        between: ['const login = await loginOf(orgId, data.id, data, null);', 'if (login.status) return { statusCode: login.status, headers, body: JSON.stringify({ error: login.error, field: login.field }) };', 'const memberId = await memberIdOf(orgId, row.userId);'],
+        number: null, words: 'That technician id is already in use.', first: "await auditAs(orgId, userId, { action: 'dispatch_technician.created'," },
+    { what: 'vehicle', ...VEHICLES, held: 'heldVehicle', table: 'dispatchVehicles', key: 'vehicle', normalise: 'normalise', made: 'inserted', links: 'const linked = await checkLinks(VEHICLE_LINKS, data, null, orgId);',
+        asks: 'if (!data.id) return { statusCode: 400,', list: 'VEHICLE_LINKS', number: null, words: 'That vehicle id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.created'," },
+    { what: 'equipment', ...EQUIPMENT, held: 'heldEquipment', table: 'dispatchEquipment', key: 'item', normalise: 'normalise', made: 'inserted', links: 'const linked = await checkLinks(EQUIPMENT_LINKS, data, null, orgId);',
+        asks: 'if (!data.id) return { statusCode: 400,', list: 'EQUIPMENT_LINKS', number: null, words: 'That equipment id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_equipment.created'," },
+    { what: 'block', ...BLOCKS, held: 'heldBlock', table: 'dispatchScheduleBlocks', key: 'block', normalise: 'normalise', made: 'inserted', links: 'const linked = await checkLinks(BLOCK_LINKS, data, null, orgId);',
+        asks: 'if (!data.id) return { statusCode: 400,', list: 'BLOCK_LINKS', number: null, words: 'That block id is already in use.', first: "await auditAs(orgId, userId, { action: 'dispatch_block.created'," },
+    { what: 'plan', ...PLANS, held: 'heldPlan', table: 'dispatchServicePlans', key: 'plan', normalise: 'normalise', made: 'inserted', links: 'const linked = await checkLinks(PLAN_LINKS, data, null, orgId);',
+        asks: 'if (!data.id) return { statusCode: 400,', list: 'PLAN_LINKS', own: ['DISCOUNT_REFUSED', 'CADENCE_DAYS', 'CADENCE_VISITS', 'deriveInterval', 'deriveVisits'],
+        between: ["if (percentRefused(data.discountPercent, null)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };"],
+        number: null, words: 'That plan id is already in use.', first: "await auditAs(orgId, auth.userId, { action: 'dispatch_plan.created'," },
 ];
+const TABLES = CREATES.map((c) => c.table);
+const TABLE_RE = new RegExp(`\\b(${TABLES.join('|')})\\b`);
+// A top-level name of a create's file, as its source writes it.
+const ownText = (c, name) => {
+    const all = c.ast.program.body.map((n) => (n.type === 'ExportNamedDeclaration' && n.declaration ? n.declaration : n)).filter((n) => (n.type === 'FunctionDeclaration' && n.id.name === name) || (n.type === 'VariableDeclaration' && n.declarations[0].id.name === name));
+    assert.equal(all.length, 1, `${c.what}: one ${name}`);
+    return c.src.slice(all[0].start, all[0].end);
+};
+// The file's real row builder, and what an answer holds of a row: marked, so an answer that skips it shows.
+const rowOf = (c, row) => ({ ...clone(new Function('coveredJobTypesOf', `${ownText(c, c.normalise)}\nreturn ${c.normalise};`)(coveredJobTypesOf)(row)), normalised: true });
+const markedText = (c) => `const ${c.normalise} = (r) => ({ ...(${ownText(c, c.normalise)})(r), normalised: true });`;
+// A login's member, as the users table would answer: read in the org.
+const USERS = { name: 'users', id: 'users.id', orgId: 'users.org_id', clerkUserId: 'users.clerk_user_id' };
 const isCall = (n) => n.type === 'CallExpression' || n.type === 'OptionalCallExpression';
 const isInsertOf = (n, table) => isCall(n) && n.callee.property?.name === 'insert' && n.arguments[0]?.type === 'Identifier' && n.arguments[0].name === table;
 // The chain an insert opens: [name, arguments] outward.
@@ -576,7 +689,7 @@ const postOf = (c) => {
     return { node, trail, block: post.consequent };
 };
 
-test('G1 — THE GUARD: the functions that answer a held id with its row are these three; each reads by the id AND the org, awaited, and answers only that — RUN', async () => {
+test('G1 — THE GUARD: the functions that answer a held id with its row are these eight; each reads by the id AND the org, awaited, and answers only that — RUN', async () => {
     const found = [];
     for (const f of readdirSync(new URL('netlify/functions/', ROOT)).filter((n) => n.endsWith('.mjs')).sort()) {
         const src = read(`netlify/functions/${f}`);
@@ -586,23 +699,39 @@ test('G1 — THE GUARD: the functions that answer a held id with its row are the
             if (name && name !== 'handler' && codeOf(src, n).includes("'idInUse'")) found.push(`${f} ${name}`);
         }
     }
-    assert.deepEqual(found, ['dispatch-customers.mjs heldCustomer', 'dispatch-customers.mjs heldLocation', 'dispatch-jobs.mjs heldJob']);
+    // Moved in §0.291: the five other Dispatch creates answer theirs too.
+    assert.deepEqual(found, ['dispatch-customers.mjs heldCustomer', 'dispatch-customers.mjs heldLocation', 'dispatch-equipment.mjs heldEquipment', 'dispatch-jobs.mjs heldJob',
+        'dispatch-schedule-blocks.mjs heldBlock', 'dispatch-service-plans.mjs heldPlan', 'dispatch-technicians.mjs heldTechnician', 'dispatch-vehicles.mjs heldVehicle']);
+    assert.deepEqual([CREATES.length, new Set(TABLES).size, new Set(CREATES.map((c) => c.held)).size], [8, 8, 8]);
     for (const c of CREATES) {
         const fn = fnNode(c.src, c.ast, c.held);
         const asked = [];
-        const run = (rows) => new Function('db', 'and', 'eq', c.table, 'headers', c.normalise, `${c.src.slice(fn.start, fn.end)}\nreturn ${c.held};`)(
-            { select: (...cols) => ({ from: (t) => ({ where: (w) => { asked.push([cols, t.name, w]); return rows instanceof Error ? Promise.reject(rows) : Promise.resolve(rows); } }) }) },
-            (...a) => ['and', ...a], (a, b) => [a, b], { name: c.table, id: 'id', orgId: 'org_id' }, { h: 1 }, (r) => ({ ...r, normalised: true }));
-        const answer = await run([{ id: 'x1', name: 'Stored' }])('org_a', 'x1');
-        assert.deepEqual(asked, [[[], c.table, ['and', ['id', 'x1'], ['org_id', 'org_a']]]], `${c.held}: REGRESSION — read by its id AND its org, whole, once`);
+        // Moved in §0.291: the file's own row builder and helpers, as its source has them; a technician's answer carries its login's member.
+        const run = (rows, members = [{ id: 'usr_1' }]) => new Function('db', 'and', 'eq', c.table, 'users', 'headers', 'coveredJobTypesOf', `${c.after ? ownText(c, 'memberIdOf') : ''}\n${markedText(c)}\n${c.src.slice(fn.start, fn.end)}\nreturn ${c.held};`)(
+            { select: (...cols) => ({ from: (t) => ({ where: (w) => { const r = t.name === c.table ? rows : members; asked.push([cols, t.name, w]); return r instanceof Error ? Promise.reject(r) : Promise.resolve(r); } }) }) },
+            (...a) => ['and', ...a], (a, b) => [a, b], { name: c.table, id: 'id', orgId: 'org_id' }, USERS, { h: 1 }, coveredJobTypesOf);
+        const stored = { id: 'x1', orgId: 'org_a', name: 'Stored', firstName: 'Stored', userId: 'user_tess' };
+        const answer = await run([stored])('org_a', 'x1');
+        assert.deepEqual(asked.splice(0), [[[], c.table, ['and', ['id', 'x1'], ['org_id', 'org_a']]],
+            ...(c.after ? [[[{ id: 'users.id' }], 'users', ['and', ['users.org_id', 'org_a'], ['users.clerk_user_id', 'user_tess']]]] : [])], `${c.held}: REGRESSION — read by its id AND its org, whole, once`);
         assert.deepEqual({ ...answer, body: JSON.parse(answer.body) }, { statusCode: 409, headers: { h: 1 },
-            body: { error: c.words, code: 'idInUse', [c.key]: { id: 'x1', name: 'Stored', normalised: true } } });
+            body: { error: c.words, code: 'idInUse', [c.key]: rowOf(c, c.after ? { ...stored, memberId: 'usr_1' } : stored) } });
+        assert.equal(JSON.parse(answer.body)[c.key].id, 'x1');
         assert.equal(await run([])('org_a', 'x1'), null, `${c.held}: another org's id, or none — no row, no code`);
+        assert.equal(asked.splice(0).length, 1, 'and nothing read after it');
         await assert.rejects(run(new Error('read failed'))('org_a', 'x1'), /read failed/, `${c.held}: a failed read is the handler's 500`);
+        if (c.after) {
+            // The login's member: none of the org is none; no login asks for none; a failed read is the handler's 500.
+            assert.equal(JSON.parse((await run([stored], [])('org_a', 'x1')).body)[c.key].memberId, null);
+            asked.splice(0);
+            assert.equal(JSON.parse((await run([{ ...stored, userId: null }])('org_a', 'x1')).body)[c.key].memberId, null);
+            assert.equal(asked.splice(0).length, 1);
+            await assert.rejects(run([stored], new Error('members failed'))('org_a', 'x1'), /members failed/);
+        }
     }
 });
 
-test('G2 — THE GUARD: the held id is asked before any link, the insert names its id alone, and a create that wrote nothing is asked again; no upsert of the three left', () => {
+test('G2 — THE GUARD: the held id is asked before any link, the insert names its id alone, and a create that wrote nothing is asked again; no upsert of the eight left', () => {
     for (const c of CREATES) {
         const { node, trail, block } = postOf(c);
         const code = block.body.map((n) => codeOf(c.src, n));
@@ -616,7 +745,10 @@ test('G2 — THE GUARD: the held id is asked before any link, the insert names i
         // Nothing written or told before the insert, and the body's own checks before the look.
         for (const s of code.slice(0, insertAt)) assert.ok(!/db\.(insert|update|delete|batch|execute)\(|auditAs\(|notifyCustomer\(|recordStatusChange\(/.test(s), `${c.what}: written before its create: ${s.slice(0, 80)}`);
         assert.equal(code[0], "const data = JSON.parse(event.body || '{}');");
-        assert.ok(look >= 2 && code[1].startsWith('if (!data.id ||'), `${c.what}: an id is asked for first`);
+        assert.ok(look >= 2 && code[1].startsWith(c.asks), `${c.what}: an id is asked for first`);
+        for (const s of code.slice(1, look)) assert.ok(!/\bawait\b|\bdb\./.test(s), `${c.what}: only the body is read before the look: ${s.slice(0, 80)}`);
+        // What is asked after the links, each against nothing held, before the write (§0.291).
+        for (const s of c.between || []) { const at = only(s); assert.ok(at > links && at < insertAt, `${c.what}: between its links and its write: ${s}`); }
         // The insert: on its id alone — a taken number is the retry's, never a create that wrote nothing.
         const chain = chainOf(trail, node);
         assert.deepEqual(chain.map(([n]) => n), ['values', 'onConflictDoNothing', 'returning'], `${c.what}: REGRESSION — the create is an insert, never an upsert`);
@@ -638,34 +770,38 @@ test('G2 — THE GUARD: the held id is asked before any link, the insert names i
         assert.deepEqual(calls.map(([p, s]) => [p, s]), Array(2).fill(['AwaitExpression', `${c.held}(orgId, data.id)`]));
         for (const [, , at] of calls) assert.ok(at > block.start && at < block.end, `${c.what}: in its own POST`);
         const all = codeOf(c.src, block);
-        assert.ok(!/\bprior[A-Z]\w*/.test(all) && !all.includes(".updated'"), `${c.what}: REGRESSION — the create decided on a row it replaced`);
+        assert.ok(!/\bprior([A-Z]\w*)?\b/.test(all) && !all.includes(".updated'"), `${c.what}: REGRESSION — the create decided on a row it replaced`);
     }
-    // Every write of a new row of the three, over every function: none an upsert (quote-to-job's are its own new ids).
+    // Moved in §0.291: the five others joined the three.
+    // Every write of a new row of the eight, over every function: none an upsert (quote-to-job's are its own new ids).
     const inserts = [];
     for (const f of readdirSync(new URL('netlify/functions/', ROOT)).filter((n) => n.endsWith('.mjs')).sort()) {
         const src = read(`netlify/functions/${f}`);
-        if (!/\b(dispatchJobs|dispatchCustomers|dispatchServiceLocations)\b/.test(src)) continue;
+        assert.ok(!/insert\s+into\s+"?dispatch_/i.test(src), `${f}: a Dispatch row written in raw SQL — name it here`);
+        if (!TABLE_RE.test(src)) continue;
         walk(parseOf(src).program, (n, trail) => {
             for (const { table } of CREATES) if (isInsertOf(n, table)) inserts.push(`${f} ${table} ${chainOf(trail, n).map(([name]) => name).join('.')}`);
             if (isCall(n) && n.callee.property?.name === 'onConflictDoUpdate') {
-                assert.ok(!/\b(dispatchJobs|dispatchCustomers|dispatchServiceLocations)\b/.test(codeOf(src, n.arguments[0])), `${f}: REGRESSION — an upsert of a Dispatch create`);
+                assert.ok(!TABLE_RE.test(codeOf(src, n.arguments[0])), `${f}: REGRESSION — an upsert of a Dispatch create`);
             }
         });
     }
     assert.deepEqual(inserts.sort(), ['dispatch-customers.mjs dispatchCustomers values.onConflictDoNothing.returning', 'dispatch-customers.mjs dispatchServiceLocations values.onConflictDoNothing.returning',
-        'dispatch-jobs.mjs dispatchJobs values.onConflictDoNothing.returning', 'quote-to-job.mjs dispatchCustomers values', 'quote-to-job.mjs dispatchJobs values.returning']);
+        'dispatch-equipment.mjs dispatchEquipment values.onConflictDoNothing.returning', 'dispatch-jobs.mjs dispatchJobs values.onConflictDoNothing.returning',
+        'dispatch-schedule-blocks.mjs dispatchScheduleBlocks values.onConflictDoNothing.returning', 'dispatch-service-plans.mjs dispatchServicePlans values.onConflictDoNothing.returning',
+        'dispatch-technicians.mjs dispatchTechnicians values.onConflictDoNothing.returning', 'dispatch-vehicles.mjs dispatchVehicles values.onConflictDoNothing.returning', 'quote-to-job.mjs dispatchCustomers values', 'quote-to-job.mjs dispatchJobs values.returning']);
 });
 
 // A create's block, RUN: the held reads its own, the database a script of answers.
-const runPost = async (c, { body, heldReads = [], madeRows, linksAnswer = { set: {} }, numberTaken = 0, owner = [{ id: 'cust_1' }] }) => {
+const runPost = async (c, { body, heldReads = [], madeRows, linksAnswer = { set: {} }, numberTaken = 0, owner = [{ id: 'cust_1' }], members = [{ id: 'usr_1', name: 'Tess', clerkUserId: 'user_tess' }], holders = [] }) => {
     const log = [];
     let held = 0, tries = 0;
-    const tables = Object.fromEntries(['dispatchJobs', 'dispatchCustomers', 'dispatchServiceLocations'].map((t) => [t, { name: t, id: `${t}.id`, orgId: `${t}.org_id` }]));
+    const tables = { users: USERS, ...Object.fromEntries(TABLES.map((t) => [t, { name: t, id: `${t}.id`, orgId: `${t}.org_id`, userId: `${t}.user_id` }])) };
     const db = {
         select: (cols) => ({ from: (t) => ({ where: async (w) => {
             if (!cols && t.name === c.table) { log.push(['held', w]); const r = heldReads[held++]; if (r instanceof Error) throw r; return r ? [r] : []; }
             log.push(['read', t.name, w]);
-            return owner;
+            return t.name === 'users' ? members : t.name === c.table ? holders : owner;
         } }) }),
         insert: (t) => ({ values: (v) => ({ onConflictDoNothing: (o) => ({ returning: async () => {
             log.push(['insert', t.name, o.target, v]);
@@ -674,15 +810,17 @@ const runPost = async (c, { body, heldReads = [], madeRows, linksAnswer = { set:
         } }) }) }),
     };
     let n = 0;
-    const heldFns = CREATES.filter((x) => x.src === c.src).map((x) => { const f = fnNode(x.src, x.ast, x.held); return x.src.slice(f.start, f.end); }).join('\n');
+    // The real held reads, row builders and helpers of the file (moved in §0.291: a stub stood for the row builders).
+    const heldFns = [...(c.own || []).map((name) => ownText(c, name)), ...CREATES.filter((x) => x.src === c.src).map((x) => { const f = fnNode(x.src, x.ast, x.held); return `${markedText(x)}\n${x.src.slice(f.start, f.end)}`; })].join('\n');
     const env = {
         event: { httpMethod: 'POST', body: JSON.stringify(body) }, orgId: 'org_a', userId: 'user_1', auth: { userId: 'user_1' }, headers: {}, db, ...tables,
-        and: (...a) => ['and', ...a], eq: (a, b) => [a, b], JOB_STATUSES: ['unscheduled', 'scheduled'], JOB_LINKS: 'JOB_LINKS', CUSTOMER_LINKS: 'CUSTOMER_LINKS',
+        and: (...a) => ['and', ...a], eq: (a, b) => [a, b], ne: (a, b) => [a, '!=', b], JOB_STATUSES: ['unscheduled', 'scheduled'],
+        ...Object.fromEntries(CREATES.filter((x) => x.list).map((x) => [x.list, x.list])),
+        loginAsked, loginDecided, coveredJobTypesOf, coveredToStore, percentRefused, defaultWorkWeek,
         checkLinks: async (l, d, stored, org) => { log.push(['links', l, stored, org]); return linksAnswer; },
         accountTaken: async (org, acc) => { log.push(['account', acc]); return null; }, takenReply: () => ({ statusCode: 409, taken: true }),
         withNumberRetry: async (attempt) => { for (;;) try { return await attempt(); } catch (e) { if (e.code !== '23505') throw e; } },
         nextJobNumber: async () => `JOB-${++n}`, nextCustomerNumber: async () => `CUST-${++n}`,
-        normaliseJob: (r) => ({ ...r, normalised: true }), normaliseCust: (r) => ({ ...r, normalised: true }), normaliseLoc: (r) => ({ ...r, normalised: true }),
         recordStatusChange: async (...a) => { log.push(['history', ...a]); }, notifyCustomer: async (a) => { log.push(['notice', a.before, a.after.id]); },
         getCallerName: async () => 'Jeff', jobAfterNotice: async (org, id, w) => w, auditAs: async (org, by, a) => { log.push(['audit', org, a.action]); },
     };
@@ -695,14 +833,24 @@ const BODIES = {
     job: { id: 'x1', customerId: 'cust_1', title: 'Boiler', status: 'scheduled', accountId: 'acc_1' },
     customer: { id: 'x1', name: 'Acme', accountId: 'acc_1' },
     location: { id: 'x1', customerId: 'cust_1', name: 'Site', address: '1 Main', city: 'Reno' },
+    technician: { id: 'x1', firstName: 'Tess', lastName: 'Ng', userId: 'usr_1' },
+    vehicle: { id: 'x1', name: 'Van 3', assignedTechId: 'dtech_1' },
+    equipment: { id: 'x1', name: 'Meter', category: 'diagnostic', checkedOutToId: 'dtech_1' },
+    block: { id: 'x1', techId: 'dtech_1', startDate: '2026-11-25', endDate: '2026-11-26', allDay: true },
+    plan: { id: 'x1', name: 'Gold', cadence: 'quarterly', discountPercent: '10', coveredJobTypes: ['jt_1'] },
 };
 const FRESH = {
     job: ['held', 'links', 'insert', 'history', 'notice', 'audit'],
     customer: ['held', 'links', 'account', 'insert', 'audit'],
     location: ['held', 'read', 'insert', 'audit'],
+    technician: ['held', 'links', 'read', 'read', 'read', 'insert', 'audit'],   // the member picked, who holds that login, the member it names
+    vehicle: ['held', 'links', 'insert', 'audit'],
+    equipment: ['held', 'links', 'insert', 'audit'],
+    block: ['held', 'links', 'insert', 'audit'],
+    plan: ['held', 'links', 'insert', 'audit'],
 };
 
-test('G3 — THE GUARD: the three creates — a fresh id made once; a held one answered with its row, no link asked, nothing written; two at once; another org\'s id the words alone — RUN', async () => {
+test('G3 — THE GUARD: the eight creates — a fresh id made once; a held one answered with its row, no link asked, nothing written; two at once; another org\'s id the words alone — RUN', async () => {
     for (const c of CREATES) {
         const body = BODIES[c.what];
         const byIdAndOrg = ['held', ['and', [`${c.table}.id`, 'x1'], [`${c.table}.org_id`, 'org_a']]];
@@ -714,21 +862,22 @@ test('G3 — THE GUARD: the three creates — a fresh id made once; a held one a
         const insert = made.log.find(([k]) => k === 'insert');
         assert.deepEqual([insert[1], insert[2], insert[3].id, insert[3].orgId], [c.table, `${c.table}.id`, 'x1', 'org_a']);
         assert.deepEqual(made.log.find(([k]) => k === 'audit'), ['audit', 'org_a', `dispatch_${c.what}.created`]);
-        if (c.what !== 'location') assert.deepEqual(made.log.find(([k]) => k === 'links'), ['links', c.what === 'job' ? 'JOB_LINKS' : 'CUSTOMER_LINKS', null, 'org_a'], 'every link asked as new');
+        if (c.list) assert.deepEqual(made.log.find(([k]) => k === 'links'), ['links', c.list, null, 'org_a'], 'every link asked as new');
         if (c.what === 'job') {
             assert.deepEqual(made.log.find(([k]) => k === 'history'), ['history', 'org_a', 'x1', null, 'scheduled', 'user_1', 'Job created']);
             assert.deepEqual(made.log.find(([k]) => k === 'notice'), ['notice', null, 'x1']);
             assert.deepEqual([insert[3].createdBy, insert[3].dispatchedBy], ['user_1', null]);
         }
         // Held: an earlier press landed. Its links are not asked — one deleted since is no refusal of it.
-        const stored = { id: 'x1', orgId: 'org_a', name: 'As stored' };
+        const stored = { id: 'x1', orgId: 'org_a', name: 'As stored', firstName: 'As', lastName: 'stored', userId: 'user_tess' };
         const again = await runPost(c, { body, heldReads: [stored], linksAnswer: { error: 'No such account.', status: 404, field: 'accountId' }, owner: [] });
-        assert.deepEqual([again.answer.statusCode, again.kinds], [409, ['held']], `${c.what}: REGRESSION — written over, or a link asked`);
-        assert.deepEqual(again.said, { error: c.words, code: 'idInUse', [c.key]: { ...stored, normalised: true } });
+        assert.deepEqual([again.answer.statusCode, again.kinds], [409, ['held', ...(c.after || [])]], `${c.what}: REGRESSION — written over, or a link asked`);
+        assert.deepEqual(again.said, { error: c.words, code: 'idInUse', [c.key]: rowOf(c, c.after ? { ...stored, memberId: 'usr_1' } : stored) });
         // Two at once: the insert wrote nothing, the row beside it is the answer.
         const beside = await runPost(c, { body, heldReads: [null, stored], madeRows: [] });
-        assert.deepEqual([beside.answer.statusCode, beside.kinds], [409, [...FRESH[c.what].slice(0, FRESH[c.what].indexOf('insert') + 1), 'held']], `${c.what}: no history, notice or audit of a create that wrote nothing`);
-        assert.deepEqual(beside.log.at(-1), byIdAndOrg);
+        assert.deepEqual([beside.answer.statusCode, beside.kinds], [409, [...FRESH[c.what].slice(0, FRESH[c.what].indexOf('insert') + 1), 'held', ...(c.after || [])]], `${c.what}: no history, notice or audit of a create that wrote nothing`);
+        assert.deepEqual(beside.log.filter(([k]) => k === 'held'), [byIdAndOrg, byIdAndOrg]);
+        assert.deepEqual(beside.log.at(-1 - (c.after || []).length), byIdAndOrg);
         assert.deepEqual([beside.said.code, beside.said[c.key].id], ['idInUse', 'x1']);
         // Another org's id: the words alone.
         const other = await runPost(c, { body, madeRows: [] });
@@ -748,4 +897,80 @@ test('G3 — THE GUARD: the three creates — a fresh id made once; a held one a
         // No id: refused before anything is read.
         assert.deepEqual([(await runPost(c, { body: { ...body, id: '' } })).kinds], [[]]);
     }
+});
+
+test("G4 — §0.291's five, RUN: what each refuses with nothing written, and the row each stores", async () => {
+    const of = (what) => CREATES.find((c) => c.what === what);
+    const row = (r) => r.log.find(([k]) => k === 'insert')?.[3];
+    const kinds = (r) => [r.answer.statusCode, r.said?.field ?? null, r.kinds];
+    // No id, name, technician or day, or days the wrong way round: refused before anything is read.
+    for (const [what, gone] of [['technician', { firstName: '' }], ['technician', { lastName: '' }], ['vehicle', { name: '' }], ['equipment', { name: '' }], ['plan', { name: '' }],
+        ['block', { techId: '' }], ['block', { startDate: '' }], ['block', { endDate: '2026-11-24' }]]) {
+        assert.deepEqual(kinds(await runPost(of(what), { body: { ...BODIES[what], ...gone } })), [400, null, []], `${what} ${JSON.stringify(gone)}`);
+    }
+    // A technician's login: the member read in the org, held by no other technician; stored as their Clerk identity, answered with their app id.
+    const T = of('technician');
+    const linked = await runPost(T, { body: BODIES.technician });
+    assert.deepEqual([row(linked).userId, linked.said.technician.userId, linked.said.technician.memberId], ['user_tess', 'user_tess', 'usr_1']);
+    assert.deepEqual(linked.log.filter(([k]) => k === 'read').map(([, t, w]) => [t, w]), [['users', ['and', ['users.org_id', 'org_a'], ['users.id', 'usr_1']]],
+        ['dispatchTechnicians', ['and', ['dispatchTechnicians.org_id', 'org_a'], ['dispatchTechnicians.user_id', 'user_tess'], ['dispatchTechnicians.id', '!=', 'x1']]],
+        ['users', ['and', ['users.org_id', 'org_a'], ['users.clerk_user_id', 'user_tess']]]]);
+    assert.deepEqual(row(linked).workingHours, JSON.stringify(defaultWorkWeek()), 'rostered from the start');
+    for (const none of [{ userId: undefined }, { userId: null }, { userId: '' }]) {
+        const r = await runPost(T, { body: { ...BODIES.technician, ...none } });
+        assert.deepEqual([...kinds(r), row(r).userId, r.said.technician.memberId], [201, null, ['held', 'links', 'insert', 'audit'], null, null]);
+    }
+    assert.deepEqual(kinds(await runPost(T, { body: BODIES.technician, members: [] })), [404, 'userId', ['held', 'links', 'read']], 'no member of this org');
+    assert.deepEqual(kinds(await runPost(T, { body: BODIES.technician, holders: [{ firstName: 'Ann', lastName: 'Lee' }] })), [409, 'userId', ['held', 'links', 'read', 'read']], "another technician's login");
+    assert.deepEqual(kinds(await runPost(T, { body: { ...BODIES.technician, userId: 5 } })), [400, 'userId', ['held', 'links']]);
+    // …but a held technician asks no login: taken since, or gone, the create had landed.
+    const landed = await runPost(T, { body: BODIES.technician, heldReads: [{ id: 'x1', orgId: 'org_a', userId: 'user_tess' }], members: [], holders: [{ firstName: 'Ann' }] });
+    assert.deepEqual([landed.answer.statusCode, landed.said.code, landed.said.technician.memberId, landed.kinds], [409, 'idInUse', null, ['held', 'read']]);
+    // A plan: a percent none or 0-100, asked against nothing held; its interval the cadence's; its covered types a list.
+    const P = of('plan');
+    for (const bad of ['150', -1, 'abc']) {
+        assert.deepEqual(kinds(await runPost(P, { body: { ...BODIES.plan, discountPercent: bad } })), [400, 'discountPercent', ['held', 'links']], `REGRESSION — ${bad}% stored`);
+        const held = await runPost(P, { body: { ...BODIES.plan, discountPercent: bad }, heldReads: [{ id: 'x1', orgId: 'org_a', discountPercent: '150' }] });
+        assert.deepEqual([held.answer.statusCode, held.said.code, held.kinds], [409, 'idInUse', ['held']], 'a held plan is asked nothing');
+    }
+    for (const [sent, stored] of [['', null], [null, null], [0, 0], ['100', '100']]) assert.equal(row(await runPost(P, { body: { ...BODIES.plan, discountPercent: sent } })).discountPercent, stored);
+    for (const [plan, days, visits] of [[{ cadence: 'quarterly', intervalDays: 10 }, 91, 4], [{ cadence: 'custom', intervalDays: '10' }, 10, 37], [{ cadence: undefined }, 365, 1]]) {
+        const r = row(await runPost(P, { body: { ...BODIES.plan, ...plan } }));
+        assert.deepEqual([r.intervalDays, r.visitsPerYear, r.coveredJobTypes], [days, visits, ['jt_1']]);
+    }
+    // Time off: part of a day only when it says so and has both its hours; otherwise all day, with none.
+    const B = of('block');
+    for (const [sent, stored] of [
+        [{ allDay: false, startTime: '09:00', endTime: '11:00' }, [false, '09:00', '11:00']],
+        [{ allDay: true, startTime: '09:00', endTime: '11:00' }, [true, null, null]],          // the hours typed before "All day" was ticked again
+        [{ allDay: undefined, startTime: '09:00', endTime: '11:00' }, [true, null, null]],
+        [{ allDay: false, startTime: '09:00', endTime: '' }, [true, null, null]],
+        [{ allDay: false, startTime: '', endTime: '11:00' }, [true, null, null]],
+        [{ allDay: false }, [true, null, null]], [{ allDay: true }, [true, null, null]],
+    ]) {
+        const r = row(await runPost(B, { body: { ...BODIES.block, ...sent } }));
+        assert.deepEqual([r.allDay, r.startTime, r.endTime], stored, `REGRESSION — ${JSON.stringify(sent)}: a block partial with no hours blocks nothing`);
+    }
+    const oneDay = row(await runPost(B, { body: { ...BODIES.block, endDate: undefined } }));
+    assert.deepEqual([oneDay.endDate, oneDay.createdBy], ['2026-11-25', 'Jeff']);
+});
+
+test('G5 — THE GUARD: every screen that reads a create that had landed names the key its function answers, by the id it sent — RUN over the source', () => {
+    const calls = [];
+    for (const f of readdirSync(new URL('src/', ROOT), { recursive: true }).map((p) => String(p).replace(/\\/g, '/')).filter((p) => /\.jsx?$/.test(p) && p !== 'utils/createResend.js').sort()) {
+        const src = read(`src/${f}`);
+        if (!src.includes('heldCreate(')) continue;
+        walk(parseOf(src).program, (n) => { if (isCall(n) && n.callee.name === 'heldCreate') calls.push(`${f.split('/').at(-1)} ${n.arguments.slice(2).map((a) => codeOf(src, a)).join(' ')}`); });
+    }
+    assert.deepEqual(calls.sort(), ["DispatchServicePlansDetail.jsx 'plan' draft.id",
+        "DispatchTab.jsx 'block' blk.id", "DispatchTab.jsx 'customer' draft.id", "DispatchTab.jsx 'customer' newCustId", "DispatchTab.jsx 'job' body.id",
+        "DispatchTab.jsx 'location' locId", "DispatchTab.jsx 'location' locId", "DispatchTab.jsx 'technician' draft.id",
+        "DispatchVehiclesDetail.jsx 'item' eDraft.id", "DispatchVehiclesDetail.jsx 'vehicle' vDraft.id", 'DispatchVehiclesDetail.jsx key row.id']);
+    const named = new Set(calls.map((c) => c.match(/'(\w+)'/)?.[1]).filter(Boolean));
+    assert.deepEqual([...named].sort(), CREATES.map((c) => c.key).sort(), 'REGRESSION — a key no function answers: the create that landed is never read');
+    // The import's two: by the key of the table each row went to.
+    const FLEET = read('src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx');
+    const imports = [];
+    walk(parseOf(FLEET).program, (n) => { if (isCall(n) && n.callee.name === 'answered') imports.push([FLEET.slice(n.start, n.end).match(/functions\/([\w-]+)/)[1], codeOf(FLEET, n.arguments[1]), codeOf(FLEET, n.arguments[2])]); });
+    assert.deepEqual(imports, [['dispatch-vehicles', "'vehicle'", 'row'], ['dispatch-equipment', "'item'", 'row']]);
 });

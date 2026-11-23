@@ -173,7 +173,7 @@ test('a refusal comes before any write or send; signed out, or refused by sign-i
             if (x.status !== 403 || !/turned off/.test(x.said) || x.asked) open.add(`${f} ${r.method} ${r.what || r.label || ''}, refused by sign-in: ${x.status} ${x.said}, ${x.asked} statements`);
         }
     }
-    assert.ok(refused >= 15796 && out >= 3658 && off >= 3260, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
+    assert.ok(refused >= 15841 && out >= 3668 && off >= 3270, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
     assert.deepEqual(wrote, [], 'REGRESSION: a write, a Clerk write or a send before its refusal');
     assert.deepEqual([...open], [], 'REGRESSION: answered a caller sign-in refused');
     for (const [f, [methods, why]] of Object.entries(PUBLIC)) assert.ok(FUNCTIONS.includes(f) && methods.length && why.length >= 9, `${f}: a public function that is there`);
@@ -200,24 +200,35 @@ test('THE GUARD — every refusal a function returns, left out in memory, change
     UNREACHED.forEach(([f, t, r, why], i) => { assert.equal(named.get(i), 1, `${f}: if (${t}) returning ${r} is named as unreached, once — a new one is reached, or named`); assert.ok(why.length > 10); });
 });
 
-// The three Dispatch creates (state §0.290): an id this org holds is answered with its record as stored — before a link is asked,
-// and again when the insert wrote nothing, two pressed at once — and another org's id with the words alone; nothing written
-// but the insert that wrote none. Each line left out in memory answers otherwise.
+// The eight Dispatch creates (state §0.290's three; technicians, vehicles, equipment, time off and service plans since §0.291): an id this org
+// holds is answered with its record as stored — before a link, a login or a percent is asked, and again when the insert wrote
+// nothing, two pressed at once — and another org's id with the words alone; nothing written but the insert that wrote none. Each
+// line left out in memory answers otherwise. Moved in §0.291: what a create would be refused for is a list for each, and the column its
+// record is named by is said for each.
 test("a Dispatch create whose id the org holds answers 409 idInUse with the record as stored, nothing written; another org's id, the words alone — RUN", async () => {
     await asked;
-    const row = { id: 'x1', orgId: 'org_a', name: 'As stored', title: 'As stored', customerId: 'x1', customerNumber: 'CUST-0007', jobNumber: 'JOB-2026-0007', address: '1 Main St', city: 'Dallas', status: 'scheduled', scheduledDate: '2026-12-01' };
-    const base = { settings: [{ extra: { dispatchEnabled: true } }], dispatch_customers: [{ ...row, id: 'c1' }] };
+    const row = { id: 'x1', orgId: 'org_a', name: 'As stored', title: 'As stored', firstName: 'As stored', lastName: 'Field', userId: 'user_ana', customerId: 'x1', customerNumber: 'CUST-0007', jobNumber: 'JOB-2026-0007', address: '1 Main St', city: 'Dallas', status: 'scheduled', scheduledDate: '2026-12-01',
+        category: 'hvac', cadence: 'annual', techId: 'tech_me', blockType: 'pto', startDate: '2026-12-01', endDate: '2026-12-02', allDay: true };
+    const base = { settings: [{ extra: { dispatchEnabled: true } }], dispatch_customers: [{ ...row, id: 'c1' }], dispatch_technicians: [{ id: 'tech_me', orgId: 'org_a' }], users: [{ id: 'usr_ana', orgId: 'org_a', clerkUserId: 'user_ana', name: 'Ana Field' }] };
+    // Each: the function, its answer's key, its look and the column its record is named by, its table, and what a create of it
+    // sends; refusals: what it would be refused for were it a new one — a link, a login, a percent — and the status of each.
+    const LINKS = [[{ accountId: 'acc_gone', customerId: 'c_gone' }, 404]];
     const creates = [
-        ['dispatch-jobs', 'job', 'dispatch_jobs', {}, { id: 'x1', customerId: 'c1', title: 'Typed' }, 'That job id is already in use.'],
-        ['dispatch-customers', 'customer', 'dispatch_customers', {}, { id: 'x1', name: 'Typed' }, 'That customer id is already in use.'],
-        ['dispatch-customers', 'location', 'dispatch_service_locations', { resource: 'locations' }, { id: 'x1', customerId: 'c1', name: 'Typed', address: 'a', city: 'c' }, 'That location id is already in use.'],
+        ['dispatch-jobs', 'job', 'Job', 'title', 'dispatch_jobs', {}, { id: 'x1', customerId: 'c1', title: 'Typed' }, 'That job id is already in use.', LINKS],
+        ['dispatch-customers', 'customer', 'Customer', 'name', 'dispatch_customers', {}, { id: 'x1', name: 'Typed' }, 'That customer id is already in use.', LINKS],
+        ['dispatch-customers', 'location', 'Location', 'name', 'dispatch_service_locations', { resource: 'locations' }, { id: 'x1', customerId: 'c1', name: 'Typed', address: 'a', city: 'c' }, 'That location id is already in use.', LINKS],
+        ['dispatch-technicians', 'technician', 'Technician', 'firstName', 'dispatch_technicians', {}, { id: 'x1', firstName: 'Typed', lastName: 'Typed' }, 'That technician id is already in use.', [[{ assignedVehicleId: 'veh_gone' }, 404], [{ userId: 'usr_gone' }, 404]]],
+        ['dispatch-vehicles', 'vehicle', 'Vehicle', 'name', 'dispatch_vehicles', {}, { id: 'x1', name: 'Typed' }, 'That vehicle id is already in use.', [[{ assignedTechId: 'tech_gone' }, 404]]],
+        ['dispatch-equipment', 'item', 'Equipment', 'name', 'dispatch_equipment', {}, { id: 'x1', name: 'Typed' }, 'That equipment id is already in use.', [[{ checkedOutToId: 'tech_gone' }, 404], [{ checkedOutJobId: 'job_gone' }, 404]]],
+        ['dispatch-schedule-blocks', 'block', 'Block', 'title', 'dispatch_schedule_blocks', {}, { id: 'x1', techId: 'tech_me', title: 'Typed', startDate: '2026-12-05' }, 'That block id is already in use.', [[{ techId: 'tech_gone' }, 404]]],
+        ['dispatch-service-plans', 'plan', 'Plan', 'name', 'dispatch_service_plans', {}, { id: 'x1', name: 'Typed' }, 'That plan id is already in use.', [[{ visitTemplateId: 'tpl_gone' }, 404], [{ coveredJobTypes: ['jt_gone'] }, 404], [{ discountPercent: 150 }, 400]]],
     ];
-    for (const [f, key, table, qs, body, words] of creates) {
+    for (const [f, key, look, named, table, qs, body, words, refusals] of creates) {
         // held(n): whether the n-th read of the whole row at its id finds it. The insert writes nothing unless `lands`.
         const run = async (handler, held, { lands = false, sent = body, linked = true } = {}) => {
             let n = 0, wrote = [], answer = null;
             const rows = ({ kind, table: t, fields }) => {
-                if (t !== table) return linked || t === 'settings' ? base[t] || [] : [];   // linked: the customer it names is the org's
+                if (t !== table) return linked || t === 'settings' ? base[t] || [] : [];   // linked: the records it names are the org's
                 if (kind === 'select') return !fields && held(n++) ? [row] : [];   // a read naming its columns is the number's or the account's
                 return kind === 'insert' && lands ? [{ ...row, name: 'Made', title: 'Made' }] : [];
             };
@@ -225,20 +236,34 @@ test("a Dispatch create whose id the org holds answers 409 idInUse with the reco
             return { status: answer.statusCode, body: JSON.parse(answer.body), wrote };
         };
         const src = sourceOf(f), handler = await load(f);
+        assert.ok(refusals.length >= 1, `${key}: what a new one would be refused for`);
         // This create's own copy of a line: the customers' file holds the locations' create first.
-        const start = src.indexOf(`const landed = await held${key[0].toUpperCase()}${key.slice(1)}(orgId, data.id);`);
+        const start = src.indexOf(`const landed = await held${look}(orgId, data.id);`);
         assert.ok(start > 0, `REGRESSION: ${key}: the held look`);
         const cut = async (line) => { const i = src.indexOf(line, start); assert.ok(start >= 0 && i > start, `${key}: ${line}`); return loadCut(f, [i, i + line.length]); };
         const early = await run(handler, () => true, { lands: true });
         assert.deepEqual([early.status, early.body.code, early.body.error, early.wrote], [409, 'idInUse', words, []], `REGRESSION: ${key}: a create of an id the org holds wrote, or did not say so`);
         assert.equal(early.body[key]?.id, 'x1');
-        assert.equal(early.body[key][key === 'job' ? 'title' : 'name'], 'As stored', 'the record as stored, never as sent');
-        // A link it names that is no record of the org is never asked of a create that landed.
-        const gone = await run(handler, () => true, { linked: false, sent: { ...body, accountId: 'acc_gone', customerId: 'c_gone' } });
-        assert.deepEqual([gone.status, gone.body.code], [409, 'idInUse'], `REGRESSION: ${key}: a link asked before the held look`);
+        assert.equal(early.body[key][named], 'As stored', `REGRESSION: ${key}: the record as stored, never as sent`);
         const unlooked = await cut('if (landed) return landed;'), past = await run(unlooked, () => true, { lands: true });
         assert.deepEqual([past.status, past.wrote[0]], [201, `insert ${table}`], 'shown red: the look left out, the create writes');
-        assert.equal((await run(unlooked, () => true, { linked: false, sent: { ...body, accountId: 'acc_gone', customerId: 'c_gone' } })).status, 404, 'shown red: its link refused over a create that landed');
+        // A link it names that is no record of the org — or a login of no member, a percent out of range — is never asked of a create
+        // that landed.
+        for (const [bad, status] of refusals) {
+            const at = `${key} ${JSON.stringify(bad)}`, gone = await run(handler, () => true, { linked: false, sent: { ...body, ...bad } });
+            assert.deepEqual([gone.status, gone.body.code, gone.wrote], [409, 'idInUse', []], `REGRESSION: ${at}: asked before the held look`);
+            const red = await run(unlooked, () => true, { linked: false, sent: { ...body, ...bad } });
+            assert.deepEqual([red.status, red.body.code], [status, undefined], `shown red: ${at}: refused over a create that landed`);
+            const fresh = await run(handler, () => false, { lands: true, linked: false, sent: { ...body, ...bad } });
+            assert.deepEqual([fresh.status, fresh.body.field in bad || key === 'location', fresh.wrote], [status, true, []], `REGRESSION: ${at}: a new one is asked, and refused for it, nothing written`);   // a location's refusal names no field
+            if (refusals === LINKS) continue;
+            // The refusal of §0.291's five, as each writes it: left out, the new one is made.
+            const asks = 'userId' in bad ? 'if (login.status) return ' : 'discountPercent' in bad ? 'if (percentRefused(data.discountPercent, null)) return ' : 'if (linked.error) return ';
+            const i = src.indexOf(asks, start), end = src.indexOf('};', i) + 2;
+            assert.ok(i > start && end > i && !src.slice(i, end).includes('\n'), `${at}: its refusal, after the held look`);
+            const unasked = await run(await loadCut(f, [i, end]), () => false, { lands: true, linked: false, sent: { ...body, ...bad } });
+            assert.deepEqual([unasked.status, unasked.wrote[0]], [201, `insert ${table}`], `shown red: ${at}: its refusal left out, it is made`);
+        }
         // Two at once: none held when asked, the insert wrote nothing, held now — no history, notice or audit after it.
         const beside = await run(handler, (n) => n > 0);
         assert.deepEqual([beside.status, beside.body.code, beside.body[key]?.id, beside.wrote], [409, 'idInUse', 'x1', [`insert ${table}`]], `REGRESSION: ${key}: the same create pressed twice at once`);
@@ -253,15 +278,33 @@ test("a Dispatch create whose id the org holds answers 409 idInUse with the reco
         const made = await run(handler, () => false, { lands: true });
         assert.deepEqual([made.status, made.body.code, made.wrote[0]], [201, undefined, `insert ${table}`]);
         assert.ok(made.wrote.includes('insert audit_log'), `${key}: ${made.wrote}`);
+        // A technician's record names its login's member by their app id, what the screen's picker holds: read in the held look, each
+        // time, as a create's answer reads it.
+        if (key === 'technician') {
+            assert.ok(src.includes('const [member] = await db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), eq(users.clerkUserId, login)));'), "REGRESSION: a login's member read out of its org");
+            assert.deepEqual([early.body[key].memberId, beside.body[key].memberId, early.body[key].userId], ['usr_ana', 'usr_ana', 'user_ana'], 'REGRESSION: a technician answered with no member of its login');
+            const line = ' ? await memberIdOf(orgId, held.userId) : null;', i = src.indexOf(line);
+            assert.ok(i > 0 && src.indexOf(line, i + 1) < 0, 'the member of the login held');
+            const unnamed = await run(await loadCut(f, [i, i + line.length]), () => true);
+            assert.notEqual(unnamed.body[key]?.memberId, 'usr_ana', 'shown red: the member unread');
+            const none = await run(handler, () => true, { linked: false });   // its login no member of this org
+            assert.deepEqual([none.status, none.body[key].memberId], [409, null]);
+        } else assert.equal('memberId' in early.body[key], false, `${key}: no login`);
     }
     // The look and the insert as written: by id AND org, awaited before the insert and after; the insert gives way on its id
-    // alone; a customer's, a location's and a job's create are no upsert again.
-    for (const [f, key, table] of [['dispatch-jobs', 'Job', 'dispatchJobs'], ['dispatch-customers', 'Customer', 'dispatchCustomers'], ['dispatch-customers', 'Location', 'dispatchServiceLocations']]) {
-        const src = sourceOf(f).split('\r\n').join('\n'), times = (x) => src.split(x).length - 1;
-        assert.equal(times(`await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n    return held ? { statusCode: 409,`), 1, `REGRESSION: ${key}: the held look in its org`);
+    // alone; none of the eight creates is an upsert again, and each is audited as a create. Moved in §0.291: five more creates, a technician's look
+    // reading its login's member between.
+    const tables = { Job: 'dispatchJobs', Customer: 'dispatchCustomers', Location: 'dispatchServiceLocations', Technician: 'dispatchTechnicians', Vehicle: 'dispatchVehicles', Equipment: 'dispatchEquipment', Block: 'dispatchScheduleBlocks', Plan: 'dispatchServicePlans' };
+    assert.deepEqual(creates.map(([, , look]) => look).sort(), Object.keys(tables).sort(), 'every create run here is read here');
+    for (const [f, , key] of creates) {
+        const table = tables[key], src = sourceOf(f).split('\r\n').join('\n'), times = (x) => src.split(x).length - 1;
+        const member = key === 'Technician' ? '    const memberId = held ? await memberIdOf(orgId, held.userId) : null;\n' : '';
+        assert.equal(times(`await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n${member}    return held ? { statusCode: 409,`), 1, `REGRESSION: ${key}: the held look in its org`);
+        assert.equal(['userId', 'auth.userId'].reduce((n, who) => n + times(`await auditAs(orgId, ${who}, { action: 'dispatch_${key.toLowerCase()}.created', `), 0), 1, `REGRESSION: ${key}: a create audited as anything else`);
         assert.equal(times(`= await held${key}(orgId, data.id);`), 2, `REGRESSION: ${key}: asked before and after its insert, awaited`);
         assert.equal(times(`.onConflictDoNothing({ target: ${table}.id }).returning();`), 1, `REGRESSION: ${key}: its insert`);
         assert.equal(times(`.onConflictDoUpdate({ target: ${table}.id`), 0, `REGRESSION: ${key}: an upsert`);
+        assert.equal(src.split(/\s+/).join(' ').includes(`.onConflictDoUpdate({ target: ${table}.id`), false, `REGRESSION: ${key}: an upsert, over lines`);
     }
 });
 

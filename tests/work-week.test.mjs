@@ -31,7 +31,9 @@ test('defaultWorkWeek is Mon–Fri 08:00–17:00, a fresh object every call, wee
 test('the technician editor seeds a new technician with the default week; the shift toggle uses the same hours', () => {
     const s = code(read('src/Tabs/DispatchTab.jsx'));
     assert.ok(s.includes("import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';"));
-    assert.ok(s.includes("homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek() });"),
+    // Moved in §0.291: the draft goes on past the pattern — every field the form shows (its licence, certifications and login's
+    // member), so what another member set since is told from what this one typed.
+    assert.ok(/homeZip: '', skills: \[\], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek\(\),\r?\n {12}licenseLevel: null, certifications: \[\], memberId: null \}\);/.test(s),
         'the new-technician draft carries the default pattern, so the POST body does too');
     assert.ok(s.includes('const DEFAULT_SHIFT = DEFAULT_SHIFT_HOURS;'), 'ticking a day on in the shift dialog gives the same 08:00–17:00');
     assert.ok(!s.includes("{ start: '07:00', end: '17:00' }"), 'no second, disagreeing default');

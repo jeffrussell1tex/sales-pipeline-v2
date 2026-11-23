@@ -23,7 +23,7 @@ const AUDIT = { audit_log: [{ id: 'aud_1', ...o, action: 'update', entityType: '
 
 // Who the Dispatch gate lets in, per method: a rep refused, Admin, Manager and Dispatcher in, a Technician and ReadOnly
 // reading only; then a rep let in where the org opens Dispatch to reps. own: the table a create asks whether the org holds its
-// id already (state §0.290) — its reads answer none and its insert the row made.
+// id already (state §0.290, §0.291) — its reads answer none and its insert the row made.
 const creating = (own, rows) => (own ? ({ kind, table }) => (kind === 'select' && table === own ? [] : rows[table] || []) : rows);
 const gate = (what, rows, { post, put, del, get = {}, own } = {}) => [
     { what: `${what}: Dispatch on - reads`, method: 'GET', qs: get, rows: { ...ON, ...TECH, ...JOB, ...rows } },
@@ -33,6 +33,13 @@ const gate = (what, rows, { post, put, del, get = {}, own } = {}) => [
     { what: `${what}: Dispatch open to reps - a rep in`, method: post ? 'POST' : 'GET', qs: {}, body: post, rows: creating(own, { ...OPEN, ...TECH, ...JOB, ...rows }) },
 ];
 const unlinked = (what, rows, qs = {}) => ({ what: `${what}: a Technician with no technician row linked reads nothing`, method: 'GET', qs, rows: { ...ON, ...rows, dispatch_technicians: [] } });
+// A create's id the org holds (state §0.291, as the customers', locations' and jobs' of §0.290): its record before any link, login or
+// percent is asked — what `body` names is none of the org's, which asked first would be refused; a caller the gate refuses is
+// refused all the same.
+const heldId = (what, body, rows) => [
+    { what: `${what}: a create whose id the org holds (409)`, method: 'POST', qs: {}, body, rows: { ...ON, ...TECH, ...rows } },
+    { what: `${what}: a create whose id the org holds (409), Dispatch open to reps`, method: 'POST', qs: {}, body, rows: { ...OPEN, ...TECH, ...rows } },
+];
 
 // Accepted quote x1 on deal opp1 (on no account, of no customer's name), no job made of it yet.
 const QUOTE = {
@@ -69,8 +76,9 @@ export const REQUESTS = {
     ],
     'dispatch-equipment': [
         off,
-        ...gate('equipment', EQUIP, { post: { id: 'x1', name: 'Recovery unit' }, put: { name: 'Recovery unit 2' }, del: true }),
+        ...gate('equipment', EQUIP, { post: { id: 'x1', name: 'Recovery unit' }, put: { name: 'Recovery unit 2' }, del: true, own: 'dispatch_equipment' }),
         unlinked('equipment', EQUIP),
+        ...heldId('equipment', { id: 'x1', name: 'Recovery unit', checkedOutToId: 'tech_gone' }, EQUIP),
     ],
     'dispatch-jobs': [
         off,
@@ -99,19 +107,26 @@ export const REQUESTS = {
     ],
     'dispatch-schedule-blocks': [
         off,
-        ...gate('time off', BLOCK, { post: { id: 'x1', techId: 'tech_me', startDate: '2026-12-01' }, put: { title: 'Holiday' }, del: true }),
+        ...gate('time off', BLOCK, { post: { id: 'x1', techId: 'tech_me', startDate: '2026-12-01' }, put: { title: 'Holiday' }, del: true, own: 'dispatch_schedule_blocks' }),
         unlinked('time off', BLOCK),
+        ...heldId('time off', { id: 'x1', techId: 'tech_gone', startDate: '2026-12-01' }, BLOCK),
     ],
     'dispatch-service-plans': [
         off,
-        ...gate('service plans', PLAN, { post: { id: 'x1', name: 'Gold' }, put: { name: 'Gold 2' }, del: true }),
+        ...gate('service plans', PLAN, { post: { id: 'x1', name: 'Gold' }, put: { name: 'Gold 2' }, del: true, own: 'dispatch_service_plans' }),
         unlinked('service plans', PLAN),
+        ...heldId('service plans', { id: 'x1', name: 'Gold', visitTemplateId: 'tpl_gone', discountPercent: 150 }, PLAN),
     ],
-    'dispatch-technicians': [off, ...gate('technicians', {}, { post: { id: 'tech_me', firstName: 'Ana', lastName: 'Field' }, put: { phone: '555-0100' }, del: true })],
+    'dispatch-technicians': [
+        off,
+        ...gate('technicians', {}, { post: { id: 'tech_me', firstName: 'Ana', lastName: 'Field' }, put: { phone: '555-0100' }, del: true, own: 'dispatch_technicians' }),
+        ...heldId('technicians', { id: 'tech_me', firstName: 'Ana', lastName: 'Field', assignedVehicleId: 'veh_gone', userId: 'usr_gone' }, {}),
+    ],
     'dispatch-vehicles': [
         off,
-        ...gate('vehicles', VEHICLE, { post: { id: 'x1', name: 'Van 1' }, put: { name: 'Van 2' }, del: true }),
+        ...gate('vehicles', VEHICLE, { post: { id: 'x1', name: 'Van 1' }, put: { name: 'Van 2' }, del: true, own: 'dispatch_vehicles' }),
         unlinked('vehicles', VEHICLE),
+        ...heldId('vehicles', { id: 'x1', name: 'Van 1', assignedTechId: 'tech_gone' }, VEHICLE),
     ],
     invoices: [
         off,

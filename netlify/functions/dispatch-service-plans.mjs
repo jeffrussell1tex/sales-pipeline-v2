@@ -95,6 +95,16 @@ function normalise(row) {
     };
 }
 
+// A create's id this org holds already (state §0.291): an earlier press of the same create landed (its form keeps the id after
+// an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the plan as stored, for the
+// screen to take; nothing written. It was an upsert of the whole row: a price, a discount, a retirement
+// set in between by another member was written over. null when this org holds none — another org's id is the words alone.
+// Its callers await it: a failed read is the handler's 500, never an answer with no row.
+async function heldPlan(orgId, id) {
+    const [held] = await db.select().from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That plan id is already in use.', code: 'idInUse', plan: normalise(held) }) } : null;
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -123,18 +133,18 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ plans: visible.map(normalise) }) };
         }
 
-        // ── POST: create (upsert on id, so a seeded import is idempotent) ─────
+        // ── POST: create — an id the org holds writes nothing (state §0.291) ──
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
             if (!data.id)   return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
-            // Its links (state §0.223): asked against the plan this upsert would overwrite IN THIS ORG, read first — a value
-            // it holds is never asked again; another org's id reads none, so every link it names is asked.
-            const [prior] = await db.select({ id: dispatchServicePlans.id, visitTemplateId: dispatchServicePlans.visitTemplateId, discountPercent: dispatchServicePlans.discountPercent, coveredJobTypes: dispatchServicePlans.coveredJobTypes })
-                .from(dispatchServicePlans).where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));
-            const linked = await checkLinks(PLAN_LINKS, data, prior || null, orgId);
+            // A create only (state §0.291): an id this org holds is answered with its row before any link is asked.
+            const landed = await heldPlan(orgId, data.id);
+            if (landed) return landed;
+            // Its links (state §0.223): every one it names is asked.
+            const linked = await checkLinks(PLAN_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
-            if (percentRefused(data.discountPercent, prior?.discountPercent)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };
+            if (percentRefused(data.discountPercent, null)) return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };
 
             const cadence = data.cadence ?? 'annual';
             const row = {
@@ -163,17 +173,15 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C).
-            const [inserted] = await db.insert(dispatchServicePlans).values(row)
-                .onConflictDoUpdate({
-                    target: dispatchServicePlans.id, setWhere: eq(dispatchServicePlans.orgId, orgId),
-                    set: { ...row, createdAt: undefined },
-                }).returning();
-            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-            // that said the id was taken elsewhere (state §0.166).
+            const [inserted] = await db.insert(dispatchServicePlans).values(row).onConflictDoNothing({ target: dispatchServicePlans.id }).returning();
+            // Nothing written: the same create landed beside this one, or another org holds the id — the words alone (state §0.166).
+            if (!inserted) {
+                const beside = await heldPlan(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That plan id is already in use.' }) };
 
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, auth.userId, { action: prior ? 'dispatch_plan.updated' : 'dispatch_plan.created', entityType: 'dispatch_plan', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.cadence || 'custom'}${inserted.price != null ? ` · $${Number(inserted.price).toLocaleString()}` : ''}` });
+            await auditAs(orgId, auth.userId, { action: 'dispatch_plan.created', entityType: 'dispatch_plan', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.cadence || 'custom'}${inserted.price != null ? ` · $${Number(inserted.price).toLocaleString()}` : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ plan: normalise(inserted) }) };
         }
 

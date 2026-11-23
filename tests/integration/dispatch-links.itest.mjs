@@ -328,8 +328,8 @@ test('a login held is never asked again — re-sent by either id, or left out of
     assert.equal(r.status, 200, `its own member, by app id — the technician holding it is itself: ${JSON.stringify(r.body)}`);
     assert.equal((await one(dispatchTechnicians, T2)).userId, CLERK_HAL);
     r = await call('dispatch-technicians', ADMIN, 'POST', { id: T2, firstName: 'Second', lastName: 'Tech' });
-    assert.equal(r.status, 201, JSON.stringify(r.body));
-    assert.equal((await one(dispatchTechnicians, T2)).userId, CLERK_HAL, 'the create is an upsert: a login left out is kept');
+    assert.deepEqual([r.status, r.body.code, r.body.technician?.memberId], [409, 'idInUse', USR_HAL], 'Reversed in §0.291 (the create is no upsert): answered with itself — ' + JSON.stringify(r.body));
+    assert.deepEqual([(await one(dispatchTechnicians, T2)).userId, (await one(dispatchTechnicians, T2)).notes], [CLERK_HAL, 'kept'], 'nothing written');
 
     r = await call('dispatch-technicians', ADMIN, 'PUT', { userId: null }, { id: ID('t_tess') });
     assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -353,7 +353,8 @@ test("a vehicle's technician is this org's — a create and an update; one held 
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual([(await one(dispatchVehicles, V_HELD)).name, (await one(dispatchVehicles, V_HELD)).assignedTechId], ['Held van, edited', T_B], 'held: kept');
     r = await call('dispatch-vehicles', ADMIN, 'POST', { id: V_HELD, name: 'Held van', assignedTechId: T_B });
-    assert.equal(r.status, 201, `the create is an upsert: what it holds is not asked — ${JSON.stringify(r.body)}`);
+    assert.deepEqual([r.status, r.body.code], [409, 'idInUse'], `Reversed in §0.291: answered with itself, its links not asked — ${JSON.stringify(r.body)}`);
+    assert.equal((await one(dispatchVehicles, V_HELD)).name, 'Held van, edited', 'nothing written');
 
     r = await call('dispatch-vehicles', ADMIN, 'PUT', { assignedTechId: T1 }, { id: V_B });
     assert.equal(r.status, 404, "org B's vehicle: not found in A");
@@ -415,20 +416,20 @@ test("a plan visit's plan and customer are this org's — every visit names both
     assert.equal(r.body.visit.planId, P_OFF);
 });
 
-test('a time-off block names a technician of this org, and stays with it: a re-POST naming another is refused 409, never re-pointed; its author stays the first create\'s', async () => {
+test('a time-off block names a technician of this org, and stays with it: a re-POST, naming another or not, writes nothing (reversed in §0.291)', async () => {
     refused(await call('dispatch-schedule-blocks', ADMIN, 'POST', { id: ID('bl_new'), techId: T_B, startDate: '2026-11-03' }), 'technician', 'techId');
     assert.equal(await one(dispatchScheduleBlocks, ID('bl_new')), undefined, 'nothing written');
 
     let r = await call('dispatch-schedule-blocks', ADMIN, 'POST', { id: BL1, techId: T2, startDate: '2026-11-02', title: 'Moved' });
     assert.equal(r.status, 409, JSON.stringify(r.body));
-    assert.deepEqual(r.body, { error: 'A block stays with its technician — add a new one for another.', field: 'techId' });
+    assert.deepEqual([r.body.code, r.body.block?.techId, r.body.block?.title], ['idInUse', T1, 'Dentist']);
     let row = await one(dispatchScheduleBlocks, BL1);
     assert.deepEqual([row.techId, row.title], [T1, 'Dentist'], 'unchanged');
 
     r = await call('dispatch-schedule-blocks', ADMIN, 'POST', { id: BL1, techId: T1, startDate: '2026-11-02', title: 'Dentist, again' });
-    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual([r.status, r.body.code], [409, 'idInUse'], JSON.stringify(r.body));
     row = await one(dispatchScheduleBlocks, BL1);
-    assert.deepEqual([row.techId, row.title, row.createdBy], [T1, 'Dentist, again', 'Seeded Author'], "its author is the first create's");
+    assert.deepEqual([row.techId, row.title, row.createdBy], [T1, 'Dentist', 'Seeded Author'], "its author is the first create's");
 
     r = await call('dispatch-schedule-blocks', ADMIN, 'POST', { id: BL_B, techId: T1, startDate: '2026-11-04' });
     assert.equal(r.status, 409, JSON.stringify(r.body));

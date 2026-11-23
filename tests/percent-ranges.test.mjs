@@ -135,15 +135,19 @@ test('settings.mjs: a default tax rate named out of range is refused naming quot
         "quoteDefaults:        'quoteDefaults'        in data ?");
 });
 
-test('dispatch-service-plans.mjs: a discount named out of range is refused naming discountPercent before the create\'s upsert and the update; blank is none', () => {
+test('dispatch-service-plans.mjs: a discount named out of range is refused naming discountPercent before the create\'s insert and the update; blank is none', () => {
     const s = code(read('netlify/functions/dispatch-service-plans.mjs'));
     const REFUSED = "return { statusCode: 400, headers, body: JSON.stringify({ error: DISCOUNT_REFUSED, field: 'discountPercent' }) };";
     const post = between(s, "if (event.httpMethod === 'POST') {", "if (event.httpMethod === 'PUT') {");
+    // Reversed in §0.291: the create was an upsert and held the discount of the plan it wrote over; a create only now — an id this
+    // org holds is answered with its plan, and a discount is asked against nothing held.
     order(post,
-        'discountPercent: dispatchServicePlans.discountPercent,',
-        'if (percentRefused(data.discountPercent, prior?.discountPercent)) ' + REFUSED,
+        'const landed = await heldPlan(orgId, data.id);',
+        'if (landed) return landed;',
+        'if (percentRefused(data.discountPercent, null)) ' + REFUSED,
         "discountPercent: data.discountPercent === '' ? null : data.discountPercent ?? null,",
-        'await db.insert(dispatchServicePlans)');
+        'await db.insert(dispatchServicePlans).values(row).onConflictDoNothing({ target: dispatchServicePlans.id }).returning();');
+    assert.ok(!/\bprior\b/.test(post), 'REGRESSION: a create holds an out-of-range discount from a row it found');
     const put = between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
     order(put,
         "if (!current) return { statusCode: 404,",

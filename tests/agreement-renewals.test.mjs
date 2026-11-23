@@ -103,7 +103,18 @@ test('service plans: renewalLeadDays is read, created and updated; the panel off
     const p = code(read('src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx'));
     assert.ok(p.includes('<Field label="Renewal reminder"'));
     assert.ok(p.includes("onChange={e => set('renewalLeadDays', e.target.value)}"));
-    assert.ok(p.includes("renewalLeadDays: 60, anchorMode: 'fixed' })"), 'a new plan starts at the default');
+    // Moved in §0.291: the new plan's draft goes on past the default — every field the form shows, so what another member set
+    // since is told from what this one typed.
+    assert.ok(p.includes("leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed', description: null, visitTemplateId: null, includedHours: null, responseHours: null, price: null, billingPeriod: 'annual', discountPercent: null }); setError(''); }}"), 'a new plan starts at the default');
+    // Each field the form sets is in that draft (the custom interval apart: the resend reads it as stored).
+    const form = p.slice(p.indexOf('const PlanForm = ('), p.indexOf('export const DispatchServicePlansDetail = ('));
+    assert.ok(p.includes('const PlanForm = (') && p.includes('export const DispatchServicePlansDetail = ('));
+    const from = p.indexOf("setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true,");
+    assert.ok(from > -1);
+    const seed = p.slice(from, p.indexOf('})', from));
+    const shown = [...new Set([...form.matchAll(/\bset\('(\w+)'/g)].map((m) => m[1]))];
+    assert.equal(shown.length, 15, `the form's fields: ${shown}`);
+    assert.deepEqual(shown.filter((k) => !new RegExp(`[ {]${k}: `).test(seed)), ['intervalDays'], 'a field the form shows and a new plan leaves out');
     const schema = code(read('db/schema.ts'));
     assert.ok(schema.includes("renewalLeadDays:  integer('renewal_lead_days'),"));
     assert.ok(schema.includes("export const dispatchPlanVisits = pgTable('dispatch_plan_visits', {"));

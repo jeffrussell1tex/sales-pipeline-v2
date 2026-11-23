@@ -3,13 +3,15 @@
 // (Recommended)").
 //
 // The import's rows carry ids derived from the old entries' (`imp_<id>`, a unit `imp_<id>_u<n>`) and the two POSTs
-// are designed upserts (§0.201), so every press re-sent every row and REPLACED the stored one: an edited vehicle's
+// were upserts (§0.201), so every press re-sent every row and REPLACED the stored one: an edited vehicle's
 // make, VIN and service dates went back to null, a checked-out unit was checked in — and the card never went, its
-// count the whole old list, its words "Re-running is safe". Now only the rows the tables do not hold are sent; the
+// count the whole old list, its words "Re-running is safe". Since §0.291 the POSTs are creates: a row the tables hold
+// is answered 'idInUse' and left as it is. Still only the rows the tables do not hold are sent; the
 // card counts them and goes once none are; a vehicle deleted after an import counts again; with no answered read of
 // the tables (every row would look missing) the import refuses and says so; a refusal says the server's words.
-// RUN: planImport / importCardShows (src/utils/legacyDispatchImport.js) and the screen's readHeld, extracted and run
-// with a stubbed dbFetch. WIRING (§18b23 — the screen needs React and a DOM): DispatchVehiclesDetail.jsx.
+// RUN: planImport / importCardShows (src/utils/legacyDispatchImport.js) and the screen's readHeld and load, extracted and
+// run with a stubbed dbFetch. WIRING (§18b23): DispatchVehiclesDetail.jsx. The whole panel — its import press, its two
+// forms, its loads — RUN: tests/dispatch-panels.test.mjs (§0.291).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -65,8 +67,8 @@ test('RUN the plan: all new — every row is to send', () => {
 });
 
 test('RUN the plan: some already in — only the missing are sent, a held row never again', () => {
-    // imp_v1 was imported and edited since (a make, a VIN); imp_e1_u1 is checked out. Neither may be sent:
-    // the POST would replace them whole.
+    // imp_v1 was imported and edited since (a make, a VIN); imp_e1_u1 is checked out. Neither may be sent
+    // (the POST replaced them whole; since §0.291 it leaves them as they are and the press would say them already in).
     const held = {
         vehicles: [{ id: 'imp_v1', name: 'Van 1', make: 'Ford', vin: '1FT…' }, { id: 'veh_other', name: 'Own van' }],
         equipment: [{ id: 'imp_e1_u1', name: 'Pressure Tester #1', checkedOutToId: 'tech_1' }],
@@ -181,9 +183,11 @@ const loadOf = (answers) => {
     const st = { loading: null, loadError: null, techsError: null, vehicles: null, equipment: null, techs: null, fleetLoaded: null };
     const set = (k) => (v) => { st[k] = v; };
     // Moved (§0.247, docs/design/refusal-sweep Part 8): the load's catch says failureWords(err) — a parameter here.
-    const fn = new Function('dbFetch', 'readRefusal', 'failureWords', 'setLoading', 'setLoadError', 'setTechsError', 'setVehicles', 'setEquipment', 'setTechs', 'setFleetLoaded',
+    // Moved in §0.291: the load numbers itself — the panel's own ref (loadSeq), as it begins.
+    assert.equal(count(s, 'const loadSeq = useRef(0);'), 1);
+    const fn = new Function('loadSeq', 'dbFetch', 'readRefusal', 'failureWords', 'setLoading', 'setLoadError', 'setTechsError', 'setVehicles', 'setEquipment', 'setTechs', 'setFleetLoaded',
         `${unstoppedText}\nreturn async () => {${body}};`)(
-        async (url) => { const a = answers[url.split('/').pop()]; if (a instanceof Error) throw a; return a; }, readRefusal, failureWords,
+        { current: 0 }, async (url) => { const a = answers[url.split('/').pop()]; if (a instanceof Error) throw a; return a; }, readRefusal, failureWords,
         set('loading'), set('loadError'), set('techsError'), set('vehicles'), set('equipment'), set('techs'), set('fleetLoaded'));
     return async () => { await fn(); return st; };
 };
@@ -231,7 +235,9 @@ test('WIRING: the screen plans with the lifted helper, from the tables as read n
     // Moved pin (§0.247 Part 8): the import names failureWords too — every catch says it, never a raw err.message.
     // Moved in §0.264 (the unknown-save rule, Part 5): it names the rule's helpers too — a row whose answer proved nothing
     // may have been imported, said apart from the rows the server refused.
-    assert.ok(s.includes("import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid } from '../../../utils/refusalWords.js';"));
+    // Moved in §0.291: the two creates' held answers too — unknownOf and alreadySaid, and createResend's three.
+    assert.ok(s.includes("import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid, unknownOf, alreadySaid } from '../../../utils/refusalWords.js';"));
+    assert.ok(s.includes("import { heldCreate, overStored, keptSaid } from '../../../utils/createResend.js';"));
     // The old in-file planners are gone: one rule, the helper's.
     assert.equal(count(s, 'plannedVehicleImports'), 0);
     assert.equal(count(s, 'plannedEquipmentImports'), 0);
@@ -240,8 +246,11 @@ test('WIRING: the screen plans with the lifted helper, from the tables as read n
     // The load says whether the tables answered. Moved pin (§0.243's re-check): `setTechs(tJson.technicians    || []);`
     // before setFleetLoaded(true) became the technicians read apart, first — RUN below.
     const load = between(s, 'const load = useCallback(async () => {', '}, []);');
-    order(load, "setTechsError('');", 'if (!tRes.ok) {', 'if (tJson) setTechs(tJson.technicians || []);',
-        'setEquipment(eJson.equipment  || []);', 'setFleetLoaded(true);', '} catch (err) {', 'setLoadError(', 'setFleetLoaded(false);');
+    // Moved in §0.291: each place the load writes is behind its own number — the last read asked is the one shown.
+    order(load, 'const seq = ++loadSeq.current;', "setTechsError('');", 'if (seq !== loadSeq.current) return;', 'if (!tRes.ok) {', 'if (tJson) setTechs(tJson.technicians || []);',
+        'if (seq !== loadSeq.current) return;', 'setVehicles(vJson.vehicles    || []);',
+        'setEquipment(eJson.equipment  || []);', 'setFleetLoaded(true);', '} catch (err) {', 'if (seq !== loadSeq.current) return;', 'setLoadError(', 'setFleetLoaded(false);');
+    assert.equal(count(load, 'if (seq !== loadSeq.current) return;'), 5, 'after each await that sets');
     // The technicians' words are drawn beside the fleet's.
     assert.ok(s.includes("<CategoryDetailChrome error={[loadError, techsError].filter(Boolean).join(' ')} crumb="));
 
@@ -260,14 +269,23 @@ test('WIRING: the screen plans with the lifted helper, from the tables as read n
     // A refusal: the server's words, not "HTTP 409".
     // Moved in §0.264 (the unknown-save rule, Part 5): the server's own refusal is "not imported"; any other answer, or
     // none, may have imported the row — listed apart (guide §18b134 rule 11).
-    assert.equal(count(run, 'if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }'), 2);
+    // Moved in §0.291: both loops read an answer by one function — landed; else a row of this very id the tables hold is
+    // "already in the tables" (left as it is, never "not imported"); else the refusal, heard or not.
+    order(run, 'const answered = async (res, key, row) => {', 'if (res.ok) { ok++; return; }', 'const r = await writeRefusalOf(res);',
+        'if (heldCreate(res.status, r.body, key, row.id)) { already++; return; }',
+        '(r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`);',
+        'for (const row of plan.vehicles) {', "if (twice(row, 'vehicle ')) continue;", "await answered(await dbFetch('/.netlify/functions/dispatch-vehicles', {", "}), 'vehicle', row);",
+        'for (const row of plan.equipment) {', "if (twice(row, 'unit ')) continue;", "await answered(await dbFetch('/.netlify/functions/dispatch-equipment', {", "}), 'item', row);");
+    assert.equal(count(run, 'await answered(await dbFetch('), 2);
+    assert.equal(count(run, 'dbFetch('), 2, 'no POST answered any other way');
     assert.equal(count(run, '} catch { maybe.push(`${row.name}: the server could not be reached`); }'), 2);
     assert.equal(count(run, 'failed.push(`${row.name}: the server could not be reached`)'), 0, 'a throw is never "not imported" (state §0.264)');
     assert.equal(count(run, "'HTTP '"), 0);
     // A failed row is an error, kept until closed; "Re-running is safe" is gone from the screen.
     // Moved in §0.264 (the unknown-save rule, Part 5): a row that may have been imported is an error too, in the rule's words.
     assert.ok(run.includes('if (failed.length || maybe.length) {\n            const listed = (rows) => '));
-    assert.ok(run.includes('            setImportError(`Imported ${ok} of ${plan.count}.`\n                + (failed.length ? ` ${failed.length} not imported — ${listed(failed)}.` : \'\')'));
+    // Moved in §0.291: the rows the tables held already are counted between.
+    assert.ok(run.includes('            setImportError(`Imported ${ok} of ${plan.count}.`\n                + (already ? ` ${already} already in the tables.` : \'\')\n                + (failed.length ? ` ${failed.length} not imported — ${listed(failed)}.` : \'\')'));
     assert.ok(run.includes("+ (maybe.length ? ` ${maybeSaid(`${maybe.length} record${maybe.length === 1 ? '' : 's'}`, 'imported', listed(maybe), maybe.length > 1)}.` : ''));"));
     assert.equal(count(s, 'Re-running is safe'), 0);
     assert.equal(count(s, 're-running the import cannot create duplicates'), 0);

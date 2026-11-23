@@ -41,6 +41,16 @@ function normalise(row) {
     };
 }
 
+// A create's id this org holds already (state §0.291): an earlier press of the same create landed (its form keeps the id after
+// an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the block as stored, for the
+// screen to take; nothing written. It was an upsert of the whole row: a shorter absence, its type, its notes
+// set in between by another member was written over. null when this org holds none — another org's id is the words alone.
+// Its callers await it: a failed read is the handler's 500, never an answer with no row.
+async function heldBlock(orgId, id) {
+    const [held] = await db.select().from(dispatchScheduleBlocks).where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That block id is already in use.', code: 'idInUse', block: normalise(held) }) } : null;
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -89,16 +99,15 @@ export const handler = async (event) => {
             if (endDate < data.startDate) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'endDate cannot be before startDate' }) };
             }
-            // The create is an upsert. A block stays with its technician, as the PUT keeps it — a re-POST naming
-            // another is refused, never re-pointed — and a technician named anew is this org's (state §0.201).
-            const [prior] = await db.select({ id: dispatchScheduleBlocks.id, techId: dispatchScheduleBlocks.techId })
-                .from(dispatchScheduleBlocks).where(and(eq(dispatchScheduleBlocks.id, data.id), eq(dispatchScheduleBlocks.orgId, orgId)));
-            if (prior && prior.techId !== data.techId) {
-                return { statusCode: 409, headers, body: JSON.stringify({ error: 'A block stays with its technician — add a new one for another.', field: 'techId' }) };
-            }
-            const linked = await checkLinks(BLOCK_LINKS, data, prior || null, orgId);
+            // A create only (state §0.291): an id this org holds is answered with its row before any link is asked.
+            const landed = await heldBlock(orgId, data.id);
+            if (landed) return landed;
+            const linked = await checkLinks(BLOCK_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
+            // A partial-day block needs both ends; otherwise it is all day — the dialog keeps times typed before "All day" was
+            // ticked again, and such a block was stored partial with no hours: it blocked nothing (§0.291's review).
+            const partial = data.allDay === false && !!(data.startTime && data.endTime);
             const row = {
                 id:        data.id,
                 orgId,
@@ -107,10 +116,9 @@ export const handler = async (event) => {
                 title:     data.title     ?? null,
                 startDate: data.startDate,
                 endDate,
-                // A partial-day block needs both ends; otherwise treat it as all-day.
-                allDay:    data.allDay !== false && !(data.startTime && data.endTime),
-                startTime: data.allDay === false ? (data.startTime ?? null) : null,
-                endTime:   data.allDay === false ? (data.endTime   ?? null) : null,
+                allDay:    !partial,
+                startTime: partial ? data.startTime : null,
+                endTime:   partial ? data.endTime : null,
                 notes:     data.notes     ?? null,
                 createdBy: await getCallerName(userId, orgId),
                 createdAt: new Date(),
@@ -119,19 +127,15 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C).
-            const [inserted] = await db.insert(dispatchScheduleBlocks).values(row)
-                .onConflictDoUpdate({
-                    target: dispatchScheduleBlocks.id,
-                    setWhere: eq(dispatchScheduleBlocks.orgId, orgId),
-                    // its technician and its author are the first create's (the PUT's rule)
-                    set: { ...row, createdAt: undefined, techId: undefined, createdBy: undefined },
-                }).returning();
-            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-            // that said the id was taken elsewhere (state §0.166).
+            const [inserted] = await db.insert(dispatchScheduleBlocks).values(row).onConflictDoNothing({ target: dispatchScheduleBlocks.id }).returning();
+            // Nothing written: the same create landed beside this one, or another org holds the id — the words alone (state §0.166).
+            if (!inserted) {
+                const beside = await heldBlock(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That block id is already in use.' }) };
 
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, userId, { action: prior ? 'dispatch_block.updated' : 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
+            await auditAs(orgId, userId, { action: 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ block: normalise(inserted) }) };
         }
 

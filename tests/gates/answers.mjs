@@ -246,6 +246,8 @@ export const ANSWERS = {
             ["equipment: Dispatch on - deletes", "200 200 reps 200 tech ro dunk out"],
             ["equipment: Dispatch open to reps - a rep in", "201 201 201 201 tech ro dunk out"],
             ["equipment: a Technician with no technician row linked reads nothing", "200 200 reps 200 nolink 200 dunk out"],
+            ["equipment: a create whose id the org holds (409)", "409 409 reps 409 tech ro dunk out"],
+            ["equipment: a create whose id the org holds (409), Dispatch open to reps", "409 409 409 409 tech ro dunk out"],
         ],
     },
     'netlify/functions/dispatch-jobs.mjs': {
@@ -297,6 +299,8 @@ export const ANSWERS = {
             ["time off: Dispatch on - deletes", "200 200 reps 200 tech ro dunk out"],
             ["time off: Dispatch open to reps - a rep in", "201 201 201 201 tech ro dunk out"],
             ["time off: a Technician with no technician row linked reads nothing", "200 200 reps 200 nolink 200 dunk out"],
+            ["time off: a create whose id the org holds (409)", "409 409 reps 409 tech ro dunk out"],
+            ["time off: a create whose id the org holds (409), Dispatch open to reps", "409 409 409 409 tech ro dunk out"],
         ],
     },
     'netlify/functions/dispatch-service-plans.mjs': {
@@ -309,6 +313,8 @@ export const ANSWERS = {
             ["service plans: Dispatch on - deletes", "200 200 reps 200 tech ro dunk out"],
             ["service plans: Dispatch open to reps - a rep in", "201 201 201 201 tech ro dunk out"],
             ["service plans: a Technician with no technician row linked reads nothing", "200 200 reps 200 nolink 200 dunk out"],
+            ["service plans: a create whose id the org holds (409)", "409 409 reps 409 tech ro dunk out"],
+            ["service plans: a create whose id the org holds (409), Dispatch open to reps", "409 409 409 409 tech ro dunk out"],
         ],
     },
     'netlify/functions/dispatch-status.mjs': {
@@ -330,6 +336,8 @@ export const ANSWERS = {
             ["technicians: Dispatch on - changes", "200 200 reps 200 tech ro dunk out"],
             ["technicians: Dispatch on - deletes", "200 200 reps 200 tech ro dunk out"],
             ["technicians: Dispatch open to reps - a rep in", "201 201 201 201 tech ro dunk out"],
+            ["technicians: a create whose id the org holds (409)", "409 409 reps 409 tech ro dunk out"],
+            ["technicians: a create whose id the org holds (409), Dispatch open to reps", "409 409 409 409 tech ro dunk out"],
         ],
     },
     'netlify/functions/dispatch-vehicles.mjs': {
@@ -342,6 +350,8 @@ export const ANSWERS = {
             ["vehicles: Dispatch on - deletes", "200 200 reps 200 tech ro dunk out"],
             ["vehicles: Dispatch open to reps - a rep in", "201 201 201 201 tech ro dunk out"],
             ["vehicles: a Technician with no technician row linked reads nothing", "200 200 reps 200 nolink 200 dunk out"],
+            ["vehicles: a create whose id the org holds (409)", "409 409 reps 409 tech ro dunk out"],
+            ["vehicles: a create whose id the org holds (409), Dispatch open to reps", "409 409 409 409 tech ro dunk out"],
         ],
     },
     'netlify/functions/documents.mjs': {

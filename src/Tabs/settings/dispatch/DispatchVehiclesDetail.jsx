@@ -19,9 +19,10 @@
 //
 // The old blob keys are left in place, untouched. Nothing reads them for
 // decisions any more, but deleting live data to tidy up is not worth the risk.
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, thrownSaid, unknownOf, alreadySaid } from '../../../utils/refusalWords.js';
+import { heldCreate, overStored, keptSaid } from '../../../utils/createResend.js';
 import { planImport, importCardShows, IMPORT_UNREAD } from '../../../utils/legacyDispatchImport.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -129,9 +130,9 @@ const VehicleForm = ({ draft, set, techs, onSave, onDelete, onCancel, busy, erro
             <button onClick={onSave} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : (draft._isNew ? 'Create vehicle' : 'Save vehicle')}
             </button>
-            <button onClick={onCancel} style={btnGhost}>Cancel</button>
+            <button onClick={onCancel} disabled={busy} style={{ ...btnGhost, opacity: busy ? 0.6 : 1 }}>Cancel</button>
             {!draft._isNew && (
-                <button onClick={onDelete} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto' }}>Delete</button>
+                <button onClick={onDelete} disabled={busy} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto', opacity: busy ? 0.6 : 1 }}>Delete</button>
             )}
             {error && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger, fontFamily: T.sans }}>{error}</span>}
         </div>
@@ -187,9 +188,9 @@ const EquipmentForm = ({ draft, set, categories, techs, onSave, onDelete, onCanc
             <button onClick={onSave} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : (draft._isNew ? 'Create item' : 'Save item')}
             </button>
-            <button onClick={onCancel} style={btnGhost}>Cancel</button>
+            <button onClick={onCancel} disabled={busy} style={{ ...btnGhost, opacity: busy ? 0.6 : 1 }}>Cancel</button>
             {!draft._isNew && (
-                <button onClick={onDelete} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto' }}>Delete</button>
+                <button onClick={onDelete} disabled={busy} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto', opacity: busy ? 0.6 : 1 }}>Delete</button>
             )}
             {error && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger, fontFamily: T.sans }}>{error}</span>}
         </div>
@@ -197,8 +198,8 @@ const EquipmentForm = ({ draft, set, categories, techs, onSave, onDelete, onCanc
 );
 
 // Legacy blob → table rows: src/utils/legacyDispatchImport.js (state §0.243, Q7 "Send only
-// what's missing"). The POSTs are designed upserts (§0.201) — a row sent again is replaced
-// whole — so the import sends only the rows the tables do not hold yet.
+// what's missing"): the import sends only the rows the tables do not hold yet. A row made meanwhile is
+// answered 'idInUse' and left as it is (state §0.291).
 
 // The words of a refusal, with no stop of their own (a sentence follows them).
 const unstopped = (why) => String(why).replace(/[.\s]+$/, '');
@@ -240,9 +241,16 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
 
     const [vDraft, setVDraft] = useState(null);
     const [eDraft, setEDraft] = useState(null);
-    const [busy,   setBusy]   = useState(false);
+    const [vBusy,  setVBusy]  = useState(false);   // each card its own: one's press out never frees, or holds, the other's form
+    const [eBusy,  setEBusy]  = useState(false);
     const [vError, setVError] = useState('');
     const [eError, setEError] = useState('');
+    // A create answered with the record an earlier press made, standing otherwise now: said, until its Close (§0.291).
+    const [vSaid, setVSaid] = useState('');
+    const [eSaid, setESaid] = useState('');
+    // A new record's bodies whose answer proved nothing, by its id (state §0.291): any may be the one stored.
+    const unproven = useRef({});
+    const keepSentNew = (body) => { if (body) (unproven.current[body.id] = unproven.current[body.id] || []).push(body); };
 
     const [importing,    setImporting]    = useState(false);
     const [importResult, setImportResult] = useState('');
@@ -251,7 +259,9 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
     const legacyVehicles  = settings?.dispatchVehicles  || [];
     const legacyEquipment = settings?.dispatchEquipment || [];
 
+    const loadSeq = useRef(0);   // two reads can be out at once (each card's save reads the fleet again): the last asked is the one shown
     const load = useCallback(async () => {
+        const seq = ++loadSeq.current;
         setLoading(true);
         setLoadError('');
         setTechsError('');
@@ -261,13 +271,17 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                 dbFetch('/.netlify/functions/dispatch-equipment'),
                 dbFetch('/.netlify/functions/dispatch-technicians'),
             ]);
+            if (seq !== loadSeq.current) return;
             // The technicians first, apart (§0.243): a refusal of theirs failed the whole load, so the
             // import card blamed the vehicles and equipment and refused an import that could run.
             // Their names stay as last read; the words say why they may be missing.
             if (!tRes.ok) {
-                setTechsError(`The technicians couldn't be read (${unstopped(await readRefusal(tRes))}), so who is assigned to what may not show. Refresh to try again.`);
+                const why = unstopped(await readRefusal(tRes));
+                if (seq !== loadSeq.current) return;
+                setTechsError(`The technicians couldn't be read (${why}), so who is assigned to what may not show. Refresh to try again.`);
             } else {
                 const tJson = await tRes.json().catch(() => null);
+                if (seq !== loadSeq.current) return;
                 if (tJson) setTechs(tJson.technicians || []);
                 else setTechsError("The technicians' answer couldn't be read, so who is assigned to what may not show. Refresh to try again.");
             }
@@ -278,10 +292,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             if (!vRes.ok) throw new Error(`The vehicles couldn't be read (${unstopped(await readRefusal(vRes))}).`);
             if (!eRes.ok) throw new Error(`The equipment couldn't be read (${unstopped(await readRefusal(eRes))}).`);
             const [vJson, eJson] = await Promise.all([vRes.json(), eRes.json()]);
+            if (seq !== loadSeq.current) return;
             setVehicles(vJson.vehicles    || []);
             setEquipment(eJson.equipment  || []);
             setFleetLoaded(true);
         } catch (err) {
+            if (seq !== loadSeq.current) return;
             setLoadError(failureWords(err));   // plain words — never "Failed to fetch" or a parse error's (§0.247)
             setFleetLoaded(false);
         }
@@ -308,10 +324,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
     const saveVehicle = async () => {
         if (!vDraft) return;
         if (!(vDraft.name || '').trim()) { setVError('Name is required.'); return; }
-        setBusy(true); setVError('');
+        setVBusy(true); setVError(''); setVSaid('');
+        let sentNew = null;
         try {
             const body = { ...vDraft, name: vDraft.name.trim() };
             delete body._isNew;
+            if (vDraft._isNew) sentNew = body;
             const url = vDraft._isNew
                 ? '/.netlify/functions/dispatch-vehicles'
                 : '/.netlify/functions/dispatch-vehicles?id=' + encodeURIComponent(vDraft.id);
@@ -322,21 +340,36 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             });
             // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
             // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
-            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change vehicles.'); throw refusalError(r.words, r.heard); }
+            if (!res.ok) {
+                const r = await writeRefusalOf(res, 'Your role cannot change vehicles.');
+                const held = sentNew ? heldCreate(res.status, r.body, 'vehicle', vDraft.id) : null;
+                if (!held) throw refusalError(r.words, r.heard);
+                // An earlier press of this create landed (state §0.291): what was changed since is an edit of it, to save.
+                const bodies = unproven.current[vDraft.id] || [];
+                const shown = overStored(body, held, bodies);
+                delete unproven.current[vDraft.id];
+                setVehicles(prev => [...prev.filter(x => x.id !== held.id), held]);   // shown though the read after it fails
+                await load();
+                if (shown.mine.length) { setVDraft(d => (d && d.id === held.id ? overStored({ ...d, name: (d.name || '').trim() }, held, bodies).draft : d)); setVError(keptSaid('The vehicle')); setVBusy(false); return; }
+                if (shown.differs) setVSaid(alreadySaid('The vehicle', 'created'));
+                setVDraft(null); setVBusy(false); return;
+            }
+            delete unproven.current[vDraft.id];
             await load();
             setVDraft(null);
         } catch (err) {
-            // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again upserts
-            // the same vehicle in this org (state §0.264, the unknown-save rule, Part 5).
+            // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again is answered
+            // with the vehicle it made (state §0.264, the unknown-save rule, Part 5; §0.291).
+            if (unknownOf(err)) keepSentNew(sentNew);
             setVError(thrownSaid(err, 'The vehicle', 'saved'));
         }
-        setBusy(false);
+        setVBusy(false);
     };
 
     const deleteVehicle = async () => {
-        if (!vDraft || vDraft._isNew) return;
+        if (!vDraft || vDraft._isNew || vBusy) return;
         if (vDraft.assignedTechId) { setVError('Unassign the technician before deleting this vehicle.'); return; }
-        setBusy(true); setVError('');
+        setVBusy(true); setVError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-vehicles?id=' + encodeURIComponent(vDraft.id), { method: 'DELETE' });
             // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status — never
@@ -347,7 +380,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         } catch (err) {
             setVError(thrownSaid(err, 'The vehicle', 'deleted'));   // maybe (state §0.264, the unknown-save rule, Part 5)
         }
-        setBusy(false);
+        setVBusy(false);
     };
 
     // ── Equipment writes ─────────────────────────────────────────────────────
@@ -355,10 +388,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         if (!eDraft) return;
         if (!(eDraft.name || '').trim())     { setEError('Name is required.'); return; }
         if (!(eDraft.category || '').trim()) { setEError('Category is required — job requirements point at it.'); return; }
-        setBusy(true); setEError('');
+        setEBusy(true); setEError(''); setESaid('');
+        let sentNew = null;
         try {
             const body = { ...eDraft, name: eDraft.name.trim(), category: eDraft.category.trim() };
             delete body._isNew;
+            if (eDraft._isNew) sentNew = body;
             const url = eDraft._isNew
                 ? '/.netlify/functions/dispatch-equipment'
                 : '/.netlify/functions/dispatch-equipment?id=' + encodeURIComponent(eDraft.id);
@@ -369,20 +404,35 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             });
             // The ok check first (§0.243): the server's words, else its status — never "HTTP N".
             // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
-            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change equipment.'); throw refusalError(r.words, r.heard); }
+            if (!res.ok) {
+                const r = await writeRefusalOf(res, 'Your role cannot change equipment.');
+                const held = sentNew ? heldCreate(res.status, r.body, 'item', eDraft.id) : null;
+                if (!held) throw refusalError(r.words, r.heard);
+                // An earlier press of this create landed (state §0.291): what was changed since is an edit of it, to save.
+                const bodies = unproven.current[eDraft.id] || [];
+                const shown = overStored(body, held, bodies);
+                delete unproven.current[eDraft.id];
+                setEquipment(prev => [...prev.filter(x => x.id !== held.id), held]);
+                await load();
+                if (shown.mine.length) { setEDraft(d => (d && d.id === held.id ? overStored({ ...d, name: (d.name || '').trim(), category: (d.category || '').trim() }, held, bodies).draft : d)); setEError(keptSaid('The equipment')); setEBusy(false); return; }
+                if (shown.differs) setESaid(alreadySaid('The equipment', 'created'));
+                setEDraft(null); setEBusy(false); return;
+            }
+            delete unproven.current[eDraft.id];
             await load();
             setEDraft(null);
         } catch (err) {
-            // An answer that proves nothing may have saved it: said so, the draft kept with its id (state §0.264, Part 5).
+            // An answer that proves nothing may have saved it: said so, the draft kept with its id (state §0.264, Part 5; §0.291).
+            if (unknownOf(err)) keepSentNew(sentNew);
             setEError(thrownSaid(err, 'The equipment', 'saved'));
         }
-        setBusy(false);
+        setEBusy(false);
     };
 
     const deleteEquipment = async () => {
-        if (!eDraft || eDraft._isNew) return;
+        if (!eDraft || eDraft._isNew || eBusy) return;
         if (eDraft.checkedOutJobId || eDraft.checkedOutToId) { setEError('Check this item in before deleting it.'); return; }
-        setBusy(true); setEError('');
+        setEBusy(true); setEError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-equipment?id=' + encodeURIComponent(eDraft.id), { method: 'DELETE' });
             // A 403 keeps the role's sentence (Q13); any other refusal the server's words, else its status (§0.247).
@@ -392,12 +442,12 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         } catch (err) {
             setEError(thrownSaid(err, 'The equipment', 'deleted'));   // maybe (state §0.264, the unknown-save rule, Part 5)
         }
-        setBusy(false);
+        setEBusy(false);
     };
 
     // ── One-time import from the retired settings blobs ──────────────────────
-    // Only what the tables do not hold yet is sent (Q7): the POSTs upsert, so a row sent again
-    // would replace an edited vehicle's make, VIN and service dates, or clear a unit's check-out.
+    // Only what the tables do not hold yet is sent (Q7). A row made meanwhile is answered with itself and left as it is (§0.291);
+    // two entries of the old list with one id are said — the second never is the first.
     // With no answered load, every row would look missing — it refuses and says so.
     const runImport = async () => {
         if (loadError || !fleetLoaded) { setImportError(IMPORT_UNREAD); return; }
@@ -416,23 +466,28 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         if (!plan.known) { setImportError(IMPORT_UNREAD); setImporting(false); return; }
         // A row the server refused was not imported; a row whose answer proved nothing may have been, said apart (state
         // §0.264, the unknown-save rule, Part 5; guide §18b134 rule 11) — a press again re-reads the tables first.
-        let ok = 0; const failed = []; const maybe = [];
+        let ok = 0, already = 0; const failed = []; const maybe = []; const ids = new Set();
+        const answered = async (res, key, row) => {
+            if (res.ok) { ok++; return; }
+            const r = await writeRefusalOf(res);
+            if (heldCreate(res.status, r.body, key, row.id)) { already++; return; }
+            (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`);
+        };
+        const twice = (row, table) => { if (!ids.has(table + row.id)) { ids.add(table + row.id); return false; } failed.push(`${row.name}: another entry of the old list has the same id`); return true; };
         for (const row of plan.vehicles) {
             if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
+            if (twice(row, 'vehicle ')) continue;
             try {
-                const res = await dbFetch('/.netlify/functions/dispatch-vehicles', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }
-                ok++;
+                await answered(await dbFetch('/.netlify/functions/dispatch-vehicles', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }), 'vehicle', row);
             } catch { maybe.push(`${row.name}: the server could not be reached`); }
         }
         for (const row of plan.equipment) {
             if (!stillOrg(askedOrg)) return;
+            if (twice(row, 'unit ')) continue;
             try {
-                const res = await dbFetch('/.netlify/functions/dispatch-equipment', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-                if (!res.ok) { const r = await writeRefusalOf(res); (r.heard ? failed : maybe).push(`${row.name}: ${unstopped(r.words)}`); continue; }
-                ok++;
+                await answered(await dbFetch('/.netlify/functions/dispatch-equipment', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }), 'item', row);
             } catch { maybe.push(`${row.name}: the server could not be reached`); }
         }
         await load();
@@ -440,12 +495,13 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         if (failed.length || maybe.length) {
             const listed = (rows) => `${rows.slice(0, 3).join('; ')}${rows.length > 3 ? '…' : ''}`;
             setImportError(`Imported ${ok} of ${plan.count}.`
+                + (already ? ` ${already} already in the tables.` : '')
                 + (failed.length ? ` ${failed.length} not imported — ${listed(failed)}.` : '')
                 + (maybe.length ? ` ${maybeSaid(`${maybe.length} record${maybe.length === 1 ? '' : 's'}`, 'imported', listed(maybe), maybe.length > 1)}.` : ''));
         } else {
             setImportResult(plan.count === 0
                 ? 'Nothing was missing: every entry of the old list is already in the tables.'
-                : `Imported ${ok} record${ok === 1 ? '' : 's'}.`);
+                : `Imported ${ok} record${ok === 1 ? '' : 's'}.${already ? ` ${already} already in the tables.` : ''}`);
         }
         setImporting(false);
     };
@@ -514,16 +570,26 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                     { key: 'more',   label: '',            w: '28px' },
                 ]} rows={vehicles.map(v => ({
                     name:   <span style={{ fontWeight: 600, color: T.ink, cursor: 'pointer' }}
-                                onClick={() => { setVDraft({ ...v }); setVError(''); }}>{v.name}</span>,
+                                onClick={() => { if (vBusy) return; setVDraft({ ...v }); setVError(''); }}>{v.name}</span>,
                     type:   <span style={{ fontSize: 12, color: T.inkMid }}>{labelise(v.type)}</span>,
                     plate:  <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{v.licensePlate || '—'}</span>,
                     tech:   <span style={{ fontSize: 12, color: T.inkMid }}>{techName(v.assignedTechId) || '—'}</span>,
                     status: <StatusPill status={v.status || 'available'}/>,
-                    more:   <RowMenuButton onOpen={() => { setVDraft({ ...v }); setVError(''); }}/>,
+                    more:   <RowMenuButton onOpen={() => { if (vBusy) return; setVDraft({ ...v }); setVError(''); }}/>,
                 }))}/>
                 {vehicles.length === 0 && !loading && (
                     <div style={{ padding: '14px 2px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
                         No vehicles yet.
+                    </div>
+                )}
+                {vSaid && (
+                    <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, padding: '8px 12px', background: T.surface2,
+                        border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 12, fontFamily: T.sans, color: T.ink }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>{vSaid}</span>
+                        <button onClick={() => setVSaid('')}
+                            style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                            Close
+                        </button>
                     </div>
                 )}
                 {vDraft ? (
@@ -531,13 +597,13 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                         <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 12, fontFamily: T.sans }}>
                             {vDraft._isNew ? 'New vehicle' : vDraft.name}
                         </div>
-                        <VehicleForm draft={vDraft} techs={techs} busy={busy} error={vError}
+                        <VehicleForm draft={vDraft} techs={techs} busy={vBusy} error={vError}
                             set={(k, val) => setVDraft(d => ({ ...d, [k]: val }))}
                             onSave={saveVehicle} onDelete={deleteVehicle}
-                            onCancel={() => { setVDraft(null); setVError(''); }}/>
+                            onCancel={() => { if (vBusy) return; setVDraft(null); setVError(''); }}/>
                     </div>
                 ) : (
-                    <button onClick={() => { setVDraft({ id: 'veh_' + crypto.randomUUID(), _isNew: true, name: '', type: 'van', status: 'available' }); setVError(''); }}
+                    <button onClick={() => { setVDraft({ id: 'veh_' + crypto.randomUUID(), _isNew: true, name: '', type: 'van', status: 'available', licensePlate: null, make: null, model: null, assignedTechId: null, odometer: null, notes: null }); setVError(''); }}
                         style={{ ...btnGhost, marginTop: 12, color: T.ink }}>+ Add vehicle</button>
                 )}
             </CSectionCard>
@@ -570,16 +636,26 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                     { key: 'more',   label: '',            w: '28px' },
                 ]} rows={equipment.map(e => ({
                     name:   <span style={{ fontWeight: 600, color: T.ink, cursor: 'pointer' }}
-                                onClick={() => { setEDraft({ ...e }); setEError(''); }}>{e.name}</span>,
+                                onClick={() => { if (eBusy) return; setEDraft({ ...e }); setEError(''); }}>{e.name}</span>,
                     cat:    <span style={{ fontSize: 12, color: T.inkMid }}>{e.category || '—'}</span>,
                     serial: <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{e.serialNumber || '—'}</span>,
                     out:    <span style={{ fontSize: 12, color: T.inkMid }}>{techName(e.checkedOutToId) || '—'}</span>,
                     status: <StatusPill status={e.status || 'available'}/>,
-                    more:   <RowMenuButton onOpen={() => { setEDraft({ ...e }); setEError(''); }}/>,
+                    more:   <RowMenuButton onOpen={() => { if (eBusy) return; setEDraft({ ...e }); setEError(''); }}/>,
                 }))}/>
                 {equipment.length === 0 && !loading && (
                     <div style={{ padding: '14px 2px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
                         No equipment yet.
+                    </div>
+                )}
+                {eSaid && (
+                    <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, padding: '8px 12px', background: T.surface2,
+                        border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 12, fontFamily: T.sans, color: T.ink }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>{eSaid}</span>
+                        <button onClick={() => setESaid('')}
+                            style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                            Close
+                        </button>
                     </div>
                 )}
                 {eDraft ? (
@@ -587,13 +663,13 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
                         <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 12, fontFamily: T.sans }}>
                             {eDraft._isNew ? 'New equipment item' : eDraft.name}
                         </div>
-                        <EquipmentForm draft={eDraft} categories={categories} techs={techs} busy={busy} error={eError}
+                        <EquipmentForm draft={eDraft} categories={categories} techs={techs} busy={eBusy} error={eError}
                             set={(k, val) => setEDraft(d => ({ ...d, [k]: val }))}
                             onSave={saveEquipment} onDelete={deleteEquipment}
-                            onCancel={() => { setEDraft(null); setEError(''); }}/>
+                            onCancel={() => { if (eBusy) return; setEDraft(null); setEError(''); }}/>
                     </div>
                 ) : (
-                    <button onClick={() => { setEDraft({ id: 'eq_' + crypto.randomUUID(), _isNew: true, name: '', category: '', status: 'available' }); setEError(''); }}
+                    <button onClick={() => { setEDraft({ id: 'eq_' + crypto.randomUUID(), _isNew: true, name: '', category: '', status: 'available', serialNumber: null, assetTag: null, nextCalibrationDate: null, checkedOutToId: null, notes: null }); setEError(''); }}
                         style={{ ...btnGhost, marginTop: 12, color: T.ink }}>+ Add item</button>
                 )}
             </CSectionCard>

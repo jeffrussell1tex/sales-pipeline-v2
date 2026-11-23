@@ -4,7 +4,8 @@
 // press again sends the same create (§0.263). Each was an upsert of the whole row: another member's change in between — a
 // job scheduled and given a crew, a customer marked do-not-service, an address's gate code — was written over by the
 // create's values, unchecked. Now each is a create: an id this org holds is 409 code 'idInUse' with the row as stored,
-// nothing written, before any link is asked; another org's id the words alone.
+// nothing written, before any link is asked; another org's id the words alone. Since §0.291 (Jeff, 23 Nov: "Fix the other
+// five") the five other Dispatch creates too: technicians, vehicles, equipment units, schedule blocks, service plans.
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST)
 if (!process.env.DATABASE_URL_TEST) {
@@ -54,7 +55,7 @@ let armed = null;
 const { QueryPromise } = await import('drizzle-orm');
 const realThen = QueryPromise.prototype.then;
 QueryPromise.prototype.then = function (ok, bad) {
-    if (armed && typeof this.toSQL === 'function' && /^select /.test(this.toSQL().sql) && /from "dispatch_(jobs|customers|service_locations)"/.test(this.toSQL().sql)) {
+    if (armed && typeof this.toSQL === 'function' && /^select /.test(this.toSQL().sql) && /from "dispatch_(jobs|customers|service_locations|technicians|vehicles|equipment|schedule_blocks|service_plans)"/.test(this.toSQL().sql)) {
         const h = armed; armed = null;
         return realThen.call(this, async (rows) => { await h(); return rows; }).then(ok, bad);
     }
@@ -63,7 +64,8 @@ QueryPromise.prototype.then = function (ok, bad) {
 const { db } = await import('../../db/index.js');
 const { handler: jobsFn } = await import('../../netlify/functions/dispatch-jobs.mjs');
 const { handler: custFn } = await import('../../netlify/functions/dispatch-customers.mjs');
-const { settings, dispatchJobs, dispatchJobStatusHistory, dispatchCustomers, dispatchServiceLocations, dispatchTechnicians, accounts, auditLog } = await import('../../db/schema.js');
+const FIVE_FN = Object.fromEntries(await Promise.all(['technicians', 'vehicles', 'equipment', 'schedule-blocks', 'service-plans'].map(async (f) => [f, (await import(`../../netlify/functions/dispatch-${f}.mjs`)).handler])));
+const { users, dispatchVehicles, dispatchEquipment, dispatchScheduleBlocks, dispatchServicePlans, settings, dispatchJobs, dispatchJobStatusHistory, dispatchCustomers, dispatchServiceLocations, dispatchTechnicians, accounts, auditLog } = await import('../../db/schema.js');
 const { eq, and } = await import('drizzle-orm');
 
 // ORG NAMESPACE: this file owns 'itest_dispatch_create_*', and only this file writes to it.
@@ -88,6 +90,11 @@ const cleanup = async () => {
         await db.delete(dispatchJobs).where(eq(dispatchJobs.orgId, o));
         await db.delete(dispatchServiceLocations).where(eq(dispatchServiceLocations.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
+        await db.delete(dispatchScheduleBlocks).where(eq(dispatchScheduleBlocks.orgId, o));
+        await db.delete(dispatchServicePlans).where(eq(dispatchServicePlans.orgId, o));
+        await db.delete(dispatchEquipment).where(eq(dispatchEquipment.orgId, o));
+        await db.delete(dispatchVehicles).where(eq(dispatchVehicles.orgId, o));
+        await db.delete(users).where(eq(users.orgId, o));
         await db.delete(dispatchTechnicians).where(eq(dispatchTechnicians.orgId, o));
         await db.delete(accounts).where(eq(accounts.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
@@ -250,5 +257,118 @@ test('a create that lands between the press\'s look and its insert: idInUse with
         assert.equal(landed, true, key + ': it landed after the look');
         assert.deepEqual([r.status, r.body.code, r.body[key]?.id], [409, 'idInUse', body.id], JSON.stringify(r.body));
         assert.equal((await rowOf(table, body.id))[key === 'job' ? 'title' : 'name'], 'Theirs', 'nothing written over it');
+    }
+});
+
+// ── §0.291: the five other creates ──
+// Each: its create as its screen sends it, what another member does to the row since (and what must stand), the key its
+// answer holds the row under, its words, its audit's entity and action.
+const FIVE = (tag) => [
+    { fn: 'technicians', key: 'technician', table: dispatchTechnicians, audit: 'dispatch_technician', words: 'That technician id is already in use.',
+        body: { id: ID('tech_' + tag), firstName: 'Ann', lastName: 'Lee', userId: null, email: '', phone: '', employmentType: 'employee', status: 'active', homeZip: '', skills: [], laborRate: null, overtimeRate: null, assignedVehicleId: null, notes: '', workingHours: {} },
+        moved: { userId: 'clerk_itest_dispatch_create_member_' + tag, status: 'on_leave', licenseLevel: 'master', notes: 'Back in May' } },
+    { fn: 'vehicles', key: 'vehicle', table: dispatchVehicles, audit: 'dispatch_vehicle', words: 'That vehicle id is already in use.',
+        body: { id: ID('veh_' + tag), name: 'Van 1', type: 'van', status: 'available' },
+        moved: { status: 'out_of_service', assignedTechId: ID('tech'), licensePlate: 'ABC 123' } },
+    { fn: 'equipment', key: 'item', table: dispatchEquipment, audit: 'dispatch_equipment', words: 'That equipment id is already in use.',
+        body: { id: ID('eq_' + tag), name: 'Gauge', category: 'hvac', status: 'available' },
+        moved: { status: 'checked_out', checkedOutToId: ID('tech'), checkedOutAt: new Date('2026-11-20T10:00:00Z'), serialNumber: 'S-9' } },
+    { fn: 'schedule-blocks', key: 'block', table: dispatchScheduleBlocks, audit: 'dispatch_block', words: 'That block id is already in use.',
+        body: { id: ID('blk_' + tag), techId: ID('tech'), blockType: 'pto', startDate: '2026-12-01', endDate: '2026-12-05', allDay: true, startTime: '', endTime: '', title: '', notes: '' },
+        moved: { endDate: '2026-12-02', blockType: 'sick', notes: 'Back early' } },
+    { fn: 'service-plans', key: 'plan', table: dispatchServicePlans, audit: 'dispatch_plan', words: 'That plan id is already in use.',
+        body: { id: ID('plan_' + tag), name: 'Gold', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed' },
+        moved: { active: false, price: '120.00', discountPercent: '10.00', notes: 'Retired' } },
+];
+
+test("§0.291 the five other creates: sent again over another member's change, each is 409 'idInUse' with the row as stored — nothing written, no second audit", async () => {
+    for (const c of FIVE('again')) {
+        const first = await post(FIVE_FN[c.fn], c.body, { role: 'Admin' });
+        assert.equal(first.status, 201, `${c.fn}: ${JSON.stringify(first.body)}`);
+        await db.update(c.table).set(c.moved).where(and(eq(c.table.id, c.body.id), eq(c.table.orgId, A)));
+        const stands = await rowOf(c.table, c.body.id);
+        const again = await post(FIVE_FN[c.fn], c.body, { role: 'Admin', user: 'clerk_itest_dispatch_create_two' });
+        assert.deepEqual(await rowOf(c.table, c.body.id), stands, `REGRESSION: ${c.fn}: a create sent again wrote over another member's change`);
+        assert.deepEqual([again.status, again.body.code, again.body.error, again.body[c.key]?.id], [409, 'idInUse', c.words, c.body.id], c.fn);
+        for (const [k, v] of Object.entries(c.moved)) if (typeof v === 'string') assert.equal(String(again.body[c.key][k]), v, `${c.fn}: ${k} as stored`);
+        assert.deepEqual(await auditsOf(c.body.id), [`${c.audit}.created`], c.fn);
+    }
+});
+
+test('§0.291 a technician create sent again names the member the login is as stored; a link gone or a login taken since is no refusal of a create that landed', async () => {
+    await db.insert(users).values({ id: ID('usr_mem'), orgId: A, clerkUserId: 'clerk_itest_dispatch_create_mem', name: 'Mem Ber', email: 'm@itest-dispatch-create.local', role: 'Technician', active: true });
+    const t = { ...FIVE('link')[0].body, userId: ID('usr_mem') };
+    const veh = FIVE('gone')[1].body, eq1 = { ...FIVE('gone')[2].body, checkedOutToId: ID('tech_away') }, blk = { ...FIVE('gone')[3].body, techId: ID('tech_away') };
+    await db.insert(dispatchTechnicians).values({ id: ID('tech_away'), orgId: A, firstName: 'A', lastName: 'Way' });
+    // The app's picker sends a member's app id ('usr_…'); this org's member is read by it.
+    const made = await post(FIVE_FN.technicians, { ...t, userId: 'clerk_itest_dispatch_create_mem' }, { role: 'Admin' });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    assert.equal(made.body.technician.memberId, ID('usr_mem'));
+    assert.equal((await post(FIVE_FN.vehicles, { ...veh, assignedTechId: ID('tech_away') }, { role: 'Admin' })).status, 201);
+    assert.equal((await post(FIVE_FN.equipment, eq1, { role: 'Admin' })).status, 201);
+    assert.equal((await post(FIVE_FN['schedule-blocks'], blk, { role: 'Admin' })).status, 201);
+    // Since: the technician they name is gone, and the login is another technician's.
+    await db.delete(dispatchTechnicians).where(and(eq(dispatchTechnicians.id, ID('tech_away')), eq(dispatchTechnicians.orgId, A)));
+    await db.update(dispatchTechnicians).set({ userId: null }).where(and(eq(dispatchTechnicians.id, t.id), eq(dispatchTechnicians.orgId, A)));
+    await db.insert(dispatchTechnicians).values({ id: ID('tech_taker'), orgId: A, firstName: 'T', lastName: 'Aker', userId: 'clerk_itest_dispatch_create_mem' });
+    for (const [f, body] of [['technicians', { ...t, userId: 'clerk_itest_dispatch_create_mem' }], ['vehicles', { ...veh, assignedTechId: ID('tech_away') }], ['equipment', eq1], ['schedule-blocks', blk]]) {
+        const r = await post(FIVE_FN[f], body, { role: 'Admin' });
+        assert.deepEqual([r.status, r.body.code], [409, 'idInUse'], `${f}: ${JSON.stringify(r.body)}`);
+    }
+    // Not held: the links are still asked, and the login.
+    for (const [f, body, status, field] of [['equipment', { ...FIVE('newlink')[2].body, checkedOutToId: ID('tech_away') }, 404, 'checkedOutToId'], ['service-plans', { ...FIVE('newlink')[4].body, discountPercent: 150 }, 400, 'discountPercent'], ['vehicles', { ...FIVE('newlink')[1].body, assignedTechId: ID('tech_away') }, 404, 'assignedTechId'], ['schedule-blocks', { ...FIVE('newlink')[3].body, techId: ID('tech_away') }, 404, 'techId'],
+        ['technicians', { ...FIVE('newlink')[0].body, userId: 'clerk_itest_dispatch_create_mem' }, 409, 'userId']]) {
+        const r = await post(FIVE_FN[f], body, { role: 'Admin' });
+        assert.deepEqual([r.status, r.body.field, r.body.code], [status, field, undefined], `${f}: ${JSON.stringify(r.body)}`);
+    }
+    // The held one names its member.
+    await db.update(dispatchTechnicians).set({ userId: null }).where(and(eq(dispatchTechnicians.id, ID('tech_taker')), eq(dispatchTechnicians.orgId, A)));
+    await db.update(dispatchTechnicians).set({ userId: 'clerk_itest_dispatch_create_mem' }).where(and(eq(dispatchTechnicians.id, t.id), eq(dispatchTechnicians.orgId, A)));
+    const named = await post(FIVE_FN.technicians, t, { role: 'Admin' });
+    assert.deepEqual([named.status, named.body.technician?.memberId, named.body.technician?.userId], [409, ID('usr_mem'), 'clerk_itest_dispatch_create_mem'], JSON.stringify(named.body));
+});
+
+test('§0.291 review: a block all day again after hours were typed is all day, its hours none — it was stored partial with no hours, blocking nothing; a partial one keeps both', async () => {
+    for (const [tag, sent, want] of [['again', { allDay: true, startTime: '08:00', endTime: '12:00' }, [true, null, null]], ['part', { allDay: false, startTime: '08:00', endTime: '12:00' }, [false, '08:00', '12:00']],
+        ['half', { allDay: false, startTime: '08:00', endTime: '' }, [true, null, null]], ['none', {}, [true, null, null]]]) {
+        const { allDay: _a, startTime: _s, endTime: _e, ...rest } = FIVE('day_' + tag)[3].body;
+        const r = await post(FIVE_FN['schedule-blocks'], { ...rest, ...sent }, { role: 'Admin' });
+        assert.equal(r.status, 201, JSON.stringify(r.body));
+        const row = await rowOf(dispatchScheduleBlocks, rest.id);
+        assert.deepEqual([row.allDay, row.startTime, row.endTime], want, tag);
+    }
+});
+
+test('§0.291 two of one create at once: one lands, the other is idInUse with it, one audit; one landed between the look and the insert the same', async () => {
+    for (const c of FIVE('pair')) {
+        const two = await Promise.all([0, 1].map(() => post(FIVE_FN[c.fn], c.body, { role: 'Admin' })));
+        assert.deepEqual(two.map((r) => r.status).sort(), [201, 409], `${c.fn}: ${JSON.stringify(two.map((r) => r.body))}`);
+        const lost = two.find((r) => r.status === 409).body;
+        assert.deepEqual([lost.code, lost[c.key]?.id], ['idInUse', c.body.id], c.fn);
+        assert.deepEqual(await auditsOf(c.body.id), [`${c.audit}.created`], c.fn);
+    }
+    for (const c of FIVE('between')) {
+        const theirs = { technicians: { firstName: 'Theirs', lastName: 'X' }, vehicles: { name: 'Theirs' }, equipment: { name: 'Theirs', category: 'x' }, 'schedule-blocks': { techId: ID('tech'), startDate: '2026-12-09', endDate: '2026-12-09' }, 'service-plans': { name: 'Theirs' } }[c.fn];
+        let landed = false;
+        armed = async () => { await db.insert(c.table).values({ id: c.body.id, orgId: A, ...theirs }).execute(); landed = true; };
+        const r = await post(FIVE_FN[c.fn], c.body, { role: 'Admin' });
+        assert.equal(landed, true, c.fn);
+        assert.deepEqual([r.status, r.body.code, r.body[c.key]?.id], [409, 'idInUse', c.body.id], `${c.fn}: ${JSON.stringify(r.body)}`);
+        const row = await rowOf(c.table, c.body.id);
+        for (const [k, v] of Object.entries(theirs)) assert.equal(row[k], v, `${c.fn}: nothing written over it`);
+        assert.deepEqual(await auditsOf(c.body.id), [], c.fn);
+    }
+});
+
+test("§0.291 another org's id: the words alone, no code, no row, nothing written in either org", async () => {
+    for (const c of FIVE('orgb')) {
+        const bBody = c.fn === 'schedule-blocks' ? { ...c.body, techId: ID('tech_b') } : c.body;
+        if (c.fn === 'schedule-blocks') await db.insert(dispatchTechnicians).values({ id: ID('tech_b'), orgId: B, firstName: 'B', lastName: 'T' });
+        assert.equal((await post(FIVE_FN[c.fn], bBody, { org: B, role: 'Admin' })).status, 201, c.fn);
+        const theirs = await rowOf(c.table, c.body.id, B);
+        const r = await post(FIVE_FN[c.fn], c.body, { role: 'Admin' });
+        assert.deepEqual([r.status, r.body], [409, { error: c.words }], c.fn);
+        assert.deepEqual([await rowOf(c.table, c.body.id, B), await rowOf(c.table, c.body.id, A)], [theirs, undefined], c.fn);
+        assert.deepEqual(await auditsOf(c.body.id), [], c.fn);
     }
 });

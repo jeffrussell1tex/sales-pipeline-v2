@@ -10,9 +10,10 @@
 //
 // Per-record saves, no "Save changes" button: a whole-object PUT would clobber a
 // concurrent edit, and these rows are referenced live by customers.
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
-import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid } from '../../../utils/refusalWords.js';
+import { readRefusal, failureWords, maybeSaid, writeRefusalOf, refusalError, unknownOf, thrownSaid, alreadySaid } from '../../../utils/refusalWords.js';
+import { heldCreate, overStored, keptSaid } from '../../../utils/createResend.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -236,9 +237,9 @@ const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSav
                 <button onClick={onSave} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>
                     {busy ? 'Saving…' : (draft._isNew ? 'Create plan' : 'Save plan')}
                 </button>
-                <button onClick={onCancel} style={btnGhost}>Cancel</button>
+                <button onClick={onCancel} disabled={busy} style={{ ...btnGhost, opacity: busy ? 0.6 : 1 }}>Cancel</button>
                 {!draft._isNew && (
-                    <button onClick={onDelete} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto' }}>Delete</button>
+                    <button onClick={onDelete} disabled={busy} style={{ ...btnGhost, color: T.danger, marginLeft: 'auto', opacity: busy ? 0.6 : 1 }}>Delete</button>
                 )}
                 {error && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger, fontFamily: T.sans }}>{error}</span>}
             </div>
@@ -254,6 +255,11 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
     const [draft,     setDraft]     = useState(null);
     const [busy,      setBusy]      = useState(false);
     const [error,     setError]     = useState('');
+    // A create answered with the plan an earlier press made, standing otherwise now: said, until its Close (§0.291).
+    const [saidPlan,  setSaidPlan]  = useState('');
+    // A new record's bodies whose answer proved nothing, by its id (state §0.291): any may be the one stored.
+    const unproven = useRef({});
+    const keepSentNew = (body) => { if (body) (unproven.current[body.id] = unproven.current[body.id] || []).push(body); };
 
     const [seeding, setSeeding] = useState(false);
     const [seedMsg, setSeedMsg] = useState('');
@@ -309,10 +315,12 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
         if (!draft) return;
         if (!(draft.name || '').trim()) { setError('Plan name is required.'); return; }
         if (draft.cadence === 'custom' && !draft.intervalDays) { setError('A custom cadence needs an interval in days.'); return; }
-        setBusy(true); setError('');
+        setBusy(true); setError(''); setSaidPlan('');
+        let sentNew = null;
         try {
             const body = { ...draft, name: draft.name.trim() };
             delete body._isNew;
+            if (draft._isNew) sentNew = body;
             const url = draft._isNew
                 ? '/.netlify/functions/dispatch-service-plans'
                 : '/.netlify/functions/dispatch-service-plans?id=' + encodeURIComponent(draft.id);
@@ -323,17 +331,33 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
             });
             // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
             // The role's sentence only for the server's own 403 (state §0.264, the unknown-save rule, Part 5).
-            if (!res.ok) { const r = await writeRefusalOf(res, 'Your role cannot change service plans.'); throw refusalError(r.words, r.heard); }
+            if (!res.ok) {
+                const r = await writeRefusalOf(res, 'Your role cannot change service plans.');
+                const held = sentNew ? heldCreate(res.status, r.body, 'plan', draft.id) : null;
+                if (!held) throw refusalError(r.words, r.heard);
+                // An earlier press of this create landed (state §0.291): what was changed since is an edit of it, to save.
+                const bodies = unproven.current[draft.id] || [];
+                // The interval as the server stores it: a named cadence's own days, whatever was typed under Custom before it.
+                const asStored = (b) => ({ ...b, intervalDays: b.cadence === 'custom' ? b.intervalDays : CADENCES.find(c => c.id === b.cadence)?.days ?? null });
+                const shown = overStored(asStored(body), held, bodies.map(asStored));
+                delete unproven.current[draft.id];
+                setPlans(prev => [...prev.filter(x => x.id !== held.id), held]);   // shown though the read after it fails
+                await load();
+                if (shown.mine.length) { setDraft(d => (d && d.id === held.id ? overStored(asStored({ ...d, name: (d.name || '').trim() }), held, bodies.map(asStored)).draft : d)); setError(keptSaid('The plan')); setBusy(false); return; }
+                if (shown.differs) setSaidPlan(alreadySaid('The plan', 'created'));
+                setDraft(null); setBusy(false); return;
+            }
+            delete unproven.current[draft.id];
             await load();
             setDraft(null);
-        // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again upserts the
-        // same plan in this org (state §0.264, the unknown-save rule, Part 5).
-        } catch (err) { setError(thrownSaid(err, 'The plan', 'saved')); }
+        // An answer that proves nothing may have saved it: said so, the draft kept with its id — a press again is answered
+        // with the plan it made (state §0.264, the unknown-save rule, Part 5; §0.291).
+        } catch (err) { if (unknownOf(err)) keepSentNew(sentNew); setError(thrownSaid(err, 'The plan', 'saved')); }
         setBusy(false);
     };
 
     const remove = async () => {
-        if (!draft || draft._isNew) return;
+        if (!draft || draft._isNew || busy) return;
         setBusy(true); setError('');
         try {
             const res = await dbFetch('/.netlify/functions/dispatch-service-plans?id=' + encodeURIComponent(draft.id), { method: 'DELETE' });
@@ -443,7 +467,7 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                 ]} rows={plans.map(p => ({
                     name:    <span style={{ fontWeight: 600, color: T.info, cursor: 'pointer', textDecoration: 'underline',
                                  textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}
-                                 onClick={() => { setDraft({ ...p }); setError(''); }}>{p.name}</span>,
+                                 onClick={() => { if (busy) return; setDraft({ ...p }); setError(''); }}>{p.name}</span>,
                     cadence: <span style={{ fontSize: 12, color: T.inkMid }}>{cadenceLabel(p.cadence)}</span>,
                     visits:  <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.visitsPerYear ?? '—'}</span>,
                     lead:    <span style={{ fontSize: 12, color: T.inkMid }} title={p.anchorMode === 'rolling' ? 'Rolling from last completed visit' : 'Fixed contract grid'}>
@@ -469,6 +493,16 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                     </div>
                 )}
 
+                {saidPlan && (
+                    <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, padding: '8px 12px', background: T.surface2,
+                        border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 12, fontFamily: T.sans, color: T.ink }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>{saidPlan}</span>
+                        <button onClick={() => setSaidPlan('')}
+                            style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                            Close
+                        </button>
+                    </div>
+                )}
                 {draft ? (
                     <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 12, fontFamily: T.sans }}>
@@ -478,10 +512,10 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                             holders={draft._isNew ? 0 : holdersOf(draft.id)} busy={busy} error={error}
                             set={(k, v) => setDraft(d => ({ ...d, [k]: v }))}
                             onSave={save} onDelete={remove}
-                            onCancel={() => { setDraft(null); setError(''); }}/>
+                            onCancel={() => { if (busy) return; setDraft(null); setError(''); }}/>
                     </div>
                 ) : (
-                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed' }); setError(''); }}
+                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed', description: null, visitTemplateId: null, includedHours: null, responseHours: null, price: null, billingPeriod: 'annual', discountPercent: null }); setError(''); }}
                         style={{ ...btnGhost, marginTop: 12, color: T.ink }}>+ New plan</button>
                 )}
             </CSectionCard>

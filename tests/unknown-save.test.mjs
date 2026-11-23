@@ -107,30 +107,88 @@ const CREATES = [
     ['leads', 'leads', 'newRow.id'], ['coaching-notes', 'coachingNotes', 'values.id'], ['export-dsr', 'dsrQueue', 'data.id'], ['export-schedules', 'exportSchedules', 'data.id'],
     ['lead-requests', 'leadClaimRequests', 'data.id'],
 ];
-// Dispatch's three (§0.290) answer the row as stored with the code: [file, the held look, table, key, its normaliser, the insert's answer].
+// Dispatch's eight (§0.290's three, §0.291's five) answer the row as stored with the code. The key its screens read, the noun its
+// words say and its normaliser are each the file's own (an equipment unit's answer is 'item'); row — what the normaliser is
+// handed; answer — the insert's answer; action — the one audit a create writes.
 const HELD_CREATES = [
-    ['dispatch-jobs', 'heldJob', 'dispatchJobs', 'job', 'normaliseJob', 'written'],
-    ['dispatch-customers', 'heldCustomer', 'dispatchCustomers', 'customer', 'normaliseCust', 'inserted'],
-    ['dispatch-customers', 'heldLocation', 'dispatchServiceLocations', 'location', 'normaliseLoc', 'inserted'],
+    { file: 'dispatch-jobs', name: 'heldJob', table: 'dispatchJobs', key: 'job', words: 'job', normalise: 'normaliseJob', answer: 'written', action: 'dispatch_job' },
+    { file: 'dispatch-customers', name: 'heldCustomer', table: 'dispatchCustomers', key: 'customer', words: 'customer', normalise: 'normaliseCust', answer: 'inserted', action: 'dispatch_customer' },
+    { file: 'dispatch-customers', name: 'heldLocation', table: 'dispatchServiceLocations', key: 'location', words: 'location', normalise: 'normaliseLoc', answer: 'inserted', action: 'dispatch_location' },
+    { file: 'dispatch-technicians', name: 'heldTechnician', table: 'dispatchTechnicians', key: 'technician', words: 'technician', normalise: 'normalise', answer: 'inserted', action: 'dispatch_technician',
+        row: '{ ...held, memberId }', member: '    const memberId = held ? await memberIdOf(orgId, held.userId) : null;\n' },   // the login's member, read in this org
+    { file: 'dispatch-vehicles', name: 'heldVehicle', table: 'dispatchVehicles', key: 'vehicle', words: 'vehicle', normalise: 'normalise', answer: 'inserted', action: 'dispatch_vehicle' },
+    { file: 'dispatch-equipment', name: 'heldEquipment', table: 'dispatchEquipment', key: 'item', words: 'equipment', normalise: 'normalise', answer: 'inserted', action: 'dispatch_equipment' },
+    { file: 'dispatch-schedule-blocks', name: 'heldBlock', table: 'dispatchScheduleBlocks', key: 'block', words: 'block', normalise: 'normalise', answer: 'inserted', action: 'dispatch_block' },
+    { file: 'dispatch-service-plans', name: 'heldPlan', table: 'dispatchServicePlans', key: 'plan', words: 'plan', normalise: 'normalise', answer: 'inserted', action: 'dispatch_plan' },
 ];
-test('WIRING (§0.290): a Dispatch create answers a taken id idInUse with the row as stored only for an id THIS org holds — before the write and after one that wrote nothing; another org\'s is the words alone', () => {
-    for (const [file, name, table, key, shape, answer] of HELD_CREATES) {
-        const s = read(`netlify/functions/${file}.mjs`);
-        const look = between(s, `async function ${name}(orgId, id) {`, '\n}');
-        assert.ok(look.includes(`    const [held] = await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n`), `REGRESSION: ${name} asks every org — another org's row answered`);
-        assert.ok(look.includes(`    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${key} id is already in use.', code: 'idInUse', ${key}: ${shape}(held) }) } : null;`), `${name}: the row as stored, with the code`);
-        assert.equal((look.match(/await db\./g) || []).length, 1, `${name}: one read, nothing written`);
-        // The create: the look and its answer, the insert on its id alone, the look again, the words alone.
-        const create = between(s, `const landed = await ${name}(orgId, data.id);`, `return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${key} id is already in use.' }) };`);
-        assert.ok(/^const landed = await \w+\(orgId, data\.id\);\n {12,16}if \(landed\) return landed;\n/.test(create), `${name}: answered at once`);
-        const wrote = create.indexOf(`.onConflictDoNothing({ target: ${table}.id }).returning();`);
-        assert.ok(wrote > 0, `${name}: a taken id writes nothing`);
-        const squeezed = create.slice(wrote).replace(/\s+/g, ' ');
-        assert.ok(squeezed.endsWith(`if (!${answer}) { const beside = await ${name}(orgId, data.id); if (beside) return beside; } if (!${answer}) `), `${name}: nothing written — the same create beside this one, else the words alone`);
-        assert.ok(!create.includes('onConflictDoUpdate'), `REGRESSION: ${name}'s create writes over the row it finds`);
-        assert.equal(s.split(`await ${name}(`).length - 1, 2, `${name}: awaited at both — a failed read is a 500, never an answer`);
-        assert.equal(s.split(`${name}(`).length - 1, 3, `${name}: its definition and the two`);
+const holdsCreate = (s, { name, table, key, words, normalise, answer, action, row = 'held', member = '' }) => {
+    const look = between(s, `async function ${name}(orgId, id) {`, '\n}');
+    assert.ok(look.includes(`    const [held] = await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n${member}`), `REGRESSION: ${name} asks every org — another org's row answered`);
+    assert.ok(look.includes(`    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.', code: 'idInUse', ${key}: ${normalise}(${row}) }) } : null;`), `${name}: the row as stored, with the code`);
+    assert.equal((look.match(/await db\./g) || []).length, 1, `${name}: one read of the row, nothing written`);
+    assert.equal((look.match(/\bawait\b/g) || []).length, member ? 2 : 1, `${name}: that read, and a technician's member alone`);
+    // The create: the look and its answer, the insert on its id alone, the look again, the words alone.
+    const create = between(s, `const landed = await ${name}(orgId, data.id);`, `return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.' }) };`);
+    assert.ok(/^const landed = await \w+\(orgId, data\.id\);\n {12,16}if \(landed\) return landed;\n/.test(create), `${name}: answered at once`);
+    const wrote = create.indexOf(`.onConflictDoNothing({ target: ${table}.id }).returning();`);
+    assert.ok(wrote > 0, `${name}: a taken id writes nothing`);
+    const squeezed = create.slice(wrote).replace(/\s+/g, ' ');
+    assert.ok(squeezed.endsWith(`if (!${answer}) { const beside = await ${name}(orgId, data.id); if (beside) return beside; } if (!${answer}) `), `${name}: nothing written — the same create beside this one, else the words alone`);
+    assert.ok(!create.includes('onConflictDoUpdate'), `REGRESSION: ${name}'s create writes over the row it finds`);
+    assert.equal(s.split(`await ${name}(`).length - 1, 2, `${name}: awaited at both — a failed read is a 500, never an answer`);
+    assert.equal(s.split(`${name}(`).length - 1, 3, `${name}: its definition and the two`);
+    // Audited as a create alone (§0.291): a press that wrote nothing is answered before it, and no create is an update any more.
+    const after = between(s.slice(s.indexOf(create)), `That ${words} id is already in use.' }) };\n`, 'return { statusCode: 201,');
+    assert.equal(after.split(`{ action: '${action}.created', `).length - 1, 1, `${name}: one audit, a create`);
+    assert.ok(!after.includes('.updated') && !/\bprior\b/.test(after), `REGRESSION: ${name}'s create audited as an update`);
+};
+// Moved in §0.291: extended to the five creates that followed §0.290's three, each assert as it was; a held look's one read is the
+// row's (a technician's also reads its login's member).
+test('WIRING (§0.290, §0.291): a Dispatch create answers a taken id idInUse with the row as stored only for an id THIS org holds — before the write and after one that wrote nothing; another org\'s is the words alone; audited as a create alone', () => {
+    assert.equal(HELD_CREATES.length, 8);
+    for (const spec of HELD_CREATES) {
+        const s = read(`netlify/functions/${spec.file}.mjs`);
+        holdsCreate(s, spec);
+        // Red with each line taken out, in memory: in the look, then in the create.
+        const { name, table, key, words, normalise, answer, action, row = 'held', member } = spec;
+        const look = `async function ${name}(`, create = `const landed = await ${name}(orgId, data.id);`;
+        const swaps = [
+            [look, `and(eq(${table}.id, id), eq(${table}.orgId, orgId))`, `eq(${table}.id, id)`],
+            [look, "code: 'idInUse', ", ''], [look, `${key}: ${normalise}(${row})`, `row: ${normalise}(${row})`], [look, `${normalise}(${row})`, 'held'],
+            [look, 'return held ? { statusCode: 409,', 'return held ? { statusCode: 200,'],
+            [create, 'const landed = await', 'const landed ='], [create, 'if (landed) return landed;', ''],
+            [create, `.onConflictDoNothing({ target: ${table}.id })`, `.onConflictDoUpdate({ target: ${table}.id, set: row })`],
+            [create, `.onConflictDoNothing({ target: ${table}.id })`, '.onConflictDoNothing()'],
+            [create, 'const beside = await', 'const beside ='], [create, 'if (beside) return beside;', ''],
+            [create, `if (!${answer}) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.' }) };`, ''],
+            [create, `action: '${action}.created'`, `action: prior ? '${action}.updated' : '${action}.created'`],
+            ...(member ? [[look, member, '    const memberId = null;\n'], [look, row, 'held']] : []),
+        ];
+        for (const [from, line, without] of swaps) {
+            const at = s.indexOf(from), i = s.indexOf(line, at);
+            assert.ok(at > -1 && i > -1 && i - at < 9000, `${name}: ${line}`);
+            assert.throws(() => holdsCreate(s.slice(0, i) + without + s.slice(i + line.length), spec), { code: 'ERR_ASSERTION' }, `${name}: a pin blind to: ${line}`);
+        }
     }
+});
+test('WIRING (§0.291): each screen takes the stored row by the key its server answers — a key that is not the server\'s reads as a refusal, the create never taken', () => {
+    const SCREENS = [
+        ['src/Tabs/DispatchTab.jsx', { customer: 2, location: 2, job: 1, technician: 1, block: 1 }],
+        ['src/Tabs/settings/dispatch/DispatchServicePlansDetail.jsx', { plan: 1 }],
+        ['src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx', { vehicle: 1, item: 1, key: 1 }],   // key: the old list's import, handed each
+    ];
+    const keys = new Set(HELD_CREATES.map((c) => c.key)), taken = new Set();
+    for (const [file, want] of SCREENS) {
+        const s = read(file), found = {};
+        for (const m of s.matchAll(/\bheldCreate\([^()]*?, (?:'(\w+)'|(key)), [\w.]+\)/g)) { const k = m[1] || m[2]; found[k] = (found[k] || 0) + 1; taken.add(k); }
+        assert.deepEqual(found, want, file);
+        assert.equal(s.split('heldCreate(').length - 1, Object.values(want).reduce((a, b) => a + b, 0), `${file}: each call read`);
+    }
+    taken.delete('key');
+    assert.deepEqual([...taken].sort(), [...keys].sort(), 'each key a server answers is taken on a screen, and no other');
+    const v = read('src/Tabs/settings/dispatch/DispatchVehiclesDetail.jsx');
+    const imported = [...v.matchAll(/await answered\(await dbFetch\('\/\.netlify\/functions\/(dispatch-\w+)', \{\n[^\n]*\}\), '(\w+)', row\);/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(imported, HELD_CREATES.filter((c) => ['dispatch-vehicles', 'dispatch-equipment'].includes(c.file)).map((c) => [c.file, c.key]), "the import's two, each by its own server's key");
 });
 test('WIRING: each create answers a taken id 409 in words, and says idInUse only for an id THIS org holds (ownIdTaken by id and org)', () => {
     const lib = read('netlify/functions/_lib.mjs');

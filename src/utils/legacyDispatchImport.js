@@ -6,10 +6,9 @@
 // dispatch_equipment tables.
 //
 // Each row's id is derived from its old entry's (`imp_<id>`, an equipment unit `imp_<id>_u<n>`),
-// and the two POSTs are designed upserts (§0.201): a row sent again REPLACES the stored one —
-// its make, VIN, service dates, a unit's check-out — with what the old list says. So the import
-// sends only the rows the tables do not hold yet: what the tables hold is never sent, and a
-// re-press changes nothing already imported. A row deleted after an import is missing again,
+// and the two POSTs are creates (§0.291): a row the tables hold is answered 'idInUse' and left
+// as it is. The import sends only the rows the tables do not hold yet, so a re-press changes
+// nothing already imported. A row deleted after an import is missing again,
 // so it counts again and a press makes it again (the answer's own words).
 //
 // What the tables hold is known only from a read that answered: with no read (a failed load,

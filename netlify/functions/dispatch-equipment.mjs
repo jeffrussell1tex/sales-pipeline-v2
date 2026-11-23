@@ -42,6 +42,16 @@ function normalise(row) {
     };
 }
 
+// A create's id this org holds already (state §0.291): an earlier press of the same create landed (its form keeps the id after
+// an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the unit as stored, for the
+// screen to take; nothing written. It was an upsert of the whole row: a check-out, a status, a serial
+// set in between by another member was written over. null when this org holds none — another org's id is the words alone.
+// Its callers await it: a failed read is the handler's 500, never an answer with no row.
+async function heldEquipment(orgId, id) {
+    const [held] = await db.select().from(dispatchEquipment).where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That equipment id is already in use.', code: 'idInUse', item: normalise(held) }) } : null;
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -75,10 +85,10 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id)   return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             if (!data.name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'name required' }) };
-            // The create is an upsert: a holder the unit already has is held (state §0.201).
-            const [prior] = await db.select({ id: dispatchEquipment.id, checkedOutToId: dispatchEquipment.checkedOutToId, checkedOutJobId: dispatchEquipment.checkedOutJobId })
-                .from(dispatchEquipment).where(and(eq(dispatchEquipment.id, data.id), eq(dispatchEquipment.orgId, orgId)));
-            const linked = await checkLinks(EQUIPMENT_LINKS, data, prior || null, orgId);
+            // A create only (state §0.291): an id this org holds is answered with its row before any link is asked.
+            const landed = await heldEquipment(orgId, data.id);
+            if (landed) return landed;
+            const linked = await checkLinks(EQUIPMENT_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
 
             const row = {
@@ -105,17 +115,15 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C).
-            const [inserted] = await db.insert(dispatchEquipment).values(row)
-                .onConflictDoUpdate({
-                    target: dispatchEquipment.id, setWhere: eq(dispatchEquipment.orgId, orgId),
-                    set: { ...row, createdAt: undefined },
-                }).returning();
-            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-            // that said the id was taken elsewhere (state §0.166).
+            const [inserted] = await db.insert(dispatchEquipment).values(row).onConflictDoNothing({ target: dispatchEquipment.id }).returning();
+            // Nothing written: the same create landed beside this one, or another org holds the id — the words alone (state §0.166).
+            if (!inserted) {
+                const beside = await heldEquipment(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That equipment id is already in use.' }) };
 
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, auth.userId, { action: prior ? 'dispatch_equipment.updated' : 'dispatch_equipment.created', entityType: 'dispatch_equipment', entityId: inserted.id, entityName: inserted.name, detail: [inserted.category, inserted.assetTag].filter(Boolean).join(' · ') || null });
+            await auditAs(orgId, auth.userId, { action: 'dispatch_equipment.created', entityType: 'dispatch_equipment', entityId: inserted.id, entityName: inserted.name, detail: [inserted.category, inserted.assetTag].filter(Boolean).join(' · ') || null });
             return { statusCode: 201, headers, body: JSON.stringify({ item: normalise(inserted) }) };
         }
 
