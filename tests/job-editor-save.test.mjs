@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as JC from '../src/utils/jobChanges.js';
 import { writeRefusalOf, refusalError, saidError, maybeSaid, thrownSaid } from '../src/utils/refusalWords.js';
+import { heldCreate } from '../src/utils/createResend.js';
 
 const { editorFields, jobChanges, sentOf, seenIn, movedWords, pressLanded, sameAppointment } = JC;
 
@@ -59,21 +60,26 @@ const libWithout = (piece, put) => new Function(`${without(code(read('src/utils/
 return { jobChanges, editorFields, jobAnswerOf, sentOf, rebaseDraft, appointmentDropped };`)();
 
 // One editor, opened on `job`: `type` into its draft (or its address, `loc`), `press` its Save over one answer → the job body sent
-// (null when none was); the address step's own answer is `address`.
+// (null when none was); the address step's own answer is `address`, or what it answers each request. Moved in §0.290: the ids an
+// address may have been made under outlive a press (newLocIds was a new object each), and how each address was sent is recorded.
 const editorOf = (job, src = SAVE, lib = JC) => {
     const ed = { opened: { current: { ...job } }, draft: { ...job }, selected: job, saved: [], status: null, loc: null, sentAddresses: [],
-        address: { status: 200, body: { location: { id: 'loc9' } } } };
+        newLocIds: { current: {} }, maybeLocIds: { current: new Set() }, address: { status: 200, body: { location: { id: 'loc9' } } } };
     ed.type = (typed) => { ed.draft = { ...ed.draft, ...typed }; return ed; };
     ed.at = (loc) => { ed.loc = loc; return ed; };
     ed.press = async (answer) => {
         let body = null;
-        const names = ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'stillOrg', 'dbFetch', 'newLocIds', 'setLoc', 'opened', 'selected', 'jobChanges',
+        const names = ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'stillOrg', 'dbFetch', 'newLocIds', 'maybeLocIds', 'heldCreate', 'setLoc', 'opened', 'selected', 'jobChanges',
             'editorFields', 'jobAnswerOf', 'sentOf', 'rebaseDraft', 'appointmentDropped', 'writeRefusalOf', 'refusalError', 'saidError', 'maybeSaid', 'thrownSaid', 'onSaved', 'setDraft', 'setSelectedId'];
         const save = new Function(...names, `${src}\nreturn save;`)(ed.draft, ed.loc, (v) => { ed.status = v; }, () => {}, () => 'org_a', () => true,
             async (url, o) => {
-                if (url.includes('resource=locations')) { ed.sentAddresses.push(JSON.parse(o.body)); return answerOf(ed.address.status, ed.address.body); }
+                if (url.includes('resource=locations')) {
+                    const sent = JSON.parse(o.body); ed.sentAddresses.push({ ...sent, method: o.method, url });
+                    const a = typeof ed.address === 'function' ? ed.address(sent, o) : ed.address;
+                    return answerOf(a.status, a.body);
+                }
                 body = JSON.parse(o.body); return typeof answer === 'function' ? answer(body) : answer;
-            }, { current: {} }, (f) => { ed.loc = f(ed.loc); }, ed.opened, ed.selected,
+            }, ed.newLocIds, ed.maybeLocIds, heldCreate, (f) => { ed.loc = f(ed.loc); }, ed.opened, ed.selected,
             lib.jobChanges, lib.editorFields, lib.jobAnswerOf, lib.sentOf, lib.rebaseDraft, lib.appointmentDropped, writeRefusalOf, refusalError, saidError, maybeSaid, thrownSaid,
             (j) => { ed.saved.push(j); ed.selected = j; }, (f) => { ed.draft = typeof f === 'function' ? f(ed.draft) : f; }, () => {});
         await save();
@@ -272,4 +278,141 @@ test('a landed Save over another member’s appointment still keeps a start type
     assert.deepEqual(sent, { id: 'j1', title: 'Boiler (rush)' });
     assert.deepEqual(ed.status, { kind: 'ok', msg: 'Saved' });
     assert.equal(ed.draft.scheduledStart, '13:00'); assert.equal(ed.draft.scheduledDate, '2026-09-18');
+});
+
+// ── RUN (state §0.290): the address step sends a create again with its id, and takes what an earlier press made. ──
+const TYPED = { id: null, address: '1 Main St', city: 'Austin', state: 'TX', zip: '' };
+const MAYBE = 'The address may have been saved';   // how an answer that proved nothing is said
+const madeOf = (sent) => ({ id: sent.id, customerId: sent.customerId, name: sent.name, address: sent.address, city: sent.city, state: sent.state, zip: sent.zip, gateCode: null });
+// The server's locations POST and PUT (dispatch-customers.mjs), one row an id: `lost` answers are 500s over a write that landed.
+const locations = (lost = []) => {
+    const rows = new Map(); let n = 0;
+    const answer = (sent, { method }) => {
+        const dead = lost.includes(n++);
+        if (method === 'POST' && rows.has(sent.id)) return { status: 409, body: { error: 'That location id is already in use.', code: 'idInUse', location: rows.get(sent.id) } };
+        if (method === 'PUT' && !rows.has(sent.id)) return { status: 404, body: { error: 'Not found' } };
+        rows.set(sent.id, { ...rows.get(sent.id), ...madeOf(sent) });
+        return dead ? { status: 500, body: {} } : { status: method === 'POST' ? 201 : 200, body: { location: rows.get(sent.id) } };
+    };
+    return Object.assign(answer, { rows });
+};
+
+test('an address whose first press proved nothing is sent again with its id, and taken as made — never made twice, never sent over the one made — RUN', async () => {
+    const ed = editorOf({ ...JOB, customerId: 'c1' }).at(TYPED);
+    ed.address = locations([0]);
+    assert.equal(await ed.press(server(JOB)), null, 'the job is not sent after an address that may not be there');
+    assert.ok(ed.status.msg.startsWith(MAYBE), ed.status.msg); assert.equal(ed.loc.id, null);
+    const id = ed.sentAddresses[0].id;
+    const body = await ed.press(server(JOB));
+    assert.deepEqual(ed.sentAddresses.map((a) => [a.id, a.method]), [[id, 'POST'], [id, 'POST']], 'REGRESSION: the same create, its id — and nothing written over the address made');
+    assert.deepEqual(body, { id: 'j1', locationId: id }, 'the job linked to the address an earlier press made');
+    assert.deepEqual(ed.status, { kind: 'ok', msg: 'Saved' }); assert.equal(ed.loc.id, id);
+    assert.equal(ed.address.rows.size, 1);
+    // Shown red, each line out: the record not read, its refusal is said over an address that stands; the id not kept, a second is made.
+    const deaf = editorOf({ ...JOB, customerId: 'c1' }, without(SAVE, "held = loc.id ? null : heldCreate(lres.status, r.body, 'location', locId);")).at(TYPED);
+    deaf.address = locations([0]);
+    await deaf.press(server(JOB));
+    assert.equal(await deaf.press(server(JOB)), null);
+    assert.deepEqual(deaf.status, { kind: 'err', msg: 'The address was not saved — That location id is already in use.' });
+    const twice = editorOf({ ...JOB, customerId: 'c1' }, without(SAVE, "(newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID())", "'dloc_' + crypto.randomUUID()")).at(TYPED);
+    twice.address = locations([0]);
+    await twice.press(server(JOB)); await twice.press(server(JOB));
+    assert.equal(twice.address.rows.size, 2);
+});
+
+test('an address typed otherwise since the press that made it is saved onto the one made, before the job — and its refusal is said, its id kept — RUN', async () => {
+    const ed = editorOf({ ...JOB, customerId: 'c1' }).at(TYPED);
+    ed.address = locations([0]);
+    await ed.press(server(JOB));
+    const id = ed.sentAddresses[0].id;
+    ed.at({ ...ed.loc, address: ' 2 Main St ', zip: '78701' });
+    const body = await ed.press(server(JOB));
+    assert.deepEqual(ed.sentAddresses.slice(1).map((a) => [a.id, a.method, a.address, a.zip]), [[id, 'POST', '2 Main St', '78701'], [id, 'PUT', '2 Main St', '78701']]);
+    assert.ok(ed.sentAddresses[2].url.endsWith(`&id=${id}`), 'the PUT names the address made');
+    assert.deepEqual(body, { id: 'j1', locationId: id }); assert.equal(ed.address.rows.get(id).address, '2 Main St');
+    assert.deepEqual(ed.status, { kind: 'ok', msg: 'Saved' });
+    // Each field alone counts; a blank state and none are one value.
+    for (const [k, v] of [['address', '3 Main St'], ['city', 'Waco'], ['state', ''], ['zip', '78702']]) {
+        const one = editorOf({ ...JOB, customerId: 'c1' }).at(TYPED);
+        one.address = locations([0]);
+        await one.press(server(JOB)); one.at({ ...TYPED, [k]: v }); await one.press(server(JOB));
+        assert.deepEqual(one.sentAddresses.map((a) => a.method), ['POST', 'POST', 'PUT'], k);
+    }
+    // Its PUT refused, or proving nothing: said, the job not sent, and the next press sends the same id again.
+    for (const [status, why, said] of [[400, { error: 'No such city.' }, 'The address was not saved — No such city.'], [500, {}, MAYBE]]) {
+        const no = editorOf({ ...JOB, customerId: 'c1' }).at(TYPED), real = locations([0]);
+        no.address = real;
+        await no.press(server(JOB));
+        no.address = (sent, o) => (o.method === 'PUT' ? { status, body: why } : real(sent, o));
+        no.at({ ...TYPED, address: '2 Main St' });
+        assert.equal(await no.press(server(JOB)), null);
+        assert.ok(no.status.kind === 'err' && no.status.msg.startsWith(said), no.status.msg); assert.equal(no.loc.id, null);
+        no.address = real;
+        assert.deepEqual(await no.press(server(JOB)), { id: 'j1', locationId: no.sentAddresses[0].id });
+        assert.equal(real.rows.size, 1);
+    }
+    // Shown red: the compare out, the address the member corrected is left as first typed, "Saved" said over it.
+    const red = editorOf({ ...JOB, customerId: 'c1' }, without(SAVE, "['address', 'city', 'state', 'zip'].some(k => (loc[k] || '').trim() !== (held[k] || ''))", 'false')).at(TYPED);
+    red.address = locations([0]);
+    await red.press(server(JOB)); red.at({ ...TYPED, address: '2 Main St' }); await red.press(server(JOB));
+    assert.deepEqual([red.status.msg, [...red.address.rows.values()][0].address], ['Saved', '1 Main St']);
+    const unsaid = editorOf({ ...JOB, customerId: 'c1' }, without(SAVE, ' held = null; }\n', ' }\n')).at(TYPED), real = locations([0]);
+    unsaid.address = real;
+    await unsaid.press(server(JOB));
+    unsaid.address = (sent, o) => (o.method === 'PUT' ? { status: 400, body: { error: 'No such city.' } } : real(sent, o));
+    unsaid.at({ ...TYPED, address: '2 Main St' }); await unsaid.press(server(JOB));
+    assert.equal(unsaid.status.msg, 'Saved', 'shown red: a refused correction said saved');
+});
+
+test("an address's id is given up on the server's own refusal of its first press alone; one that may have landed keeps its id; another record's answer proves nothing — RUN", async () => {
+    const press = async (answers, src = SAVE) => {
+        const ed = editorOf({ ...JOB, customerId: 'c1' }, src).at(TYPED);
+        for (const [status, body] of answers) { ed.address = (sent) => ({ status, body: typeof body === 'function' ? body(sent) : body }); await ed.press(server(JOB)); }
+        return { ids: ed.sentAddresses.map((a) => a.id), said: ed.status.msg, loc: ed.loc };
+    };
+    const OK = [201, (sent) => ({ location: { id: sent.id } })], LOST = [500, {}], NO = [400, { error: 'No such customer.' }];
+    const first = await press([NO, OK]);
+    assert.equal(new Set(first.ids).size, 2, 'refused at once: nothing was made, its id given up');
+    const later = await press([LOST, NO, OK]);
+    assert.equal(new Set(later.ids).size, 1, 'REGRESSION: a refusal after a press that may have landed gave its id up — a second address');
+    assert.equal(new Set((await press([LOST, NO, OK], without(SAVE, 'if (r.heard && !mayBe) {', 'if (r.heard) {'))).ids).size, 2, 'shown red');
+    assert.equal(new Set((await press([LOST, NO, OK], without(SAVE, 'if (!loc.id) maybeLocIds.current.add(locId);'))).ids).size, 2, 'shown red: never marked as maybe made');
+    // Refused first and its id forgotten with it: the next press's own id is its own.
+    assert.equal(new Set((await press([NO, LOST, OK])).ids).size, 2);
+    // Another org's id (no code), and a record of another id: refused in words, never taken as made.
+    for (const body of [{ error: 'That location id is already in use.' }, { error: 'That location id is already in use.', code: 'idInUse', location: { id: 'dloc_other' } }]) {
+        const other = await press([LOST, [409, body]]);
+        assert.equal(other.said, 'The address was not saved — That location id is already in use.'); assert.equal(other.loc.id, null);
+    }
+    // An address the form already holds is a PUT, whose refusal is never read as a create that landed.
+    const held = editorOf({ ...JOB, customerId: 'c1', locationId: 'loc5' }).at({ ...TYPED, id: 'loc5' });
+    held.address = () => ({ status: 409, body: { error: 'In use.', code: 'idInUse', location: { id: 'loc5' } } });
+    assert.equal(await held.press(server(JOB)), null);
+    assert.deepEqual(held.sentAddresses.map((a) => [a.id, a.method]), [['loc5', 'PUT']]);
+    assert.equal(held.status.msg, 'The address was not saved — In use.');
+});
+
+test("another job picked while the address is out: the Save's job is sent as it was opened, and the other job's form never takes this address — RUN", async () => {
+    const OTHER = { ...JOB, id: 'j2', title: 'Chiller', status: 'on_site' }, SHOWN = { id: null, address: '', city: '', state: '', zip: '' };
+    const run = async (src, held = false) => {
+        const ed = editorOf({ ...JOB, customerId: 'c1' }, src).at(TYPED), real = locations(held ? [0] : []);
+        ed.type({ title: 'Boiler (rush)' });
+        ed.address = real;
+        if (held) await ed.press(server(JOB));
+        ed.address = (sent, o) => { ed.opened.current = { ...OTHER }; ed.draft = { ...OTHER }; ed.loc = { ...SHOWN }; return real(sent, o); };
+        const body = await ed.press(server(JOB));
+        return { body, loc: ed.loc, id: ed.sentAddresses[0].id, draft: ed.draft, opened: ed.opened.current };
+    };
+    for (const held of [false, true]) {
+        const r = await run(SAVE, held);
+        assert.deepEqual(r.body, { id: 'j1', title: 'Boiler (rush)', locationId: r.id }, "REGRESSION: the job's changes read against the other job");
+        assert.deepEqual(r.loc, SHOWN, "REGRESSION: the other job's form holds this job's address — its next Save would be saved over it");
+        assert.deepEqual([r.draft, r.opened], [OTHER, OTHER]);
+    }
+    // Shown red: the base read after the address step (every field the two differ in sent over this job); the address set whatever is shown.
+    const BASE = "        const base = opened.current || draft;";
+    assert.ok(SAVE.includes(BASE) && SAVE.indexOf(BASE) < SAVE.indexOf('let lres = await sendAddress('), 'the job as opened, read before the address step');
+    const late = without(without(SAVE, BASE), '            const body = jobChanges(editorFields(base', `    ${BASE}\n            const body = jobChanges(editorFields(base`);
+    assert.equal((await run(late)).body.fromStatus, 'on_site');
+    assert.notEqual((await run(without(SAVE, ' && opened.current?.id === draft.id) { delete', ') { delete'))).loc.id, null);
 });

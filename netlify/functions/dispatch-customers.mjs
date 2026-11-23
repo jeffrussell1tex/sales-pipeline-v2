@@ -24,6 +24,20 @@ async function accountTaken(orgId, accountId, selfId) {
 }
 const takenReply = (other) => ({ statusCode: 409, headers, body: JSON.stringify({ error: accountInDispatch(other), field: 'accountId' }) });
 
+// A create's id this org holds already (state §0.290): an earlier press of the same create landed (its screen keeps the id
+// after an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the row as stored, for the
+// screen to take; nothing written. Each was an upsert of the whole row: another member's do-not-service, plan or gate code
+// set in between was written over. null when this org holds no such row — another org's id is the words alone. Their
+// callers await them: a failed read is the handler's 500, never an answer with no row.
+async function heldCustomer(orgId, id) {
+    const [held] = await db.select().from(dispatchCustomers).where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That customer id is already in use.', code: 'idInUse', customer: normaliseCust(held) }) } : null;
+}
+async function heldLocation(orgId, id) {
+    const [held] = await db.select().from(dispatchServiceLocations).where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That location id is already in use.', code: 'idInUse', location: normaliseLoc(held) }) } : null;
+}
+
 // A customer's CRM account: a live account of this org when a write names it anew (state §0.199) — and since
 // §0.201 its service plan and preferred technician.
 const CUSTOMER_LINKS = [
@@ -42,8 +56,7 @@ const headers = {
 // Human-readable per-org customer number, e.g. CUST-0001. Assigned SERVER-SIDE
 // only: two reps creating customers at the same moment would otherwise generate
 // the same number client-side. Immutable once set — the PUT whitelist below
-// deliberately omits customerNumber, and POST (an upsert) reuses any existing
-// value rather than reissuing one.
+// deliberately omits customerNumber, and POST is a create (state §0.290).
 // Previously this selected EVERY customer row in the org and found the maximum in
 // JS. Fine at hundreds, wasteful at tens of thousands, and it grew with the table
 // on every single create.
@@ -176,13 +189,14 @@ export const handler = async (event) => {
                 if (!data.id || !data.customerId || !data.name || !data.address || !data.city) {
                     return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, name, address, city required' }) };
                 }
+                // A create only (state §0.290): an id this org holds is answered with its location before its customer is asked.
+                const landed = await heldLocation(orgId, data.id);
+                if (landed) return landed;
                 // A location belongs to one of this org's customers (state §0.166) — the
                 // id it names was taken as given.
                 const [ownCust] = await db.select({ id: dispatchCustomers.id }).from(dispatchCustomers)
                     .where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));
                 if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };
-                const [priorLoc] = await db.select({ id: dispatchServiceLocations.id }).from(dispatchServiceLocations)
-                    .where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));
                 const row = {
                     id:            data.id,
                     orgId,
@@ -207,12 +221,15 @@ export const handler = async (event) => {
                 // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
                 // took (census-D §2C).
                 const [inserted] = await db.insert(dispatchServiceLocations).values(row)
-                    .onConflictDoUpdate({ target: dispatchServiceLocations.id, setWhere: eq(dispatchServiceLocations.orgId, orgId), set: { ...row, createdAt: undefined } }).returning();
-                // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-                // that said the id was taken elsewhere (state §0.166).
+                    .onConflictDoNothing({ target: dispatchServiceLocations.id }).returning();
+                // Nothing written: the same create landed beside this one, or another org holds the id — the words alone
+                // (state §0.166; this crashed, a 500 that said the id was taken elsewhere).
+                if (!inserted) {
+                    const beside = await heldLocation(orgId, data.id);
+                    if (beside) return beside;
+                }
                 if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That location id is already in use.' }) };
-                // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-                await auditAs(orgId, auth.userId, { action: priorLoc ? 'dispatch_location.updated' : 'dispatch_location.created', entityType: 'dispatch_customer', entityId: inserted.customerId, entityName: inserted.name, detail: [inserted.address, inserted.city].filter(Boolean).join(', ') || null });
+                await auditAs(orgId, auth.userId, { action: 'dispatch_location.created', entityType: 'dispatch_customer', entityId: inserted.customerId, entityName: inserted.name, detail: [inserted.address, inserted.city].filter(Boolean).join(', ') || null });
                 return { statusCode: 201, headers, body: JSON.stringify({ location: normaliseLoc(inserted) }) };
             }
 
@@ -259,17 +276,15 @@ export const handler = async (event) => {
             if (!data.id || !data.name) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
             }
-            // Reuse the number on upsert; never accept one from the client.
-            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId,
-                servicePlanId: dispatchCustomers.servicePlanId, preferredTechId: dispatchCustomers.preferredTechId })
-                .from(dispatchCustomers)
-                .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
-            // Its account, plan and preferred technician, named anew, are this org's (state §0.199, §0.201); the
-            // create is an upsert, so one the customer already holds is not asked again.
-            const linked = await checkLinks(CUSTOMER_LINKS, data, priorCust || null, orgId);
+            // A create only (state §0.290): an id this org holds is answered with its customer before any link is asked — its own
+            // account is no "already in Dispatch".
+            const landed = await heldCustomer(orgId, data.id);
+            if (landed) return landed;
+            // Its account, plan and preferred technician are this org's (state §0.199, §0.201).
+            const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             Object.assign(data, linked.set);
-            if (data.accountId && data.accountId !== priorCust?.accountId) {
+            if (data.accountId) {
                 const other = await accountTaken(orgId, data.accountId, data.id);
                 if (other) return takenReply(other);
             }
@@ -315,18 +330,19 @@ export const handler = async (event) => {
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C).
             const inserted = await withNumberRetry(async () => {
-                const customerNumber = priorCust?.customerNumber || await nextCustomerNumber(orgId);
-                const row = buildRow(customerNumber);
-                const [upserted] = await db.insert(dispatchCustomers).values(row)
-                    .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } })
-                    .returning();
-                return upserted;
+                // On its id alone: a number taken meanwhile is the retry's, never a create that wrote nothing.
+                const [made] = await db.insert(dispatchCustomers).values(buildRow(await nextCustomerNumber(orgId)))
+                    .onConflictDoNothing({ target: dispatchCustomers.id }).returning();
+                return made;
             }, { label: 'customer number' });
-            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
-            // that said the id was taken elsewhere (state §0.166).
+            // Nothing written: the same create landed beside this one, or another org holds the id — the words alone (state
+            // §0.166; this crashed, a 500 that said the id was taken elsewhere).
+            if (!inserted) {
+                const beside = await heldCustomer(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That customer id is already in use.' }) };
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, auth.userId, { action: priorCust ? 'dispatch_customer.updated' : 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.customerNumber}${inserted.customerType ? ' · ' + inserted.customerType : ''}` });
+            await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.customerNumber}${inserted.customerType ? ' · ' + inserted.customerType : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ customer: normaliseCust(inserted) }) };
         }
 

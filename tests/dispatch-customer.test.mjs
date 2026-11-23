@@ -551,8 +551,13 @@ test('the readers: quote -> job, the placeholder, New Job\'s field and Save, the
     assert.ok(d.includes('setNewJobForm(f => withoutTemplate(appliedTemplate.prevForm, f)); setAppliedTemplate(null);'));
     assert.ok(d.includes('    const takenBy = new Map((customers || []).filter(c => c.accountId && c.id !== draft?.id).map(c => [c.accountId, c]));'), 'the customer being edited never takes its own account');
     assert.ok(d.includes('            if (address && newJobForm.madeLocation?.key === locKey) locationId = newJobForm.madeLocation.id;'), 'a retry reuses the location');
-    assert.ok(d.includes("                    setNewJobForm(f => ({ ...f, customer: createdCust?.name || custLabel, customerId, accountId: createdCust?.accountId || custAccountId || '',"),
+    // Moved in §0.290: the account is the made customer's alone — one the server refused and the create left off was put back
+    // on the form, and on the job.
+    assert.ok(d.includes("                    setNewJobForm(f => ({ ...f, customer: createdCust?.name || custLabel, customerId, accountId: createdCust?.accountId || '',"),
         'the made customer is the form\'s: a retry reuses it');
+    // §0.290: a customer an earlier press made is taken as stored — and listed once.
+    assert.ok(d.includes("                        const cheld = heldCreate(r.status, refused, 'customer', newCustId);   // an earlier press made it\n                        if (cheld) { cdata = { customer: cheld }; return { ok: true, status: r.status }; }\n"), 'REGRESSION: an earlier press\'s customer said as refused');
+    assert.ok(d.includes('                setCustomers(prev => [...prev.filter(c => c.id !== createdCust.id), createdCust]);\n'), 'REGRESSION: a customer an earlier press made, loaded since, listed twice');
     assert.ok(d.includes('                if (stillOrg(askedOrg)) setNewJobForm(f => ({ ...f, madeLocation: { id: locationId, key: locKey } }));'), 'and the made location');
     assert.ok(d.includes('{unarchived(accounts).map(a => <option key={a.id} value={a.id} disabled={takenBy.has(a.id)}>{accountOptionLabel(a, accountsById, takenBy)}</option>)}'));
 
@@ -597,7 +602,11 @@ test('the readers: quote -> job, the placeholder, New Job\'s field and Save, the
     assert.ok(s.includes("const takenReply = (other) => ({ statusCode: 409, headers, body: JSON.stringify({ error: accountInDispatch(other), field: 'accountId' }) });"), 'refused: 409, naming the customer, on the account field');
     assert.ok(s.includes('.where(and(eq(dispatchCustomers.orgId, orgId), eq(dispatchCustomers.accountId, accountId), ne(dispatchCustomers.id, selfId)))'),
         "another customer of THIS org — never the customer being saved");
-    assert.ok(s.includes('            if (data.accountId && data.accountId !== priorCust?.accountId) {'), 'the create: an account named anew');
+    // Reversed in §0.290: the create was an upsert, the account its row held not asked again; every account it names is asked —
+    // and a press sent again is answered with its customer first, so its own account is no "already in Dispatch".
+    const made = s.slice(s.indexOf('            const landed = await heldCustomer(orgId, data.id);'), s.indexOf('const [made] = await db.insert(dispatchCustomers)'));
+    assert.ok(s.includes('const [made] = await db.insert(dispatchCustomers)') && made.startsWith('            const landed = await heldCustomer(orgId, data.id);\n            if (landed) return landed;\n')
+        && made.includes('            if (data.accountId) {\n                const other = await accountTaken(orgId, data.accountId, data.id);\n                if (other) return takenReply(other);\n            }\n'), 'the create: the held look, then every account it names, before the insert');
     assert.ok(s.includes('                if (data.accountId && data.accountId !== held.accountId) {'), 'the edit: an account named anew');
 
     const h = read('src/components/layout/AppHeader.jsx');

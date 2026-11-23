@@ -9,6 +9,7 @@ const o = { orgId: 'org_a' };
 const TECH = { dispatch_technicians: [{ id: 'tech_me', ...o, userId: 'user_me', firstName: 'Ana', lastName: 'Field', status: 'active' }] };
 const CUST = { dispatch_customers: [{ id: 'x1', ...o, name: 'Acme Plant', customerNumber: 'CUST-0001' }] };
 const LOC = { dispatch_service_locations: [{ id: 'x1', ...o, customerId: 'x1', name: 'Dock 4', address: '1 Main St', city: 'Dallas' }] };
+const LOC_BODY = { id: 'x1', customerId: 'x1', name: 'Dock 4', address: '1 Main St', city: 'Dallas' };
 const EQUIP = { dispatch_equipment: [{ id: 'x1', ...o, name: 'Recovery unit', category: 'hvac', status: 'available' }] };
 const JOB = { dispatch_jobs: [{ id: 'x1', ...o, jobNumber: 'JOB-2026-0001', customerId: 'c1', title: 'Tune-up', trade: 'hvac', jobType: 'maintenance', status: 'scheduled', assignedTechId: 'tech_me', coTechIds: '[]', updatedAt: '2026-11-20 10:00:00', stamp: '2026-11-20 10:00:00' }] };
 const JOB_OF_ANOTHER = { dispatch_jobs: [{ ...JOB.dispatch_jobs[0], assignedTechId: 'tech_other' }] };
@@ -21,13 +22,15 @@ const DRAFT = { invoices: [{ id: 'x1', ...o, jobId: 'x1', invoiceNumber: 'INV-20
 const AUDIT = { audit_log: [{ id: 'aud_1', ...o, action: 'update', entityType: 'account', entityId: 'x1' }] };
 
 // Who the Dispatch gate lets in, per method: a rep refused, Admin, Manager and Dispatcher in, a Technician and ReadOnly
-// reading only; then a rep let in where the org opens Dispatch to reps.
-const gate = (what, rows, { post, put, del, get = {} } = {}) => [
+// reading only; then a rep let in where the org opens Dispatch to reps. own: the table a create asks whether the org holds its
+// id already (state §0.290) — its reads answer none and its insert the row made.
+const creating = (own, rows) => (own ? ({ kind, table }) => (kind === 'select' && table === own ? [] : rows[table] || []) : rows);
+const gate = (what, rows, { post, put, del, get = {}, own } = {}) => [
     { what: `${what}: Dispatch on - reads`, method: 'GET', qs: get, rows: { ...ON, ...TECH, ...JOB, ...rows } },
-    ...(post ? [{ what: `${what}: Dispatch on - creates`, method: 'POST', qs: {}, body: post, rows: { ...ON, ...TECH, ...rows } }] : []),
+    ...(post ? [{ what: `${what}: Dispatch on - creates`, method: 'POST', qs: {}, body: post, rows: creating(own, { ...ON, ...TECH, ...rows }) }] : []),
     ...(put ? [{ what: `${what}: Dispatch on - changes`, method: 'PUT', qs: { id: 'x1' }, body: put, rows: { ...ON, ...TECH, ...rows } }] : []),
     ...(del ? [{ what: `${what}: Dispatch on - deletes`, method: 'DELETE', qs: { id: 'x1' }, rows: { ...ON, ...TECH, ...rows } }] : []),
-    { what: `${what}: Dispatch open to reps - a rep in`, method: post ? 'POST' : 'GET', qs: {}, body: post, rows: { ...OPEN, ...TECH, ...JOB, ...rows } },
+    { what: `${what}: Dispatch open to reps - a rep in`, method: post ? 'POST' : 'GET', qs: {}, body: post, rows: creating(own, { ...OPEN, ...TECH, ...JOB, ...rows }) },
 ];
 const unlinked = (what, rows, qs = {}) => ({ what: `${what}: a Technician with no technician row linked reads nothing`, method: 'GET', qs, rows: { ...ON, ...rows, dispatch_technicians: [] } });
 
@@ -51,9 +54,18 @@ const off = { what: 'Dispatch off: everyone refused, an Admin too', method: 'GET
 export const REQUESTS = {
     'dispatch-customers': [
         off,
-        ...gate('customers', CUST, { post: { id: 'x1', name: 'Acme Plant' }, put: { name: 'Acme Plant 2' }, del: true }),
+        ...gate('customers', CUST, { post: { id: 'x1', name: 'Acme Plant' }, put: { name: 'Acme Plant 2' }, del: true, own: 'dispatch_customers' }),
         { what: 'locations: Dispatch on - reads', method: 'GET', qs: { resource: 'locations' }, rows: { ...ON, ...TECH, ...JOB, ...LOC } },
         unlinked('customers', CUST),
+        // A create's id the org holds (state §0.290): its record before any link is asked — the account and the customer these
+        // name are none of the org's, which a link asked first would answer 404; a caller the gate refuses is refused all the same.
+        { what: 'customers: a create whose id the org holds (409)', method: 'POST', qs: {}, body: { id: 'x1', name: 'Acme Plant', accountId: 'acc_gone' }, rows: { ...ON, ...TECH, ...CUST } },
+        { what: 'customers: a create whose id the org holds (409), Dispatch open to reps', method: 'POST', qs: {}, body: { id: 'x1', name: 'Acme Plant', accountId: 'acc_gone' }, rows: { ...OPEN, ...TECH, ...CUST } },
+        { what: 'locations: Dispatch on - creates', method: 'POST', qs: { resource: 'locations' }, body: LOC_BODY, rows: creating('dispatch_service_locations', { ...ON, ...TECH, ...CUST, ...LOC }) },
+        { what: 'locations: Dispatch open to reps - a rep in', method: 'POST', qs: { resource: 'locations' }, body: LOC_BODY, rows: creating('dispatch_service_locations', { ...OPEN, ...TECH, ...CUST, ...LOC }) },
+        { what: 'locations: a create for a customer the org does not hold (404)', method: 'POST', qs: { resource: 'locations' }, body: LOC_BODY, rows: creating('dispatch_service_locations', { ...ON, ...TECH, ...LOC }) },
+        { what: 'locations: a create whose id the org holds (409)', method: 'POST', qs: { resource: 'locations' }, body: LOC_BODY, rows: { ...ON, ...TECH, ...LOC } },
+        { what: 'locations: a create whose id the org holds (409), Dispatch open to reps', method: 'POST', qs: { resource: 'locations' }, body: LOC_BODY, rows: { ...OPEN, ...TECH, ...LOC } },
     ],
     'dispatch-equipment': [
         off,
@@ -62,8 +74,12 @@ export const REQUESTS = {
     ],
     'dispatch-jobs': [
         off,
-        ...gate('jobs', JOB, { post: { id: 'x1', customerId: 'c1', title: 'Tune-up' }, put: { title: 'Tune-up 2' }, del: true }),
+        // The customer a create names is the org's: a new job's is asked (state §0.290).
+        ...gate('jobs', { ...JOB, dispatch_customers: [{ id: 'c1', ...o, name: 'Acme Plant' }] }, { post: { id: 'x1', customerId: 'c1', title: 'Tune-up' }, put: { title: 'Tune-up 2' }, del: true, own: 'dispatch_jobs' }),
         unlinked('jobs', JOB),
+        // As the customers': the account it names is none of the org's, and is never asked.
+        { what: 'a create whose id the org holds (409)', method: 'POST', qs: {}, body: { id: 'x1', customerId: 'c1', title: 'Tune-up', accountId: 'acc_gone' }, rows: { ...ON, ...TECH, ...JOB } },
+        { what: 'a create whose id the org holds (409), Dispatch open to reps', method: 'POST', qs: {}, body: { id: 'x1', customerId: 'c1', title: 'Tune-up', accountId: 'acc_gone' }, rows: { ...OPEN, ...TECH, ...JOB } },
         { what: 'a Technician reads no job they are not on (404)', method: 'GET', qs: { id: 'x1' }, rows: { ...ON, ...TECH, ...JOB_OF_ANOTHER } },
         { what: 'a Technician reads a job they are on', method: 'GET', qs: { id: 'x1' }, rows: { ...ON, ...TECH, ...JOB } },
         { what: 'line items: a Technician reads none of a job they are not on', method: 'GET', qs: { resource: 'lineitems', jobId: 'x1' }, rows: { ...ON, ...TECH, ...JOB_OF_ANOTHER, ...LINE } },

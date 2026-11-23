@@ -264,6 +264,16 @@ async function missedOfficeJob(orgId, id, updates, saw) {
     return { statusCode: 409, headers, body: JSON.stringify({ error: movedWords(now, saw), job, code: 'stale' }) };
 }
 
+// A create's id this org holds already (state §0.290): an earlier press of the same create landed (New Job keeps its id after
+// an answer that proved nothing, §0.263), or two pressed at once — 409 code 'idInUse' with the job as stored, for the
+// screen to take; nothing written. It was an upsert of the whole row: another member's schedule and crew given in between
+// were written over. null when this org holds no such job — another org's id is the words alone. Its callers await it: a
+// failed read is the handler's 500, never an answer with no job.
+async function heldJob(orgId, id) {
+    const [held] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.', code: 'idInUse', job: normaliseJob(held) }) } : null;
+}
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -409,14 +419,12 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };
             }
 
-            // POST is an upsert, so reuse any number already issued for this id
-            // rather than reissuing one — job numbers are immutable.
-            const [priorJob] = await db.select()
-                .from(dispatchJobs)
-                .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
-            // Each link it names anew is one of this org's; the create is an upsert, so one the job
-            // already holds is not asked again (state §0.199).
-            const linked = await checkLinks(JOB_LINKS, data, priorJob || null, orgId);
+            // A create only (state §0.290): an id this org holds is answered with its job before any link is asked — one deleted
+            // since is no refusal of a create that landed.
+            const landed = await heldJob(orgId, data.id);
+            if (landed) return landed;
+            // Each link it names is one of this org's (state §0.199).
+            const linked = await checkLinks(JOB_LINKS, data, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             Object.assign(data, linked.set);
 
@@ -472,45 +480,34 @@ export const handler = async (event) => {
                 tags:             JSON.stringify(data.tags         ?? []),
                 customFields:     JSON.stringify(data.customFields ?? {}),
                 // Who made it is the caller, stamped here — the body named anyone
-                // (state §0.172) — and POST is an upsert, so a re-POST of a job keeps
-                // the first create's. Nothing stamps dispatchedBy: the status
+                // (state §0.172). Nothing stamps dispatchedBy: the status
                 // history records who moved each status, server-side.
-                createdBy:        priorJob ? (priorJob.createdBy ?? null) : (userId ?? null),
-                dispatchedBy:     priorJob ? (priorJob.dispatchedBy ?? null) : null,
+                createdBy:        userId ?? null,
+                dispatchedBy:     null,
                 createdAt:        new Date(),
                 updatedAt:        new Date(),
             });
 
             const { row, written } = await withNumberRetry(async () => {
-                const jobNumber = priorJob?.jobNumber || await nextJobNumber(orgId);
-                const r = buildRow(jobNumber);
-                // The three invoice_* columns mirror the job's live invoice and are
-                // written by invoices.mjs alone (§18b44); quote_id by quote-to-job.mjs.
-                // An upsert of an existing job must leave all four as they are.
-                const [w] = await db.insert(dispatchJobs).values(r)
-                    .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId),
-                        set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } })
-                    .returning();
+                const r = buildRow(await nextJobNumber(orgId));
+                // On its id alone: a number taken meanwhile is the retry's, never a create that wrote nothing.
+                const [w] = await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();
                 return { row: r, written: w };
             }, { label: 'job number' });
 
-            // A job id another org holds (state §0.166): the upsert writes nothing
-            // for it, and the status history, customer notice and audit below went
-            // on regardless — the first as a stray row against that org's job,
-            // before a crash on the missing row (a 500 that said the id was taken
-            // elsewhere). The row is this org's, or the create is refused — the upsert's own answer (state §0.268).
+            // Nothing written: the same create landed beside this one (this org's, answered with its job), or another org holds
+            // the id (state §0.166 — the status history, customer notice and audit below went on regardless): the words alone.
+            if (!written) {
+                const beside = await heldJob(orgId, data.id);
+                if (beside) return beside;
+            }
             if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };
 
-            // A create sent again with its id (New Job keeps one id across its presses — state §0.263) is an upsert of the
-            // job it made: "Job created" once, by the press that made it; a re-POST that moved the status records that
-            // move as a PUT does (state §0.266).
-            if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
-            else if (row.status !== priorJob.status) await recordStatusChange(orgId, data.id, priorJob.status, row.status, userId, null);
+            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
             // A job created already scheduled confirms the appointment (§0.111).
-            await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
+            await notifyCustomer({ orgId, before: null, after: written, actorName: await getCallerName(userId, orgId) });
             const inserted = await jobAfterNotice(orgId, data.id, written);
-            // A create sent again with its id is an update of the row it made (state §0.266): audited so, never a second create.
-            await auditAs(orgId, userId, { action: priorJob ? 'dispatch_job.updated' : 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
+            await auditAs(orgId, userId, { action: 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
 
             return { statusCode: 201, headers, body: JSON.stringify({ job: normaliseJob(inserted) }) };
         }

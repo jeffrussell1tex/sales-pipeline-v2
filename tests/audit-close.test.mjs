@@ -151,9 +151,17 @@ test('public API: every field a resource answers with, and every column it filte
 
 test('dispatch-jobs: createdBy is the caller’s, kept across a re-POST; no body sets it or dispatchedBy', () => {
     const s = code(read('netlify/functions/dispatch-jobs.mjs'));
-    assert.ok(s.includes('createdBy:        priorJob ? (priorJob.createdBy ?? null) : (userId ?? null),'));
-    assert.ok(s.includes('dispatchedBy:     priorJob ? (priorJob.dispatchedBy ?? null) : null,'));
-    assert.ok(s.includes('.where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));'), 'the prior row, in this org');
+    // Reversed in §0.290: the create was an upsert that kept the prior row's maker; it is a create only — a job this org holds
+    // is answered, nothing written, so its maker stays the first press's.
+    const post = between(s, "'id, customerId, title required'", "if (event.httpMethod === 'PUT')");
+    assert.ok(post.includes('createdBy:        userId ?? null,'), 'the caller');
+    assert.ok(post.includes('dispatchedBy:     null,'), 'nothing stamps dispatchedBy');
+    const heldJob = between(s, 'async function heldJob(orgId, id) {', '\n}');
+    assert.ok(heldJob.includes('.from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));'), 'the held row, in this org');
+    before(post, 'const landed = await heldJob(orgId, data.id);', 'if (landed) return landed;', 'answered by the held look');
+    before(post, 'if (landed) return landed;', 'await db.insert(dispatchJobs)', 'REGRESSION: a re-POST reaches the insert');
+    assert.ok(post.includes('await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();'), 'two at once: the second writes nothing');
+    assert.ok(!post.includes('onConflictDoUpdate'), 'REGRESSION: a re-POST rewrites who made the job');
     const fields = between(s, 'const scalarFields = [', '];');
     assert.ok(!/'createdBy'|'dispatchedBy'/.test(fields), 'REGRESSION: an edit rewrites who made the job');
     assert.ok(!/data\.(createdBy|dispatchedBy)/.test(s), 'REGRESSION: the body names who made it');

@@ -85,9 +85,10 @@ import { quoteTotals } from '../src/utils/quoteTotals.js';
 import { quoteMoneyRows } from '../src/utils/quoteMoneyRows.js';
 import { fmtMoney, isLiveInvoice } from '../src/utils/invoices.js';
 import { esc, to12h } from '../src/utils/customerNotifications.js';
-import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, movedWords, JOB_STATUSES } from '../src/utils/jobChanges.js';
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, movedWords, jobHolds, JOB_STATUSES } from '../src/utils/jobChanges.js';
+import { heldCreate, overStored } from '../src/utils/createResend.js';
 import { T } from '../src/tokens.js';
-import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid, writeRefusal, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore, alreadySaid, maybeSaid, writeRefusal, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid } from '../src/utils/refusalWords.js';
 import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
 import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { maybeSettingsError, settingsSaid } from '../src/Tabs/settings/shared/saveSettings.js';
@@ -2043,13 +2044,17 @@ test('Part 6a/6b: WIRING — the banner above every view, kept until its Close; 
     // Moved in §0.263 (the unknown-save rule, Part 4): and the helpers that tell the server's own refusal from an answer
     // that proves nothing; the jobs that may have been returned said by maybeFreedWords.
     // Moved in §0.278: and landedBefore — the job card's press beaten by one in flight that made the same change is done.
-    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore } from '../utils/refusalWords.js';"));
+    // Moved in §0.290: and alreadySaid — a create answered with the record an earlier press made; and the two helpers that
+    // read that answer (createResend.js), the real ones the RUN tests hand in.
+    assert.ok(d.includes("import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore, alreadySaid } from '../utils/refusalWords.js';"));
+    assert.ok(d.includes("import { heldCreate, overStored } from '../utils/createResend.js';"));
     assert.ok(d.includes("import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';"));
     // Added in §0.286: the office saves' one rule, the real helpers (the RUN tests hand in these same exports).
     // Moved in §0.286's review: and sentOf (a landed press whose answer cannot be read, kept as sent).
     // Moved in §0.289: and seenOf (the week drag names where the board saw the job), listOf (whose crew a stale job has),
     // appointmentDropped (the editor's refused appointment) and the statuses the app knows.
-    assert.ok(d.includes("import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, JOB_STATUSES as KNOWN_STATUSES } from '../utils/jobChanges.js';"));
+    // Moved in §0.290: and jobHolds — whether the job an earlier press made stands as this press sent it.
+    assert.ok(d.includes("import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobHolds, jobAnswerOf, sentOf, seenOf, listOf, JOB_STATUSES as KNOWN_STATUSES } from '../utils/jobChanges.js';"));
     const save = between(d, '    const saveBlock = async (blk, unassignJobIds = []) => {', '\n    };');
     // Moved in §0.263 (the unknown-save rule, Part 4): a refusal carries whether it was the server's own (refusalError);
     // an unreadable landed block is said in full (saidError); an unassign refused in the server's words is notFreed, any
@@ -5074,16 +5079,25 @@ test('Part 11: the schedule and the held crew — an answer after an org switch,
 });
 
 // The customer and technician saves (CustomersView, TechniciansView), extracted and run.
-const custSave = async ({ answer, switchAt = -1, isNew = false }) => {
-    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [], editing: [] };
+// Since §0.290 a new customer's Save answered 'idInUse' with the customer an earlier press made takes it (heldCreate,
+// overStored — the real ones): `unproven` (its bodies whose answer proved nothing, handed in so presses share it), `shown`
+// (the form still on screen), `adopting`, `savingRef` and the banner above every view (`onSaid`). `over` is the form as
+// typed; `whileOut` is typed into it as the request goes out; `edit` changes one line, in memory alone (the red runs).
+const custSave = async ({ answer, switchAt = -1, isNew = false, over = {}, unproven = { current: {} }, shown = true, whileOut = null, edit = null }) => {
+    const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [], editing: [], said: [], outRef: [] };
     const org = { now: 'org_a' };
-    const draft = { ...(isNew ? { _isNew: true } : {}), id: 'cust_1', name: ' Acme ', accountId: '', preferredTechId: '', servicePlanId: '', planStartDate: '' };
-    const save = p10Fn(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.name || '').trim())", '\n    };',
-        ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords', ...U4_NAMES], 'save')(
-        draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a', p11Fetch(did, answer, org, { switchAt }), (o) => o === org.now, readRefusal,
-        (c) => did.saved.push(c), (v) => did.drafts.push(v), (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords, ...U4);
+    const draft = { ...(isNew ? { _isNew: true } : {}), id: 'cust_1', name: ' Acme ', accountId: '', preferredTechId: '', servicePlanId: '', planStartDate: '', ...over };
+    const draftNow = stateOf(draft);
+    const savingRef = { current: false }, adopting = { current: null };
+    const fetch = p11Fetch(did, () => { did.outRef.push(savingRef.current); if (whileOut) draftNow.set((d) => ({ ...d, ...whileOut })); return answer; }, org, { switchAt });
+    const save = p10Edited(DISPATCH, "    const save = async () => {\n        if (!draft || !(draft.name || '').trim())", '\n    };', edit,
+        ['draft', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'stillOrg', 'readRefusal', 'onSaved', 'setDraft', 'setSelectedId', 'setEditing', 'failureWords', ...U4_NAMES,
+            'savingRef', 'heldCreate', 'overStored', 'alreadySaid', 'unproven', 'shownRef', 'adopting', 'onSaid'], 'save')(
+        draft, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a', fetch, (o) => o === org.now, readRefusal,
+        (c) => did.saved.push(c), (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, (v) => did.selected.push(v), (v) => did.editing.push(v), failureWords, ...U4,
+        savingRef, heldCreate, overStored, alreadySaid, unproven, { current: shown }, adopting, (t) => did.said.push(t));
     await save();
-    return did;
+    return { ...did, unproven, held: savingRef.current, adopting: adopting.current };
 };
 const techSave = async ({ answer, switchAt = -1 }) => {
     const did = { sent: [], statuses: [], saving: [], saved: [], drafts: [], selected: [] };
@@ -5109,6 +5123,9 @@ test('Part 11: the customer and technician saves — each refusal in the house w
             assert.deepEqual([did.saved, did.editing, did.drafts], [[], [], []], 'the form stays open as typed, nothing listed');
             assert.equal(did.sent[0][1], isNew ? 'POST' : 'PUT');
             assert.equal(did.sent[0][2].id, 'cust_1', 'the form\'s own id sent');
+            // Added in §0.290: held while its request is out, and no longer; a create that may have landed is remembered as sent.
+            assert.deepEqual([did.outRef, did.held, did.saving, did.said], [[true], false, [true, false], []]);
+            assert.deepEqual(did.unproven.current, isNew && !heard ? { cust_1: [did.sent[0][2]] } : {}, `the body an unproven create sent (${said})`);
         }
     }
     for (const [answer, words, heard] of p11Writes('Your role cannot change technicians.')) {
@@ -5138,6 +5155,78 @@ test('Part 11: the customer and technician saves — landed, as stored; an unrea
         onceOf(200, { technician: { id: 'dtech_1', firstName: 'Ann', lastName: 'Lee' } })]) {
         const ts = await techSave({ answer, switchAt: 0 });
         assert.deepEqual([ts.statuses, ts.saved, ts.drafts], [[null], [], []], 'technician: REGRESSION — an answer from the org left said or written');
+    }
+});
+
+// Added in §0.290 (Jeff, 23 Nov: "Fix New Job resend"): a new customer's Save whose earlier press landed is answered with the
+// customer as stored, nothing written — what this member changed since shows over it, as an edit to save knowingly.
+test('§0.290 Part 11: the customer\'s Save — a create an earlier press made: as stored, what was changed since in the form, said above every view when the form is gone; never a row it did not send — RUN', async () => {
+    const IN_USE = (customer, status = 409) => onceOf(status, { error: 'That customer id is already in use.', code: 'idInUse', ...(customer ? { customer } : {}) });
+    const STORED = Object.freeze({ id: 'cust_1', name: 'Acme', accountId: null, preferredTechId: null, servicePlanId: null, planStartDate: null, customerNumber: 'CUST-0007', doNotService: false });
+    const SAID = 'The customer was already created by an earlier press.';
+    const press = async (extra, held, { over = {}, sent = [UNSENT()], ...rest } = {}) => {
+        const unproven = { current: {} };
+        const typed = { name: 'Acme', ...over };
+        for (const answer of sent) await custSave({ answer, isNew: true, unproven, over: typed });
+        return custSave({ answer: IN_USE(held), isNew: true, unproven, over: { ...typed, ...extra }, ...rest });
+    };
+    // As stored: this press's customer — nothing said, the form closed on the row as stored, the bodies remembered dropped.
+    const same = await press({}, STORED);
+    assert.deepEqual([same.saved, same.selected, same.editing, same.statuses, same.said, same.drafts], [[STORED], ['cust_1'], [false], [null, { kind: 'ok', msg: 'Saved.' }], [], [null]],
+        'REGRESSION: a create that landed said as refused, or another row than the one stored listed');
+    assert.deepEqual([same.sent.length, same.unproven.current, same.held, same.saving], [1, {}, false, [true, false]], 'one request: nothing written over it');
+    // Another member changed it since, this one did not: theirs stands, said.
+    const THEIRS = Object.freeze({ ...STORED, name: 'Acme Inc', doNotService: true });
+    const theirs = await press({}, THEIRS, { over: { doNotService: false } });
+    assert.deepEqual([theirs.saved, theirs.editing, theirs.statuses[1], theirs.said], [[THEIRS], [false], { kind: 'ok', msg: 'Saved.' }, [alreadySaid('The customer', 'created')]],
+        'REGRESSION: another member\'s change shown as this member\'s own, or not said');
+    // This member changed it since: the form on the stored row with that over it — not saved, said; its next Save is an edit.
+    const mine = await press({ notes: 'Gate code 41' }, THEIRS, { over: { doNotService: false } });
+    assert.deepEqual([mine.saved, mine.selected, mine.editing, mine.adopting, mine.said], [[THEIRS], ['cust_1'], [], 'cust_1', []]);
+    assert.deepEqual(mine.drafts, [{ ...THEIRS, notes: 'Gate code 41' }], 'REGRESSION: what was typed lost, or written over another member\'s change');
+    assert.ok(!('_isNew' in mine.drafts[0]), 'REGRESSION: the next Save sends a create again');
+    assert.deepEqual(mine.statuses[1], { kind: 'err', msg: `${SAID} What you changed since is in the form, not saved yet — Save to keep it.` });
+    assert.deepEqual([mine.unproven.current, mine.sent.length], [{}, 1]);
+    // Typed while the press was out: kept too. Another record's form by then: left as it is.
+    const typing = await press({ notes: 'Gate code 41' }, STORED, { whileOut: { contactName: 'Ann' } });
+    assert.deepEqual(typing.drafts, [{ ...STORED, notes: 'Gate code 41', contactName: 'Ann' }]);
+    const left = await press({ notes: 'Gate code 41' }, STORED, { whileOut: { id: 'cust_9' } });
+    assert.deepEqual([left.drafts.length, left.drafts[0].id, left.drafts[0].customerNumber], [1, 'cust_9', undefined], 'REGRESSION: the stored customer put over another record\'s form');
+    // The form gone meanwhile (another view): listed as stored, what was changed since said above every view, nothing opened.
+    const gone = await press({ notes: 'Gate code 41' }, THEIRS, { shown: false });
+    assert.deepEqual([gone.saved, gone.drafts, gone.selected, gone.statuses, gone.said], [[THEIRS], [], [], [null],
+        [`${SAID} What you changed since was not saved — open the customer to change it.`]], 'REGRESSION: a change lost with nothing said');
+    // Never a row this press did not send, a body with none, an edit, or another status: the words, the form open, nothing listed.
+    for (const [answer, isNew] of [[IN_USE({ ...STORED, id: 'cust_9' }), true], [IN_USE(null), true], [IN_USE(STORED), false], [onceOf(409, { error: 'That customer id is already in use.', customer: STORED }), true]]) {
+        const did = await custSave({ answer, isNew });
+        assert.deepEqual([did.saved, did.said, did.drafts, did.editing, did.statuses[1]], [[], [], [], [], { kind: 'err', msg: 'That customer id is already in use.' }], 'REGRESSION: a row not proven this create\'s taken');
+    }
+    const broken = await custSave({ answer: IN_USE(STORED, 500), isNew: true });
+    assert.deepEqual([broken.saved, broken.statuses[1]], [[], { kind: 'err', msg: maybeSaid('The customer', 'saved', 'That customer id is already in use.') }]);
+    // After an org switch: nothing listed, said or opened.
+    for (const extra of [{}, { notes: 'x' }]) {
+        const moved = await press(extra, THEIRS, { switchAt: 0 });
+        assert.deepEqual([moved.saved, moved.said, moved.drafts, moved.statuses], [[], [], [], [null]], 'REGRESSION: an answer from the org left listed or said');
+    }
+    // Red, each over the Save as extracted with its one line changed in memory.
+    for (const [line, extra, rest] of [
+        [["held = isNew ? heldCreate(res.status, r.body, 'customer', draft.id) : null;", 'held = null;'], {}, {}],
+        [['const saved = data.customer || held || body;', 'const saved = data.customer || body;'], {}, {}],
+        [['if (shown.differs) onSaid(', 'if (false) onSaid('], {}, {}],
+        [['if (shown.mine.length && !shownRef.current) {', 'if (false) {'], { notes: 'x' }, { shown: false }],
+        [['if (sentNew && unknownOf(err)) (unproven', 'if (false) (unproven'], { notes: 'x' }, { forget: true }],
+        [['setDraft(d => (d && d.id === held.id ?', 'setDraft(d => (true ?'], { notes: 'x' }, { whileOut: { id: 'cust_9' } }],
+        [['adopting.current = held.id;', ''], { notes: 'x' }, {}],
+        [['setSaving(false); savingRef.current = false;', 'setSaving(false);'], {}, {}],
+    ]) {
+        const { forget, ...opts } = rest;
+        const run = async (edit) => {
+            const unproven = { current: {} };
+            await custSave({ answer: UNSENT(), isNew: true, unproven, edit: forget ? edit : null });
+            const did = await custSave({ answer: IN_USE(THEIRS), isNew: true, unproven, over: extra, ...opts, edit: forget ? null : edit });
+            return [did.saved, did.said, did.drafts, did.statuses, did.editing, did.adopting, did.held];
+        };
+        assert.notDeepEqual(await run(line), await run(null), `taken out, it is red: ${line[0]}`);
     }
 });
 
@@ -5331,7 +5420,10 @@ const SEL_OPENED = Object.freeze({ ...SEL, durationMinutes: 120, crewSize: 1, st
 const SEL_SEEN = Object.freeze({ scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: 120 });   // where the editor saw it (§0.289)
 const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer = onceOf(200, { location: LOC }), loc = null, switchAt = -1,
     newLocIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID(), draft = { ...SEL, durationHrs: 2, crewSize: 1, status: 'scheduled' },
-    opened = { current: { ...SEL_OPENED } }, selected = { ...SEL_OPENED }, whileOut = null, switchDraft = null, edit = null }) => {
+    opened = { current: { ...SEL_OPENED } }, selected = { ...SEL_OPENED }, whileOut = null, switchDraft = null, edit = null,
+    maybeLocIds = { current: new Set() }, whileAddressOut = null }) => {
+    // Since §0.290 an address a press may have made already keeps its id (`maybeLocIds`, the component's ref — handed in so
+    // presses can share it); `whileAddressOut` runs as the address's request goes out (another job picked in the list).
     const did = { sent: [], statuses: [], saving: [], saved: [], selected: [], locs: [], drafts: [], opened };
     const org = { now: 'org_a' };
     // Since §0.286's review setDraft is handed an updater (what was typed while the request was out is kept): the draft is
@@ -5340,7 +5432,7 @@ const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer
     // job picked in the list: the selectedId effect's draft).
     const draftNow = stateOf(draft);
     const answerFor = (url) => {
-        if (url.includes('resource=locations')) return typeof locAnswer === 'function' ? locAnswer() : locAnswer;
+        if (url.includes('resource=locations')) { if (whileAddressOut) whileAddressOut(draftNow); return typeof locAnswer === 'function' ? locAnswer(did.sent.at(-1)) : locAnswer; }
         if (whileOut) draftNow.set((d) => ({ ...d, ...whileOut }));
         if (switchDraft) draftNow.set(switchDraft());
         return jobAnswer;
@@ -5352,12 +5444,14 @@ const jobSave = async ({ jobAnswer = onceOf(200, { job: STORED_JOB }), locAnswer
     // Since §0.289 `edit` changes one line of the extracted source, in memory alone (the red runs).
     const save = p10Edited(DISPATCH, "    const save = async () => {\n        if (!draft) return;\n        if (!(draft.title || '').trim())", '\n    };', edit,
         ['draft', 'loc', 'setStatus', 'setSaving', 'requestOrg', 'dbFetch', 'readRefusal', 'stillOrg', 'onSaved', 'setSelectedId', 'failureWords',
-            'newLocIds', 'setLoc', 'crypto', ...U4_NAMES, 'opened', 'jobChanges', 'editorFields', 'rebaseDraft', 'jobAnswerOf', 'setDraft', 'selected', 'sentOf', 'appointmentDropped'], 'save')(
+            'newLocIds', 'setLoc', 'crypto', ...U4_NAMES, 'opened', 'jobChanges', 'editorFields', 'rebaseDraft', 'jobAnswerOf', 'setDraft', 'selected', 'sentOf', 'appointmentDropped',
+            'maybeLocIds', 'heldCreate'], 'save')(
         draft, loc, (v) => did.statuses.push(v), (v) => did.saving.push(v), () => 'org_a',
         p11Fetch(did, answerFor, org, { switchAt }), readRefusal, (o) => o === org.now,
         (j) => did.saved.push(j), (v) => did.selected.push(v), failureWords,
         newLocIds, (u) => did.locs.push(typeof u === 'function' ? u(loc) : u), { randomUUID: uuid }, ...U4,
-        opened, jobChanges, editorFields, rebaseDraft, jobAnswerOf, (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, selected, sentOf, appointmentDropped);
+        opened, jobChanges, editorFields, rebaseDraft, jobAnswerOf, (u) => { draftNow.set(u); did.drafts.push(draftNow.value); }, selected, sentOf, appointmentDropped,
+        maybeLocIds, heldCreate);
     await save();
     return { ...did, draftNow: draftNow.value };
 };
@@ -5383,28 +5477,38 @@ test('Part 11: the job record\'s save — the job\'s refusal in the house words 
     assert.deepEqual(after.statuses[1], { kind: 'err', msg: maybeSaid('The job', 'saved', 'The server could not be reached.') });
 });
 
-test('§0.263 Part 4: the job record\'s new address keeps one id across presses until it lands or the server refuses it in words; landed, the form takes its id — RUN', async () => {
-    const newLocIds = { current: {} };
+test('§0.263 Part 4: the job record\'s new address keeps one id across presses until it lands or the server refuses its first press in words; landed, the form takes its id — RUN', async () => {
+    // Moved in §0.290: the presses share the ids one may have made (maybeLocIds) beside the ids they hold.
+    const newLocIds = { current: {} }, maybeLocIds = { current: new Set() };
     let n = 0;
     const uuid = () => `u${n++}`;
     const typed = { id: null, address: '9 Elm St', city: 'Austin', state: 'TX', zip: '' };
-    const press = (locAnswer, loc = typed) => jobSave({ loc, locAnswer, newLocIds, uuid });
+    const press = (locAnswer, loc = typed) => jobSave({ loc, locAnswer, newLocIds, maybeLocIds, uuid });
     const lost = await press(UNSENT());
     assert.deepEqual([lost.sent[0][0], lost.sent[0][1], lost.sent[0][2].id], ['/.netlify/functions/dispatch-customers?resource=locations', 'POST', 'dloc_u0']);
     assert.deepEqual(newLocIds.current, { job_1: 'dloc_u0' }, 'held for the job');
     const page = await press(P11_PAGE());
     assert.equal(page.sent[0][2].id, 'dloc_u0', 'REGRESSION: a fresh id after an answer that proved nothing — a second address each press (census-B (c))');
     assert.deepEqual(page.statuses[1], { kind: 'err', msg: maybeSaid('The address', 'saved', 'The server returned 502.') });
+    // Reversed in §0.290 (it pinned the id given up here): a refusal after a press that may have made the address says nothing
+    // of that press — the id is kept, and the next press sends it again.
     const refused = await press(onceOf(400, { error: 'City is required.' }));
     assert.equal(refused.sent[0][2].id, 'dloc_u0');
-    assert.deepEqual([refused.statuses[1], newLocIds.current], [{ kind: 'err', msg: 'The address was not saved — City is required.' }, {}], 'the server\'s own refusal: nothing made, the id given up');
-    const fresh = await press(onceOf(201, { location: { id: 'dloc_u1' } }));
-    assert.equal(fresh.sent[0][2].id, 'dloc_u1', 'a fresh id after the server\'s own refusal');
-    assert.deepEqual([newLocIds.current, fresh.locs, fresh.sent[1][2].locationId], [{}, [{ ...typed, id: 'dloc_u1' }], 'dloc_u1'],
+    assert.deepEqual([refused.statuses[1], newLocIds.current], [{ kind: 'err', msg: 'The address was not saved — City is required.' }, { job_1: 'dloc_u0' }],
+        'REGRESSION: the id given up after a press that may have made its address — the next press makes a second');
+    const kept = await press(onceOf(201, { location: { id: 'dloc_u0' } }));
+    assert.deepEqual([kept.sent[0][2].id, newLocIds.current, n], ['dloc_u0', {}, 1], 'the same id, landed and given up');
+    // The server's own refusal of the FIRST press: nothing made, the id given up — and no longer one that may have landed.
+    const first = await press(onceOf(400, { error: 'City is required.' }));
+    assert.deepEqual([first.sent[0][2].id, first.statuses[1], newLocIds.current, maybeLocIds.current.has('dloc_u1')],
+        ['dloc_u1', { kind: 'err', msg: 'The address was not saved — City is required.' }, {}, false], 'the server\'s own refusal: nothing made, the id given up');
+    const fresh = await press(onceOf(201, { location: { id: 'dloc_u2' } }));
+    assert.equal(fresh.sent[0][2].id, 'dloc_u2', 'a fresh id after the server\'s own refusal');
+    assert.deepEqual([newLocIds.current, fresh.locs, fresh.sent[1][2].locationId], [{}, [{ ...typed, id: 'dloc_u2' }], 'dloc_u2'],
         'landed: the id given up, the form\'s address takes it, the job saved at it');
     // The form holds the id now: a second Save sends a PUT for that address — never a second address.
-    const again = await press(onceOf(200, { location: { id: 'dloc_u1' } }), fresh.locs[0]);
-    assert.deepEqual([again.sent[0][0], again.sent[0][1], again.sent[0][2].id, n], ['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_u1', 'PUT', 'dloc_u1', 2],
+    const again = await press(onceOf(200, { location: { id: 'dloc_u2' } }), fresh.locs[0]);
+    assert.deepEqual([again.sent[0][0], again.sent[0][1], again.sent[0][2].id, n], ['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_u2', 'PUT', 'dloc_u2', 3],
         'REGRESSION: a second Save made another address');
     // Landed with an answer that cannot be read: the id sent is the form's.
     const unread = await jobSave({ loc: typed, locAnswer: P11_UNREADABLE(), newLocIds: { current: {} }, uuid: () => 'k' });
@@ -5414,12 +5518,107 @@ test('§0.263 Part 4: the job record\'s new address keeps one id across presses 
     assert.deepEqual([moved.locs, moved.statuses, moved.sent.length], [[], [null], 1]);
 });
 
+// Added in §0.290: the new address an earlier press made is taken as it is; typed otherwise since, saved onto it.
+test('§0.290 Part 11: the job record\'s new address an earlier press made — taken; corrected since, saved onto it; that refused, said and its id kept; another job picked meanwhile never takes it — RUN', async () => {
+    const LOCS = '/.netlify/functions/dispatch-customers?resource=locations', JOB_URL = '/.netlify/functions/dispatch-jobs?id=job_1';
+    const typed = { id: null, address: '9 Elm St', city: 'Austin', state: 'TX', zip: '' };
+    const STORED = Object.freeze({ id: 'dloc_k', customerId: 'cust_1', name: '9 Elm St', address: '9 Elm St', city: 'Austin', state: 'TX', zip: null, isDefault: false });
+    const IN_USE = (location, status = 409) => onceOf(status, { error: 'That location id is already in use.', code: 'idInUse', ...(location ? { location } : {}) });
+    // A press that may have made it, then `next`: the create answered with it as stored, a PUT answered `put`.
+    const pressed = async ({ loc = typed, stored = STORED, put = onceOf(200, { location: { ...STORED, ...loc, id: 'dloc_k' } }), first = [UNSENT()], ...extra } = {}) => {
+        const newLocIds = { current: {} }, maybeLocIds = { current: new Set() };
+        for (const locAnswer of first) await jobSave({ loc: typed, locAnswer, newLocIds, maybeLocIds, uuid: () => 'k' });
+        const did = await jobSave({ loc, locAnswer: ([, method]) => (method === 'POST' ? IN_USE(stored) : put), newLocIds, maybeLocIds, uuid: () => 'z', ...extra });
+        return { ...did, newLocIds, maybeLocIds };
+    };
+    const paths = (did) => did.sent.map(([u, m]) => [u, m]);
+    // As typed: taken as it is — no write to it, the job saved at it, the form's address takes its id.
+    const same = await pressed();
+    assert.deepEqual(paths(same), [[LOCS, 'POST'], [JOB_URL, 'PUT']], 'REGRESSION: the address an earlier press made said as refused, or written again');
+    assert.deepEqual([same.sent[0][2].id, same.sent[1][2].locationId, same.locs, same.newLocIds.current], ['dloc_k', 'dloc_k', [{ ...typed, id: 'dloc_k' }], {}]);
+    assert.deepEqual([same.statuses, same.saved], [[null, { kind: 'ok', msg: 'Saved' }], [STORED_JOB]]);
+    // Corrected since (each of its four fields): saved onto the one made, never a second.
+    for (const change of [{ address: '11 Elm St' }, { city: 'Dallas' }, { state: 'OK' }, { zip: '78702' }]) {
+        const did = await pressed({ loc: { ...typed, ...change } });
+        assert.deepEqual(paths(did), [[LOCS, 'POST'], [`${LOCS}&id=dloc_k`, 'PUT'], [JOB_URL, 'PUT']], `REGRESSION: the correction lost (${JSON.stringify(change)})`);
+        assert.deepEqual([did.sent[1][2], did.sent[2][2].locationId], [did.sent[0][2], 'dloc_k'], 'the address as typed now, under the id made');
+        assert.equal(did.sent[1][2][Object.keys(change)[0]], Object.values(change)[0]);
+        assert.deepEqual([did.locs, did.newLocIds.current, did.statuses[1]], [[{ ...typed, ...change, id: 'dloc_k' }], {}, { kind: 'ok', msg: 'Saved' }]);
+    }
+    // Spaces typed around it are no correction.
+    assert.deepEqual(paths(await pressed({ loc: { ...typed, address: ' 9 Elm St ', zip: ' ' } })), [[LOCS, 'POST'], [JOB_URL, 'PUT']]);
+    // The correction refused, or proving nothing: said about the address, the job not sent, its id kept for the next press.
+    for (const [put, words, heard] of p11Writes()) {
+        const did = await pressed({ loc: { ...typed, city: 'Dallas' }, put });
+        assert.deepEqual(paths(did), [[LOCS, 'POST'], [`${LOCS}&id=dloc_k`, 'PUT']], 'the job is not sent after a refused address');
+        assert.deepEqual([did.statuses, did.saved, did.locs], [[null, { kind: 'err', msg: heard ? `The address was not saved — ${words}` : maybeSaid('The address', 'saved', words) }], [], []], words);
+        assert.deepEqual([did.newLocIds.current, did.maybeLocIds.current.has('dloc_k')], [{ job_1: 'dloc_k' }, true], 'REGRESSION: its id given up — the next press makes a second address');
+        const next = await jobSave({ loc: { ...typed, city: 'Dallas' }, newLocIds: did.newLocIds, maybeLocIds: did.maybeLocIds, locAnswer: ([, m]) => (m === 'POST' ? IN_USE(STORED) : onceOf(200, { location: STORED })) });
+        assert.deepEqual([paths(next).length, next.sent[1][2].id, next.sent[2][2].locationId], [3, 'dloc_k', 'dloc_k']);
+    }
+    // Never a location it did not send, a body with none, or another status: a first press gives its id up.
+    for (const stored of [{ ...STORED, id: 'dloc_9' }, null]) {
+        const did = await pressed({ stored, first: [] });
+        assert.deepEqual([paths(did), did.statuses[1], did.locs, did.newLocIds.current], [[[LOCS, 'POST']], { kind: 'err', msg: 'The address was not saved — That location id is already in use.' }, [], {}],
+            'REGRESSION: a location that is not the one sent taken');
+    }
+    const broken = await jobSave({ loc: typed, locAnswer: IN_USE(STORED, 500), uuid: () => 'k' });
+    assert.deepEqual([broken.sent.length, broken.statuses[1]], [1, { kind: 'err', msg: maybeSaid('The address', 'saved', 'That location id is already in use.') }]);
+    // A PUT of the form's own address is never read as a create that landed.
+    const own = await jobSave({ loc: LOC, locAnswer: IN_USE({ ...LOC }) });
+    assert.deepEqual([own.sent.length, own.statuses[1]], [1, { kind: 'err', msg: 'The address was not saved — That location id is already in use.' }]);
+    // After an org switch, while the create or its correction was out: nothing said, no job sent, the form as it was.
+    for (const switchAt of [0, 1]) {
+        for (const put of [onceOf(200, { location: STORED }), onceOf(400, { error: 'x' })]) {
+            const did = await pressed({ loc: { ...typed, city: 'Dallas' }, put, switchAt });
+            assert.deepEqual([did.sent.length, did.statuses, did.locs, did.saved], [switchAt + 1, [null], [], []], 'REGRESSION: an answer from the org left said, or a request sent in the new one');
+        }
+    }
+    // Another job picked while the address was out (the list stays live): the address is never put on its form, and the job
+    // saved is the one pressed — diffed from that job as opened, never the one picked.
+    const J2 = Object.freeze({ id: 'job_2', title: 'Roof check', customerId: 'cust_2', locationId: 'dloc_2', durationMinutes: 60, crewSize: 2, status: 'completed', priority: 'high' });
+    const picked = async (edit = null, how = {}) => {
+        const opened = { current: { ...SEL_OPENED } };
+        const did = await pressed({ ...how, opened, edit, whileAddressOut: (draftNow) => { opened.current = { ...J2 }; draftNow.set({ ...J2 }); } });
+        return { locs: did.locs, body: did.sent.at(-1)[2], url: did.sent.at(-1)[0], draft: did.draftNow, opened: opened.current, newLocIds: did.newLocIds.current };
+    };
+    const BODY = { id: 'job_1', locationId: 'dloc_k', status: 'scheduled', fromStatus: 'unscheduled', fromAppointment: SEL_SEEN };
+    for (const how of [{}, { loc: { ...typed, city: 'Dallas' } }]) {
+        const p = await picked(null, how);
+        assert.deepEqual([p.locs, p.url, p.body], [[], JOB_URL, BODY], 'REGRESSION: another job\'s form given this address, or the job diffed from the one picked');
+        assert.deepEqual([p.draft, p.opened, p.newLocIds], [{ ...J2 }, { ...J2 }, { job_1: 'dloc_k' }], 'its id kept until a form takes it — its own job\'s next Save is answered with it, never a second address');
+    }
+    // Red, each over the Save as extracted with its one line changed in memory.
+    assert.equal((await picked(['if (stillOrg(askedOrg) && opened.current?.id === draft.id) {', 'if (stillOrg(askedOrg)) {'])).locs.length, 1, 'taken out, it is red');
+    assert.notDeepEqual((await picked(['jobChanges(editorFields(base, base.locationId),', 'jobChanges(editorFields(opened.current, opened.current.locationId),'])).body, BODY, 'the base read after the address step, it is red');
+    const seen = (did) => [paths(did), did.statuses, did.locs, did.newLocIds.current];
+    for (const [line, how] of [
+        [["heldCreate(lres.status, r.body, 'location', locId);", 'null;'], {}],
+        [["if (held && ['address', 'city', 'state', 'zip']", "if (false && ['address', 'city', 'state', 'zip']"], { loc: { ...typed, city: 'Dallas' } }],
+        [["lres = await sendAddress('PUT');", "lres = await sendAddress('POST');"], { loc: { ...typed, city: 'Dallas' } }],
+        [['return; held = null; }', 'return; }'], { loc: { ...typed, city: 'Dallas' }, put: () => onceOf(400, { error: 'x' }) }],
+        [['if (r.heard && !mayBe) {', 'if (r.heard) {'], { loc: { ...typed, city: 'Dallas' }, put: () => onceOf(400, { error: 'x' }) }],
+        [['if (!loc.id) maybeLocIds.current.add(locId);', ''], { stored: null }],
+    ]) {
+        const args = () => ({ ...how, ...(how.put ? { put: how.put() } : {}) });
+        const first = line[0].startsWith('if (!loc.id)');
+        const run = async (edit) => {
+            if (!first) return seen(await pressed({ ...args(), edit }));
+            const newLocIds = { current: {} }, maybeLocIds = { current: new Set() };
+            await jobSave({ loc: typed, locAnswer: UNSENT(), newLocIds, maybeLocIds, uuid: () => 'k', edit });
+            await jobSave({ loc: typed, locAnswer: onceOf(400, { error: 'x' }), newLocIds, maybeLocIds, uuid: () => 'k', edit });
+            return newLocIds.current;
+        };
+        assert.notDeepEqual(await run(line), await run(null), `taken out, it is red: ${line[0]}`);
+    }
+});
+
 test('Part 11: the job record\'s save — landed, as stored and the address\'s id; after an org switch nothing said, no job sent — RUN', async () => {
     const landed = await jobSave({ loc: LOC });
     assert.deepEqual(landed.sent.map(([u, m]) => [u, m]), [['/.netlify/functions/dispatch-customers?resource=locations&id=dloc_1', 'PUT'], ['/.netlify/functions/dispatch-jobs?id=job_1', 'PUT']]);
     // Moved in §0.286 (it pinned `locationId: 'dloc_1'` in the whole job sent): only what the draft changed from the job as
     // opened, the status it moves from named — the job already stands at dloc_1, so its location is not sent again (a new
-    // address's id is: §0.263 Part 4 above, 'dloc_u1' and 'dloc_k').
+    // address's id is: §0.263 Part 4 above, 'dloc_u2' and 'dloc_k').
     // Moved in §0.289's review: a save that puts the job on the schedule names the appointment it goes on at, sent or not.
     assert.deepEqual(landed.sent[1][2], { id: 'job_1', status: 'scheduled', fromStatus: 'unscheduled', fromAppointment: SEL_SEEN });
     assert.deepEqual(landed.locs, [{ ...LOC }], 'since §0.263 the form\'s address holds the id stored');
@@ -5961,23 +6160,33 @@ const NJ_JOB0 = Object.freeze({ id: 'job_0' });
 const NJ_CUST = Object.freeze({ id: 'cust_1', name: 'Acme' });
 // Since §0.263 (the unknown-save rule, Part 4) New Job's creates hold their ids in `heldNewJobIds` (the tab's ref —
 // handed in so presses can share it); `uuid` stands in for crypto.randomUUID.
-const newJob = async ({ form = {}, answers, switchAt = -1, heldNewJobIds = { current: {} }, uuid = () => globalThis.crypto.randomUUID() }) => {
-    const did = { sent: [], errors: [], saving: [], shown: [], selected: [], forms: [] };
+// Since §0.290 a create an earlier press made is answered with it (heldCreate, jobHolds, alreadySaid, the board's mapping —
+// the real ones): the ids are asked through the tab's askHeld, extracted and built over `heldNewJobIds` and the ids a press
+// may have made (`maybeNewJobIds`, handed in so presses can share it); the banner's words are recorded in `said` (null as
+// each press begins). An answer may be a function of the body sent. `listed` / `rawListed` / `custsListed` — what the lists
+// hold already; `edit` / `askEdit` change one line of the Save / of askHeld, in memory alone (the red runs).
+const newJob = async ({ form = {}, answers, switchAt = -1, heldNewJobIds = { current: {} }, maybeNewJobIds = { current: new Set() }, uuid = () => globalThis.crypto.randomUUID(),
+    listed = [NJ_JOB0], rawListed = [{ id: 'job_0', jobNumber: 'J-0' }], custsListed = [NJ_CUST], edit = null, askEdit = null }) => {
+    const did = { sent: [], errors: [], saving: [], shown: [], selected: [], forms: [], said: [] };
     const org = { now: 'org_a' };
     const queue = [...answers];
-    const jobsStart = [NJ_JOB0], custsStart = [NJ_CUST];
+    const jobsStart = listed, custsStart = custsListed;
     const jobs = stateOf(jobsStart), custs = stateOf(custsStart);
     // The Jobs view's list, as stored (since §0.266 New Job adds the job it made).
-    const rawStart = [{ id: 'job_0', jobNumber: 'J-0' }], raw = stateOf(rawStart);
+    const rawStart = rawListed, raw = stateOf(rawStart);
     const f = { ...NJ_FORM, ...form };
-    const handle = p10Fn(DISPATCH, '    const handleSaveNewJob = async () => {', '\n    };',
+    const askHeld = p10Edited(DISPATCH, '    const askHeld = (key, make) => {', '\n    };', askEdit, ['heldNewJobIds', 'maybeNewJobIds'], 'askHeld')(heldNewJobIds, maybeNewJobIds);
+    const answerNow = () => { const a = queue.shift(); return typeof a === 'function' ? a(did.sent.at(-1)[2]) : a; };
+    const handle = p10Edited(DISPATCH, '    const handleSaveNewJob = async () => {', '\n    };', edit,
         ['newJobForm', 'setNewJobError', 'placeholderOn', 'customerForText', 'customers', 'accounts', 'dealHolds', 'DEAL_NEEDS_PICK', 'typedCustomerRefusal',
             'setNewJobSaving', 'requestOrg', 'saveDroppingRefused', 'stillOrg', 'dbFetch', 'refusalWords', 'readRefusal', 'failureWords', 'setCustomers', 'setNewJobForm',
-            'setJobs', 'setJobsRaw', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm', 'heldNewJobIds', 'crypto', ...U4_NAMES], 'handleSaveNewJob')(
+            'setJobs', 'setJobsRaw', 'setSelectedJobId', 'EMPTY_JOB', 'setAppliedTemplate', 'setShowNewJobForm', 'askHeld', 'crypto', ...U4_NAMES,
+            'setCreateSaid', 'heldCreate', 'jobHolds', 'alreadySaid', 'boardJobOf'], 'handleSaveNewJob')(
         f, (v) => did.errors.push(v), () => false, () => ({}), custsStart, [], () => false, 'Pick a customer.', () => 'refused',
-        (v) => did.saving.push(v), () => 'org_a', saveDroppingRefused, (o) => o === org.now, p11Fetch(did, () => queue.shift(), org, { switchAt }),
+        (v) => did.saving.push(v), () => 'org_a', saveDroppingRefused, (o) => o === org.now, p11Fetch(did, answerNow, org, { switchAt }),
         refusalWords, readRefusal, failureWords, custs.set, (u) => did.forms.push(typeof u === 'function' ? u(f) : u), jobs.set, raw.set, (v) => did.selected.push(v),
-        NJ_FORM, () => {}, (v) => did.shown.push(v), heldNewJobIds, { randomUUID: uuid }, ...U4);
+        NJ_FORM, () => {}, (v) => did.shown.push(v), askHeld, { randomUUID: uuid }, ...U4,
+        (v) => did.said.push(v), heldCreate, jobHolds, alreadySaid, boardJobOfReal());
     await handle();
     return { ...did, jobs: jobs.value, jobsSame: jobs.value === jobsStart, custs: custs.value, custsSame: custs.value === custsStart, raw: raw.value, rawSame: raw.value === rawStart };
 };
@@ -6003,6 +6212,8 @@ test('Part 11: New Job — the job\'s refusal in the server\'s words with their 
     assert.deepEqual(landed.raw, [{ id: 'djob_1' }, { id: 'job_0', jobNumber: 'J-0' }], 'REGRESSION: the Jobs view lists the new job only after a reload');
     const again = await newJob({ answers: [onceOf(201, { job: { id: 'job_0', jobNumber: 'J-0', title: 'As stored' } })] });
     assert.deepEqual(again.raw, [{ id: 'job_0', jobNumber: 'J-0', title: 'As stored' }], 'a job it already lists is listed once, as stored');
+    assert.deepEqual(again.jobs.map((j) => j.id), ['job_0'], 'since §0.290 on the board too: listed once');
+    assert.deepEqual([landed.said, again.said], [[null], [null]], 'since §0.290: a create of its own says nothing, an earlier one\'s words cleared');
     const unreadable = await newJob({ answers: [P11_UNREADABLE()] });
     assert.deepEqual([unreadable.errors, unreadable.jobs[0].id, unreadable.shown], [[''], unreadable.sent[0][2].id, [false]], 'landed with no job read: listed under the id sent');
     assert.equal(unreadable.rawSame, true, 'no stored job read: the Jobs view lists none made up');
@@ -6062,6 +6273,16 @@ test('Part 11 review fix: New Job — a customer made under an answer that canno
     assert.deepEqual([dropped.custs[1], dropped.sent[2][2].isDefault], [{ id: dropped.sent[1][2].id, name: 'New Co', accountId: null }, true],
         'REGRESSION: the dropped account put back on the row kept — the customer listed as linked to an account the server refused');
     assert.equal(dropped.sent[3][2].accountId, null, 'REGRESSION: the job sent with the account the customer\'s create dropped');
+    // Added in §0.290: the form's account is the made customer's too — none, dropped. It kept the refused one, and the next
+    // press (its job refused) sent the job on an account the server had said names nothing.
+    const madeForm = (did) => { const x = did.forms.find((y) => y.madeCustomerId); return [x.madeCustomerId, x.accountId, x.customer]; };
+    assert.deepEqual([madeForm(dropped), madeForm(linked)], [[dropped.sent[1][2].id, '', 'New Co'], [linked.sent[0][2].id, 'acc_1', 'New Co']],
+        'REGRESSION: the refused account kept on the form');
+    const dropAgain = (edit) => newJob({ form: { ...typed, address: '', city: '', accountId: 'acc_gone', opportunityCopied: true }, edit,
+        answers: [onceOf(404, { error: 'That account is not in this organization.', field: 'accountId' }), (b) => onceOf(201, { customer: { id: b.id, name: 'New Co', accountId: null } }), onceOf(500, {})] });
+    const asIs = await dropAgain(null);
+    assert.deepEqual([madeForm(asIs)[1], asIs.sent[2][2].accountId, asIs.shown], ['', null, []], 'the job refused: the form open, with no account');
+    assert.equal(madeForm(await dropAgain(["accountId: createdCust?.accountId || '',", "accountId: createdCust?.accountId || custAccountId || '',"]))[1], 'acc_gone', 'put back, it is red');
 });
 
 test('Part 11: New Job — an answer after an org switch says and lists nothing — RUN', async () => {
@@ -6073,52 +6294,275 @@ test('Part 11: New Job — an answer after an org switch says and lists nothing 
     assert.deepEqual([loc.errors, loc.sent.length], [[''], 1]);
 });
 
-test('§0.263 Part 4: New Job — a customer, address or job create pressed again after an answer that proved nothing sends the same id; after the server\'s own refusal, or once landed, the id is given up — RUN', async () => {
+test('§0.263 Part 4: New Job — a customer, address or job create pressed again after an answer that proved nothing sends the same id; after the server\'s own refusal of the first press, or once landed, the id is given up — RUN', async () => {
     let n = 0;
     const uuid = () => `u${n++}`;
     const idOf = (did, i = 0) => did.sent[i][2].id;
+    const REFUSED = (words) => onceOf(409, { error: words });
     // The customer.
-    const held = { current: {} };
+    const held = { current: {} }, maybe = { current: new Set() };
     const typed = { customerId: '', customer: 'New Co' };
-    const c1 = await newJob({ form: typed, answers: [UNSENT()], heldNewJobIds: held, uuid });
+    const custPress = (answers, form = typed, extra = {}) => newJob({ form, answers, heldNewJobIds: held, maybeNewJobIds: maybe, uuid, ...extra });
+    const c1 = await custPress([UNSENT()]);
     assert.deepEqual([c1.errors[1], held.current], [maybeSaid('The customer', 'created', 'The server could not be reached.'), { 'cust|New Co|': idOf(c1) }]);
-    const c2 = await newJob({ form: typed, answers: [P11_PAGE()], heldNewJobIds: held, uuid });
+    const c2 = await custPress([P11_PAGE()]);
     assert.equal(idOf(c2), idOf(c1), 'REGRESSION: a fresh customer id after an answer that proved nothing — a second customer of the name');
-    const other = await newJob({ form: { ...typed, customer: 'Other Co' }, answers: [UNSENT()], heldNewJobIds: held, uuid });
+    const other = await custPress([UNSENT()], { ...typed, customer: 'Other Co' });
     assert.notEqual(idOf(other), idOf(c1), 'another customer, its own id');
-    const c3 = await newJob({ form: typed, answers: [onceOf(409, { error: 'That account is already a customer.' })], heldNewJobIds: held, uuid });
-    assert.deepEqual([idOf(c3), c3.errors[1]], [idOf(c1), 'The customer was not created — That account is already a customer.']);
-    assert.ok(!('cust|New Co|' in held.current), 'the server\'s own refusal: nothing made, the id given up');
-    const c4 = await newJob({ form: typed, answers: [onceOf(201, { customer: { id: 'dcust_s', name: 'New Co' } }), onceOf(201, { job: { id: 'djob_s' } })], heldNewJobIds: held, uuid });
-    assert.notEqual(idOf(c4), idOf(c1), 'a fresh id after the server\'s own refusal');
-    assert.ok(!('cust|New Co|' in held.current), 'landed: given up');
+    // Reversed in §0.290 (it pinned the id given up here): a refusal after a press that may have landed says nothing of that
+    // press — its id is kept, and the next press sends it (made then, or answered with the customer it made).
+    const c3 = await custPress([REFUSED('That account is already a customer.')]);
+    assert.deepEqual([idOf(c3), c3.errors[1], held.current['cust|New Co|']], [idOf(c1), 'The customer was not created — That account is already a customer.', idOf(c1)],
+        'REGRESSION: the id given up after a press that may have made its customer — the next press makes a second');
+    const c4 = await custPress([onceOf(201, { customer: { id: 'dcust_s', name: 'New Co' } }), onceOf(201, { job: { id: 'djob_s' } })]);
+    assert.equal(idOf(c4), idOf(c1));
+    assert.ok(!('cust|New Co|' in held.current) && !maybe.current.has(idOf(c1)), 'landed: given up');
+    // Refused on its first press: nothing made, the id given up (added in §0.290 — it was pinned by the press above).
+    const c5 = await custPress([REFUSED('That account is already a customer.')]);
+    assert.ok(idOf(c5) !== idOf(c1) && !('cust|New Co|' in held.current) && !maybe.current.has(idOf(c5)), 'the server\'s own refusal: nothing made, the id given up');
+    const c6 = await custPress([UNSENT()]);
+    assert.notEqual(idOf(c6), idOf(c5), 'a fresh id after the server\'s own refusal');
+    // Refused first, a 502 next: that one may have made it — kept through the refusal after.
+    await custPress([REFUSED('Nope.')]);
+    assert.equal(held.current['cust|New Co|'], idOf(c6));
     // The job address.
-    const held2 = { current: {} };
+    const held2 = { current: {} }, maybe2 = { current: new Set() };
     const addressed = { address: '1 Main St', city: 'Austin' };
-    const a1 = await newJob({ form: addressed, answers: [UNSENT()], heldNewJobIds: held2, uuid });
+    const locPress = (answers) => newJob({ form: addressed, answers, heldNewJobIds: held2, maybeNewJobIds: maybe2, uuid });
+    const a1 = await locPress([UNSENT()]);
     assert.equal(a1.errors[1], maybeSaid('The job address', 'saved', 'The server could not be reached.'));
-    const a2 = await newJob({ form: addressed, answers: [onceOf(500, { error: 'Internal server error' })], heldNewJobIds: held2, uuid });
+    const a2 = await locPress([onceOf(500, { error: 'Internal server error' })]);
     assert.equal(idOf(a2), idOf(a1), 'REGRESSION: a fresh address id after an answer that proved nothing — a second address');
-    const a3 = await newJob({ form: addressed, answers: [onceOf(201, { location: { id: idOf(a1) } }), UNSENT()], heldNewJobIds: held2, uuid });
+    // Added in §0.290: refused after it — kept.
+    const a2r = await locPress([onceOf(400, { error: 'City is required.' })]);
+    assert.deepEqual([idOf(a2r), a2r.errors[1], Object.values(held2.current)], [idOf(a1), 'The job address was not saved — City is required.', [idOf(a1)]],
+        'REGRESSION: the address\'s id given up after a press that may have made it');
+    const a3 = await locPress([onceOf(201, { location: { id: idOf(a1) } }), UNSENT()]);
     assert.equal(idOf(a3), idOf(a1));
     assert.ok(a3.forms.some((x) => x.madeLocation?.id === idOf(a1)), 'landed: the form holds the address made — a retry sends no second');
     assert.equal(a3.errors[1], maybeSaid('The job', 'created', 'The server could not be reached.'), 'the job, not the address, may have been created');
-    assert.ok(!Object.keys(held2.current).some((k) => k.startsWith('loc|')), 'the landed address\'s id given up');
-    const a4 = await newJob({ form: addressed, answers: [onceOf(400, { error: 'City is required.' })], heldNewJobIds: { current: { [`loc|${['cust_1', '1 Main St', 'Austin', '', ''].join('\n')}`]: 'dloc_h' } }, uuid });
+    assert.ok(!Object.keys(held2.current).some((k) => k.startsWith('loc|')) && !maybe2.current.has(idOf(a1)), 'the landed address\'s id given up');
+    const LOC_KEY = `loc|${['cust_1', '1 Main St', 'Austin', '', ''].join('\n')}`;
+    const held4 = { current: { [LOC_KEY]: 'dloc_h' } };
+    const a4 = await newJob({ form: addressed, answers: [onceOf(400, { error: 'City is required.' })], heldNewJobIds: held4, uuid });
     assert.deepEqual([idOf(a4), a4.errors[1]], ['dloc_h', 'The job address was not saved — City is required.'], 'the held id is the one sent, keyed by the address');
+    assert.deepEqual(held4.current, {}, 'refused, no press before it unproven: given up');
     // The job.
-    const held3 = { current: {} };
-    const j1 = await newJob({ answers: [UNSENT()], heldNewJobIds: held3, uuid });
-    const j2 = await newJob({ answers: [P11_PAGE()], heldNewJobIds: held3, uuid });
+    const held3 = { current: {} }, maybe3 = { current: new Set() };
+    const jobPress = (answers, form = {}, extra = {}) => newJob({ form, answers, heldNewJobIds: held3, maybeNewJobIds: maybe3, uuid, ...extra });
+    const j1 = await jobPress([UNSENT()]);
+    const j2 = await jobPress([P11_PAGE()]);
     assert.equal(idOf(j2), idOf(j1), 'REGRESSION: a fresh job id after an answer that proved nothing — a second job');
     assert.deepEqual(j2.errors[1], maybeSaid('The job', 'created', 'The server returned 502.'));
-    const changed = await newJob({ form: { title: 'Filter swap' }, answers: [UNSENT()], heldNewJobIds: held3, uuid });
+    const changed = await jobPress([UNSENT()], { title: 'Filter swap' });
     assert.notEqual(idOf(changed), idOf(j1), 'another job, its own id');
-    const j3 = await newJob({ answers: [onceOf(409, { error: 'That job id is already in use.' })], heldNewJobIds: held3, uuid });
-    assert.deepEqual([idOf(j3), j3.errors[1]], [idOf(j1), 'That job id is already in use.']);
-    const j4 = await newJob({ answers: [onceOf(201, { job: { id: 'djob_n' } })], heldNewJobIds: held3, uuid });
-    assert.notEqual(idOf(j4), idOf(j1), 'a fresh id after the server\'s own refusal');
-    assert.deepEqual(Object.keys(held3.current).length, 1, 'landed: only the changed job\'s id still held');
+    // Reversed in §0.290, as the customer's: refused after a press that may have made the job, its id is kept — a 401 on the
+    // second press and the third made a second job.
+    const j3 = await jobPress([onceOf(401, { error: 'Not signed in.' })]);
+    assert.deepEqual([idOf(j3), j3.errors[1]], [idOf(j1), 'Not signed in.']);
+    const j4 = await jobPress([onceOf(201, { job: { id: 'djob_n' } })]);
+    assert.equal(idOf(j4), idOf(j1), 'REGRESSION: a second job after a refusal that said nothing of the first press');
+    assert.deepEqual([Object.values(held3.current), [...maybe3.current]], [[idOf(changed)], [idOf(changed)]], 'landed: only the changed job\'s id still held');
+    const j5 = await jobPress([REFUSED('Pick a customer.')]);
+    const j6 = await jobPress([UNSENT()]);
+    assert.ok(idOf(j5) !== idOf(j1) && idOf(j6) !== idOf(j5), 'a fresh id after the server\'s own refusal of the first press');
+    // Red: askHeld with its rule taken out gives the id up whatever came before; with the press not remembered, the same; and
+    // with a refusal that gives nothing up, the refused first press's id is sent again.
+    const pressed = async (askEdit, answers) => {
+        const h = { current: {} }, m = { current: new Set() }, ids = [];
+        for (const answer of answers) ids.push(idOf(await newJob({ answers: [answer], heldNewJobIds: h, maybeNewJobIds: m, uuid, askEdit })));
+        return new Set(ids).size;
+    };
+    const after = () => [UNSENT(), onceOf(401, { error: 'Not signed in.' }), UNSENT()], firstOnly = () => [REFUSED('Nope.'), UNSENT()];
+    assert.deepEqual([await pressed(null, after()), await pressed(null, firstOnly())], [1, 2]);
+    assert.equal(await pressed(['if (!mayBe) {', 'if (true) {'], after()), 2, 'taken out, it is red');
+    assert.equal(await pressed(['maybeNewJobIds.current.add(id);', ''], after()), 2, 'taken out, it is red');
+    assert.equal(await pressed(['if (!mayBe) {', 'if (false) {'], firstOnly()), 1, 'taken out, it is red');
+    for (const line of ['if (cheard) custHeld.giveUp();', 'if (lr.heard) locAsk.giveUp();', 'if (jheard) jobAsk.giveUp();']) {
+        const h = { current: {} };
+        const at = line.includes('custHeld') ? typed : line.includes('locAsk') ? addressed : {};
+        await newJob({ form: at, answers: [REFUSED('Nope.')], heldNewJobIds: h, uuid, edit: [line, ''] });
+        assert.equal(Object.keys(h.current).length, 1, `taken out, it is red: ${line}`);
+    }
+});
+
+// Added in §0.290 (Jeff, 23 Nov: "Fix New Job resend"): each step an earlier press made is answered with what it made, as
+// stored, nothing written — the job on the board and in Jobs as stored, said when it stands otherwise than this press sent it.
+const NJ_IN_USE = (key, row, status = 409) => onceOf(status, { error: `That ${key} id is already in use.`, code: 'idInUse', ...(row ? { [key]: row } : {}) });
+// A job as the server stored it from the body sent (dispatch-jobs.mjs normaliseJob's shape), `over` what moved it since.
+const NJ_STORED = (body, over = {}) => ({ description: null, assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, timeSlot: 'anytime', assignedEquipmentIds: [],
+    tags: [], customFields: {}, invoiceAmount: null, publicToken: null, customerNotifications: [], ...body, jobNumber: 'JOB-2026-0007', ...over });
+// A press that proved nothing, then one answered with the job that press made — `over` what another member did to it since.
+const heldJobPress = async ({ form = {}, over = {}, first = UNSENT(), ...extra } = {}) => {
+    const heldNewJobIds = { current: {} }, maybeNewJobIds = { current: new Set() };
+    let stored = null;
+    const made = await newJob({ form, answers: [(b) => { stored = NJ_STORED(b, over); return first; }], heldNewJobIds, maybeNewJobIds });
+    const did = await newJob({ form, answers: [() => NJ_IN_USE('job', stored)], heldNewJobIds, maybeNewJobIds, ...extra });
+    return { ...did, made, stored, heldNewJobIds, maybeNewJobIds };
+};
+
+test('§0.290: New Job — the job an earlier press made, as stored: as sent, nothing said; scheduled by another, or completed, said and not moved to; listed once on the board and in Jobs — RUN', async () => {
+    const ALREADY = alreadySaid('The job', 'created');
+    // As this press sent it: its own job — on the board through the board's one mapping and in Jobs as stored, picked, nothing said.
+    const as = await heldJobPress();
+    assert.equal(as.sent[0][2].id, as.made.sent[0][2].id, 'one id across the presses');
+    assert.deepEqual(as.jobs, [boardJobOfReal()(as.stored, [NJ_CUST]), NJ_JOB0], 'REGRESSION: a row built from the form, not the job as stored');
+    assert.deepEqual([as.jobs[0]._raw, as.jobs[0].customer, as.jobs[0].jobNumber], [as.stored, 'Acme', 'JOB-2026-0007'], 'the next sender diffs against the job as stored');
+    assert.deepEqual(as.raw, [as.stored, { id: 'job_0', jobNumber: 'J-0' }]);
+    assert.deepEqual([as.errors, as.said, as.selected, as.shown, as.saving], [[''], [null], [as.stored.id], [false], [true, false]]);
+    assert.deepEqual([as.forms, as.sent.length, as.heldNewJobIds.current, as.maybeNewJobIds.current.size], [[NJ_FORM], 1, {}, 0], 'the form emptied, its id given up: the next New Job is another job');
+    // What the server may leave off (the account, the deal) is no difference.
+    const unlinked = await heldJobPress({ form: { accountId: 'acc_1', opportunityId: 'opp_1' }, over: { accountId: null, opportunityId: null } });
+    assert.deepEqual(unlinked.said, [null], 'REGRESSION: a link the create dropped said as another member\'s change');
+    // A crew held on it, still in the queue: as sent, picked — nothing it sent was changed.
+    const crewed = await heldJobPress({ over: { assignedTechId: 'tech_1' } });
+    assert.deepEqual([crewed.said, crewed.selected, crewed.jobs[0].assignedTechIds], [[null], [crewed.stored.id], ['tech_1']]);
+    // Scheduled by another member since: theirs stands, on both lists; said, its record a press away; never picked or moved to.
+    const SCHED = { status: 'scheduled', assignedTechId: 'tech_1', coTechIds: ['tech_2'], scheduledDate: '2026-11-25', scheduledStart: '13:30', scheduledEnd: '15:30', timeSlot: 'exact' };
+    const sched = await heldJobPress({ over: SCHED });
+    assert.deepEqual([sched.said, sched.selected], [[null, { text: ALREADY, jobId: sched.stored.id }], []], 'REGRESSION: another member\'s schedule shown with nothing said, or the job picked in the queue it left');
+    assert.deepEqual([sched.jobs[0].status, sched.jobs[0].start, sched.jobs[0].assignedTechIds, sched.jobs[0].scheduledDate, sched.raw[0]], ['scheduled', 13.5, ['tech_1', 'tech_2'], '2026-11-25', sched.stored],
+        'REGRESSION: the job put back in the queue on this screen — its next press saved over theirs');
+    assert.deepEqual([sched.sent.length, sched.errors, sched.shown, sched.forms], [1, [''], [false], [NJ_FORM]]);
+    // Completed, and one changed but still in the queue.
+    const done = await heldJobPress({ over: { status: 'completed' } });
+    assert.deepEqual([done.said[1], done.selected, done.jobs[0].status], [{ text: ALREADY, jobId: done.stored.id }, [], 'completed']);
+    const renamed = await heldJobPress({ over: { title: 'Boiler service (annual)' } });
+    assert.deepEqual([renamed.said[1], renamed.selected, renamed.raw[0].title], [{ text: ALREADY, jobId: renamed.stored.id }, [renamed.stored.id], 'Boiler service (annual)']);
+    // A status that proved nothing first, and a page: the same.
+    assert.deepEqual((await heldJobPress({ first: P11_PAGE() })).said, [null]);
+    // Listed already (a reload of the lists between the presses): once on each, as stored — never beside the old row.
+    const dupe = await newJob({ answers: [(b) => NJ_IN_USE('job', NJ_STORED(b, SCHED))], uuid: () => 'k', listed: [NJ_JOB0, { id: 'djob_k', status: 'unscheduled' }], rawListed: [{ id: 'djob_k', status: 'unscheduled' }, { id: 'job_0' }] });
+    assert.deepEqual([dupe.jobs.map((j) => [j.id, j.status]), dupe.raw.map((j) => [j.id, j.status])], [[['djob_k', 'scheduled'], ['job_0', undefined]], [['djob_k', 'scheduled'], ['job_0', undefined]]],
+        'REGRESSION: the job listed twice');
+    const landedDupe = await newJob({ answers: [onceOf(201, { job: { id: 'djob_k' } })], listed: [{ id: 'djob_k' }, NJ_JOB0] });
+    assert.deepEqual(landedDupe.jobs.map((j) => j.id), ['djob_k', 'job_0']);
+    // A link dropped in this very press, the id the same: held is read of the body last sent.
+    const dropped = await newJob({ form: { accountId: 'acc_gone' }, answers: [onceOf(404, { error: 'That account is not in this organization.', field: 'accountId' }), (b) => NJ_IN_USE('job', NJ_STORED(b))] });
+    assert.deepEqual([dropped.sent.length, dropped.sent[1][2].accountId, dropped.sent[0][2].id === dropped.sent[1][2].id, dropped.said, dropped.jobs[0].id], [2, null, true, [null], dropped.sent[0][2].id]);
+    // Never another job, a body with none, or another status: the words, the form open, nothing listed or said above.
+    for (const answer of [(b) => NJ_IN_USE('job', NJ_STORED(b, { id: 'djob_9' })), () => NJ_IN_USE('job', null), (b) => onceOf(409, { error: 'That job id is already in use.', job: NJ_STORED(b) })]) {
+        const heldNewJobIds = { current: {} };
+        const did = await newJob({ answers: [answer], heldNewJobIds });
+        assert.deepEqual([did.errors, did.jobsSame, did.rawSame, did.shown, did.selected, did.said, did.forms], [['', 'That job id is already in use.'], true, true, [], [], [null], []], 'REGRESSION: a job not proven this create\'s taken');
+        assert.deepEqual(heldNewJobIds.current, {}, 'the server\'s own refusal of the first press: its id given up');
+        const after = { current: {} }, maybe = { current: new Set() };
+        await newJob({ answers: [UNSENT()], heldNewJobIds: after, maybeNewJobIds: maybe });
+        const kept = { ...after.current };
+        await newJob({ answers: [answer], heldNewJobIds: after, maybeNewJobIds: maybe });
+        assert.deepEqual(after.current, kept, 'REGRESSION: given up after a press that may have made it');
+    }
+    const broken = await newJob({ answers: [(b) => NJ_IN_USE('job', NJ_STORED(b), 500)] });
+    assert.deepEqual([broken.errors[1], broken.jobsSame], [maybeSaid('The job', 'created', 'That job id is already in use.'), true]);
+    // After an org switch: nothing listed, said or closed.
+    const moved = await heldJobPress({ over: SCHED, switchAt: 0 });
+    assert.deepEqual([moved.errors, moved.said, moved.jobsSame, moved.rawSame, moved.selected, moved.shown, moved.forms], [[''], [null], true, true, [], [], []], 'REGRESSION: an answer from the org left said or listed');
+    // Red, each over the Save as extracted with its one line changed in memory.
+    const seen = (d) => [d.errors, d.said, d.selected, d.shown, d.jobs.map((j) => [j.status, j.customer, j.start]), d.raw.map((j) => [j.jobNumber, j.status])];
+    for (const [line, over] of [
+        [["held = heldCreate(r.status, refused, 'job', body.id);", 'held = null;'], {}],
+        [['if (!jobHolds(held, asked)) setCreateSaid(', 'if (true) setCreateSaid('], {}],
+        [['if (!jobHolds(held, asked)) setCreateSaid(', 'if (false) setCreateSaid('], SCHED],
+        [["if (held.status === 'unscheduled') setSelectedJobId(held.id);", 'setSelectedJobId(held.id);'], SCHED],
+        [["if (held.status === 'unscheduled') setSelectedJobId(held.id);", ''], {}],
+        [['setJobsRaw(prev => [held, ...prev.filter(j => j.id !== held.id)]);', ''], {}],
+        [['if (held) return { ok: true, status: r.status };', ''], {}],
+        [['setCreateSaid(null);', ''], {}],
+    ]) {
+        const [out, is] = [await heldJobPress({ over, edit: line }), await heldJobPress({ over })];
+        const bare = (d) => JSON.stringify(seen(d)).split(d.stored.id).join('ID');
+        assert.notEqual(bare(out), bare(is), `taken out, it is red: ${line[0]}`);
+    }
+    for (const line of ['setJobs(prev => [row, ...prev.filter(j => j.id !== row.id)]);', 'setJobsRaw(prev => [held, ...prev.filter(j => j.id !== held.id)]);', 'setJobs(prev => [optimistic, ...prev.filter(j => j.id !== optimistic.id)]);']) {
+        const did = await newJob({ answers: [line.includes('optimistic') ? onceOf(201, { job: { id: 'djob_k' } }) : (b) => NJ_IN_USE('job', NJ_STORED(b))], uuid: () => 'k',
+            listed: [{ id: 'djob_k' }], rawListed: [{ id: 'djob_k' }], edit: [line, line.replace(/\.\.\.prev\.filter\(.*?\)\]/, '...prev]')] });
+        assert.equal(did.jobs.length + did.raw.length, 3, `taken out, it is red: ${line}`);
+    }
+    const link = await heldJobPress({ form: { accountId: 'acc_1' }, over: { accountId: null }, edit: ['const { id: _id, accountId: _account, opportunityId: _deal, ...asked } = sent;', 'const { id: _id, ...asked } = sent;'] });
+    assert.equal(link.said.length, 2, 'taken out, it is red: the account left out of what is compared');
+});
+
+test('§0.290: New Job — the customer, the address, then the job an earlier press made: each taken as stored, the next step sent on it; the customer made in this press names the job; after an org switch nothing — RUN', async () => {
+    const typed = { customerId: '', customer: 'New Co', address: '1 Main St', city: 'Austin', accountId: 'acc_1' };
+    // As the server stored the customer an earlier press made — another member gave it a plan and took its account off since.
+    const CUST = (b, over = {}) => ({ id: b.id, name: b.name, accountId: b.accountId ?? null, customerNumber: 'CUST-0007', servicePlanId: null, ...over });
+    const THEIRS = { accountId: null, servicePlanId: 'plan_1', name: 'New Co Inc' };
+    const LOCATION = (b) => ({ ...b, isDefault: false });
+    let cust = null, loc = null, job = null;
+    const all = await newJob({ form: typed, answers: [(b) => NJ_IN_USE('customer', cust = CUST(b, THEIRS)), (b) => NJ_IN_USE('location', loc = LOCATION(b)), (b) => NJ_IN_USE('job', job = NJ_STORED(b))] });
+    assert.deepEqual(all.sent.map(([u]) => u), ['/.netlify/functions/dispatch-customers', '/.netlify/functions/dispatch-customers?resource=locations', '/.netlify/functions/dispatch-jobs']);
+    assert.deepEqual([all.errors, all.shown, all.custs], [[''], [false], [NJ_CUST, cust]], 'REGRESSION: a customer an earlier press made said as refused, or listed as the form had it');
+    assert.deepEqual([all.sent[1][2].customerId, all.sent[1][2].isDefault, all.sent[2][2].customerId, all.sent[2][2].locationId, all.sent[2][2].accountId], [cust.id, true, cust.id, loc.id, null],
+        'the address and the job are the customer\'s as stored — its account too');
+    const made = all.forms.find((x) => x.madeCustomerId);
+    assert.deepEqual([made.customer, made.customerId, made.accountId, made.madeCustomerId], ['New Co Inc', cust.id, '', cust.id], 'a Save refused after this point reuses it');
+    assert.ok(all.forms.some((x) => x.madeLocation?.id === loc.id), 'and the address');
+    // The board's row names the customer made in this press — the list the Save read has none of it yet.
+    assert.deepEqual([all.jobs[0].customer, all.jobs[0].customerId, all.raw[0], all.said], ['New Co Inc', cust.id, job, [null]], 'REGRESSION: the job\'s title shown as its customer');
+    const noName = (b) => NJ_IN_USE('job', NJ_STORED(b));
+    const nameOf = async (edit) => (await newJob({ form: { ...typed, address: '', city: '' }, answers: [(b) => onceOf(201, { customer: CUST(b) }), noName], edit })).jobs[0].customer;
+    assert.deepEqual([await nameOf(null), await nameOf(['boardJobOf(held, [...customers, createdCust].filter(Boolean))', 'boardJobOf(held, customers)'])], ['New Co', 'Boiler service'], 'taken out, it is red');
+    // Listed already: once, as stored.
+    const dupe = await newJob({ form: typed, answers: [(b) => NJ_IN_USE('customer', CUST(b, THEIRS)), (b) => onceOf(201, { location: LOCATION(b) }), (b) => onceOf(201, { job: NJ_STORED(b) })], uuid: () => 'k', custsListed: [{ id: 'dcust_k', name: 'New Co' }, NJ_CUST] });
+    assert.deepEqual(dupe.custs.map((c) => [c.id, c.name]), [['cust_1', 'Acme'], ['dcust_k', 'New Co Inc']], 'REGRESSION: the customer listed twice');
+    // The ids given up once held: another New Job of the same customer, address or job makes its own.
+    const held = { current: {} }, maybe = { current: new Set() };
+    await newJob({ form: typed, answers: [(b) => NJ_IN_USE('customer', CUST(b)), (b) => NJ_IN_USE('location', LOCATION(b)), (b) => NJ_IN_USE('job', NJ_STORED(b))], heldNewJobIds: held, maybeNewJobIds: maybe });
+    assert.deepEqual([held.current, maybe.current.size], [{}, 0]);
+    // Held, then a later step refused: the form open on what was made, said about that step.
+    const jobRefused = await newJob({ form: typed, answers: [(b) => NJ_IN_USE('customer', CUST(b)), (b) => NJ_IN_USE('location', LOCATION(b)), onceOf(404, { error: 'That deal is not in this organization.' })] });
+    assert.deepEqual([jobRefused.errors, jobRefused.shown, jobRefused.jobsSame, jobRefused.custs.length], [['', 'That deal is not in this organization.'], [], true, 2]);
+    // Never a row of another id, or a body with none.
+    for (const row of [{ id: 'other' }, null]) {
+        const c = await newJob({ form: typed, answers: [NJ_IN_USE('customer', row)] });
+        assert.deepEqual([c.errors, c.sent.length, c.custsSame, c.forms], [['', 'The customer was not created — That customer id is already in use.'], 1, true, []], 'REGRESSION: a customer that is not the one sent taken');
+        const l = await newJob({ form: { ...typed, customerId: 'cust_1' }, answers: [NJ_IN_USE('location', row)] });
+        assert.deepEqual([l.errors, l.sent.length, l.forms], [['', 'The job address was not saved — That location id is already in use.'], 1, []], 'REGRESSION: an address that is not the one sent taken');
+    }
+    // After an org switch, at either step: no next request, nothing listed or said.
+    const atCust = await newJob({ form: typed, answers: [(b) => NJ_IN_USE('customer', CUST(b))], switchAt: 0 });
+    assert.deepEqual([atCust.sent.length, atCust.errors, atCust.custsSame, atCust.forms], [1, [''], true, []]);
+    const atLoc = await newJob({ form: { ...typed, customerId: 'cust_1' }, answers: [(b) => NJ_IN_USE('location', LOCATION(b))], switchAt: 0 });
+    assert.deepEqual([atLoc.sent.length, atLoc.errors, atLoc.forms, atLoc.shown], [1, [''], [], []]);
+    // Red, each over the Save as extracted with its one line changed in memory.
+    const run = (edit) => newJob({ form: typed, uuid: () => 'k', custsListed: [{ id: 'dcust_k', name: 'New Co' }], edit, answers: [(b) => NJ_IN_USE('customer', CUST(b, THEIRS)), (b) => NJ_IN_USE('location', LOCATION(b)), (b) => NJ_IN_USE('job', NJ_STORED(b))] });
+    const seen = (d) => [d.errors, d.sent.map(([, , b]) => b), d.custs, d.shown];
+    for (const line of [["heldCreate(r.status, refused, 'customer', newCustId);", 'null;'], ["lheld = heldCreate(lres.status, lr.body, 'location', locId);", 'lheld = null;'],
+        ['if (cheld) { cdata = { customer: cheld }; return', 'if (cheld) { return'], ['setCustomers(prev => [...prev.filter(c => c.id !== createdCust.id), createdCust]);', 'setCustomers(prev => [...prev, createdCust]);']]) {
+        assert.notDeepEqual(seen(await run(line)), seen(await run(null)), `taken out, it is red: ${line[0]}`);
+    }
+    for (const line of ['custHeld.landed();', 'locAsk.landed();', 'jobAsk.landed();']) {
+        const h = { current: {} };
+        await newJob({ form: typed, heldNewJobIds: h, edit: [line, ''], answers: [(b) => NJ_IN_USE('customer', CUST(b)), (b) => NJ_IN_USE('location', LOCATION(b)), (b) => NJ_IN_USE('job', NJ_STORED(b))] });
+        assert.equal(Object.keys(h.current).length, 1, `taken out, it is red: ${line}`);
+    }
+});
+
+test('§0.290: New Job\'s banner — a create answered with a job that stands otherwise, above every view until its Close; Open job closes it and opens the record; the Save itself never moves the view — RUN and WIRING', () => {
+    const d = dispatchSrc();
+    const banner = between(d, '{createSaid && (', '{/* Main content */}');
+    order(banner, '<div role="status"', '{createSaid.text}</span>', '{createSaid.jobId && (', 'Open job', '</button>', '<button onClick={() => setCreateSaid(null)}', 'Close', '</button>');
+    order(d, '{unassignError && (', '{createSaid && (', '{/* Main content */}', "{view === 'board' ? (");
+    assert.equal(count(d, '{createSaid && ('), 1);
+    assert.ok(d.includes('const [createSaid, setCreateSaid] = useState(null);'));
+    // Cleared as a Save begins, set by the job held, Open job, Close, and the Customers view's words — none else, and no timer.
+    assert.equal(count(d, 'setCreateSaid('), 5);
+    assert.ok(!/setTimeout\([^;]*setCreateSaid/.test(d), 'REGRESSION: the banner closed on a timer');
+    assert.ok(between(d, '<CustomersView customers={customers}', 'onSaved={saved').includes('onSaid={text => setCreateSaid({ text })}'), 'the Customers view\'s words, with no job');
+    // Open job: the banner closed, the record opened — run, over the tab's own openJobRecord.
+    const press = between(banner, '{createSaid.jobId && (\n                        <button onClick={', '}\n                            style=');
+    const openSrc = between(d, '    const openJobRecord = (id) => {', '\n');
+    const did = { said: [], opened: [], views: [] };
+    const openJobRecord = new Function('setOpenJobRequest', 'setView', `${openSrc}\nreturn openJobRecord;`)((v) => did.opened.push(v), (v) => did.views.push(v));
+    new Function('createSaid', 'setCreateSaid', 'openJobRecord', `return ${press.slice('{createSaid.jobId && (\n                        <button onClick={'.length)};`)({ text: 'x', jobId: 'djob_k' }, (v) => did.said.push(v), openJobRecord)();
+    assert.deepEqual([did.said, did.opened.map((o) => o.id), did.views], [[null], ['djob_k'], ['jobs']]);
+    // The Save never moves the view: what stands behind New Job may hold unsaved work.
+    const save = between(d, '    const handleSaveNewJob = async () => {', '\n    };');
+    assert.ok(!/setView\(|openJobRecord\(|setOpenJobRequest\(/.test(save), 'REGRESSION: the Save moves the view');
+    order(save, "setNewJobError('');", 'setCreateSaid(null);', 'const askedOrg = requestOrg();');
+    // The one id rule: each create asks askHeld, gives up on a refusal heard, lets go once landed.
+    assert.equal(count(save, 'askHeld('), 3);
+    assert.ok(!save.includes('heldNewJobIds'), 'REGRESSION: an id held or given up outside askHeld');
 });
 
 // The mass schedule: the first refusal's words, with the job they are about.
@@ -12837,29 +13281,60 @@ test('§0.266 a held Create is kept by its panel — API keys, Webhooks, a new A
     assert.ok(rules.includes('{(error || held) && <div') && rules.includes('{error || held}</div>}'), 'a held rule window says its words');
 });
 
-// Dispatch's creates are upserts (§0.172): a create sent again with its id (New Job keeps one — §0.263) writes "Job created"
-// once, and every Dispatch create audits a row it already held as an update, never a second create.
-test('§0.266 Dispatch: a create sent again writes "Job created" once — its own status move as a PUT records one — and audits an update, not a second create — WIRING', () => {
+// A create sent again with its id (New Job keeps one — §0.263) writes "Job created" once, and is never audited a second create.
+// Rewritten in §0.290 (reversed by design): the job, customer and location creates were upserts that audited an update of the
+// row they had made and, for a job, recorded its own status move; each is a create alone now — the row an earlier press made
+// is answered as stored, nothing written, recorded, told or audited. The other five Dispatch creates are as they were.
+test('§0.266 / §0.290 Dispatch: a job, customer or location create sent again writes nothing — answered with its row by id and org, before any link and again after a write that took nothing; "Job created" and the created audit are the create\'s alone; the other creates audit an update — WIRING', () => {
     const fnSrc = (n) => code(read(`netlify/functions/${n}.mjs`));
-    const jobs = fnSrc('dispatch-jobs');
-    const post = between(jobs, "        if (event.httpMethod === 'POST') {", "        if (event.httpMethod === 'PUT') {");
-    order(post, 'const [priorJob] = await db.select()',
-        "if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');",
-        'else if (row.status !== priorJob.status) await recordStatusChange(orgId, data.id, priorJob.status, row.status, userId, null);',
-        "action: priorJob ? 'dispatch_job.updated' : 'dispatch_job.created'");
-    assert.equal(count(post, 'recordStatusChange('), 2, 'REGRESSION: a status-history write the re-POST makes regardless');
-    for (const [file, prior, entity] of [['dispatch-customers', 'priorCust', 'dispatch_customer'], ['dispatch-customers', 'priorLoc', 'dispatch_location'],
+    const jobs = fnSrc('dispatch-jobs'), cust = fnSrc('dispatch-customers');
+    const jobPost = between(jobs, "\n        if (event.httpMethod === 'POST') {", "\n        if (event.httpMethod === 'PUT') {");
+    const custPost = between(cust, "\n        if (event.httpMethod === 'POST') {", "\n        if (event.httpMethod === 'PUT') {");
+    const locPost = between(cust, "\n            if (event.httpMethod === 'POST') {", "\n            if (event.httpMethod === 'PUT') {");
+    const inUse = (what) => `return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${what} id is already in use.' }) };`;
+    // The job: held look, links (asked of no row), the insert alone, nothing written — held again, then the words — and only
+    // then the history (once, 'Job created'), the notice (from no job) and the audit.
+    order(jobPost, "return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, title required' }) };", '\n            const landed = await heldJob(orgId, data.id);\n            if (landed) return landed;',
+        'const linked = await checkLinks(JOB_LINKS, data, null, orgId);', 'if (linked.error) return', 'await withNumberRetry(async () => {', 'const r = buildRow(await nextJobNumber(orgId));',
+        'const [w] = await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();', 'return { row: r, written: w };',
+        '\n            if (!written) {\n                const beside = await heldJob(orgId, data.id);\n                if (beside) return beside;\n            }', `if (!written) ${inUse('job')}`,
+        "\n            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');", 'await notifyCustomer({ orgId, before: null, after: written,', "await auditAs(orgId, userId, { action: 'dispatch_job.created'");
+    assert.equal(count(jobPost, 'recordStatusChange('), 1, 'REGRESSION: a status-history write the re-POST makes');
+    // Who made it is the caller; nothing is taken from a row it would have written over.
+    order(jobPost, 'createdBy:        userId ?? null,', 'dispatchedBy:     null,');
+    // The customer.
+    order(custPost, "return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };", '\n            const landed = await heldCustomer(orgId, data.id);\n            if (landed) return landed;',
+        'const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);', 'if (linked.error) return', 'if (data.accountId) {', 'const other = await accountTaken(orgId, data.accountId, data.id);', 'if (other) return takenReply(other);',
+        'await withNumberRetry(async () => {', 'const [made] = await db.insert(dispatchCustomers).values(buildRow(await nextCustomerNumber(orgId)))', '.onConflictDoNothing({ target: dispatchCustomers.id }).returning();',
+        '\n            if (!inserted) {\n                const beside = await heldCustomer(orgId, data.id);\n                if (beside) return beside;\n            }', `if (!inserted) ${inUse('customer')}`, "await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created'");
+    // The location: its row looked for before its customer is asked (one deleted since is no refusal of a create that landed).
+    order(locPost, "return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, name, address, city required' }) };", '\n                const landed = await heldLocation(orgId, data.id);\n                if (landed) return landed;',
+        "if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };", 'const [inserted] = await db.insert(dispatchServiceLocations).values(row)',
+        '.onConflictDoNothing({ target: dispatchServiceLocations.id }).returning();', '\n                if (!inserted) {\n                    const beside = await heldLocation(orgId, data.id);\n                    if (beside) return beside;\n                }',
+        `if (!inserted) ${inUse('location')}`, "await auditAs(orgId, auth.userId, { action: 'dispatch_location.created'");
+    for (const [name, post, held, table, entity, src, fn, words, key, normalise] of [
+        ['the job', jobPost, 'heldJob(', 'dispatchJobs', 'dispatch_job', jobs, 'heldJob', 'job', 'job', 'normaliseJob'],
+        ['the customer', custPost, 'heldCustomer(', 'dispatchCustomers', 'dispatch_customer', cust, 'heldCustomer', 'customer', 'customer', 'normaliseCust'],
+        ['the location', locPost, 'heldLocation(', 'dispatchServiceLocations', 'dispatch_location', cust, 'heldLocation', 'location', 'location', 'normaliseLoc']]) {
+        assert.ok(!/onConflictDoUpdate|db\.update\(|\bprior(Job|Cust|Loc)\b/.test(post), `REGRESSION: ${name}'s create writes over a row it finds`);
+        assert.equal(count(post, 'db.insert('), 1, `${name}: one write`);
+        assert.equal(count(post, `await ${held}`), 2, `${name}: looked for before its links and after a write that took nothing — none else`);
+        assert.equal(count(post, 'auditAs('), 1, `${name}: one audit, the create's`);
+        assert.ok(!post.includes(`${entity}.updated`), `REGRESSION: ${name}'s create audits an update`);
+        assert.equal(count(src, `action: '${entity}.created'`), 1);
+        // The row it answers with: by its id AND the caller's org; nothing written in it, and none of this org's the plain null.
+        const look = between(src, `async function ${fn}(orgId, id) {`, '\n}\n');
+        order(look, `const [held] = await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));`,
+            `return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${words} id is already in use.', code: 'idInUse', ${key}: ${normalise}(held) }) } : null;`);
+        assert.ok(!/recordStatusChange|notifyCustomer|auditAs|db\.(insert|update|delete)\(|catch/.test(look), `REGRESSION: ${fn} writes, tells, or answers a failed read as none`);
+    }
+    for (const [file, prior, entity] of [
         ['dispatch-equipment', 'prior', 'dispatch_equipment'], ['dispatch-schedule-blocks', 'prior', 'dispatch_block'], ['dispatch-service-plans', 'prior', 'dispatch_plan'],
         ['dispatch-technicians', 'prior', 'dispatch_technician'], ['dispatch-vehicles', 'prior', 'dispatch_vehicle']]) {
         const s = fnSrc(file);
         assert.ok(s.includes(`action: ${prior} ? '${entity}.updated' : '${entity}.created'`), `REGRESSION: ${file} audits a create sent again as a second ${entity} create`);
         assert.ok(!s.includes(`{ action: '${entity}.created'`), `${file}: no create audited without its prior row read`);
     }
-    const cust = fnSrc('dispatch-customers');
-    order(cust, "if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };",
-        'const [priorLoc] = await db.select({ id: dispatchServiceLocations.id }).from(dispatchServiceLocations)',
-        '.where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));',
-        'await db.insert(dispatchServiceLocations).values(row)');
 });
 
 // ── §0.268: every Dispatch write answers from its own write (OPEN_ITEMS §4.8, census-D §2C; Jeff, 19 Nov: "Dispatch re-reads") ──
@@ -12950,9 +13425,13 @@ test('§0.268 THE CLASS — no Dispatch POST or PUT reads its row again after it
     const notice = between(jobs, 'async function jobAfterNotice(orgId, jobId, written) {', '\n}\n');
     order(notice, 'try {', 'return after || written;', '} catch (e) {', 'return written;');
     assert.equal(count(jobs, 'await jobAfterNotice('), 3, 'the create, the field update and the update — each answers the job as written when its read fails');
-    // A job another org holds still writes nothing past its upsert: refused before the status history.
-    order(jobs, '                    .returning();\n                return { row: r, written: w };', "if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };",
-        "if (!priorJob) await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');");
+    // A job another org holds still writes nothing past its insert: refused before the status history.
+    // Moved in §0.290: the insert is a create alone (it was an upsert). What it reads after a write is only ever after one that
+    // took nothing (heldJob / heldCustomer / heldLocation inside the miss's own branch, pinned whole in §0.266 / §0.290 above):
+    // a write that landed still answers from itself.
+    order(jobs, '\n                const [w] = await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();\n                return { row: r, written: w };',
+        '\n            if (!written) {\n                const beside = await heldJob(orgId, data.id);', "if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };",
+        "\n            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');");
     // An update whose row went since it was read: 404 before its status history or notice — each path by its own lines (the
     // §0.268 review: 12-space needles also matched the field path's 16-space lines, so a 404 moved after the dispatcher's
     // notice passed). A needle's leading newline holds it to its own indent.

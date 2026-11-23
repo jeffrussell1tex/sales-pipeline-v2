@@ -21,6 +21,7 @@ import { emptyReceipt, receiptFromInsert, receiptFromUpdate, isClean, describeRe
 import { makeBulkClient } from '../src/utils/bulkClient.js';
 
 const ROOT = new URL('../', import.meta.url);
+const between = (src, start, end) => { const a = src.indexOf(start); assert.ok(a >= 0, start); const b = src.indexOf(end, a + start.length); assert.ok(b > a, end); return src.slice(a, b); };
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
 const answerOf = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => { if (body instanceof Error) throw body; return body; } });
 
@@ -106,6 +107,31 @@ const CREATES = [
     ['leads', 'leads', 'newRow.id'], ['coaching-notes', 'coachingNotes', 'values.id'], ['export-dsr', 'dsrQueue', 'data.id'], ['export-schedules', 'exportSchedules', 'data.id'],
     ['lead-requests', 'leadClaimRequests', 'data.id'],
 ];
+// Dispatch's three (§0.290) answer the row as stored with the code: [file, the held look, table, key, its normaliser, the insert's answer].
+const HELD_CREATES = [
+    ['dispatch-jobs', 'heldJob', 'dispatchJobs', 'job', 'normaliseJob', 'written'],
+    ['dispatch-customers', 'heldCustomer', 'dispatchCustomers', 'customer', 'normaliseCust', 'inserted'],
+    ['dispatch-customers', 'heldLocation', 'dispatchServiceLocations', 'location', 'normaliseLoc', 'inserted'],
+];
+test('WIRING (§0.290): a Dispatch create answers a taken id idInUse with the row as stored only for an id THIS org holds — before the write and after one that wrote nothing; another org\'s is the words alone', () => {
+    for (const [file, name, table, key, shape, answer] of HELD_CREATES) {
+        const s = read(`netlify/functions/${file}.mjs`);
+        const look = between(s, `async function ${name}(orgId, id) {`, '\n}');
+        assert.ok(look.includes(`    const [held] = await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n`), `REGRESSION: ${name} asks every org — another org's row answered`);
+        assert.ok(look.includes(`    return held ? { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${key} id is already in use.', code: 'idInUse', ${key}: ${shape}(held) }) } : null;`), `${name}: the row as stored, with the code`);
+        assert.equal((look.match(/await db\./g) || []).length, 1, `${name}: one read, nothing written`);
+        // The create: the look and its answer, the insert on its id alone, the look again, the words alone.
+        const create = between(s, `const landed = await ${name}(orgId, data.id);`, `return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${key} id is already in use.' }) };`);
+        assert.ok(/^const landed = await \w+\(orgId, data\.id\);\n {12,16}if \(landed\) return landed;\n/.test(create), `${name}: answered at once`);
+        const wrote = create.indexOf(`.onConflictDoNothing({ target: ${table}.id }).returning();`);
+        assert.ok(wrote > 0, `${name}: a taken id writes nothing`);
+        const squeezed = create.slice(wrote).replace(/\s+/g, ' ');
+        assert.ok(squeezed.endsWith(`if (!${answer}) { const beside = await ${name}(orgId, data.id); if (beside) return beside; } if (!${answer}) `), `${name}: nothing written — the same create beside this one, else the words alone`);
+        assert.ok(!create.includes('onConflictDoUpdate'), `REGRESSION: ${name}'s create writes over the row it finds`);
+        assert.equal(s.split(`await ${name}(`).length - 1, 2, `${name}: awaited at both — a failed read is a 500, never an answer`);
+        assert.equal(s.split(`${name}(`).length - 1, 3, `${name}: its definition and the two`);
+    }
+});
 test('WIRING: each create answers a taken id 409 in words, and says idInUse only for an id THIS org holds (ownIdTaken by id and org)', () => {
     const lib = read('netlify/functions/_lib.mjs');
     const own = lib.slice(lib.indexOf('export async function ownIdTaken('), lib.indexOf('\n}\n', lib.indexOf('export async function ownIdTaken(')));
@@ -222,7 +248,6 @@ test('WIRING: a create keeps its id across presses — the rails, the deal windo
 // ── Part 3 (state §0.262): Leads, Quotes, Reports, the Sales Manager ──
 // Each handler extracted as written and run over stubs. The Reports, Leads-request, quote-window, Create-job and Sales
 // Manager cases run in tests/refusal-sweep.test.mjs (moved there with their Part); these are the ones no test ran.
-const between = (src, start, end) => { const a = src.indexOf(start); assert.ok(a >= 0, start); const b = src.indexOf(end, a + start.length); assert.ok(b > a, end); return src.slice(a, b); };
 const stateOf = (v) => { const st = { value: v }; st.set = (x) => { st.value = typeof x === 'function' ? x(st.value) : x; }; return st; };
 const LEADS = 'src/Tabs/LeadsTab.jsx';
 const leadSave = () => new Function('useCallback', 'requestOrg', 'stillOrg', 'setLeads', 'dbWrite', 'setUndoToast', 'maybeSaid',
@@ -457,14 +482,65 @@ test('RUN (Part 4): maybeFreedWords — each job that may have been returned to 
 test('WIRING (Part 4): Dispatch\'s creates keep their ids — New Job\'s customer, address and job, held by what each sends; the job record\'s new address, per job', () => {
     const d = read('src/Tabs/DispatchTab.jsx');
     assert.equal((d.match(/const heldNewJobIds = useRef\(\{\}\);/g) || []).length, 1);
-    assert.ok(d.includes("const newCustId = heldNewJobIds.current[custKey] || (heldNewJobIds.current[custKey] = 'dcust_' + crypto.randomUUID());"));
-    assert.ok(d.includes("const locId = heldNewJobIds.current[locHeld] || (heldNewJobIds.current[locHeld] = 'dloc_' + crypto.randomUUID());"));
-    assert.ok(d.includes('jobId = payload.id = heldNewJobIds.current[jobKey] || (heldNewJobIds.current[jobKey] = jobId);'));
+    // Moved in §0.290: the three ask their id through askHeld (run below) — held by its key, given up only where no earlier
+    // press may have landed.
+    assert.ok(d.includes("const custHeld = askHeld(custKey, () => 'dcust_' + crypto.randomUUID());\n                const newCustId = custHeld.id;"));
+    assert.ok(d.includes("const locAsk = askHeld(locHeld, () => 'dloc_' + crypto.randomUUID());\n                const locId = locAsk.id;"));
+    assert.ok(d.includes("const jobAsk = askHeld(jobKey, () => 'djob_' + crypto.randomUUID());\n            const jobId = payload.id = jobAsk.id;"));
+    assert.equal(d.split('askHeld(').length - 1, 3, 'the three creates');
+    for (const [ask, heard] of [['custHeld', 'cheard'], ['locAsk', 'lr.heard'], ['jobAsk', 'jheard']]) {
+        const refused = `if (${heard}) ${ask}.giveUp();`, landed = `${ask}.landed();`;
+        assert.deepEqual([d.split(refused).length - 1, d.split(`${ask}.giveUp(`).length - 1, d.split(landed).length - 1], [1, 1, 1], `${ask}: given up on the server's own refusal alone, let go once landed`);
+        assert.ok(d.includes(refused) && d.indexOf(refused) < d.indexOf(landed), `${ask}: a refusal throws before it is let go`);
+    }
     assert.ok(d.includes('const custKey = `cust|${custLabel}|${custAccountId}`;') && d.includes('const locHeld = `loc|${locKey}`;')
-        && d.includes('const jobKey = `job|${JSON.stringify({ ...payload, id: null })}`;'), 'keyed by what each create sends');
+        // Moved in §0.290: the payload is made with no id, and takes its own after the key.
+        && d.includes("            const payload = {\n                id:              null,\n") && d.includes('const jobKey = `job|${JSON.stringify(payload)}`;\n            const jobAsk = askHeld(jobKey,'), 'keyed by what each create sends');
     assert.equal((d.match(/const newLocIds = useRef\(\{\}\);/g) || []).length, 1);
     assert.ok(d.includes("const locId = loc.id || newLocIds.current[draft.id] || (newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID());"));
-    assert.ok(d.includes('if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));'), 'a landed address is the form\'s: a second Save PUTs it');
+    // Moved in §0.290: and only while the editor still shows that job.
+    assert.ok(d.includes('if (stillOrg(askedOrg) && opened.current?.id === draft.id) { delete newLocIds.current[draft.id]; setLoc(l => (l ? { ...l, id: locationId } : l)); }'), 'a landed address is the form\'s: a second Save PUTs it');
+    // §0.290: an address a press may have made keeps its id through a later press's refusal, and one an earlier press made is taken.
+    const jobs = between(d, '    const maybeLocIds = useRef(new Set());', "            subject = 'The job';\n");
+    let at = -1;
+    for (const line of ['const mayBe = maybeLocIds.current.has(locId);', 'if (!loc.id) maybeLocIds.current.add(locId);', "let lres = await sendAddress(loc.id ? 'PUT' : 'POST');",
+        "held = loc.id ? null : heldCreate(lres.status, r.body, 'location', locId);", 'if (!held) {', 'if (r.heard && !mayBe) { delete newLocIds.current[draft.id]; maybeLocIds.current.delete(locId); }',
+        "throw saidError(r.heard ? `The address was not saved — ${r.words}` : maybeSaid('The address', 'saved', r.words));", 'if (stillOrg(askedOrg) && opened.current?.id === draft.id) { delete newLocIds.current[draft.id];']) {
+        const i = jobs.indexOf(line, at + 1);
+        assert.ok(i > at, `in order: ${line}`);
+        at = i;
+    }
+});
+
+test('RUN (§0.290): askHeld — a create keeps its id by what it sends; the server\'s refusal of the first press gives it up, one after a press that may have landed does not (a 401 on the second press and the third made a second job); landed lets it go', () => {
+    const src = between(read('src/Tabs/DispatchTab.jsx'), '    const heldNewJobIds = useRef({});', '    // A create answered with a record');
+    const probe = (text) => {
+        let n = 0;
+        const { askHeld, held, maybe } = new Function('useRef', `${text}\nreturn { askHeld, held: heldNewJobIds, maybe: maybeNewJobIds };`)((v) => ({ current: v }));
+        const ask = (key) => askHeld(key, () => `id${++n}`);
+        const out = [];
+        let a = ask('k'); a.giveUp(); out.push([a.id, { ...held.current }, maybe.current.size]);   // refused at once: nothing made
+        a = ask('k'); out.push(a.id);                                        // a new id; its answer proves nothing
+        a = ask('k'); a.giveUp(); out.push([a.id, { ...held.current }]);      // the second press refused: the first may have landed
+        a = ask('k'); out.push(a.id);                                        // the third: the same create
+        out.push(ask('other').id);                                           // what it sends changed: another create
+        a.landed(); out.push([{ ...held.current }, [...maybe.current]]);      // landed: let go
+        a = ask('k'); a.giveUp(); out.push([a.id, { ...held.current }]);      // the next create's first refusal gives it up
+        return out;
+    };
+    const RIGHT = [['id1', {}, 0], 'id2', ['id2', { k: 'id2' }], 'id2', 'id3', [{ other: 'id3' }, ['id3']], ['id4', { other: 'id3' }]];
+    assert.deepEqual(probe(src), RIGHT);
+    // Red with each line taken out, in memory.
+    const giveUp = 'if (!mayBe) { delete heldNewJobIds.current[key]; maybeNewJobIds.current.delete(id); }', landed = 'landed: () => { delete heldNewJobIds.current[key]; maybeNewJobIds.current.delete(id); }';
+    for (const [line, without] of [
+        ['const mayBe = maybeNewJobIds.current.has(id);', 'const mayBe = false;'], ['maybeNewJobIds.current.add(id);', ''],
+        ['heldNewJobIds.current[key] || (heldNewJobIds.current[key] = make())', '(heldNewJobIds.current[key] = make())'],
+        [giveUp, ''], [giveUp, 'if (!mayBe) { delete heldNewJobIds.current[key]; }'], [giveUp, 'if (!mayBe) { maybeNewJobIds.current.delete(id); }'],
+        [landed, 'landed: () => {}'], [landed, 'landed: () => { delete heldNewJobIds.current[key]; }'],
+    ]) {
+        assert.equal(src.split(line).length - 1, 1, line);
+        assert.notDeepEqual(probe(src.replace(line, () => without)), RIGHT, `a probe blind to: ${line}`);
+    }
 });
 
 // ── Part 5 (state §0.264): Settings ──

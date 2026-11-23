@@ -533,9 +533,9 @@ test("dispatch: a customer's account is this org's — a create and an update; o
     let row = await one(dispatchCustomers, CU_HELD);
     assert.deepEqual([row.name, row.accountId], ['Held, edited', B_ACCT], 'held: kept');
     r = await call('dispatch-customers', WHO.admin, 'POST', { id: CU_HELD, name: 'Held, upserted', accountId: B_ACCT });
-    assert.equal(r.status, 201, `the create is an upsert: what it holds is not asked — ${JSON.stringify(r.body)}`);
+    assert.deepEqual([r.status, r.body.code], [409, 'idInUse'], `Reversed in §0.290 (the create is no upsert): answered with itself, its links not asked — ${JSON.stringify(r.body)}`);
     row = await one(dispatchCustomers, CU_HELD);
-    assert.deepEqual([row.name, row.accountId], ['Held, upserted', B_ACCT]);
+    assert.deepEqual([row.name, row.accountId], ['Held, edited', B_ACCT]);
 
     r = await call('dispatch-customers', WHO.admin, 'PUT', { accountId: ACCT }, { id: CU_B });
     assert.equal(r.status, 404, "org B's customer: not found in A");

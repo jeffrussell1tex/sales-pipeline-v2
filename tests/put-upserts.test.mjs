@@ -122,10 +122,11 @@ const PUT_WRITES = {
     'users.mjs PUT insert': [1, "the quota writer's audit rows (audit_log) — a member's save is update-only (upsertUser's updateOnly, state §0.202)"],
 };
 // The designed create-upserts (§0.201: "The create is an upsert") — a re-POST overwrites with defaults; filed (OUT).
+// Reversed in §0.290: a customer's, a location's and a job's create are creates (an id taken writes nothing, answered
+// 'idInUse' in this org) — dispatch-customers.mjs holds none, and dispatch-jobs.mjs's one is a job's line item.
 const POST_UPSERTS = {
-    'dispatch-customers.mjs POST upsert': 2,
     'dispatch-equipment.mjs POST upsert': 1,
-    'dispatch-jobs.mjs POST upsert': 2,
+    'dispatch-jobs.mjs POST upsert': 1,
     'dispatch-plan-visits.mjs POST upsert': 1,
     'dispatch-schedule-blocks.mjs POST upsert': 1,
     'dispatch-service-plans.mjs POST upsert': 1,

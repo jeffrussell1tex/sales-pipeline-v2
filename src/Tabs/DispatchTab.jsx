@@ -5,7 +5,9 @@ import { DISCARD_LABELS } from '../utils/tabLayers';
 import { saveDroppingRefused } from '../utils/linkIds.js';
 import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // A refusal in the server's words, a failure in plain words (guide §18b125 rule 5); time off's jobs not freed (§0.246).
-import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore } from '../utils/refusalWords.js';
+import { readRefusal, failureWords, refusalWords, heardRefusal, maybeSaid, writeRefusalOf, refusalError, unknownOf, saidError, thrownSaid, landedBefore, alreadySaid } from '../utils/refusalWords.js';
+// A create sent again with its id, answered with the row an earlier press made (state §0.290).
+import { heldCreate, overStored } from '../utils/createResend.js';
 import { notFreedWords, maybeFreedWords } from '../utils/dispatchUnassign.js';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
@@ -15,7 +17,7 @@ import { to12h } from '../utils/customerNotifications.js';
 // The week board's drop planner — the crew after a drop, the gates, the partial PUT (state §0.134).
 import { planWeekDrop } from '../utils/weekDrop.js';
 // An office save names only what it changed, a status move where it moved from (state §0.286).
-import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, JOB_STATUSES as KNOWN_STATUSES } from '../utils/jobChanges.js';
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobHolds, jobAnswerOf, sentOf, seenOf, listOf, JOB_STATUSES as KNOWN_STATUSES } from '../utils/jobChanges.js';
 // Quote → job → invoice (state §0.149): the vocabulary, the arithmetic and the transitions.
 import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines, isInvoiceEditable, isLiveInvoice,
     JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
@@ -2979,7 +2981,7 @@ const CustomerEditForm = ({ draft, set, accounts, accountsById, takenBy, techs, 
     </div>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, propertyTypes, onSaved, onScheduleJob, onGoToDue, confirmDiscard }) => {
+const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, propertyTypes, onSaved, onSaid, onScheduleJob, onGoToDue, confirmDiscard }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -3093,16 +3095,18 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
     // "+ New customer" opened an existing record.
     const creating = !!(draft && draft._isNew);
     React.useEffect(() => {
-        if (creating) return;
+        if (creating || (editing && selectedId)) return;   // a filter that hides the record being edited moved the form to another
         if (selectedId && list.some(c => c.id === selectedId)) return;
         if (list.length) setSelectedId(list[0].id);
         else setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [list.map(c => c.id).join(','), selectedId, creating]);
+    }, [list.map(c => c.id).join(','), selectedId, creating, editing]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
+    const adopting = React.useRef(null);   // a new customer's form become an edit of the one stored (save, state §0.290): its draft is set there
     React.useEffect(() => {
+        if (adopting.current && adopting.current === selectedId) { adopting.current = null; return; }
         if (!editing) return;
         // A new customer has no row to load from, and loading `null` over it would
         // blank the form the moment the user started typing.
@@ -3118,9 +3122,12 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
     // Everything that abandons an in-progress form goes through here, so there is
     // one place deciding whether to warn — not a confirm bolted onto each call
     // site, which is how one of them ends up missing it.
+    // Held while a Save is out (state §0.290): its answer acted on whatever form was open by then.
+    const savingRef = React.useRef(false);
     const guarded = (action) => {
+        if (saving) return;
         if (draftIsDirty(draft, (customers || []).find(c => c.id === draft?.id))) {
-            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, action); return; }
+            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, () => { if (!savingRef.current) action(); }); return; }
         }
         action();
     };
@@ -3144,15 +3151,22 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
         .filter(t => t.status === 'active' || t.id === (draft && draft.preferredTechId))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
+    // A new customer's bodies whose answer proved nothing, by its id (state §0.290): any may be the one stored.
+    const unproven = useRef({});
+    const shownRef = useRef(true);   // the view tabs stay live while a Save is out: a form gone is said above every view
+    React.useEffect(() => { shownRef.current = true; return () => { shownRef.current = false; }; }, []);
+
     const save = async () => {
         if (!draft || !(draft.name || '').trim()) { setStatus({ kind: 'err', msg: 'Name is required.' }); return; }
-        setSaving(true); setStatus(null);
+        setSaving(true); savingRef.current = true; setStatus(null);
+        let sentNew = null;
         try {
             const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null,
                 preferredTechId: draft.preferredTechId || null,
                 servicePlanId:   draft.servicePlanId   || null,
                 planStartDate:   draft.planStartDate   || null };
             const isNew = body._isNew; delete body._isNew;
+            if (isNew) sentNew = body;
             const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/dispatch-customers'
                 + (isNew ? '' : '?id=' + encodeURIComponent(draft.id)), {
@@ -3161,14 +3175,36 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                 body: JSON.stringify(body),
             });
             // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
+            let held = null;
             if (!res.ok) {
                 const r = await writeRefusalOf(res, 'Your role cannot change customers.');
                 if (!stillOrg(askedOrg)) return;
-                throw refusalError(r.words, r.heard);
+                held = isNew ? heldCreate(res.status, r.body, 'customer', draft.id) : null;
+                if (!held) throw refusalError(r.words, r.heard);
+                // An earlier press of this create landed (state §0.290): the customer as stored — another member may have changed it
+                // since. What this member changed since shows over it, as an edit to save knowingly; never written by itself.
+                const bodies = unproven.current[draft.id] || [];
+                const shown = overStored(body, held, bodies);
+                delete unproven.current[draft.id];
+                if (shown.mine.length && !shownRef.current) {
+                    onSaved(held);
+                    onSaid('The customer was already created by an earlier press. What you changed since was not saved — open the customer to change it.');
+                    return;
+                }
+                if (shown.mine.length) {
+                    onSaved(held);
+                    adopting.current = held.id;
+                    setSelectedId(held.id);
+                    setDraft(d => (d && d.id === held.id ? overStored({ ...d, name: (d.name || '').trim() }, held, bodies).draft : d));
+                    setStatus({ kind: 'err', msg: 'The customer was already created by an earlier press. What you changed since is in the form, not saved yet — Save to keep it.' });
+                    return;
+                }
+                if (shown.differs) onSaid(alreadySaid('The customer', 'created'));
             }
-            const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the copy sent
+            const data = held ? {} : await res.json().catch(() => ({}));   // landed: an answer that cannot be read keeps the copy sent
             if (!stillOrg(askedOrg)) return;
-            const saved = data.customer || body;
+            const saved = data.customer || held || body;
+            delete unproven.current[saved.id];
             onSaved(saved);
             // Clear the draft so `creating` goes false again — otherwise the
             // auto-select guard above stays disabled for the rest of the session.
@@ -3178,10 +3214,12 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
             setStatus({ kind: 'ok', msg: 'Saved.' });
         } catch (err) {
             // An answer that proves nothing may have saved it (state §0.263): said so, the form kept with its id — a press
-            // again sends the same customer (the server's upsert, in this org).
+            // again sends the same create, answered with the customer it made (state §0.290).
+            if (sentNew && unknownOf(err)) (unproven.current[sentNew.id] = unproven.current[sentNew.id] || []).push(sentNew);
             setStatus({ kind: 'err', msg: thrownSaid(err, 'The customer', 'saved') });
+        } finally {
+            setSaving(false); savingRef.current = false;
         }
-        setSaving(false);
     };
 
     const st  = selected ? (stats[selected.id] || {}) : {};
@@ -4296,8 +4334,10 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 
     const customerName = (id) => (customers || []).find(c => c.id === id)?.name || '—';
     // A job's new address keeps one id (state §0.263, census-B finding (c)): a press after one that may have made it
-    // sends it again, and once it lands the address is the form's — a second Save made another address each time.
+    // sends it again, and once it lands the address is the form's — a second Save made another address each time. `maybe`: one
+    // a press may have made already — a later press's refusal says nothing of that one, so its id is kept (state §0.290).
     const newLocIds = useRef({});
+    const maybeLocIds = useRef(new Set());
 
     const save = async () => {
         if (!draft) return;
@@ -4307,6 +4347,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
         }
         setSaving(true); setStatus(null);
         let subject = 'The job';   // what a failure with no answer may have saved (state §0.263)
+        const base = opened.current || draft;   // this job as opened — read before the address step, while which another job can be picked
         try {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             let locationId = draft.locationId || null;
@@ -4316,9 +4357,11 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
             if (loc && (loc.address || '').trim()) {
                 subject = 'The address';
                 const locId = loc.id || newLocIds.current[draft.id] || (newLocIds.current[draft.id] = 'dloc_' + crypto.randomUUID());
-                const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations'
-                    + (loc.id ? '&id=' + encodeURIComponent(loc.id) : ''), {
-                    method: loc.id ? 'PUT' : 'POST',
+                const mayBe = maybeLocIds.current.has(locId);
+                if (!loc.id) maybeLocIds.current.add(locId);
+                const sendAddress = (method) => dbFetch('/.netlify/functions/dispatch-customers?resource=locations'
+                    + (method === 'PUT' ? '&id=' + encodeURIComponent(locId) : ''), {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         id: locId, customerId: draft.customerId,
@@ -4328,19 +4371,31 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                         zip: (loc.zip || '').trim() || null,
                     }),
                 });
+                let lres = await sendAddress(loc.id ? 'PUT' : 'POST');
                 // The ok check first, the house words (state §0.248, Part 11): the server's with their ref, else "The
                 // server returned N." — the address named, since the job is not sent after it.
+                let held = null;
                 if (!lres.ok) {
-                    const r = await writeRefusalOf(lres);
+                    let r = await writeRefusalOf(lres);
                     if (!stillOrg(askedOrg)) return;
-                    if (r.heard) delete newLocIds.current[draft.id];
-                    throw saidError(r.heard ? `The address was not saved — ${r.words}` : maybeSaid('The address', 'saved', r.words));
+                    held = loc.id ? null : heldCreate(lres.status, r.body, 'location', locId);   // an earlier press made it (state §0.290)
+                    // Typed otherwise since: saved onto the address made — no job of the org names it yet, so no one else can have
+                    // changed it.
+                    if (held && ['address', 'city', 'state', 'zip'].some(k => (loc[k] || '').trim() !== (held[k] || ''))) {
+                        lres = await sendAddress('PUT');
+                        if (!lres.ok) { r = await writeRefusalOf(lres); if (!stillOrg(askedOrg)) return; held = null; }
+                    }
+                    if (!held) {
+                        if (r.heard && !mayBe) { delete newLocIds.current[draft.id]; maybeLocIds.current.delete(locId); }
+                        throw saidError(r.heard ? `The address was not saved — ${r.words}` : maybeSaid('The address', 'saved', r.words));
+                    }
                 }
-                const ldata = await lres.json().catch(() => ({}));
+                const ldata = held ? {} : await lres.json().catch(() => ({}));
                 locationId = ldata.location?.id || locId;
                 addressSaved = true;
-                delete newLocIds.current[draft.id];
-                if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));
+                // Only while the editor still shows this job (the list stays live): another job's form would be saved over this
+                // address. Its id is kept until a form takes it — the job's own save refused, the next press made another address.
+                if (stillOrg(askedOrg) && opened.current?.id === draft.id) { delete newLocIds.current[draft.id]; setLoc(l => (l ? { ...l, id: locationId } : l)); }
             }
             subject = 'The job';
 
@@ -4348,7 +4403,6 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
             // 2 — the job: only what the draft changed from the job as opened, the status it moves from named (state §0.286).
             // Each side through one builder (editorFields — the form's expressions as they always were), so an untouched field
             // is never sent: a screen behind another member's change wrote its old status and schedule back.
-            const base = opened.current || draft;
             // The appointment it saw named with one it sends (state §0.289): the job as opened, never the form's reading of it.
             const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id, { seen: base });
             // Nothing of the job changed: no write — "Saved" when the address step above saved the address.
@@ -6094,9 +6148,22 @@ export default function DispatchTab() {
     // a plan's visit or a blank one — set the render it opens.
     const newJobBaseRef = useRef(null);
     // New Job's creates keep their ids once an answer proved nothing (state §0.263, the unknown-save rule, Part 6): the same
-    // customer, address or job pressed again sends the same id — the server's upsert in this org lands it once. Keyed by
-    // what each sends; a landed create, or the server's own refusal, gives its id up.
+    // customer, address or job pressed again sends the same id — made once, and answered 'idInUse' with the record as stored
+    // when an earlier press made it (state §0.290; it was an upsert, and wrote over what another member did to it since).
+    // Keyed by what each sends; a landed create gives its id up, and so does the server's own refusal of the first press — one
+    // after a press that may have landed (`maybeNewJobIds`) says nothing of that one, so its id is kept (the review: a 401 on
+    // the second press and the third made a second job).
     const heldNewJobIds = useRef({});
+    const maybeNewJobIds = useRef(new Set());
+    const askHeld = (key, make) => {
+        const id = heldNewJobIds.current[key] || (heldNewJobIds.current[key] = make());
+        const mayBe = maybeNewJobIds.current.has(id);
+        maybeNewJobIds.current.add(id);
+        return { id, giveUp: () => { if (!mayBe) { delete heldNewJobIds.current[key]; maybeNewJobIds.current.delete(id); } },
+            landed: () => { delete heldNewJobIds.current[key]; maybeNewJobIds.current.delete(id); } };
+    };
+    // A create answered with a record an earlier press made that stands otherwise now: said, above every view, until its Close.
+    const [createSaid, setCreateSaid] = useState(null);   // { text, jobId? }
     if (!showNewJobForm) newJobBaseRef.current = null;
     else if (newJobBaseRef.current === null) newJobBaseRef.current = JSON.stringify(newJobForm);
     const requestCloseNewJob = useLocalLayer(showNewJobForm, { onClose: closeNewJob, dirty: showNewJobForm && JSON.stringify(newJobForm) !== newJobBaseRef.current, busy: newJobSaving });
@@ -6124,6 +6191,7 @@ export default function DispatchTab() {
 
         setNewJobSaving(true);
         setNewJobError('');
+        setCreateSaid(null);
         const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let step = ['The customer', 'created'];   // what a failure with no answer may have made (state §0.263)
         try {
@@ -6134,7 +6202,8 @@ export default function DispatchTab() {
             let createdCust = null;
             if (!customerId) {
                 const custKey = `cust|${custLabel}|${custAccountId}`;
-                const newCustId = heldNewJobIds.current[custKey] || (heldNewJobIds.current[custKey] = 'dcust_' + crypto.randomUUID());
+                const custHeld = askHeld(custKey, () => 'dcust_' + crypto.randomUUID());
+                const newCustId = custHeld.id;
                 // A won deal's account, copied onto its placeholder, is left off when the server says it names no live
                 // account — deleted since (state §0.214): the customer is made as before, unlinked. Only a 404 is
                 // dropped: the 409 for an account another customer stands for is said under the form.
@@ -6147,6 +6216,8 @@ export default function DispatchTab() {
                     const r = await dbFetch('/.netlify/functions/dispatch-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                     if (!r.ok) {
                         const refused = await r.json().catch(() => null);
+                        const cheld = heldCreate(r.status, refused, 'customer', newCustId);   // an earlier press made it
+                        if (cheld) { cdata = { customer: cheld }; return { ok: true, status: r.status }; }
                         cwhy = refusalWords(r, refused); cheard = heardRefusal(r.status, refused);
                         return { ok: false, status: r.status, field: refused?.field };
                     }
@@ -6155,19 +6226,19 @@ export default function DispatchTab() {
                 }, { id: newCustId, name: custLabel, accountId: custAccountId || null }, newJobForm.opportunityCopied ? ['accountId'] : []);
                 if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
                 if (!cans.ok) {
-                    if (cheard) delete heldNewJobIds.current[custKey];
+                    if (cheard) custHeld.giveUp();
                     throw saidError(cheard ? `The customer was not created — ${cwhy}` : maybeSaid('The customer', 'created', cwhy));
                 }
-                delete heldNewJobIds.current[custKey];
+                custHeld.landed();
                 // Landed with an answer that cannot be read: the row as sent (its refused account left off) — listed, and its
                 // first address its default (the review of §0.248).
                 createdCust = cdata?.customer || { id: newCustId, name: custLabel, accountId: csent.accountId || null };
                 customerId  = createdCust?.id || newCustId;
-                setCustomers(prev => [...prev, createdCust]);
+                setCustomers(prev => [...prev.filter(c => c.id !== createdCust.id), createdCust]);
                 // The made customer is the form's now (state §0.214; OPEN_ITEMS §4.4): a Save refused after this point
                 // and pressed again reuses it — it made a second customer of the same name.
                 if (stillOrg(askedOrg)) {
-                    setNewJobForm(f => ({ ...f, customer: createdCust?.name || custLabel, customerId, accountId: createdCust?.accountId || custAccountId || '',
+                    setNewJobForm(f => ({ ...f, customer: createdCust?.name || custLabel, customerId, accountId: createdCust?.accountId || '',
                         customerRefusal: '', madeCustomerId: customerId }));
                 }
             }
@@ -6179,7 +6250,8 @@ export default function DispatchTab() {
             else if (address) {
                 step = ['The job address', 'saved'];
                 const locHeld = `loc|${locKey}`;
-                const locId = heldNewJobIds.current[locHeld] || (heldNewJobIds.current[locHeld] = 'dloc_' + crypto.randomUUID());
+                const locAsk = askHeld(locHeld, () => 'dloc_' + crypto.randomUUID());
+                const locId = locAsk.id;
                 const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -6192,13 +6264,17 @@ export default function DispatchTab() {
                     }),
                 });
                 // The ok check first, the house words (state §0.248, Part 11); a landed answer that cannot be read keeps the id sent.
+                let lheld = null;
                 if (!lres.ok) {
                     const lr = await writeRefusalOf(lres);
-                    if (lr.heard) delete heldNewJobIds.current[locHeld];
-                    throw saidError(lr.heard ? `The job address was not saved — ${lr.words}` : maybeSaid('The job address', 'saved', lr.words));
+                    lheld = heldCreate(lres.status, lr.body, 'location', locId);   // an earlier press made it
+                    if (!lheld) {
+                        if (lr.heard) locAsk.giveUp();
+                        throw saidError(lr.heard ? `The job address was not saved — ${lr.words}` : maybeSaid('The job address', 'saved', lr.words));
+                    }
                 }
-                delete heldNewJobIds.current[locHeld];
-                const ldata = await lres.json().catch(() => null);
+                locAsk.landed();
+                const ldata = lheld ? null : await lres.json().catch(() => null);
                 locationId = ldata?.location?.id || locId;
                 if (stillOrg(askedOrg)) setNewJobForm(f => ({ ...f, madeLocation: { id: locationId, key: locKey } }));
             }
@@ -6206,9 +6282,8 @@ export default function DispatchTab() {
             if (!stillOrg(askedOrg)) return;
             // 3 — the job
             step = ['The job', 'created'];
-            let jobId = 'djob_' + crypto.randomUUID();
             const payload = {
-                id:              jobId,
+                id:              null,
                 customerId,
                 locationId,
                 accountId:       createdCust ? (createdCust.accountId || null) : (custAccountId || null),   // the made customer's, as the server kept it
@@ -6228,8 +6303,9 @@ export default function DispatchTab() {
                 servicePlanId:   newJobForm.servicePlanId || null,
                 planDueDate:     newJobForm.planDueDate   || null,
             };
-            const jobKey = `job|${JSON.stringify({ ...payload, id: null })}`;
-            jobId = payload.id = heldNewJobIds.current[jobKey] || (heldNewJobIds.current[jobKey] = jobId);
+            const jobKey = `job|${JSON.stringify(payload)}`;
+            const jobAsk = askHeld(jobKey, () => 'djob_' + crypto.randomUUID());
+            const jobId = payload.id = jobAsk.id;
             // The CRM account a job copies from its customer, and the deal a won deal's placeholder copies, are
             // left off when the server says they name no live record — deleted since (a create asks every link
             // it names, state §0.199) — and the job is saved without them. A deal the dispatcher picked is
@@ -6238,12 +6314,14 @@ export default function DispatchTab() {
             // org's token.
             // As the customer's (state §0.248, Part 11): the ok check first, a refusal's words and link from its body; a
             // landed answer that cannot be read keeps the job as sent, under the id sent.
-            let data = null, why = '', jheard = false;
+            let data = null, why = '', jheard = false, held = null;
             const { answer, sent } = await saveDroppingRefused(async (body) => {
                 if (!stillOrg(askedOrg)) return undefined;
                 const r = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 if (!r.ok) {
                     const refused = await r.json().catch(() => null);
+                    held = heldCreate(r.status, refused, 'job', body.id);   // an earlier press made it
+                    if (held) return { ok: true, status: r.status };
                     why = refusalWords(r, refused); jheard = heardRefusal(r.status, refused);
                     return { ok: false, status: r.status, field: refused?.field };
                 }
@@ -6252,10 +6330,26 @@ export default function DispatchTab() {
             }, payload, newJobForm.opportunityCopied ? ['accountId', 'opportunityId'] : ['accountId']);
             if (!stillOrg(askedOrg)) return;
             if (!answer.ok) {
-                if (jheard) delete heldNewJobIds.current[jobKey];
+                if (jheard) jobAsk.giveUp();
                 throw saidError(jheard ? why : maybeSaid('The job', 'created', why));
             }
-            delete heldNewJobIds.current[jobKey];
+            jobAsk.landed();
+            if (held) {
+                // The job an earlier press made, as it stands (state §0.290): on the board and in Jobs as stored — another member may
+                // have scheduled it since, and a row built from the form would be saved over theirs. Standing as this press
+                // sent it, it is this press's job, nothing said; otherwise said, its record a press away — never moved to (the
+                // review: the view behind New Job may hold unsaved work).
+                const row = boardJobOf(held, [...customers, createdCust].filter(Boolean));
+                setJobs(prev => [row, ...prev.filter(j => j.id !== row.id)]);
+                setJobsRaw(prev => [held, ...prev.filter(j => j.id !== held.id)]);
+                const { id: _id, accountId: _account, opportunityId: _deal, ...asked } = sent;
+                if (!jobHolds(held, asked)) setCreateSaid({ text: alreadySaid('The job', 'created'), jobId: held.id });
+                if (held.status === 'unscheduled') setSelectedJobId(held.id);
+                setNewJobForm(EMPTY_JOB);
+                setAppliedTemplate(null);
+                setShowNewJobForm(false);
+                return;
+            }
             // Optimistically add to local state
             const saved = data?.job || data || {};
             const optimistic = {
@@ -6284,7 +6378,7 @@ export default function DispatchTab() {
                 // The job as stored — what a sender diffs against (state §0.286); it held the whole answer, `{ job }`.
                 _raw:            saved,
             };
-            setJobs(prev => [optimistic, ...prev]);
+            setJobs(prev => [optimistic, ...prev.filter(j => j.id !== optimistic.id)]);
             // The Jobs view lists the jobs as stored (jobsRaw): the job made joins it as the server answered it — it showed
             // only after a reload (state §0.266). A landed answer that could not be read has no stored job to list.
             if (saved.id) setJobsRaw(prev => [saved, ...prev.filter(j => j.id !== saved.id)]);
@@ -6963,6 +7057,27 @@ export default function DispatchTab() {
                 </div>
             )}
 
+            {/* A create answered with the record an earlier press made, standing otherwise now (state §0.290): until its Close. */}
+            {createSaid && (
+                <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px',
+                    marginBottom: 12, background: T.surface2, borderLeft: `3px solid ${T.goldInk}`, borderRadius: T.r,
+                    fontSize: 12.5, color: T.ink, fontWeight: 600, fontFamily: T.sans }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>{createSaid.text}</span>
+                    {createSaid.jobId && (
+                        <button onClick={() => { const id = createSaid.jobId; setCreateSaid(null); openJobRecord(id); }}
+                            style={{ fontSize: 11, color: T.info, background: 'none', border: 'none', cursor: 'pointer',
+                                fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                            Open job
+                        </button>
+                    )}
+                    <button onClick={() => setCreateSaid(null)}
+                        style={{ fontSize: 11, color: T.inkMid, background: 'none', border: 'none', cursor: 'pointer',
+                            fontWeight: 600, fontFamily: T.sans, padding: 0 }}>
+                        Close
+                    </button>
+                </div>
+            )}
+
             {/* Main content */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {view === 'board' ? (
@@ -7059,6 +7174,7 @@ export default function DispatchTab() {
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
                     <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} planVisits={planVisits} propertyTypes={propertyTypes} confirmDiscard={confirmDiscard}
+                        onSaid={text => setCreateSaid({ text })}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];

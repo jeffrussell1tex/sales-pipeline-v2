@@ -129,6 +129,14 @@ test("J6 — the server's 'already': every value the write sets held, by the sam
     assert.ok(jobHolds({ customFields: { b: 2, a: 1 } }, { customFields: JSON.stringify({ a: 1, b: 2 }) }), "REGRESSION: an API press sent again with its custom fields said 'stale'");
     assert.ok(!jobHolds({ customFields: { a: 1 } }, { customFields: JSON.stringify({ a: 2 }) }));
     assert.ok(jobHolds({ tags: '["x"]' }, { tags: JSON.stringify(['x']) }));
+    // §0.290: a New Job sent again, answered with the job an earlier press made — the body as New Job sends it (a trade, a type and
+    // a plan not chosen as none) against the job as the server stores and answers it; scheduled, crewed or edited since, it is not as sent.
+    const sent = { customerId: 'c1', locationId: 'loc1', title: 'Boiler', trade: null, jobType: null, priority: 'normal', status: 'unscheduled', durationMinutes: 120, crewSize: 1, minLicense: null,
+        needSkills: [], scheduledDate: null, equipmentIds: [], requiredVehicleType: null, servicePlanId: null, planDueDate: null };
+    const made = { ...STORED, customerId: 'c1', status: 'unscheduled', scheduledDate: null, scheduledStart: null, scheduledEnd: null, timeSlot: 'anytime', assignedTechId: null, coTechIds: [], assignedEquipmentIds: [],
+        requiredVehicleType: null, servicePlanId: null, planDueDate: null, createdBy: 'user_me', jobNumber: 'JOB-2026-0001' };
+    assert.ok(jobHolds(made, sent), 'REGRESSION: a create sent again and standing as sent said to stand otherwise');
+    for (const since of [{ status: 'scheduled' }, { scheduledDate: '2026-12-01' }, { title: 'Boiler (rush)' }, { priority: 'emergency' }, { needSkills: ['gas'] }, { durationMinutes: 60 }, { locationId: null }]) assert.ok(!jobHolds({ ...made, ...since }, sent), JSON.stringify(since));
 });
 
 test("J7 — a refusal read only about the job pressed: 'already' and 'stale' with the job, else nothing", () => {
@@ -214,8 +222,22 @@ test("the job endpoint refuses a fromStatus or a status outside the job statuses
     const officeLinks = f.lastIndexOf('const linked = await checkLinks(JOB_LINKS, data, current, orgId);');
     assert.ok(from < officeLinks && st < officeLinks && officeLinks < write, 'the office PUT refuses both before its links are asked and its write');
     const p = at("if (data.status != null && !JOB_STATUSES.includes(data.status)) {\n                return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };");
-    const prior = f.indexOf('const [priorJob] = await db.select()');
-    assert.ok(prior > 0 && p < prior, 'the create refuses before it reads or writes');
+    // Moved in §0.290: the create's first read is its held look (POST is a create, no upsert) — it was priorJob's. In order: the
+    // refusal, the held look, the links (asked against none), the insert, the look again, the words alone — before any status
+    // history, customer notice or audit.
+    const steps = ['const landed = await heldJob(orgId, data.id);\n            if (landed) return landed;', 'const linked = await checkLinks(JOB_LINKS, data, null, orgId);',
+        'const [w] = await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();',
+        'if (!written) {\n                const beside = await heldJob(orgId, data.id);\n                if (beside) return beside;\n            }',
+        "if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };",
+        "await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');",
+        'await notifyCustomer({ orgId, before: null, after: written, actorName: await getCallerName(userId, orgId) });',
+        "action: 'dispatch_job.created'"].map(at);
+    assert.ok(p < steps[0], 'the create refuses before it reads or writes');
+    for (let i = 1; i < steps.length; i++) assert.ok(steps[i - 1] < steps[i], `REGRESSION: the create's steps out of order — ${i}`);
+    // Reversed in §0.290: POST was an upsert that kept the number and the maker of the job it found; a create writes neither over one.
+    assert.ok(!f.includes('priorJob'), 'no create reads the job it would write over');
+    assert.ok(f.includes("body: JSON.stringify({ error: 'That job id is already in use.', code: 'idInUse', job: normaliseJob(held) })"), 'the job as stored');
+    assert.ok(f.includes('from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));\n    return held ? {'), 'the held look in its org');
 });
 
 // ── §0.289: where the screen saw the job ──

@@ -280,11 +280,22 @@ test('THE GUARD: every single write asks checkLinks — a create with nothing he
     assert.ok(o.includes('const people = await checkLinks(DEAL_LINKS, data, null, orgId);'));
     assert.ok(at(o, 'const link = await accountLink(data, existing.accountId, orgId, existing.site, existing.account);', 'const people = await checkLinks(DEAL_LINKS, data, existing, orgId);'), 'after accountLink — itself after the ownership check');
     const dc = fn('dispatch-customers');
-    assert.ok(dc.includes('const linked = await checkLinks(CUSTOMER_LINKS, data, priorCust || null, orgId);'), 'the create is an upsert: what it holds is not asked again');
+    // Reversed in §0.290: the create was an upsert, what the row held not asked again; it is a create only — an id this org
+    // holds is answered with its customer before any link is asked, so each link is asked with nothing held, before the insert.
+    assert.ok(inOrder(dc, "return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };", 'const landed = await heldCustomer(orgId, data.id);\n            if (landed) return landed;',
+        'const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);', 'const [made] = await db.insert(dispatchCustomers)', '.onConflictDoNothing({ target: dispatchCustomers.id }).returning();'),
+        'the held look, then the links with nothing held, then the insert — never an upsert');
+    assert.ok(dc.includes('    const [held] = await db.select().from(dispatchCustomers).where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));'), 'the held look in this org');
+    assert.ok(!dc.includes('priorCust'), 'REGRESSION: the create reads a row to write over');
     assert.ok(dc.includes('const linked = await checkLinks(CUSTOMER_LINKS, data, held, orgId);'));
     assert.ok(at(dc, 'const linked = await checkLinks(CUSTOMER_LINKS, data, held, orgId);', 'const updates = { updatedAt: new Date() };'));
     const dj = fn('dispatch-jobs');
-    assert.ok(dj.includes('const linked = await checkLinks(JOB_LINKS, data, priorJob || null, orgId);'));
+    // Reversed in §0.290: as the customer's — the held look in this org, then the links with nothing held, then the insert.
+    assert.ok(inOrder(dj, "return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, title required' }) };", 'const landed = await heldJob(orgId, data.id);\n            if (landed) return landed;',
+        'const linked = await checkLinks(JOB_LINKS, data, null, orgId);', 'await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();'),
+        'the held look, then the links with nothing held, then the insert — never an upsert');
+    assert.ok(dj.includes('    const [held] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));'), 'the held look in this org');
+    assert.ok(!dj.includes('priorJob'), 'REGRESSION: the create reads a row to write over');
     const putCheck = '            const linked = await checkLinks(JOB_LINKS, data, current, orgId);\n'
         + '            if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };\n'
         + '            Object.assign(data, linked.set);\n';
@@ -315,7 +326,10 @@ test('THE GUARD: every check answers its refusal and stores what it decided — 
     assert.ok(fn('activities').includes("for (const k of Object.keys(relinked)) if (k !== 'id' && k in updateData) { clean[k] = relinked[k]; updateData[k] = relinked[k]; }"), 'an activity update stores the survivor, contactId with its list');
     const dc = fn('dispatch-customers');
     assert.ok(dc.includes('if (CUSTOMER_LINKS.some((l) => l.key in data)) {'), "a customer update naming its account is asked — or another of its links (§0.201)");
-    assert.ok(dc.includes('const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber, accountId: dispatchCustomers.accountId,'), 'the account the customer holds is read with its number');
+    // Reversed in §0.290: the create reads no customer it would write over; every account it names is asked whether another
+    // customer holds it, as checkLinks decided it — and its number is always a fresh one.
+    assert.ok(inOrder(dc, 'const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);', 'Object.assign(data, linked.set);', '            if (data.accountId) {\n                const other = await accountTaken(orgId, data.accountId, data.id);\n                if (other) return takenReply(other);',
+        'db.insert(dispatchCustomers).values(buildRow(await nextCustomerNumber(orgId)))'), 'the account the create names, asked as decided, before the insert');
 });
 
 test('THE GUARD: every bulk write asks checkBulkLinks for the batch, before anything is written — an overwrite against the stored rows; a create clears, after its insert, a link to its own row that did not land', () => {
@@ -527,9 +541,11 @@ test('THE GUARD: a screen that copies a link onto a new record leaves off one th
     // its field and its words (refusalWords: the server's with their ref, else the status).
     // Moved in §0.263 (the unknown-save rule, Part 4): whether the refusal was the server's own is read beside its words,
     // and the throw says it as it is, or as maybe (saidError).
-    assert.ok(d.includes("                if (!r.ok) {\n                    const refused = await r.json().catch(() => null);\n                    why = refusalWords(r, refused); jheard = heardRefusal(r.status, refused);\n                    return { ok: false, status: r.status, field: refused?.field };\n"),
+    // Moved in §0.290: an earlier press's job, answered 'idInUse', is read first — landed, never a refusal to drop a link over.
+    assert.ok(d.includes("                if (!r.ok) {\n                    const refused = await r.json().catch(() => null);\n                    held = heldCreate(r.status, refused, 'job', body.id);   // an earlier press made it\n                    if (held) return { ok: true, status: r.status };\n                    why = refusalWords(r, refused); jheard = heardRefusal(r.status, refused);\n                    return { ok: false, status: r.status, field: refused?.field };\n"),
         "the server's refusal handed to the drop, its status and field (the fix review, tests F2)");
-    assert.ok(d.includes("            if (!answer.ok) {\n                if (jheard) delete heldNewJobIds.current[jobKey];\n                throw saidError(jheard ? why : maybeSaid('The job', 'created', why));\n            }\n"), 'anything else is said under the form');
+    // Moved in §0.290: the id is given up through askHeld — kept when an earlier press may have made it.
+    assert.ok(d.includes("            if (!answer.ok) {\n                if (jheard) jobAsk.giveUp();\n                throw saidError(jheard ? why : maybeSaid('The job', 'created', why));\n            }\n"), 'anything else is said under the form');
     assert.ok(d.includes('opportunityId:   sent.opportunityId || null,'), 'the job on screen holds the deal it was saved with');
 });
 

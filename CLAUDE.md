@@ -498,7 +498,9 @@ One commit per verified batch; doc patch in the same commit.
   five deletes (off, unsaid, never in the Undo; ids encoded; none sent
   under its own Undo, `restoring.js`) — is an earlier press
   that landed (THE GUARD,
-  tests/unknown-save.test.mjs; guide §18b134); since §0.262 Leads, Quotes,
+  tests/unknown-save.test.mjs; guide §18b134); since §0.290 Dispatch's job,
+  customer and location creates too, with the row as stored, taken by its
+  screen and never written over by itself (`heldCreate`; rule 15); since §0.262 Leads, Quotes,
   Reports and the Sales Manager too — a refusal puts back only its own row, a
   create with no form keeps its id by what it sends; since §0.263 Dispatch
   too (`thrownSaid`, `saidError`); since §0.264 Settings and its senders

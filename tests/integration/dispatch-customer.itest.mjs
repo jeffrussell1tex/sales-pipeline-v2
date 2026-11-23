@@ -10,7 +10,7 @@
 //   I4  quote -> job on a deal whose account has no customer, beside one typed as "Acme Inc" for "Acme, Inc." and
 //       linked to nothing: that customer — no second one made.
 //   I5  the customer create: a second customer for an account another customer of this org stands for — 409 naming
-//       it, nothing written; the same customer re-POSTed (an upsert holding the account) saves; org B's customer on
+//       it, nothing written; the same customer re-POSTed is answered with itself, nothing written (§0.290); org B's customer on
 //       its own account of the same name is no bar.
 //   I6  the customer edit: linking an account another customer stands for — 409, nothing written; a save of other
 //       fields on a customer whose account another already shares (stored before §0.214) is never asked again.
@@ -229,17 +229,19 @@ test('I4 — quote -> job on a deal whose account has no customer: the one custo
     assert.equal((await rowsOf(dispatchCustomers)).length, custBefore);
 });
 
-test('I5 — the create: a second customer for an account another customer stands for is refused, naming it; the same customer re-POSTed saves; org B is no bar', async () => {
+test('I5 — the create: a second customer for an account another customer stands for is refused, naming it; the same customer re-POSTed is answered with itself; org B is no bar', async () => {
     const before = (await rowsOf(dispatchCustomers)).length;
     const second = await call(custFn, 'POST', { body: { id: ID('c_site2'), name: 'Dcust Port Allen annex', accountId: SITE } });
     assert.equal(second.status, 409, JSON.stringify(second.body));
     assert.deepEqual(second.body, { error: 'That CRM account is already in Dispatch as “Dcust Shell - Port Allen” (CUST-0001) — add this site to it as a service location instead.', field: 'accountId' });
     assert.equal(await one(dispatchCustomers, ID('c_site2')), undefined, 'nothing written');
     assert.equal((await rowsOf(dispatchCustomers)).length, before);
-    // The site's own customer re-POSTed (the create is an upsert): the account it holds is not asked again.
+    // The site's own customer re-POSTed (reversed in §0.290: a create, not an upsert): answered with itself as stored, its own
+    // account never asked — nothing written.
+    const stored = await one(dispatchCustomers, C_SITE);
     const again = await call(custFn, 'POST', { body: { id: C_SITE, name: 'Dcust Shell - Port Allen', accountId: SITE, notes: 'kept' } });
-    assert.equal(again.status, 201, JSON.stringify(again.body));
-    assert.equal((await one(dispatchCustomers, C_SITE)).notes, 'kept');
+    assert.deepEqual([again.status, again.body.code, again.body.customer?.id], [409, 'idInUse', C_SITE], JSON.stringify(again.body));
+    assert.deepEqual(await one(dispatchCustomers, C_SITE), stored);
     // Lone Star has no customer: one is made.
     const lone = await call(custFn, 'POST', { body: { id: ID('c_lone'), name: 'Dcust Lone Star', accountId: LONE } });
     assert.equal(lone.status, 201, JSON.stringify(lone.body));

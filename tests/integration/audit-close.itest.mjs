@@ -356,17 +356,18 @@ test('a job\'s createdBy is the caller\'s and survives a re-POST; no body sets c
     assert.equal(first.createdBy, WHO.admin.user, 'the caller, not the body');
     assert.equal(first.dispatchedBy, null);
     const other = { ...WHO.admin, user: 'clerk_itest_aclose_admin2' };
-    await call('dispatch-jobs', other, 'POST', { ...job, title: 'Fresh again' });
+    // Reversed in §0.290: a create sent again with its id writes nothing — answered with the job as stored (it was an upsert).
+    const resent = await call('dispatch-jobs', other, 'POST', { ...job, title: 'Fresh again' });
+    assert.deepEqual([resent.status, resent.body.code, resent.body.job.title], [409, 'idInUse', 'Fresh']);
     const [again] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.id, job.id));
-    assert.equal(again.title, 'Fresh again');
+    assert.equal(again.title, 'Fresh');
     assert.equal(again.createdBy, WHO.admin.user, 'a re-POST keeps who created it');
-    // Added in §0.266: a create sent again with its id (New Job keeps one across its presses — §0.263) writes "Job created"
-    // once, the first press's, and is audited as an update — never a second create.
+    // Added in §0.266: "Job created" and the create's audit once, the first press's.
     const history = await db.select().from(dispatchJobStatusHistory).where(eq(dispatchJobStatusHistory.jobId, job.id));
     assert.deepEqual(history.map((h) => [h.fromStatus, h.toStatus, h.note]), [[null, 'unscheduled', 'Job created']],
         'REGRESSION: a create sent again writes a second "Job created" row');
     const audits = (await db.select().from(auditLog).where(eq(auditLog.entityId, job.id))).map((a) => a.action).sort();
-    assert.deepEqual(audits, ['dispatch_job.created', 'dispatch_job.updated'], 'REGRESSION: a create sent again audited as a second create');
+    assert.deepEqual(audits, ['dispatch_job.created'], 'REGRESSION: a create sent again audited');
     await call('dispatch-jobs', WHO.admin, 'PUT', { createdBy: 'usr_forged', dispatchedBy: 'usr_forged', title: 'Edited' }, { id: job.id });
     const [edited] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.id, job.id));
     assert.equal(edited.title, 'Edited');

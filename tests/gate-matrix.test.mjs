@@ -173,7 +173,7 @@ test('a refusal comes before any write or send; signed out, or refused by sign-i
             if (x.status !== 403 || !/turned off/.test(x.said) || x.asked) open.add(`${f} ${r.method} ${r.what || r.label || ''}, refused by sign-in: ${x.status} ${x.said}, ${x.asked} statements`);
         }
     }
-    assert.ok(refused >= 15755 && out >= 3649 && off >= 3251, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
+    assert.ok(refused >= 15796 && out >= 3658 && off >= 3260, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
     assert.deepEqual(wrote, [], 'REGRESSION: a write, a Clerk write or a send before its refusal');
     assert.deepEqual([...open], [], 'REGRESSION: answered a caller sign-in refused');
     for (const [f, [methods, why]] of Object.entries(PUBLIC)) assert.ok(FUNCTIONS.includes(f) && methods.length && why.length >= 9, `${f}: a public function that is there`);
@@ -198,6 +198,71 @@ test('THE GUARD — every refusal a function returns, left out in memory, change
     assert.ok(gates >= 217, `the refusals found (${gates}; 217 on 23 Nov) — a scan that stops finding them fails here`);
     assert.deepEqual(unseen, [], 'REGRESSION: a refusal no request reaches — add one to tests/gates/requests-*.mjs (the caller it refuses, and the one it lets by), or name it in UNREACHED with why');
     UNREACHED.forEach(([f, t, r, why], i) => { assert.equal(named.get(i), 1, `${f}: if (${t}) returning ${r} is named as unreached, once — a new one is reached, or named`); assert.ok(why.length > 10); });
+});
+
+// The three Dispatch creates (state §0.290): an id this org holds is answered with its record as stored — before a link is asked,
+// and again when the insert wrote nothing, two pressed at once — and another org's id with the words alone; nothing written
+// but the insert that wrote none. Each line left out in memory answers otherwise.
+test("a Dispatch create whose id the org holds answers 409 idInUse with the record as stored, nothing written; another org's id, the words alone — RUN", async () => {
+    await asked;
+    const row = { id: 'x1', orgId: 'org_a', name: 'As stored', title: 'As stored', customerId: 'x1', customerNumber: 'CUST-0007', jobNumber: 'JOB-2026-0007', address: '1 Main St', city: 'Dallas', status: 'scheduled', scheduledDate: '2026-12-01' };
+    const base = { settings: [{ extra: { dispatchEnabled: true } }], dispatch_customers: [{ ...row, id: 'c1' }] };
+    const creates = [
+        ['dispatch-jobs', 'job', 'dispatch_jobs', {}, { id: 'x1', customerId: 'c1', title: 'Typed' }, 'That job id is already in use.'],
+        ['dispatch-customers', 'customer', 'dispatch_customers', {}, { id: 'x1', name: 'Typed' }, 'That customer id is already in use.'],
+        ['dispatch-customers', 'location', 'dispatch_service_locations', { resource: 'locations' }, { id: 'x1', customerId: 'c1', name: 'Typed', address: 'a', city: 'c' }, 'That location id is already in use.'],
+    ];
+    for (const [f, key, table, qs, body, words] of creates) {
+        // held(n): whether the n-th read of the whole row at its id finds it. The insert writes nothing unless `lands`.
+        const run = async (handler, held, { lands = false, sent = body, linked = true } = {}) => {
+            let n = 0, wrote = [], answer = null;
+            const rows = ({ kind, table: t, fields }) => {
+                if (t !== table) return linked || t === 'settings' ? base[t] || [] : [];   // linked: the customer it names is the org's
+                if (kind === 'select') return !fields && held(n++) ? [row] : [];   // a read naming its columns is the number's or the account's
+                return kind === 'insert' && lands ? [{ ...row, name: 'Made', title: 'Made' }] : [];
+            };
+            await ask(async (e, c) => { answer = await handler(e, c); wrote = globalThis.__gates.ops.filter((x) => x.kind !== 'select').map((x) => `${x.kind} ${x.table}`); return answer; }, f, { method: 'POST', qs, body: sent, rows }, 'Admin');
+            return { status: answer.statusCode, body: JSON.parse(answer.body), wrote };
+        };
+        const src = sourceOf(f), handler = await load(f);
+        // This create's own copy of a line: the customers' file holds the locations' create first.
+        const start = src.indexOf(`const landed = await held${key[0].toUpperCase()}${key.slice(1)}(orgId, data.id);`);
+        assert.ok(start > 0, `REGRESSION: ${key}: the held look`);
+        const cut = async (line) => { const i = src.indexOf(line, start); assert.ok(start >= 0 && i > start, `${key}: ${line}`); return loadCut(f, [i, i + line.length]); };
+        const early = await run(handler, () => true, { lands: true });
+        assert.deepEqual([early.status, early.body.code, early.body.error, early.wrote], [409, 'idInUse', words, []], `REGRESSION: ${key}: a create of an id the org holds wrote, or did not say so`);
+        assert.equal(early.body[key]?.id, 'x1');
+        assert.equal(early.body[key][key === 'job' ? 'title' : 'name'], 'As stored', 'the record as stored, never as sent');
+        // A link it names that is no record of the org is never asked of a create that landed.
+        const gone = await run(handler, () => true, { linked: false, sent: { ...body, accountId: 'acc_gone', customerId: 'c_gone' } });
+        assert.deepEqual([gone.status, gone.body.code], [409, 'idInUse'], `REGRESSION: ${key}: a link asked before the held look`);
+        const unlooked = await cut('if (landed) return landed;'), past = await run(unlooked, () => true, { lands: true });
+        assert.deepEqual([past.status, past.wrote[0]], [201, `insert ${table}`], 'shown red: the look left out, the create writes');
+        assert.equal((await run(unlooked, () => true, { linked: false, sent: { ...body, accountId: 'acc_gone', customerId: 'c_gone' } })).status, 404, 'shown red: its link refused over a create that landed');
+        // Two at once: none held when asked, the insert wrote nothing, held now — no history, notice or audit after it.
+        const beside = await run(handler, (n) => n > 0);
+        assert.deepEqual([beside.status, beside.body.code, beside.body[key]?.id, beside.wrote], [409, 'idInUse', 'x1', [`insert ${table}`]], `REGRESSION: ${key}: the same create pressed twice at once`);
+        const alone = await run(await cut('if (beside) return beside;'), (n) => n > 0);
+        assert.deepEqual([alone.status, alone.body], [409, { error: words }], 'shown red: the second look left out, the words with no record');
+        // Another org's id: held by no row of this org, then or after — the words alone, and nothing after the insert.
+        const other = await run(handler, () => false);
+        assert.deepEqual([other.status, other.body, other.wrote], [409, { error: words }, [`insert ${table}`]], `REGRESSION: ${key}: another org's id`);
+        const on = await run(await cut(`if (!${key === 'job' ? 'written' : 'inserted'}) return { statusCode: 409, headers, body: JSON.stringify({ error: '${words}' }) };`), () => false);
+        assert.notDeepEqual([on.status, on.body, on.wrote], [other.status, other.body, other.wrote], 'shown red: the refusal left out, the create goes on');
+        // One that lands: the row made, audited as a create.
+        const made = await run(handler, () => false, { lands: true });
+        assert.deepEqual([made.status, made.body.code, made.wrote[0]], [201, undefined, `insert ${table}`]);
+        assert.ok(made.wrote.includes('insert audit_log'), `${key}: ${made.wrote}`);
+    }
+    // The look and the insert as written: by id AND org, awaited before the insert and after; the insert gives way on its id
+    // alone; a customer's, a location's and a job's create are no upsert again.
+    for (const [f, key, table] of [['dispatch-jobs', 'Job', 'dispatchJobs'], ['dispatch-customers', 'Customer', 'dispatchCustomers'], ['dispatch-customers', 'Location', 'dispatchServiceLocations']]) {
+        const src = sourceOf(f).split('\r\n').join('\n'), times = (x) => src.split(x).length - 1;
+        assert.equal(times(`await db.select().from(${table}).where(and(eq(${table}.id, id), eq(${table}.orgId, orgId)));\n    return held ? { statusCode: 409,`), 1, `REGRESSION: ${key}: the held look in its org`);
+        assert.equal(times(`= await held${key}(orgId, data.id);`), 2, `REGRESSION: ${key}: asked before and after its insert, awaited`);
+        assert.equal(times(`.onConflictDoNothing({ target: ${table}.id }).returning();`), 1, `REGRESSION: ${key}: its insert`);
+        assert.equal(times(`.onConflictDoUpdate({ target: ${table}.id`), 0, `REGRESSION: ${key}: an upsert`);
+    }
 });
 
 test('the engine on made-up code: each shape of refusal found, its loss cut where it stands; a cut copy really lost its gate — RUN', async () => {

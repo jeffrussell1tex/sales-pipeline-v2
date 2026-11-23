@@ -277,7 +277,7 @@ test('schema: dispatch_jobs.quote_id and the invoices table with its unique (org
 
 // ── the job endpoint: the mirror and the link are not the client’s to write ──
 
-test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoice columns are off the PUT allowlist and untouched by the POST upsert (§18b44)', () => {
+test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoice columns are off the PUT allowlist and untouched by a POST sent again (§18b44)', () => {
     const f = code(read('netlify/functions/dispatch-jobs.mjs'));
     assert.ok(f.includes('export function normaliseJob(row) {'), 'shared with the two new functions');
     assert.ok(f.includes('export async function nextJobNumber(orgId) {'));
@@ -285,9 +285,14 @@ test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoi
     const scalar = f.slice(f.indexOf('const scalarFields = ['), f.indexOf('];', f.indexOf('const scalarFields = [')));
     for (const k of ['quoteId', 'invoiceAmount', 'invoiceStatus', 'invoicePaidAt', 'jobNumber']) assert.ok(!scalar.includes(`'${k}'`), `${k} is not client-writable`);
     assert.ok(scalar.includes("'customerPoNumber'"), 'the PO stays writable');
-    // Moved in §0.268: the upsert answers its own row (.returning()).
-    assert.ok(f.includes('set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } })\n                    .returning();'),
-        'an upsert of an existing job leaves the mirror alone');
+    // Moved in §0.268: the write answers its own row (.returning()).
+    // Reversed in §0.290: the POST was an upsert, its set leaving the three invoice columns out; it is a create only — a job
+    // this org holds is answered before the insert, and a taken id writes nothing, so a create sent again leaves the mirror alone.
+    const post = f.slice(f.indexOf("'id, customerId, title required'"), f.indexOf("action: 'dispatch_job.created'"));
+    assert.ok(post.includes('const landed = await heldJob(orgId, data.id);\n            if (landed) return landed;')
+        && post.includes('if (landed) return landed;') && post.indexOf('if (landed) return landed;') < post.indexOf('await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();'),
+        'a create sent again leaves the mirror of the job it made alone');
+    assert.ok(!/onConflictDoUpdate|db\.update\(/.test(post) && (post.match(/db\.insert\(/g) || []).length === 1, 'REGRESSION: the create writes over a job it finds');
     assert.ok(!/quoteId:\s+data\.quoteId/.test(f), 'the POST never takes a quote id from the body');
     const c = code(read('netlify/functions/dispatch-customers.mjs'));
     assert.ok(c.includes('export async function nextCustomerNumber(orgId) {'));

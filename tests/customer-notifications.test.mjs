@@ -99,8 +99,22 @@ test('dispatch-jobs: every write that can schedule or start travel tells the cus
     const s = code(read('netlify/functions/dispatch-jobs.mjs'));
     assert.ok(s.includes("import { notifyCustomer } from './_customerNotify.mjs';"));
     assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: /g) || []).length, 3, 'create, the technician path, the dispatcher path');
-    assert.ok(s.includes('await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });'), 'create — an upsert may be a re-schedule, so the prior row is the whole row');
-    assert.ok(s.includes('            const [priorJob] = await db.select()\n                .from(dispatchJobs)'), 'the prior row is selected whole');
+    // Reversed in §0.290: the create was an upsert and told the customer by the row it wrote over; it is a create only — told as
+    // new, from the whole row it wrote, and a create sent again (an id this org holds) is answered before any of it.
+    const post = s.slice(s.indexOf("'id, customerId, title required'"), s.indexOf("if (event.httpMethod === 'PUT')", s.indexOf("'id, customerId, title required'")));
+    let at = -1;
+    for (const line of ['const landed = await heldJob(orgId, data.id);', 'if (landed) return landed;', 'const linked = await checkLinks(JOB_LINKS, data, null, orgId);',
+        'const [w] = await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();', 'if (!written) {', 'const beside = await heldJob(orgId, data.id);', 'if (beside) return beside;',
+        "if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };",
+        "await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');",
+        'await notifyCustomer({ orgId, before: null, after: written, actorName: await getCallerName(userId, orgId) });',
+        "await auditAs(orgId, userId, { action: 'dispatch_job.created',"]) {
+        const i = post.indexOf(line, at + 1);
+        assert.ok(i > at, `create, in order: ${line}`);
+        at = i;
+    }
+    assert.equal((post.match(/await notifyCustomer\(/g) || []).length, 1, 'create — told once, by the press that made the job');
+    assert.equal((post.match(/await recordStatusChange\(/g) || []).length, 1, 'REGRESSION: a create sent again records a move');
     // Moved in §0.285: the office's update tells the customer by the job its write replaced, read under the write's lock —
     // never the PUT's read (OPEN_ITEMS §4.8, §0.278's found (a)); the field path by the job its stamped write claimed.
     assert.equal((s.match(/await notifyCustomer\(\{ orgId, before: current, after: written, actorName: await getCallerName\(userId, orgId\) \}\);/g) || []).length, 1, 'the field path');

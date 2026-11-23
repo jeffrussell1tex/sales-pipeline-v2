@@ -127,7 +127,11 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
         "    { key: 'parentJobId', kind: 'job', notSelf: true },",
         '];',
     ].join('\n')), 'the job: its crew one link, its vehicle, units, plan and linked jobs (never itself) — this file\'s spec, the one run above');
-    assert.ok(j.includes('const linked = await checkLinks(JOB_LINKS, data, priorJob || null, orgId);') && j.includes('const linked = await checkLinks(JOB_LINKS, data, current, orgId);'), 'the create (an upsert, its prior row held) and the update');
+    // Reversed in §0.290: the create was an upsert, its prior row held; it asks each link with nothing held, after the held look
+    // (an id this org holds is answered with its job) and before the insert — the refusal before anything is written.
+    assert.ok(j.includes('const linked = await checkLinks(JOB_LINKS, data, null, orgId);') && j.includes('const linked = await checkLinks(JOB_LINKS, data, current, orgId);'), 'the create (nothing held) and the update');
+    assert.ok(inOrder(j, '            const landed = await heldJob(orgId, data.id);', '            if (landed) return landed;', '            const linked = await checkLinks(JOB_LINKS, data, null, orgId);', REFUSE,
+        '            Object.assign(data, linked.set);', 'await db.insert(dispatchJobs).values(r).onConflictDoNothing({ target: dispatchJobs.id }).returning();'), 'the create, in order');
 
     const t = fn('dispatch-technicians');
     assert.ok(t.includes("const TECH_LINKS = [{ key: 'assignedVehicleId', kind: 'vehicle' }];"));
@@ -185,7 +189,14 @@ test("THE GUARD: every Dispatch write path asks the links it names anew — afte
 
     const c = fn('dispatch-customers');
     assert.ok(c.includes(['const CUSTOMER_LINKS = [', "    { key: 'accountId', kind: 'account' },", "    { key: 'servicePlanId', kind: 'plan' },", "    { key: 'preferredTechId', kind: 'technician' },", '];'].join('\n')));
-    assert.ok(c.includes('                servicePlanId: dispatchCustomers.servicePlanId, preferredTechId: dispatchCustomers.preferredTechId })'), "the create reads the plan and technician the customer holds");
+    // Reversed in §0.290: the create read the plan and technician the customer it would write over held; it is a create only —
+    // the held look (this org's), then its account, plan and technician asked with nothing held, refused before the insert.
+    assert.ok(inOrder(c, '            const landed = await heldCustomer(orgId, data.id);', '            if (landed) return landed;', '            const linked = await checkLinks(CUSTOMER_LINKS, data, null, orgId);', REFUSE,
+        '            Object.assign(data, linked.set);', 'await db.insert(dispatchCustomers)', '.onConflictDoNothing({ target: dispatchCustomers.id }).returning();'), 'the create asks its plan and technician with nothing held');
+    // A location's customer is asked after its held look and before its insert, as it was before its upsert.
+    assert.ok(inOrder(c, '                const landed = await heldLocation(orgId, data.id);', '                if (landed) return landed;', '                const [ownCust] = await db.select({ id: dispatchCustomers.id }).from(dispatchCustomers)',
+        '.where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));', "if (!ownCust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };",
+        'await db.insert(dispatchServiceLocations).values(row)', '.onConflictDoNothing({ target: dispatchServiceLocations.id }).returning();'), "a location's create, in order");
     assert.ok(inOrder(c, '            if (CUSTOMER_LINKS.some((l) => l.key in data)) {',
         '                const [held] = await db.select({ accountId: dispatchCustomers.accountId, servicePlanId: dispatchCustomers.servicePlanId,',
         '                    preferredTechId: dispatchCustomers.preferredTechId }).from(dispatchCustomers)'),
@@ -311,7 +322,10 @@ test("THE GUARD: the Technicians screen picks a member by their app id and shows
         '                                onChange={e => { if (saving) return; const v = e.target.value; setDraft(d => { const row = (techsRaw || []).find(t => t.id === d.id);'),
         "while a save is out the form holds still and stays on its technician — no field, chip or pick changes it, no list pick or '+ New' leaves it — so the answer is the form's own, taken whole: the login stored and the row's updatedAt, its words with it; a new form gives way to a technician picked (the form read as unsaved after every save; the re-checks: a change typed during the save was overwritten, a technician re-opened got its old values back, 'Saved' landed under another form)");
     assert.ok(!d.includes('draftRef'), 'no answer-time merge: nothing to merge');
-    assert.ok(inOrder(d, '    const savingRef = React.useRef(false);',
+    // Moved in §0.290: the technicians' own view — the customer form has the same hold now, and its lines stood in for these.
+    const techView = d.slice(d.indexOf('const TechniciansView = ('));
+    assert.ok(d.includes('const TechniciansView = ('));
+    assert.ok(inOrder(techView, '    const savingRef = React.useRef(false);',
         '            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, () => { if (!savingRef.current) action(); }); return; }',
         '        setSaving(true); savingRef.current = true; setStatus(null);', '            setSaving(false); savingRef.current = false;',
         "    const held = saving ? { opacity: 0.6, pointerEvents: 'none' } : null;",

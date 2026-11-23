@@ -93,10 +93,14 @@ test('the job editor offers a preferred start time and a time window, and saves 
 
 test('the job editor names the appointment it saw as STORED, with one it sends and only then — RUN (§0.289)', () => {
     // The Save's own lines that build its body, extracted and run on the real helpers.
-    const i = s.indexOf('            const base = opened.current || draft;');
+    // Moved in §0.290: the job as opened is read before the address step (another job can be picked while that is out), the body
+    // built after it.
+    const base = '        const base = opened.current || draft;', b = s.indexOf(base), step = s.indexOf("subject = 'The address';", b);
+    const i = s.indexOf('            const body = jobChanges(editorFields(base, base.locationId),', step);
     const j = s.indexOf('            if (!body) { setStatus(', i);
-    assert.ok(i > 0 && j > i, 'the Save builds its body');
-    const bodyOf = new Function('opened', 'draft', 'locationId', 'jobChanges', 'editorFields', `${s.slice(i, j)}\nreturn body;`);
+    assert.equal(s.split(base).length - 1, 1, 'one job opened');
+    assert.ok(b > 0 && step > b && i > step && j > i, 'the Save builds its body, from the job as opened before its address step');
+    const bodyOf = new Function('opened', 'draft', 'locationId', 'jobChanges', 'editorFields', `${base}\n${s.slice(i, j)}\nreturn body;`);
     const save = (opened, draft) => bodyOf({ current: opened }, draft, draft.locationId ?? null, jobChanges, editorFields);
     // Stored with a start, a morning slot and an end the form reads another way (exact, 11:00 from the duration).
     const stored = { id: 'j1', title: 'T', status: 'scheduled', durationMinutes: 120, scheduledDate: '2026-09-15',
