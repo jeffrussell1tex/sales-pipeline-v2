@@ -16,7 +16,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, sentOf, jobAnswerOf } from '../src/utils/jobChanges.js';
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, sentOf, jobAnswerOf, seenIn, movedWords, sameAppointment, sameCrew } from '../src/utils/jobChanges.js';
 import { writeRefusalOf, refusalError, thrownSaid } from '../src/utils/refusalWords.js';
 import { to12h } from '../src/utils/customerNotifications.js';
 
@@ -54,10 +54,13 @@ test('a requirement is a kind: the editor and the new-job form pick categories, 
     assert.ok(s.includes('{equipCategories.map(kind => {\n                                            const on    = (newJobForm.equipCategories || []).includes(kind);'));
     assert.ok(!s.includes('(newJobForm.equipCategories || []).includes(u.id)'), 'no unit picker remains');
     assert.ok(jc.includes('    equipmentIds:    Array.isArray(job.equipmentIds) ? job.equipmentIds : [],'), 'the editor saves the kinds (editorFields, §0.286)');
-    assert.ok(s.includes('const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id);'), "through the editor's Save");
+    // Moved in §0.289: the Save names the job as opened as what it saw ({ seen: base }) — a kind added sends no appointment, so it names none.
+    assert.ok(s.includes('const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id, { seen: base });'), "through the editor's Save");
     const opened = { id: 'j1', title: 'T', status: 'unscheduled', equipmentIds: ['Pressure tester'] };
     assert.deepEqual(jobChanges(editorFields(opened, null), editorFields({ ...opened, equipmentIds: ['Pressure tester', 'Ladder'] }, null), 'j1'),
         { id: 'j1', equipmentIds: ['Pressure tester', 'Ladder'] }, 'a kind added sends the kinds, nothing else');
+    assert.deepEqual(jobChanges(editorFields(opened, null), editorFields({ ...opened, equipmentIds: ['Pressure tester', 'Ladder'] }, null), 'j1', { seen: opened }),
+        { id: 'j1', equipmentIds: ['Pressure tester', 'Ladder'] }, 'as the Save sends it since §0.289: no appointment sent, none named');
     assert.deepEqual(editorFields({ title: 'T', equipmentIds: 'not a list' }, null).equipmentIds, [], 'a stored non-list is sent as none');
 });
 
@@ -92,7 +95,8 @@ test('scheduling reserves one in-service unit per kind that no overlapping job h
     // the mass scheduler's writes
     assert.ok(s.includes('        const reservedThisRun = [];'));
     assert.ok(s.includes('                reservedThisRun).picked;'), 'units reserved earlier in the same pass are not offered again');
-    assert.ok(s.includes('                    date: pr.dateStr, start: startS, end: endS, units: pr.assignedEquipment }), pr.job.id, { checkStatus: true });'), "the mass scheduler's units ride its scheduleFields, its status checked");
+    // Moved in §0.289: it names the job as the plan was made on it as what it saw (run below).
+    assert.ok(s.includes('                    date: pr.dateStr, start: startS, end: endS, units: pr.assignedEquipment }), pr.job.id, { checkStatus: true, seen: pr.job._raw || held });'), "the mass scheduler's units ride its scheduleFields, its status checked");
     assert.ok(s.includes('                reservedThisRun.push(...pr.assignedEquipment);'));
     assert.ok(s.includes("                assignedEquipment: pr.assignedEquipment || [] } : j;"));
 });
@@ -113,16 +117,22 @@ test('the board job carries its reservation, shows it, and drops it when the job
     const CHECK = { checkStatus: true };
     assert.ok(s.includes('const body = jobChanges((jobs.find(j => j.id === jobId) || {})._raw, unassignFields(), jobId, { checkStatus: true });'),
         'the time-off unassign, as saveBlock sends it');
+    // Moved in §0.289: each press names the appointment and the crew it saw, sent or not (a hold too: it takes the job off the
+    // time it was seen at) — none is '', a slot 'anytime', the length beside the time.
+    const NO_TIME = { scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: '' }, ANN = { assignedTechId: 't1', coTechIds: [] };
     const reserved = { id: 'j1', status: 'unscheduled', assignedTechId: 't1', coTechIds: [], assignedEquipmentIds: ['u1'] };
     assert.deepEqual(jobChanges(reserved, heldCrewFields(['t1']), 'j1', CHECK),
-        { id: 'j1', assignedEquipmentIds: [], status: 'unscheduled', fromStatus: 'unscheduled' }, 'a held crew releases its units, its status named as seen');
+        { id: 'j1', assignedEquipmentIds: [], status: 'unscheduled', fromStatus: 'unscheduled', fromAppointment: NO_TIME, fromCrew: ANN },
+        'a held crew releases its units, its status named as seen');
     assert.deepEqual(jobChanges(reserved, unassignFields(), 'j1', CHECK),
-        { id: 'j1', assignedTechId: null, coTechIds: [], assignedEquipmentIds: [], status: 'unscheduled', fromStatus: 'unscheduled' },
+        { id: 'j1', assignedTechId: null, coTechIds: [], assignedEquipmentIds: [], status: 'unscheduled', fromStatus: 'unscheduled',
+            fromAppointment: NO_TIME, fromCrew: ANN },
         'a time-off unassign over a copy already unscheduled releases them too, naming its status and where it saw it (no time held, none sent)');
     assert.equal(jobChanges({ ...reserved, assignedTechId: null, assignedEquipmentIds: [] }, unassignFields(), 'j1', CHECK), null, 'a job already free needs no write');
     const placed = { ...reserved, status: 'scheduled', scheduledStart: '09:00', scheduledEnd: '11:00' };
     assert.deepEqual(jobChanges(placed, unassignFields(), 'j1', CHECK),
-        { id: 'j1', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [], fromStatus: 'scheduled' },
+        { id: 'j1', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [], fromStatus: 'scheduled',
+            fromAppointment: { scheduledDate: '', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'anytime', durationMinutes: '' }, fromCrew: ANN },
         'an unassign of a scheduled job: back to the queue from where it stood');
     assert.ok(s.includes('const unitLabel = (id, units = []) => {'));
 });
@@ -151,7 +161,7 @@ const fetchOf = (st, answers) => async (url, opts) => {
     const id = new URL(url, 'http://x.test').searchParams.get('id');
     const a = answers[id];
     if (a instanceof Error) throw a;
-    return a;
+    return typeof a === 'function' ? a(JSON.parse(opts.body)) : a;
 };
 // The parent's keepSent over two copies held as plain state; adoptJob recorded.
 const parentOf = (jobsRaw, jobs) => {
@@ -164,36 +174,43 @@ const parentOf = (jobsRaw, jobs) => {
     return st;
 };
 
-const runSchedule = async (selectedJob, { added = ['t1'], date = '2026-09-15', time = '10:00', units = ['u1'], answer } = {}) => {
-    const fn = between(s, '    const handleSchedule = async () => {', '\n    const writeHeldCrew = ');
-    const st = { sent: [], scheduled: [], adopted: [], errors: [] };
+// A function's source with one piece of it taken out in memory (there once): how a case is shown to turn on it.
+const without = (src, piece) => { if (!piece) return src; assert.equal(src.split(piece).length - 1, 1, piece); return src.replace(piece, ''); };
+const RESEED = ' setReseed(n => n + 1);';
+
+const runSchedule = async (selectedJob, { added = ['t1'], date = '2026-09-15', time = '10:00', units = ['u1'], answer, cut = '' } = {}) => {
+    const fn = without(between(s, '    const handleSchedule = async () => {', '\n    const writeHeldCrew = '), cut);
+    const st = { sent: [], scheduled: [], adopted: [], errors: [], reseed: 0 };
     const names = ['addedTechs', 'selectedJob', 'scheduleDate', 'scheduleTime', 'setScheduleError', 'techs', 'shiftForDate', 'hhToNum', 'blocksOnDate',
         'blocks', 'blockTypes', 'equipmentConflicts', 'jobs', 'equipUnits', 'describeConflict', 'pickEquipmentFor', 'overlappingRivals',
         'setScheduleNotice', 'setSaving', 'requestOrg', 'stillOrg', 'jobChanges', 'scheduleFields', 'sentOf', 'jobAnswerOf', 'dbFetch',
         'writeRefusalOf', 'refusalError', 'thrownSaid', 'onAdopt', 'candidates', 'onScheduled', 'showNotice', 'to12h', 'unitLabel',
-        'setAddedTechs', 'setScheduleTime', 'setScheduleDate'];
+        'setAddedTechs', 'setScheduleTime', 'setScheduleDate', 'setReseed'];
     const handleSchedule = new Function(...names, `${fn}\nreturn handleSchedule;`)(
         Object.fromEntries(added.map((id) => [id, true])), selectedJob, date, time, (v) => { if (v) st.errors.push(v); },
         [{ id: 't1', name: 'Ann Lee' }, { id: 't2', name: 'Bob Ray' }], () => null, hhToNum, () => [],
         [], [], () => [], [], [], () => '', () => ({ picked: units }), () => [],
         () => {}, () => {}, () => 'org_a', () => true, jobChanges, scheduleFields, sentOf, jobAnswerOf, fetchOf(st, { [selectedJob.id]: answer }),
         writeRefusalOf, refusalError, thrownSaid, (j) => st.adopted.push(j), [], (o) => st.scheduled.push(o), () => {}, to12h, (id) => id,
-        () => {}, () => {}, () => {});
+        () => {}, () => {}, () => {}, (f) => { st.reseed = f(st.reseed); });
     await handleSchedule();
     return st;
 };
 
 test('Schedule now over a copy already scheduled names its status and where it saw it; nothing to change sends nothing; an unreadable answer hands up what was sent — RUN', async () => {
     const raw = { id: 'j1', title: 'Boiler', status: 'scheduled', assignedTechId: 't1', coTechIds: [], scheduledDate: '2026-09-15',
-        scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: ['u1'] };
+        scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120, assignedEquipmentIds: ['u1'] };
     const job = { id: 'j1', title: 'Boiler', customer: 'Acme', scheduledDate: '2026-09-15', durationHrs: 2, equipCategories: ['Ladder'], _raw: raw };
     const stored = { ...raw, scheduledStart: '10:00', scheduledEnd: '12:00' };
     const st = await runSchedule(job, { answer: answerOf(200, { job: stored }) });
     assert.deepEqual(st.errors, []);
+    // Moved in §0.289: the press names the appointment (with its length) and the crew it saw — the crew too, though it is not sent.
     assert.deepEqual(st.sent, [['/.netlify/functions/dispatch-jobs?id=j1', 'PUT', { id: 'j1', scheduledDate: '2026-09-15', scheduledStart: '10:00',
-        scheduledEnd: '12:00', timeSlot: 'exact', status: 'scheduled', fromStatus: 'scheduled' }]],
+        scheduledEnd: '12:00', timeSlot: 'exact', status: 'scheduled', fromStatus: 'scheduled',
+        fromAppointment: { scheduledDate: '2026-09-15', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120 },
+        fromCrew: { assignedTechId: 't1', coTechIds: [] } }]],
         'the appointment moved; the crew and the reserved unit unchanged, unsent; the status unchanged, named with where it was seen');
-    assert.equal(st.scheduled[0].serverJob, stored);
+    assert.equal(st.scheduled[0].serverJob, stored); assert.equal(st.reseed, 0, 'landed: the parent moves on, nothing reseeded');
     assert.deepEqual(st.scheduled[0].sent, { scheduledDate: '2026-09-15', scheduledStart: '10:00', scheduledEnd: '12:00', timeSlot: 'exact', status: 'scheduled' });
     assert.deepEqual(st.scheduled[0].assignedEquipment, ['u1']);
 
@@ -213,6 +230,61 @@ test('Schedule now over a copy already scheduled names its status and where it s
     const stale = await runSchedule(job, { answer: answerOf(409, { error: 'This job is en route now — it changed since you opened it. Nothing was saved.', code: 'stale', job: enRoute }) });
     assert.deepEqual(stale.adopted, [enRoute]); assert.deepEqual(stale.scheduled, []);
     assert.deepEqual(stale.errors, ['Boiler: This job is en route now — it changed since you opened it. Nothing was saved.']);
+    // Its picks and Start are the job's again (state §0.289, the review): kept, the next press wrote them back over the job
+    // as stored. A refusal of any other kind keeps what the member picked; the reseed's line out, the stale one kept it too.
+    assert.equal(stale.reseed, 1);
+    assert.equal((await runSchedule(job, { answer: answerOf(403, { error: 'no' }) })).reseed, 0);
+    assert.equal((await runSchedule(job, { answer: answerOf(500, { error: 'no' }) })).reseed, 0);
+    const kept = await runSchedule(job, { cut: RESEED, answer: answerOf(409, { error: 'x', code: 'stale', job: enRoute }) });
+    assert.deepEqual(kept.adopted, [enRoute]); assert.equal(kept.reseed, 0, 'shown red: the line out, nothing reseeded');
+
+    // Rescheduled since by another dispatcher, its status unmoved (state §0.289): the server's own words over what the press
+    // sent — refused, the job as stored adopted; the same press from the adopted job names the appointment it now sees.
+    const rescheduled = { ...raw, scheduledDate: '2026-09-16', scheduledStart: '14:00', scheduledEnd: '16:00' };
+    const refusal = (now, body) => answerOf(409, { error: movedWords(now, seenIn(body).seen), code: 'stale', job: now });
+    const moved = await runSchedule(job, { answer: refusal(rescheduled, st.sent[0][2]) });
+    assert.deepEqual(moved.adopted, [rescheduled]); assert.deepEqual(moved.scheduled, []);
+    assert.deepEqual(moved.errors, ['Boiler: This job’s time changed since this screen loaded it. Nothing was saved.']);
+    const again = await runSchedule({ ...job, _raw: rescheduled }, { answer: answerOf(200, { job: stored }) });
+    assert.deepEqual(again.sent[0][2].fromAppointment, { scheduledDate: '2026-09-16', scheduledStart: '14:00', scheduledEnd: '16:00', timeSlot: 'exact', durationMinutes: 120 });
+    // Its length alone changed since (no day, start or end moved): the end sent was worked out from the old one — refused too.
+    const longer = await runSchedule(job, { answer: refusal({ ...raw, durationMinutes: 240 }, st.sent[0][2]) });
+    assert.deepEqual(longer.errors, ['Boiler: This job’s time changed since this screen loaded it. Nothing was saved.']);
+    const both = await runSchedule(job, { answer: refusal({ ...rescheduled, assignedTechId: 't2' }, st.sent[0][2]) });
+    assert.deepEqual(both.errors, ['Boiler: This job’s time and crew changed since this screen loaded it. Nothing was saved.']);
+
+    // Given another crew since: the press re-timed the job for the crew it saw (unsent) — refused, the crew's words. And a
+    // press that changes the crew alone names the time it saw, unsent.
+    const recrewed = await runSchedule(job, { answer: refusal({ ...raw, assignedTechId: 't2' }, st.sent[0][2]) });
+    assert.deepEqual(recrewed.errors, ['Boiler: This job’s crew changed since this screen loaded it. Nothing was saved.']);
+    const crewOnly = await runSchedule(job, { added: ['t2', 't1'], time: '09:00', answer: answerOf(200, { job: stored }) });
+    assert.deepEqual(crewOnly.sent[0][2], { id: 'j1', assignedTechId: 't2', coTechIds: ['t1'], status: 'scheduled', fromStatus: 'scheduled',
+        fromAppointment: { scheduledDate: '2026-09-15', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120 },
+        fromCrew: { assignedTechId: 't1', coTechIds: [] } }, 'a crew chosen for the time it was seen at names that time, unsent');
+    // A row kept from a press whose answer proved nothing (_maybe) was never seen as stored: it names neither.
+    const maybe = await runSchedule({ ...job, _raw: { ...raw, _maybe: true } }, { answer: answerOf(200, { job: stored }) });
+    assert.ok(!('fromAppointment' in maybe.sent[0][2]) && !('fromCrew' in maybe.sent[0][2]), JSON.stringify(maybe.sent[0][2]));
+    assert.equal(maybe.sent[0][2].fromStatus, 'scheduled');
+    assert.deepEqual(crewOnly.scheduled[0].sent, { assignedTechId: 't2', coTechIds: ['t1'], status: 'scheduled' }, 'kept as sent: never what the screen saw');
+});
+
+test('the crew builder seeds its picks and Start from the job, again at a refusal’s reseed — RUN', () => {
+    const effect = between(s, '    useEffect(() => {\n        const sel = selectedJob;', '\n\n    const candidates = useMemo(');
+    const run = (selectedJob, reseed, src = effect) => {
+        const st = {};
+        new Function('useEffect', 'selectedJob', 'reseed', 'setAddedTechs', 'setScheduleTime', src)(
+            (f, deps) => { f(); st.deps = deps; }, selectedJob, reseed, (v) => { st.added = v; }, (v) => { st.time = v; });
+        return st;
+    };
+    const queued = { id: 'j1', start: null, assignedTechIds: ['t2'], scheduledStart: '14:00' };
+    assert.deepEqual(run(queued, 0), { added: { t2: true }, time: '14:00', deps: ['j1', 0] }, 'the crew held and the preferred start');
+    assert.deepEqual(run({ ...queued, start: 9, scheduledStart: null }, 0), { added: {}, time: '', deps: ['j1', 0] });
+    // A reseed runs it over the same job; with the reseed out of its deps it never would.
+    assert.notDeepEqual(run(queued, 1).deps, run(queued, 0).deps);
+    const gone = without(effect, ', reseed');
+    assert.deepEqual(run(queued, 1, gone).deps, run(queued, 0, gone).deps, 'shown red: the dep out, nothing reseeds');
+    assert.ok(s.includes("const [reseed, setReseed] = useState(0);\n    useEffect(() => { setScheduleDate(''); }, [reseed]);"), 'the day chosen goes with a reseed');
+    assert.equal(s.split(RESEED).length - 1, 2, 'Schedule now and the hold');
 });
 
 test('the parent’s onScheduled: an answer adopted; one that could not be read kept as sent in both copies and the base, then guessed on the board — RUN', () => {
@@ -246,10 +318,24 @@ test('the parent’s onScheduled: an answer adopted; one that could not be read 
     assert.deepEqual(q.adopted, [stored]); assert.deepEqual(q.kept, []); assert.equal(q.jobs[0], row, 'no guess over an answer');
 });
 
+// Mass-schedule's confirm over the proposals and the board's rows; an answer may be a function of the body it was sent.
+const runMass = async (proposals, rows, answers, cut = '') => {
+    const fn = without(between(s, '    const confirmMassSchedule = async () => {', '\n    const [unassignError, setUnassignError]'), cut);
+    const p = parentOf(rows.map((r) => r._raw), rows);
+    const st = { sent: [], prog: [], plan: [] };
+    const names = ['massPlan', 'setMassSaving', 'setMassProg', 'requestOrg', 'stillOrg', 'pickEquipmentFor', 'equipment', 'overlappingRivals', 'jobs',
+        'hhmm', 'jobChanges', 'scheduleFields', 'sentOf', 'dbFetch', 'writeRefusalOf', 'jobAnswerOf', 'refusalError', 'thrownSaid',
+        'adoptJob', 'keepSent', 'setJobs', 'addAudit', 'setMassPlan'];
+    await new Function(...names, `${fn}\nreturn confirmMassSchedule;`)(
+        { proposals, fromStr: '2026-09-21', toStr: '2026-09-25', skipped: [] }, () => {}, (v) => st.prog.push(v), () => 'org_a', () => true,
+        () => ({ picked: [] }), [], () => [], rows, hhmm, jobChanges, scheduleFields, sentOf, fetchOf(st, answers), writeRefusalOf, jobAnswerOf,
+        refusalError, thrownSaid, p.adoptJob, p.keepSent, p.setJobs, (...a) => p.audit.push(a), (v) => st.plan.push(v))();
+    return { p, st };
+};
+
 test('Mass-schedule: a copy already scheduled names its status; an unreadable answer is kept as sent after the adopted — RUN', async () => {
-    const fn = between(s, '    const confirmMassSchedule = async () => {', '\n    const [unassignError, setUnassignError]');
     const rawA = { id: 'jA', title: 'Boiler', status: 'scheduled', assignedTechId: 't1', coTechIds: [], scheduledDate: '2026-09-21',
-        scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', assignedEquipmentIds: [] };
+        scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120, assignedEquipmentIds: [] };
     const rawB = { id: 'jB', title: 'Furnace', status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledDate: null,
         scheduledStart: null, scheduledEnd: null, timeSlot: 'anytime', assignedEquipmentIds: [] };
     const rowA = { id: 'jA', title: 'Boiler', durationHrs: 2, equipCategories: [], assignedTechIds: ['t1'], status: 'scheduled', start: 9, _raw: rawA };
@@ -258,25 +344,22 @@ test('Mass-schedule: a copy already scheduled names its status; an unreadable an
     const prA = { job: rowA, tech: t2, crew: [t2], dateStr: '2026-09-22', startHr: 10 };
     const prB = { job: rowB, tech: t1, crew: [t1, t2], dateStr: '2026-09-22', startHr: 13 };
     const storedA = { ...rawA, assignedTechId: 't2', scheduledDate: '2026-09-22', scheduledStart: '10:00', scheduledEnd: '12:00' };
-    const p = parentOf([rawA, rawB], [rowA, rowB]);
-    const st = { sent: [], prog: [], plan: [] };
-    const names = ['massPlan', 'setMassSaving', 'setMassProg', 'requestOrg', 'stillOrg', 'pickEquipmentFor', 'equipment', 'overlappingRivals', 'jobs',
-        'hhmm', 'jobChanges', 'scheduleFields', 'sentOf', 'dbFetch', 'writeRefusalOf', 'jobAnswerOf', 'refusalError', 'thrownSaid',
-        'adoptJob', 'keepSent', 'setJobs', 'addAudit', 'setMassPlan'];
-    const confirmMassSchedule = new Function(...names, `${fn}\nreturn confirmMassSchedule;`)(
-        { proposals: [prA, prB], fromStr: '2026-09-21', toStr: '2026-09-25', skipped: [] }, () => {}, (v) => st.prog.push(v), () => 'org_a', () => true,
-        () => ({ picked: [] }), [], () => [], [rowA, rowB], hhmm, jobChanges, scheduleFields, sentOf,
-        fetchOf(st, { jA: answerOf(200, { job: storedA }), jB: answerOf(200, UNREADABLE()) }), writeRefusalOf, jobAnswerOf, refusalError, thrownSaid,
-        p.adoptJob, p.keepSent, p.setJobs, (...a) => p.audit.push(a), (v) => st.plan.push(v));
-    await confirmMassSchedule();
+    const { p, st } = await runMass([prA, prB], [rowA, rowB], { jA: answerOf(200, { job: storedA }), jB: answerOf(200, UNREADABLE()) });
+    // Moved in §0.289: each names the appointment (its length too: '' when the job holds none) and the crew it saw.
     assert.deepEqual(st.sent.map(([, , b]) => b), [
         { id: 'jA', assignedTechId: 't2', coTechIds: [], scheduledDate: '2026-09-22', scheduledStart: '10:00', scheduledEnd: '12:00', timeSlot: 'exact',
-            status: 'scheduled', fromStatus: 'scheduled' },
+            status: 'scheduled', fromStatus: 'scheduled',
+            fromAppointment: { scheduledDate: '2026-09-21', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120 },
+            fromCrew: { assignedTechId: 't1', coTechIds: [] } },
         { id: 'jB', status: 'scheduled', assignedTechId: 't1', coTechIds: ['t2'], scheduledDate: '2026-09-22', scheduledStart: '13:00', scheduledEnd: '15:00',
-            timeSlot: 'exact', fromStatus: 'unscheduled' },
+            timeSlot: 'exact', fromStatus: 'unscheduled',
+            fromAppointment: { scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: '' }, fromCrew: { assignedTechId: '', coTechIds: [] } },
     ], 'A, already scheduled, names its unchanged status and where it was seen; B moves from unscheduled');
     assert.deepEqual(p.adopted, [storedA], 'the answered job adopted');
     const sentB = sentOf(st.sent[1][2]);
+    // §0.289: what was kept is what the body sets — never what its screen saw.
+    assert.deepEqual(sentB, { status: 'scheduled', assignedTechId: 't1', coTechIds: ['t2'], scheduledDate: '2026-09-22', scheduledStart: '13:00',
+        scheduledEnd: '15:00', timeSlot: 'exact' });
     assert.deepEqual(p.kept, [['jB', sentB]], 'the unreadable one kept as sent');
     assert.deepEqual(p.raw, [rawA, { ...rawB, ...sentB }], 'the Jobs view’s copy of B holds what was sent');
     assert.deepEqual(p.jobs[1]._raw, { ...rawB, ...sentB }, 'and B’s board base');
@@ -286,12 +369,49 @@ test('Mass-schedule: a copy already scheduled names its status; an unreadable an
     assert.deepEqual(st.plan, [null], 'all landed: the panel closes');
 });
 
+test('Mass-schedule names the job as the plan was made on it, never as the board holds it since: a job moved while the panel was open is refused and leaves it — RUN', async () => {
+    const raw = { id: 'jA', title: 'Boiler', status: 'scheduled', assignedTechId: 't1', coTechIds: [], scheduledDate: '2026-09-21',
+        scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120, assignedEquipmentIds: [] };
+    const row = { id: 'jA', title: 'Boiler', durationHrs: 2, equipCategories: [], assignedTechIds: ['t1'], status: 'scheduled', start: 9, _raw: raw };
+    const t2 = { id: 't2' };
+    const pr = () => ({ job: row, tech: t2, crew: [t2], dateStr: '2026-09-22', startHr: 10 });
+    // The panel open, the board took the job at another time and crew: the plan's clash and shift checks were made on neither.
+    const now = { ...raw, assignedTechId: 't3', scheduledDate: '2026-09-23', scheduledStart: '15:00', scheduledEnd: '17:00' };
+    const board = { ...row, start: 15, scheduledDate: '2026-09-23', assignedTechIds: ['t3'], _raw: now };
+    // The server over that job: moved from what the body named → 409 stale in its words; else written.
+    const server = (body) => {
+        const { seen } = seenIn(body);
+        return (!seen.appointment || sameAppointment(now, seen.appointment)) && (!seen.crew || sameCrew(now, seen.crew))
+            ? answerOf(200, { job: { ...now, ...sentOf(body) } }) : answerOf(409, { error: movedWords(now, seen), code: 'stale', job: now });
+    };
+    const one = pr();
+    const { p, st } = await runMass([one], [board], { jA: server });
+    assert.deepEqual(st.sent[0][2], { id: 'jA', assignedTechId: 't2', coTechIds: [], scheduledDate: '2026-09-22', scheduledStart: '10:00', scheduledEnd: '12:00',
+        timeSlot: 'exact', status: 'scheduled', fromStatus: 'scheduled',
+        fromAppointment: { scheduledDate: '2026-09-21', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact', durationMinutes: 120 },
+        fromCrew: { assignedTechId: 't1', coTechIds: [] } }, 'the plan’s day, time, length and crew');
+    assert.deepEqual(p.adopted, [now]); assert.deepEqual(p.kept, []); assert.deepEqual(p.audit, [], 'nothing scheduled, no audit row');
+    assert.equal(st.prog.at(-1).error, 'Boiler: This job’s time and crew changed since this screen loaded it. Nothing was saved.');
+    assert.deepEqual(st.plan.map(f => f({ proposals: [one], fromStr: 'x' })), [{ proposals: [], fromStr: 'x' }], 'it leaves the panel, not sent again');
+
+    // Shown red: the plan's copy not named, the press names the board's own — and schedules over it.
+    const over = await runMass([pr()], [board], { jA: server }, ', seen: pr.job._raw || held');
+    assert.equal(over.st.sent[0][2].fromAppointment.scheduledDate, '2026-09-23');
+    assert.equal(over.st.prog.at(-1).failed, 0); assert.equal(over.p.audit.length, 1);
+
+    // A plan made on a job kept from a press whose answer proved nothing names neither: the server decides it on its status.
+    const maybe = await runMass([{ ...pr(), job: { ...row, _raw: { ...raw, _maybe: true } } }], [board], { jA: server });
+    assert.ok(!('fromAppointment' in maybe.st.sent[0][2]) && !('fromCrew' in maybe.st.sent[0][2]));
+    assert.equal(maybe.st.sent[0][2].fromStatus, 'scheduled');
+});
+
 test('the Jobs editor’s landed save rebases the draft onto the job as stored, keeping what was typed while it was out — RUN', () => {
     const tail = between(s, '            const stored = data.job || ', "            setStatus({ kind: 'ok', msg: 'Saved' });");
     // Moved in §0.286's review: functional, and only while the editor still shows the job saved (the list stays live).
     assert.ok(tail.includes('setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, stored) : d));'), 'functional: keystrokes typed while out are kept');
     assert.ok(tail.includes('if (opened.current?.id === draft.id) opened.current = { ...stored };'), 'the base only for the job still shown');
-    assert.ok(s.includes('setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job) : d));'), 'the stale path is functional too');
+    // Moved in §0.289: the stale path's rebase says it was refused — the stored appointment whole (tests/job-editor-save.test.mjs runs it).
+    assert.ok(s.includes('setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job, { refused: true }) : d));'), 'the stale path is functional too');
     const run = ({ data, selected, base, body, typed }) => {
         const st = { saved: [], selectedIds: [], draft: typed, opened: { current: base } };
         new Function('data', 'selected', 'base', 'sentOf', 'body', 'onSaved', 'setDraft', 'rebaseDraft', 'locationId', 'opened', 'setSelectedId', 'draft', tail)(

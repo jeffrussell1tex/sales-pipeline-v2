@@ -15,7 +15,7 @@ import { to12h } from '../utils/customerNotifications.js';
 // The week board's drop planner — the crew after a drop, the gates, the partial PUT (state §0.134).
 import { planWeekDrop } from '../utils/weekDrop.js';
 // An office save names only what it changed, a status move where it moved from (state §0.286).
-import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, jobAnswerOf, sentOf } from '../utils/jobChanges.js';
+import { jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields, rebaseDraft, appointmentDropped, jobAnswerOf, sentOf, seenOf, listOf, JOB_STATUSES as KNOWN_STATUSES } from '../utils/jobChanges.js';
 // Quote → job → invoice (state §0.149): the vocabulary, the arithmetic and the transitions.
 import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines, isInvoiceEditable, isLiveInvoice,
     JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
@@ -1044,6 +1044,10 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     };
     useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
     const [saving, setSaving] = useState(false);
+    // A press refused because the job moved (state §0.289, the review): the picks and the start are the job's again — kept,
+    // they stood as the member's own over another member's crew, and the next press wrote them back.
+    const [reseed, setReseed] = useState(0);
+    useEffect(() => { setScheduleDate(''); }, [reseed]);   // the day chosen too: beside the job's new start it was a time nobody chose
     // "Assign anyway?" closes on Escape as its Cancel does (state §0.231).
     useLocalLayer(!!overridePrompt, { onClose: () => setOverridePrompt(null) });
 
@@ -1056,7 +1060,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         // The job's preferred start (Jobs → Preferred start time, §0.112) seeds
         // the builder's Start, so a dispatcher who set one is not asked again.
         setScheduleTime(sel?.scheduledStart || '');
-    }, [selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+    }, [selectedJob?.id, reseed]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const candidates = useMemo(() => {
         if (!selectedJob) return [];
@@ -1205,7 +1209,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     else {
                         // The job moved since this screen read it ('stale'): the job as stored takes its place, the words said,
                         // naming it — the queue may move on from it while the words stay.
-                        if (answer === 'stale' && onAdopt) onAdopt(r.body.job);
+                        if (answer === 'stale' && onAdopt) { onAdopt(r.body.job); setReseed(n => n + 1); }
                         throw refusalError(answer === 'stale' ? `${selectedJob.title || selectedJob.customer}: ${r.words}` : r.words, r.heard);
                     }
                 } else {
@@ -1278,7 +1282,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     const answer = jobAnswerOf(res.status, r.body, selectedJob.id);
                     if (answer === 'already') serverJob = r.body.job;   // an earlier press landed (state §0.286)
                     else {
-                        if (answer === 'stale' && onAdopt) onAdopt(r.body.job);   // the job as stored, the words said
+                        if (answer === 'stale' && onAdopt) { onAdopt(r.body.job); setReseed(n => n + 1); }   // the job as stored, the words said
                         throw refusalError(answer === 'stale' ? `${selectedJob.title || selectedJob.customer}: ${r.words}` : r.words, r.heard);
                     }
                 } else {
@@ -1337,9 +1341,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                         // priority edge when a job was selected (state §0.179).
                         const edge = `1.5px solid ${isSel ? T.goldInk : T.border}`;
                         return (
-                            <div key={j.id} onClick={() => onSelectJob(j.id)}
+                            <div key={j.id} onClick={() => { if (!saving) onSelectJob(j.id); }}   // held while a press is out: its answer seeds the picks of the job shown
                                 style={{ padding: '10px 12px', marginBottom: 6,
-                                    background: T.surface, borderRadius: T.r, cursor: 'pointer',
+                                    background: T.surface, borderRadius: T.r, cursor: saving ? 'default' : 'pointer',
                                     borderTop: edge, borderRight: edge, borderBottom: edge,
                                     borderLeft: `4px solid ${pc}`,
                                     boxShadow: isSel ? '0 2px 8px rgba(42,38,34,0.08)' : 'none' }}>
@@ -4306,6 +4310,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
         try {
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             let locationId = draft.locationId || null;
+            let addressSaved = false;
 
             // 1 — address, when one has been entered or changed
             if (loc && (loc.address || '').trim()) {
@@ -4333,6 +4338,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 }
                 const ldata = await lres.json().catch(() => ({}));
                 locationId = ldata.location?.id || locId;
+                addressSaved = true;
                 delete newLocIds.current[draft.id];
                 if (stillOrg(askedOrg)) setLoc(l => (l ? { ...l, id: locationId } : l));
             }
@@ -4343,7 +4349,8 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
             // Each side through one builder (editorFields — the form's expressions as they always were), so an untouched field
             // is never sent: a screen behind another member's change wrote its old status and schedule back.
             const base = opened.current || draft;
-            const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id);
+            // The appointment it saw named with one it sends (state §0.289): the job as opened, never the form's reading of it.
+            const body = jobChanges(editorFields(base, base.locationId), editorFields(draft, locationId), draft.id, { seen: base });
             // Nothing of the job changed: no write — "Saved" when the address step above saved the address.
             if (!body) { setStatus({ kind: 'ok', msg: loc && (loc.address || '').trim() ? 'Saved' : 'No changes to save.' }); return; }
             const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(draft.id), {
@@ -4360,14 +4367,17 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 else {
                     // The job moved since the editor opened it ('stale'): the job as stored, with what the member typed over it
                     // kept on screen — the editor stays open; its next Save sends their changes from the job as it is.
+                    let dropped = '';
                     if (answer === 'stale') {
+                        if (appointmentDropped(base, draft, r.body.job)) dropped = ' Its time is shown as it is now — choose yours again.';
                         onSaved(r.body.job);
                         // Functional (the review): what was typed while the request was out is kept too — and only while the
                         // editor still shows this job (the list stays live: another job picked meanwhile is never rebased).
-                        setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job) : d));
+                        setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job, { refused: true }) : d));
                         if (opened.current?.id === draft.id) opened.current = { ...r.body.job };
                     }
-                    throw refusalError(r.words, r.heard);
+                    // The address step landed before the job was refused: "nothing" is the job's alone.
+                    throw refusalError(answer === 'stale' ? (addressSaved ? r.words.replace(/ Nothing was saved\.$/, ' Its address was saved; nothing else was.') : r.words) + dropped : r.words, r.heard);
                 }
             } else {
                 data = await res.json().catch(() => ({}));
@@ -6385,7 +6395,7 @@ export default function DispatchTab() {
                 // §0.286). The whole crew is persisted, not just the lead (it once sent `coTechIds: []`).
                 const held = (jobs.find(j => j.id === pr.job.id) || pr.job)._raw;
                 const body = jobChanges(held, scheduleFields({ leadId: pr.tech.id, coIds: (pr.crew || []).slice(1).map(t => t.id),
-                    date: pr.dateStr, start: startS, end: endS, units: pr.assignedEquipment }), pr.job.id, { checkStatus: true });
+                    date: pr.dateStr, start: startS, end: endS, units: pr.assignedEquipment }), pr.job.id, { checkStatus: true, seen: pr.job._raw || held });   // seen: as the plan was made on it (§0.289)
                 if (body) {
                     const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(pr.job.id), {
                         method: 'PUT',
@@ -6489,7 +6499,7 @@ export default function DispatchTab() {
 
         if (!unassignJobIds.length) return;
 
-        const freed = [], notFreed = [], maybeFreed = [];
+        const freed = [], notFreed = [], maybeFreed = [], noLonger = [];
         const adopted = [];   // the jobs as the server answered with them (state §0.286)
         const asSent = new Map();   // landed, its answer unreadable: kept as sent
         for (const jobId of unassignJobIds) {
@@ -6509,7 +6519,13 @@ export default function DispatchTab() {
                     const answer = jobAnswerOf(r.status, w.body, jobId);
                     if (answer === 'already') { freed.push(jobId); adopted.push(w.body.job); }   // an earlier press landed
                     // The job moved since the board read it: the job as stored, and said by name, never returned unseen.
-                    else { if (answer === 'stale') adopted.push(w.body.job); (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words }); }
+                    else if (answer === 'stale') {
+                        // No longer this technician's (another member gave it another crew, or took it off): nothing to return.
+                        adopted.push(w.body.job);
+                        const crew = [w.body.job.assignedTechId, ...listOf(w.body.job.coTechIds)];
+                        if (crew.includes(blk.techId)) notFreed.push({ id: jobId, words: w.words.replace(/ Nothing was saved\.$/, '') });   // the time off was saved
+                        else noLonger.push(jobId);
+                    } else (w.heard ? notFreed : maybeFreed).push({ id: jobId, words: w.words });
                 }
             } catch (e) { maybeFreed.push({ id: jobId, words: failureWords(e) }); }
         }
@@ -6526,7 +6542,8 @@ export default function DispatchTab() {
             addAudit('dispatch.timeoff.unassign', 'dispatch_technician', blk.techId,
                 `${techName.firstName || ''} ${techName.lastName || ''}`.trim() || blk.techId,
                 `Time off ${blk.startDate}–${blk.endDate} — ${freed.length} job(s) returned to the queue` +
-                (freed.length !== unassignJobIds.length ? ` — ${unassignJobIds.length - freed.length} failed` : ''));
+                (noLonger.length ? ` — ${noLonger.length} no longer theirs` : '') +
+                (freed.length + noLonger.length !== unassignJobIds.length ? ` — ${unassignJobIds.length - freed.length - noLonger.length} failed` : ''));
         }
 
         // Each job still on the technician, by name and why — never only the audit row's count (state §0.246, Q12).
@@ -6639,6 +6656,11 @@ export default function DispatchTab() {
                 payload = { ...payload, assignedEquipmentIds: reserved };
             }
         }
+        // Where the board saw the job (state §0.289): the day, time and crew the plan was checked against, and its status —
+        // a job moved since is refused, never moved from a board behind it. A row with no copy of the job names nothing.
+        // A status the app does not know (stored before §0.286) is not named: the drag never moves it.
+        const at = job._raw?.status || 'unscheduled';
+        if (seenOf(job._raw).fromCrew) payload = { ...payload, ...(KNOWN_STATUSES.includes(at) ? { fromStatus: at } : {}), ...seenOf(job._raw) };
 
         const toTech   = plan.crewChanged ? techs.find(t => t.id === toTechId) : null;
         const fromTech = techs.find(t => t.id === fromTechId) || null;
@@ -6667,18 +6689,25 @@ export default function DispatchTab() {
                     body: JSON.stringify(payload),
                 });
                 // The ok check first, the house words; a 403 the role's sentence (state §0.248, Q13) — it said "HTTP N".
+                let data = {}, already = false;
                 if (!res.ok) {
                     const r = await writeRefusalOf(res, 'Your role cannot reschedule jobs.');
                     if (!stillOrg(askedOrg)) return;
-                    throw refusalError(r.words, r.heard);
+                    const answer = jobAnswerOf(res.status, r.body, job.id);
+                    if (answer === 'already') { data = { job: r.body.job }; already = true; }   // there as dropped, an earlier drop's or another member's: no audit row of this one
+                    else {
+                        if (answer === 'stale') adoptJob(r.body.job);   // the job as stored, the words said
+                        throw refusalError(answer === 'stale' ? `${name}: ${r.words}` : r.words, r.heard);
+                    }
+                } else {
+                    data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read moves the row as sent
                 }
-                const data = await res.json().catch(() => ({}));   // landed: an answer that cannot be read moves the row as sent
                 if (!stillOrg(askedOrg)) return;
                 const saved = data.job || null;
                 // The job as the server answered with it, into both copies (state §0.286: its `_raw` too, which the next
                 // sender diffs against); one whose answer could not be read, moved as sent.
                 if (saved) adoptJob(saved); else { moveRow(); keepSent(job.id, sentOf(payload)); }
-                if (addAudit) {
+                if (addAudit && !already) {
                     addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,
                         `Moved from ${job.scheduledDate}${fromTech ? ` · ${fromTech.name}` : ''} to ${where}`
                         + (reserved ? ` — reserved: ${reserved.map(id => unitLabel(id, equipment)).join(', ') || 'none'}` : '')
@@ -6690,7 +6719,7 @@ export default function DispatchTab() {
                 weekMoveTimer.current = setTimeout(() => setWeekMove(st => ({ ...st, notice: '' })), 8000);
             } catch (e) {
                 if (!stillOrg(askedOrg)) return;   // a failure after an org switch says nothing (state §0.175)
-                if (unknownOf(e)) { moveRow(); keepSent(job.id, sentOf(payload)); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }
+                if (unknownOf(e)) { moveRow(); keepSent(job.id, { ...sentOf(payload), _maybe: true }); setWeekMove({ busy: false, error: maybeSaid(name, 'moved', failureWords(e)), notice: '' }); return; }
                 setWeekMove({ busy: false, error: failureWords(e), notice: '' });   // plain words (state §0.248)
             }
         };

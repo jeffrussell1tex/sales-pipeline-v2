@@ -144,7 +144,7 @@ test('every shape a function looks at answers as its method does, or as the tabl
         const labels = new Map(all[f].shapes.map(([r]) => [r.label, r.method]));
         for (const [label, line] of Object.entries(also)) if (!labels.has(label) || line === plain[labels.get(label)]) left.push(`${f} — ${label}`);
     }
-    assert.ok(shapes >= 3344, `the shapes asked (${shapes}; 3,344 on 23 Nov)`);
+    assert.ok(shapes >= 3340, `the shapes asked (${shapes}; 3,344 on 23 Nov; 3,340 since §0.289 — a body's fromStatus is read in seenIn, src/utils/jobChanges.js, no longer in the function's own file)`);
     assert.deepEqual(wrong, [], `REGRESSION: a branch answers other roles than its method does (in order: ${ASKERS.map((r) => r || 'signed out').join(', ')}):\n   ${wrong.join('\n   ')}\n`);
     assert.deepEqual(left, [], 'a line of `also` for a shape that is gone, or that answers as its method does — take it out');
 });
@@ -173,7 +173,7 @@ test('a refusal comes before any write or send; signed out, or refused by sign-i
             if (x.status !== 403 || !/turned off/.test(x.said) || x.asked) open.add(`${f} ${r.method} ${r.what || r.label || ''}, refused by sign-in: ${x.status} ${x.said}, ${x.asked} statements`);
         }
     }
-    assert.ok(refused >= 15775 && out >= 3653 && off >= 3255, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
+    assert.ok(refused >= 15755 && out >= 3649 && off >= 3251, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
     assert.deepEqual(wrote, [], 'REGRESSION: a write, a Clerk write or a send before its refusal');
     assert.deepEqual([...open], [], 'REGRESSION: answered a caller sign-in refused');
     for (const [f, [methods, why]] of Object.entries(PUBLIC)) assert.ok(FUNCTIONS.includes(f) && methods.length && why.length >= 9, `${f}: a public function that is there`);

@@ -122,7 +122,11 @@ One commit per verified batch; doc patch in the same commit.
   save sends only what it changed (`src/utils/jobChanges.js`), a status
   move naming `fromStatus` — 409 `stale` / `already` with the job
   (`missedOfficeJob`); the screen adopts every answered job into both
-  copies (`adoptJob`, `keepSent`; rule 14).
+  copies (`adoptJob`, `keepSent`; rule 14). Since §0.289 a press
+  names the time and the crew its screen saw too, as stored
+  (`fromAppointment`, `fromCrew`, `seenOf`), the Jobs editor the time when
+  it sends any of it, the length or `scheduled` — held in the same read; a
+  409 `already` only where all else it named is as seen (rule 15).
 - The `null === null` collision: an unresolvable caller and an unassigned row
   both read `null` — guard with `!!row.ownerId` wherever it matters.
 - Role gate is an allowlist (`APP_ROLES` / `isAppRole`); unrecognised values

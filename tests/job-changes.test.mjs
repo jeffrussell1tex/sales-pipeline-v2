@@ -2,13 +2,15 @@
 // Dispatch office save sends only what it changed from the job as its screen holds it, and a status move names the status
 // it moved from. src/utils/jobChanges.js, run: one rule per column (a list held as JSON text, a decimal, none and false),
 // the body each press sends, the editor's form as it always was, a stale editor rebased, and the server's 'already'.
+// And §0.289 (§0.286's found (a); Jeff, 23 Nov: "Next race finding"): the appointment and the crew a save relied on, named.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import {
     JOB_STATUSES, listOf, sameJobValue, jobChanges, scheduleFields, heldCrewFields, unassignFields, editorFields,
-    rebaseDraft, jobHolds, jobAnswerOf, sentOf,
+    rebaseDraft, jobHolds, jobAnswerOf, sentOf, seenOf, seenIn, movedWords, sameAppointment, sameCrew,
+    pressLanded, appointmentDropped,
 } from '../src/utils/jobChanges.js';
 
 const STORED = {   // a job as the server holds it (normaliseJob's shape, lists as drizzle hands them back)
@@ -70,13 +72,16 @@ test('J3 — each press: a schedule, a hold, a time off — only what it changes
 test('J3b — a press whose meaning is a status names it and where it saw the job whenever it sends anything (the review); nothing to change sends nothing', () => {
     const queued = { id: 'j4', status: 'unscheduled', assignedTechId: null, coTechIds: [], assignedEquipmentIds: [] };
     assert.deepEqual(jobChanges(queued, heldCrewFields(['t1']), 'j4', { checkStatus: true }),
-        { id: 'j4', status: 'unscheduled', assignedTechId: 't1', coTechIds: [], fromStatus: 'unscheduled' },
+        // Moved in §0.289: the time and the crew it was seen with too.
+        { id: 'j4', status: 'unscheduled', assignedTechId: 't1', coTechIds: [], fromStatus: 'unscheduled',
+            fromAppointment: { scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: '' }, fromCrew: { assignedTechId: '', coTechIds: [] } },
         'REGRESSION: a hold over a job held unscheduled names no status — scheduled since by another, it lands unchecked');
     assert.deepEqual(jobChanges(queued, heldCrewFields(['t1']), 'j4'), { id: 'j4', assignedTechId: 't1', coTechIds: [] }, 'without it: the fields alone');
     assert.equal(jobChanges(queued, unassignFields(), 'j4', { checkStatus: true }), null, 'a job already back with no crew: still nothing to send');
     const sch = jobChanges(STORED, scheduleFields({ leadId: 't1', coIds: ['t2'], date: '2026-11-27', start: '08:00', end: '10:00', units: ['u1'] }), 'j1', { checkStatus: true });
     assert.equal(sch.fromStatus, 'scheduled', 'a reschedule names where it saw the job');
     assert.deepEqual(sentOf({ id: 'j1', status: 'scheduled', fromStatus: 'unscheduled', title: 'x' }), { status: 'scheduled', title: 'x' });
+    assert.deepEqual(sentOf({ id: 'j1', ...seenOf(STORED), title: 'x' }), { title: 'x' }, 'REGRESSION: what its screen saw kept as the job\'s own (§0.289)');
 });
 
 test("J4 — the editor's form is the body its Save always sent; an untouched form sends nothing; a start typed sends the appointment", () => {
@@ -188,11 +193,11 @@ test('THE GUARD — the parent adopts every job a press is answered with, and ke
     inOrder('onSaved={saved => { adoptJob(saved);', 'onAdopt={adoptJob}', 'onHeld={({ jobId, jobName, techIds, crewNames, serverJob, sent }) => {', 'if (serverJob) adoptJob(serverJob);', 'else keepSent(jobId, sent);',
         'onScheduled={({', 'if (serverJob) adoptJob(serverJob);', 'else keepSent(jobId, sent);');
     for (const call of ['units: reservedUnits }), selectedJob.id, { checkStatus: true });', 'heldCrewFields(ids), selectedJob.id, { checkStatus: true });',
-        'units: pr.assignedEquipment }), pr.job.id, { checkStatus: true });', 'unassignFields(), jobId, { checkStatus: true });']) assert.ok(d.includes(call), `REGRESSION: a status press unguarded — ${call}`);
-    inOrder('setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job) : d));', 'const stored = data.job || { ...(selected || base), ...sentOf(body) };', 'setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, stored) : d));', 'if (opened.current?.id === draft.id) opened.current = { ...stored };');
+        'units: pr.assignedEquipment }), pr.job.id, { checkStatus: true, seen: pr.job._raw || held });', 'unassignFields(), jobId, { checkStatus: true });']) assert.ok(d.includes(call), `REGRESSION: a status press unguarded — ${call}`);
+    inOrder('setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, r.body.job, { refused: true }) : d));', 'const stored = data.job || { ...(selected || base), ...sentOf(body) };', 'setDraft(d => (d && d.id === draft.id ? rebaseDraft(base, { ...d, locationId }, stored) : d));', 'if (opened.current?.id === draft.id) opened.current = { ...stored };');
     inOrder('if (saved) adopted.push(saved); else asSent.set(pr.job.id, sentOf(body));', 'asSent.forEach((sent, id) => keepSent(id, sent));');
     inOrder('else asSent.set(jobId, sentOf(body)); }', 'asSent.forEach((sent, id) => keepSent(id, sent));');
-    inOrder('if (saved) adoptJob(saved); else { moveRow(); keepSent(job.id, sentOf(payload)); }', 'if (unknownOf(e)) { moveRow(); keepSent(job.id, sentOf(payload));');
+    inOrder('if (saved) adoptJob(saved); else { moveRow(); keepSent(job.id, sentOf(payload)); }', 'if (unknownOf(e)) { moveRow(); keepSent(job.id, { ...sentOf(payload), _maybe: true });');
 });
 
 // The server's two refusals before any write (§0.286 and its review): a fromStatus that is no status, and a status that is
@@ -202,12 +207,150 @@ test("the job endpoint refuses a fromStatus or a status outside the job statuses
     const f = readFileSync(new URL('../netlify/functions/dispatch-jobs.mjs', import.meta.url), 'utf8').split('\r\n').join('\n');
     // Each line once in the file, by its position against the write (the line items' own PUT comes first in the file).
     const at = (n) => { const i = f.indexOf(n); assert.ok(i >= 0, `REGRESSION: missing — ${n}`); assert.equal(f.indexOf(n, i + 1), -1, `once: ${n}`); return i; };
-    const write = at('const { before: replaced, written } = await officeWrite(orgId, id, updates, seenStatus);');
-    const from = at("if (seenStatus !== undefined && !JOB_STATUSES.includes(seenStatus)) {\n                return { statusCode: 400, headers, body: JSON.stringify({ error: 'fromStatus is the status the job was seen in — one of the job statuses.', field: 'fromStatus' }) };");
+    // Moved in §0.289: seenIn reads all three (its own refusals: J8).
+    const write = at('const { before: replaced, written } = await officeWrite(orgId, id, updates, named.seen);');
+    const from = at("const named = seenIn(data);\n            if (named.error) return { statusCode: 400, headers, body: JSON.stringify({ error: named.error, field: named.field }) };");
     const st = at("if ('status' in data && !JOB_STATUSES.includes(data.status)) {\n                return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };");
     const officeLinks = f.lastIndexOf('const linked = await checkLinks(JOB_LINKS, data, current, orgId);');
     assert.ok(from < officeLinks && st < officeLinks && officeLinks < write, 'the office PUT refuses both before its links are asked and its write');
     const p = at("if (data.status != null && !JOB_STATUSES.includes(data.status)) {\n                return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };");
     const prior = f.indexOf('const [priorJob] = await db.select()');
     assert.ok(prior > 0 && p < prior, 'the create refuses before it reads or writes');
+});
+
+// ── §0.289: where the screen saw the job ──
+
+const APPT = { scheduledDate: '2026-11-26', scheduledStart: '08:00', scheduledEnd: '10:00', timeSlot: 'exact', durationMinutes: 120 };
+const CREW = { assignedTechId: 't1', coTechIds: ['t2'] };
+
+test('J8 — what a screen saw: the appointment and the crew as stored — none of a field is empty, a slot never set is anytime, a crew list however it is held', () => {
+    assert.deepEqual(seenOf(STORED), { fromAppointment: APPT, fromCrew: CREW });
+    assert.deepEqual(seenOf({ ...STORED, coTechIds: '["t2"]' }), { fromAppointment: APPT, fromCrew: CREW }, 'a list held as JSON text');
+    for (const bare of [{ id: 'j0' }, { id: 'j0', scheduledDate: null, scheduledStart: '', scheduledEnd: undefined, timeSlot: null, assignedTechId: null, coTechIds: null }]) {
+        assert.deepEqual(seenOf(bare), { fromAppointment: { scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: '' }, fromCrew: { assignedTechId: '', coTechIds: [] } });
+    }
+    // The review: a job not seen as stored names nothing — none held, a row with no job behind it, one moved by a press whose answer proved nothing.
+    for (const none of [null, undefined, {}, { status: 'scheduled', ...CREW }, { ...STORED, _maybe: true }]) assert.deepEqual(seenOf(none), {}, JSON.stringify(none));
+    assert.deepEqual(seenOf({ ...STORED, coTechIds: ['t2', null, '', 5] }).fromCrew, CREW, 'a crew list its ids alone, as the database reads it');
+    assert.equal(seenOf({ ...STORED, durationMinutes: '90' }).fromAppointment.durationMinutes, 90);
+    assert.ok(!sameAppointment(STORED, { ...STORED, durationMinutes: 240 }), 'REGRESSION: a longer job read as the same appointment — scheduled for its old length');
+    assert.ok(sameAppointment({ timeSlot: null }, { timeSlot: 'anytime', scheduledDate: '' }) && !sameAppointment(STORED, { ...STORED, scheduledEnd: '11:00' }));
+    assert.ok(sameCrew({ coTechIds: '[]' }, { assignedTechId: '' }) && !sameCrew(STORED, { ...STORED, coTechIds: ['t3'] }) && !sameCrew(STORED, { ...STORED, assignedTechId: 't9' }));
+    // The server's reading of a body: each named one, read the same way; none named, none asked.
+    assert.deepEqual(seenIn({ title: 'x' }), { seen: {} });
+    assert.deepEqual(seenIn({ fromStatus: 'scheduled', ...seenOf(STORED) }), { seen: { status: 'scheduled', appointment: APPT, crew: CREW } });
+    assert.deepEqual(seenIn({ fromAppointment: {} }), { seen: { appointment: { scheduledDate: '', scheduledStart: '', scheduledEnd: '', timeSlot: 'anytime', durationMinutes: '' } } });
+    assert.equal(seenIn({ fromAppointment: { durationMinutes: '240' } }).seen.appointment.durationMinutes, 240);
+    assert.equal(seenIn({ fromStatus: 'gone' }).field, 'fromStatus');
+    assert.equal(seenIn({ fromStatus: undefined }).field, 'fromStatus');
+    for (const a of [null, undefined, 'x', 5, [], { scheduledDate: 5 }, { timeSlot: {} }, { durationMinutes: 'x' }, { durationMinutes: {} }]) assert.equal(seenIn({ fromAppointment: a }).field, 'fromAppointment', JSON.stringify(a));
+    for (const c of [null, 'x', [], {}, { coTechIds: 't2' }, { assignedTechId: {}, coTechIds: [] }, { coTechIds: [1] }]) assert.equal(seenIn({ fromCrew: c }).field, 'fromCrew', JSON.stringify(c));
+});
+
+test('J9 — a save that sends the appointment or the crew names the one it saw, from the job as stored; one that sends neither names neither; a press names each it means', () => {
+    // The Jobs editor: its form reads an end from the start and the length, and no slot as anytime — what it saw is the job's own.
+    const odd = { ...STORED, scheduledEnd: '12:30', timeSlot: null };
+    assert.deepEqual(jobChanges(editorFields(odd, 'loc1'), editorFields({ ...odd, durationHrs: 3 }, 'loc1'), 'j1', { seen: odd }),
+        { id: 'j1', durationMinutes: 180, scheduledDate: '2026-11-26', scheduledStart: '08:00', scheduledEnd: '11:00', timeSlot: 'exact',
+            fromAppointment: { scheduledDate: '2026-11-26', scheduledStart: '08:00', scheduledEnd: '12:30', timeSlot: 'anytime', durationMinutes: 120 } },
+        "REGRESSION: an appointment sent with no word of the one it saw, or with the form's reading of it");
+    assert.deepEqual(jobChanges(editorFields(STORED, 'loc1'), editorFields({ ...STORED, title: 'New' }, 'loc1'), 'j1', { seen: STORED }), { id: 'j1', title: 'New' }, 'a title beside another member\'s reschedule lands');
+    assert.deepEqual(jobChanges(STORED, { assignedTechId: 't9', coTechIds: ['t2'] }, 'j1', { seen: STORED }), { id: 'j1', assignedTechId: 't9', coTechIds: ['t2'], fromCrew: CREW });
+    // A press: Schedule now for another crew at the time it saw — the time not sent, and named.
+    const sch = jobChanges(STORED, scheduleFields({ leadId: 't9', coIds: [], date: '2026-11-26', start: '08:00', end: '10:00', units: ['u1'] }), 'j1', { checkStatus: true });
+    assert.deepEqual(sch, { id: 'j1', status: 'scheduled', assignedTechId: 't9', coTechIds: [], fromStatus: 'scheduled', fromAppointment: APPT, fromCrew: CREW },
+        'REGRESSION: a crew given for a time another member has since moved lands at the new time');
+    // Every press means both: a hold takes the job off the time it was seen at (the review).
+    assert.deepEqual(Object.keys(jobChanges(STORED, heldCrewFields(['t1', 't2']), 'j1', { checkStatus: true })).filter((k) => k.startsWith('from')), ['fromStatus', 'fromAppointment', 'fromCrew']);
+    assert.deepEqual(Object.keys(jobChanges(STORED, unassignFields(), 'j1', { checkStatus: true })).filter((k) => k.startsWith('from')), ['fromStatus', 'fromAppointment', 'fromCrew']);
+    assert.equal(jobChanges({ ...STORED, status: 'unscheduled', assignedTechId: null, coTechIds: [], scheduledStart: null, scheduledEnd: null, assignedEquipmentIds: [] }, unassignFields(), 'j1', { checkStatus: true }), null, 'nothing to change: nothing sent');
+    // The review: an editor that puts the job on the schedule names the appointment it goes on at; one that takes it off does not.
+    const queued = { ...STORED, status: 'unscheduled' };
+    assert.deepEqual(jobChanges(editorFields(queued, 'loc1'), editorFields({ ...queued, status: 'scheduled' }, 'loc1'), 'j1', { seen: queued }), { id: 'j1', status: 'scheduled', fromStatus: 'unscheduled', fromAppointment: APPT },
+        'REGRESSION: a job scheduled from its status alone, its time moved since, confirmed at a time nobody chose');
+    assert.deepEqual(jobChanges(editorFields(STORED, 'loc1'), editorFields({ ...STORED, status: 'cancelled' }, 'loc1'), 'j1', { seen: STORED }), { id: 'j1', status: 'cancelled', fromStatus: 'scheduled' });
+    // A length sent alone (no start: the end stays none) names the appointment it is the length of.
+    const noStart = { ...STORED, scheduledStart: null, scheduledEnd: null, timeSlot: 'morning' };
+    const longer = jobChanges(editorFields(noStart, 'loc1'), editorFields({ ...noStart, durationHrs: 3 }, 'loc1'), 'j1', { seen: noStart });
+    assert.deepEqual(Object.keys(longer).sort(), ['durationMinutes', 'fromAppointment', 'id']);
+    // Mass-schedule: the diff against the row held now, what it saw the copy the plan was made on.
+    const planned = { ...STORED, assignedTechId: 't8' };
+    assert.equal(jobChanges(STORED, scheduleFields({ leadId: 't9', date: '2026-11-26', start: '08:00', end: '10:00' }), 'j1', { checkStatus: true, seen: planned }).fromCrew.assignedTechId, 't8', 'REGRESSION: a plan names the crew of a copy adopted after it');
+    // A job the screen holds no copy of: nothing seen, nothing named.
+    assert.deepEqual(jobChanges(undefined, unassignFields(), 'j9', { checkStatus: true }), { id: 'j9', ...unassignFields() });
+});
+
+test('J10 — a refusal says what moved, the status first', () => {
+    const seen = { status: 'scheduled', appointment: APPT, crew: CREW };
+    assert.equal(movedWords({ ...STORED, status: 'en_route', scheduledDate: 'x' }, seen), 'This job is en route now — it changed since you opened it. Nothing was saved.');
+    assert.equal(movedWords({ ...STORED, status: null }, { status: 'scheduled' }), 'This job is unscheduled now — it changed since you opened it. Nothing was saved.');
+    assert.equal(movedWords({ ...STORED, scheduledDate: '2026-12-01' }, seen), 'This job’s time changed since this screen loaded it. Nothing was saved.');
+    assert.equal(movedWords({ ...STORED, durationMinutes: 240 }, seen), 'This job’s time changed since this screen loaded it. Nothing was saved.');
+    assert.equal(movedWords({ ...STORED, coTechIds: [] }, seen), 'This job’s crew changed since this screen loaded it. Nothing was saved.');
+    assert.equal(movedWords({ ...STORED, coTechIds: [], timeSlot: 'am' }, seen), 'This job’s time and crew changed since this screen loaded it. Nothing was saved.');
+    assert.equal(movedWords(STORED, seen), 'This job changed since this screen loaded it. Nothing was saved.', 'moved and moved back since: still no claim of what');
+    assert.equal(movedWords(STORED), 'This job changed since this screen loaded it. Nothing was saved.');
+});
+
+test("J11 — 'already' is an earlier press landed: all it sent held, and all else it relied on as it saw it (the review)", () => {
+    const seen = { status: 'scheduled', appointment: APPT, crew: CREW };
+    const crew = { updatedAt: new Date(), assignedTechId: 't9', coTechIds: '[]' };
+    const landed = { ...STORED, assignedTechId: 't9', coTechIds: [] };
+    assert.ok(pressLanded(landed, crew, seen), 'its own press, sent again');
+    assert.ok(!pressLanded({ ...landed, scheduledDate: '2026-12-01' }, crew, seen), 'REGRESSION: the same crew by another member, at another time, said done');
+    assert.ok(!pressLanded({ ...landed, durationMinutes: 240 }, crew, seen));
+    assert.ok(!pressLanded({ ...landed, status: 'cancelled' }, crew, seen), 'REGRESSION: a cancelled job said done');
+    const day = { updatedAt: new Date(), scheduledDate: '2026-11-27' };
+    const moved = { ...STORED, scheduledDate: '2026-11-27' };
+    assert.ok(pressLanded(moved, day, seen), 'the day sent, the rest of the appointment as seen');
+    assert.ok(!pressLanded({ ...moved, scheduledStart: '14:00' }, day, seen));
+    assert.ok(!pressLanded({ ...moved, assignedTechId: 't9' }, day, seen), 'REGRESSION: the same day by another member, for another crew, said done');
+    assert.ok(!pressLanded(STORED, day, seen), 'what it sent is not held');
+    assert.ok(pressLanded({ ...STORED, status: 'cancelled' }, { status: 'cancelled' }, { status: 'scheduled' }), 'a status sent is the one it moved to');
+    assert.ok(pressLanded(moved, day), 'nothing named: what it sent alone, as before');
+});
+
+test('J12 — an editor refused over another appointment shows the stored one whole and says so; one refused over its crew or status keeps the time typed (the review)', () => {
+    const stored = { ...STORED, scheduledDate: '2026-12-01', scheduledStart: null, scheduledEnd: null, timeSlot: 'morning' };
+    const draft = { ...STORED, title: 'Mine', scheduledStart: '13:00', scheduledEnd: '15:00' };
+    const shown = rebaseDraft(STORED, draft, stored, { refused: true });
+    assert.deepEqual([shown.title, shown.scheduledDate, shown.scheduledStart, shown.scheduledEnd, shown.timeSlot], ['Mine', '2026-12-01', null, null, 'morning'],
+        'REGRESSION: a start typed for one day beside the day another member moved it to');
+    assert.ok(appointmentDropped(STORED, draft, stored));
+    assert.ok(!appointmentDropped(STORED, { ...STORED, title: 'Mine' }, stored), 'no time typed: none dropped');
+    assert.ok(!appointmentDropped(STORED, draft, { ...STORED, assignedTechId: 't9' }), 'the appointment stands: none dropped');
+    assert.equal(rebaseDraft(STORED, draft, { ...STORED, assignedTechId: 't9' }, { refused: true }).scheduledStart, '13:00');
+    assert.equal(rebaseDraft(STORED, draft, stored).scheduledStart, '13:00', 'a save that landed keeps what was typed while it was out');
+});
+
+// The database's half, by its lines (tests/integration/dispatch-race.itest.mjs runs them; this file is the harness's).
+test('THE GUARD — the office write finds the job only where the save saw it: its status, its appointment and its crew, in the locked read; a miss is said by what moved', () => {
+    const f = readFileSync(new URL('../netlify/functions/dispatch-jobs.mjs', import.meta.url), 'utf8').split('\r\n').join('\n');
+    const at = f.indexOf('async function officeWrite(orgId, id, updates, saw = {}) {');
+    assert.ok(at > 0);
+    const write = f.slice(at, f.indexOf('\n}\n', at));
+    for (const line of ["saw.status === undefined ? undefined : textIs(dispatchJobs.status, 'unscheduled', saw.status),",
+        "a && and(textIs(dispatchJobs.scheduledDate, '', a.scheduledDate), textIs(dispatchJobs.scheduledStart, '', a.scheduledStart),",
+        "textIs(dispatchJobs.scheduledEnd, '', a.scheduledEnd), textIs(dispatchJobs.timeSlot, 'anytime', a.timeSlot),",
+        "sql`coalesce(${dispatchJobs.durationMinutes}::text, '') = ${String(a.durationMinutes)}`),",
+        "c && and(textIs(dispatchJobs.assignedTechId, '', c.assignedTechId), sql`${coCrew} = ${JSON.stringify(c.coTechIds)}::jsonb`));",
+        ".where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId), seen)).for('update'));"]) assert.ok(write.includes(line), `REGRESSION: missing — ${line}`);
+    assert.ok(f.includes("const textIs = (col, none, v) => sql`coalesce(nullif(${col}, ''), ${none}) = ${v}`;"));
+    assert.ok(f.includes('if (!written) return await missedOfficeJob(orgId, id, updates, named.seen);'));
+    assert.ok(f.includes("JSON.stringify({ error: movedWords(now, saw), job, code: 'stale' })"));
+    const d = readFileSync(new URL('../src/Tabs/DispatchTab.jsx', import.meta.url), 'utf8').split('\r\n').join('\n');
+    assert.ok(d.includes('editorFields(draft, locationId), draft.id, { seen: base });'), 'REGRESSION: the Jobs editor names no appointment it saw');
+    assert.ok(d.includes("if (seenOf(job._raw).fromCrew) payload = { ...payload, ...(KNOWN_STATUSES.includes(at) ? { fromStatus: at } : {}), ...seenOf(job._raw) };"), 'REGRESSION: the week drag names nothing it saw');
+    assert.ok(f.includes('if (pressLanded(now, updates, saw)) return { statusCode: 409,'));
+    // The crew list as stored, read as the screen reads it: a list, JSON text of one, one id, JSON text of nothing.
+    for (const line of ["const coList = sql`case when jsonb_typeof(${co}) = 'array' then ${co}",
+        "when jsonb_typeof(${co}) <> 'string' then '[]'::jsonb",
+        "when not ((${co} #>> '{}') is json) then jsonb_build_array(${co} #>> '{}')",
+        "when jsonb_typeof((${co} #>> '{}')::jsonb) = 'array' then (${co} #>> '{}')::jsonb",
+        "when jsonb_typeof((${co} #>> '{}')::jsonb) = 'string' then jsonb_build_array((${co} #>> '{}')::jsonb)",
+        "else '[]'::jsonb end`;",
+        "const coCrew = sql`coalesce((select jsonb_agg(t.e order by t.n) from jsonb_array_elements(${coList}) with ordinality as t(e, n) where jsonb_typeof(t.e) = 'string' and t.e <> '\"\"'::jsonb), '[]'::jsonb)`;",
+        "updates.coTechIds    = JSON.stringify(data.coTechIds || []);"]) assert.ok(f.includes(line), `REGRESSION: missing — ${line}`);
+    for (const line of ["if (answer === 'stale' && onAdopt) { onAdopt(r.body.job); setReseed(n => n + 1); }\n", "if (answer === 'stale' && onAdopt) { onAdopt(r.body.job); setReseed(n => n + 1); }   // the job as stored", '}, [selectedJob?.id, reseed]);',
+        "if (appointmentDropped(base, draft, r.body.job)) dropped = ' Its time is shown as it is now — choose yours again.';", 'if (crew.includes(blk.techId)) notFreed.push({ id: jobId,', 'else noLonger.push(jobId);']) assert.ok(d.includes(line), `REGRESSION: missing — ${line}`);
 });

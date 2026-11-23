@@ -411,3 +411,175 @@ test('§0.286 review: a status outside the job statuses is a 400 naming the fiel
     assert.equal(said(hold).code, 'stale');
     assert.equal((await jobOf(held)).assignedTechId, null, 'the crew never written over the scheduled job');
 });
+
+// ── §0.289 (OPEN_ITEMS §4.8, §0.286's found (a); Jeff, 23 Nov: "Next race finding"): a save that sends the appointment or
+// the crew names the one its screen saw (fromAppointment, fromCrew) — the job rescheduled or given another crew since,
+// its status unmoved, was written over: the other member's time lost, the customer confirmed for the old one. ──────────
+const APPT = { scheduledDate: '2026-11-26', scheduledStart: '08:00', scheduledEnd: '10:00', timeSlot: 'exact' };
+const NO_CREW = { assignedTechId: null, coTechIds: [] };
+const apptOf = (j) => [j.scheduledDate, j.scheduledStart, j.scheduledEnd, j.timeSlot];
+const auditsOf = async (id) => (await db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.entityId, id)))).length;
+
+test("§0.289 an appointment sent over a reschedule another member made since writes nothing — 409 'stale' with the job as it stands, no notice, no audit; staged at the read, and not", async () => {
+    for (const staged of [true, false]) {
+        const id = await seed(`appt_${staged ? 'raced' : 'plain'}`, 'scheduled');
+        const other = otherMove(id, { scheduledDate: '2026-12-03', scheduledStart: '13:00', scheduledEnd: '15:00' });
+        mails.length = 0; ranAtRead = false;
+        if (staged) armedAtRead = other; else await other();
+        // The Jobs editor's duration edit: its appointment group whole, the end moved.
+        const res = await put(A, { id, durationMinutes: 180, ...APPT, scheduledEnd: '11:00', fromAppointment: APPT });
+        assert.equal(ranAtRead, staged);
+        assert.equal(res.statusCode, 409, res.body);
+        assert.equal(said(res).code, 'stale');
+        assert.equal(said(res).error, 'This job’s time changed since this screen loaded it. Nothing was saved.');
+        assert.deepEqual(apptOf(said(res).job), ['2026-12-03', '13:00', '15:00', 'exact'], 'the job as stored, for the screen to show');
+        const job = await jobOf(id);
+        assert.deepEqual(apptOf(job), ['2026-12-03', '13:00', '15:00', 'exact'], 'REGRESSION: the other member\'s reschedule written over');
+        assert.equal(job.durationMinutes, null, 'nothing of the save written');
+        assert.equal(mails.length, 0, 'REGRESSION: the customer confirmed for the old time');
+        assert.equal(await auditsOf(id), 0);
+    }
+});
+
+test("§0.289 a crew sent over another crew given since writes nothing — 409 'stale'; the crew held as a list, as JSON text and as none compares as the crew it is", async () => {
+    const id = await seed('crew', 'scheduled');
+    const [lead, co] = TECHS;
+    await otherMove(id, { assignedTechId: lead, coTechIds: JSON.stringify([co]) })();   // as the app writes it: JSON text in the jsonb column
+    const stale = await put(A, { id, assignedTechId: co, coTechIds: [], fromCrew: NO_CREW });
+    assert.equal(stale.statusCode, 409, stale.body);
+    assert.equal(said(stale).code, 'stale');
+    assert.equal(said(stale).error, 'This job’s crew changed since this screen loaded it. Nothing was saved.');
+    assert.equal((await jobOf(id)).assignedTechId, lead, 'REGRESSION: the other member\'s crew written over');
+    assert.deepEqual([(await movesOf(id)).length, await auditsOf(id)], [0, 0]);
+    // What it does not name stands beside it: an appointment-only save over a crew changed since lands, the crew theirs; and a crew over a time changed since, the time theirs.
+    const beside = await put(A, { id, ...APPT, scheduledDate: '2026-11-30', fromAppointment: APPT });
+    assert.equal(beside.statusCode, 200, beside.body);
+    assert.deepEqual([said(beside).job.assignedTechId, said(beside).job.scheduledDate], [lead, '2026-11-30']);
+    const turned = await put(A, { id, assignedTechId: lead, coTechIds: [], fromCrew: { assignedTechId: lead, coTechIds: [co] } });
+    assert.deepEqual([turned.statusCode, said(turned).job.scheduledDate], [200, '2026-11-30']);
+    await otherMove(id, { assignedTechId: lead, coTechIds: JSON.stringify([co]) })();
+    // Seen as it stands — each way a list can be held — it lands.
+    const lands = await put(A, { id, assignedTechId: co, coTechIds: [], fromCrew: { assignedTechId: lead, coTechIds: [co] } });
+    assert.equal(lands.statusCode, 200, lands.body);
+    for (const [held, tag] of [[sql`'["x1"]'::jsonb`, 'a list'], [sql`to_jsonb('["x1"]'::text)`, 'JSON text'], [sql`to_jsonb('x1'::text)`, 'one id as text'], [sql`to_jsonb('"x1"'::text)`, 'JSON text of one id'], [sql`'["x1", null, ""]'::jsonb`, 'a list with nothing in it']]) {
+        await otherMove(id, { assignedTechId: co })();
+        await db.execute(sql`update dispatch_jobs set co_tech_ids = ${held} where id = ${id} and org_id = ${A}`);
+        const res = await put(A, { id, title: `T ${tag}`, fromCrew: { assignedTechId: co, coTechIds: ['x1'] } });
+        assert.equal(res.statusCode, 200, `${tag}: ${res.body}`);
+        const other = await put(A, { id, title: 'no', fromCrew: { assignedTechId: co, coTechIds: ['x2'] } });
+        assert.equal(other.statusCode, 409, `${tag}, another crew: ${other.body}`);
+    }
+    for (const [held, tag] of [[sql`null`, 'none'], [sql`to_jsonb(''::text)`, 'an empty text'], [sql`'[]'::jsonb`, 'an empty list'], [sql`to_jsonb('null'::text)`, 'JSON text of nothing'], [sql`to_jsonb('""'::text)`, 'JSON text of an empty text'], [sql`to_jsonb('5'::text)`, 'JSON text of a number'], [sql`'[null, ""]'::jsonb`, 'a list of nothing']]) {
+        await db.execute(sql`update dispatch_jobs set co_tech_ids = ${held} where id = ${id} and org_id = ${A}`);
+        const res = await put(A, { id, title: `T ${tag}`, fromCrew: { assignedTechId: co, coTechIds: [] } });
+        assert.equal(res.statusCode, 200, `${tag}: ${res.body}`);
+    }
+});
+
+test("§0.289 an appointment seen as it stands lands and confirms; none of a field — null or '' — and a slot never set are the ones the screen reads; nothing seen is ever written", async () => {
+    const id = await seed('appt_ok', 'scheduled');
+    mails.length = 0;
+    const res = await put(A, { id, ...APPT, scheduledStart: '09:00', scheduledEnd: '11:00', fromAppointment: APPT, fromCrew: NO_CREW, fromStatus: 'scheduled' });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(apptOf(await jobOf(id)), ['2026-11-26', '09:00', '11:00', 'exact']);
+    assert.equal(confirms(), 1, 'a reschedule is confirmed');
+    await db.execute(sql`update dispatch_jobs set scheduled_date = null, scheduled_start = '', scheduled_end = null, time_slot = null where id = ${id} and org_id = ${A}`);
+    const none = await put(A, { id, scheduledDate: '2026-12-01', fromAppointment: { scheduledDate: null, scheduledStart: null, scheduledEnd: '', timeSlot: 'anytime' } });
+    assert.equal(none.statusCode, 200, none.body);
+    assert.equal((await jobOf(id)).scheduledDate, '2026-12-01');
+    assert.ok(!/fromAppointment|fromCrew/.test(JSON.stringify(await jobOf(id))));
+});
+
+test("§0.289 a press names all it relied on: a crew for a time another member has since moved, or a time for a crew since changed, is refused whole — the words say what moved, the status first", async () => {
+    const cases = [
+        ['time', { scheduledDate: '2026-12-04' }, 'This job’s time changed since this screen loaded it. Nothing was saved.'],
+        ['crew', { assignedTechId: TECHS[1] }, 'This job’s crew changed since this screen loaded it. Nothing was saved.'],
+        ['both', { scheduledDate: '2026-12-04', assignedTechId: TECHS[1] }, 'This job’s time and crew changed since this screen loaded it. Nothing was saved.'],
+        ['status', { status: 'en_route', scheduledDate: '2026-12-04' }, 'This job is en route now — it changed since you opened it. Nothing was saved.'],
+    ];
+    for (const [tag, moved, words] of cases) {
+        const id = await seed(`press_${tag}`, 'scheduled');
+        await otherMove(id, moved)();
+        mails.length = 0;
+        const before = [await jobOf(id), (await movesOf(id)).length, await auditsOf(id)];
+        const res = await put(A, { id, status: 'scheduled', assignedTechId: TECHS[0], coTechIds: [], fromStatus: 'scheduled', fromAppointment: APPT, fromCrew: NO_CREW });
+        assert.equal(res.statusCode, 409, `${tag}: ${res.body}`);
+        assert.deepEqual([await jobOf(id), (await movesOf(id)).length, await auditsOf(id), mails.length], [...before, 0], `${tag}: no write, move, audit or notice`);
+        assert.deepEqual([said(res).code, said(res).error], ['stale', words]);
+        assert.notEqual((await jobOf(id)).assignedTechId, TECHS[0], `${tag}: nothing written`);
+    }
+});
+
+test("§0.289 a press sent again after it landed is 'already' though what it saw has moved by its own hand; two reschedules at once: one lands, the other is refused", async () => {
+    const id = await seed('appt_again', 'scheduled');
+    mails.length = 0;
+    const body = { id, ...APPT, scheduledStart: '09:00', scheduledEnd: '11:00', fromAppointment: APPT };
+    assert.equal((await put(A, body)).statusCode, 200);
+    const again = await put(A, body);
+    assert.equal(again.statusCode, 409, again.body);
+    assert.equal(said(again).code, 'already');
+    assert.equal(confirms(), 1, 'told once');
+    const id2 = await seed('appt_pair', 'scheduled');
+    const two = await Promise.all(['13:00', '15:00'].map((scheduledStart) => put(A, { id: id2, ...APPT, scheduledStart, scheduledEnd: null, fromAppointment: APPT })));
+    assert.deepEqual(two.map((r) => r.statusCode).sort(), [200, 409]);
+    const lost = two.find((r) => r.statusCode === 409), won = two.find((r) => r.statusCode === 200);
+    assert.equal(said(lost).code, 'stale');
+    assert.equal((await jobOf(id2)).scheduledStart, said(won).job.scheduledStart, 'REGRESSION: the second reschedule written over the first');
+});
+
+test("§0.289 what is no appointment or crew is a 400 naming the field, nothing written; a body naming neither is decided as before; another org's job is a 404", async () => {
+    const id = await seed('bad_seen', 'scheduled');
+    for (const [field, value] of [['fromAppointment', null], ['fromAppointment', 'x'], ['fromAppointment', []], ['fromAppointment', { scheduledDate: 5 }],
+        ['fromCrew', null], ['fromCrew', { assignedTechId: 't', coTechIds: 'x' }], ['fromCrew', { assignedTechId: {}, coTechIds: [] }], ['fromCrew', { coTechIds: [1] }]]) {
+        const res = await put(A, { id, title: 'changed', [field]: value });
+        assert.equal(res.statusCode, 400, `${field} ${JSON.stringify(value)}: ${res.body}`);
+        assert.equal(said(res).field, field);
+    }
+    assert.equal((await jobOf(id)).title, 'Job bad_seen');
+    assert.equal((await put(A, { id, ...APPT, scheduledDate: '2026-12-09' })).statusCode, 200, 'an older screen, naming neither');
+    const other = await put(B, { id, ...APPT, fromAppointment: APPT });
+    assert.equal(other.statusCode, 404, other.body);
+    assert.ok(!said(other).job);
+    assert.equal((await jobOf(id)).scheduledDate, '2026-12-09');
+});
+
+test("§0.289 review: 'already' is an earlier press landed — every field it sends held AND all else it relied on as seen; the same crew or day by another member's hand is 'stale'", async () => {
+    // A crew given at the time the screen saw; the other member gave the same crew at another time.
+    const id = await seed('alr_time', 'scheduled');
+    await otherMove(id, { assignedTechId: TECHS[0], scheduledStart: '13:00', scheduledEnd: '15:00' })();
+    const crew = await put(A, { id, status: 'scheduled', assignedTechId: TECHS[0], coTechIds: [], fromStatus: 'scheduled', fromAppointment: APPT, fromCrew: NO_CREW });
+    assert.deepEqual([crew.statusCode, said(crew).code], [409, 'stale'], crew.body);
+    // A drag to a day the other member chose too, the crew changed or the job cancelled since.
+    for (const [tag, moved, code] of [['same', {}, 'already'], ['crew', { assignedTechId: TECHS[1] }, 'stale'], ['cancelled', { status: 'cancelled' }, 'stale'], ['start', { scheduledStart: '14:00' }, 'stale']]) {
+        const j = await seed('alr_drag_' + tag, 'scheduled');
+        await otherMove(j, { scheduledDate: '2026-11-27', ...moved })();
+        const res = await put(A, { id: j, scheduledDate: '2026-11-27', fromStatus: 'scheduled', fromAppointment: APPT, fromCrew: NO_CREW });
+        assert.deepEqual([res.statusCode, said(res).code], [409, code], `${tag}: ${res.body}`);
+    }
+});
+
+test('§0.289 review: a length another member changed is in the appointment seen — a job with no start made longer is not scheduled for its old length; the crew seen is asked under the lock, staged at the read; two crews at once: one lands; a cleared crew list is stored as the empty one', async () => {
+    const id = await seed('length', 'unscheduled');
+    await otherMove(id, { durationMinutes: 240 })();
+    const res = await put(A, { id, status: 'scheduled', ...APPT, fromStatus: 'unscheduled', fromAppointment: { ...APPT, durationMinutes: 120 }, fromCrew: NO_CREW });
+    assert.deepEqual([res.statusCode, said(res).code], [409, 'stale'], res.body);
+    assert.equal((await put(A, { id, status: 'scheduled', ...APPT, fromStatus: 'unscheduled', fromAppointment: { ...APPT, durationMinutes: '240' }, fromCrew: NO_CREW })).statusCode, 200);
+
+    const raced = await seed('crew_raced', 'scheduled');
+    ranAtRead = false;
+    armedAtRead = otherMove(raced, { assignedTechId: TECHS[1] });
+    const late = await put(A, { id: raced, assignedTechId: TECHS[0], coTechIds: [], fromCrew: NO_CREW });
+    assert.equal(ranAtRead, true);
+    assert.deepEqual([late.statusCode, said(late).code], [409, 'stale'], late.body);
+    assert.equal((await jobOf(raced)).assignedTechId, TECHS[1], 'REGRESSION: the crew seen decided on the PUT\'s read');
+
+    const pair = await seed('crew_pair', 'scheduled');
+    const two = await Promise.all(TECHS.map((t) => put(A, { id: pair, assignedTechId: t, coTechIds: [], fromCrew: NO_CREW })));
+    assert.deepEqual(two.map((r) => r.statusCode).sort(), [200, 409]);
+
+    const cleared = await put(A, { id: raced, coTechIds: null });
+    assert.equal(cleared.statusCode, 200, cleared.body);
+    assert.deepEqual(said(cleared).job.coTechIds, []);
+    const [{ held }] = (await db.execute(sql`select co_tech_ids #>> '{}' as held from dispatch_jobs where id = ${raced} and org_id = ${A}`)).rows;
+    assert.equal(held, '[]');
+});

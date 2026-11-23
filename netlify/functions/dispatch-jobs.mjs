@@ -16,7 +16,7 @@ import { notifyCustomer } from './_customerNotify.mjs';
 import { resolveTechnicianId } from './_techScope.mjs';
 import { techOnJob, techPatchHolds } from './_techJobs.mjs';
 import { techMoveRefusal } from '../../src/utils/techMoves.js';   // a technician's move, from where the job stands (state §0.281)
-import { JOB_STATUSES, jobHolds } from '../../src/utils/jobChanges.js';   // an office save's fromStatus and 'already' (state §0.286)
+import { JOB_STATUSES, pressLanded, seenIn, movedWords } from '../../src/utils/jobChanges.js';   // an office save's fromStatus and 'already' (state §0.286), what its screen saw (§0.289)
 import { checkLinks } from './_links.mjs';
 
 // A job's customer, service location, CRM account and deal: live rows of this org when a write names
@@ -217,9 +217,27 @@ async function missedTechJob(orgId, id, myTechId, data) {
 // own locked read found. `before` is the job as written, its status and appointment as they were (all the history, the
 // notice's plan and the audit read of it). → { before, written }, both null when the job is gone. Its callers await it.
 // `fromStatus` (state §0.286): a save that moves the status names where its screen saw the job; the locked read finds the
-// job only while it stands there — a save behind another member's move writes nothing (missedOfficeJob says what).
-async function officeWrite(orgId, id, updates, fromStatus) {
-    const seen = fromStatus === undefined ? undefined : sql`coalesce(nullif(${dispatchJobs.status}, ''), 'unscheduled') = ${fromStatus}`;
+// job only while it stands there — a save behind another member's move writes nothing (missedOfficeJob says what). And
+// the appointment and the crew its screen saw, when it names them (state §0.289): `seen` is seenIn's.
+const textIs = (col, none, v) => sql`coalesce(nullif(${col}, ''), ${none}) = ${v}`;
+// A co-technician list as stored — a list, JSON text of one, or one id — compared as the ids the screen reads of it
+// (jobChanges.js crewOf over the read's own parse): JSON text of nothing is none.
+const co = dispatchJobs.coTechIds;
+const coList = sql`case when jsonb_typeof(${co}) = 'array' then ${co}
+    when jsonb_typeof(${co}) <> 'string' then '[]'::jsonb
+    when not ((${co} #>> '{}') is json) then jsonb_build_array(${co} #>> '{}')
+    when jsonb_typeof((${co} #>> '{}')::jsonb) = 'array' then (${co} #>> '{}')::jsonb
+    when jsonb_typeof((${co} #>> '{}')::jsonb) = 'string' then jsonb_build_array((${co} #>> '{}')::jsonb)
+    else '[]'::jsonb end`;
+const coCrew = sql`coalesce((select jsonb_agg(t.e order by t.n) from jsonb_array_elements(${coList}) with ordinality as t(e, n) where jsonb_typeof(t.e) = 'string' and t.e <> '""'::jsonb), '[]'::jsonb)`;
+async function officeWrite(orgId, id, updates, saw = {}) {
+    const a = saw.appointment, c = saw.crew;
+    const seen = and(
+        saw.status === undefined ? undefined : textIs(dispatchJobs.status, 'unscheduled', saw.status),
+        a && and(textIs(dispatchJobs.scheduledDate, '', a.scheduledDate), textIs(dispatchJobs.scheduledStart, '', a.scheduledStart),
+            textIs(dispatchJobs.scheduledEnd, '', a.scheduledEnd), textIs(dispatchJobs.timeSlot, 'anytime', a.timeSlot),
+            sql`coalesce(${dispatchJobs.durationMinutes}::text, '') = ${String(a.durationMinutes)}`),
+        c && and(textIs(dispatchJobs.assignedTechId, '', c.assignedTechId), sql`${coCrew} = ${JSON.stringify(c.coTechIds)}::jsonb`));
     const was = db.$with('replaced').as(db.select({
         wasId: dispatchJobs.id, wasStatus: dispatchJobs.status, wasDate: dispatchJobs.scheduledDate,
         wasStart: dispatchJobs.scheduledStart, wasSlot: dispatchJobs.timeSlot,
@@ -237,13 +255,13 @@ async function officeWrite(orgId, id, updates, fromStatus) {
 // job as stored (compared with the row itself, by jobChanges.js's one rule per column). Else the job moved since its screen
 // read it: code 'stale', the job as stored for the screen to show, nothing written — no history, no notice, no audit.
 // Its callers await it: a failed re-read is the handler's 500.
-async function missedOfficeJob(orgId, id, updates) {
+async function missedOfficeJob(orgId, id, updates, saw) {
     const [now] = await db.select().from(dispatchJobs).where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
     if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
     const job = normaliseJob(now);
     const status = String(now.status || 'unscheduled').replace(/_/g, ' ');
-    if (jobHolds(now, updates)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in updates ? `This job is ${status} already.` : 'This job holds what you sent already.', job, code: 'already' }) };
-    return { statusCode: 409, headers, body: JSON.stringify({ error: `This job is ${status} now — it changed since you opened it. Nothing was saved.`, job, code: 'stale' }) };
+    if (pressLanded(now, updates, saw)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'status' in updates ? `This job is ${status} already.` : 'This job holds what you sent already.', job, code: 'already' }) };
+    return { statusCode: 409, headers, body: JSON.stringify({ error: movedWords(now, saw), job, code: 'stale' }) };
 }
 
 export const handler = async (event) => {
@@ -569,10 +587,9 @@ export const handler = async (event) => {
 
             // The status the save's screen saw the job in, when it moves the status (state §0.286): one of the job's statuses,
             // never written — a body naming none is decided as before (a save that moves no status, a screen with no copy of the job, older screens).
-            const seenStatus = Object.hasOwn(data, 'fromStatus') ? data.fromStatus : undefined;
-            if (seenStatus !== undefined && !JOB_STATUSES.includes(seenStatus)) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'fromStatus is the status the job was seen in — one of the job statuses.', field: 'fromStatus' }) };
-            }
+            // So is the appointment and the crew it saw, when it sends either (state §0.289).
+            const named = seenIn(data);
+            if (named.error) return { statusCode: 400, headers, body: JSON.stringify({ error: named.error, field: named.field }) };
             // A status is one of the job's (the review): one stored outside them made every later move a 400.
             if ('status' in data && !JOB_STATUSES.includes(data.status)) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: `status is one of: ${JOB_STATUSES.join(', ')}.`, field: 'status' }) };
@@ -609,7 +626,7 @@ export const handler = async (event) => {
             if ('actualEnd'   in data) updates.actualEnd   = data.actualEnd   ? new Date(data.actualEnd)   : null;
 
             // JSON fields
-            if ('coTechIds'    in data) updates.coTechIds    = JSON.stringify(data.coTechIds);
+            if ('coTechIds'    in data) updates.coTechIds    = JSON.stringify(data.coTechIds || []);   // a cleared list is the empty one (as a create's)
             if ('needSkills'   in data) updates.needSkills   = JSON.stringify(data.needSkills);
             if ('equipmentIds' in data) updates.equipmentIds = JSON.stringify(data.equipmentIds);
             // The units reserved at scheduling (§0.116). A job that leaves the
@@ -621,8 +638,8 @@ export const handler = async (event) => {
 
             // Answered from its own write (state §0.268): a read after it could fail with the write landed, a 500 over a save that
             // took (census-D §2C). Written with the job it replaced, read under the write's own lock (state §0.285).
-            const { before: replaced, written } = await officeWrite(orgId, id, updates, seenStatus);
-            if (!written) return await missedOfficeJob(orgId, id, updates);   // gone, already, or moved since (state §0.286)
+            const { before: replaced, written } = await officeWrite(orgId, id, updates, named.seen);
+            if (!written) return await missedOfficeJob(orgId, id, updates, named.seen);   // gone, already, or moved since (state §0.286, §0.289)
 
             // Write status history if status changed — from the job the write replaced, never the PUT's read (state §0.285)
             const fromStatus = replaced.status;
