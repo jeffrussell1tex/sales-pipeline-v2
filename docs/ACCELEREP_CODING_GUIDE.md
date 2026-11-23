@@ -4904,3 +4904,15 @@ THE GUARD: tests/owner-writes.test.mjs (the predicate rendered and decided as ma
 4. **A gate inside a branch, whose name a request-wide gate may also bind (the six CRM wipes'; users.mjs has none), is pinned by its position** — every org-wide wipe opens with its own `requireRole(auth, ['Admin'], headers)` and its return, read straight after the branch opens (tests/one-delete-path.test.mjs). A presence pin whose text occurs twice in its slice holds neither copy (OPEN_ITEMS §4.6).
 
 THE GUARD: tests/order-pins.test.mjs (every order pin over tests/ and tests/integration/, its floor the pins judged, a RUN test of each rule); tests/one-delete-path.test.mjs (the seven wipes); tests/refusal-sweep.test.mjs's G4 and G5 (each listed floor no lower than the count last measured for it — they do not see a count that has grown since; OPEN_ITEMS §6).
+
+## 18b137. Who May Do What Is Run, Not Read — A New Gate, Method Or Function Is Asked As Every Role (hard rule)
+
+**Origin (§0.288, 23 Nov 2026 — OPEN_ITEMS §4.6; Jeff: "Pin the gates").** Twenty-six gate returns could each be deleted with all 201 suites passing: the unit suites never ran a handler.
+
+1. **A new function, method or gate gets its answers in tests/gates/answers.mjs** — its plain line per method, and an aimed request in tests/gates/requests-*.mjs for each 401 or 403 the plain lines do not reach, and the caller it lets through where there is one. The test names a function not listed, an answer that changed and a refusal no request reaches; it does not see a missing let-through request, or a refusal with another status.
+2. **A changed line there is a changed right** — read it against the rule before changing it, never to make the test pass.
+3. **A refusal comes before any write, raw statement, stored file, Clerk write or send** — save one named with its reason (`afterWrite`: a write whose own WHERE or claim touches nothing, four today) — and a caller sign-in refused asks the database nothing (the public and scheduled functions named in PUBLIC).
+4. **A request's rows are the rows as stored**: the fake answers a statement the columns it names, so a check that reads its owner from the wrong column fails.
+5. **What it does not read needs a suite of its own**: what a 200 holds (some lists and masks have no unit suite today — OPEN_ITEMS §4.6, §0.288's (j)), SQL filters, a write that touched no row, a bulk write's forbidden rows, 400s and 404s no aimed request asks, rules keyed on managedReps, one part of a condition, scheduled functions past their off switch, sign-in.
+
+THE GUARD: tests/gate-matrix.test.mjs.

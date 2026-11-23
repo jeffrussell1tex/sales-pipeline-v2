@@ -522,6 +522,10 @@ One commit per verified batch; doc patch in the same commit.
 - An order pin in a test holds its earlier line present — `s.includes(x) && s.indexOf(x) < s.indexOf(y)`
   (-1 is before everything; THE GUARD, tests/order-pins.test.mjs) — and a floor on a count of code stands at its
   count, raised by the batch that adds to it (refusal-sweep's G4 and G5 hold the recorded ones; guide §18b136).
+- Who may do what on the server is run (§0.288): every function as every role (a scheduled one to its off
+  switch), and each 401, 403 or gate answer it returns, left out in memory, must change an answer or be named
+  with why none can (three are). A new function, method or gate gets its line in `tests/gates/answers.mjs` and
+  a request that reaches it (THE GUARD, tests/gate-matrix.test.mjs; guide §18b137).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with
   asserted occurrence counts, dry-run default, `--apply` flag, write once,
   re-read FROM DISK to verify. `App.jsx` is CRLF — preserve it.
