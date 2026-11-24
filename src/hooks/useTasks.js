@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { taskWriteAnswer } from '../utils/taskWrite.js';
@@ -32,15 +32,10 @@ export function useTasks(deps) {
     // The latest load of the tasks: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
     const loadGen = useRef(0);
-    const loadTasks = (setDbOffline) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        const gen = ++loadGen.current;
-        dbFetch('/.netlify/functions/tasks')
-            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
-            .then(data => { if (data && stillOrg(askedOrg)) setTasks(data.tasks || []); })
-            .catch(err => console.error('Failed to load tasks:', err));
-    };
+    const loadTasks = () => readList('tasks', {
+        read: () => dbFetch('/.netlify/functions/tasks'),
+        take: setTasks, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)
+    });
 
     // Deleting a task (state §0.178; Jeff: "add the delete to thee task rail") — the task
     // rail's Delete calls it. A confirm, then the DELETE, then Undo once the DELETE has
@@ -139,7 +134,7 @@ export function useTasks(deps) {
                 if (!res.ok) {
                     const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
                     if (!landedBefore(res.status, body)) { setTaskModalError(writeRefusal(res, body, `"${taskData.title || 'The task'}"`).words); setTaskModalSaving(false); return; }
-                    loadTasks(() => {});
+                    loadTasks();
                 } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
                 if (data) setTasks(prev => [...prev, data.task || newTask]);

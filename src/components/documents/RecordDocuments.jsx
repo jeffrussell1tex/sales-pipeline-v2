@@ -6,6 +6,7 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import { unreadWords } from '../../utils/listLoads.js';
 import { requestOrg, stillOrg } from '../../utils/storage';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill, baseName } from './atoms';
 import DocumentPicker from './DocumentPicker';
@@ -28,11 +29,13 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
         downloadDoc, userRole,
         accounts = [], contacts = [],
+        loads,   // whether the library was read (state §0.294)
     } = useApp();
     // Upload, Link existing, a dropped file and Unlink are offered to whom the server lets
     // write — canEditCrm, requireWrite's list (state §0.182); a reader sees the list and
     // downloads.
     const canEdit = canEditCrm(userRole);
+    const docsUnread = unreadWords(loads, ['documents']);
 
     const [drag, setDrag] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -167,7 +170,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Documents · {docs.length} file{docs.length === 1 ? '' : 's'}
+                    Documents{docsUnread ? '' : ` · ${docs.length} file${docs.length === 1 ? '' : 's'}`}
                 </div>
                 {canEdit && (
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -200,9 +203,10 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                 </div>
             )}
 
-            {/* List */}
+            {/* List — a library that was not read can hold the one file just uploaded: said whatever it holds (state §0.294). */}
+            {docsUnread && docs.length > 0 && <div role="status" style={{ fontSize: 12, color: T.warn, padding: '0 0 6px' }}>{docsUnread}</div>}
             {docs.length === 0 ? (
-                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '8px 0' }}>No documents linked yet.</div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '8px 0' }}>{docsUnread || 'No documents linked yet.'}</div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {docs.map((doc) => (

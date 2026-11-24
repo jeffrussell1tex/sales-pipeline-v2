@@ -624,7 +624,7 @@ test("THE MERGE: a merged-away account's deals follow it to the survivor by id, 
     assert.ok(mu.includes('        if (snap.parentAccountId === log.archivedId) {') && back > mu.indexOf('        if (snap.parentAccountId === log.archivedId) {') && back < mu.indexOf('    const set = {}, keptFields = [];'), 'and its undo puts the stored tier back (survivorRestore: what the merge wrote, while it still holds it)');
     const u = read('src/hooks/useMerge.js');
     assert.ok(u.includes('const { setAccounts, setContacts, loadAccounts, loadContacts, loadOpportunities, loadTasks, loadActivities, offerUndo, setUndoToast, currentUser } = deps || {};'));
-    assert.ok(u.includes("try { loadOpportunities?.(() => {}); } catch (e) { console.error('Deal refresh failed after merge:', e); }"));
+    assert.ok(u.includes("try { loadOpportunities?.(); } catch (e) { console.error('Deal refresh failed after merge:', e); }"));
     const merge = between(u, 'const handleMerge = async (payload) => {', 'const findContactDuplicates');
     assert.ok(merge.includes("            refreshAfter('account');\n"), 'after a merge');
     const undo = between(u, 'const undoMerge = async (mergeLogId, entityType, name) => {', 'const offerMergeUndo');

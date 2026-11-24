@@ -130,13 +130,14 @@ const UI_KEPT = ['activeTab', 'isMobile', 'showProfilePanel', 'accountsSortDir',
 const CAL_KEPT = ['calView', 'calOffset', 'calShowGcal', 'calShowCalls', 'calShowMeetings', 'calShowWeekends', 'calProvider',
     'logFromCalDateFrom', 'logFromCalDateTo'];
 
-test('useUIState: a record, an id, a name or a form is the org\'s (31); the tab, the device and the view preferences stay (16)', () => {
+test('useUIState: a record, an id, a name or a form is the org\'s (30); the tab, the device and the view preferences stay (16)', () => {
     const src = read('src/hooks/useUIState.js');
     hookShape(src, 'useUIState');
     const states = statesOf(src);
     assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), UI_KEPT,
         'a new plain state: decide whether it is the org\'s (useOrgBoundState) or a view preference (add it to UI_KEPT)');
-    assert.equal(states.filter((s) => s.bound).length, 31, 'viewingContact and viewingAccount, which nothing drew, are gone (§0.190), and viewingTask, which drew the task view nothing opened (D20)');
+    // Moved in §0.294: dbOffline is gone (31 -> 30) — how each list loaded is useListLoads', masked by org (tests/list-loads.test.mjs).
+    assert.equal(states.filter((s) => s.bound).length, 30, 'viewingContact and viewingAccount, which nothing drew, are gone (§0.190), and viewingTask, which drew the task view nothing opened (D20)');
     for (const name of ['activePipelineId', 'viewingRep', 'selectedAccounts', 'selectedContacts',
         'myProfile', 'profileForm', 'notifications', 'globalSearch', 'quickLogForm', 'settingsView', 'quotaForecastFilter', 'commissionsFilter']) {
         assert.ok(states.some((s) => s.name === name && s.bound), `${name} is org-bound`);

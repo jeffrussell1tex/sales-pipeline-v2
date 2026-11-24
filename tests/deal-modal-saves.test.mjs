@@ -49,7 +49,7 @@ test('useActivities: a logged activity is POSTed and shown only once the server 
     // Moved in §0.261: an answer that proves nothing is said as maybe; one saying it is already stored landed with an earlier press.
     const refusedAt = log.indexOf("if (!r.ok) return { ok: false, error: r.unknown ? maybeSaid('The activity', 'saved', r.error) : r.error, unknown: r.unknown };");
     assert.ok(refusedAt > 0, 'a refused POST answers its error');
-    assert.ok(log.indexOf('if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }') > 0 && log.includes('if (!r.ok && r.landed)') && log.indexOf('if (!r.ok && r.landed)') < refusedAt, 'already stored: landed, the list read again');
+    assert.ok(log.indexOf('if (!r.ok && r.landed) { loadActivities(); return { ok: true }; }') > 0 && log.includes('if (!r.ok && r.landed)') && log.indexOf('if (!r.ok && r.landed)') < refusedAt, 'already stored: landed, the list read again');
     assert.ok(refusedAt < log.indexOf('setActivities(prev => [...prev, activity]);'), 'shown only after the POST landed');
     assert.ok(src.includes('handleLogActivity,'), 'returned');
 });

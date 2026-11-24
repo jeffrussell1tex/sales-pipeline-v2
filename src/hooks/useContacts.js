@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { activeDealsOf } from '../utils/contactDeals.js';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
@@ -17,15 +17,10 @@ export function useContacts(deps) {
     // The latest load of the contacts: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
     const loadGen = useRef(0);
-    const loadContacts = (setDbOffline) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        const gen = ++loadGen.current;
-        dbFetch('/.netlify/functions/contacts')
-            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
-            .then(data => { if (data && stillOrg(askedOrg)) setContacts(data.contacts || []); })
-            .catch(err => console.error('Failed to load contacts:', err));
-    };
+    const loadContacts = () => readList('contacts', {
+        read: () => dbFetch('/.netlify/functions/contacts'),
+        take: setContacts, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)
+    });
 
     // One delete path for contacts (state §0.178) — every screen's Delete comes here:
     // the Contacts tab's row menus (the people list and the company view) and its
@@ -105,7 +100,7 @@ export function useContacts(deps) {
                     return [...prev, ...refused.filter(f => !f.merged).map(f => f.c).filter(c => !have.has(c.id))];
                 });
                 // One merged away since: the list read again — it leaves the list, and the contact it lives on in shows as stored.
-                if (failed.some(f => f.merged)) loadContacts(() => {});
+                if (failed.some(f => f.merged)) loadContacts();
                 // Said apart (the review): a merged refusal's row leaves the list, so its own words say why.
                 const heard = refused.filter(f => !f.merged), merged = refused.filter(f => f.merged);
                 failNote = [
@@ -145,7 +140,7 @@ export function useContacts(deps) {
                         if (!rr.ok && !rr.landed) notRestored.push({ c, error: rr.error, unknown: rr.unknown });
                     }
                     if (!stillOrg(askedOrg)) return;
-                    if (mergedReload) loadContacts(() => {});   // overtakes the press's own read (above)
+                    if (mergedReload) loadContacts();   // overtakes the press's own read (above)
                     if (notRestored.length) {
                         // One whose answer proves nothing may be back (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe): kept, said as maybe.
                         const gone = notRestored.filter(n => !n.unknown).map(n => n.c.id);
@@ -197,7 +192,7 @@ export function useContacts(deps) {
                 if (!res.ok) {
                     const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
                     if (!landedBefore(res.status, body)) { setContactModalError(writeRefusal(res, body, `"${fullName || 'The contact'}"`).words); setContactModalSaving(false); return; }
-                    loadContacts(() => {});
+                    loadContacts();
                 } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;
                 if (data) setContacts(prev => [...prev, data.contact || newContact]);

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { refusalWords, failureWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
@@ -22,15 +22,10 @@ export function useActivities(deps) {
     // The latest load of the activities: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
     const loadGen = useRef(0);
-    const loadActivities = (setDbOffline) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        const gen = ++loadGen.current;
-        dbFetch('/.netlify/functions/activities')
-            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
-            .then(data => { if (data && stillOrg(askedOrg)) setActivities(data.activities || []); })
-            .catch(err => console.error('Failed to load activities:', err));
-    };
+    const loadActivities = () => readList('activities', {
+        read: () => dbFetch('/.netlify/functions/activities'),
+        take: setActivities, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)
+    });
 
     // Deleting an activity (state §0.177) — a deal's History tab is the screen that
     // calls it. A confirm, then the DELETE, then Undo once the DELETE has landed:
@@ -98,7 +93,7 @@ export function useActivities(deps) {
         if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
         // Its id is the form's (Part 6): a second press after an answer that proved nothing is the same activity — answered
         // already stored, it landed with the first: the list read again. One that proves nothing may have saved (state §0.261, the unknown-save rule — Jeff's Q2: an answer that proves nothing keeps the change, said as maybe).
-        if (!r.ok && r.landed) { loadActivities(() => {}); return { ok: true }; }
+        if (!r.ok && r.landed) { loadActivities(); return { ok: true }; }
         if (!r.ok) return { ok: false, error: r.unknown ? maybeSaid('The activity', 'saved', r.error) : r.error, unknown: r.unknown };
         setActivities(prev => [...prev, activity]);
         adoptScores(r.data);
@@ -157,7 +152,7 @@ export function useActivities(deps) {
                 let data;
                 if (!res.ok) {
                     const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
-                    if (landedBefore(res.status, body)) { loadActivities(() => {}); data = null; }
+                    if (landedBefore(res.status, body)) { loadActivities(); data = null; }
                     else { const heard = heardRefusal(res.status, body); const error = heard ? refusalWords(res, body) : maybeSaid('The activity', 'saved', refusalWords(res, body)); setActivityModalError(error); setActivityModalSaving(false); return { ok: false, status: res.status, error, field: body?.field, unknown: !heard }; }
                 } else data = await res.json().catch(() => ({}));
                 if (!stillOrg(askedOrg)) return;

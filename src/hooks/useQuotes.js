@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { useState, useCallback, useRef } from 'react';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 import { failureWords, refusalWords, heardRefusal, landedBefore, maybeSaid } from '../utils/refusalWords.js';
 
@@ -26,7 +26,7 @@ const storedRowOf = async (url, key, id) => {
  *   handleSaveProduct() — POST or PUT
  *   handleDeleteProduct()
  */
-export function useQuotes() {
+export function useQuotes(deps = {}) {
     const [quotes, setQuotes]   = useState([]);
     const [products, setProducts] = useState([]);
 
@@ -38,38 +38,21 @@ export function useQuotes() {
     const [quotesDeepLinkOppId, setQuotesDeepLinkOppId] = useState(null);
 
     // ── Loaders ───────────────────────────────────────────────────────────────
-    const loadQuotes = useCallback(async (setDbOffline) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        try {
-            await waitForToken();
-            const res = await dbFetch('/.netlify/functions/quotes');
-            if (!stillOrg(askedOrg)) return;
-            if (setDbOffline) setDbOffline(dbStatusOf(res));
-            if (!res.ok) return;
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
-            setQuotes(data.quotes || []);
-        } catch (err) {
-            console.error('Failed to load quotes:', err.message);
-        }
-    }, []);
+    // Each read reports whether it landed (state §0.294): a refused price book, and a failed read of either, answered in
+    // silence, its list drawn as none. `deps.reportLoad` is stable (useListLoads).
+    const quotesGen = useRef(0);
+    const loadQuotes = useCallback(() => readList('quotes', {
+        read: () => dbFetch('/.netlify/functions/quotes'),
+        take: setQuotes, gen: quotesGen, report: deps.reportLoad, wait: waitForToken,
+    }), []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-    const loadProducts = useCallback(async (includeInactive = false) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        try {
-            await waitForToken();
-            const url = includeInactive
-                ? '/.netlify/functions/products?includeInactive=true'
-                : '/.netlify/functions/products';
-            const res = await dbFetch(url);
-            if (!res.ok || !stillOrg(askedOrg)) return;
-            const data = await res.json();
-            if (!stillOrg(askedOrg)) return;
-            setProducts(data.products || []);
-        } catch (err) {
-            console.error('Failed to load products:', err.message);
-        }
-    }, []);
+    const productsGen = useRef(0);
+    const loadProducts = useCallback((includeInactive = false) => readList('products', {
+        read: () => dbFetch(includeInactive
+            ? '/.netlify/functions/products?includeInactive=true'
+            : '/.netlify/functions/products'),
+        take: setProducts, gen: productsGen, report: deps.reportLoad, wait: waitForToken,
+    }), []);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Quote CRUD ────────────────────────────────────────────────────────────
     /**

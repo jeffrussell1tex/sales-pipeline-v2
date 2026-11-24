@@ -17,6 +17,8 @@ import {
 } from '../../utils/importReceipt';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
+import ListsWait from '../ui/ListsWait.jsx';
+import { areRead, RECORD_LISTS, LEAD_LISTS } from '../../utils/listLoads.js';
 import AccountRail from '../rails/AccountRail';
 import TaskRail from '../rails/TaskRail';
 import UserModal from '../modals/UserModal';
@@ -142,7 +144,31 @@ export default function ModalLayer() {
         setViewingContact, setViewingAccount,
         isMobile,
         escapeBlocked,
+        // The lists the record windows read (state §0.294)
+        loads, recordWait,
+        setContactRailId, setShowDocLinkPicker, setDocLinkPickerContext, setMergeModal, setContactMergeModal, setViewingActivity, setMeetingPrepOpen, setMeetingPrepOppId,
     } = useApp();
+
+    // A record's window is drawn once the lists it reads were read (state §0.294; listLoads.js RECORD_LISTS, LEAD_LISTS): one
+    // asked for before that waits (ListsWait), and opens by itself when they are. Read once, they stay read — no open window
+    // is ever taken down. The team import reads none of them.
+    const recordsRead = areRead(loads, RECORD_LISTS);
+    const leadsRead = areRead(loads, LEAD_LISTS);
+    const csvReads = csvImportType !== 'users';
+    // Close: each window that waits is let go, its seed with it (a task's, an activity's, a deal's), the rails' stack whole.
+    const stopWaiting = () => {
+        if (!recordsRead) {
+            setShowModal(false); setNewDealSeed(null);
+            if (csvReads) setShowCsvImportModal(false);
+            setShowActivityModal(false); setEditingActivity(null); setActivityInitialContext(null);
+            setTaskRailId(null); setEditingTask(null);
+            setContactRailId(null); setAccountRailId(null); setRailStack([]);
+            setShowDocLinkPicker(false); setDocLinkPickerContext(null); setMergeModal(null); setContactMergeModal(null); setViewingActivity(null);
+            setQuickLogOpen(false); setMeetingPrepOpen(false); setMeetingPrepOppId(null);
+        }
+        if (!leadsRead) { setShowLeadModal(false); setShowLeadImportModal(false); }
+    };
+    const waiting = recordWait.length > 0;
 
     // A deal's team notes, saved as they change (state §0.177), one operation at a time (state §0.236): the
     // server applies it to the notes as stored. The list on screen and the open deal take the notes the server
@@ -193,7 +219,7 @@ export default function ModalLayer() {
 
     return (
         <>
-            {showModal && (
+            {showModal && recordsRead && (
                 <OpportunityModal
                     opportunity={editingOpp}
                     seed={editingOpp ? null : newDealSeed}
@@ -457,7 +483,7 @@ export default function ModalLayer() {
 
             {/* ActivityModal replaced by ActivityRail */}
 
-            {showCsvImportModal && (
+            {showCsvImportModal && (recordsRead || !csvReads) && (
                 <CsvImportModal
                     importType={csvImportType}
                     contacts={contacts}
@@ -555,11 +581,11 @@ export default function ModalLayer() {
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setContacts, overwritesWithIds, ow.appliedIds);
                             // The server moved owner ids with the rep names (state §0.193); the app's copy reads them back.
-                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts(() => {});
+                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts();
                             phases.push(receiptFromUpdate(ow));
                         }
                         // The app's copy holds the id it sent, not the name the server stamped with it: read them back.
-                        if (owned) loadContacts(() => {});
+                        if (owned) loadContacts();
 
                         return settle(mergeReceipts(...phases, { ...emptyReceipt(), companies }), 'contact');
                     }}
@@ -624,7 +650,7 @@ export default function ModalLayer() {
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setAccounts, overwritesWithIds, ow.appliedIds);
                             // The server moved owner ids with the owner names (state §0.193); the app's copy reads them back.
-                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'accountOwner' in r)) loadAccounts(() => {});
+                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'accountOwner' in r)) loadAccounts();
                             phases.push(receiptFromUpdate(ow));
                         }
 
@@ -687,7 +713,7 @@ export default function ModalLayer() {
                             created = res.landed.length;
                             const receipt = receiptFromInsert(res);
                             phases.push(receipt);
-                            if (!isClean(receipt) && created) loadOpportunities(() => {});
+                            if (!isClean(receipt) && created) loadOpportunities();
                             if (!isClean(receipt)) throw new ImportError(mergeReceipts(...phases), 'opportunity');
                         }
 
@@ -707,16 +733,16 @@ export default function ModalLayer() {
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setOpportunities, overwritesBuilt, ow.appliedIds);
                             // The server moved owner ids with the rep names (state §0.193); the app's copy reads them back.
-                            if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities(() => {});
+                            if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities();
                             // A CSV that named an account: the server kept a linked deal's spelling, or unlinked one
                             // renamed (§0.198) — the list reads the deals as stored, not as the file sent them.
-                            if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities(() => {});
+                            if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities();
                             // A CSV that named a stage or a close date: the server appended each move to the deal's history in
                             // the write (state §0.239) — the list reads the deals as stored, so the History tab shows them.
-                            else if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'stage' in r || 'forecastedCloseDate' in r)) loadOpportunities(() => {});
+                            else if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'stage' in r || 'forecastedCloseDate' in r)) loadOpportunities();
                             phases.push(receiptFromUpdate(ow));
                         }
-                        if (created) loadOpportunities(() => {});
+                        if (created) loadOpportunities();
 
                         return settle(mergeReceipts(...phases), 'opportunity');
                     }}
@@ -846,7 +872,7 @@ export default function ModalLayer() {
                 />
             )}
 
-            {showLeadModal && (
+            {showLeadModal && leadsRead && (
                 <LeadModal
                     onClose={() => setShowLeadModal(false)}
                     onSaved={(lead) => {
@@ -860,7 +886,7 @@ export default function ModalLayer() {
                     }}
                 />
             )}
-            {showLeadImportModal && (
+            {showLeadImportModal && leadsRead && (
                 <LeadImportModal
                     existingLeads={leads}
                     onClose={() => { document.activeElement?.blur(); setShowLeadImportModal(false); }}
@@ -1376,17 +1402,18 @@ export default function ModalLayer() {
                 );
             })()}
 
-            <ActivityRail />
-            <TaskRail />
-            <ContactRail />
-            <AccountRail />
+            {recordsRead && <ActivityRail />}
+            {recordsRead && <TaskRail />}
+            {recordsRead && <ContactRail />}
+            {recordsRead && <AccountRail />}
             <DocumentRail />
             <DocumentUploadRail />
-            <DocumentLinkPicker />
-            <MergeReviewModal />
-            <ContactMergeReviewModal />
+            {recordsRead && <DocumentLinkPicker />}
+            {recordsRead && <MergeReviewModal />}
+            {recordsRead && <ContactMergeReviewModal />}
             <CoachingNoteDialogHost />
-            <ActivityDetailDialogHost />
+            {recordsRead && <ActivityDetailDialogHost />}
+            {waiting && <ListsWait lists={recordWait} onClose={stopWaiting}/>}
         </>
     );
 }

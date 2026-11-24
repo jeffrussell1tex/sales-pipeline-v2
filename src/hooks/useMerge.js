@@ -10,7 +10,7 @@ import { readRefusal } from '../utils/refusalWords.js';
 // deps — this render's own: App hands a fresh object each render, after offerUndo is declared.
 //   - setAccounts / setContacts : a merge's optimistic update (drop the archived row, swap in the survivor)
 //   - loadAccounts / loadContacts / loadOpportunities / loadTasks / loadActivities : the lists read again after a
-//                    merge and its Undo; called as loadX(()=>{}) so the no-op setDbOffline never throws
+//                    merge and its Undo
 //   - offerUndo / setUndoToast : App's Undo toast — a merge's shape, its notice and its error
 //   - currentUser  : display name sent with the merge (merge_log.performed_by; Past merges names the
 //                    member by the server's own id first)
@@ -26,22 +26,22 @@ export function useMerge(deps) {
     const [mergeError, setMergeError] = useState(null);
 
     const refreshAccounts = () => {
-        try { loadAccounts?.(() => {}); } catch (e) { console.error('Account refresh failed after merge:', e); }
+        try { loadAccounts?.(); } catch (e) { console.error('Account refresh failed after merge:', e); }
     };
     const refreshContacts = () => {
-        try { loadContacts?.(() => {}); } catch (e) { console.error('Contact refresh failed after merge:', e); }
+        try { loadContacts?.(); } catch (e) { console.error('Contact refresh failed after merge:', e); }
     };
     // An account merge moves the merged-away account's deals to the survivor, by id and by
     // name, and its undo moves them back (state §0.198, D14): the deals are read again after
     // each, or a deal saved from the old list would link the merged-away account again.
     const refreshOpportunities = () => {
-        try { loadOpportunities?.(() => {}); } catch (e) { console.error('Deal refresh failed after merge:', e); }
+        try { loadOpportunities?.(); } catch (e) { console.error('Deal refresh failed after merge:', e); }
     };
     const refreshTasks = () => {
-        try { loadTasks?.(() => {}); } catch (e) { console.error('Task refresh failed after merge:', e); }
+        try { loadTasks?.(); } catch (e) { console.error('Task refresh failed after merge:', e); }
     };
     const refreshActivities = () => {
-        try { loadActivities?.(() => {}); } catch (e) { console.error('Activity refresh failed after merge:', e); }
+        try { loadActivities?.(); } catch (e) { console.error('Activity refresh failed after merge:', e); }
     };
     // Every list a merge or its Undo moves is read again after each (state §0.207; OPEN_ITEMS §4.2): an account
     // merge moves tasks', activities' and deals' account, sub-accounts' parent and contacts' company; a contact

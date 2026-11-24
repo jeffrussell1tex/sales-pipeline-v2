@@ -76,7 +76,6 @@ export function useUIState() {
     const [exportingCSV, setExportingCSV] = useState(null);
     const [exportingBackup, setExportingBackup] = useState(false);
     const [restoringBackup, setRestoringBackup] = useState(false);
-    const [dbOffline, setDbOffline] = useOrgBoundState(resets, false);
 
     return {
         resetOnOrgSwitch: resetAllOf(resets),
@@ -126,6 +125,5 @@ export function useUIState() {
         exportingCSV, setExportingCSV,
         exportingBackup, setExportingBackup,
         restoringBackup, setRestoringBackup,
-        dbOffline, setDbOffline,
     };
 }

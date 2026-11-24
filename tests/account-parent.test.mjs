@@ -655,7 +655,7 @@ test('useAccounts: a new account under a parent takes the lowest tier above it; 
     assert.ok(del.includes("setUndoToast({ error: first.unknown ? maybeSaid(first.a.name, 'restored', first.error) : `Could not restore ${first.a.name} — ${first.error}` });"), 'a refusal says so');
     // Moved pin (§0.273): a press that found one gone reads the list again at the Undo's end too.
     // Moved in §0.282: and when this press was refused as merged away (its own read, overtaken).
-    assert.ok(del.includes('if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts(() => {});'),'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
+    assert.ok(del.includes('if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts();'),'and the list is read again: the Undo may have taken in part — or one was already back (§0.261)');
 });
 
 test("accounts.mjs: a parent is checked against THIS org's rows when a create names one and when a save moves it — after the ownership check, before the write; the tiers fit, written to this org's rows only and handed back; a save that leaves the parent keeps the stored tier", () => {

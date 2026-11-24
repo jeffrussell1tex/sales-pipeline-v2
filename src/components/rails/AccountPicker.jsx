@@ -85,7 +85,7 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onSele
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
-                if (landedBefore(res.status, body)) { loadAccounts && loadAccounts(() => {}); pick(newAccount); return; }
+                if (landedBefore(res.status, body)) { loadAccounts && loadAccounts(); pick(newAccount); return; }
                 const w = writeRefusal(res, body, `The account "${name}"`, 'created');
                 onError && onError(w.unknown ? w.words : `Couldn't create account "${name}". ${w.words}`);
                 return;

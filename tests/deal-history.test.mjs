@@ -147,7 +147,7 @@ test('WIRING: the screens — dealBody strips the list; the window leaves an unt
     assert.ok(m.includes('<CloseDateMoves deal={opportunity}/>'), 'Q3: shown in the History tab');
     assert.ok(m.includes("forecastedCloseDate: base.forecastedCloseDate ?? (opportunity?.id ? '' :"), 'an undated deal opens empty (Jeff: "Open with the date empty"); a new one on today');
     const ml = code(read('src/components/layout/ModalLayer.jsx'));
-    assert.ok(ml.includes("overwritesBuilt.some(r => 'stage' in r || 'forecastedCloseDate' in r)) loadOpportunities(() => {});"), 'the list reads the deals again after an Overwrite that moved a stage or a date');
+    assert.ok(ml.includes("overwritesBuilt.some(r => 'stage' in r || 'forecastedCloseDate' in r)) loadOpportunities();"), 'the list reads the deals again after an Overwrite that moved a stage or a date');
     assert.ok(m.includes("{fmtMoveDay(m.from)} → {fmtMoveDay(m.to)}"), 'from → to');
 });
 

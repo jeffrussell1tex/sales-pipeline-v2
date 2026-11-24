@@ -40,6 +40,7 @@ export const ESCAPE_ORDER = [
     ['followUp', 100050],        // the quick log's "add a follow-up?"
     ['leaveGuard', 99999],
     ['tabPopover', 12000],       // a popover portaled out of a tab or a rail (state §0.230)
+    ['recordWait', 11105],       // in place of a record's window whose lists were not read (§0.294); later in ModalLayer
     ['linkPicker', 11105],
     ['docPicker', 11104],        // "Link an existing document", from a record's Documents (state §0.233; it held by a list of its own)
     ['uploadRail', 11103],

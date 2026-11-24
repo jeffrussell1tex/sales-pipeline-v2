@@ -79,9 +79,8 @@ test('THE GUARD — a hook copies from deps at its top only a helper that is the
 test('the deals load reads getQuarter when its answer lands', () => {
     const src = read('src/hooks/useOpportunities.js');
     assert.ok(src.includes('    const { addAudit, showConfirm, softDelete, setUndoToast } = deps;'), 'the hook\'s top copies no quarter helper');
-    const load = src.slice(src.indexOf('const loadOpportunities = (setDbOffline) => {'), src.indexOf(".catch(err => console.error('Failed to load opportunities:'"));
-    assert.ok(load.includes('if (!data || !stillOrg(askedOrg)) return;'));
-    assert.ok(load.includes('.then(data => {') && load.indexOf('const { getQuarter, getQuarterLabel } = deps;') > load.indexOf('.then(data => {'), 'read in the answer, not before the request');
+    const load = src.slice(src.indexOf("const loadOpportunities = () => readList('opportunities', {"), src.indexOf('// Deleting deals (state §0.178)'));
+    assert.ok(load.includes('take: (loadedOpps) => {') && load.indexOf('const { getQuarter, getQuarterLabel } = deps;') > load.indexOf('take: (loadedOpps) => {'), 'read in the answer, not before the request');
 });
 
 test('the contact delete check reads the deals as they are now', () => {

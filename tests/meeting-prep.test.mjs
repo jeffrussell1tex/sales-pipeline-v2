@@ -94,7 +94,7 @@ test('the list of deals: each open deal a row — its name, stage and amount —
 test('the panel is drawn once, outside .app-container, inside its own boundary', () => {
     const app = read('src/App.jsx');
     assert.equal(count(app, '<MeetingPrepPanel />'), 1);
-    assert.ok(app.includes('        <LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>\n        <MeetingPrepPanel />\n        </LayerBoundary>'),
+    assert.ok(app.includes('        <LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>\n        {recordsRead && <MeetingPrepPanel />}\n        </LayerBoundary>'),
         'its own boundary, at the top of App\'s render beside ModalLayer\'s — tests/escape-order.test.mjs reads that it is outside .app-container');
 });
 

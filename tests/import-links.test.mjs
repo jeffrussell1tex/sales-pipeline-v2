@@ -460,8 +460,8 @@ test("IMPORTED CONTACTS BECOME THE OWNERS (state §0.217; Jeff, 30 Oct): a new c
     assert.ok(!('ownerId' in newContactRow({ firstName: 'Ann' })));
     const ml = code(read('src/components/layout/ModalLayer.jsx'));
     const contacts = ml.slice(ml.indexOf('onImportContacts={async'), ml.indexOf('onImportAccounts={async'));
-    assert.ok(contacts.includes('owned = res.landed.some((c) => c.ownerId);') && contacts.includes('if (owned) loadContacts(() => {});'), 'the app reads back the names the server stamped');
-    assert.ok(contacts.includes('phases.push(receiptFromUpdate(ow));') && contacts.indexOf('if (owned) loadContacts(() => {});') > contacts.indexOf('phases.push(receiptFromUpdate(ow));'), 'once the overwrite is answered');
+    assert.ok(contacts.includes('owned = res.landed.some((c) => c.ownerId);') && contacts.includes('if (owned) loadContacts();'), 'the app reads back the names the server stamped');
+    assert.ok(contacts.includes('phases.push(receiptFromUpdate(ow));') && contacts.indexOf('if (owned) loadContacts();') > contacts.indexOf('phases.push(receiptFromUpdate(ow));'), 'once the overwrite is answered');
     assert.ok(!contacts.slice(contacts.indexOf('const overwritesWithIds')).slice(0, 300).includes('newContactRow'), 'an overwrite keeps its owner');
 });
 
@@ -518,8 +518,8 @@ test("THE GUARD (state §0.216): the modal plans the contact and deal imports at
     const deals = ml.slice(ml.indexOf('onImportOpportunities={async'), ml.indexOf('onImportUsers={async'));
     assert.ok(deals.includes('const { _link: link, ...csv } = o;') && deals.includes('return { ...row, account: link.name, accountId: link.id, ...(link.site ? { site: link.site } : {}) };'), "each deal by its account's id and own name, a site typed in full its Site Name");
     assert.ok(deals.includes('currentUserId,'), 'Q11: the importer by id');
-    assert.ok(deals.includes('if (created) loadOpportunities(() => {});') && deals.includes('phases.push(receiptFromUpdate(ow));') && deals.indexOf('if (created) loadOpportunities(() => {});') > deals.indexOf('phases.push(receiptFromUpdate(ow));'), 'the deals read again as stored — the owner and name the server stamped — once the overwrite is answered (the review of 3b)');
-    assert.ok(deals.includes('if (!isClean(receipt) && created) loadOpportunities(() => {});'), 'and before a failure is said');
+    assert.ok(deals.includes('if (created) loadOpportunities();') && deals.includes('phases.push(receiptFromUpdate(ow));') && deals.indexOf('if (created) loadOpportunities();') > deals.indexOf('phases.push(receiptFromUpdate(ow));'), 'the deals read again as stored — the owner and name the server stamped — once the overwrite is answered (the review of 3b)');
+    assert.ok(deals.includes('if (!isClean(receipt) && created) loadOpportunities();'), 'and before a failure is said');
 });
 
 test("THE GUARD (state §0.216, §0.217): the deals and contacts bulk creates stamp the importer by id as a member of this org — one rule, _lib.mjs importerOwners — and every bulk overwrite fills a left-out key from its stored row", () => {

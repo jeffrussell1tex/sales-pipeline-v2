@@ -6,11 +6,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../AppContext';
+import { unreadWords } from '../../utils/listLoads.js';
 import { useLocalLayer } from '../../hooks/useLocalLayer';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill } from './atoms';
 
 export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClose }) {
-    const { documents = [] } = useApp();
+    const { documents = [], loads } = useApp();
+    const docsUnread = unreadWords(loads, ['documents']);
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState({}); // id -> doc
 
@@ -50,8 +52,9 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
                         style={{ width: '100%', marginTop: 12, padding: '8px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface2, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }} />
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, borderTop: `1px solid ${T.border}` }}>
+                    {docsUnread && rows.length > 0 && <div role="status" style={{ padding: '8px 18px', fontSize: 12, color: T.warn }}>{docsUnread}</div>}
                     {rows.length === 0 ? (
-                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>No other documents available.</div>
+                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>{docsUnread || 'No other documents available.'}</div>
                     ) : rows.map((doc) => {
                         const on = !!selected[doc.id];
                         return (

@@ -4880,14 +4880,9 @@ test('Part 10: WIRING — every window reads the ok check first and says the hou
         assert.ok(!s.includes("'Scan failed. Please try again.'") && !s.includes("'Scoring failed'") && !s.includes("'Failed to save lead'"), `${f}: an old fallback`);
         assert.ok(/import \{[^}]*\b(readRefusal|refusalWords|failureWords)\b[^}]*\} from '(\.\.\/)+utils\/refusalWords\.js';/.test(s), `${f}: the house words imported`);
     }
-    // The hooks' loads throw 'HTTP ' + status into a catch that only logs — no member sees those words (the banner is
-    // dbStatusOf's); none other is left.
-    for (const [f, list] of [['src/hooks/useAccounts.js', 'accounts'], ['src/hooks/useActivities.js', 'activities'], ['src/hooks/useContacts.js', 'contacts'], ['src/hooks/useTasks.js', 'tasks']]) {
-        const s = code(read(f));
-        assert.equal(count(s, "'HTTP '"), 1, `${f}: only the load's`);
-        order(s, "if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })", `.catch(err => console.error('Failed to load ${list}:', err));`);
-    }
-    for (const f of FILES.slice(4)) assert.ok(!code(read(f)).includes("'HTTP '"), `${f}: REGRESSION — "HTTP N" said`);
+    // Moved in §0.294: the hooks' loads say the house words too, under the list's name (listLoads.js readList) — "HTTP N" is
+    // in none of them.
+    for (const f of FILES) assert.ok(!code(read(f)).includes("'HTTP '"), `${f}: REGRESSION — "HTTP N" said`);
     // Moved in §0.261: a throw proves nothing — said as maybe.
     assert.ok(code(read('src/components/rails/AccountPicker.jsx')).includes('onError && onError(`The account "${name}" may have been created — reload the page to see whether it was: ${failureWords(e)}`);'));
     assert.ok(code(read('src/Tabs/PastMerges.jsx')).includes('setError(`Past merges did not load — ${failureWords(e)}`)'));
@@ -9155,7 +9150,7 @@ test('Part 12c: WIRING — no source under src/ says "check your connection" or 
     // Moved floor (§0.249, the review's fixes, round 4: G4): 242, the .js and .jsx sources measured under src/ (it was 240
     // — two sources could drop out of the walk and go unsearched with nothing said). Fewer: say the new count, and why.
     assert.ok(files.length >= 242, `every .js and .jsx source (${files.length})`);
-    // No file named since the review's fixes L (§0.249): the app's outage banner (fetchStatus.js bannerCopyOf) said
+    // No file named since the review's fixes L (§0.249): the app's outage banner (listLoads.js loadsBanner since §0.294) said
     // "Check your connection and refresh." over a server that answered — it says the server's failure now.
     const said = files.filter((f) => /check your connection|Network error — the change was not saved/i.test(code(read(f))));
     assert.deepEqual(said, [], 'REGRESSION: the old words for a request that never left');
@@ -9968,23 +9963,24 @@ test('Part 12 fixes (S): WIRING — no source under src/ draws "network error" t
 // a refusal with none, and nothing for a request that never left or a landed answer that could not be read — on the
 // one-slot toast a later toast replaces. The banner says the server's failure; the load, the importer and the claim
 // requests say the house words; the panel says a failed read; the claim requests' refusals are press notices (Q1).
-const { bannerCopyOf: p12fxLBanner, dbStatusOf: p12fxLStatus } = await import('../src/utils/fetchStatus.js');
+const { SIGN_IN_WORDS: p12fxLAuth, dbStatusOf: p12fxLStatus } = await import('../src/utils/fetchStatus.js');
 const P12FXL_SETTINGS = 'src/hooks/useSettings.js';
 const P12FXL_BULK = 'src/utils/bulkClient.js';
 const P12FXL_LEADS = 'src/Tabs/LeadsTab.jsx';
-const P12FXL_OUTAGE = 'The server returned an error loading your data — changes may not be saving. Refresh the page to try again.';
+const { loadsBanner: p12fxLBanner } = await import('../src/utils/listLoads.js');
 
+// Moved in §0.294: the banner names the lists and says each failure's own words (listLoads.js; tests/list-loads.test.mjs).
 test('Part 12 fixes (L): the outage banner — a load the server answered with an error says the server\'s failure, never "Check your connection"; the sign-in banner unchanged — RUN', () => {
     for (const status of [500, 502, 503, 404]) {
-        const state = p12fxLStatus({ ok: false, status });
-        assert.equal(state, true, `${status}: the outage state`);
-        assert.deepEqual(p12fxLBanner(state), { tone: 'outage', text: P12FXL_OUTAGE },
-            'REGRESSION: "Database connection lost — … Check your connection and refresh." over a server that answered');
+        assert.equal(p12fxLStatus({ ok: false, status }), true, `${status}: the outage state`);
+        const b = p12fxLBanner({ accounts: { read: false, out: false, error: `The server returned ${status}.`, auth: false } });
+        assert.equal(b.tone, 'outage');
+        assert.ok(b.text.startsWith(`Accounts could not be loaded. The server returned ${status}.`), b.text);
+        assert.doesNotMatch(b.text, /check your connection|Database connection lost/i, 'REGRESSION: "Database connection lost — … Check your connection and refresh." over a server that answered');
     }
-    assert.doesNotMatch(p12fxLBanner(true).text, /check your connection|Database connection lost/i);
-    assert.deepEqual(p12fxLBanner(p12fxLStatus({ ok: false, status: 401 })), {
-        tone: 'auth', text: 'Your sign-in is no longer valid — refresh the page and sign in again. Changes are not being saved.' });
-    assert.equal(p12fxLStatus({ ok: true, status: 200 }), false, 'no banner over a load that landed');
+    assert.equal(p12fxLBanner({ accounts: { read: false, out: false, error: 'x', auth: p12fxLStatus({ ok: false, status: 401 }) === 'auth' } }).text, p12fxLAuth);
+    assert.equal(p12fxLAuth, 'Your sign-in is no longer valid — refresh the page and sign in again. Changes are not being saved.');
+    assert.equal(p12fxLStatus({ ok: true, status: 200 }), false);
 });
 
 // useSettings' load chain, extracted and run: the first load of an org, a reload of the org in state, a newer load.
@@ -12988,13 +12984,13 @@ test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts
     const iii = between(s, "test('(iii) under src/,", "test('(iii) self-test (§0.248)");
     // Moved in §0.287: 192 -> 228, 187 -> 188 — refusals-said's floors raised to the counts measured 23 Nov (a floor with room
     // to spare passes a deletion: the scoped run's survivor).
-    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 228, 'REGRESSION: scan (iii)\'s floor below the 228 body reads measured 23 Nov (§0.287)');
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 220, 'REGRESSION: scan (iii)\'s floor below the 220 body reads measured 24 Nov (§0.294: the nine list loads read through the one loader)');
     assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
     // 187 since AI scoring batch 2B took "Score all deals" and its catch out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
-    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 189, 'REGRESSION: scan (iv)\'s floor below the 189 catch clauses measured 23 Nov (§0.291)');
-    assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 54, 'REGRESSION: scan (iv)\'s list no longer held at its 54 files');
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(catches >= ') >= 187, 'REGRESSION: scan (iv)\'s floor below the 187 catch clauses measured 24 Nov (§0.294: three list loads\' catches are the one loader\'s, scanned too)');
+    assert.ok(p12fxG4Floor(iv, 'assert.ok(MESSAGE_SCANNED.length >= ') >= 55, 'REGRESSION: scan (iv)\'s list no longer held at its 55 files (§0.294: listLoads.js)');
     assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
     order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
     const i = between(s, "test('(i) every error state under src/ is read", "test('(i) self-test");

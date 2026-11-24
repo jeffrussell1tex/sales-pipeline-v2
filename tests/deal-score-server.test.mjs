@@ -94,7 +94,7 @@ test('the screens read the kept score through one reader, behind the Deal scorin
     assert.ok(read('src/components/ListView.jsx').includes('<div>Win %</div>'), 'the list\'s column (Q8)');
     // Train now scores every deal on the server; the deals on screen are loaded again once it lands (§0.256's browser check).
     const panel = code(read('src/Tabs/settings/salesProcess/DealScoringDetail.jsx'));
-    const landedAt = panel.indexOf('setTrainMsg(trainDealWords(answer));'), reloadAt = panel.indexOf("if (typeof loadOpportunities === 'function') loadOpportunities(() => {});");
+    const landedAt = panel.indexOf('setTrainMsg(trainDealWords(answer));'), reloadAt = panel.indexOf("if (typeof loadOpportunities === 'function') loadOpportunities();");
     assert.ok(landedAt > -1 && reloadAt > landedAt, 'REGRESSION: Train now leaves the screen\'s deals without their scores until the next sign-in');
     assert.ok(read('src/Tabs/PipelineTab.jsx').includes("'Sales Rep', 'Win %', 'Days in Stage'"), 'the CSV\'s column — Claude\'s AI Score gone (2B, Q2)');
 });

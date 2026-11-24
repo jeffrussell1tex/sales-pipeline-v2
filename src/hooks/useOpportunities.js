@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped, NETWORK_ERROR } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
 import { dealBody } from '../utils/dealNotes.js';
@@ -32,23 +32,16 @@ export function useOpportunities(deps) {
     // The latest load of the opportunities: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
     const loadGen = useRef(0);
-    const loadOpportunities = (setDbOffline) => {
-        // This org's deals only (state §0.173): an answer for an org switched away
-        // from is dropped.
-        const askedOrg = requestOrg();
-        const gen = ++loadGen.current;
-        dbFetch('/.netlify/functions/opportunities')
-            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
-            .then(data => {
-                if (!data || !stillOrg(askedOrg)) return;
+    const loadOpportunities = () => readList('opportunities', {
+            read: () => dbFetch('/.netlify/functions/opportunities'),
+            gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)
+            take: (loadedOpps) => {
                 // Read when the answer lands (state §0.176): App fills these refs during
                 // its render, after this hook has run, so a copy taken at the hook's top
                 // is null on a mount's first render — and a remount with Clerk already
                 // loaded (Vite's Fast Refresh) ran this load with it: "getQuarter is not
                 // a function", and no deals until the next load.
                 const { getQuarter, getQuarterLabel } = deps;
-                const loadedOpps = data.opportunities || [];
                 const updatedOpps = loadedOpps.map(opp => {
                     const normalized = {
                         ...opp,
@@ -66,9 +59,8 @@ export function useOpportunities(deps) {
                     return normalized;
                 });
                 setOpportunities(updatedOpps);
-            })
-            .catch(err => console.error('Failed to load opportunities:', err));
-    };
+            },
+    });
 
     // Deleting deals (state §0.178) — the Pipeline's Delete (N), an Admin's: the server
     // deletes a deal for an Admin only. Confirmed, one DELETE each, and no Undo (Jeff:
@@ -215,7 +207,7 @@ export function useOpportunities(deps) {
                     if (!res.ok) {
                         const body = await res.json().catch(() => null); if (!stillOrg(askedOrg)) return;
                         if (!landedBefore(res.status, body)) { setOppModalError(writeRefusal(res, body, `"${dealName}"`).words); return; }
-                        loadOpportunities(() => {});
+                        loadOpportunities();
                     } else data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
                     if (data) setOpportunities(prev => [...prev, data.opportunity || newOpp]);
@@ -290,7 +282,7 @@ export function useOpportunities(deps) {
                 setOpportunities(prev => prev.filter(o => o.id !== newId));
                 return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };
             }
-            if (r.landed) { setOpportunities(prev => prev.filter(o => o.id !== newId)); loadOpportunities(() => {}); }
+            if (r.landed) { setOpportunities(prev => prev.filter(o => o.id !== newId)); loadOpportunities(); }
             if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
             if (fromLeadId) deps.onLeadConverted?.(fromLeadId);

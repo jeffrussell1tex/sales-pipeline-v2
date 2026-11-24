@@ -9,8 +9,8 @@
 // state from the server's response rather than guessing it.
 // ════════════════════════════════════════════════════════════════════════════
 
-import { useState, useCallback } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus.js';
+import { useState, useCallback, useRef } from 'react';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, waitForToken, requestOrg, stillOrg, refusalFrom, NETWORK_ERROR } from '../utils/storage.js';
 import { readRefusal, failureWords, heardRefusal, maybeSaid } from '../utils/refusalWords.js';
 import {
@@ -72,32 +72,22 @@ export function useDocuments(_deps = {}) {
     const [docsError, setDocsError] = useState(null);
 
     // ── Library (global Documents tab) ──────────────────────────────────────
-    const loadDocuments = useCallback(async (setDbOffline) => {
-        // This org's library only (state §0.173): an answer for an org switched
-        // away from is dropped, and leaves the new org's load its own state.
-        const askedOrg = requestOrg();
+    const docsGen = useRef(0);
+    const loadDocuments = useCallback(async () => {
+        // This org's library only, and its latest load's answer (state §0.173, §0.294): one dropped leaves the load that
+        // overtook it its own state.
         setDocsLoading(true);
         setDocsError(null);
-        try {
-            await waitForToken();
-            const r = await dbFetch(DOCS_FN);
-            if (!stillOrg(askedOrg)) return;
-            if (setDbOffline) setDbOffline(dbStatusOf(r));
-            // A read refused or failed: the library says it couldn't be opened, and why (DocumentsTab, state §0.243) —
-            // the server's words, else its status.
-            if (!r.ok) throw new Error(await readRefusal(r));
-            const data = await r.json();
-            if (!stillOrg(askedOrg)) return;
-            setDocuments(Array.isArray(data.documents) ? data.documents : []);
-        } catch (e) {
-            if (!stillOrg(askedOrg)) return;
-            console.error('Failed to load documents:', e);
-            // A refusal's words, else plain words (§0.243's second fix round) — never a parse error's or "Failed to fetch".
-            setDocsError(failureWords(e));
-        } finally {
-            if (stillOrg(askedOrg)) setDocsLoading(false);
-        }
-    }, []);
+        const { current, error } = await readList('documents', {
+            read: () => dbFetch(DOCS_FN),
+            take: setDocuments, gen: docsGen, report: _deps.reportLoad, wait: waitForToken,
+        });
+        if (!current) return;
+        // A read refused or failed: the library says it couldn't be opened, and why (DocumentsTab, state §0.243) — the
+        // server's words, else plain ones (readList) — never a parse error's or "Failed to fetch".
+        setDocsError(error);
+        setDocsLoading(false);
+    }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Version history for one document (detail rail) ──────────────────────
     // NOTE: backed by GET ?action=versions&id= — that endpoint ships in the

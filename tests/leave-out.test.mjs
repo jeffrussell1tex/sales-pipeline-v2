@@ -151,5 +151,5 @@ test('THE GUARD (the re-check): the activities POST reads an empty contact list 
     assert.ok(post.indexOf("if (Array.isArray(data.contactIds) && !data.contactIds.length && data.contactId) data.contactIds = [data.contactId];") >= 0
         && post.indexOf("if (Array.isArray(data.contactIds) && !data.contactIds.length && data.contactId) data.contactIds = [data.contactId];") < post.indexOf('sanitize({ ...data, ...linked.set })'), 'before the row is built — a delete\'s Undo of an older activity kept its contact');
     const m = code(read('src/components/layout/ModalLayer.jsx'));
-    assert.ok(m.includes("if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities(() => {});"), 'the list shows the spelling the server kept');
+    assert.ok(m.includes("if (ow.appliedIds.length && !overwritesBuilt.some(r => 'salesRep' in r) && overwritesBuilt.some(r => 'account' in r)) loadOpportunities();"), 'the list shows the spelling the server kept');
 });

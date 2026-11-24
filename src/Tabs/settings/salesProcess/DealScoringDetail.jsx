@@ -50,7 +50,7 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
             setTrainMsg(trainDealWords(answer));
             // The pass scored every deal of the org on the server; the deals on screen take those scores now, not at the
             // next sign-in (found in §0.256's browser check: the answer carries the model, never the deals).
-            if (typeof loadOpportunities === 'function') loadOpportunities(() => {});
+            if (typeof loadOpportunities === 'function') loadOpportunities();
         } catch (e) {
             if (!stillOrg(askedOrg)) return;
             // Only the server's own refusal is "Not trained"; any other answer may have trained it (state §0.264, Part 5).

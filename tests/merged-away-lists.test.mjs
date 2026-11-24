@@ -332,13 +332,19 @@ test("T5 — the Accounts tab's contact counts — a row's \"N contacts\", the S
 
 // ── the record is kept ──────────────────────────────────────────────────────
 
-const LOAD_ACCOUNTS = ind(12, '.then(data => { if (data && stillOrg(askedOrg)) setAccounts(data.accounts || []); })');
-const LOAD_CONTACTS = ind(12, '.then(data => { if (data && stillOrg(askedOrg)) setContacts(data.contacts || []); })');
-// A load line, run as written on an answer: `chain` stands in for the dbFetch chain before it; `still` for stillOrg.
-const load = (line, setter, answer, still = true) => {
+// Moved in §0.294: the rows answered go to the setter as they are (listLoads.js readList, run below).
+const LOAD_ACCOUNTS = ind(8, 'take: setAccounts, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)');
+const LOAD_CONTACTS = ind(8, 'take: setContacts, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)');
+// The one loader run on an answer, its take a recorder: that each hook hands its setter as it is, is the pinned line.
+const load = async (name, answer, still = true) => {
+    const { readList } = await import('../src/utils/listLoads.js');
+    const { setRequestOrg } = await import('../src/utils/storage.js');
     let got = 'not set';
-    run(['const answered = chain', line], ['chain', 'stillOrg', 'askedOrg', setter],
-        [{ then: (f) => f(answer) }, () => still, 'org_qa', (v) => { got = v; }], 'answered');
+    const quiet = console.error; console.error = () => {};
+    setRequestOrg('org_qa');
+    try {
+        await readList(name, { gen: { current: 0 }, take: (v) => { got = v; }, read: async () => { if (!still) setRequestOrg('org_b'); return { ok: true, status: 200, json: async () => answer }; } });
+    } finally { console.error = quiet; setRequestOrg(null); }
     return got;
 };
 const DROP_ACCOUNT = [
@@ -373,7 +379,7 @@ const GET_CODE = (table, sortBy) => [
     `            return { statusCode: 200, headers, body: JSON.stringify({ ${table}: results }) };`,
 ].join('\n');
 
-test("T6 — the record is kept: both GETs answer every row of the org, narrowed by the read scope alone (each GET's code, whole), both hooks load every row they are answered, the app's context hands every row on, and the merge hook still drops the row it archived; a link and the account picker read that whole list (run)", () => {
+test("T6 — the record is kept: both GETs answer every row of the org, narrowed by the read scope alone (each GET's code, whole), both hooks load every row they are answered, the app's context hands every row on, and the merge hook still drops the row it archived; a link and the account picker read that whole list (run)", async () => {
     // Each GET's code, whole: a filter on any column a merge writes (merge_archived, merged_into_id, archived_at) — in
     // the query, on a line of its own or through a helper — changes it. A word list missed archived_at (the review).
     for (const [table, sortBy] of [['accounts', 'name'], ['contacts', 'lastName']]) {
@@ -388,10 +394,10 @@ test("T6 — the record is kept: both GETs answer every row of the org, narrowed
         "REGRESSION: the accounts load leaves rows out — a link to a merged-away account reads \"can't open\", the picker offers Create for its name");
     once(code(read('src/hooks/useContacts.js')), LOAD_CONTACTS,
         "REGRESSION: the contacts load leaves merged-away rows out — a link to one reads \"can't open\", and a chip or a deal's committee loses its survivor");
-    assert.deepEqual(ids(load(LOAD_ACCOUNTS, 'setAccounts', { accounts: ACCOUNTS })), ids(ACCOUNTS), 'the accounts load: every row answered, merged-away included');
-    assert.deepEqual(ids(load(LOAD_CONTACTS, 'setContacts', { contacts: CONTACTS })), ids(CONTACTS), 'the contacts load: every row answered, merged-away included');
-    assert.deepEqual(load(LOAD_ACCOUNTS, 'setAccounts', {}), [], 'an answer with no list: none');
-    assert.equal(load(LOAD_CONTACTS, 'setContacts', { contacts: CONTACTS }, false), 'not set', 'an answer for an org switched away from is dropped (§0.173)');
+    assert.deepEqual(ids(await load('accounts', { accounts: ACCOUNTS })), ids(ACCOUNTS), 'the accounts load: every row answered, merged-away included');
+    assert.deepEqual(ids(await load('contacts', { contacts: CONTACTS })), ids(CONTACTS), 'the contacts load: every row answered, merged-away included');
+    assert.equal(await load('accounts', {}), 'not set', 'an answer with no list is no answer of none (reversed in §0.294): nothing set, the load failed');
+    assert.equal(await load('contacts', { contacts: CONTACTS }, false), 'not set', 'an answer for an org switched away from is dropped (§0.173)');
     assert.equal(count(code(read('src/App.jsx')), '\n        accounts, setAccounts,\n        contacts, setContacts,\n'), 1,
         "the app's context hands on the whole lists");
     // The merge hook drops the row it archived at once; the scan's key — the list's length and its merged-away count
@@ -1071,8 +1077,8 @@ const APP_READS = [
 // The list hooks are the only screens' reads of either list endpoint: a screen that fetched its own list would be
 // outside the guard. Every other call naming the endpoint writes (a method, or a bulk post or put).
 const LIST_GETS = [
-    "src/hooks/useAccounts.js — dbFetch('/.netlify/functions/accounts')",
-    "src/hooks/useContacts.js — dbFetch('/.netlify/functions/contacts')",
+    "src/hooks/useAccounts.js — read: () => dbFetch('/.netlify/functions/accounts'),",
+    "src/hooks/useContacts.js — read: () => dbFetch('/.netlify/functions/contacts'),",
 ];
 const LIST_ENDPOINT = /\/\.netlify\/functions\/(accounts|contacts)/;
 

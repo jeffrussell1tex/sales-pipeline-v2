@@ -41,7 +41,7 @@ if (args.length) {
 // exact shape (10 of 17), against the 17% first recorded.
 //
 // A bare identifier callback — `.then(checkOk)` — is assumed to consume it, which
-// is what App.jsx does.
+// is what App.jsx's leads load did until §0.294.
 const consumesResponse = (cb) => {
   if (!cb) return false;
   if (cb.type === 'Identifier') return true;           // .then(checkOk)

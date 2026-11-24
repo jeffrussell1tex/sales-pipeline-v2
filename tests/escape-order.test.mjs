@@ -180,6 +180,7 @@ const zOf = {
     confirm: () => /\.modal-overlay \{[^}]*z-index: (\d+);/.exec(read('src/index.css'))[1],
     followUp: () => /followUpPrompt && \(\s*<div ref=\{followUpRef\} style=\{\{[^}]*?zIndex: (\d+)/.exec(read('src/components/layout/QuickLogFab.jsx'))[1],
     leaveGuard: () => /zIndex:(\d+)/.exec(read('src/Tabs/settings/shared/LeaveGuardModal.jsx'))[1],
+    recordWait: () => maxZ('src/components/ui/ListsWait.jsx'),
     linkPicker: () => maxZ('src/components/documents/DocumentLinkPicker.jsx'),
     uploadRail: () => maxZ('src/components/documents/DocumentUploadRail.jsx'),
     documentRail: () => maxZ('src/components/documents/DocumentRail.jsx'),
@@ -221,7 +222,7 @@ test('each layer\'s z in the order is the one its file draws', () => {
 const OPEN_AS = {
     coachingNote: '!!coachingNoteModal', blockedDelete: '!!blockedDeleteModal', prompt: '!!promptModal', confirm: '!!confirmModal',
     followUp: '!!followUpPrompt', leaveGuard: 'showNavGuard',
-    linkPicker: 'showDocLinkPicker', uploadRail: 'showUploadRail', documentRail: '!!documentRailId',
+    recordWait: 'recordWait.length > 0', linkPicker: 'showDocLinkPicker', uploadRail: 'showUploadRail', documentRail: '!!documentRailId',
     activityDetail: '!!viewingActivity', taskRail: '!!taskRailId', activityRail: '!!showActivityModal',
     accountRail: '!!accountRailId', contactRail: '!!contactRailId',
     spiffClaim: '!!(showSpiffClaimModal && spiffClaimContext)', duePopup: '!!taskDuePopup', reminderPopup: '!!taskReminderPopup',
@@ -282,6 +283,7 @@ const LAYERS = {
     ContactMergeReviewModal: { name: 'merge', layer: 'src/components/modals/ContactMergeReviewModal.jsx' },
     CoachingNoteDialogHost: { name: 'coachingNote', layer: 'src/components/modals/CoachingNoteDialog.jsx' },   // its own since §0.252: App closed it mid-save
     ActivityDetailDialogHost: { name: 'activityDetail', app: 'viewingActivity' },
+    waiting: { name: 'recordWait', layer: 'src/components/ui/ListsWait.jsx' },   // in place of a record's window whose lists were not read (§0.294)
     // the quick log
     quickLogOpen: { name: 'quickLog', layer: 'src/components/layout/QuickLogFab.jsx' },
     followUpPrompt: { name: 'followUp', layer: 'src/components/layout/QuickLogFab.jsx' },
@@ -320,7 +322,10 @@ const layersIn = (file, component) => {
             && anc.some((a) => (a.type === 'FunctionDeclaration' && a.id && a.id.name === component))) ret = n.argument;
     });
     assert.ok(ret, `${component} returns markup`);
-    const first = (e) => (e.type === 'LogicalExpression' ? first(e.left) : e.type === 'Identifier' ? e.name : null);
+    // A layer behind a wait for its lists (state §0.294) is the layer: the wait's name is passed over, left or right.
+    const WAITS = new Set(['recordsRead', 'leadsRead']);
+    const first = (e) => (e.type === 'LogicalExpression' ? (first(e.left) ?? first(e.right)) : e.type === 'Identifier' ? (WAITS.has(e.name) ? null : e.name)
+        : e.type === 'JSXElement' ? e.openingElement.name.name : null);
     const out = [];
     for (const c of ret.children) {
         if (c.type === 'JSXElement') out.push(c.openingElement.name.name);

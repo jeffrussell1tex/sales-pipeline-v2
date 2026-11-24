@@ -197,7 +197,7 @@ export default function QuickLogFab() {
                                 if (!stillOrg(askedOrg)) return;
                                 // Already stored: an earlier press landed — the list read again, the log done. One whose answer
                                 // proves nothing may be in (§0.261, Jeff's Q2): kept, said as maybe, the panel and its id kept.
-                                if (!rq.ok && rq.landed) { setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id)); loadActivities?.(() => {}); }
+                                if (!rq.ok && rq.landed) { setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id)); loadActivities?.(); }
                                 else if (!rq.ok && rq.unknown) { setUndoToast({ error: maybeSaid('The activity', 'logged', rq.error) }); return; }
                                 else if (!rq.ok) {
                                     setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id));

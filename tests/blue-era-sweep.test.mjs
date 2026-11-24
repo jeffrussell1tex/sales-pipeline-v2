@@ -51,7 +51,7 @@ test('the blues went by role: a primary button is the ink button, a link or bord
     assert.ok(li.includes("e.currentTarget.style.borderColor=T.info"), 'a drag-over border is info');
     const app = code(read('src/App.jsx'));
     assert.ok(app.includes('<rect width="100" height="100" rx="20" fill={T.ink}/>'), 'the sign-in mark is ink');
-    assert.ok(app.includes("background: dbOffline === 'auth' ? T.warn : T.danger"), 'the offline banner');
+    assert.ok(app.includes("background: loadBanner.tone === 'auth' ? T.warn : T.danger"), 'the offline banner');
     const prep = code(read('src/components/layout/MeetingPrepPanel.jsx'));   // cut out of App (§0.185)
     // The win chance's colour is its band's token since AI scoring batch 2A (never a hex).
     assert.ok(prep.includes("const healthColor = win ? T[win.tone] : T.inkMuted;"), 'the meeting-prep win-chance colour');

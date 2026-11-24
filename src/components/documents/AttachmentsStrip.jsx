@@ -6,6 +6,7 @@
 
 import React, { useMemo } from 'react';
 import { useApp } from '../../AppContext';
+import { unreadWords } from '../../utils/listLoads.js';
 import { T, fmtSize, FileTypeBadge } from './atoms';
 import { canEditCrm } from '../../utils/roles.js';
 
@@ -14,10 +15,12 @@ export default function AttachmentsStrip({ recordType, recordId, recordName, rec
         documents = [],
         unlinkDocument, setDocumentRailId, setShowUploadRail, setUploadRailContext,
         userRole,
+        loads,   // whether the library was read (state §0.294)
     } = useApp();
     // Attach and Remove are offered to whom the server lets write — canEditCrm,
     // requireWrite's list (state §0.182).
     const canEdit = canEditCrm(userRole);
+    const docsUnread = unreadWords(loads, ['documents']);   // said whatever it holds: a library that was not read can hold the one file just attached
 
     const recordLink = { type: recordType, recordId, name: recordName, sub: recordSub };
     const docs = useMemo(
@@ -47,8 +50,9 @@ export default function AttachmentsStrip({ recordType, recordId, recordName, rec
                     </button>
                 )}
             </div>
+            {docsUnread && docs.length > 0 && <div role="status" style={{ fontSize: 12, color: T.warn, paddingBottom: 6 }}>{docsUnread}</div>}
             {docs.length === 0 ? (
-                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No attachments.</div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>{docsUnread || 'No attachments.'}</div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     {docs.map((doc) => (

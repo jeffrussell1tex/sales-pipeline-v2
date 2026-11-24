@@ -2,12 +2,12 @@
 //
 // Two carried items (handoff §5): a 401/403 rendered as "Database connection
 // lost", and the Settings catalogue's MFA card carrying hand-typed status
-// text. dbStatusOf / bannerCopyOf / mfaCardOf are pure; the scan pins the
-// wiring in every loader, the banner, AdminView and the catalogue.
+// text. dbStatusOf / mfaCardOf are pure; the scan pins the wiring in every
+// loader, the banner, AdminView and the catalogue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dbStatusOf, bannerCopyOf, mfaCardOf } from '../src/utils/fetchStatus.js';
+import { dbStatusOf, SIGN_IN_WORDS, mfaCardOf } from '../src/utils/fetchStatus.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 
@@ -20,17 +20,9 @@ test('dbStatusOf: ok → false, 401/403 → auth, any other non-ok → outage', 
     assert.equal(dbStatusOf(null), false);
 });
 
-test('bannerCopyOf: the auth state names sign-in, not the database', () => {
-    const auth = bannerCopyOf('auth');
-    assert.equal(auth.tone, 'auth');
-    assert.match(auth.text, /sign in again/);
-    assert.doesNotMatch(auth.text, /Database/);
-    const outage = bannerCopyOf(true);
-    assert.equal(outage.tone, 'outage');
-    // Moved in §0.249 (review fixes, L): the outage state is a server that answered with an error (dbStatusOf), never
-    // "Check your connection" (Q4's words are for a request that never left) — the pin on its words, at the same strength.
-    assert.match(outage.text, /^The server returned an error loading your data — changes may not be saving\./);
-    assert.doesNotMatch(outage.text, /check your connection|Database connection lost/i);
+test('the auth words name sign-in, not the database', () => {
+    assert.match(SIGN_IN_WORDS, /sign in again/);
+    assert.doesNotMatch(SIGN_IN_WORDS, /Database|check your connection/i);
 });
 
 test('mfaCardOf: live enrolment → chip, detail and attention; unknown → null', () => {
@@ -41,18 +33,21 @@ test('mfaCardOf: live enrolment → chip, detail and attention; unknown → null
     assert.equal(mfaCardOf({}), null);
 });
 
-test('every loader reports through dbStatusOf; nothing sets the outage flag on a bare non-ok', () => {
-    const files = ['src/hooks/useAccounts.js', 'src/hooks/useActivities.js', 'src/hooks/useContacts.js', 'src/hooks/useOpportunities.js', 'src/hooks/useTasks.js', 'src/hooks/useDocuments.js', 'src/hooks/useQuotes.js', 'src/App.jsx'];
-    for (const f of files) {
+// Moved in §0.294: the loads read dbStatusOf through the one loader (readList), and the banner's words are loadsBanner's
+// (tests/list-loads.test.mjs RUNS both).
+test('every loader goes through readList, which reads dbStatusOf; nothing keeps an outage flag of its own', () => {
+    for (const [f, lists] of [['src/hooks/useAccounts.js', ['accounts']], ['src/hooks/useActivities.js', ['activities']], ['src/hooks/useContacts.js', ['contacts']], ['src/hooks/useOpportunities.js', ['opportunities']],
+        ['src/hooks/useTasks.js', ['tasks']], ['src/hooks/useDocuments.js', ['documents']], ['src/hooks/useQuotes.js', ['quotes', 'products']], ['src/App.jsx', ['leads']]]) {
         const src = read(f);
-        assert.ok(!src.includes('setDbOffline(true)'), `${f}: a bare setDbOffline(true)`);
-        assert.ok(src.includes('dbStatusOf('), `${f}: reports through dbStatusOf`);
-        assert.ok(/from '\.\.?\/utils\/fetchStatus(\.js)?'/.test(src), `${f}: imports the helper`);
+        assert.ok(!/dbOffline|setDbOffline/i.test(src), `${f}: an outage flag of its own`);
+        for (const l of lists) assert.ok(src.includes(`readList('${l}', {`), `${f}: ${l} through readList`);
+        assert.ok(/import \{[^}]*\breadList\b[^}]*\} from '\.\.?\/utils\/listLoads\.js'/.test(src), `${f}: imports the loader`);
     }
+    assert.ok(read('src/utils/listLoads.js').includes("auth: dbStatusOf(r) === 'auth'"), 'the one loader tells a refused sign-in from an outage');
     const app = read('src/App.jsx');
-    assert.ok(app.includes('<span>{bannerCopyOf(dbOffline).text}</span>'), 'the banner copy comes from the state');
+    assert.ok(app.includes('<span>{loadBanner.text}</span>'), 'the banner copy comes from the loads');
     // Tokens since the blue-era sweep (state §0.136): warn for the auth banner, danger for the outage.
-    assert.ok(app.includes("background: dbOffline === 'auth' ? T.warn : T.danger"), 'the auth banner is amber, the outage banner red');
+    assert.ok(app.includes("background: loadBanner.tone === 'auth' ? T.warn : T.danger"), 'the auth banner is amber, the outage banner red');
     assert.ok(!app.includes('<span>Database connection lost'), 'no hardcoded outage sentence');
 });
 

@@ -16,6 +16,7 @@ import { startCalendarConnect } from '../utils/calendarConnect.js';
 import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
 import ReportChart from '../components/ReportChart.jsx';
 import { contactIndex, dealCommittee } from '../utils/dealEngagement.js';
+import { unreadWords, REPORT_LISTS } from '../utils/listLoads.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)
@@ -168,6 +169,7 @@ export default function HomeTab() {
         meetingPrepEvent, setMeetingPrepEvent,
         meetingPrepOpen, setMeetingPrepOpen,
         meetingPrepOppId, setMeetingPrepOppId,
+        loads,   // whether each list was read (state §0.294)
     } = useApp();
 
     const { orgId } = useAuth();
@@ -807,7 +809,9 @@ export default function HomeTab() {
                                             </div>
                                             <button onClick={() => openPinnedReport(r)} style={{ fontSize: '0.75rem', color: T.goldInk, fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>Open →</button>
                                         </div>
-                                        {result
+                                        {result && unreadWords(loads, REPORT_LISTS[r.source] || REPORT_LISTS.Opportunities)
+                                            ? <div role="status" style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>{unreadWords(loads, REPORT_LISTS[r.source] || REPORT_LISTS.Opportunities)}</div>
+                                            : result
                                             ? <ReportChart result={result} chartType={chartType}/>
                                             : <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>A template report — open it in Reports.</div>}
                                     </div>

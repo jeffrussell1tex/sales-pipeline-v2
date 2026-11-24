@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
+import { unreadWords } from '../../utils/listLoads.js';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { readRefusal, failureWords, maybeSaid, writeRefusal, landedBefore } from '../../utils/refusalWords.js';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
@@ -60,7 +61,6 @@ export default function AppHeader({
     handleLogout,
     setShowModal, setEditingOpp,
     setViewingAccount, setViewingContact,
-    dbOffline, setDbOffline,
     notifications,
     showNotifications, setShowNotifications,
     // Badge counts computed in App.jsx from visibleTasks / feedLastRead
@@ -69,7 +69,7 @@ export default function AppHeader({
 }) {
     const {
         settings, setSettings, currentUser, userRole, clerkUser, isMobile,
-        accounts, contacts, opportunities, tasks,
+        accounts, contacts, opportunities, tasks, loads,
         activeTab, setActiveTab,
         getQuarter, getQuarterLabel,
         exportToCSV, exportingCSV,
@@ -85,6 +85,7 @@ export default function AppHeader({
         anyLayerOpen,
     } = useApp();
 
+    const bellUnread = unreadWords(loads, ['opportunities', 'tasks', 'activities']);   // the lists its entries are worked out from (state §0.294)
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
@@ -562,9 +563,12 @@ export default function AppHeader({
                                 const noHits = !mA.length && !mC.length && !mO.length && !lineA && !lineC;
                                 const showA = mA.length > 0 || !!lineA;
                                 const showC = mC.length > 0 || !!lineC;
+                                const unread = unreadWords(loads, ['accounts', 'contacts', 'opportunities']);   // what the search could not look in (state §0.294)
+                                if (noHits && unread) return <div role="status" style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>{unread}</div>;
                                 if (noHits) return <div style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No results found</div>;
                                 return (
                                     <>
+                                        {unread && <div role="status" style={{ padding: '8px 12px', color: T.warn, fontSize: 12, fontFamily: T.sans }}>{unread}</div>}
                                         {showA && <div><SearchGroup label="Accounts"/>{mA.map(a => { const od = openDealsOf.get(a.id) || 0; const sub = [parentLabel(a, accountsById.get(a.parentAccountId)), a.accountOwner, od > 0 ? `${od} open deal${od>1?'s':''}` : ''].filter(Boolean).join(' · '); return <SearchRow key={'sa-'+a.id} primary={a.name} secondary={sub || undefined} meta="Account" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(a); }, 100); } }}/>; })}{lineA && <MergedSearchLine line={lineA} noun="account" meta="Account" onOpen={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(lineA.into); }, 100); } }}/>}{moreA > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreA} more — keep typing</div>}</div>}
                                         {showC && <div><SearchGroup label="Contacts"/>{mC.map(c => <SearchRow key={'sc-'+c.id} primary={`${c.firstName} ${c.lastName}`} secondary={[c.title,c.company].filter(Boolean).join(' · ')} meta="Contact" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(c); }, 100); } }}/>)}{lineC && <MergedSearchLine line={lineC} noun="contact" meta="Contact" onOpen={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(lineC.into); }, 100); } }}/>}{moreC > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreC} more — keep typing</div>}</div>}
                                         {mO.length > 0 && <div><SearchGroup label="Opportunities"/>{mO.map(o => <SearchRow key={'so-'+o.id} primary={o.opportunityName || o.account || 'Unnamed'} secondary={`${o.account} · ${o.stage}`} meta={`$${(o.arr||0).toLocaleString()}`} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); { const askedOrg = requestOrg(); setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(o); setShowModal(true); }, 150); } }}/>)}{moreO > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreO} more — keep typing</div>}</div>}
@@ -600,8 +604,9 @@ export default function AppHeader({
                                 <span>Notifications ({notifications.length})</span>
                                 <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
                             </div>
+                            {bellUnread && notifications.length > 0 && <div role="status" style={{ padding: '0.625rem 1rem', color: T.warn, fontSize: 12, borderBottom: `1px solid ${T.border}` }}>{bellUnread}</div>}
                             {notifications.length === 0
-                                ? <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13 }}>No notifications</div>
+                                ? <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13 }}>{bellUnread || 'No notifications'}</div>
                                 : notifications.map(n => (
                                     <div key={n.id} style={{ padding: '0.875rem 1rem', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', transition: 'background 0.15s' }}
                                         onMouseEnter={e => e.currentTarget.style.background = T.surface2} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}

@@ -80,34 +80,29 @@ test('a switch empties the lists before the new org\'s answers; leads and the ca
         assert.ok(clear.includes(s), `emptied on a switch: ${s}`);
     }
     before(app, 'listsOrgRef.current = organization.id;', 'const loadData = async () => {', 'emptied before the loads start');
-    assert.ok(app.includes('.then(data => { if (stillOrg(leadsOrg)) setLeads(data.leads || []); })'), 'leads');
+    assert.ok(clear.includes('resetLoads(organization.id);'), 'and an emptied list is not one that was read (§0.294)');
+    assert.ok(app.includes("const loadLeads = () => readList('leads', {") && app.includes('take: setLeads, gen: leadsGen, report: reportLoad,'), 'leads: the one loader drops another org\'s answer');
     const cal = between(app, 'const fetchCalendarEvents = async () => {', 'const fetchLogFromCalEvents');
     assert.ok(cal.includes('const askedOrg = requestOrg();'));
     assert.equal(count(cal, 'if (!stillOrg(askedOrg)) return;'), 2, 'the calendar: its answer and its error');
 });
 
 test('every shared list loader takes the asking org, and drops an answer for another at each step before it sets anything', () => {
-    // [file, loader, where it ends, its setter, how many checks]: a promise chain
-    // checks when the response arrives and again when its body is read; the
-    // documents load also in its error and its loading flag.
-    for (const [file, loader, end, setter, checks] of [
-        ['src/hooks/useOpportunities.js', 'const loadOpportunities = (setDbOffline) => {', '.catch(', 'setOpportunities(updatedOpps)', 2],
-        ['src/hooks/useAccounts.js', 'const loadAccounts = (setDbOffline) => {', '.catch(', 'setAccounts(data.accounts', 2],
-        ['src/hooks/useContacts.js', 'const loadContacts = (setDbOffline) => {', '.catch(', 'setContacts(data.contacts', 2],
-        ['src/hooks/useTasks.js', 'const loadTasks = (setDbOffline) => {', '.catch(', 'setTasks(data.tasks', 2],
-        ['src/hooks/useActivities.js', 'const loadActivities = (setDbOffline) => {', '.catch(', 'setActivities(data.activities', 2],
-        ['src/hooks/useDocuments.js', 'const loadDocuments = useCallback(async (setDbOffline) => {', '}, []);', 'setDocuments(Array.isArray', 4],
-        ['src/hooks/useQuotes.js', 'const loadQuotes = useCallback(async (setDbOffline) => {', '}, []);', 'setQuotes(data.quotes', 2],
-        ['src/hooks/useQuotes.js', 'const loadProducts = useCallback(async (includeInactive = false) => {', '}, []);', 'setProducts(data.products', 2],
-        ['src/hooks/useCoachingNotes.js', 'const reload = useCallback(async () => {', '}, []);', 'setCoachingNotes(Array.isArray', 2],
-    ]) {
-        const s = code(read(file));
-        assert.ok(/import \{[^}]*\brequestOrg\b[^}]*\bstillOrg\b[^}]*\} from '\.\.\/utils\/storage(\.js)?';/.test(s), `${file}: imports the rule`);
-        const body = between(s, loader, end);
-        before(body, 'const askedOrg = requestOrg();', 'stillOrg(askedOrg)', `${file}: the org is taken when the load starts`);
-        before(body, 'stillOrg(askedOrg)', setter, `${file}: ${setter} only for the org that asked`);
-        assert.equal(count(body, 'stillOrg(askedOrg)'), checks, `${file}: ${checks} checks — a step without one lets another org's answer through`);
-    }
+    // Moved in §0.294: the nine loads are one loader, which checks when the response arrives, when a refusal's body or the
+    // rows are read, and when it fails (tests/list-loads.test.mjs RUNS each step); coaching notes' own is as it was.
+    const rl = code(read('src/utils/listLoads.js'));
+    const body = between(rl, 'export async function readList(', '\n}\n');
+    before(body, 'const askedOrg = requestOrg();', 'const current = () => stillOrg(askedOrg) && gen.current === mine;', 'the org is taken when the load starts');
+    before(body, 'const current = () =>', 'take(rows);', 'the rows only for the org that asked');
+    assert.equal(count(body, 'if (!current()) return { current: false, error: null };'), 4, '4 checks — a step without one lets another org\'s answer through');
+    for (const [file, calls] of [['src/hooks/useOpportunities.js', 1], ['src/hooks/useAccounts.js', 1], ['src/hooks/useContacts.js', 1], ['src/hooks/useTasks.js', 1], ['src/hooks/useActivities.js', 1],
+        ['src/hooks/useDocuments.js', 1], ['src/hooks/useQuotes.js', 2], ['src/App.jsx', 1]]) assert.equal(count(code(read(file)), 'readList('), calls, `${file}: its loads are the one loader's`);
+    const s = code(read('src/hooks/useCoachingNotes.js'));
+    assert.ok(/import \{[^}]*\brequestOrg\b[^}]*\bstillOrg\b[^}]*\} from '\.\.\/utils\/storage(\.js)?';/.test(s), 'imports the rule');
+    const notes = between(s, 'const reload = useCallback(async () => {', '}, []);');
+    before(notes, 'const askedOrg = requestOrg();', 'stillOrg(askedOrg)', 'the org is taken when the load starts');
+    before(notes, 'stillOrg(askedOrg)', 'setCoachingNotes(Array.isArray', 'only for the org that asked');
+    assert.equal(count(notes, 'stillOrg(askedOrg)'), 2);
 });
 
 // ── 3. What loads once ───────────────────────────────────────────────────────

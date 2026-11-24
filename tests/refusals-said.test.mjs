@@ -42,7 +42,7 @@
 //     response by name, not by binding, so an outer `res.ok` check counts toward a nested block's or loop's own
 //     `const res` (the review of §0.248);
 //   - scan (iii): a named read's `check` is words in order, not meaning — it holds while those words stand between the
-//     start of the reading function (or, `outer`, of the function holding it: App.jsx's `.then(checkOk)` chain) and
+//     start of the reading function (or, `outer`, of the function holding it: App.jsx's `.then(checkOk)` chain until §0.294 — none is named so now) and
 //     the read; a named read with no `check` (a helper that reads at any status, a per-invite list read by design)
 //     stands on its text alone, so a change to its caller's check is the caller's own pins' to catch.
 // RUN: the words (src/utils/refusalWords.js: refusalWords, readRefusal, failureWords), BackupDetail's saveSnapshotFile,
@@ -350,8 +350,8 @@ function bodyReadsBeforeOkOf(src) {
             const scope = stack.length ? stack[stack.length - 1] : program;
             if (!(obj.type === 'Identifier' && okReadBefore(scope, obj.name, n))) {
                 // `at` the read's place in the source, `from` its function's start — for a named site's `check` (below);
-                // `outer` the start of the function holding that one (§0.249: a `.then(r => r.json())` after the chain's
-                // `.then(checkOk)`).
+                // `outer` the start of the function holding that one (§0.249: a `.then(r => r.json())` after a chain's
+                // own check; no shipped read since §0.294).
                 const holder = stack.length > 1 ? stack[stack.length - 2] : program;
                 out.push({ line: n.loc.start.line, text: lines[n.loc.start.line - 1].trim(), name: obj.type === 'Identifier' ? obj.name : '', at: n.start, from: scope.start, outer: holder.start });
             }
@@ -582,11 +582,12 @@ const CLEANED = [
     // Part 10 (§0.248): the record hooks and their windows — each save reads the ok check first and says the house words
     // (Q3); each catch failureWords; the duplicate scans and Past merges say failureWords. With them the scan's
     // okReadBefore counts only a check the read is under (the hidden shape above). None needs a name. The hooks' loads
-    // still throw 'HTTP ' + status — to the console alone, never drawn (the banner is dbStatusOf's).
+    // are listLoads.js readList's since §0.294, said in the house words.
     'src/hooks/useAccounts.js', 'src/hooks/useActivities.js', 'src/hooks/useContacts.js', 'src/hooks/useQuotes.js',
     'src/hooks/useTasks.js', 'src/hooks/useUserHandlers.js', 'src/hooks/useMerge.js', 'src/components/modals/LeadModal.jsx',
     'src/components/rails/AccountPicker.jsx', 'src/components/modals/OpportunityModal.jsx', 'src/Tabs/DuplicateScanView.jsx',
     'src/Tabs/ContactDuplicateScanView.jsx', 'src/Tabs/PastMerges.jsx',
+    'src/utils/listLoads.js',   // §0.294: the app's nine list loads, one loader
     // Part 11 (§0.248): Dispatch's remaining reads and words — every save and read in DispatchTab.jsx reads the ok check
     // first and says the house words (a 403 the role's sentence, Q13), every catch failureWords; the service plans panel
     // likewise. Two loads read their bodies after an ok check made through a `.filter` the scan cannot see: each read is
@@ -614,10 +615,6 @@ const SWEPT = srcFiles();
 const LOAD_ALL_CHECK = ['.filter(([, r]) => !r.ok);', 'if (failed.length) {', 'throw new Error('];
 const LOAD_ALL_WHY = 'DispatchTab\'s load: its eight lists checked first through `failed` (a `.filter` of the answers not ok), each refusal said in the server\'s words — the scan sees no plain `res.ok`';
 const PLANS_CHECK = ['.filter(([, r]) => !r.ok);', 'if (bad.length) {', 'throw new Error('];
-// App.jsx's leads load (§0.249, docs/design/refusal-sweep Part 12): its read is a `.then(r => r.json())` after the
-// chain's `.then(checkOk)`, which throws on a refusal — the check stands in the function that holds the read's arrow
-// (`outer`): checkOk itself, then the chain that calls it before the read.
-const APP_LEADS_CHECK = ['const checkOk = (r) => {', 'if (!r.ok) throw new Error(', '.then(checkOk).then('];
 const BODY_FIRST = [
     ...['techsRes', 'vehiclesRes', 'equipRes', 'custsRes', 'jobsRes', 'blocksRes', 'plansRes', 'visitsRes'].map((r) => (
         { file: 'src/Tabs/DispatchTab.jsx', text: `${r}.json(),`, why: LOAD_ALL_WHY, check: LOAD_ALL_CHECK })),
@@ -628,8 +625,6 @@ const BODY_FIRST = [
     { file: 'src/hooks/useOpportunities.js', text: 'try { body = await res.json(); } catch { body = null; }',
         why: 'saveDealNote: a refused note\'s answer carries the notes as stored (§0.236) — the list takes them on a refusal too; its words fall back to the status' },
     // Since §0.249 (docs/design/refusal-sweep Part 12) every source under src/ — the rest, each with its reason.
-    { file: 'src/App.jsx', text: '.then(checkOk).then(r => r.json())', outer: true, check: APP_LEADS_CHECK,
-        why: 'the leads load: checkOk (the load\'s one ok check, beside the offline banner) throws a refusal before the read — to the console alone, the list left as it was' },
     { file: 'src/utils/refusalWords.js', text: 'try { body = await res.json(); } catch { /* not JSON, or no body */ }',
         why: 'readRefusal itself: the words of an answer its caller found refused — read at any status, by design' },
     // Since §0.262 (the unknown-save rule, Part 4) writeRefusalOf reads a refused write's body once, for its words and heardRefusal.
@@ -662,7 +657,8 @@ const BODY_FIRST = [
 // A named read's `check` (§0.248): true when the words of `b.check` do not stand, in order, between the start of the
 // function that reads (x.from) and the read itself (x.at) — the real check dropped, moved after the read, or in
 // another function. A name with no `check` asks nothing here. Since §0.249 a name marked `outer` reads its check from the
-// start of the function holding the reading one (x.outer): App.jsx's `.then(r => r.json())`, after the chain's checkOk.
+// start of the function holding the reading one (x.outer): App.jsx's leads load until §0.294;
+// none is named so now, its self-test aside.
 const namedCheckMissing = (src, b, x) => {
     if (!b.check) return false;
     let at = x.from;
@@ -708,7 +704,8 @@ test('(iii) under src/, no body is read before its response\'s ok check, unless 
     assert.ok(SWEPT.length >= 242 && SWEPT.includes('src/App.jsx') && SWEPT.includes('src/utils/storage.js'), `every source under src/ (${SWEPT.length})`);
     // 228 since §0.287 (23 Nov): re-measured — the body reads the batches since §0.249 added. At 192 the floor had 36 to
     // spare, and a floor with room passes a deletion (the scoped run's survivor passed owner-writes' at one to spare).
-    assert.ok(reads >= 228, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
+    // 220 since §0.294: the nine list loads' reads are the one loader's (listLoads.js readList).
+    assert.ok(reads >= 220, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
     for (const b of BODY_FIRST) assert.equal(lineCount[`${b.file} ${b.text}`], 1, `${b.file}: the named text "${b.text}" is one line of its file — a second would pass under its name`);
     const named = (x) => BODY_FIRST.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
@@ -719,9 +716,9 @@ test('(iii) under src/, no body is read before its response\'s ok check, unless 
     // A named read whose ok check the scan cannot see stands only while its `check` does (§0.248).
     assert.deepEqual(unchecked, [], `a named body read whose check is gone — the read now takes a refusal's body as the list:\n${unchecked.join('\n')}`);
     for (const b of BODY_FIRST) if (b.check) assert.ok(Array.isArray(b.check) && b.check.length >= 2 && b.check.every((w) => typeof w === 'string' && w.length > 5), `${b.file}: a check is words, in order`);
-    // Moved pin (§0.249): App.jsx's leads load joins them, its check read from the function holding the read (`outer`).
-    assert.equal(BODY_FIRST.filter((b) => b.check).length, 10, 'the load-all\'s eight reads, the service plans load and App\'s leads load carry a check');
-    assert.deepEqual(BODY_FIRST.filter((b) => b.outer).map((b) => b.file), ['src/App.jsx'], 'one check read from the holding function');
+    // Moved in §0.294: App.jsx's leads load, the one check read from a holding function (`outer`), is the one loader's now.
+    assert.equal(BODY_FIRST.filter((b) => b.check).length, 9, 'the load-all\'s eight reads and the service plans load carry a check');
+    assert.deepEqual(BODY_FIRST.filter((b) => b.outer), [], 'no check read from a holding function');
 });
 
 test('(iii) self-test (§0.248): a named read stands only while its `check` stands before it in its function — gone, after, or elsewhere, it fails', () => {
@@ -798,7 +795,7 @@ test('(iii) self-test (§0.248): a check counts only where the read is under it 
         'each branch checked first');
 });
 
-test('(iii) self-test (§0.249): a name marked `outer` reads its check from the function holding the read — App.jsx\'s leads load, as shipped and with its check gone', () => {
+test('(iii) self-test (§0.249): a name marked `outer` reads its check from the function holding the read', () => {
     const site = { file: 'x', text: '.then(ok).then(r => r.json())', why: 'a self-test', outer: true, check: ['const ok = (r) => {', 'if (!r.ok) throw new Error(', '.then(ok).then('] };
     const missing = (s, b = site) => bodyReadsBeforeOkOf(s).found.map((x) => namedCheckMissing(s, b, x));
     const good = "async function l() {\n  const ok = (r) => { if (!r.ok) throw new Error('x'); return r; };\n  f()\n    .then(ok).then(r => r.json())\n    .then(d => d); }";
@@ -808,13 +805,6 @@ test('(iii) self-test (§0.249): a name marked `outer` reads its check from the 
     assert.deepEqual(missing(good.replace('.then(ok).then(r', '.then(r')), [true], 'the chain that skips the check');
     assert.deepEqual(missing("const ok = (r) => { if (!r.ok) throw new Error('x'); return r; };\nasync function l() { f()\n    .then(ok).then(r => r.json()); }"), [true],
         'a check outside the holding function is none');
-    // On the shipped file: the leads load as it stands, and with checkOk's refusal gone.
-    const a = read('src/App.jsx');
-    assert.deepEqual(uncheckedOf('src/App.jsx', a), [], 'App\'s leads load, as shipped');
-    const from = "if (!r.ok) throw new Error('HTTP ' + r.status); return r; };";
-    assert.equal(a.split(from).length, 2, from);
-    assert.equal(uncheckedOf('src/App.jsx', a.replace(from, "if (false) throw new Error('HTTP ' + r.status); return r; };")).length, 1,
-        'REGRESSION: checkOk no longer throws a refusal, and the leads read passed under its name');
 });
 
 // ── (iv) ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -874,14 +864,15 @@ test('(iv) in the files the sweep owns, no catch says its raw `.message` — fai
     // fixes, round 2 (§0.249, G2), re-measured after every round 2 fix: the invitation import's roster read again (I2)
     // says its failure through a catch of its own (failureWords(e)). Re-measured after every round 3 fix (§0.249, G3):
     // still 188 over the 54 files. Re-measured after every round 4 fix (§0.249, G4): still 188 over the 54 files.
-    assert.ok(MESSAGE_SCANNED.length >= 54 && MESSAGE_SCANNED.includes('src/App.jsx') && MESSAGE_SCANNED.includes('src/components/rails/TaskRail.jsx'),
+    assert.ok(MESSAGE_SCANNED.length >= 55 && MESSAGE_SCANNED.includes('src/App.jsx') && MESSAGE_SCANNED.includes('src/components/rails/TaskRail.jsx'),
         `the files the sweep cleaned (${MESSAGE_SCANNED.length}) — fewer means the list was cut short`);
     assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');
     for (const f of MESSAGE_SCANNED) { const r = caughtMessagesOf(read(f)); catches += r.catches; for (const x of r.found) found.push({ file: f, ...x }); }
     // 187 since AI scoring batch 2B: "Score all deals" and its catch were taken out (PipelineTab.jsx; Jeff, 17 Nov, Q4).
     // 188 since §0.287 (23 Nov): re-measured — one catch added since AI scoring batch 2B; at 187 a catch deleted passed.
     // 189 since §0.291: re-measured — saveBlock's own catch (a block's send that threw keeps the body it sent, and throws on).
-    assert.ok(catches >= 189, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
+    // 187 since §0.294: the quotes', price book's and library's loads' catches are the one loader's, its file scanned too.
+    assert.ok(catches >= 187, `the scan sees the catch clauses (${catches}) — fewer means it lost its shape`);
     const named = (x) => CAUGHT_MESSAGES.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));
     assert.deepEqual(unnamed, [], `a caught failure said in its raw words — "Failed to fetch", "Unexpected token '<'" — say failureWords(e) (src/utils/refusalWords.js), or name it in CAUGHT_MESSAGES:\n${unnamed.map((x) => `  ${x.file}:${x.line} ${x.text}`).join('\n')}`);
@@ -1358,9 +1349,10 @@ test('5c: New quote stops when the create was refused (the banner says why), and
 // ── 5d the Documents library says a read that failed ────────────────────────────────────────────────────────────
 test('5d: the Documents library says it couldn\'t be opened, and why — never "No documents yet" over a failed read', () => {
     const hook = code(read('src/hooks/useDocuments.js'));
-    const load = between(hook, 'const loadDocuments = useCallback(async (setDbOffline) => {', '}, []);');
-    // Moved pin (§0.243's second fix round): `e.message || 'Failed to load documents'` → failureWords(e).
-    order(load, 'if (!r.ok) throw new Error(await readRefusal(r));', 'const data = await r.json();', 'setDocsError(failureWords(e));');
+    const load = between(hook, 'const loadDocuments = useCallback(async () => {', '}, []);');
+    // Moved in §0.294: the words are the one loader's — readRefusal's for a refusal, failureWords' for a failure (tests/
+    // list-loads.test.mjs RUNS both).
+    order(load, 'setDocsError(null);', "const { current, error } = await readList('documents', {", 'if (!current) return;', 'setDocsError(error);');
     assert.ok(!/setDocsError\([^\n]*e\.message/.test(load), 'REGRESSION: a parse error\'s words in the library\'s banner');
     const tab = code(read('src/Tabs/DocumentsTab.jsx'));
     assert.ok(/documents = \[\], docsLoading, docsError,/.test(tab), 'the tab takes it');

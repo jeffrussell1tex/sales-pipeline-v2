@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { dbStatusOf } from '../utils/fetchStatus';
+import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { isOpenDeal } from '../utils/contactDeals.js';
 import { tierUnder, branchTiers, parentRefusal, withTiers, withRows, parentsFirst, undoOfDeletes } from '../utils/accountParent.js';
@@ -20,15 +20,10 @@ export function useAccounts(deps) {
     // The latest load of the accounts: an answer a later load overtook is dropped (state §0.207) — a merge's
     // reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it.
     const loadGen = useRef(0);
-    const loadAccounts = (setDbOffline) => {
-        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
-        const gen = ++loadGen.current;
-        dbFetch('/.netlify/functions/accounts')
-            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => (gen === loadGen.current ? data : null))   // a later load overtook it
-            .then(data => { if (data && stillOrg(askedOrg)) setAccounts(data.accounts || []); })
-            .catch(err => console.error('Failed to load accounts:', err));
-    };
+    const loadAccounts = () => readList('accounts', {
+        read: () => dbFetch('/.netlify/functions/accounts'),
+        take: setAccounts, gen: loadGen, report: deps.reportLoad,   // whether it was read (state §0.294)
+    });
 
     // An account's sub-accounts as the screens list them — the Accounts tab's badge and drawer, the account rail's
     // Sub-Accounts, App's rollup: one merged away is left out (state §0.206 — Jeff: "Hide them"). The record is
@@ -118,7 +113,7 @@ export function useAccounts(deps) {
                 failed.splice(0, failed.length, ...failed.filter(f => !f.retried));
             }
             if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
-            if (goneBefore) loadAccounts(() => {});   // the sub-accounts another delete lifted, as the server has them (§0.273)
+            if (goneBefore) loadAccounts();   // the sub-accounts another delete lifted, as the server has them (§0.273)
             // What the Undo re-sends is what the server answered, never this screen's copies (state
             // §0.198): each row deleted as stored, and each sub-account it promoted as stored
             // before — accountParent.js undoOfDeletes.
@@ -138,7 +133,7 @@ export function useAccounts(deps) {
                     return [...prev, ...refused.filter(f => !f.merged).map(f => f.a).filter(a => !have.has(a.id))];
                 });
                 // One merged away since: the list read again — it leaves the list, and the account it lives on in shows as stored.
-                if (failed.some(f => f.merged)) loadAccounts(() => {});
+                if (failed.some(f => f.merged)) loadAccounts();
                 // Said apart (the review): a merged refusal's row leaves the list, so its own words say why.
                 const heard = refused.filter(f => !f.merged), merged = refused.filter(f => f.merged);
                 failNote = [
@@ -220,7 +215,7 @@ export function useAccounts(deps) {
                     // A press that found one gone read the list again (§0.273); that read can answer after this Undo put
                     // its rows back, and wipe them off — this read, later, overtakes it (loadGen).
                     // A press refused as merged away read it again too (§0.282, the review) — the same race.
-                    if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts(() => {});
+                    if (notRestored.length || reread || goneBefore || failed.some(f => f.merged)) loadAccounts();
                 })
             );
             if (failNote) setUndoToast(t => (t ? { ...t, error: failNote } : t));
@@ -289,7 +284,7 @@ export function useAccounts(deps) {
                 const body = await res.json().catch(() => null);
                 if (!stillOrg(askedOrg)) return;
                 if (method === 'POST' && landedBefore(res.status, body)) {
-                    loadAccounts(() => {});
+                    loadAccounts();
                     addAudit(auditAction, 'account', auditId, auditName, auditDetail);
                     setShowAccountModal(false); setAccountModalError(null);
                     return;

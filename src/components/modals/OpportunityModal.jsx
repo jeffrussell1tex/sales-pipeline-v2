@@ -18,6 +18,7 @@ import { mayUseAi, aiAccessWords, modelLabel } from '../../utils/aiModels.js';
 import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
 import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped, sitesOf, isHiddenAccount, HIDDEN_ACCOUNT_WORDS } from '../../utils/dealAccount.js';
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { unreadWords } from '../../utils/listLoads.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
 import { mayChangeNote } from '../../utils/dealNotes.js';
 import { closeDateMovesOf } from '../../utils/dealHistory.js';
@@ -840,7 +841,8 @@ function AiScoreTab({ opportunity, aiScore, askWords = null, onScored, onClose, 
 //  Quotes panel (preserved)
 // ─────────────────────────────────────────────────────────────
 function OppQuotesPanel({ opportunity, contacts, onClose }) {
-    const { quotes, setActiveTab, setQuotesDeepLinkOppId } = useApp();
+    const { quotes, setActiveTab, setQuotesDeepLinkOppId, loads } = useApp();
+    const quotesUnread = unreadWords(loads, ['quotes']);   // the deal's quotes were not read (state §0.294)
     const oppQuotes = React.useMemo(() =>
         (quotes || []).filter(q => q.opportunityId === opportunity?.id).sort((a, b) => (b.version || 1) - (a.version || 1)),
         [quotes, opportunity?.id]
@@ -878,8 +880,8 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
             {oppQuotes.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.inkMuted, fontSize: '0.875rem', fontFamily: T.sans }}>
                     <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
-                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: T.inkMid }}>No quotes yet</div>
-                    <div>Click below to open the Quote Builder for this opportunity.</div>
+                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: T.inkMid }}>{quotesUnread || 'No quotes yet'}</div>
+                    {!quotesUnread && <div>Click below to open the Quote Builder for this opportunity.</div>}
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -899,7 +901,7 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
                 </div>
             )}
             <button onClick={handleNavigate} style={{ width: '100%', background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '0.75rem', fontSize: '0.9375rem', fontWeight: '700', cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                📋 {oppQuotes.length === 0 ? 'Build First Quote' : 'Open in Quote Builder'} →
+                📋 {oppQuotes.length === 0 && !quotesUnread ? 'Build First Quote' : 'Open in Quote Builder'} →
             </button>
         </div>
     );

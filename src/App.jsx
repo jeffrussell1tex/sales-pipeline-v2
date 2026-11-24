@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
+import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS } from './utils/listLoads.js';
+import { useListLoads } from './hooks/useListLoads.js';
+import ListsGate from './components/ui/ListsGate.jsx';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
@@ -12,7 +14,7 @@ import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLo
 import { featureOn, dealScoreView, withDealScores } from './utils/dealScore.js';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
-import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
+import { isDispatcher, isTechnician, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
 import { useOpportunities } from './hooks/useOpportunities';
@@ -141,6 +143,8 @@ function App() {
     // ── State hooks ──
     const modalState = useModalState();
     const uiState = useUIState();
+    // How each record list loaded, for the org on screen (state §0.294; src/utils/listLoads.js).
+    const { loads, reportLoad, resetLoads } = useListLoads(activeOrgId);
     const calState = useCalendarState(activeOrgId);   // the calendar strip of the org on screen, from the switch's own render (§0.249, round 4)
 
     // An org switch puts back every value that belongs to the org on screen
@@ -199,7 +203,6 @@ function App() {
         newPainPointInput, setNewPainPointInput, newVerticalMarketInput, setNewVerticalMarketInput,
         auditSearch, setAuditSearch, auditEntityFilter, setAuditEntityFilter, auditActionFilter, setAuditActionFilter,
         exportingCSV, setExportingCSV, exportingBackup, setExportingBackup, restoringBackup, setRestoringBackup,
-        dbOffline, setDbOffline,
     } = uiState;
 
     // ── Caller identity ──────────────────────────────────────────────────
@@ -350,6 +353,7 @@ function App() {
         get onDealWon()           { return _onDealWonRef.current; },
         get onLeadConverted()     { return _onLeadConvertedRef.current; },
         get adoptDealScores()     { return _adoptDealScoresRef.current; },
+        reportLoad,   // stable (useListLoads): whether each list was read (state §0.294)
     };
 
     const {
@@ -404,6 +408,11 @@ function App() {
     const documentsHook = useDocuments(_deps);
 
     const [leads, setLeads] = React.useState([]);
+    const leadsGen = React.useRef(0);
+    const loadLeads = () => readList('leads', {
+        read: () => dbFetch('/.netlify/functions/leads'),
+        take: setLeads, gen: leadsGen, report: reportLoad,   // whether it was read (state §0.294)
+    });
     // A lead becomes Converted once the deal made from it lands (state §0.253; Jeff, 16 Nov: "When the deal saves") —
     // through the leads endpoint, so its own rules hold (who may change the lead); the server stamps convertedAt. It
     // was marked on the Convert press, before any deal existed: a Cancel left a Converted lead with no deal. A refusal
@@ -527,31 +536,24 @@ function App() {
     if (listsOrgRef.current && listsOrgRef.current !== organization.id) {
         setOpportunities([]); setAccounts([]); setContacts([]); setTasks([]); setActivities([]);
         setLeads([]); documentsHook.setDocuments([]); setQuotes([]); setProducts([]);
+        resetLoads(organization.id);   // an emptied list was not read (state §0.294)
+        setQuotesDeepLinkOppId(null);  // a quote's link the Quotes tab has not taken yet is the last org's
     }
     listsOrgRef.current = organization.id;
     const loadData = async () => {
-        const checkOk = (r) => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
-
         // Wait for Clerk token to be available before firing any DB calls
         await waitForToken();
 
         // ── Data loading delegated to hooks ──────────────────────────────
-        loadOpportunities(setDbOffline);
-        loadAccounts(setDbOffline);
-        loadContacts(setDbOffline);
-        loadTasks(setDbOffline);
-        loadActivities(setDbOffline);
-        documentsHook.loadDocuments(setDbOffline);
-
-        // Load quotes and products if quotes feature is enabled
-        loadQuotes(setDbOffline);
+        loadOpportunities();
+        loadAccounts();
+        loadContacts();
+        loadTasks();
+        loadActivities();
+        documentsHook.loadDocuments();
+        loadQuotes();
         loadProducts();
-
-const leadsOrg = requestOrg();
-dbFetch('/.netlify/functions/leads')
-    .then(checkOk).then(r => r.json())
-    .then(data => { if (stillOrg(leadsOrg)) setLeads(data.leads || []); })
-    .catch(err => console.error('Failed to load leads:', err));
+        loadLeads();
 
 // Settings + users loading delegated to useSettings hook
 const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
@@ -1009,7 +1011,22 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
         handleSaveProduct, handleDeleteProduct,
         getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
-    } = useQuotes();
+    } = useQuotes(_deps);
+
+    // Try again (state §0.294): the lists named, each read again by its own loader — never the whole of loadData, which
+    // would read the settings, the roster and the profile again too.
+    const retryLoads = (names) => {
+        const loaders = {
+            opportunities: loadOpportunities, accounts: loadAccounts, contacts: loadContacts, tasks: loadTasks, activities: loadActivities,
+            leads: loadLeads, documents: documentsHook.loadDocuments, quotes: loadQuotes, products: () => loadProducts(),
+        };
+        for (const n of names) loaders[n]?.();
+    };
+    const loadBanner = loadsBanner(loads);
+    // A tab, once the lists it draws from were read.
+    const gate = { loads, onRetry: retryLoads };
+    const listsOf = (tab) => tabLists(tab, { technician: isTechnician(userRole) });
+    const recordsRead = areRead(loads, RECORD_LISTS);   // meeting prep and the quick log wait with the record windows
 
     // A message's link into the app (state §0.237; src/utils/appLinks.js — Jeff's Q1-Q4): a deal opens its window,
     // a task its rail, a quote its deal's configurator in Quotes (§0.158), a task digest the Tasks tab, the
@@ -1649,7 +1666,11 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
     // that takes its own Escape passes it on while one above it is open (escapeBlocked),
     // and App's own Escape closes the one on top (openLayersRef — state §0.189). Here,
     // before the early returns, so the ref always holds this render's.
+    // A record's window asked for before the lists it reads were read (state §0.294): ModalLayer's ListsWait stands in for it.
+    const recordWait = waitsFor(loads, { showModal, showCsvImportModal, csvImportType, showActivityModal, taskRailId, contactRailId, accountRailId, showDocLinkPicker,
+        mergeModal, contactMergeModal, viewingActivity, quickLogOpen, meetingPrepOpen, meetingPrepEvent, showLeadModal, showLeadImportModal });
     const openLayers = {
+        recordWait: recordWait.length > 0,
         coachingNote: !!coachingNoteModal, blockedDelete: !!blockedDeleteModal, prompt: !!promptModal, confirm: !!confirmModal,
         followUp: !!followUpPrompt, leaveGuard: showNavGuard,
         linkPicker: showDocLinkPicker, uploadRail: showUploadRail, documentRail: !!documentRailId,
@@ -1865,7 +1886,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
         isRepVisible,
         // Derived
         stages,
-        dbOffline,
+        recordWait, loads, retryLoads,   // the lists a window asked for waits for; how each list loaded; the lists named, read again (state §0.294)
         // Hook handlers
         handleDeleteDeals,
         handleSave,
@@ -2054,19 +2075,18 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
                 setEditingOpp={setEditingOpp}
                 setViewingAccount={openAccountRail}
                 setViewingContact={openContactRail}
-                dbOffline={dbOffline}
-                setDbOffline={setDbOffline}
             />
             </LayerBoundary>
 
-            {/* ── DB OFFLINE / SIGN-IN BANNER — dbOffline is false | 'auth' | true (fetchStatus.js) ── */}
-            {dbOffline && (
-                <div style={{ background: dbOffline === 'auth' ? T.warn : T.danger, color:T.surface, padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
+            {/* ── The lists that could not be loaded — up while any list's latest load failed, each leaving it by its own
+                next load that lands (state §0.294, listLoads.js loadsBanner); no ✕: what it says stands until it is read. */}
+            {loadBanner && (
+                <div role="alert" style={{ background: loadBanner.tone === 'auth' ? T.warn : T.danger, color:T.surface, padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'0.625rem' }}>
                         <span style={{ fontSize:'1rem' }}>⚠️</span>
-                        <span>{bannerCopyOf(dbOffline).text}</span>
+                        <span>{loadBanner.text}</span>
                     </div>
-                    <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:T.surface, borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
+                    <button onClick={() => retryLoads(loadBanner.failed)} disabled={loadBanner.trying} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:T.surface, borderRadius:'4px', padding:'2px 10px', cursor: loadBanner.trying ? 'default' : 'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0, marginLeft:'0.75rem' }}>{loadBanner.trying ? 'Trying…' : 'Try again'}</button>
                 </div>
             )}
 
@@ -2180,49 +2200,49 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
             <React.Fragment key={activeOrgId || 'no-org'}>
             {activeTab === 'home' && (
                 <ErrorBoundary tabName="Home">
-                    <HomeTab />
+                    <ListsGate {...gate} lists={listsOf('home')}><HomeTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'pipeline' && (
                 <ErrorBoundary tabName="Pipeline">
-                    <PipelineTab />
+                    <ListsGate {...gate} lists={listsOf('pipeline')}><PipelineTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'tasks' && (
                 <ErrorBoundary tabName="Tasks">
-                    <TasksTab />
+                    <ListsGate {...gate} lists={listsOf('tasks')}><TasksTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'accounts' && (
                 <ErrorBoundary tabName="Accounts">
-                    <AccountsTab />
+                    <ListsGate {...gate} lists={listsOf('accounts')}><AccountsTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'contacts' && (
                 <ErrorBoundary tabName="Contacts">
-                    <ContactsTab />
+                    <ListsGate {...gate} lists={listsOf('contacts')}><ContactsTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
                 <ErrorBoundary tabName="Leads">
-                    <LeadsTab />
+                    <ListsGate {...gate} lists={listsOf('leads')}><LeadsTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'quotes' && settings.quotesEnabled !== false && (
                 <ErrorBoundary tabName="Quotes">
-                    <QuotesTab />
+                    <ListsGate {...gate} lists={listsOf('quotes')}><QuotesTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
             {activeTab === 'dispatch' && canUseDispatch(userRole, settings) && (
                 <ErrorBoundary tabName="Dispatch">
-                    <DispatchTab />
+                    <ListsGate {...gate} lists={listsOf('dispatch')}><DispatchTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
@@ -2234,7 +2254,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
 
             {activeTab === 'reports' && (
                 <ErrorBoundary tabName="Reports">
-                    <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />
+                    <ListsGate {...gate} lists={listsOf('reports')}><ReportsTab leadsEnabled={settings.leadsEnabled !== false} /></ListsGate>
                 </ErrorBoundary>
             )}
 
@@ -2245,7 +2265,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
                 ("Something went wrong", observed). */}
             {activeTab === 'salesManager' && (isAdmin || isManager) && (
                 <ErrorBoundary tabName="Sales Manager">
-                    <SalesManagerTab />
+                    <ListsGate {...gate} lists={listsOf('salesManager')}><SalesManagerTab /></ListsGate>
                 </ErrorBoundary>
             )}
 
@@ -2272,10 +2292,10 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
             context at z-index 1, so a panel drawn inside it sits under every rail and modal
             whatever its own z — a Prep pressed in a rail opened the panel behind the rail. */}
         <LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>
-        <MeetingPrepPanel />
+        {recordsRead && <MeetingPrepPanel />}
         </LayerBoundary>
         <LayerBoundary onCrash={() => setQuickLogOpen(false)}>
-        <QuickLogFab />
+        {recordsRead && <QuickLogFab />}
         </LayerBoundary>
 
             {/* A crash in the leave guard is Stay (state §0.185): the page and its

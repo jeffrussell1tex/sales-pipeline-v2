@@ -901,36 +901,37 @@ const LOADS = [
 ];
 
 test("T16 — each of the five loads drops an answer a later load overtook (amend 16, C4): a merge's reload landing after its Undo's put the merge back on screen, and the next whole-row save sent it — each loader's lines run as written: two loads, the second answered first, only the second's list set; an answer for an org switched away from still dropped", async () => {
-    for (const [rel, loader, list, setter] of LOADS) {
-        const t = code(read(rel));
-        const END = `.catch(err => console.error('Failed to load ${list}:', err));\n    };\n`;
-        const body = between(t, ind(4, 'const loadGen = useRef(0);\n'), END);
-        order(body,
-            ind(4, 'const loadGen = useRef(0);'),
-            ind(4, `const ${loader} = (setDbOffline) => {`),
-            ind(8, 'const gen = ++loadGen.current;'),
-            ind(8, `dbFetch('/.netlify/functions/${list}')`),
-            ind(12, '.then(data => (gen === loadGen.current ? data : null))   // a later load overtook it'));
-        assert.equal(count(t, '.then(data => (gen === loadGen.current ? data : null))'), 1, rel);
-        let org = 'org_a';
-        const pending = [], sets = [];
-        const loadFn = run([body], ['useRef', 'requestOrg', 'stillOrg', 'dbFetch', 'dbStatusOf', setter, 'deps'], [
-            (v) => ({ current: v }), () => org, (o) => !!o && o === org, () => new Promise((res) => pending.push(res)), () => null,
-            (rows) => sets.push(rows.map((r) => r.id)), { getQuarter: () => 1, getQuarterLabel: () => 'Q1 2026' },
-        ], loader);
-        const answered = (id) => ({ ok: true, status: 200, json: async () => ({ [list]: [{ id }] }) });
-        const settle = async () => { for (let i = 0; i < 5; i++) await tick(); };
-        loadFn(() => {}); loadFn(() => {});
-        pending[1](answered('second')); await settle();
-        pending[0](answered('first')); await settle();
-        assert.deepEqual(sets, [['second']], `REGRESSION: ${loader} — an answer a later load overtook lands after it`);
-        sets.length = 0; pending.length = 0;
-        loadFn(() => {}); org = 'org_b'; pending[0](answered('a')); await settle();
-        assert.deepEqual(sets, [], `${loader}: an answer for an org switched away from dropped (§0.173)`);
-        pending.length = 0;
-        loadFn(() => {}); pending[0](answered('b')); await settle();
-        assert.deepEqual(sets, [['b']], `${loader}: one load sets its list`);
-    }
+    // Moved in §0.294: each loader hands its request and its setter to the one loader (listLoads.js readList), run here for
+    // real over the org on screen (storage.js setRequestOrg).
+    const { readList } = await import('../src/utils/listLoads.js');
+    const { setRequestOrg } = await import('../src/utils/storage.js');
+    const quiet = console.error; console.error = () => {};
+    try {
+        for (const [rel, loader, list, setter] of LOADS) {
+            const t = code(read(rel));
+            const body = between(t, ind(4, 'const loadGen = useRef(0);\n'), '\n    });\n');
+            order(body, ind(4, 'const loadGen = useRef(0);'), ind(4, `const ${loader} = () => readList('${list}', {`));
+            assert.equal(count(t, "dbFetch('/.netlify/functions/" + list + "')"), 1, `${rel}: one request`);
+            const pending = [], sets = [];
+            const loadFn = run([body], ['useRef', 'readList', 'dbFetch', setter, 'deps'], [
+                (v) => ({ current: v }), readList, () => new Promise((res) => pending.push(res)),
+                (rows) => sets.push(rows.map((r) => r.id)), { getQuarter: () => 1, getQuarterLabel: () => 'Q1 2026' },
+            ], loader);
+            const answered = (id) => ({ ok: true, status: 200, json: async () => ({ [list]: [{ id }] }) });
+            const settle = async () => { for (let i = 0; i < 5; i++) await tick(); };
+            setRequestOrg('org_a');
+            loadFn(); loadFn();
+            pending[1](answered('second')); await settle();
+            pending[0](answered('first')); await settle();
+            assert.deepEqual(sets, [['second']], `REGRESSION: ${loader} — an answer a later load overtook lands after it`);
+            sets.length = 0; pending.length = 0;
+            loadFn(); setRequestOrg('org_b'); pending[0](answered('a')); await settle();
+            assert.deepEqual(sets, [], `${loader}: an answer for an org switched away from dropped (§0.173)`);
+            pending.length = 0;
+            loadFn(); pending[0](answered('b')); await settle();
+            assert.deepEqual(sets, [['b']], `${loader}: one load sets its list`);
+        }
+    } finally { console.error = quiet; setRequestOrg(null); }
 });
 
 // ── the review (17 Oct, b13/wf-reviews.json): T17-T20 ─────────────────────────────────────────────────────────────

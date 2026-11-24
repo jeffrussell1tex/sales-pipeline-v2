@@ -218,9 +218,9 @@ test('DEAL WINDOW: a new rep\'s name is put in once — not in every deal window
 
 test('IMPORT: an overwrite that named owners reads the moved owner ids back', () => {
     const l = read('src/components/layout/ModalLayer.jsx');
-    assert.ok(l.includes("if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts(() => {});"));
-    assert.ok(l.includes("if (ow.appliedIds.length && overwritesWithIds.some(r => 'accountOwner' in r)) loadAccounts(() => {});"));
-    assert.ok(l.includes("if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities(() => {});"));
+    assert.ok(l.includes("if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts();"));
+    assert.ok(l.includes("if (ow.appliedIds.length && overwritesWithIds.some(r => 'accountOwner' in r)) loadAccounts();"));
+    assert.ok(l.includes("if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities();"));
 });
 
 test('BULK AND MERGE: a writer that changes the owner name moves the owner id with it', () => {
