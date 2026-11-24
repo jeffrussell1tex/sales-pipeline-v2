@@ -125,7 +125,7 @@ async function wasReminderSent(orgId, taskId) {
             .limit(1);
         return rows.length > 0;
     } catch {
-        return false; // fail open — better to send than silently skip
+        return false; // not known to have gone: it goes again (Jeff, 23 Nov: "Send alert again")
     }
 }
 

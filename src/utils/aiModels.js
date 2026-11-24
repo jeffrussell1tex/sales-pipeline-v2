@@ -12,9 +12,9 @@
 // `what` is the panel's own line under the select (the Deal Scoring Roadmap's draft); no price is written
 // here, so none goes stale — the panel points at Anthropic's pricing page.
 export const AI_MODELS = Object.freeze([
-    Object.freeze({ id: 'claude-haiku-5-5',  label: 'Haiku 5.5',  what: 'Fastest and cheapest. A score comes back in a few seconds. Good for scoring many deals routinely, and for Score all deals.' }),
-    Object.freeze({ id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', what: 'Costs more per score. Weighs mixed signals better and writes more specific recommendations. A good choice for teams with fewer, larger deals.' }),
-    Object.freeze({ id: 'claude-opus-5-5',   label: 'Opus 5.5',   what: 'The most expensive. The deepest reading of a deal. Worth it for a handful of large, complex deals; costly with Score all deals.' }),
+    Object.freeze({ id: 'claude-haiku-5-5',  label: 'Haiku 5.5',  what: 'Fastest and cheapest. An explanation comes back in a few seconds. Good for explaining deals routinely.' }),
+    Object.freeze({ id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', what: 'Costs more per deal. Weighs mixed signals better and writes more specific recommendations. A good choice for teams with fewer, larger deals.' }),
+    Object.freeze({ id: 'claude-opus-5-5',   label: 'Opus 5.5',   what: 'The most expensive. The deepest reading of a deal. Worth it for a handful of large, complex deals.' }),
 ]);
 
 // A workspace that never chose: Haiku, the class that ran before (Q2), and Sonnet when Haiku cannot answer.
@@ -51,13 +51,54 @@ export function aiAccessOf(aiSettings) {
 export const mayUseAi = (role, aiSettings) => aiAccessOf(aiSettings).roles.includes(role);
 export const aiAccessWords = (aiSettings) => `AI in this workspace is open to ${aiAccessOf(aiSettings).who}.`;
 
+// Why a request to Claude has no key to go out on (state §0.293 — Jeff, 23 Nov: "I'm building this where a customer uses
+// their own AI key. So no key provided stop"): the org installed none, or the one it stored cannot be read. The server's
+// reasons (_aiKey.mjs), and the words every screen says for them.
+export const AI_KEY_WORDS = Object.freeze({
+    no_key:         'No AI key is installed for this workspace — an Admin adds one in Settings → Features & AI.',
+    key_unreadable: "This workspace's AI key could not be read — an Admin enters it again in Settings → Features & AI.",
+});
+
+// The Features panel's reading of the workspace's key (state §0.293), pure so the suite runs it. `action`: what the open
+// draft does to the key — 'set' (typed), 'clear' (to be removed) or null; `set`: the app's settings say one is stored;
+// `check`: the server's answer to the key check, null until it answers, { reason: 'unasked' } when it could not be asked.
+// The server's answer is the newer: another Admin may have installed or removed the key since the settings loaded.
+export function aiKeyState({ action, set, check }) {
+    const stored = check && check.reason !== 'unasked' ? check.reason !== 'no_key' : set === true;
+    const isSet = action === 'set' || (action !== 'clear' && stored);
+    const unread = isSet && action !== 'set' && check?.reason === 'key_unreadable';
+    return { isSet, unread, notReady: !isSet ? 'no AI key is installed' : unread ? 'the AI key could not be read' : '' };
+}
+// The line under the key box, when the draft leaves the key as it is.
+export const aiKeyLine = ({ isSet, unread }, last4) => (unread ? { tone: 'danger', text: 'The installed key could not be read — enter it again' }
+    : isSet ? { tone: 'ok', text: `✓ Key installed${last4 ? ` · ••••${last4}` : ''}` }
+    : { tone: 'inkMuted', text: 'No key installed · nothing is sent to Claude' });
+// What the key check found, in words; `notCallable`: the labels of the models the key cannot call.
+export function aiKeyCheckWords(check, notCallable = []) {
+    if (!check) return '';
+    if (check.checked) return notCallable.length
+        ? `Checked against your key: ${notCallable.join(' and ')} ${notCallable.length > 1 ? 'are' : 'is'} not available to it.`
+        : 'Checked against your key: every model here is available to it.';
+    if (check.reason === 'no_key' || check.reason === 'key_unreadable') return AI_KEY_WORDS[check.reason];
+    if (check.reason === 'refused') return 'Your AI key was refused when checked — an Admin can replace it under "AI · Your own key".';
+    return "Couldn't check which models the key can call.";
+}
+// The two switches' words: what each sends, on whose key — and, on with no key to use, that nothing is sent.
+export const aiPromptsWords = (on, notReady) => (!on ? 'Off · the report builder reads prompts with its built-in interpreter and tells members an Admin can turn AI assistance on here.'
+    : notReady ? `On, but ${notReady} — nothing is sent to Claude, and the built-in interpreter reads every prompt.`
+    : 'On · the report builder\'s "Ask AI" sends the prompt sentence (never your records) to Claude with your own key; the built-in reader takes over if Claude cannot answer.');
+export const aiScoringWords = (on, notReady, label) => (!on ? 'Off · the deal window offers no "Explain this deal". An explanation a deal already has still shows.'
+    : notReady ? `On, but ${notReady} — nothing is sent to Claude, and no deal is explained.`
+    : `On · the deal window's "Explain this deal" sends the deal — its fields, notes and last ten activities — to Claude ${label} with your own key; each explanation is kept on the deal, with the model that made it, and written to the audit log.`);
+
 // The fields only the panel's mock controls wrote — the token budget and what happened past it (Jeff, 9 Nov:
 // decision 2), and the residency, retention, redaction and governance controls nothing enforced (Q4; guide
-// §18b64). The next save leaves them out (§18b64.5); nothing is deleted to clean up.
-export const RETIRED_AI_FIELDS = Object.freeze(['tokenBudget', 'budgetExceed', 'region', 'trainingOptIn', 'zeroRetention', 'piiRedaction', 'dpaSignedAt', 'auditLogging', 'blockList']);
+// §18b64). The next save leaves them out (§18b64.5); nothing is deleted to clean up. `byok` since §0.293: the switch decided
+// nothing (a stored key was used whatever it said) and hid the key box — the key's presence decides.
+export const RETIRED_AI_FIELDS = Object.freeze(['tokenBudget', 'budgetExceed', 'region', 'trainingOptIn', 'zeroRetention', 'piiRedaction', 'dpaSignedAt', 'auditLogging', 'blockList', 'byok']);
 
 // The blob the panel saves: the model, fallback and "Available to" as they run (a stored id off the list is
-// saved as the default the panel showed — Q2), BYOK as it was, the retired fields left out.
+// saved as the default the panel showed — Q2), the retired fields left out.
 export function aiSettingsToSave(aiSettings) {
     const blob = { ...blobOf(aiSettings) };
     for (const f of RETIRED_AI_FIELDS) delete blob[f];

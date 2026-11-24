@@ -224,7 +224,7 @@ test('AI scoring: a writer, on a deal they may edit — asked before the key, th
     const own = 'const notYours = await assertOwnership({ table: opportunities, entity: \'opportunity\', id: opportunityId, orgId, userId: auth.userId, userRole: auth.userRole, headers, row: opp });';
     assert.ok(s.includes(own));
     assert.ok(s.includes('if (notYours) return notYours;'));
-    before(s, own, 'const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);', 'before the key');
+    before(s, own, 'const { apiKey, keyProblem } = resolveAnthropicKey(orgSettingsRow?.extra);', 'before the key');
     before(s, own, 'const aiEnabled = orgSettingsRow?.extra?.aiScoringEnabled ?? false;', 'before the switch');
     before(s, own, 'const cached = opp.aiScore;', 'before a cached score is returned');
 });

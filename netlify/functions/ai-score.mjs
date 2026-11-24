@@ -11,7 +11,8 @@
  *   A closed deal: 400 { code: 'closed' }, nothing sent.
  *
  * Requires:
- *   ANTHROPIC_API_KEY in Netlify environment variables
+ *   the org's own Anthropic key (Settings → Features & AI) — with none, or one that cannot be read, nothing is sent: a
+ *   503 with code 'no_key' or 'key_unreadable' (_aiKey.mjs, state §0.293)
  *
  * The score is cached on the opportunity record (aiScore JSONB column)
  * and returned immediately on subsequent requests unless forceRefresh=true.
@@ -35,13 +36,12 @@ import { opportunities, activities, settings, contacts } from '../../db/schema.j
 import { eq, and, inArray } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
-// The org's BYOK key, else the site's — one helper for every Anthropic call
-// (state §0.141; this file carried its own copy of the decrypt before).
+// The org's own key, or none (state §0.293) — one helper for every Anthropic call.
 import { resolveAnthropicKey } from './_aiKey.mjs';
 // The score's shape, the server's and the deal window's (state §0.188).
 import { withHistory, cutAtWord } from '../../src/utils/aiScore.js';
 // The Admin's model and who may ask (state §0.238); one attempt's request and what its answer means.
-import { modelOf, fallbackOf, modelLabel, mayUseAi, aiAccessWords } from '../../src/utils/aiModels.js';
+import { modelOf, fallbackOf, modelLabel, mayUseAi, aiAccessWords, AI_KEY_WORDS } from '../../src/utils/aiModels.js';
 import { MIN_ATTEMPT_MS, attemptTime, scoreRequestBody, attemptOutcome, causeWords } from '../../src/utils/aiCall.js';
 // A deal's people and who was engaged, by contact id — the deal window's own rule (state §0.192).
 import { activityContactIds, dealCommittee, engagedContacts, engagedLabel, personLabel } from '../../src/utils/dealEngagement.js';
@@ -92,12 +92,12 @@ export const handler = async (event) => {
         const notYours = await assertOwnership({ table: opportunities, entity: 'opportunity', id: opportunityId, orgId, userId: auth.userId, userRole: auth.userRole, headers, row: opp });
         if (notYours) return notYours;
 
-        // Prefer org-level BYOK key; fall back to shared env var
+        // The org's own key, from its own settings row.
         const [orgSettingsRow] = await db.select({ extra: settings.extra })
             .from(settings)
             .where(eq(settings.orgId, orgId))
             .limit(1);
-        const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);
+        const { apiKey, keyProblem } = resolveAnthropicKey(orgSettingsRow?.extra);
 
         // "Available to" (state §0.238 — Jeff, 9 Nov: decision 2; Q3 "Asking Claude only"): a role it leaves
         // out asks nothing of Claude and is not handed the cached score either; the score a deal keeps still
@@ -105,11 +105,12 @@ export const handler = async (event) => {
         const aiSettings = orgSettingsRow?.extra?.aiSettings;
         if (!mayUseAi(auth.userRole, aiSettings)) return { statusCode: 403, headers, body: JSON.stringify({ error: aiAccessWords(aiSettings), code: 'ai_role' }) };
 
-        if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
-
         // ── Check feature gate (reuse orgSettingsRow fetched above) ─────────
+        // Before the key, as report-prompt.mjs asks (state §0.293): with the switch off, a missing key is not why.
         const aiEnabled = orgSettingsRow?.extra?.aiScoringEnabled ?? false;
         if (!aiEnabled) return { statusCode: 200, headers, body: JSON.stringify({ disabled: true }) };
+
+        if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: AI_KEY_WORDS[keyProblem], code: keyProblem }) };
 
         // ── The win chance Claude explains (2B): the deal's, as it stands now ─────────────────────────────────────────
         // A closed deal has none — nothing is sent. One that could not be worked out is said so, nothing sent.
@@ -249,7 +250,7 @@ Provide 3-5 signals, each tied to a factor above. Be specific — reference actu
         // The answer kept (state §0.240): the last that read, else the last that read but brought no next action — never
         // worse than one blank answer (Jeff, 10 Nov: "Keep score, no action"); none read, none kept.
         const kept = [...attempts].reverse().find((a) => a.outcome.ok) || [...attempts].reverse().find((a) => a.outcome.parsed) || null;
-        const keyWords = usingOrgKey ? 'the workspace’s key' : 'the site key';
+        const keyWords = 'the workspace’s key';
         const entityName = opp.opportunityName || opp.account || 'Unnamed';
 
         if (!kept) {
@@ -319,7 +320,7 @@ Provide 3-5 signals, each tied to a factor above. Be specific — reference actu
         }
 
         // The win chance it explained rides along (a transport field, never kept in aiScore): the deal on screen takes it.
-        return { statusCode: 200, headers, body: JSON.stringify({ ...stored, usingOrgKey, winChance: win }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ...stored, winChance: win }) };
 
     } catch (err) {
         console.error('ai-score error:', err.message);

@@ -11,7 +11,7 @@
 // `explains` is the win chance it explained (the deal's dealScore as it stood — src/utils/dealScore.js). Before 2B a
 // deal kept Claude's own score instead: { score, verdict, headline, signals, recommendation, scoredAt, history } — such
 // a score still reads, as Claude's own, earlier (`earlierScoresOf`). `history` holds Claude's own earlier scores only.
-// An answer adds transport fields — fromCache, usingOrgKey, and since 2B winChance (the win chance it explained, which the
+// An answer adds transport fields — fromCache, usingOrgKey (until §0.293), and since 2B winChance (the win chance it explained, which the
 // screen sets on the deal itself) — the deal's aiScore does not keep; with the org's switch off it is
 // { disabled: true } and carries nothing.
 

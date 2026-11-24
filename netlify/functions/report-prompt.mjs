@@ -6,8 +6,8 @@
  * POST /.netlify/functions/report-prompt   body: { prompt, today? }
  *
  * Answers 200 with ONE of:
- *   { readBy: 'claude', model, usingOrgKey, definition, name, notes }
- *   { unavailable: true, reason: 'off' | 'role' | 'no_key' | 'refused' | 'unreadable' | 'error' }
+ *   { readBy: 'claude', model, definition, name, notes }
+ *   { unavailable: true, reason: 'off' | 'role' | 'no_key' | 'key_unreadable' | 'refused' | 'unreadable' | 'error' }
  * so the client always knows whether to run its own reader
  * (src/utils/reportPrompt.js) — the same shape either way (guide §18b41 item 5).
  *
@@ -17,10 +17,10 @@
  * become filters). Never a row of CRM data — this function reads no CRM table.
  *
  * Gates, in order: Clerk auth; the org's switch settings.extra
- * .aiReportPromptsEnabled (an Admin's, Settings → Features → AI); the org's
+ * .aiReportPromptsEnabled (an Admin's, Settings → Features & AI); the org's
  * "Available to" (src/utils/aiModels.js — a role it leaves out gets the
  * built-in reader, nothing sent; state §0.238, Jeff's Q1); a key
- * (_aiKey.mjs: the org's BYOK key, else the site's). Every read is by the
+ * (_aiKey.mjs: the org's own, or none — state §0.293). Every read is by the
  * caller's org. What Claude returns is NOT trusted as a definition: it is
  * passed through the same allowlists a saved report passes through
  * (validateReading — resolveDefinition, resolveWhere) and every dropped id
@@ -28,8 +28,7 @@
  * tests can run it.
  *
  * The model is Claude Opus 5 at low effort — a sentence into a small JSON
- * object; roughly a cent and a half a reading at list price, on the org's key
- * when they have one. Raw fetch, like ai-score.mjs (no SDK dependency in the
+ * object; roughly a cent and a half a reading at list price, on the org's key. Raw fetch, like ai-score.mjs (no SDK dependency in the
  * function bundle).
  */
 import { db } from '../../db/index.js';
@@ -75,8 +74,8 @@ export const handler = async (event) => {
         // "Available to" covers Ask AI too (state §0.238 — Jeff, 9 Nov, Q1 "Roles both, model scoring"): a role it
         // leaves out sends nothing to Claude, and its builder reads the prompt itself. The model stays this file's own.
         if (!mayUseAi(auth.userRole, row?.extra?.aiSettings)) return answer(200, { unavailable: true, reason: 'role' });
-        const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);
-        if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });
+        const { apiKey, keyProblem } = resolveAnthropicKey(row?.extra);
+        if (!apiKey) return answer(200, { unavailable: true, reason: keyProblem });
 
         const fiscalStart = fiscalStartOf(row?.fiscalYearStart);
         const stages = openStagesOf({ funnelStages: row?.extra?.funnelStages || row?.stages || [] });
@@ -116,12 +115,12 @@ export const handler = async (event) => {
                 // from a validator that dropped one (observed on dev, 15 Sep).
                 console.log(`report-prompt: model input ${JSON.stringify(call.input).slice(0, 1500)}`);
                 const { definition, name, notes } = validateReading(call.input, prompt);
-                reply = { readBy: 'claude', model: REPORT_PROMPT_MODEL, usingOrgKey, definition, name, notes };
+                reply = { readBy: 'claude', model: REPORT_PROMPT_MODEL, definition, name, notes };
             }
         }
         await auditAs(orgId, auth.userId, {
             action: 'ai.report_prompt', entityType: 'ai_reading', entityId: 'report-prompt', entityName: prompt.slice(0, 120),
-            detail: `${REPORT_PROMPT_MODEL} · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · ${outcome}`,
+            detail: `${REPORT_PROMPT_MODEL} · the workspace’s key · ${outcome}`,
         });
         return answer(200, reply);
     } catch (err) {

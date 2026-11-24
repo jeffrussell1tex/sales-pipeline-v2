@@ -24,8 +24,8 @@ if (!process.env.DATABASE_URL_TEST) {
     throw new Error('DATABASE_URL_TEST is not set — refusing to run integration tests against a non-test database.');
 }
 process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;
-// No site key, and no org key is seeded: a caller past the scoring gates gets the
-// 503 that comes before any call to the model — nothing here reaches Anthropic.
+// No org key is seeded: a caller past the scoring gates gets the 503 that comes before any
+// call to the model — nothing here reaches Anthropic (and no site key is read, state §0.293).
 process.env.ANTHROPIC_API_KEY = '';
 
 import { test, before, after, mock } from 'node:test';
@@ -115,7 +115,7 @@ before(async () => {
     const now = new Date();
     await db.insert(settings).values([
         // A's SPIFF list holds the SPIFF its claims name: a claim's SPIFF is an entry of the org's list (state §0.204).
-        { id: 'settings_' + A, orgId: A, extra: { dispatchEnabled: true, slackConfig: { webhookUrl: SLACK_URL, channel: '#wins', enabled: true },
+        { id: 'settings_' + A, orgId: A, extra: { dispatchEnabled: true, aiScoringEnabled: true, slackConfig: { webhookUrl: SLACK_URL, channel: '#wins', enabled: true },
             spiffs: [{ id: 'spiff_itest_inorg', name: 'Q4 push', type: 'flat', amount: 500, active: true }] } },
         { id: 'settings_' + B, orgId: B, extra: { dispatchEnabled: true } },
     ]);
@@ -404,7 +404,7 @@ test('AI scoring: her own deal, an unassigned deal, and a Manager on any deal pa
     for (const [who, opp] of [[WHO.karen, 'opp_itest_inorg_karen'], [WHO.karen, 'opp_itest_inorg_open'], [WHO.manager, 'opp_itest_inorg_ravi']]) {
         const r = await call('ai-score', who, 'POST', { opportunityId: opp });
         assert.equal(r.status, 503, `${who.role} → ${opp}: ${JSON.stringify(r.body)}`);
-        assert.match(r.body.error, /No Anthropic API key configured/);
+        assert.equal(r.body.code, 'no_key');
     }
     assert.equal((await call('ai-score', WHO.karen, 'POST', { opportunityId: 'opp_itest_inorg_missing' })).status, 404);
 });

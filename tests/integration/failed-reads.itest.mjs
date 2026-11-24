@@ -189,6 +189,20 @@ const seedQuote = async (tag, status) => {
     return quote;
 };
 
+test("§0.293 a quote is not emailed when its sender's own row cannot be read — 500, no email, the quote as it was; read again, it goes with the sender's address", async () => {
+    await setExtra({});
+    const quote = await seedQuote('sender', 'Approved');
+    const SENDER = (t, f) => t === users && !!f && Object.keys(f).sort().join() === 'email,profile';
+    const before = await rowOf(quotes, quote);
+    is500(await failing(SENDER, () => FN['quote-email'](admin('POST', { quoteId: quote }))), 'the sender');
+    assert.equal(mails.length, 0, 'REGRESSION: sent with no one to reply to');
+    assert.deepEqual(await rowOf(quotes, quote), before, 'the quote as it was');
+    const sent = await FN['quote-email'](admin('POST', { quoteId: quote }));
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.deepEqual(mails.map((m) => m.replyTo), ['failed-admin@itest.local']);
+    mails.length = 0;
+});
+
 test("§0.292 a quote the org's own rules hold for approval is not sent, accepted or approved by the default rules when the org's cannot be read — 500, nothing written, no email", async () => {
     await setExtra({ approvalTiers: TIERS });
     const draft = await seedQuote('send', 'Draft');

@@ -323,7 +323,7 @@ test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key 
     assert.ok(s.includes("const auth = await verifyAuth(event);") && s.includes('const { orgId } = auth;'));
     assert.ok(s.includes(".from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);"), 'the settings row by org');
     assert.ok(s.includes("if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });"), 'the Admin’s switch, checked before any key is read');
-    assert.ok(s.includes("const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);") && s.includes("if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });"));
+    assert.ok(s.includes("const { apiKey, keyProblem } = resolveAnthropicKey(row?.extra);") && s.includes("if (!apiKey) return answer(200, { unavailable: true, reason: keyProblem });"));
     assert.ok(s.includes("reason: 'off'") && s.indexOf("reason: 'off'") < s.indexOf('resolveAnthropicKey(row?.extra)'), 'off before the key');
     assert.ok(s.includes(".from(users).where(eq(users.orgId, orgId));"), 'the roster by org');
     assert.ok(!/from\(opportunities\)|from\(leads\)|from\(accounts\)|from\(activities\)/.test(s), 'no CRM rows are read, so none can leave');
@@ -337,9 +337,9 @@ test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key 
     assert.ok(s.includes("import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';"), 'the pure half is the tested one');
     assert.ok(!s.includes('apiKey:') && !s.includes('apiKey }'), 'the key is never in a response body');
     const key = code(read('netlify/functions/_aiKey.mjs'));
-    assert.ok(key.includes("import { decrypt } from './crypto.mjs';") && key.includes("const apiKey = orgKey || process.env.ANTHROPIC_API_KEY || null;"), 'the org’s key, else the site’s');
+    assert.ok(key.includes("import { decrypt } from './crypto.mjs';") && !key.includes('process.env'), 'the org’s key, or none (state §0.293)');
     const score = code(read('netlify/functions/ai-score.mjs'));
-    assert.ok(score.includes("const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);") && !score.includes('createDecipheriv'), 'ai-score uses the one helper; its own copy of the decrypt is gone');
+    assert.ok(score.includes("const { apiKey, keyProblem } = resolveAnthropicKey(orgSettingsRow?.extra);") && !score.includes('createDecipheriv'), 'ai-score uses the one helper; its own copy of the decrypt is gone');
 });
 
 test('the switch: settings.aiReportPromptsEnabled in BOTH halves of settings.mjs, a client default, an Admin’s control in Features, off by default', () => {
@@ -364,12 +364,12 @@ test('the tab: Claude first when the switch is on, the built-in reader for every
     // Claude's reading taken only from a landed answer.
     assert.ok(s.includes("if (!res.ok) extraNotes.push(`Claude could not read this one (${await readRefusal(res)}) — read by the built-in interpreter instead.`);\n                else {\n                    const data = await res.json().catch(() => ({}));"));
     assert.ok(s.includes("if (data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }"));
-    assert.ok(s.includes("else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed"), 'no key: said in words');
+    assert.ok(s.includes("else if (data.unavailable && (data.reason === 'no_key' || data.reason === 'key_unreadable')) extraNotes.push(`${AI_KEY_WORDS[data.reason]} Read by the built-in interpreter instead.`);"), 'no key: said in words');
     assert.ok(s.includes("} catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }"), 'unreachable: the fallback, said');
-    assert.ok(s.includes("else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired)"), 'a rejected key is named for the Admin (observed on dev: the site key answered 401)');
+    assert.ok(s.includes("else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it in Settings → Features & AI. Read by the built-in interpreter instead.');"), 'a rejected key is named for the Admin (observed on dev: the site key answered 401)');
     // State §0.238: the note goes to one "Available to" names — a role it leaves out is told only who read it.
     assert.ok(s.includes("        } else {\n            extraNotes.push(aiOpen ? PROMPT_AI_AVAILABLE_NOTE : 'Read by the built-in interpreter.');\n        }"), 'off: the built-in reader and the note that AI is available');
-    assert.ok(s.includes("const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn \"Claude reads report prompts\" on under Settings → Features → AI.';"));
+    assert.ok(s.includes("const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn \"Claude reads report prompts\" on in Settings → Features & AI, with the workspace\\'s own AI key.';"));
     assert.ok(s.includes("        if (!reading) {\n            const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });"), 'the built-in reader runs whenever Claude did not answer');
     assert.ok(s.includes("const r = { ...reading, understood: understoodFor(reading.definition), notes: [...reading.notes, ...extraNotes] };"), 'the chips describe the definition whichever reader made it');
     assert.ok(s.includes("const chips = [{ kind: 'read by', text: readBy === 'claude' ? 'Claude' : 'Built-in interpreter' }, ...understood];"), 'the banner names the reader');

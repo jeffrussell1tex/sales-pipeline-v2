@@ -112,7 +112,7 @@ test('every action the batch adds is a literal in its file (the log carries thes
 test('the two AI calls and the job say what left the app and as whom', () => {
     const p = code(src('report-prompt.mjs'));
     assert.ok(p.includes("action: 'ai.report_prompt', entityType: 'ai_reading', entityId: 'report-prompt', entityName: prompt.slice(0, 120),"), 'the sentence is the entity');
-    assert.ok(p.includes("detail: `${REPORT_PROMPT_MODEL} · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · ${outcome}`"), 'which key, what happened');
+    assert.ok(p.includes("detail: `${REPORT_PROMPT_MODEL} · the workspace’s key · ${outcome}`"), 'which key, what happened');
     const a = code(src('ai-score.mjs'));
     // One row each way, naming every model asked and why one failed (state §0.238).
     assert.ok(a.includes("const entityName = opp.opportunityName || opp.account || 'Unnamed';"));

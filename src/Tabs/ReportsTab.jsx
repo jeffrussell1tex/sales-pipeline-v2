@@ -28,7 +28,7 @@ import { unarchived, standsFor, accountOfDeal } from '../utils/pickLink.js';
 // sets, drawn by the same component.
 import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';
 import { interpretPrompt, understoodFor, PROMPT_STARTERS } from '../utils/reportPrompt.js';
-import { mayUseAi, aiAccessWords } from '../utils/aiModels.js';
+import { mayUseAi, aiAccessWords, AI_KEY_WORDS } from '../utils/aiModels.js';
 import ReportChart from '../components/ReportChart.jsx';
 import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
@@ -2197,7 +2197,7 @@ const LibraryCard = ({ r, mayTouch, pinned, onOpen, onPin, onShare, onDeliver, o
 
 // §0.141 — the words under a reading the built-in interpreter did while Claude
 // is off for the workspace. Module scope: the picker and the banner share them.
-const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn "Claude reads report prompts" on under Settings → Features → AI.';
+const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn "Claude reads report prompts" on in Settings → Features & AI, with the workspace\'s own AI key.';
 
 // ── The prompt's reading (state §0.139) ──────────────────────────────────────
 // Module scope, data as props. What interpretPrompt() understood, as chips, and
@@ -2465,10 +2465,10 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 else {
                     const data = await res.json().catch(() => ({}));
                     if (data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }
-                    else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed — an Admin adds one under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                    else if (data.unavailable && (data.reason === 'no_key' || data.reason === 'key_unreadable')) extraNotes.push(`${AI_KEY_WORDS[data.reason]} Read by the built-in interpreter instead.`);
                     else if (data.unavailable && data.reason === 'off') extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
                     else if (data.unavailable && data.reason === 'role') extraNotes.push(`${aiAccessWords(settings?.aiSettings)} Read by the built-in interpreter.`);
-                    else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                    else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it in Settings → Features & AI. Read by the built-in interpreter instead.');
                     else extraNotes.push('Claude could not read this one — read by the built-in interpreter instead.');
                 }
             } catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }

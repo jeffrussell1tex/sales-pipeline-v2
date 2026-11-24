@@ -5,11 +5,11 @@
  * GET /.netlify/functions/ai-models   (an Admin's — the Features panel asks as it opens)
  *
  * Answers 200 with ONE of:
- *   { checked: true,  usingOrgKey, callable: [model ids] }   — the app's models (src/utils/aiModels.js)
- *                                                               Anthropic lists for the key in use
- *   { checked: false, reason: 'no_key' | 'refused' | 'unreachable', status? }
+ *   { checked: true,  callable: [model ids] }   — the app's models (src/utils/aiModels.js)
+ *                                                  Anthropic lists for the org's key
+ *   { checked: false, reason: 'no_key' | 'key_unreadable' | 'refused' | 'unreachable', status? }
  *
- * The key in use is the one a score would use: the org's BYOK key, else the site's (_aiKey.mjs), read from
+ * The key is the one a score would use: the org's own, or none (_aiKey.mjs, state §0.293), read from
  * THIS org's settings row. Anthropic's models list costs nothing and sends no record of the org. Nothing is
  * cached: the answer is this org's key's, now — a module-level copy would hand one org's answer to another
  * in a warm instance. The key never leaves the server; the answer is ids only.
@@ -42,8 +42,8 @@ export const handler = async (event) => {
     try {
         const [row] = await db.select({ extra: settingsTable.extra })
             .from(settingsTable).where(eq(settingsTable.orgId, auth.orgId)).limit(1);
-        const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);
-        if (!apiKey) return answer(200, { checked: false, reason: 'no_key' });
+        const { apiKey, keyProblem } = resolveAnthropicKey(row?.extra);
+        if (!apiKey) return answer(200, { checked: false, reason: keyProblem });
 
         let response;
         try {
@@ -52,12 +52,12 @@ export const handler = async (event) => {
                 signal: AbortSignal.timeout(8000),
             });
         } catch {
-            return answer(200, { checked: false, reason: 'unreachable', usingOrgKey });
+            return answer(200, { checked: false, reason: 'unreachable' });
         }
-        if (!response.ok) return answer(200, { checked: false, reason: response.status === 401 || response.status === 403 ? 'refused' : 'unreachable', status: response.status, usingOrgKey });
+        if (!response.ok) return answer(200, { checked: false, reason: response.status === 401 || response.status === 403 ? 'refused' : 'unreachable', status: response.status });
         const listed = await response.json().catch(() => null);
         const ids = new Set(Array.isArray(listed?.data) ? listed.data.map((m) => m?.id).filter((id) => typeof id === 'string') : []);
-        return answer(200, { checked: true, usingOrgKey, callable: AI_MODELS.map((m) => m.id).filter((id) => ids.has(id)) });
+        return answer(200, { checked: true, callable: AI_MODELS.map((m) => m.id).filter((id) => ids.has(id)) });
     } catch (err) {
         console.error('ai-models error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'ai-models') };

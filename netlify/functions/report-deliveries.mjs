@@ -40,8 +40,10 @@ import {
     cleanDelivery, deliveryDue, deliveryHasChannel, deliveryTable, deliveryHtmlTable, slackBlocksForReport, periodLabel,
 } from '../../src/utils/reportDelivery.js';
 
+import { isPlaceholderEmail } from '../../src/utils/orgIdentity.js';
+
 const siteUrl = () => (process.env.APP_URL || process.env.URL || 'https://salespipelinetracker.com').replace(/\/$/, '');
-const isPlaceholder = (email) => !email || String(email).endsWith('@placeholder.local');
+const isPlaceholder = (email) => !email || isPlaceholderEmail(email);
 
 /** The report's owner on ITS org's roster — role, app id, name, address. Null when they are gone. */
 async function ownerOf(row) {

@@ -6,9 +6,13 @@
 const clean = (v) => String(v ?? '').replace(/\s+/g, ' ').trim();
 
 // A plain address: something@something.tld, no spaces or angle brackets. Anything else is not used as a reply
-// address — Resend refuses a malformed reply_to, and the email would not go out.
+// address — Resend refuses a malformed reply_to, and the email would not go out — nor is either of the roster's
+// placeholders (state §0.293): well formed, and they reach no one.
 const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
-export const emailOrNull = (v) => { const s = clean(v); return EMAIL_RE.test(s) ? s : null; };
+// The roster's own two, stored where a member has no address: one added with none (users.mjs sanitize), one who signed in
+// with none in Clerk (_lib.mjs ensureRosterRow).
+export const isPlaceholderEmail = (v) => /@(placeholder\.local|no-email\.invalid)$/i.test(clean(v));
+export const emailOrNull = (v) => { const s = clean(v); return EMAIL_RE.test(s) && !isPlaceholderEmail(s) ? s : null; };
 
 /**
  * @param {{ displayName?, address?, city?, state?, zip?, phone?, supportEmail? }} profile  the Company profile

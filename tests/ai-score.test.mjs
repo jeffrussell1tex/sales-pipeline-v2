@@ -98,7 +98,7 @@ test('ai-score.mjs keeps the new score with the one it replaces in its history, 
     assert.ok(s.includes('const cached = opp.aiScore;'));
     assert.ok(s.includes('const stored = withHistory(cached, scoreData);'));
     assert.ok(s.includes('.set({ aiScore: stored, updatedAt: new Date() })'));
-    assert.ok(s.includes('body: JSON.stringify({ ...stored, usingOrgKey, winChance: win })'), 'the win chance it explained rides along (2B)');
+    assert.ok(s.includes('body: JSON.stringify({ ...stored, winChance: win })'), 'the win chance it explained rides along (2B)');
 });
 
 // Every object built with an aiScore key in netlify/functions — a write of it.
@@ -186,13 +186,13 @@ test("every detail tab's Save saves the deal — none submits the form a detail 
     assert.ok(save.includes('onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id,'));
 });
 
-test('the switch: "Claude scores deals" in Settings → Features & AI, saved as aiScoringEnabled — both halves of settings.mjs, off by default', () => {
+test('the switch: "Claude explains deals" in Settings → Features & AI, saved as aiScoringEnabled — both halves of settings.mjs, off by default', () => {
     const f = read('src/Tabs/settings/data/FeaturesDetail.jsx');
     assert.ok(f.includes('const [aiScoring, setAiScoring] = React.useState(false);'));
     assert.ok(f.includes('setAiScoring(settings.aiScoringEnabled === true);'), 'read from the settings prop, never self-fetched');
     assert.equal(count(f, '                aiScoringEnabled: aiScoring,\n'), 2, 'saved with the panel, and on the settings after');
     assert.ok(f.includes('onClick={() => { setAiScoring(v => !v); setDirty(true); }} role="switch" aria-checked={aiScoring}'));
-    assert.ok(f.includes('Claude scores deals'));
+    assert.ok(f.includes('>Claude explains deals</div>'));
     const s = read('netlify/functions/settings.mjs');
     assert.equal(count(s, 'aiScoringEnabled:'), 2, 'the GET projection AND the PUT whitelist (18b12)');
     assert.ok(read('src/utils/settingsDefaults.js').includes('    aiScoringEnabled: false,'), 'off by default');

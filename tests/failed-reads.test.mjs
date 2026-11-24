@@ -19,6 +19,8 @@ const PLAIN = { settings: [{ orgId: 'org_a', extra: { dispatchEnabled: true } }]
 const WRITES = new Set(['insert', 'update', 'delete', 'batch', 'execute', 'store', 'clerk', 'fetch']);
 const ME = { id: 'usr_me', name: 'Me Rep' };
 const DEAL = { id: 'd1', orgId: 'org_a', ownerId: 'usr_me', salesRep: 'Me Rep', stage: 'Proposal' };
+// An org's own AI key, stored as the settings PUT stores it.
+const ownKey = async (key, secret = 'failed-reads') => { const was = process.env.SETTINGS_ENCRYPTION_KEY; process.env.SETTINGS_ENCRYPTION_KEY = secret; try { return (await import(new URL('netlify/functions/crypto.mjs', ROOT).href)).encrypt(key); } finally { if (was === undefined) delete process.env.SETTINGS_ENCRYPTION_KEY; else process.env.SETTINGS_ENCRYPTION_KEY = was; } };
 const fn = (f) => import(new URL(`netlify/functions/${f}.mjs`, ROOT).href);
 const lib = await fn('_lib');
 const isCaller = (op) => op.kind === 'select' && op.table === 'users' && Object.keys(op.fields || {}).sort().join() === 'id,name';
@@ -359,8 +361,8 @@ test("a win chance that could not be worked out just now is said so — never la
     const { rescoreDeals } = await fn('_dealScore');
     const ai = await load('ai-score');
     const deal = { ...DEAL, opportunityName: 'D', arr: '100', dealScore: { score: 62, status: 'Healthy' } };
-    const rows = { opportunities: [deal], users: [ME], activities: [], settings: [{ orgId: 'org_a', extra: { aiScoringEnabled: true } }] };
-    const env = { ANTHROPIC_API_KEY: 'test' };
+    const rows = { opportunities: [deal], users: [ME], activities: [], settings: [{ orgId: 'org_a', extra: { aiScoringEnabled: true, anthropicApiKey: await ownKey('test') } }] };
+    const env = { SETTINGS_ENCRYPTION_KEY: 'failed-reads' };
     const x = await run(ai, 'ai-score', { method: 'POST', body: { opportunityId: 'd1' }, env }, 'Admin', (op) => op.kind === 'select' && op.table === 'activities', rows);
     assert.ok(x.hits > 0);
     assert.deepEqual([x.status, x.body.code, x.wrote], [503, 'no_win_chance', ''], JSON.stringify(x.body));

@@ -82,7 +82,7 @@ const calendarOauthCallback = [
 // ── AI ───────────────────────────────────────────────────────────────────────
 // The passing requests stop at "no Anthropic key" (503): nothing is asked of Claude.
 const deal = (ownerId) => ({ id: 'opp_1', orgId: 'org_a', opportunityName: 'Deal', ownerId, salesRep: 'Rep', stage: 'Proposal' });
-const ai = (availableTo, ownerId) => ({ opportunities: [deal(ownerId)], settings: [{ orgId: 'org_a', extra: { aiSettings: { availableTo } } }], users: [member('user_ai_rep', 'usr_ai_rep', 'Ai Rep')] });
+const ai = (availableTo, ownerId) => ({ opportunities: [deal(ownerId)], settings: [{ orgId: 'org_a', extra: { aiScoringEnabled: true, aiSettings: { availableTo } } }], users: [member('user_ai_rep', 'usr_ai_rep', 'Ai Rep')] });
 const explain = (what, rows) => ({ what, method: 'POST', body: { opportunityId: 'opp_1' }, rows, userId: 'user_ai_rep' });
 const aiScore = [
     explain("another rep's deal - the rep refused, Admin and Manager pass", ai('All roles', 'usr_other')),

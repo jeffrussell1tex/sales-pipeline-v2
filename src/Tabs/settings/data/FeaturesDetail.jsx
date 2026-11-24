@@ -7,7 +7,7 @@ import { usePanelRevs } from '../shared/usePanelRevs.js';
 import { PANEL_CHANGED, PANEL_CHANGED_KEY } from '../../../utils/settingsRevs.js';
 import { T } from '../shared/tokens.js';
 // The AI models an Admin may choose and who may ask Claude (state §0.238); the panel asks which the key can call.
-import { AI_MODELS, AI_ACCESS, modelOf, fallbackOf, aiAccessOf, modelLabel, aiSettingsToSave } from '../../../utils/aiModels.js';
+import { AI_MODELS, AI_ACCESS, modelOf, fallbackOf, aiAccessOf, modelLabel, aiSettingsToSave, aiKeyState, aiKeyLine, aiKeyCheckWords, aiPromptsWords, aiScoringWords } from '../../../utils/aiModels.js';
 import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
@@ -52,12 +52,15 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     // clear a key that is already stored.
     const [apiKeyInput, setApiKeyInput] = React.useState('');
     const [keyAction,   setKeyAction]   = React.useState(null); // null | 'set' | 'clear'
+    // Saves that changed the key, so the key check is asked again after each — the same key typed again changes nothing
+    // else the check could see (state §0.293).
+    const [keySaves,    setKeySaves]    = React.useState(0);
     // §0.141 — Claude reads the report builder's prompts (settings.aiReportPromptsEnabled).
     // Off, the builder's own reader runs and says AI assistance is available here.
     const [aiPrompts, setAiPrompts] = React.useState(false);
-    // §0.188 — Claude scores deals (settings.aiScoringEnabled): the deal window's AI Score
-    // and the Pipeline's "Score all deals". settings.mjs read and saved the switch, and no
-    // screen showed it — so AI scoring was off in every workspace, for good.
+    // §0.188 — settings.aiScoringEnabled: since §0.257 Claude explains a deal's win chance (the deal window's
+    // "Explain this deal"). Before §0.188 settings.mjs read and saved the switch, and no screen showed it — so it was
+    // off in every workspace, for good.
     const [aiScoring, setAiScoring] = React.useState(false);
     // The tokens as this panel opened (state §0.226): every save names them, a landed save merges what it answered,
     // and the effect below re-takes them whenever it re-seeds the draft from the settings prop.
@@ -65,11 +68,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
-    // A workspace that never saved its AI settings (state §0.238): the list's defaults, all roles, no own key.
+    // A workspace that never saved its AI settings (state §0.238): the list's defaults, all roles.
     const AI_DEFAULTS = {
         model: modelOf(null),
         fallback: fallbackOf(null),
-        byok: false,
         byokProvider: 'Anthropic',   // provider LABEL — never the key itself
         availableTo: aiAccessOf(null).value,
     };
@@ -148,17 +150,17 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 repsCanUseDispatch: tabViz.repsCanUseDispatch,
                 aiScoringEnabled: aiScoring,
                 aiReportPromptsEnabled: aiPrompts,
-                // Reflect the new key state locally. The plaintext is never held
-                // in app state, so the last-4 hint is dropped until the next load.
-                ...(keyAction ? {
-                    anthropicApiKeySet: result.anthropicApiKeySet ?? (keyAction === 'set'),
-                    anthropicApiKeyLast4: keyAction === 'set' ? apiKeyInput.trim().slice(-4) : null,
-                } : {}),
+                // Reflect the new key state locally, as the save answered it — a save that names no key can store one too (the
+                // server moves a key an older panel left in the settings blob; state §0.293). The plaintext is never held
+                // in app state: a key just typed leaves its last four, a removed one none.
+                anthropicApiKeySet: result.anthropicApiKeySet ?? (keyAction ? keyAction === 'set' : prev.anthropicApiKeySet),
+                ...(keyAction ? { anthropicApiKeyLast4: keyAction === 'set' ? apiKeyInput.trim().slice(-4) : null } : {}),
             }));
             landed(result);
             // Drop the plaintext from component state the moment it is persisted.
             setApiKeyInput('');
             setKeyAction(null);
+            if (keyAction) setKeySaves(n => n + 1);
             setDirty(false);
         } catch (e) {
             // Refused because another save landed first (J-B5): AdminView reads the latest and remounts this panel on
@@ -199,29 +201,28 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     const isOn = (flagId) => flags[flagId] !== false;
     const onCount  = FLAG_DEFS.filter(f => isOn(f.id)).length;
     const betaOn   = FLAG_DEFS.filter(f => f.beta && isOn(f.id)).length;
-    // Key state comes from the server as a boolean + masked hint — never the key.
-    const keyIsSet = keyAction === 'clear' ? false : (settings?.anthropicApiKeySet === true || keyAction === 'set');
-    const keyLast4 = settings?.anthropicApiKeyLast4 || null;
 
     // Which of the models the key in use can call (state §0.238 — Jeff's decision 4): asked as the panel opens, by this
     // org's key on the server (ai-models.mjs, an Admin's). A model the key cannot call is shown and cannot be picked.
     const [keyCheck, setKeyCheck] = React.useState(null);   // null until answered; the server's answer after
     React.useEffect(() => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
-        dbFetch('/.netlify/functions/ai-models')
-            .then(res => (res.ok ? res.json() : null))
-            .then(data => { if (stillOrg(askedOrg) && data) setKeyCheck(data); })
-            .catch(() => {});
-        // Asked again when a save installs, replaces or removes the workspace's own key (the mirror below sets these).
-    }, [settings?.anthropicApiKeySet, settings?.anthropicApiKeyLast4]);
+        let live = true;                 // nor after the key changed: the check asked for the key before it is no answer (state §0.293)
+        const said = (data) => { if (live && stillOrg(askedOrg)) setKeyCheck(data || { checked: false, reason: 'unasked' }); };
+        setKeyCheck(null);
+        dbFetch('/.netlify/functions/ai-models').then(res => (res.ok ? res.json() : null)).then(said, () => said(null));
+        // Asked again when a save installs, replaces or removes the workspace's own key.
+        return () => { live = false; };
+    }, [settings?.anthropicApiKeySet, settings?.anthropicApiKeyLast4, keySaves]);
     const uncallable = (id) => keyCheck?.checked === true && Array.isArray(keyCheck.callable) && !keyCheck.callable.includes(id);
-    const keyWho = keyCheck?.usingOrgKey ? 'your key' : 'the site key';
+    // The key as it stands, the server's answer first (src/utils/aiModels.js, state §0.293): nothing goes to Claude without
+    // one. A boolean and a masked hint — never the key.
+    const keyState = aiKeyState({ action: keyAction, set: settings?.anthropicApiKeySet, check: keyCheck });
+    const { isSet: keyIsSet, notReady: keyNotReady } = keyState;
+    const keyLast4 = settings?.anthropicApiKeyLast4 || null;
     const notCallable = AI_MODELS.filter(m => uncallable(m.id)).map(m => m.label);
-    const keyCheckWords = !keyCheck ? ''
-        : keyCheck.checked ? (notCallable.length ? `Checked against ${keyWho}: ${notCallable.join(' and ')} ${notCallable.length > 1 ? 'are' : 'is'} not available to it.` : `Checked against ${keyWho}: every model here is available to it.`)
-        : keyCheck.reason === 'no_key' ? 'No AI key is installed for this workspace.'
-        : keyCheck.reason === 'refused' ? `The AI key in use (${keyWho}) was refused when checked — an Admin can replace it under "AI · Your own key".`
-        : "Couldn't check which models the key can call.";
+    const keyCheckWords = aiKeyCheckWords(keyCheck, notCallable);
+    const keyLine = aiKeyLine(keyState, keyLast4);
     const hintSt = { fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans, lineHeight:1.45 };
 
     const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
@@ -336,7 +337,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             </DataCard>
 
             {/* ── AI model & access (state §0.238 — Jeff, 9 Nov: decisions 2 and 4; Q1-Q3) ── */}
-            <DataCard title="AI · Model & access" desc="Which Claude model scores deals, and which roles may use AI in this workspace.">
+            <DataCard title="AI · Model & access" desc="Which Claude model explains deals, and which roles may use AI in this workspace.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
                     <FL label="Model">
                         <select style={selSt} value={modelOf(aiSettings)} onChange={e => { setAiSettings(p => ({...p, model:e.target.value})); setDirty(true); }}>
@@ -350,17 +351,17 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                         </select>
                         <div style={hintSt}>{fallbackOf(aiSettings) === modelOf(aiSettings)
                             ? 'Used once when the chosen model fails or is busy: the same model is asked once more.'
-                            : 'Used once when the chosen model fails or is busy, so a rep still gets a score.'}</div>
+                            : 'Used once when the chosen model fails or is busy, so a rep still gets an explanation.'}</div>
                     </FL>
                     <FL label="Available to">
                         <select style={selSt} value={aiAccessOf(aiSettings).value} onChange={e => { setAiSettings(p => ({...p, availableTo:e.target.value})); setDirty(true); }}>
                             {AI_ACCESS.map(a => <option key={a.value} value={a.value}>{a.value}</option>)}
                         </select>
-                        <div style={hintSt}>Who may ask Claude: a deal's score, "Score all deals" and the report builder's Ask AI. A score a deal already has shows to everyone who sees the deal.</div>
+                        <div style={hintSt}>Who may ask Claude: a deal's explanation and the report builder's Ask AI. An explanation a deal already has shows to everyone who sees the deal.</div>
                     </FL>
                 </div>
                 <div style={{ ...hintSt, marginTop:12 }}>
-                    {keyCheckWords ? keyCheckWords + ' ' : ''}Each score is one request to Anthropic, billed to the key in use — your own key if one is installed, otherwise the site's. Current prices are on Anthropic's pricing page.
+                    {keyCheckWords ? keyCheckWords + ' ' : ''}Each explanation is one request to Anthropic, billed to your own key — with none installed, nothing is sent. Current prices are on Anthropic's pricing page.
                 </div>
                 {/* §0.141 — Claude reads report prompts. Off: the report builder's own reader
                     runs and tells members this is available. */}
@@ -372,25 +373,21 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                     <div>
                         <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude reads report prompts</div>
                         <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
-                            {aiPrompts
-                                ? `On · the report builder's "Ask AI" sends the prompt sentence (never your records) to Claude${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; the built-in reader takes over if Claude cannot answer.`
-                                : 'Off · the report builder reads prompts with its built-in interpreter and tells members AI assistance is available here.'}
+                            {aiPromptsWords(aiPrompts, keyNotReady)}
                         </div>
                     </div>
                 </div>
-                {/* §0.188 — Claude scores deals. Off: the deal window offers no AI Score and the
-                    Pipeline no "Score all deals"; a score a deal already has still shows. */}
+                {/* §0.188; since §0.257 Claude explains a deal's win chance. Off: the deal window offers no "Explain
+                    this deal"; an explanation a deal already has still shows. */}
                 <div onClick={() => { setAiScoring(v => !v); setDirty(true); }} role="switch" aria-checked={aiScoring}
                     style={{ marginTop:10, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: aiScoring ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
                     <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${aiScoring?T.ok:T.border}`, background:aiScoring?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
                         {aiScoring ? '✓' : ''}
                     </span>
                     <div>
-                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude scores deals</div>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude explains deals</div>
                         <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
-                            {aiScoring
-                                ? `On · a deal's AI Score, and the Pipeline's "Score all deals", send the deal — its fields, notes and last ten activities — to Claude ${modelLabel(modelOf(aiSettings))}${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; each score is kept on the deal, with the model that made it, and written to the audit log.`
-                                : 'Off · no deal is scored: the deal window offers no AI Score and the Pipeline no "Score all deals". A score a deal already has still shows.'}
+                            {aiScoringWords(aiScoring, keyNotReady, modelLabel(modelOf(aiSettings)))}
                         </div>
                     </div>
                 </div>
@@ -398,30 +395,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
             {/* ── AI · Your own key. The region, training opt-out, zero retention and PII redaction controls came out (state
                 §0.238 — Jeff, 9 Nov, Q4): saved, and enforced by nothing (guide §18b64.1). ── */}
-            <DataCard title="AI · Your own key" desc="Run this workspace's AI requests on your own Anthropic key instead of the site's.">
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    {[
-                        { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider || 'Anthropic'}${keyIsSet ? ' · key installed' : ' · no key yet'}` : 'Use your own model API key for AI requests.' },
-                    ].map(t => {
-                        const rawVal = aiSettings[t.key] ?? false;
-                        const on = t.invert ? !rawVal : rawVal;
-                        return (
-                            <div key={t.key} onClick={() => { setAiSettings(p => ({...p, [t.key]: !p[t.key]})); setDirty(true); }}
-                                style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
-                                <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${on?T.ok:T.border}`, background:on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
-                                    {on ? '✓' : ''}
-                                </span>
-                                <div>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
-                                    <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                {/* BYOK key — write-only input; the stored key is never sent back */}
-                {aiSettings.byok && (
-                    <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:6 }}>
+            <DataCard title="AI · Your own key" desc="This workspace's AI requests run on your own Anthropic key. With none installed, nothing is sent to Claude.">
+                {/* The key — write-only input; the stored key is never sent back. Always here since §0.293: the switch that hid it
+                    ("BYOK") decided nothing — a stored key was used whatever it said. */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                         <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:12, alignItems:'end' }}>
                             <FL label="Provider">
                                 <select
@@ -458,19 +435,14 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                                 </span>
                             ) : keyAction === 'set' ? (
                                 <span style={{ fontSize:11, color:T.warn, fontWeight:600, fontFamily:T.sans }}>New key will be encrypted and saved</span>
-                            ) : keyIsSet ? (
-                                <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>
-                                    ✓ Key installed{keyLast4 ? ` · ••••${keyLast4}` : ''}
-                                </span>
                             ) : (
-                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>No key installed · AI requests use the platform key</span>
+                                <span style={{ fontSize:11, color:T[keyLine.tone], fontWeight: keyLine.tone === 'inkMuted' ? 400 : 600, fontFamily:T.sans }}>{keyLine.text}</span>
                             )}
                         </div>
                         <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                             Your key is encrypted with AES-256-GCM before storage. It is never logged, never returned to the browser, and never included in exports — so it cannot be displayed again once saved.
                         </div>
                     </div>
-                )}
             </DataCard>
 
             {/* The "AI · Governance" card came out (state §0.238 — Q4): its DPA date, audit logging choice and block list were

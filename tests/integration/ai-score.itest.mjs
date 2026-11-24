@@ -22,8 +22,10 @@ if (!process.env.DATABASE_URL_TEST) {
     throw new Error('DATABASE_URL_TEST is not set — refusing to run integration tests against a non-test database.');
 }
 process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;
-// A made-up site key: the endpoint resolves it and sends it to the stub below, never out.
+// A site key is SET here, and no request may use it (state §0.293 — Jeff, 23 Nov: "no key provided stop"): each org's
+// requests carry that org's own key, stored encrypted as the settings PUT stores it (a made-up key, sent to the stub below).
 process.env.ANTHROPIC_API_KEY = 'itest-aiscore-site-key';
+process.env.SETTINGS_ENCRYPTION_KEY = 'itest-aiscore-secret';
 
 import { test, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -89,6 +91,9 @@ const FN = {
     prompt:   (await import('../../netlify/functions/report-prompt.mjs')).handler,
     models:   (await import('../../netlify/functions/ai-models.mjs')).handler,
 };
+const { encrypt } = await import('../../netlify/functions/crypto.mjs');
+const OWN_A = 'itest-aiscore-own-key-a', OWN_B = 'itest-aiscore-own-key-b';
+const KEY_A = { anthropicApiKey: encrypt(OWN_A) }, KEY_B = { anthropicApiKey: encrypt(OWN_B) };
 const { dealBody } = await import('../../src/utils/dealNotes.js');   // what a deal window sends since §0.236
 const { db } = await import('../../db/index.js');
 const { settings, users, opportunities, auditLog, activities, contacts, recommendationLog } = await import('../../db/schema.js');
@@ -135,7 +140,7 @@ const reply = (tag) => ({
 });
 const withoutFlags = ({ fromCache: _c, usingOrgKey: _k, winChance: _w, ...score }) => score;
 // The audit row's words for an explanation of a win chance (2B).
-const explainedRow = (model, win, tail = '') => `${model} · the site key · explained ${win.score}% (${win.status})${tail}`;
+const explainedRow = (model, win, tail = '') => `${model} · the workspace’s key · explained ${win.score}% (${win.status})${tail}`;
 
 const cleanup = async () => {
     for (const t of [recommendationLog, activities, contacts, opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
@@ -145,8 +150,8 @@ before(async () => {
     await cleanup();
     await db.insert(settings).values([
         // A settings row's id is its org's, as the settings PUT writes it (state §0.238's PUT test saves through it).
-        { id: A, orgId: A, extra: { aiScoringEnabled: true } },
-        { id: B, orgId: B, extra: { aiScoringEnabled: false } },
+        { id: A, orgId: A, extra: { aiScoringEnabled: true, ...KEY_A } },
+        { id: B, orgId: B, extra: { aiScoringEnabled: false, ...KEY_B } },
     ]);
     await db.insert(users).values([
         { id: 'usr_itest_aiscore_rep',  orgId: A, clerkUserId: WHO.rep.user,  name: 'Rhea Aiscore', email: 'rhea@itest-aiscore.local', role: 'User' },
@@ -193,7 +198,7 @@ test('a rep asks Claude to explain their own deal by its id — Claude asked onc
     const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(MODEL.calls.length, 1, 'one call to the model');
-    assert.equal(MODEL.calls[0].headers['x-api-key'], 'itest-aiscore-site-key', 'the site key — no org key is installed');
+    assert.equal(MODEL.calls[0].headers['x-api-key'], OWN_A, "org A's own key");
     const prompt = MODEL.calls[0].body.messages[0].content;
     assert.match(prompt, /Name: Aiscore deal/, 'the deal went in the prompt');
     const win = r.body.winChance;
@@ -207,7 +212,7 @@ test('a rep asks Claude to explain their own deal by its id — Claude asked onc
     assert.equal(r.body.headline, 'Explained first');
     assert.deepEqual(r.body.signals, reply('x').signals, 'each signal with its sentiment');
     assert.deepEqual(r.body.history, []);
-    assert.equal(r.body.usingOrgKey, false);
+    assert.ok(!('usingOrgKey' in r.body), 'one key there can be');
     assert.deepEqual(await kept(DEAL), withoutFlags(r.body), 'the deal keeps exactly the explanation answered, never the win chance');
     const audit = await db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.action, 'ai.deal_scored')));
     assert.equal(audit.length, 1, 'the explanation is in the audit log');
@@ -308,7 +313,7 @@ test('the model is told who was engaged — by id, a merged duplicate as its sur
 // ── State §0.238: the Admin's model, the fallback, "Available to", the PUT's rule, the key check ───────────────
 
 const setAi = async (aiSettings, more = {}) => {
-    await db.update(settings).set({ extra: { aiScoringEnabled: true, ...more, ...(aiSettings === undefined ? {} : { aiSettings }) } }).where(eq(settings.orgId, A));
+    await db.update(settings).set({ extra: { aiScoringEnabled: true, ...KEY_A, ...more, ...(aiSettings === undefined ? {} : { aiSettings }) } }).where(eq(settings.orgId, A));
 };
 const auditsOf = async (action) => db.select().from(auditLog).where(and(eq(auditLog.orgId, A), eq(auditLog.action, action), eq(auditLog.entityId, DEAL)));
 // A row by its exact detail — rows written within a second cannot be ordered by their timestamps.
@@ -358,7 +363,7 @@ test('busy, missing, refused or a dropped connection: the fallback answers, once
         const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
         assert.equal(r.status, 200, `${words}: ${JSON.stringify(r.body)}`);
         assert.deepEqual(MODEL.calls.map((c) => c.body.model), ['claude-opus-5-5', 'claude-haiku-5-5'], words);
-        assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), ['itest-aiscore-site-key', 'itest-aiscore-site-key']);
+        assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), [OWN_A, OWN_A]);
         assert.equal(MODEL.calls[0].body.messages[0].content, MODEL.calls[1].body.messages[0].content, 'the same prompt');
         assert.equal((await kept(DEAL)).model, 'claude-haiku-5-5', 'the model that answered');
         hasRow(await auditsOf('ai.deal_scored'), explainedRow('claude-haiku-5-5', r.body.winChance, ` · after claude-opus-5-5: ${words}`));
@@ -416,7 +421,7 @@ test('a refused key or request: no fallback, 502 with the cause in words, the de
     const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true });
     assert.equal(r.status, 502);
     assert.deepEqual([r.body.cause, r.body.error], ['busy', 'Claude is busy — try again in a minute.']);
-    hasRow(await auditsOf('ai.deal_score_failed'), 'the site key · claude-sonnet-5-5: 529 overloaded_error: Overloaded · claude-haiku-5-5: 500 api_error: Internal');
+    hasRow(await auditsOf('ai.deal_score_failed'), 'the workspace’s key · claude-sonnet-5-5: 529 overloaded_error: Overloaded · claude-haiku-5-5: 500 api_error: Internal');
 });
 
 test("the score's text ends at a whole word (OPEN_ITEMS §4.2)", async () => {
@@ -448,7 +453,7 @@ test('"Available to": a role it leaves out asks nothing and gets no cached score
     await setAi({ availableTo: 'All roles' });
     assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL })).status, 200, 'All roles: a rep');
     const [b] = await db.select().from(settings).where(eq(settings.orgId, B));
-    assert.deepEqual(b.extra, { aiScoringEnabled: false }, "org B's settings untouched by A's");
+    assert.deepEqual(b.extra, { aiScoringEnabled: false, ...KEY_B }, "org B's settings untouched by A's");
 });
 
 test('Ask AI follows "Available to" (Q1): a role it leaves out gets the built-in reader — nothing sent to Claude', async () => {
@@ -484,17 +489,81 @@ test('the settings PUT: a model, fallback or "Available to" named anew off the l
     assert.deepEqual(row.extra.aiSettings, { model: 'claude-opus-5-5', fallback: 'claude-haiku-5-5', availableTo: 'Admin + Manager only' });
 });
 
-test("the key check: an Admin's; the models of the list this org's key lists — ids only, the site key's here", async () => {
+test("the key check: an Admin's; the models of the list this org's key lists — ids only", async () => {
     await setAi({});
     MODEL.listCalls.length = 0;
     MODEL.listed = ['claude-fable-5-2', 'claude-haiku-5-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001'];
     const r = await call(FN.models, WHO.admin, 'GET');
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(r.body, { checked: true, usingOrgKey: false, callable: ['claude-haiku-5-5', 'claude-opus-5-5'] });
-    assert.equal(MODEL.listCalls[0].headers['x-api-key'], 'itest-aiscore-site-key');
-    assert.ok(!JSON.stringify(r.body).includes('itest-aiscore-site-key'), 'never the key');
+    assert.deepEqual(r.body, { checked: true, callable: ['claude-haiku-5-5', 'claude-opus-5-5'] });
+    assert.equal(MODEL.listCalls[0].headers['x-api-key'], OWN_A);
+    assert.ok(!JSON.stringify(r.body).includes(OWN_A), 'never the key');
     assert.equal((await call(FN.models, WHO.rep, 'GET')).status, 403, "a rep's is not to ask");
     assert.equal(MODEL.listCalls.length, 1);
+});
+
+// ── the org's own key, or none (state §0.293 — Jeff, 23 Nov: "I'm building this where a customer uses their own AI key. So no key provided stop") ──
+
+const aiAudits = async (org) => (await db.select().from(auditLog).where(eq(auditLog.orgId, org))).filter((r) => String(r.action).startsWith('ai.')).length;
+// Every request that could reach Claude, each with nothing sent: no call, no list asked, no audit row, the deal as it was.
+const stopped = async (reason, words) => {
+    MODEL.calls.length = 0; MODEL.listCalls.length = 0; MODEL.plan = [];
+    const deal = await kept(DEAL), logged = await aiAudits(A);
+    for (const forceRefresh of [true, false]) {
+        const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh });
+        assert.deepEqual([r.status, r.body.code, r.body.error], [503, reason, words], JSON.stringify(r.body));
+        assert.ok(!('headline' in r.body), 'no cached answer either');
+    }
+    const p = await call(FN.prompt, WHO.rep, 'POST', { prompt: 'deals by stage' });
+    assert.deepEqual([p.status, p.body], [200, { unavailable: true, reason }]);
+    const m = await call(FN.models, WHO.admin, 'GET');
+    assert.deepEqual([m.status, m.body], [200, { checked: false, reason }]);
+    assert.deepEqual([MODEL.calls.length, MODEL.listCalls.length, await aiAudits(A)], [0, 0, logged], `REGRESSION: ${reason} reached Anthropic — on whose key?`);
+    assert.deepEqual(await kept(DEAL), deal, 'the deal as it was');
+};
+
+test('an org with no key of its own asks nothing of Claude — the site\'s key, set here, is nobody\'s fallback', async () => {
+    for (const none of [null, '']) {
+        await setAi({}, { aiReportPromptsEnabled: true, anthropicApiKey: none });
+        await stopped('no_key', 'No AI key is installed for this workspace — an Admin adds one in Settings → Features & AI.');
+    }
+    await db.update(settings).set({ extra: { aiScoringEnabled: true, aiReportPromptsEnabled: true } }).where(eq(settings.orgId, A));
+    await stopped('no_key', 'No AI key is installed for this workspace — an Admin adds one in Settings → Features & AI.');
+});
+
+test('an org whose own key cannot be read stops and says so — never the site\'s key, never "no key"', async () => {
+    process.env.SETTINGS_ENCRYPTION_KEY = 'another-secret';
+    const elsewhere = encrypt(OWN_A);
+    process.env.SETTINGS_ENCRYPTION_KEY = 'itest-aiscore-secret';
+    for (const bad of ['aa:bb:cc', 'not-a-ciphertext', elsewhere, { sealed: true }]) {
+        await setAi({}, { aiReportPromptsEnabled: true, anthropicApiKey: bad });
+        await stopped('key_unreadable', "This workspace's AI key could not be read — an Admin enters it again in Settings → Features & AI.");
+    }
+    await setAi({});
+    MODEL.calls.length = 0; MODEL.reply = reply('own key back');
+    assert.equal((await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL, forceRefresh: true })).status, 200, 'entered again, it asks');
+    assert.equal(MODEL.calls[0].headers['x-api-key'], OWN_A);
+});
+
+test("each org's requests carry its own key: org B's deal is explained on B's key, A's key never sent", async () => {
+    await db.update(settings).set({ extra: { aiScoringEnabled: true, ...KEY_B } }).where(eq(settings.orgId, B));
+    MODEL.calls.length = 0; MODEL.reply = reply('B');
+    const r = await call(FN.score, WHO.repB, 'POST', { opportunityId: DEAL_B }, B);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), [OWN_B]);
+    // The key check too, and Ask AI.
+    MODEL.listCalls.length = 0;
+    assert.equal((await call(FN.models, WHO.admin, 'GET', undefined, B)).status, 200);
+    assert.deepEqual(MODEL.listCalls.map((c) => c.headers['x-api-key']), [OWN_B]);
+    await db.update(settings).set({ extra: { aiReportPromptsEnabled: true, ...KEY_B } }).where(eq(settings.orgId, B));
+    MODEL.calls.length = 0;
+    await call(FN.prompt, WHO.repB, 'POST', { prompt: 'deals by stage' }, B);
+    assert.deepEqual(MODEL.calls.map((c) => c.headers['x-api-key']), [OWN_B]);
+    // Off with no key: off is why.
+    await db.update(settings).set({ extra: { aiScoringEnabled: false } }).where(eq(settings.orgId, B));
+    assert.deepEqual((await call(FN.score, WHO.repB, 'POST', { opportunityId: DEAL_B }, B)).body, { disabled: true });
+    await db.update(settings).set({ extra: { aiScoringEnabled: false, ...KEY_B } }).where(eq(settings.orgId, B));
+    await db.delete(recommendationLog).where(eq(recommendationLog.orgId, B));   // its next step, so the test below still reads none in org B
 });
 
 // ── AI scoring batch 3: each next action Claude gives is logged ─────────────────────────────────────────────────

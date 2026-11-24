@@ -189,22 +189,21 @@ export const handler = async (event) => {
         // somebody else, or inject markup. Looked up by the CLERK id — `userId` is
         // the Clerk id, and comparing it to users.id (usr_…) never matched, so no
         // signature ever went out (§0.155).
-        // The same row gives the customer's reply its address: the rep who sends the quote (Jeff, 9 Nov, Q3); none
-        // well formed, no reply-to and no reply asked for.
+        // The same row gives the customer's reply its address: the rep who sends the quote (Jeff, 9 Nov, Q3). A sender with
+        // none usable is told one must be added, and nothing is sent (state §0.293 — Jeff, 23 Nov: "give an alert that an
+        // email address must be added"): the customer's reply would reach no one. A read that fails is the handler's 500,
+        // nothing sent (guide §18b138) — it says nothing about the address; a signature never set blocks no quote.
+        const [senderRow] = await db.select({ profile: users.profile, email: users.email })
+            .from(users).where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId))).limit(1);
+        const replyTo = emailOrNull(senderRow?.email);
+        if (!replyTo) {
+            return { statusCode: 422, headers: responseHeaders, body: JSON.stringify({ error: 'Your profile has no email address, so the customer could not reply to you. An email address must be added to your profile before this quote can be sent. Nothing was sent.', field: 'email' }) };
+        }
         let signatureHtml = '';
-        let replyTo = null;
-        try {
-            const [senderRow] = await db.select({ profile: users.profile, email: users.email })
-                .from(users).where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId))).limit(1);
-            replyTo = emailOrNull(senderRow?.email);
-            const raw = (senderRow?.profile || {}).emailSignature;
-            if (raw && String(raw).trim()) {
-                signatureHtml = `
+        const raw = (senderRow.profile || {}).emailSignature;
+        if (raw && String(raw).trim()) {
+            signatureHtml = `
       <div style="margin-top:28px;padding-top:18px;border-top:1px solid #e8e3da;font-size:13px;color:#57534e;line-height:1.6;white-space:pre-line;">${esc(raw)}</div>`;
-            }
-        } catch (e) {
-            // A missing signature must never block the quote going out.
-            console.error('quote-email: signature lookup failed', e.message);
         }
 
         // Who sends it: the caller's org (_orgIdentity.mjs — the Company profile, else its name in Clerk).
@@ -257,7 +256,7 @@ export const handler = async (event) => {
 
       ${signatureHtml || `
       <p style="margin-top:28px;font-size:13px;color:#a8a29e;">
-        This quote was prepared for you by your account representative.${replyTo ? ' Please reply to this email with any questions.' : ''}
+        This quote was prepared for you by your account representative. Please reply to this email with any questions.
       </p>`}
     </div>
     ${orgFoot ? `<div style="background:#f8f6f3;padding:18px 36px;border-top:1px solid #e8e3da;font-size:11px;color:#a8a29e;text-align:center;">

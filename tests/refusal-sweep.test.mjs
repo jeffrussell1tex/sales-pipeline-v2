@@ -78,6 +78,7 @@
 // server returned N.", or "The server could not be reached."; the duplicate scans and Past merges say failureWords.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { AI_KEY_WORDS } from '../src/utils/aiModels.js';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { quotePdfOf } from '../src/utils/quotePdfAnswer.js';
@@ -8425,10 +8426,10 @@ const P12B_REPORTS = 'src/Tabs/ReportsTab.jsx';
 const p12bPrompt = async (answer) => {
     const did = { busy: [] };
     const out = await p12bAsync(P12B_REPORTS, '            setPromptBusy(true);\n            try {', '            finally { setPromptBusy(false); }',
-        ['prompt', 'dbFetch', 'readRefusal', 'isoLocal', 'aiAccessWords', 'settings', 'PROMPT_AI_AVAILABLE_NOTE', 'setPromptBusy'],
+        ['prompt', 'dbFetch', 'readRefusal', 'isoLocal', 'aiAccessWords', 'settings', 'PROMPT_AI_AVAILABLE_NOTE', 'setPromptBusy', 'AI_KEY_WORDS'],
         "let reading = null, readBy = 'local';\nconst extraNotes = [];", '{ reading, readBy, extraNotes }')(
         'deals in Proposal', async () => { if (answer instanceof Error) throw answer; return answer; }, readRefusal, () => '2026-11-13', () => 'Ask AI is for Admins.', {}, 'AI is available.',
-        (v) => did.busy.push(v));
+        (v) => did.busy.push(v), AI_KEY_WORDS);
     return { ...out, busy: did.busy };
 };
 
@@ -8441,7 +8442,7 @@ test('Part 12b: Reports\' prompt — a refusal says why in the server\'s words, 
     const DEF = { source: 'Opportunities', dims: [], metrics: [] };
     const read1 = await p12bPrompt(onceOf(200, { readBy: 'claude', definition: DEF, name: 'Proposal deals', notes: ['n1'] }));
     assert.deepEqual([read1.readBy, read1.reading, read1.extraNotes], ['claude', { name: 'Proposal deals', definition: DEF, notes: ['n1'] }, []]);
-    assert.ok((await p12bPrompt(onceOf(200, { unavailable: true, reason: 'no_key' }))).extraNotes[0].includes('no Anthropic key is installed'));
+    for (const reason of ['no_key', 'key_unreadable']) assert.deepEqual((await p12bPrompt(onceOf(200, { unavailable: true, reason }))).extraNotes, [`${AI_KEY_WORDS[reason]} Read by the built-in interpreter instead.`]);
     for (const answer of [onceOf(200, { unavailable: true, reason: 'refused' }), P11_UNREADABLE()]) {
         assert.deepEqual((await p12bPrompt(answer)).extraNotes, ['Claude could not read this one — read by the built-in interpreter instead.']);
     }

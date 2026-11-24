@@ -1777,7 +1777,7 @@ test('S10 — Features\' save, run as written (J-B12): the tokens it opened with
     const run = async (keyAction, apiKeyInput, o) => {
         const key = [];
         const r = await runPanelSave(FEATURES, 'FeaturesDetail', 'handleSaveAi', { ...base, keyAction, apiKeyInput,
-            setApiKeyInput: (v) => key.push(['input', v]), setKeyAction: (v) => key.push(['action', v]) }, o);
+            setApiKeyInput: (v) => key.push(['input', v]), setKeyAction: (v) => key.push(['action', v]), setKeySaves: (f) => key.push(['saves', f(0)]) }, o);
         return { ...r, key };
     };
     const answer = { success: true, anthropicApiKeySet: true, revs: { aiSettings: 'A2' } };
@@ -1789,7 +1789,9 @@ test('S10 — Features\' save, run as written (J-B12): the tokens it opened with
     assert.deepEqual(put[1].aiSettings, { model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5', availableTo: 'All roles' },
         'REGRESSION (state §0.238): the save sends the model as it runs — an id off the list is the default the panel showed');
     assert.equal(stepOf(ok, 'landed')?.[1], answer, 'the answer to landed');
-    assert.deepEqual(ok.key, [['input', ''], ['action', null]], 'the plaintext dropped once saved');
+    assert.deepEqual(ok.key, [['input', ''], ['action', null], ['saves', 1]], 'the plaintext dropped once saved, the key check asked again (state §0.293)');
+    assert.deepEqual((await run('clear', '', { answer })).key, [['input', ''], ['action', null], ['saves', 1]], 'a key removed: asked again');
+    assert.deepEqual((await run(null, '', { answer })).key, [['input', ''], ['action', null]], 'a save that names no key asks nothing');
 
     const refusal = await staleRefusal('aiSettings');
     const keyTaken = await run('set', 'sk-new', { refusal, took: true });

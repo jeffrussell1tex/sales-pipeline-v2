@@ -16,6 +16,7 @@
 // empty, no one has an email — it falls to the next: the backup, then the org's
 // Admins (who may always approve), so a quote never waits unseen.
 import { canApproveQuotes, slaHours } from './quoteRules.js';
+import { isPlaceholderEmail } from './orgIdentity.js';
 import { appLink } from './appLinks.js';
 
 // The header menu's switches for these notices (AppHeader's DEFAULT_PREFS keys).
@@ -29,11 +30,11 @@ export function wantsNotice(user, key) {
     return p ? p.enabled !== false : true;
 }
 
-// Someone a notice can reach: active, with an email that is not the roster's
-// placeholder for an invite never accepted.
+// Someone a notice can reach: active, with an email that is not one of the
+// roster's two placeholders (orgIdentity.js isPlaceholderEmail).
 export const reachable = (u) => {
     const email = String(u?.email ?? '').trim();
-    return !!u && u.active !== false && !!email && !email.endsWith('@placeholder.local');
+    return !!u && u.active !== false && !!email && !isPlaceholderEmail(email);
 };
 
 const holders = (people, role) => people.filter(u => u.role === role);

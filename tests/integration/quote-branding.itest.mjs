@@ -7,7 +7,7 @@
 //             another org's profile changes nothing; the Clerk name when the profile has none; no app name anywhere
 //   EMAIL     quote-email.mjs end to end, Resend's request captured: sent as the org (the From name), the reply to
 //             the sending rep, the org's name and contact in the email, no app name and no link into the app; a rep
-//             with no usable address — no reply-to and no reply asked for
+//             with no usable address is refused, saying one must be added, nothing sent (reversed in §0.293)
 //   LAYOUT    the dispatch customer emails in the org's own layout: no app name, no "account on", no preferences
 //             link; asking for a reply only when one reaches the org; the members' layout untouched
 //
@@ -94,7 +94,7 @@ const PROFILE_B = {
 const B_WORDS = ['Bravo', '9 Bravo Road', '617-555-0909', 'help@bravo.itest'];
 const APP_WORDS = /accelerep|market street|san francisco|netlify\.app/i;
 
-const CLERK_REP = 'clerk_itest_brand_rep', CLERK_NOREP = 'clerk_itest_brand_norep';
+const CLERK_REP = 'clerk_itest_brand_rep', CLERK_NOREP = 'clerk_itest_brand_norep', CLERK_HOLD = 'clerk_itest_brand_hold', CLERK_NOROW = 'clerk_itest_brand_norow';
 const OPP_A = 'opp_itest_brand_a';
 const Q_MAIL = 'q_itest_brand_mail', Q_NOREPLY = 'q_itest_brand_noreply';
 
@@ -159,6 +159,8 @@ before(async () => {
     await db.insert(users).values([
         { id: 'usr_itest-brand-rep', clerkUserId: CLERK_REP, orgId: A, name: 'Itest Brand Rep', email: 'rep@alpha.itest', role: 'Admin' },
         { id: 'usr_itest-brand-norep', clerkUserId: CLERK_NOREP, orgId: A, name: 'Itest Brand NoRep', email: 'not-an-address', role: 'Admin' },
+        // The roster's placeholder for a member added with no address: it looks like one and reaches nobody.
+        { id: 'usr_itest-brand-hold', clerkUserId: CLERK_HOLD, orgId: A, name: 'Itest Brand Hold', email: 'usr_itest-brand-hold@placeholder.local', role: 'Admin' },
     ]);
     invalidateRoster();
     await db.insert(opportunities).values({ id: OPP_A, orgId: A, ownerId: 'usr_itest-brand-rep', salesRep: 'Itest Brand Rep', opportunityName: OPP_A, account: 'Itest Customer Co', pipelineId: 'default', stage: 'Proposal', arr: '1000.00' });
@@ -249,14 +251,28 @@ test('EMAIL: sent as the org — the From name, the reply to the sending rep, th
     for (const w of B_WORDS) assert.ok(!m.html.includes(w), `REGRESSION: another org's "${w}" in org A's email`);
 });
 
-test('EMAIL: a rep with no usable address — no reply-to, and no reply asked for', async () => {
-    resend.length = 0;
-    const r = await emailFn(ev(A, { quoteId: Q_NOREPLY }, CLERK_NOREP));
-    assert.equal(r.statusCode, 200, r.body);
-    assert.equal(resend.length, 1);
-    assert.ok(!('reply_to' in resend[0]), 'REGRESSION: a malformed reply address sent — Resend refuses it and the quote never goes out');
-    assert.ok(!resend[0].html.includes('Please reply to this email'), 'REGRESSION: a reply asked for that reaches no one at the org');
-    assert.equal(resend[0].from, '"Alpha Quotes & Co" <noreply@itest-brand.example>');
+// Reversed by design (state §0.293 — Jeff, 23 Nov: "give an alert that an email address must be added"): until then the
+// quote went out with no reply address, and the customer's reply reached no one.
+test('EMAIL: a sender with no usable address is told one must be added — nothing sent, the quote as it was, nothing logged', async () => {
+    const before = (await db.select().from(quotes).where(eq(quotes.id, Q_NOREPLY)))[0];
+    const logged = (await db.select().from(auditLog).where(eq(auditLog.orgId, A))).length;
+    for (const who of [CLERK_NOREP, CLERK_HOLD, CLERK_NOROW]) {
+        resend.length = 0;
+        const r = await emailFn(ev(A, { quoteId: Q_NOREPLY }, who));
+        assert.equal(r.statusCode, 422, `${who}: ${r.body}`);
+        assert.deepEqual(JSON.parse(r.body), { error: 'Your profile has no email address, so the customer could not reply to you. An email address must be added to your profile before this quote can be sent. Nothing was sent.', field: 'email' });
+        assert.equal(resend.length, 0, 'REGRESSION: a quote sent with no address to reply to');
+    }
+    assert.deepEqual((await db.select().from(quotes).where(eq(quotes.id, Q_NOREPLY)))[0], before, 'the quote as it was');
+    assert.equal((await db.select().from(auditLog).where(eq(auditLog.orgId, A))).length, logged);
+    // An address another org's member of the same sign-in holds is not this org's.
+    await db.insert(users).values({ id: 'usr_itest-brand-norow-b', clerkUserId: CLERK_NOROW, orgId: B, name: 'Itest Brand Elsewhere', email: 'elsewhere@bravo.itest', role: 'Admin' });
+    assert.equal((await emailFn(ev(A, { quoteId: Q_NOREPLY }, CLERK_NOROW))).statusCode, 422, "REGRESSION: org B's address read for org A");
+    // Added, the quote goes.
+    await db.update(users).set({ email: 'norep@alpha.itest' }).where(eq(users.id, 'usr_itest-brand-norep'));
+    const sent = await emailFn(ev(A, { quoteId: Q_NOREPLY }, CLERK_NOREP));
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.deepEqual([resend.length, resend[0].reply_to], [1, 'norep@alpha.itest']);
 });
 
 // ── LAYOUT ───────────────────────────────────────────────────────────────────

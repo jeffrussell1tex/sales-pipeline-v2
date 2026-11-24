@@ -85,12 +85,12 @@ test("the PUT's rule: a model, fallback or \"Available to\" named anew must be o
     assert.ok(aiSettingsRefused({ model: 'x'.repeat(500) }, {}).error.length < 120, 'the words never echo a whole body');
 });
 
-test("the panel's save: the model, fallback and \"Available to\" as they run, BYOK as it was, the budget and the mock controls' fields left out", () => {
-    assert.deepEqual(RETIRED_AI_FIELDS, ['tokenBudget', 'budgetExceed', 'region', 'trainingOptIn', 'zeroRetention', 'piiRedaction', 'dpaSignedAt', 'auditLogging', 'blockList']);
+test("the panel's save: the model, fallback and \"Available to\" as they run, the budget and the mock controls' fields left out", () => {
+    assert.deepEqual(RETIRED_AI_FIELDS, ['tokenBudget', 'budgetExceed', 'region', 'trainingOptIn', 'zeroRetention', 'piiRedaction', 'dpaSignedAt', 'auditLogging', 'blockList', 'byok']);
     const stored = { model: 'claude-sonnet-4-6', fallback: 'claude-haiku-4-5-20251001', region: 'US · us-east-2', tokenBudget: 25000000, trainingOptIn: false,
         zeroRetention: true, piiRedaction: true, byok: true, byokProvider: 'Anthropic', dpaSignedAt: '', auditLogging: 'All AI requests · 13mo retention',
         blockList: '', budgetExceed: 'Throttle to 1 req/s', availableTo: 'Admin + Manager only' };
-    assert.deepEqual(aiSettingsToSave(stored), { model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5', byok: true, byokProvider: 'Anthropic', availableTo: 'Admin + Manager only' });
+    assert.deepEqual(aiSettingsToSave(stored), { model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5', byokProvider: 'Anthropic', availableTo: 'Admin + Manager only' });
     assert.deepEqual(aiSettingsToSave(null), { model: 'claude-haiku-5-5', fallback: 'claude-sonnet-5-5', availableTo: 'All roles' });
     assert.equal(aiSettingsToSave({ availableTo: 'Everyone' }).availableTo, 'Admin only', 'saved as it runs');
     assert.equal(aiSettingsRefused(aiSettingsToSave(stored), stored), null, 'what the panel sends, the PUT takes');
@@ -230,7 +230,7 @@ test('the guard finds what it was written for: the scorer as it was, and the pan
 
 test('ai-score.mjs: "Available to" after the deal is yours and before the key — no cached score for a role it leaves out (Q3)', () => {
     const s = read('netlify/functions/ai-score.mjs');
-    assert.ok(s.includes("import { modelOf, fallbackOf, modelLabel, mayUseAi, aiAccessWords } from '../../src/utils/aiModels.js';"));
+    assert.ok(s.includes("import { modelOf, fallbackOf, modelLabel, mayUseAi, aiAccessWords, AI_KEY_WORDS } from '../../src/utils/aiModels.js';"));
     assert.ok(s.includes("import { MIN_ATTEMPT_MS, attemptTime, scoreRequestBody, attemptOutcome, causeWords } from '../../src/utils/aiCall.js';"));
     const gate = "if (!mayUseAi(auth.userRole, aiSettings)) return { statusCode: 403, headers, body: JSON.stringify({ error: aiAccessWords(aiSettings), code: 'ai_role' }) };";
     assert.ok(s.includes('const aiSettings = orgSettingsRow?.extra?.aiSettings;'), "this org's own settings row");
@@ -293,7 +293,7 @@ test("report-prompt.mjs: \"Available to\" covers Ask AI (Q1) — a role it leave
     const gate = "if (!mayUseAi(auth.userRole, row?.extra?.aiSettings)) return answer(200, { unavailable: true, reason: 'role' });";
     assert.ok(s.includes("import { mayUseAi } from '../../src/utils/aiModels.js';"));
     before(s, "if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });", gate);
-    before(s, gate, 'const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);', 'before the key');
+    before(s, gate, 'const { apiKey, keyProblem } = resolveAnthropicKey(row?.extra);', 'before the key');
     before(s, gate, "await fetch('https://api.anthropic.com/v1/messages'", 'nothing sent');
     assert.ok(s.includes('model: REPORT_PROMPT_MODEL,'), 'its own model (Q1)');
     const r = read('src/Tabs/ReportsTab.jsx');
@@ -309,7 +309,7 @@ test('ai-models.mjs: an Admin\'s; this org\'s key, asked now, nothing cached; id
     const s = read('netlify/functions/ai-models.mjs');
     assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], headers);"));
     assert.ok(s.includes('.from(settingsTable).where(eq(settingsTable.orgId, auth.orgId)).limit(1);'), "this org's row");
-    assert.ok(s.includes('const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);'), 'the key a score would use');
+    assert.ok(s.includes('const { apiKey, keyProblem } = resolveAnthropicKey(row?.extra);'), 'the key a score would use');
     assert.ok(s.includes("callable: AI_MODELS.map((m) => m.id).filter((id) => ids.has(id))"), 'the list, filtered');
     const top = s.slice(s.indexOf('const answer ='), s.indexOf('export const handler'));
     assert.ok(!/\b(let|var)\b|new Map|new Set/.test(top), 'no module-level state to carry one org\'s answer to another');
@@ -318,22 +318,22 @@ test('ai-models.mjs: an Admin\'s; this org\'s key, asked now, nothing cached; id
 
 test('the Features panel: the list\'s models, each marked by the key check; "Available to" as it runs; the budget and the mock controls gone', () => {
     const f = read('src/Tabs/settings/data/FeaturesDetail.jsx');
-    assert.ok(f.includes("import { AI_MODELS, AI_ACCESS, modelOf, fallbackOf, aiAccessOf, modelLabel, aiSettingsToSave } from '../../../utils/aiModels.js';"));
+    assert.ok(f.includes("import { AI_MODELS, AI_ACCESS, modelOf, fallbackOf, aiAccessOf, modelLabel, aiSettingsToSave, aiKeyState, aiKeyLine, aiKeyCheckWords, aiPromptsWords, aiScoringWords } from '../../../utils/aiModels.js';"));
     assert.equal(count(f, '{AI_MODELS.map(m => <option key={m.id} value={m.id} disabled={uncallable(m.id)}>'), 2, 'Model and Fallback');
     assert.ok(f.includes('<select style={selSt} value={modelOf(aiSettings)}'), 'the model as it runs (Q2)');
     assert.ok(f.includes('<select style={selSt} value={fallbackOf(aiSettings)}'));
     assert.ok(f.includes('<select style={selSt} value={aiAccessOf(aiSettings).value}'));
     assert.ok(f.includes("dbFetch('/.netlify/functions/ai-models')"), 'the key check, as the panel opens');
-    const check = between(f, "dbFetch('/.netlify/functions/ai-models')", '}, [settings?.anthropicApiKeySet, settings?.anthropicApiKeyLast4]);');   // asked again when a save changes the key (the review, 9 Nov)
-    assert.ok(check.includes('if (stillOrg(askedOrg) && data) setKeyCheck(data);'), 'after an org switch it changes nothing');
+    const check = between(f, "dbFetch('/.netlify/functions/ai-models')", '}, [settings?.anthropicApiKeySet, settings?.anthropicApiKeyLast4, keySaves]);');   // asked again when a save changes the key (the review, 9 Nov)
+    assert.ok(check.includes('.then(said, () => said(null));') && f.includes('const said = (data) => { if (live && stillOrg(askedOrg)) setKeyCheck('), 'after an org switch it changes nothing (run in tests/own-key.test.mjs)');
     assert.ok(f.includes('const aiSent = aiSettingsToSave(aiSettings);'));
     assert.equal(count(f, 'aiSettings: aiSent,'), 2, 'sent, and on the settings after');
     // The code, without its comments (which say what came out and why).
     const code = f.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/.*$/gm, '');
     for (const gone of ['Daily token budget', 'On budget exceed', 'tokenBudget', 'Zero data retention', 'PII redaction', 'Training opt-out', 'Data Residency', 'DPA signed', 'Block list', 'Audit logging', 'Reset training data', 'aiRegion', 'us-east-2', 'zeroRetention', 'piiRedaction'])
         assert.ok(!code.includes(gone), `gone: ${gone}`);
-    assert.ok(f.includes('BYOK (bring your own key)'), 'the own key stays');
-    assert.ok(f.includes("to Claude ${modelLabel(modelOf(aiSettings))}"), 'the switch names the model');
+    assert.ok(f.includes('<DataCard title="AI · Your own key"'), 'the own key stays');
+    assert.ok(f.includes('{aiScoringWords(aiScoring, keyNotReady, modelLabel(modelOf(aiSettings)))}'), 'the switch names the model');
 });
 
 // "Score all deals" is gone (AI scoring batch 2B — Jeff, 17 Nov, Q4: "Take it out"): the server scores every deal, and
