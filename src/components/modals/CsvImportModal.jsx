@@ -85,7 +85,7 @@ const recordLabel = (rec, importType) => {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
+export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, dealPipeline = '', onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
     // steps: upload → mapping → preview → conflicts (if any) → results
     const [step, setStep] = useState('upload');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
@@ -716,6 +716,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 {/* ── Step: Preview ── */}
                 {step === 'preview' && (
                     <div>
+                        {dealPipeline && importType === 'opportunities' && <p style={{ fontSize: '13px', color: T.inkMid, margin: '0 0 12px' }}>New deals go in the <strong>{dealPipeline}</strong> pipeline, the default one. A deal already here keeps its own.</p>}
                         <p style={{ color: T.inkMid, marginBottom: '16px', fontSize: '14px' }}>
                             <strong>{previewData.length}</strong> of {csvRows.length} rows ready to import. Review a sample below:
                         </p>

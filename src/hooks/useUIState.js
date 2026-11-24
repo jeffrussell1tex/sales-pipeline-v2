@@ -9,7 +9,7 @@ export function useUIState() {
     // view preferences (sorts, view modes, the feed's filter) stay plain useState.
     const resets = [];
     const [activeTab, setActiveTab] = useState('home');
-    const [activePipelineId, setActivePipelineId] = useOrgBoundState(resets, 'default');
+    const [activePipelineId, setActivePipelineId] = useOrgBoundState(resets, null);   // null: the org's default (state §0.297)
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
 
     // QuickLog

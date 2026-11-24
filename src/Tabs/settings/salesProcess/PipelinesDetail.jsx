@@ -10,6 +10,9 @@ import { LIcon } from '../shared/ui.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { todayLocal } from '../../../utils/dateLocal';
+import { useApp } from '../../../AppContext';
+import { isOpenDeal } from '../../../utils/contactDeals.js';
+import { pipelinesOf, entriesOf, defaultPipelineOf, pipelineCounts, withDefaultMarked, PIPELINE_COLORS } from '../../../utils/pipelines.js';
 
 const STAGE_COLORS = {
     'Prospecting':'#e07b4a','Qualification':'#d4a847','Discovery':'#8aab5a',
@@ -17,32 +20,11 @@ const STAGE_COLORS = {
     'Closed Won':'#4d6b3d','Closed Lost':'#9c3a2e',
 };
 
-const DEFAULT_PIPELINES = [
-    { id:'new-biz',  name:'New business', isDefault:true,
-      stages:['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing','Closed Won','Closed Lost'],
-      active:147, value:'$4.8M', teams:['SMB West','SMB East','Mid-Market'] },
-    { id:'renewal',  name:'Renewals', isDefault:false,
-      stages:['Upcoming','Engaged','Negotiating','Renewed','Churned'],
-      active:62, value:'$2.1M', teams:['Customer Success'] },
-    { id:'exp',      name:'Expansion', isDefault:false,
-      stages:['Identified','Qualified','Proposal','Commit','Won','Lost'],
-      active:38, value:'$890k', teams:['Account Management'] },
-];
-
-const STAGE_PROBS = { 'Prospecting':10,'Qualification':25,'Discovery':40,'Proposal':60,'Negotiation':80,'Closing':90,'Closed Won':100,'Closed Lost':0 };
-
 const STAGE_TYPES = { 'Closed Won':'Won','Closed Lost':'Lost' };
 
-const DEFAULT_ASSIGNMENT_RULES = [
-    { team:'SMB West',           members:8,  defaultPipeline:'New business' },
-    { team:'SMB East',           members:9,  defaultPipeline:'New business' },
-    { team:'Mid-Market',         members:6,  defaultPipeline:'New business' },
-    { team:'Customer Success',   members:5,  defaultPipeline:'Renewals' },
-    { team:'Account Management', members:7,  defaultPipeline:'Expansion' },
-];
-
 export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
-    const [selectedId, setSelectedId]   = useState('new-biz');
+    const { opportunities } = useApp();   // the deals, read before this page is drawn (PanelGate, state §0.297)
+    const [selectedId, setSelectedId]   = useState(null);   // none picked: the default one's
     const [showNewForm, setShowNewForm] = useState(false);
     const [newName, setNewName]         = useState('');
     const [newDefault, setNewDefault]   = useState(false);
@@ -141,12 +123,25 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     useLocalLayer(!!blockedDeletePipeline, { onClose: () => setBlockedDeletePipeline(null) });
     useLocalLayer(!!confirmDeletePipeline, { onClose: () => setConfirmDeletePipeline(null) });
 
-    const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
-    const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
+    // The org's pipelines as every screen draws them, and what each holds, counted from the deals (state §0.297;
+    // src/utils/pipelines.js). Until then this page drew three made-up pipelines for an org with none — the next click
+    // saved them, and every deal of the org was in a pipeline it no longer had — and decided a delete by a number typed in.
+    const pipelines = pipelinesOf(settings?.pipelines);
+    const defaultOne = defaultPipelineOf(pipelines);
+    const selected  = pipelines.find(p => p.id === selectedId) || defaultOne;
+    const counts = pipelineCounts(opportunities, pipelines, isOpenDeal);
+    const held = (id) => counts.get(id) || { open: 0, value: 0, won: 0, lost: 0, strays: 0, byStage: {} };
+    const closedOf = (id) => held(id).won + held(id).lost;
+    // What a save writes: the stored list with its change — an entry this page does not draw stays as it is — its default
+    // marked on one, so a drag never moves it. An org that stored none: the one it has.
+    const stored = entriesOf(settings?.pipelines).length ? settings.pipelines : pipelines;
+    const saveList = (list, label, defaultId = defaultOne.id) => persist({ pipelines: withDefaultMarked(list, defaultId) }, label);
+    const weightOf = (name) => (settings?.funnelStages || []).find(s => s && s.name === name)?.weight;
+    const money = (n) => `$${Math.round(n).toLocaleString()}`;
 
-    const assignmentRules = settings?.assignmentRules?.length
-        ? settings.assignmentRules
-        : DEFAULT_ASSIGNMENT_RULES;
+    // Which team goes with which pipeline, where the org saved any: read by nothing yet. Five made-up teams were drawn where it
+    // had none, and one Edit saved them — into the key the territory rules share (accounts.mjs); an org's territory rules were drawn as teams.
+    const assignmentRules = (settings?.assignmentRules || []).filter(r => r && r.team && r.defaultPipeline);
 
     // ── New pipeline ──────────────────────────────────────────
     const handleAddPipeline = async () => {
@@ -155,19 +150,16 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             setNewErr('A pipeline with that name already exists.'); return;
         }
         const newPipeline = {
-            id:        newName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            // Its own id, never one made from its name: two names made one id, and a name of no a-z none.
+            id:        'pl_' + crypto.randomUUID(),
             name:      newName.trim(),
+            color:     PIPELINE_COLORS[pipelines.length % PIPELINE_COLORS.length],
             isDefault: newDefault,
-            stages:    ['Prospecting', 'Proposal', 'Closed Won', 'Closed Lost'],
-            active:    0, value: '$0',
-            teams:     [],
+            stages:    (settings?.funnelStages || []).map(s => s && s.name).filter(Boolean),
         };
-        // If set as default, clear default flag on existing ones
-        const updated = newDefault
-            ? [...pipelines.map(p => ({ ...p, isDefault: false })), newPipeline]
-            : [...pipelines, newPipeline];
+        const updated = [...stored, newPipeline];
         setSaving(true);
-        const ok = await persist({ pipelines: updated }, 'Pipeline');
+        const ok = await saveList(updated, 'Pipeline', newDefault ? newPipeline.id : defaultOne.id);
         setSaving(false);
         // Refused — still saving, or by the server — the form keeps what was typed and the selection stays, as
         // the calendar's Add does; the words above say why (state §0.228).
@@ -178,8 +170,8 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
 
     // ── Assignment rule edit ──────────────────────────────────
     const handleAssignmentChange = async (teamName, newPipelineName) => {
-        const updated = assignmentRules.map(r =>
-            r.team === teamName ? { ...r, defaultPipeline: newPipelineName } : r
+        const updated = (settings?.assignmentRules || []).map(r =>
+            r && r.team === teamName ? { ...r, defaultPipeline: newPipelineName } : r
         );
         setEditingTeam(null);
         await persist({ assignmentRules: updated }, 'Assignment rule');
@@ -200,35 +192,44 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             ? [...opens, newStage, ...terminals]
             : [...opens, ...terminals.filter(s => STAGE_TYPES[s] !== newStageType), newStage, ...terminals.filter(s => STAGE_TYPES[s] === newStageType)];
 
-        const updatedPipelines = pipelines.map(p =>
-            p.id === selectedId ? { ...p, stages: updatedStages } : p
+        const updatedPipelines = stored.map(p =>
+            p && p.id === selected.id ? { ...p, stages: updatedStages } : p
         );
         // Refused — still saving, or by the server — the form keeps what was typed (state §0.228).
-        const ok = await persist({ pipelines: updatedPipelines }, 'Stage');
+        const ok = await saveList(updatedPipelines, 'Stage');
         if (!ok) return;
         setNewStageName(''); setNewStageType('Open'); setStageErr(''); setShowAddStage(false);
     };
 
     // ── Pipeline drag-to-reorder ─────────────────────────────
     const handlePipelineDrop = async (fromIdx, toIdx) => {
-        if (fromIdx === toIdx) return;
-        const reordered = [...pipelines];
-        const [moved] = reordered.splice(fromIdx, 1);
-        reordered.splice(toIdx, 0, moved);
-        await persist({ pipelines: reordered }, 'Pipeline order');
+        if (fromIdx === null || fromIdx === toIdx) return;   // a drag that began on the other list, or outside the page, moves nothing
+        // The places are the ones drawn; the entries, the stored ones.
+        const order = pipelines.map(p => p.id);
+        const [moved] = order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, moved);
+        const at = (p) => { const i = order.indexOf(p && p.id); return i < 0 ? order.length : i; };
+        const reordered = [...stored].sort((a, b) => at(a) - at(b));
+        await saveList(reordered, 'Pipeline order');
     };
 
     // ── Delete pipeline ──────────────────────────────────────
     const handleDeletePipeline = (pipelineId) => {
         const pipeline = pipelines.find(p => p.id === pipelineId);
         if (!pipeline) return;
-        if (pipeline.isDefault) {
+        if (pipelines.length === 1) {
+            setBlockedDeletePipeline({ name: pipeline.name, reason: 'This is the only pipeline. Add another before deleting it.' });
+            setOpenPipelineKebab(null);
+            return;
+        }
+        if (pipeline.id === defaultOne.id) {
             setBlockedDeletePipeline({ name: pipeline.name, reason: 'This is the default pipeline. Set another pipeline as default before deleting it.' });
             setOpenPipelineKebab(null);
             return;
         }
-        if ((pipeline.active || 0) > 0) {
-            setBlockedDeletePipeline({ name: pipeline.name, reason: `This pipeline has ${pipeline.active} open deal${pipeline.active !== 1 ? 's' : ''}. Move or close all deals before deleting.` });
+        const open = held(pipelineId).open;
+        if (open > 0) {
+            setBlockedDeletePipeline({ name: pipeline.name, reason: `This pipeline has ${open} open deal${open !== 1 ? 's' : ''}. Move them to another pipeline, or close them, before deleting.` });
             setOpenPipelineKebab(null);
             return;
         }
@@ -237,14 +238,14 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     };
 
     const handleConfirmDeletePipeline = async () => {
-        const updated = pipelines.filter(p => p.id !== confirmDeletePipeline);
+        const updated = stored.filter(p => !p || p.id !== confirmDeletePipeline);
         const wasSelected = selectedId === confirmDeletePipeline;
         setConfirmDeletePipeline(null);
         if (wasSelected) setSelectedId(updated[0]?.id || null);
         // Restore the selection too if the delete did not land, or the panel shows
         // a different pipeline than the one still in the database. A deletion that may have landed (null — state
         // §0.264) keeps the pipeline off the list, and so the selection as moved.
-        if (await persist({ pipelines: updated }, 'Pipeline deletion') === false && wasSelected) {
+        if (await saveList(updated, 'Pipeline deletion') === false && wasSelected) {
             setSelectedId(confirmDeletePipeline);
         }
     };
@@ -254,9 +255,8 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const exportData = {
             exportedAt: new Date().toISOString(),
             pipelines: pipelines.map(p => ({
-                id: p.id, name: p.name, isDefault: p.isDefault,
-                stages: p.stages, teams: p.teams,
-                activeDeals: p.active, pipelineValue: p.value,
+                id: p.id, name: p.name, isDefault: p.id === defaultOne.id, stages: p.stages,
+                openDeals: held(p.id).open, openRevenue: held(p.id).value, wonDeals: held(p.id).won, lostDeals: held(p.id).lost,
             })),
             assignmentRules,
         };
@@ -271,35 +271,35 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
 
     // ── Stage drag-to-reorder ─────────────────────────────────
     const handleStageDrop = async (fromIdx, toIdx) => {
-        if (fromIdx === toIdx) return;
+        if (fromIdx === null || fromIdx === toIdx) return;   // a drag that began on the other list, or outside the page, moves nothing
         const stages = [...(selected?.stages || [])];
         const [moved] = stages.splice(fromIdx, 1);
         stages.splice(toIdx, 0, moved);
-        const updatedPipelines = pipelines.map(p =>
-            p.id === selectedId ? { ...p, stages } : p
+        const updatedPipelines = stored.map(p =>
+            p && p.id === selected.id ? { ...p, stages } : p
         );
-        await persist({ pipelines: updatedPipelines }, 'Stage order');
+        await saveList(updatedPipelines, 'Stage order');
     };
 
     // ── Stage rename ──────────────────────────────────────────
     const handleRenameStage = async () => {
         if (!renameVal.trim() || renameVal.trim() === renamingStage) { setRenamingStage(null); return; }
         const stages = (selected?.stages || []).map(s => s === renamingStage ? renameVal.trim() : s);
-        const updatedPipelines = pipelines.map(p =>
-            p.id === selectedId ? { ...p, stages } : p
+        const updatedPipelines = stored.map(p =>
+            p && p.id === selected.id ? { ...p, stages } : p
         );
         setRenamingStage(null); setRenameVal(''); setOpenKebab(null);
-        await persist({ pipelines: updatedPipelines }, 'Stage rename');
+        await saveList(updatedPipelines, 'Stage rename');
     };
 
     // ── Stage delete ──────────────────────────────────────────
     const handleDeleteStage = async (stageName) => {
         const stages = (selected?.stages || []).filter(s => s !== stageName);
-        const updatedPipelines = pipelines.map(p =>
-            p.id === selectedId ? { ...p, stages } : p
+        const updatedPipelines = stored.map(p =>
+            p && p.id === selected.id ? { ...p, stages } : p
         );
         setConfirmDelete(null); setOpenKebab(null);
-        await persist({ pipelines: updatedPipelines }, 'Stage deletion');
+        await saveList(updatedPipelines, 'Stage deletion');
     };
 
     const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
@@ -353,7 +353,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                     {newErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:8, fontFamily:T.sans }}>{newErr}</div>}
                     <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:newErr ? 4 : 8, fontFamily:T.sans }}>
-                        New pipelines start with 4 default stages. You can add, remove, and reorder stages after creation.
+                        A new pipeline starts with the organization's funnel stages.
                     </div>
                 </div>
             )}
@@ -382,7 +382,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                         <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:T.r+4, padding:28, maxWidth:400, width:'90%', boxShadow:'0 8px 32px rgba(42,38,34,0.2)', fontFamily:T.sans }}>
                             <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Delete "{p?.name}"?</div>
                             <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:20 }}>
-                                This pipeline has no open deals and can be safely deleted. This action cannot be undone.
+                                This pipeline has no open deals.{closedOf(p?.id) > 0 ? ` Its ${closedOf(p.id)} closed deal${closedOf(p.id) === 1 ? '' : 's'} will count in "${defaultOne.name}".` : ''} This action cannot be undone.
                             </div>
                             <div style={{ display:'flex', gap:10 }}>
                                 <button onClick={handleConfirmDeletePipeline}
@@ -402,7 +402,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             <div style={{ display:'grid', gridTemplateColumns:'420px 1fr', gap:20 }}>
                 {/* Left: pipeline list */}
                 <div>
-                    <CSectionCard title="Pipelines" description="Drag to reorder. The default pipeline is used for new opportunities when no pipeline is selected.">
+                    <CSectionCard title="Pipelines" description="Drag to reorder. An import's new deals, and a deal that names no pipeline here, go to the default one.">
                         {pipelines.map((p,i) => (
                             <div key={p.id}
                                 draggable
@@ -411,13 +411,13 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                 onDragEnd={() => { setDragPipelineIdx(null); setDragOverPipelineIdx(null); }}
                                 onDrop={e => { e.preventDefault(); handlePipelineDrop(dragPipelineIdx, i); setDragPipelineIdx(null); setDragOverPipelineIdx(null); }}
                                 onClick={() => setSelectedId(p.id)}
-                                style={{ padding:'14px 16px', border:`1.5px solid ${selectedId===p.id ? T.goldInk : dragOverPipelineIdx===i ? T.goldInk : T.border}`, background: selectedId===p.id ? 'rgba(200,185,154,0.1)' : dragOverPipelineIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, borderRadius:T.r+2, marginBottom:10, cursor:'grab', transition:'all 120ms', opacity: dragPipelineIdx===i ? 0.5 : 1 }}>
+                                style={{ padding:'14px 16px', border:`1.5px solid ${selected.id===p.id ? T.goldInk : dragOverPipelineIdx===i ? T.goldInk : T.border}`, background: selected.id===p.id ? 'rgba(200,185,154,0.1)' : dragOverPipelineIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, borderRadius:T.r+2, marginBottom:10, cursor:'grab', transition:'all 120ms', opacity: dragPipelineIdx===i ? 0.5 : 1 }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                                     <SPDrag/>
                                     <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{p.name}</div>
-                                    {p.isDefault && <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.3)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>DEFAULT</span>}
+                                    {p.id === defaultOne.id && <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.3)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>DEFAULT</span>}
                                     <div style={{ flex:1 }}/>
-                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{p.active} open · {p.value}</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{held(p.id).open} open · {money(held(p.id).value)}</span>
                                     {/* Pipeline kebab */}
                                     <div style={{ position:'relative' }} data-menu-root={'pl-' + p.id} onClick={e => e.stopPropagation()}>
                                         <button onClick={() => setOpenPipelineKebab(openPipelineKebab===p.id ? null : p.id)}
@@ -430,11 +430,10 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                                                     View stages
                                                 </button>
-                                                {!p.isDefault && (
+                                                {p.id !== defaultOne.id && (
                                                     <button onClick={async () => {
-                                                        const updated = pipelines.map(pp => ({ ...pp, isDefault: pp.id === p.id }));
                                                         setOpenPipelineKebab(null);
-                                                        await persist({ pipelines: updated }, 'Default pipeline');
+                                                        await saveList(stored, 'Default pipeline', p.id);
                                                     }}
                                                         style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
                                                         onMouseEnter={e => e.currentTarget.style.background = T.surface2}
@@ -459,10 +458,11 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                         </div>
                                     ))}
                                 </div>
-                                <div style={{ marginTop:8, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
-                                    Used by {(p.teams||[]).map((t,ti) => <span key={ti}><b style={{ color:T.inkMid }}>{t}</b>{ti < p.teams.length-1 ? ' · ' : ''}</span>)}
-                                    {(p.teams||[]).length === 0 && <span style={{ color:T.inkMuted, fontStyle:'italic' }}>No teams assigned yet</span>}
-                                </div>
+                                {held(p.id).strays > 0 && (
+                                    <div style={{ marginTop:8, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                        Including {held(p.id).strays} open deal{held(p.id).strays === 1 ? '' : 's'} that name{held(p.id).strays === 1 ? 's' : ''} a pipeline this organization does not have.
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </CSectionCard>
@@ -472,7 +472,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                 <div>
                     <CSectionCard
                         title={`${selected?.name} — stages`}
-                        description="The stage flow for this pipeline. Probability feeds forecast & Sales Manager dashboards."
+                        description="Kept with the pipeline for reference. Deals move through the organization's own stages, in Funnel stages."
                         headAction={
                             <button onClick={() => { setShowAddStage(v => !v); setStageErr(''); setNewStageName(''); }}
                                 style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background: showAddStage ? T.surface2 : 'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
@@ -513,9 +513,9 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                         {/* Stage table with drag + kebab */}
                         <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
                             {/* Header */}
-                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
-                                {['','Stage','Default prob.','Type','Avg days','Open',''].map((h,i) => (
-                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>=2&&i<=5 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+                                {['','Stage','Default prob.','Type','Open deals',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>=2&&i<=4 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
                                 ))}
                             </div>
                             {(selected?.stages||[]).map((s,i) => (
@@ -525,7 +525,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     onDragOver={e => { e.preventDefault(); setDragOverStageIdx(i); }}
                                     onDragEnd={() => { setDragStageIdx(null); setDragOverStageIdx(null); }}
                                     onDrop={e => { e.preventDefault(); handleStageDrop(dragStageIdx, i); setDragStageIdx(null); setDragOverStageIdx(null); }}
-                                    style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'11px 14px', gap:10, borderBottom: i<(selected?.stages||[]).length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: dragOverStageIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, opacity: dragStageIdx===i ? 0.4 : 1, cursor:'grab', position:'relative', transition:'background 80ms', fontSize:13, fontFamily:T.sans }}>
+                                    style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 28px', padding:'11px 14px', gap:10, borderBottom: i<(selected?.stages||[]).length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: dragOverStageIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, opacity: dragStageIdx===i ? 0.4 : 1, cursor:'grab', position:'relative', transition:'background 80ms', fontSize:13, fontFamily:T.sans }}>
                                     <div style={{ cursor:'grab', color:T.inkMuted, fontSize:14, letterSpacing:-2 }}>⋮⋮</div>
                                     <div>
                                         {renamingStage === s ? (
@@ -540,10 +540,9 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                             </span>
                                         )}
                                     </div>
-                                    <div style={{ textAlign:'right' }}><span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{STAGE_PROBS[s] !== undefined ? `${STAGE_PROBS[s]}%` : '—'}</span></div>
+                                    <div style={{ textAlign:'right' }}><span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{weightOf(s) !== undefined ? `${weightOf(s)}%` : '—'}</span></div>
                                     <div style={{ textAlign:'right' }}><span style={{ fontSize:12, color: STAGE_TYPES[s]==='Won' ? T.ok : STAGE_TYPES[s]==='Lost' ? T.danger : T.inkMid, fontFamily:T.sans }}>{STAGE_TYPES[s]||'Open'}</span></div>
-                                    <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${5+i*2}d`}</span></div>
-                                    <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${Math.max(5, 42-i*5)}`}</span></div>
+                                    <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : (held(selected.id).byStage[s] || 0)}</span></div>
                                     {/* Kebab */}
                                     <div style={{ position:'relative' }} data-menu-root={'st-' + s}>
                                         <button onClick={e => { e.stopPropagation(); setOpenKebab(openKebab===s ? null : s); setConfirmDelete(null); setRenamingStage(null); }}
@@ -585,7 +584,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                         </div>
                     </CSectionCard>
 
-                    <CSectionCard title="Assignment rules" description="Which teams and pipelines are paired. Reps see their assigned pipelines by default.">
+                    {assignmentRules.length > 0 && <CSectionCard title="Assignment rules" description="Which teams and pipelines are paired. Nothing reads it yet.">
                         <SPTable
                             columns={[
                                 { key:'team',    label:'Team',    w:'2fr' },
@@ -612,7 +611,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                 </button>,
                             }))}
                         />
-                    </CSectionCard>
+                    </CSectionCard>}
                 </div>
             </div>
         </CategoryDetailChrome>

@@ -250,8 +250,8 @@ const readApart = () => {
 
 test("a member and a SPIFF are read apart, in this org (_links.mjs's own reader, run): any member of it, deactivated or invited; any entry of its SPIFF list, an inactive one — another org's never, one naming nothing never; every read scoped to the org", async () => {
     const { LISTS, idsReadApart, reads } = readApart();
-    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' },
-        "a SPIFF is an entry of the settings list `spiffs`, a team of `teams` (§0.205), a plan's visit template of `dispatchJobTemplates` and its covered job types of `dispatchJobTypes` (§0.223)");
+    assert.deepEqual({ ...LISTS }, { spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes', pipeline: 'pipelines' },
+        "a SPIFF is an entry of the settings list `spiffs`, a team of `teams` (§0.205), a plan's visit template of `dispatchJobTemplates` and its covered job types of `dispatchJobTypes` (§0.223), a deal's pipeline of `pipelines` — read by its own rule (§0.297)");
     assert.ok(Object.isFrozen(LISTS));
     const ids = async (kind, list, org) => (await idsReadApart(kind, list, org)).map((r) => r.id).sort();
     assert.deepEqual(await ids('spiff', ['sp_on', 'sp_off', 'sp_b', 'sp_text', 'nope'], 'org_A'), ['sp_off', 'sp_on'],
@@ -309,10 +309,11 @@ test("_links.mjs: a product is a TABLES kind, read in the org as every row is; a
         'a member, a SPIFF and a team are no TABLES kind (the member-names guard; the restore reads TABLES kinds as columns)');
     once(l, '    product: products,');
     once(l, '    report: savedReports,');
-    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' });");
+    once(l, "const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes', pipeline: 'pipelines' });");
     const reader = between(l, 'async function idsReadApart(kind, list, orgId) {', '\n}\n');
     order(reader,
         "    if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));",
+        "    if (kind === 'pipeline') { const own = new Set((await pipelinesInOrg(orgId)).map((p) => p.id)); return list.filter((id) => own.has(id)).map((id) => ({ id })); }",
         '    const rows = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));',
         '    const held = new Set(rows.flatMap((r) => listEntryIds(r.extra?.[LISTS[kind]])));',
         '    return list.filter((id) => held.has(id)).map((id) => ({ id }));');

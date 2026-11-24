@@ -81,7 +81,7 @@ export function waitsFor(loads, o) {
 // The Settings panels that count a list, let a Delete by its count, or write to whom it lists: a team or a territory saved
 // or deleted over a team that was not read reached no member of it, and Export wrote a file of none.
 export const PANEL_LISTS = {
-    'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
+    pipelines: ['opportunities'], 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
     users: ['users'], teams: ['users'], territories: ['users'], roles: ['users'], 'approval-tiers': ['users'], automations: ['users'],
 };
 

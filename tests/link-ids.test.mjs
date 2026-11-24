@@ -64,8 +64,8 @@ test('the words name the kind, in the deals endpoint\'s; only accounts and conta
     assert.equal(notInOrg('customer'), 'That customer is not in your organization — pick one from the list.');
     assert.equal(notInOrg('location'), 'That service location is not in your organization — pick one from the list.');
     assert.equal(NOT_AN_ID, 'A link must name a record by its id.');
-    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'jobTemplate', 'jobType', 'product', 'member', 'spiff', 'team', 'report'],
-        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs) and a service plan's two (§0.223 — tests/plan-links.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs), then a member's two (§0.205 — tests/member-links.test.mjs)");
+    assert.deepEqual(Object.keys(NOUNS), ['account', 'contact', 'deal', 'lead', 'customer', 'location', 'technician', 'vehicle', 'equipment', 'plan', 'job', 'jobTemplate', 'jobType', 'pipeline', 'product', 'member', 'spiff', 'team', 'report'],
+        "batch 4's six, then Dispatch's five (§0.201 — tests/dispatch-links.test.mjs) and a service plan's two (§0.223 — tests/plan-links.test.mjs), a deal's pipeline (§0.297 — tests/pipelines.test.mjs), then a sales record's three (§0.204 — tests/sales-links.test.mjs), then a member's two (§0.205 — tests/member-links.test.mjs)");
     assert.equal(notInOrg('jobTemplate'), 'That job template is not in your organization — pick one from the list.');
     assert.equal(notInOrg('jobType'), 'That job type is not in your organization — pick one from the list.');
     assert.deepEqual([...MERGES], ['account', 'contact']);
@@ -222,7 +222,7 @@ const SPECS = {
         "    { key: 'contactIds', kind: 'contact', shape: 'many', heldFrom: ['contactIds', 'contactId'] },", "    { key: 'contactId', kind: 'contact', heldFrom: ['contactId', 'contactIds'] },"],
     tasks: ['const TASK_LINKS = [', "    { key: 'accountId', kind: 'account' },", "    { key: 'opportunityId', kind: 'deal' },",
         "    { key: 'contacts', kind: 'contact', shape: 'chips', heldFrom: ['contacts', 'contactId'] },", "    { key: 'contactId', kind: 'contact', heldFrom: ['contactId', 'contacts'] },"],
-    opportunities: ["const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }];"],
+    opportunities: ["const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }, { key: 'pipelineId', kind: 'pipeline' }];"],   // its pipeline since §0.297
     accounts: ["const PARENT_LINK = [{ key: 'parentAccountId', kind: 'account', follow: false }];"],
     'dispatch-customers': ['const CUSTOMER_LINKS = [', "    { key: 'accountId', kind: 'account' },"],
     'dispatch-jobs': ['const JOB_LINKS = [', "    { key: 'customerId', kind: 'customer' },", "    { key: 'locationId', kind: 'location' },", "    { key: 'accountId', kind: 'account' },", "    { key: 'opportunityId', kind: 'deal' },"],
@@ -249,7 +249,8 @@ test('THE GUARD: each endpoint names its links — the fields batch 4 lists and 
     assert.ok(l.includes('const merges = MERGES.includes(kind);'));
     assert.ok(l.includes('for (const ask of asks) read.set(ask, await liveIdsInOrg(ask.kind, ask.fresh, orgId, { follow: ask.follow }));'), 'each field read as its spec says — a parent not followed');
     assert.equal(count(l, '    if (asked.error) return asked;\n'), 3, 'a value that names no record is refused before any read — one write, a batch, and since §0.221 a settings save');
-    assert.equal(count(l, 'db.select('), 12, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204); the restore\'s quote lines and members\' profiles, each read in clearLineProducts and clearMemberLinks (§0.205); the restored settings row, read in clearSettingsLinks (§0.221); the org\'s team names (teamNamesInOrg) and the lists a removal cleans (removeWithLists), each read in this org (§0.222) — nothing reads around them');
+    assert.ok(l.includes("const listed = await db.select({ pipelines: sql`${settings.extra}->'pipelines'` }).from(settings)\n        .where(eq(settings.orgId, orgId));"), 'the org\'s pipelines: the list alone, in this org (§0.297)');
+    assert.equal(count(l, 'db.select('), 13, 'the read; the clean-up\'s count of a mirror, of a list\'s strays and of a required link, and a login\'s member (§0.201); a member and the org\'s SPIFF list, each read apart in idsReadApart (§0.204); the restore\'s quote lines and members\' profiles, each read in clearLineProducts and clearMemberLinks (§0.205); the restored settings row, read in clearSettingsLinks (§0.221); the org\'s team names (teamNamesInOrg) and the lists a removal cleans (removeWithLists), each read in this org (§0.222); the org\'s pipelines (pipelinesInOrg, §0.297) — nothing reads around them');
     assert.ok(l.includes("const listed = await db.select({ teams: sql`${settings.extra}->'teams'` }).from(settings)\n        .where(eq(settings.orgId, orgId));"), 'the team names: the teams list alone, in this org (§0.222)');
     assert.ok(l.includes("const [row] = await db.select({ id: settings.id, extra: settings.extra, asRead: sql`${settings.extra}::text` }).from(settings)\n            .where(eq(settings.orgId, orgId));"), 'the lists a removal cleans, in this org (§0.222)');
     const ac = read('netlify/functions/accounts.mjs');

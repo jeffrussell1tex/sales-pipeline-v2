@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { settings, users } from '../../db/schema.js';
+import { settings, users, opportunities } from '../../db/schema.js';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
@@ -26,6 +26,8 @@ import { checkSettingsLinks } from './_links.mjs';
 import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js';
 // The AI models an Admin may choose and who may ask Claude (state §0.238): a value named anew is on the list.
 import { aiSettingsRefused } from '../../src/utils/aiModels.js';
+import { pipelinesRefused, removedPipelines, inUseWords } from '../../src/utils/pipelines.js';
+import { isOpenDeal } from '../../src/utils/contactDeals.js';
 // The org's default tax rate a save names (state §0.242): a percent, checked by the quote money's one rule.
 import { percentRefused } from '../../src/utils/quoteTotals.js';
 import { sql } from 'drizzle-orm';
@@ -364,6 +366,20 @@ const handle = async (event, retry) => {
             const aiRefused = 'aiSettings' in data ? aiSettingsRefused(data.aiSettings, existingExtra.aiSettings) : null;
             if (aiRefused) return { statusCode: aiRefused.status, headers, body: JSON.stringify({ error: aiRefused.error, field: aiRefused.field }) };
             if (quoteDefaultRateRefused(data, existingExtra)) return { statusCode: 400, headers, body: JSON.stringify({ error: QUOTE_DEFAULT_RATE_REFUSED, field: 'quoteDefaults' }) };
+            // The pipelines (state §0.297): never none where the org holds one, each named anew with a name of its own; and none dropped while an open deal of this
+            // org names it — judged by the list as it stands, the one pipeline of an org that stored none too. Closed deals hold
+            // nothing: they count in the default one (src/utils/pipelines.js).
+            const badPipes = 'pipelines' in data ? pipelinesRefused(data.pipelines, existingExtra.pipelines) : null;
+            if (badPipes) return { statusCode: badPipes.status, headers, body: JSON.stringify({ error: badPipes.error, field: badPipes.field }) };
+            const gonePipes = 'pipelines' in data ? removedPipelines(data.pipelines, base.pipelines) : [];
+            if (gonePipes.length) {
+                const named = await db.select({ pipelineId: opportunities.pipelineId, stage: opportunities.stage }).from(opportunities)
+                    .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.pipelineId, gonePipes.map(p => p.id))));
+                const open = {};
+                for (const d of named) if (isOpenDeal(d)) open[d.pipelineId] = (open[d.pipelineId] || 0) + 1;
+                const held = inUseWords(gonePipes, open);
+                if (held) return { statusCode: 409, headers, body: JSON.stringify({ error: held, code: 'inUse', field: 'pipelines' }) };
+            }
             const linked = await checkSettingsLinks(data, existingExtra, orgId);
             if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             // The teams this save renames (state §0.222 — Q7): every member holding one is renamed with it, below.

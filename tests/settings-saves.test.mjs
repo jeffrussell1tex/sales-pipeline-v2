@@ -48,6 +48,7 @@
 // static import of a name the sender lacked would kill the file before the scans ran.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { PIPELINE_COLORS } from '../src/utils/pipelines.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { teamsWithMembers, teamsWithMemberOn } from '../src/utils/teamMembership.js';
@@ -1917,7 +1918,7 @@ test('S10 — Pipelines\' persist, run as written (JB3-8, J-B10): the tokens it 
     assert.deepEqual([st.copy.pipelines, st.copy.assignmentRules, st.gate.current], [st.settings.pipelines, st.settings.assignmentRules, false], 'unread: put back, the gate opened');
 });
 
-// Pipelines' Add pipeline and Add stage as written, persist answering `ok`: what each sets after the send, in order.
+// Pipelines' Add pipeline and Add stage as written, saveList answering `ok`: what each sets after the send, in order.
 test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.228): refused — still saving, or by the server — the form keeps what was typed and the selection stays; landed, the form cleared and closed", async () => {
     const PIPES = [{ id: 'new-biz', name: 'New Business', isDefault: true, stages: ['Prospecting', 'Closed Won', 'Closed Lost'] }];
     const run = async (handler, ok, scope) => {
@@ -1926,6 +1927,8 @@ test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.2
         await runAs(handlerIn(read(PIPELINES), 'PipelinesDetail', handler), {
             pipelines: PIPES, selected: PIPES[0], selectedId: 'new-biz', STAGE_TYPES: { 'Closed Won': 'Won', 'Closed Lost': 'Lost' },
             persist: async (patch, label) => { st.sent.push([patch, label]); return ok; },
+            // Moved in §0.297: the list is sent by saveList, its default marked; a new pipeline's id is its own, never its name's.
+            stored: PIPES, defaultOne: PIPES[0], settings: { funnelStages: [{ name: 'Discovery' }, null] }, PIPELINE_COLORS, saveList: async (list, label, def = 'new-biz') => { st.sent.push([list, label, def]); return ok; },
             setSaving: rec('saving'), setSelectedId: rec('selected'), setNewName: rec('name'), setNewDefault: rec('default'), setNewErr: rec('err'),
             setShowNewForm: rec('form'), setNewStageName: rec('stageName'), setNewStageType: rec('stageType'), setStageErr: rec('stageErr'),
             setShowAddStage: rec('stageForm'),
@@ -1933,6 +1936,8 @@ test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.2
         });
         return st;
     };
+    const asDefault = await run('handleAddPipeline', true, { newName: 'Renewals', newDefault: true });
+    assert.deepEqual([asDefault.sent[0][2], asDefault.sent[0][0][PIPES.length].isDefault], [asDefault.sent[0][0][PIPES.length].id, true], 'Set as default, the one made (§0.297)');
     for (const [handler, scope, label, kept, cleared] of [
         ['handleAddPipeline', { newName: 'Renewals', newDefault: false }, 'Pipeline', [['saving', true], ['saving', false]],
             [['saving', true], ['saving', false], ['selected', 'renewals'], ['name', ''], ['default', false], ['err', ''], ['form', false]]],
@@ -1943,7 +1948,9 @@ test("S10 — Pipelines' Add pipeline and Add stage, run as written (state §0.2
         assert.deepEqual(refused.sent.map(([, l]) => l), [label], `${handler}: one send`);
         assert.deepEqual(refused.calls, kept, `${handler}: REGRESSION (state §0.228) — refused, the form cleared and closed: what was typed lost to a change said to be still saving`);
         const landed = await run(handler, true, scope);
-        assert.deepEqual(landed.calls, cleared, `${handler}: landed, the form cleared and closed`);
+        const made = landed.sent[0][0][PIPES.length];
+        if (handler === 'handleAddPipeline') { assert.match(made.id, /^pl_[0-9a-f-]{36}$/); assert.deepEqual([made.name, made.color, made.isDefault, made.stages, landed.sent[0][2]], ['Renewals', PIPELINE_COLORS[1], false, ['Discovery'], 'new-biz']); }
+        assert.deepEqual(landed.calls, cleared.map(([k, v]) => [k, v === 'renewals' ? made.id : v]), `${handler}: landed, the form cleared and closed`);
     }
 });
 
@@ -2198,8 +2205,8 @@ test('S10 (§0.264) — an answer that proves nothing keeps the change: Pipeline
     const del = async (answer) => {
         const calls = [];
         await runAs(handlerIn(read(PIPELINES), 'PipelinesDetail', 'handleConfirmDeletePipeline'), {
-            pipelines: [{ id: 'p1' }, { id: 'p2' }], confirmDeletePipeline: 'p1', selectedId: 'p1',
-            setConfirmDeletePipeline: () => {}, setSelectedId: (v) => calls.push(v), persist: async () => answer,
+            stored: [{ id: 'p1' }, { id: 'p2' }], confirmDeletePipeline: 'p1', selectedId: 'p1',
+            setConfirmDeletePipeline: () => {}, setSelectedId: (v) => calls.push(v), saveList: async () => answer,
         });
         return calls;
     };

@@ -13,7 +13,8 @@
 //             holds (productIdsOf, assigneesOf, below); since §0.205 a member's team (an entry of the org's
 //             teams list) and pinned reports (saved reports of the org); since §0.212 a member's manager (a member);
 //             since §0.223 a service plan's visit template and covered job types (entries of the org's job
-//             templates and job types lists)
+//             templates and job types lists); since §0.297 a deal's pipeline (an entry of the org's pipelines
+//             list — pipelinesOf, src/utils/pipelines.js)
 //   shape     one (a scalar id), many (an array of ids), chips (an array of { id, … })
 //   heldFrom  the stored fields whose ids count as held (an activity's contactIds and its contactId are
 //             one link; a task's chips and its Primary contactId too)
@@ -33,6 +34,8 @@ export const NOUNS = Object.freeze({
     // A service plan's (state §0.223): its visit template and covered job types — entries of the org's job templates and
     // job types lists, not rows; neither ever merged away
     jobTemplate: 'job template', jobType: 'job type',
+    // A deal's (state §0.297): its pipeline — an entry of the org's pipelines list, or of the one every org that stored none has
+    pipeline: 'pipeline',
     // A sales record's (state §0.204): a quote line's product, a rule's assignee, a claim's SPIFF — none ever merged away
     product: 'product', member: 'member', spiff: 'SPIFF',
     // A member's (state §0.205): their team — an entry of the org's teams list — and their pinned reports, saved reports
@@ -283,9 +286,9 @@ export const SETTINGS_LINKS = Object.freeze({
     quoteTemplates: Object.freeze([{ field: 'productIds', kind: 'product', shape: 'many' }]),
 });
 // The settings lists whose entries are records with their own id — those above, and those a row names by an entry's
-// id (a claim's SPIFF, a member's team, a plan's visit template and covered job types): each a list of objects, each
+// id (a claim's SPIFF, a member's team, a plan's visit template and covered job types, since §0.297 a deal's pipeline): each a list of objects, each
 // with its own text id, no id twice.
-export const SETTINGS_LISTS = Object.freeze(['teams', 'territories', 'spiffs', 'dispatchCrews', 'quoteTemplates', 'dispatchJobTemplates', 'dispatchJobTypes']);
+export const SETTINGS_LISTS = Object.freeze(['teams', 'territories', 'spiffs', 'dispatchCrews', 'quoteTemplates', 'dispatchJobTemplates', 'dispatchJobTypes', 'pipelines']);
 export const NOT_A_LIST = 'This setting must be a list.';
 export const ENTRY_NEEDS_ID = 'Each entry of this list needs its own id.';
 

@@ -5,6 +5,7 @@ import { readRefusal, refusalWords, failureWords } from '../../utils/refusalWord
 import { heardRefusal, landedBefore, maybeSaid } from '../../utils/refusalWords.js';   // the unknown-save rule (§0.261)
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
+import { defaultPipelineOf } from '../../utils/pipelines.js';
 import { nextStanding, standingCount, dueStands, reminderStands } from '../../utils/taskAlerts.js';
 import { buildOpportunityRow, newContactRow, heldAsStamped } from '../../utils/importRows';
 import { importLevels, sendLevels } from '../../utils/importParents.js';
@@ -499,6 +500,7 @@ export default function ModalLayer() {
                     users={settings.users || []}
                     teams={settings.teams || []}
                     territories={settings.territories || []}
+                    dealPipeline={allPipelines.length > 1 ? defaultPipelineOf(allPipelines).name : ''}
                     onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {
                         // Three phases: auto-create missing companies, POST new
@@ -667,7 +669,6 @@ export default function ModalLayer() {
                         // Stored on every imported deal (createdDate, stageChangedDate),
                         // so it must be the day the user is looking at (dateLocal.js).
                         const today = todayLocal();
-                        const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const totalProgress = newOpps.length + overwrites.length;
                         const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
                         const still = () => stillOrg(askedOrg);
@@ -692,7 +693,6 @@ export default function ModalLayer() {
                                 existingId,
                                 currentUser,
                                 currentUserId,
-                                pipelineId: activePipelineId,
                                 today,
                                 newId: () => crypto.randomUUID(),
                             });

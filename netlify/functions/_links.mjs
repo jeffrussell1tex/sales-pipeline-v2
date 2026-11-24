@@ -32,6 +32,7 @@ import { productIdsOf, lineProductsCleared, memberLinksCleared } from '../../src
 import { settingsLinksAsked, settingsLinksCleared, settingsLinkIdsByKind } from '../../src/utils/linkIds.js';
 import { membersOffLists } from '../../src/utils/linkIds.js';
 import { teamNamesOf } from '../../src/utils/teamMembership.js';
+import { pipelinesOf, defaultPipelineOf } from '../../src/utils/pipelines.js';
 // The settings row's writes carry revision tokens (state §0.224 — batch 4b-3, step B).
 import { revsMinted } from '../../src/utils/settingsRevs.js';
 import { mintRev, extraPatched } from './_settingsRevs.mjs';
@@ -62,13 +63,27 @@ const SWEPT = Object.freeze({ ...TABLES, quote: quotes });
 // row at random. Since §0.223 a service plan's visit template and covered job types: entries of the org's job templates
 // and job types lists — the lists THIS org stored (no default of either is effective unsaved: the settings GET answers
 // the stored list or none), so a built-in id every org's screen seeds (`jt_*`) counts only where this org saved it.
-const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes' });
+const LISTS = Object.freeze({ spiff: 'spiffs', team: 'teams', jobTemplate: 'dispatchJobTemplates', jobType: 'dispatchJobTypes', pipeline: 'pipelines' });
+// A deal's pipeline (state §0.297) is the one kind of them whose list counts unsaved: an org that stored none has the one
+// pipeline every screen draws (src/utils/pipelines.js pipelinesOf). The pipelines TABLE is not it: only a
+// backup reads or writes that one.
 async function idsReadApart(kind, list, orgId) {
     if (kind === 'member') return db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, list)));
+    if (kind === 'pipeline') { const own = new Set((await pipelinesInOrg(orgId)).map((p) => p.id)); return list.filter((id) => own.has(id)).map((id) => ({ id })); }
     const rows = await db.select({ extra: settings.extra }).from(settings).where(eq(settings.orgId, orgId));
     const held = new Set(rows.flatMap((r) => listEntryIds(r.extra?.[LISTS[kind]])));
     return list.filter((id) => held.has(id)).map((id) => ({ id }));
 }
+
+// The org's pipelines, as every screen draws them (state §0.297): the pipelines list alone, never the rest of the row (its
+// key is in it). A read that fails throws — never the one pipeline of an org that stored none (guide §18b138).
+export async function pipelinesInOrg(orgId) {
+    const listed = await db.select({ pipelines: sql`${settings.extra}->'pipelines'` }).from(settings)
+        .where(eq(settings.orgId, orgId));
+    return pipelinesOf(listed.flatMap((r) => (Array.isArray(r.pipelines) ? r.pipelines : [])));
+}
+// The one a deal that names none is made in.
+export const defaultPipelineIn = async (orgId) => defaultPipelineOf(await pipelinesInOrg(orgId)).id;
 
 // The live row each asked id names in this org (linkIds.js's liveIds): every row it reads — the merge walk's
 // each hop too — is read in this org.

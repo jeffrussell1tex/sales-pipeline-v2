@@ -4933,6 +4933,21 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b140. A Deal's Pipeline Is One Of Its Org's (hard rule)
+
+**Origin (§0.297, 24 Nov 2026; Jeff, 1 Oct: "Leave the data; fix the product").** A new deal ignored the pipeline picked in its window; the server stored any id, and 'default' for none; a deal naming a pipeline its org lacks was on no screen (31 in one org); "the default" was a different pipeline to each reader; and the page that deletes a pipeline asked a number typed in.
+
+1. **The org's pipelines are read through one rule** (src/utils/pipelines.js, pure, the screens' and the server's): `pipelinesOf`, `defaultPipelineOf`, `pipelineReader`. Never `settings.pipelines`, the first of the list, the id 'default' or the mark (THE GUARD walks src/; it names who reads the stored list — App, Settings → Pipelines, and the Settings cards, which count it raw — and leaves the deal window's last resort, 'default', over props that are never empty). The `pipelines` TABLE is not it.
+2. **A deal counts in its own pipeline while the org has it, else in the default one** — never in none. What is stored is never rewritten by a reader; an edit's form holds the stored id and sends one only when a pipeline is picked in it; a new deal's opens on the pipeline on screen and always sends the one it holds.
+3. **A write names a pipeline of the org or none** (_links.mjs kind 'pipeline', the effective list: an org that stored none has one): anew, 404 / a batch 400; held, never asked; none on a create, the org's default; blank on a save, not named.
+4. **A settings save drops no pipeline an open deal of the org names** (409 `inUse`), nor the last one; The page makes an id of the record's own, never from its name, and marks one default on each save (the server asks only that each entry has its own id and name; none marked, the first is the default).
+5. **What a page counts it counts from records read** (PANEL_LISTS), and what it deletes by.
+6. **A deal that leaves the screen is said** — over no toast that stands.
+
+THE GUARD: tests/pipelines.test.mjs, tests/integration/deal-pipeline.itest.mjs.
+
+---
+
 ## 18b139. A List That Was Not Read Is Not A List Of None (hard rule)
 
 **Origin (§0.294, 24 Nov 2026 — OPEN_ITEMS §4.2's two Mediums; Jeff: "Keep working").** A record list whose load failed stayed `[]`: the screens drew "No accounts yet", an import met no duplicate and made them, the account picker offered Create for a name that exists, and the banner about it was taken down by the next list that landed.

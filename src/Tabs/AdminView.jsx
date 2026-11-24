@@ -408,7 +408,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 1 detail pages
-        if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'pipelines')            return <PanelGate id="pipelines" onBack={onBack}><PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/></PanelGate>;
         if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
@@ -535,7 +535,6 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
 
     // Workspace health — from real data + static checks
     const users = settings?.users || [];
-    const pipelines = settings?.pipelines || [];
     const funnelStages = settings?.funnelStages || [];
     const calConnected = settings?.googleCalendarConnected || false;
     // Attention is computed per card from the same live data as its chip (the

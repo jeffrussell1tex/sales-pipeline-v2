@@ -49,7 +49,7 @@ test('S1 — the table: each list, its fields, the kind each names and its shape
         dispatchCrews: [{ field: 'members', kind: 'technician', shape: 'many' }, { field: 'lead', kind: 'technician' }, { field: 'defaultVehicle', kind: 'vehicle' }],
         quoteTemplates: [{ field: 'productIds', kind: 'product', shape: 'many' }],
     });
-    assert.deepEqual([...SETTINGS_LISTS], ['teams', 'territories', 'spiffs', 'dispatchCrews', 'quoteTemplates', 'dispatchJobTemplates', 'dispatchJobTypes']);
+    assert.deepEqual([...SETTINGS_LISTS], ['teams', 'territories', 'spiffs', 'dispatchCrews', 'quoteTemplates', 'dispatchJobTemplates', 'dispatchJobTypes', 'pipelines']);
     for (const key of Object.keys(SETTINGS_LINKS)) assert.ok(SETTINGS_LISTS.includes(key), `${key}: a list of records too`);
     assert.ok(Object.isFrozen(SETTINGS_LINKS) && Object.values(SETTINGS_LINKS).every(Object.isFrozen));
     assert.equal(NOT_A_LIST, 'This setting must be a list.');
@@ -284,8 +284,9 @@ const CLASSIFIED = {
     // lists rows name by an entry's id, with built-in ids every org shares — their own batch, 4b-4 (Q16)
     dispatchSkills: '4b-4', dispatchCerts: '4b-4', dispatchTrades: '4b-4', dispatchBlockTypes: '4b-4',
     dispatchPropertyTypes: '4b-4', buyerPersonas: '4b-4', productTypes: '4b-4',
-    // a deal's pipelineId names one — left by design ('default' a sentinel; OPEN_ITEMS §4.6)
-    pipelines: 'by design',
+    // a deal's pipelineId names one (state §0.297; by design until then): a list of entries with ids of their own, and more —
+    // src/utils/pipelines.js, tests/integration/deal-pipeline.itest.mjs
+    pipelines: 'list',
     // retired Dispatch blobs, still kept and returned (their rows have tables of their own)
     dispatchVehicles: 'retired', dispatchEquipment: 'retired', dispatchJobs: 'retired',
     // no ids: values, flags, words, and lists holding only their own entries' ids
@@ -304,7 +305,7 @@ const CLASSIFIED = {
     painPoints: 'value', competitors: 'value', reasonsWon: 'value', reasonsLost: 'value',
 };
 
-test('S12 — THE CLASS: every key the settings PUT stores is classified — checked here, its own check, the server\'s, 4b-4\'s, by design, retired or a value with no ids', () => {
+test('S12 — THE CLASS: every key the settings PUT stores is classified — checked here, its own check, the server\'s, 4b-4\'s, retired or a value with no ids', () => {
     const s = code(read('netlify/functions/settings.mjs'));
     const block = s.slice(s.indexOf('const extra = {'), s.indexOf('anthropicApiKey:  encryptedApiKey,') + 'anthropicApiKey:'.length);
     const keys = [...block.matchAll(/^\s{16}([A-Za-z]+):/gm)].map((m) => m[1]);

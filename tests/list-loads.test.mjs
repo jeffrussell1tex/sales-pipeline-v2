@@ -282,10 +282,10 @@ test('L8 — the record windows: drawn only once the lists they read were read, 
 });
 
 test('L9 — the Settings panels that count a list, or write to the team, wait for it, each by its id', () => {
-    assert.deepEqual(PANEL_LISTS, { 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
+    assert.deepEqual(PANEL_LISTS, { pipelines: ['opportunities'], 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
         users: ['users'], teams: ['users'], territories: ['users'], roles: ['users'], 'approval-tiers': ['users'], automations: ['users'] });
     const av = code('src/Tabs/AdminView.jsx');
-    for (const [id, comp, lists] of [['lead-scoring', 'LeadScoringDetail', 'leads'], ['account-segments', 'AccountSegmentsDetail', 'accounts'], ['buyer-personas', 'BuyerPersonasDetail', 'contacts'], ['industries', 'IndustriesDetail', 'accounts'], ['users', 'UsersDetail', 'users'], ['teams', 'TeamsDetail', 'users'], ['territories', 'TerritoriesDetail', 'users'],
+    for (const [id, comp, lists] of [['pipelines', 'PipelinesDetail', 'opportunities'], ['lead-scoring', 'LeadScoringDetail', 'leads'], ['account-segments', 'AccountSegmentsDetail', 'accounts'], ['buyer-personas', 'BuyerPersonasDetail', 'contacts'], ['industries', 'IndustriesDetail', 'accounts'], ['users', 'UsersDetail', 'users'], ['teams', 'TeamsDetail', 'users'], ['territories', 'TerritoriesDetail', 'users'],
         ['roles', 'RolesDetail', 'users'], ['approval-tiers', 'ApprovalTiersDetail', 'users'], ['automations', 'AutomationsDetail', 'users']]) {
         assert.equal([...av.matchAll(new RegExp(`if \\(id === '${id}'\\)\\s+return <PanelGate id="${id}" onBack=\\{onBack\\}><${comp}\\s[^\\n]*/></PanelGate>;`, 'g'))].length, 1, `REGRESSION: ${comp} drawn over ${lists} that were not read`);
         assert.equal(count(av, `<${comp}`), 1);
@@ -478,7 +478,7 @@ const COVERED = {
         'rails/AccountPicker', 'rails/AccountRail', 'rails/ActivityRail', 'rails/ContactRail', 'rails/TaskRail'].map((x) => [`src/components/${x}.jsx`, RECORD_LISTS])),
     'src/components/modals/LeadModal.jsx': LEAD_LISTS,
     'src/components/documents/RecordDocuments.jsx': [...RECORD_LISTS, 'documents'],   // in a record's window; the library says its own (below)
-    ...Object.fromEntries(Object.entries({ 'lead-scoring': 'LeadScoringDetail', 'account-segments': 'AccountSegmentsDetail', 'buyer-personas': 'BuyerPersonasDetail', industries: 'IndustriesDetail' }).map(([id, c]) => [`src/Tabs/settings/salesProcess/${c}.jsx`, PANEL_LISTS[id]])),
+    ...Object.fromEntries(Object.entries({ pipelines: 'PipelinesDetail', 'lead-scoring': 'LeadScoringDetail', 'account-segments': 'AccountSegmentsDetail', 'buyer-personas': 'BuyerPersonasDetail', industries: 'IndustriesDetail' }).map(([id, c]) => [`src/Tabs/settings/salesProcess/${c}.jsx`, PANEL_LISTS[id]])),
 };
 const SAYS_ITS_OWN = {
     'src/components/documents/AttachmentsStrip.jsx': 'the library, said (below)', 'src/components/documents/DocumentPicker.jsx': 'the library, said (below)',

@@ -351,6 +351,10 @@ One commit per verified batch; doc patch in the same commit.
   shown for an instant is the member's day (`dayOf`, `parseLocalDate`;
   an export's file name `todayLocal`) — THE GUARD, tests/date-local.test.mjs's
   three scans.
+- A deal's pipeline is one of its org's (§0.297, guide §18b140): the list, its default and the one a deal counts in are
+  read through src/utils/pipelines.js, the server's too (Settings' cards alone count the stored list); a pipeline named anew that the org lacks is refused, a
+  create naming none takes the org's default, a settings save drops none with open deals (THE GUARD,
+  tests/pipelines.test.mjs).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

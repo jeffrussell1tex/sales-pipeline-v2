@@ -179,6 +179,6 @@ test('RULE: the import\'s create row names no maker (the server stamps the impor
 test('WIRING: the deal window\'s create sends no maker', () => {
     const h = code(read('src/hooks/useOpportunities.js'));
     // The lead a convert names is kept out of it (state §0.253).
-    assert.ok(h.includes('            const { fromLeadId, ...enrichedNew } = enrichedData;\n            const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };'), 'the create body');
+    assert.ok(h.includes('            const { fromLeadId, ...enrichedNew } = enrichedData;\n            const newOpp = { ...enrichedNew, id: newId, pipelineId: enrichedNew.pipelineId || activePipeline.id };'), 'the create body');
     assert.ok(!/\bcreatedBy\b/.test(h), 'REGRESSION (§0.250): the deal window sent its screen name as the maker');
 });

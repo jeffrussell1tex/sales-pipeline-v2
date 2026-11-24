@@ -5,6 +5,7 @@ import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 // "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
 import { isoLocal, todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
+import { defaultPipelineOf } from '../utils/pipelines.js';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
 import ListView from '../components/ListView';
@@ -99,7 +100,7 @@ function FilterPanel({
     };
 
     const handleReset = () => {
-        setDraftPipeline(allPipelines[0]?.id || null);
+        setDraftPipeline(defaultPipelineOf(allPipelines).id);
         setDraftTimeWindow('allTime');
         setDraftStage('__allOpen__');
         setDraftRep('__me__');
@@ -634,6 +635,7 @@ export default function PipelineTab() {
                         Pipeline.
                     </div>
                     <div style={{ fontSize: 12, color: T.inkMuted, lineHeight: 1.4 }}>
+                        {allPipelines.length > 1 && <><span style={{ fontWeight: 600, color: T.ink }}>{activePipeline.name}</span><span style={{ margin: '0 7px', color: T.border }}>·</span></>}
                         <span style={{ fontWeight: 600, color: T.ink }}>
                             {pipelineFilteredOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length}
                         </span> open deals

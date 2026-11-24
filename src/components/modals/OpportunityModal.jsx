@@ -20,6 +20,7 @@ import { resolveDealAccount, dealAccountSeed, heldAccountId, siteAsAccountTyped,
 import { unarchived, HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
 import { unreadWords } from '../../utils/listLoads.js';
 import { leaveOut, sameList } from '../../utils/leaveOut.js';
+import { pipelineIdOf } from '../../utils/pipelines.js';
 import { mayChangeNote } from '../../utils/dealNotes.js';
 import { closeDateMovesOf } from '../../utils/dealHistory.js';
 import { quarterOf, fiscalStartOf } from '../../utils/quarters.js';
@@ -1143,6 +1144,7 @@ export default function OpportunityModal({
     // it is as it opened — a date nobody touched is never written back over one moved elsewhere since, and an undated
     // deal (which opens on today) stays undated until someone picks a date.
     const closeSeed = useRef(formData.forecastedCloseDate ?? '').current;
+    const pipelinePicked = useRef(false);   // an edit sends it only when one is picked here (state §0.297) — the first again too: an answer that proved nothing may have moved it
     const [siteSearch, setSiteSearch]                   = useState(opportunity?.site || '');
     // The Site Name the Account field emptied while its text stopped reading as the account
     // held — put back when the text reads as that account again, dropped by a pick or a Site Name
@@ -1329,6 +1331,7 @@ export default function OpportunityModal({
             ...(accountKept && (formData.site ?? '') === linksSeed.site ? ['site'] : []),
             ...(sameList(selectedContactIds, linksSeed.contactIds) && (formData.contacts ?? '') === linksSeed.contacts ? ['contactIds', 'contacts'] : []),
             ...((formData.forecastedCloseDate ?? '') === closeSeed ? ['forecastedCloseDate', 'closeQuarter'] : []),
+            ...(pipelinePicked.current ? [] : ['pipelineId']),
         ];
         onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds }, left));
     };
@@ -1777,9 +1780,9 @@ export default function OpportunityModal({
                                                 <label style={fieldLabelStyle}>Pipeline</label>
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                                     {allPipelines.map(p => {
-                                                        const sel = formData.pipelineId === p.id;
+                                                        const sel = pipelineIdOf(formData, allPipelines) === p.id;   // one the org does not have counts in its default
                                                         return (
-                                                            <button key={p.id} type="button" onClick={() => handleChange('pipelineId', p.id)}
+                                                            <button key={p.id} type="button" onClick={() => { pipelinePicked.current = true; handleChange('pipelineId', p.id); }}
                                                                 style={{ padding: '5px 12px', border: `1.5px solid ${sel ? p.color : T.border}`, borderRadius: T.r, background: sel ? p.color + '18' : T.surface, color: sel ? p.color : T.inkMid, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
                                                                 {p.name}
                                                             </button>

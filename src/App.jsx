@@ -7,6 +7,7 @@ import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg
 import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
 import { readRefusal, failureWords, maybeSaid } from './utils/refusalWords.js';
 import { readMyProfile } from './utils/myProfileLoad.js';
+import { pipelinesOf, defaultPipelineOf, pipelineReader } from './utils/pipelines.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
@@ -329,6 +330,7 @@ function App() {
     const _opportunitiesRef = useRef([]);
     const _onDealWonRef = useRef(null);
     const _onLeadConvertedRef = useRef(null);
+    const _onDealElsewhereRef = useRef(null);
     const _adoptDealScoresRef = useRef(null);
     const _deps = {
         get addAudit()            { return _addAuditRef.current; },
@@ -341,6 +343,7 @@ function App() {
         get opportunities()       { return _opportunitiesRef.current; },
         get onDealWon()           { return _onDealWonRef.current; },
         get onLeadConverted()     { return _onLeadConvertedRef.current; },
+        get onDealElsewhere()     { return _onDealElsewhereRef.current; },
         get adoptDealScores()     { return _adoptDealScoresRef.current; },
         reportLoad,   // stable (useListLoads): whether each list was read (state §0.294)
     };
@@ -832,10 +835,21 @@ loadMyProfile(organization?.id || null);
 
     // Filtered data based on role
     // ── Pipeline helpers ──────────────────────────────────────────────
-    const allPipelines = (settings.pipelines && settings.pipelines.length > 0)
-        ? settings.pipelines
-        : [{ id: 'default', name: 'New Business', color: '#2563eb' }];
-    const activePipeline = allPipelines.find(p => p.id === activePipelineId) || allPipelines[0];
+    // The org's own, each with a name and a colour; the one picked, else its default (state §0.297; src/utils/pipelines.js).
+    const allPipelines = pipelinesOf(settings.pipelines);
+    const activePipeline = allPipelines.find(p => p.id === activePipelineId) || defaultPipelineOf(allPipelines);
+    const inPipeline = pipelineReader(allPipelines);
+    // A deal made or moved in a pipeline that is not the one on screen leaves the screen: said (state §0.297).
+    const saidElsewhere = (deal) => {
+        const to = allPipelines.find(p => p.id === inPipeline(deal));
+        if (!to || to.id === activePipeline.id) return;
+        // Never over a toast that stands: a refusal kept until closed, an Undo. It clears only itself.
+        const said = { notice: `"${deal.opportunityName || deal.account || 'The deal'}" is in the ${to.name} pipeline.` };
+        const askedOrg = requestOrg();   // after an org switch the timer clears nothing (state §0.175)
+        said.timerId = setTimeout(() => { if (stillOrg(askedOrg)) setUndoToast(t => (t === said ? null : t)); }, 5000);
+        setUndoToast(t => t || said);
+    };
+    _onDealElsewhereRef.current = saidElsewhere;
 
     // Shared Viewing bar helpers — build option lists for Rep/Team/Territory
     // The Viewing bar's rep list: reps only — the one non-rep list (src/utils/roles.js).
@@ -861,7 +875,7 @@ loadMyProfile(organization?.id || null);
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
+        .filter(opp => inPipeline(opp) === activePipeline.id)
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))

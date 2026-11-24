@@ -189,7 +189,7 @@ test('WIRING: the window opens on the seed — the form, the Account and Sales R
 test('WIRING: both creates keep the lead id out of the body and mark the lead after the deal lands', () => {
     const save = between(HOOK, '    const handleSave = (formData,', '    const completeLostSave');
     const at = save.indexOf('            const { fromLeadId, ...enrichedNew } = enrichedData;');
-    assert.ok(at > 0 && save.indexOf('const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };', at) > at);
+    assert.ok(at > 0 && save.indexOf('const newOpp = { ...enrichedNew, id: newId, pipelineId: enrichedNew.pipelineId || activePipeline.id };', at) > at);
     const after = save.indexOf('                    if (fromLeadId) deps.onLeadConverted?.(fromLeadId);');
     assert.ok(save.indexOf('                    setShowModal(false); setOppModalError(null);', at) >= 0 && after > save.indexOf('                    setShowModal(false); setOppModalError(null);', at), 'after the landed deal closes the window');
     const lostFn = between(HOOK, '    const completeLostSave = async (', '\n    };\n');

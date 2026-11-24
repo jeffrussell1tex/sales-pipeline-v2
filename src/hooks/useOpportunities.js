@@ -167,6 +167,7 @@ export function useOpportunities(deps) {
                     const data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
                     setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || shownRow(updatedOpp)) : opp));
+                    if ('pipelineId' in sentBody(updatedOpp)) deps.onDealElsewhere?.(data.opportunity || shownRow(updatedOpp));   // a pipeline picked in this save (state §0.297)
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
                     // SMS: rep reassigned
                     if (enrichedData.salesRep && prevOpp?.salesRep !== enrichedData.salesRep) {
@@ -198,7 +199,7 @@ export function useOpportunities(deps) {
             // A lead's convert names its lead (state §0.253): kept out of the body, and the lead marked Converted once the
             // deal lands — never before.
             const { fromLeadId, ...enrichedNew } = enrichedData;
-            const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };
+            const newOpp = { ...enrichedNew, id: newId, pipelineId: enrichedNew.pipelineId || activePipeline.id };   // the pipeline picked in the window (state §0.297)
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {
@@ -211,6 +212,7 @@ export function useOpportunities(deps) {
                     } else data = await res.json().catch(() => ({}));
                     if (!stillOrg(askedOrg)) return;
                     if (data) setOpportunities(prev => [...prev, data.opportunity || newOpp]);
+                    if (data) deps.onDealElsewhere?.(data.opportunity || newOpp);   // made in a pipeline that is not on screen: said (state §0.297) — not one an earlier press made, its pill since moved
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
                     // SMS: deal assigned to rep on creation
                     if (enrichedData.salesRep) {
@@ -267,11 +269,12 @@ export function useOpportunities(deps) {
             // The list takes the deal as stored — the account and id the server kept (a new
             // link is named after its account) — never the copy sent (state §0.198).
             if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id ? r.data.opportunity : o)));
+            if ('pipelineId' in sentBody(updatedOpp)) deps.onDealElsewhere?.(r.data?.opportunity || shown);
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
             const newId = formData.id || ('id_' + crypto.randomUUID());   // given when the dialog opened: a retry is the same deal
             const { fromLeadId, ...enrichedNew } = enriched;   // as the window's create (state §0.253)
-            const newOpp = { ...enrichedNew, id: newId, pipelineId: activePipeline.id };
+            const newOpp = { ...enrichedNew, id: newId, pipelineId: enrichedNew.pipelineId || activePipeline.id };   // the pipeline picked in the window (state §0.297)
             setOpportunities(prev => [...prev, newOpp]);
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
             if (!stillOrg(askedOrg)) return stopped();
@@ -284,6 +287,7 @@ export function useOpportunities(deps) {
             }
             if (r.landed) { setOpportunities(prev => prev.filter(o => o.id !== newId)); loadOpportunities(); }
             if (r.data && r.data.opportunity) setOpportunities(prev => prev.map(o => (o.id === newId ? r.data.opportunity : o)));
+            if (!r.landed) deps.onDealElsewhere?.(r.data?.opportunity || newOpp);   // as the window's (state §0.297)
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
             if (fromLeadId) deps.onLeadConverted?.(fromLeadId);
         }

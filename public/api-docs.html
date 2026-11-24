@@ -399,7 +399,7 @@
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
       <tr><td>id</td><td>string</td><td>Unique identifier. Client-generated on create.</td></tr>
-      <tr><td>pipelineId</td><td>string</td><td>Pipeline this deal belongs to. Defaults to <code>"default"</code>.</td></tr>
+      <tr><td>pipelineId</td><td>string</td><td>Pipeline this deal belongs to: the id of one of the organization's pipelines. Left out on a create, the organization's default pipeline; one it does not have is refused.</td></tr>
       <tr><td>opportunityName</td><td>string</td><td>Deal name / title.</td></tr>
       <tr><td>account</td><td>string</td><td>Account name (display string, not a foreign key).</td></tr>
       <tr><td>salesRep</td><td>string</td><td>Assigned rep display name.</td></tr>

@@ -91,11 +91,11 @@ export const coerceCsvColumns = (row) => {
  * @param {string}  [opts.existingId]  set => OVERWRITE
  * @param {string}  opts.currentUser
  * @param {string}  [opts.currentUserId]  the importer's app id (users.id)
- * @param {string}  opts.pipelineId
+ * @param {string}  [opts.pipelineId]  none: the server makes the deal in the org's default pipeline (state §0.297)
  * @param {string}  opts.today         ISO date, yyyy-mm-dd
  * @param {() => string} opts.newId
  */
-export function buildOpportunityRow(row, { existingId = null, currentUser = '', currentUserId = '', pipelineId = 'default', today = '', newId } = {}) {
+export function buildOpportunityRow(row, { existingId = null, currentUser = '', currentUserId = '', pipelineId = null, today = '', newId } = {}) {
     const fromCsv = coerceCsvColumns(row);
 
     // OVERWRITE: the id, and strictly what the file described. Anything else is
@@ -122,7 +122,7 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
 
     return {
         id: typeof newId === 'function' ? newId() : undefined,
-        pipelineId,
+        ...(pipelineId ? { pipelineId } : {}),   // none named: the server makes it in the org's default (state §0.297)
         ...merged,
         ...(byImporter ? { ownerId: currentUserId } : {}),
         createdDate: fromCsv.createdDate || today,

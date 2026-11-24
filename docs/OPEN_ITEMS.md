@@ -2214,10 +2214,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Fixed in §0.240 (10 Nov; SHIPPED 16 Nov, the forty-sixth ship; guide §18b123).** **The deal PUT's "opportunity updated" email compares the rep's name to
   the caller's Clerk id**, so a rep with that email on is emailed about their
   own edits. §0.176 (c).
-- **Deals on a pipeline that does not exist vanish.** 31 of the Test org's
-  51 deals are on `new-biz`. Decided 1 Oct (Jeff: "Leave the data; fix the
-  product"): such a deal falls to the default pipeline, or is flagged.
-  §0.152.
 - **A deal has no competitor.** The Reports competitor table reads
   `o.competitor`. §0.187 (c).
 - **Reports' account and contact timelines** date a won or lost deal by its
@@ -2501,7 +2497,17 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Fixed in §0.294 (BUILT 24 Nov; guide §18b139).** **A failed load of the record lists and the price book draws an empty list** (§0.248, 12 Nov — Part 10's builder and the review's rule lens; read in code; older): useAccounts', useActivities', useContacts' and useTasks' loads, and useOpportunities' deals load, throw `'HTTP ' + r.status` into a console-only catch — the member sees dbStatusOf's banner on a refusal, and nothing on a request that never left or a 200 that cannot be read, the list left empty; useQuotes' `loadProducts` returns silently on a refusal (`if (!res.ok || !stillOrg(askedOrg)) return;`), so a failed read of the price book draws "No products yet. Click "+ Add product" …" (QuotesTab.jsx) and the builder "No products in the price book yet.", and `loadQuotes`' catch is console-only too. Against the house rule that a read that failed is never "none" (§0.247). Outside Parts 10-11's design; a batch of its own — each load's error said where its list is drawn. Medium.
 - **The Sales Manager's commission and SPIFF saves judge a refusal on words rebuilt from a string** (§0.249, 13 Nov — the last pass's verifier (F4); read in code; contrived bodies): `saveExtra` reads `writeSettings`' answer, whose words `refusalOf` (src/utils/storage.js) has already composed — it tests `body?.error` for truthiness and appends ` (ref <requestId>)` without checking that the error is a string — and `saidOf` (SalesManagerTab.jsx) turns them back into a body for `ownRefusal`. So a 4xx whose error is blank or not a string but which carries a `requestId` reads as the server's own refusal and says "Not saved — …" (400 `{ error: '   ', requestId: 'r1' }` the blank and the ref; 422 `{ error: { message: 'x' }, requestId: 'r1' }` "[object Object] (ref r1)"), where the maybe sentence is the rule. settings.mjs's own 4xx carry no `requestId`, so no answer seen has the shape. Recommended: `refusalOf` takes only a non-blank string error, or `writeSettings` hands back the body as well as the words. Low.
 - **A quiet activity save's thrown failure answers nothing** (§0.249, 13 Nov — Part 12c's builder; read in code; older): useActivities' `saveActivity` (src/hooks/useActivities.js) answers a refusal `{ ok: false, status, error, field }`, but its edit's and create's catches answer `undefined` after `setActivityModalError(failureWords(err))` — and a quiet save (the task rail's completion notes, `QUIET_RAIL`) drops that setter, so the caller has no words of the failure: TaskRail's `said()` falls back to Q4's "The server could not be reached." whatever threw. Recommended: the catches answer `{ ok: false, status: 0, error: failureWords(err) }`. Low.
-- **Left by §0.296** (24 Nov; its map and reviews; read in code; none fixed):
+- **Left by §0.297** (24 Nov; its map and reviews; read in code; none fixed):
+  (a) **a question for Jeff**: Home and Reports count one pipeline's deals — the one last picked under Pipeline → Filter — against a rep's whole quota, and name it nowhere; Sales Manager, the quota board and the digest count every pipeline; a saved report emailed differs from the one on screen. An org of one pipeline sees nothing (Medium for real UKG, which has three);
+  (b) **a question for Jeff**: a pipeline's own stages and the Assignment rules are read by nothing (the page says so now; the rules card shows only where some were saved) — take them out, or build them (Low);
+  (c) no screen renames a pipeline, or moves its deals to another at once (Low);
+  (d) quick log offers the deals of the pipeline on screen alone (Low);
+  (e) the public API and the webhooks hand out the pipeline id stored, and the public API filters by it — a deal drawn in the default one is not answered for its id (Low);
+  (f) a backup's restore lands deals and a pipelines list unchecked — its deals count in the default one where the org lacks theirs; the `pipelines` table it carries is read by nothing else (Low);
+  (g) Settings' card counts the stored stages, and its check "Default pipeline set" asks only that there is a pipeline; Funnel stages' "Used in" is fixed text (Low);
+  (h) a create an earlier press made is not said to be in another pipeline (Low);
+  (i) a pipeline's save and a deal made in it at the same moment: the deal then counts in the default one (Low, by design).
+- **Left by §0.296** (24 Nov; its map and reviews; read in code; (a) and (b) fixed in §0.297, BUILT 24 Nov):
   (a) **a new deal ignores the Pipeline picked in its window** (older; useOpportunities' create and its Lost path send `activePipeline.id` over the form's `pipelineId`): the deal is made in the pipeline on screen (Medium);
   (b) the server takes any `pipelineId` on a deal (opportunities.mjs), a pipeline of no org's too (Low; beside (a));
   (c) **a question for Jeff**: a member whose address is on another login's row has no row here (`users?me` answers `user: null`, by design since §0.173) — they use the app as a Sales Rep of nobody, and what they make has no owner; a page that says so, as the turned-off one does, would stop them (Low; none known);
@@ -2582,8 +2588,8 @@ to add meetings. Nothing in the app adds a meeting to Google:
   (J2's other half, filed 2 Nov): one value for every org a person is in.
   Low.
 - **Settings keyed by a team's NAME are not renamed with it** (N5, filed 2
-  Nov): `assignmentRules[].team`, `pipelines[].teams` (PipelinesDetail.jsx)
-  keep the old name after a rename. Low.
+  Nov): `assignmentRules[].team` (PipelinesDetail.jsx) keeps the old name
+  after a rename (`pipelines[].teams` is drawn no more since §0.297). Low.
 - **The restore does not pair a restored member's team name with its id**
   (N4, filed 2 Nov): §0.205 keeps the name as filed. Low.
 - **The Admin clear leaves on the lists a member created between its read
@@ -2747,16 +2753,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   31, 27, 24, 19 — `MOST_USED_PAIN_POINTS` in `PainPointsDetail.jsx`),
   the same for every org, none of them from its deals. Count the deals'
   pain points, or drop the card, as §0.86 did for the mocked-up panels (tests/honest-panels.test.mjs). Low.
-- **Pipelines starts on a demo pipeline, so Add stage saves nothing**
-  (§0.228's browser check, 3 Nov; in the code since April — moved into
-  PipelinesDetail.jsx on 1 Jun): the panel
-  opens with `selectedId` `'new-biz'`, a demo pipeline's id. An org
-  whose pipeline has another id (Accelerep QA's is `'default'`) sees its
-  own pipeline drawn by the fallback, but Add stage, a stage's rename,
-  reorder and delete write to the pipeline whose id is `selectedId` —
-  none — so each saves the list unchanged (a 200) and closes as if it
-  worked, until a pipeline card is clicked. Select the drawn pipeline
-  (`selected.id`) or start on the org's default. Medium.
 - **A refused Rename stage loses the name typed** (§0.228's review, 3
   Nov): `handleRenameStage` clears the field before it sends, so a
   refusal — still saving, or by the server — loses what was typed.
@@ -3117,7 +3113,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
   never. Recommended: "1 contact still uses this", with §4.8's
   "Opportunitys" and "Activitys" in one pass over the app's counted
   words.
-- **Settings → Pipelines draws figures from nothing** (the save cleanup design's OUT, 10 Nov; read in code): the stage table's "Avg days" is `5+i*2` and its "Open" `Math.max(5, 42-i*5)` — the row's position (src/Tabs/settings/salesProcess/PipelinesDetail.jsx:537-538); "Default prob." reads the file's own `STAGE_PROBS` (:32, :535), not the org's stages. Recommended: real figures, or no columns. Low.
 - **A settings row whose id is not its org cannot be saved** (§0.242's itest seed, 10 Nov; open question): the settings PUT writes its row as `id: orgId` with the conflict target the id (settings.mjs:504, :526); a row stored under another id meets the org's unique key instead, which the PUT reads as a lost first insert (`lostFirstInsert`, :83-85, :545) and, after its retries, answers 409 "stale" (:550-555). Seen only with a test seed; whether any row in the app database has an id other than its org: not checked (a SELECT, on Jeff's go). Low.
 - **Export's schedule Delete deletes with no confirm** (the refusal sweep's OUT, §0.245, 11 Nov; read in code): Settings → Data → Export's Delete (src/Tabs/settings/data/ExportDetail.jsx:395 → `handleDeleteSched`, :162) sends the DELETE at once; since §0.245 a refusal puts the row back and says why. Beside "Two deletes with no confirm" above, and Vehicles and equipment's (§4.4); whether a confirm is a house rule for every delete: not checked. Recommended: App's confirm, as most Settings deletes do. Low.
 - **holidays.mjs calls `raw.filter` without an array check** (the refusal sweep's OUT, §0.245, 11 Nov; from the design's map, not re-read): netlify/functions/holidays.mjs:51 — an answer from the holiday source that is not a list would throw there. Recommended: a list check before the filter, said as the Sync's failure (the sweep's Part 5). Low. Still so after §0.246 (11 Nov): Part 5 changed the Sync's screen only — no server change; whatever the server answers is now said on the Sync's red line in the house words, kept until its Close.
@@ -3852,7 +3847,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
     16 Oct).
   - left as they are by design: tasks' `relatedTo` (free text in places),
     the recommendation log's id (a deal, task or customer by action),
-    deals' `pipelineId` (a settings id, 'default' a sentinel).
+    deals' `pipelineId` — checked since §0.297 (BUILT 24 Nov).
   - a backup restore's other links: its clean-up (§0.199, §0.201) clears
     batch 4's fields, a deal's account and Dispatch's; these fields stay as
     the file has them.

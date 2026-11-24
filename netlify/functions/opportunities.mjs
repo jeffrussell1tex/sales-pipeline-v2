@@ -33,13 +33,16 @@ import { createListRefused } from '../../src/utils/dealCreate.js';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
-import { checkLinks, checkBulkLinks } from './_links.mjs';
+import { checkLinks, checkBulkLinks, defaultPipelineIn } from './_links.mjs';
 // A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
 import { rescoreDeals, withDealScore } from './_dealScore.mjs';
 
 // The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
-// its account is accountLink's, below).
-const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }];
+// its account is accountLink's, below). Its pipeline, one of the org's (state §0.297): a create that names none is the org's
+// default one's; a save that names it blank does not name it — it was written 'default' over the stored one, a pipeline an
+// org whose own ids differ does not have.
+const blankPipelineOff = (d) => { if (!d || typeof d !== 'object' || !('pipelineId' in d) || d.pipelineId) return d; const { pipelineId: _blank, ...rest } = d; return rest; };
+const DEAL_LINKS = [{ key: 'contactIds', kind: 'contact', shape: 'many' }, { key: 'pipelineId', kind: 'pipeline' }];
 
 // The stored notes still as read — the compare of a note's compare-and-set (state §0.236). jsonb equality ignores
 // key order; a row that stored no list compares as SQL NULL.
@@ -366,6 +369,7 @@ export const handler = async (event) => {
                 if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field, ids: linked.ids }) };
                 const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);
                 if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
+                if (people.rows.some(r => !r.pipelineId)) { const own = await defaultPipelineIn(orgId); people.rows = people.rows.map(r => (r.pipelineId ? r : { ...r, pipelineId: own })); }
                 // A deal naming no Sales Rep with an ownerId is that member's, by id (Q11, state §0.216 — importerOwners, _lib.mjs).
                 const importer = await importerOwners(people.rows, orgId, 'opportunity');
                 if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
@@ -396,6 +400,7 @@ export const handler = async (event) => {
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             const people = await checkLinks(DEAL_LINKS, data, null, orgId);
             if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
+            if (!data.pipelineId) data.pipelineId = await defaultPipelineIn(orgId);   // the org's default (state §0.297)
             const named = { ...data, ...people.set };
             const dated = { ...named, createdDate: createdDayOf(named) };
             const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
@@ -500,6 +505,7 @@ export const handler = async (event) => {
                     .from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
                 const priors = new Map(priorRows.map(r => [r.id, r]));
+                data.splice(0, data.length, ...data.map(blankPipelineOff));   // a blank pipeline is not named (state §0.297): the stored one
                 // Each row's account by the single save's rule (bulkDealLinks, above); one a deal already holds is not
                 // asked again. Only a deal the caller may save is asked: one she may not is answered forbidden by
                 // bulkUpsert whatever it names, so a refusal never tells her of an account she can't open.
@@ -676,6 +682,7 @@ export const handler = async (event) => {
             if (link.error) return { statusCode: link.status, headers, body: JSON.stringify({ error: link.error }) };
             // Each contact it names anew is one of this org's; one the deal already holds is not asked
             // again (state §0.199).
+            if ('pipelineId' in data && !data.pipelineId) delete data.pipelineId;   // a blank pipeline is not named (state §0.297): the stored one
             const people = await checkLinks(DEAL_LINKS, data, existing, orgId);
             if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
             Object.assign(data, people.set);

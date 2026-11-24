@@ -81,7 +81,9 @@ test('_lib.mjs: a failed read of the caller throws and is not kept; no roster ro
 // moves are, and the caller's own inbound address.
 const MORE = {
     'lead-requests': [{ method: 'PUT', what: 'decide', body: { id: 'r1', action: 'deny' }, rows: { lead_claim_requests: [{ id: 'r1', orgId: 'org_a', leadId: 'l1', requesterId: 'usr_me', status: 'pending' }], leads: [{ id: 'l1', orgId: 'org_a' }], users: [ME] } }],
-    opportunities: [{ method: 'PUT', what: 'bulk overwrite', body: [{ id: 'd1', stage: 'Proposal' }], rows: { opportunities: [DEAL], users: [ME] } }],
+    // A create and a settings save naming a pipeline of the org (state §0.297): the matrix's made-up ones are refused before the caller is read.
+    settings: [{ method: 'PUT', what: 'pipelines', body: { pipelines: [{ id: 'default', name: 'New Business' }] } }],
+    opportunities: [{ method: 'POST', what: 'its pipeline', body: { id: 'x1', pipelineId: 'default' } }, { method: 'PUT', what: 'bulk overwrite', body: [{ id: 'd1', stage: 'Proposal' }], rows: { opportunities: [DEAL], users: [ME] } }],
     'email-inbound': [{ method: 'GET', what: 'my address', env: { BCC_SECRET: 'test', INBOUND_DOMAIN: 'in.test' }, rows: { users: [ME] } }],
 };
 // Every function, as every role, with every request the gate matrix knows: where the caller's read fails the request is
