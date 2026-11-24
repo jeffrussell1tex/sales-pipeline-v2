@@ -340,7 +340,7 @@ export const handler = async (event) => {
             // the identity split broke that lookup and every rep saw only the
             // unassigned deals; then a renamed rep vanished from her own pipeline and
             // two reps sharing a name saw each other's. It keys on ids, and a caller
-            // who cannot be resolved owns nothing.
+            // with no roster row owns nothing; a failed read is a 500 (state §0.292).
             const ctx = await dealReadContext(auth);
             results = results.filter(o => dealVisibleTo(o, ctx));
             return { statusCode: 200, headers, body: JSON.stringify({ opportunities: results }) };
@@ -401,7 +401,7 @@ export const handler = async (event) => {
             const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
             // Who made it is the server's (state §0.250; guide §18b125 rule 2): the caller's member name, read before the
             // insert — never a body's; none when the caller is no member of this org.
-            const creatorName = await getCallerName(userId, orgId);
+            const { id: creatorId, name: creatorName } = await resolveCaller(userId, orgId);   // decided on below: a failed read throws (state §0.292)
             Object.assign(newRow, { createdBy: creatorName || null });
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.199).
             const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();
@@ -419,7 +419,9 @@ export const handler = async (event) => {
             // themselves about it. Pre-existing (userId has always been Clerk's),
             // and the same category as the two GET filters -- a name compared to
             // an id -- so it is fixed in the same pass. (creatorName is read before the insert since state §0.250.)
-            if (inserted.salesRep && inserted.salesRep !== creatorName) {
+            // By owner id since state §0.292: by name, a name that could not be read was someone else's, and the rep was
+            // told of their own deal.
+            if (inserted.salesRep && !(creatorId && inserted.ownerId === creatorId)) {
                 await maybeEmail(inserted.salesRep, 'opportunityCreated', {
                     repName:       inserted.salesRep,
                     dealName:      inserted.opportunityName || 'New Deal',

@@ -30,11 +30,9 @@ async function rescoreLead(orgId, leadId) {
     if (!leadId) return;
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.orgId, orgId)));
     if (!lead) return;
-    let cfg = DEFAULT_LEAD_SCORING;
-    try {
-        const [srow] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
-        cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
-    } catch (e) { /* defaults */ }
+    // A read that failed throws (state §0.292) — each caller catches it, the activity written: the lead keeps its score.
+    const [srow] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    const cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
     if (cfg.enabled === false) return;
     const acts = await db.select().from(activities).where(and(eq(activities.orgId, orgId), eq(activities.leadId, leadId)));
     const events = acts.map(a => ({ type: a.type, at: a.date || a.createdAt }));
@@ -106,7 +104,8 @@ export const handler = async (event) => {
                 // never the display name — two users sharing a name saw each
                 // other's records, and renaming one detached theirs (18b22).
                 //
-                // A caller that cannot be resolved stays null and sees only
+                // A caller with no roster row stays null (a failed read is a 500,
+                // state §0.292) and sees only
                 // unassigned rows, matching mayMutate()'s direction on writes.
                 const callerId = await getCallerId(userId, orgId);
                 results = results.filter(r => !r.ownerId || r.ownerId === callerId);

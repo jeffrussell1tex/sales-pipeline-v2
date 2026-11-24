@@ -72,10 +72,11 @@ export const withDealScore = (row, scores) => (row && scores && row.id in scores
 
 /**
  * Score these deals of the org again — after a save of the deal, or of an activity on it. Ids the org does not hold
- * are skipped. Never throws for a scoring problem: the save it follows has landed, and the nightly pass catches up.
+ * are skipped. Never throws for a scoring problem: the save it follows has landed, and the nightly pass catches up —
+ * `orThrow` (ai-score.mjs, which decides on the score and follows no save): a failure throws (state §0.292).
  * → { [id]: score | null }
  */
-export async function rescoreDeals(orgId, dealIds, { now = new Date() } = {}) {
+export async function rescoreDeals(orgId, dealIds, { now = new Date(), orThrow = false } = {}) {
     const ids = [...new Set((dealIds || []).filter((id) => typeof id === 'string' && id))];
     if (!orgId || !ids.length) return {};
     try {
@@ -86,6 +87,7 @@ export async function rescoreDeals(orgId, dealIds, { now = new Date() } = {}) {
         return await keepScores(orgId, deals, byDeal(acts), { funnelStages: funnelStagesOf(srow), model: srow?.extra?.dealModel || null, now });
     } catch (e) {
         console.warn('deal score not kept for org', orgId, '—', e.message);
+        if (orThrow) throw e;
         return {};
     }
 }

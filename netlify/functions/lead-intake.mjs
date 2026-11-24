@@ -85,6 +85,7 @@ const notFound = () => ({
     statusCode: 404, headers: htmlHeaders,
     body: page('Form not found', '<h1>This form is not available</h1><p class="foot">The link may have been turned off or copied incorrectly.</p>'),
 });
+const wentWrong = () => ({ statusCode: 500, headers: htmlHeaders, body: page('Something went wrong', '<h1>Something went wrong</h1><p class="foot">Please try again in a moment.</p>') });
 
 const formBody = ({ company, token, error, values }) => {
     const v = values || {};
@@ -148,7 +149,13 @@ export const handler = async (event) => {
     const token = tokenOf(event);
 
     if (event.httpMethod === 'GET') {
-        const org = await orgForToken(token).catch(() => null);
+        // A read that failed is not a form turned off (state §0.292).
+        let org;
+        try { org = await orgForToken(token); }
+        catch (err) {
+            console.error('lead-intake error:', err.message);
+            return wentWrong();
+        }
         if (!org) return notFound();
         return { statusCode: 200, headers: htmlHeaders, body: page(`${org.company} — Get in touch`, formBody({ company: org.company, token })) };
     }
@@ -220,6 +227,6 @@ export const handler = async (event) => {
         console.error('lead-intake error:', err.message);
         return wantsJson
             ? { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ ok: false, error: 'Something went wrong — please try again.' }) }
-            : { statusCode: 500, headers: htmlHeaders, body: page('Something went wrong', '<h1>Something went wrong</h1><p class="foot">Please try again in a moment.</p>') };
+            : wentWrong();
     }
 };

@@ -155,7 +155,7 @@ test('only an Admin deactivates or reactivates, never themselves; the status say
 test('App.jsx shows a deactivated member its no-access page for that org, and nothing else', () => {
     const s = code(read('src/App.jsx'));
     assert.ok(s.includes('    const [accessRevokedOrg, setAccessRevokedOrg] = React.useState(null);'));
-    assert.ok(s.includes("        return body?.code === 'deactivated' ? { deactivated: true } : null;"));
+    assert.ok(s.includes("readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)"), 'its answer read by readMyProfile (moved pin, §0.292; run in tests/failed-reads.test.mjs)');
     assert.ok(s.includes('        setAccessRevokedOrg(data?.deactivated ? meOrgId : null);'), 'set for the org that answered, cleared by an answer that is not a refusal');
     assert.ok(s.includes('    if (accessRevokedOrg && accessRevokedOrg === activeOrgId) {'), 'only while that org is the active one');
     assert.ok(s.includes('No access to {organization.name}'));

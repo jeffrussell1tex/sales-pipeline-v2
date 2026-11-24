@@ -532,6 +532,10 @@ One commit per verified batch; doc patch in the same commit.
   switch), and each 401, 403 or gate answer it returns, left out in memory, must change an answer or be named
   with why none can (three are). A new function, method or gate gets its line in `tests/gates/answers.mjs` and
   a request that reaches it (THE GUARD, tests/gate-matrix.test.mjs; guide §18b137).
+- A read the server decides on, or whose value is stored, throws when it fails — never its default, an empty list
+  or "no row" (§0.292): `resolveCaller` throws (nulls are a member with no row here); `getCallerName` is a label —
+  a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch (THE GUARD, tests/failed-reads.test.mjs;
+  guide §18b138).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with
   asserted occurrence counts, dry-run default, `--apply` flag, write once,
   re-read FROM DISK to verify. `App.jsx` is CRLF — preserve it.

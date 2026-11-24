@@ -1,7 +1,7 @@
 // maker-deals.test.mjs — who made a deal is the server's (state §0.250; OPEN_ITEMS §4.6, the maker items; guide §18b125
 // rule 2; Jeff, 14 Nov: "Start the maker items", all Recommended).
 //
-// A create stamps the caller's member NAME (getCallerName, in the caller's org; none when they are no member there) —
+// A create stamps the caller's member NAME (the single create resolveCaller's, §0.292, the import getCallerName's, in the caller's org; none when they are no member there) —
 // the single POST and the CSV import's new deals alike, never a body's or a row's; no save writes it (sanitize names
 // none, so neither the merged single PUT nor the import's Overwrite through partialRows can), so the stored one stands —
 // and the single PUT's upsert, should it land as an insert (the deal deleted between its read and its write), keeps the
@@ -113,11 +113,11 @@ test('RULE: the single create stamps the caller\'s member name, read in the call
     const stamp = between(raw,
         "            const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });\n",
         '            const [inserted] = await db.insert(opportunities)');
-    const run = new AsyncFunction('newRow', 'data', 'getCallerName', 'userId', 'orgId', `${stamp}\nreturn { newRow, creatorName };`);
+    const run = new AsyncFunction('newRow', 'data', 'resolveCaller', 'userId', 'orgId', `${stamp}\nreturn { newRow, creatorName };`);
     for (const [userId, want] of [['clerk_bob', 'Bob Member'], ['clerk_ghost', null]]) {
         const asked = [];
         const data = { id: 'd', createdBy: 'Mallory' };
-        const out = await run({ ...sanitize(data), ownerId: 'usr_x' }, data, roster(asked), userId, 'org_A');
+        const out = await run({ ...sanitize(data), ownerId: 'usr_x' }, data, async (...a) => ({ id: 'usr_b', name: await roster(asked)(...a) }), userId, 'org_A');
         assert.equal(out.newRow.createdBy, want, `REGRESSION (§0.250): the create stored ${JSON.stringify(out.newRow.createdBy)} for ${userId}`);
         assert.equal(out.creatorName, want ?? null, 'the email reads the same name');
         assert.deepEqual(asked, [[userId, 'org_A']], 'read once, for the caller, in the caller\'s org');
@@ -131,14 +131,14 @@ test('WIRING: the single create — the stamp before the insert, the pinned line
         'const named = { ...data, ...people.set };',
         'const dated = { ...named, createdDate: createdDayOf(named) };',
         "const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });",
-        '            const creatorName = await getCallerName(userId, orgId);\n',
+        '            const { id: creatorId, name: creatorName } = await resolveCaller(userId, orgId);',
         '            Object.assign(newRow, { createdBy: creatorName || null });\n',
         'const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();',
-        '            if (inserted.salesRep && inserted.salesRep !== creatorName) {',
+        '            if (inserted.salesRep && !(creatorId && inserted.ownerId === creatorId)) {',   // by owner id (§0.292): a failed name read was someone else's
         "createdBy:     creatorName || 'Someone',",
     ].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order, 'in order: stamped before the insert; the email after, on the same name');
-    once(src, 'const creatorName = await getCallerName(userId, orgId);');
+    once(src, 'const { id: creatorId, name: creatorName } = await resolveCaller(userId, orgId);');
 });
 
 test('RULE: the import\'s new deals each carry the importer\'s member name, never the row\'s own; none for no member', async () => {

@@ -4,7 +4,7 @@
 // read with only the id and the org in its filter — a Manager's approval, or a reassignment to another rep, landing
 // between was written back to pending, or to the rep. And every save — a Manager's approval too — wrote every column
 // of its read back, putting back what another save changed between. Staged where it happens: the real _lib.mjs with
-// getCallerName (the rep's check) wrapped, and the real _links.mjs with checkLinks (between any save's read and write)
+// resolveCaller (the rep's check; getCallerName until §0.292) wrapped, and the real _links.mjs with checkLinks (between any save's read and write)
 // wrapped, each to make the other session's move — once, when armed — the moment it returns.
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST)
@@ -38,7 +38,7 @@ let armedName = null, armedLinks = null;
 const lib = await import('../../netlify/functions/_lib.mjs');
 const links = await import('../../netlify/functions/_links.mjs');
 mock.module(new URL('../../netlify/functions/_lib.mjs', import.meta.url).href, {
-    namedExports: { ...lib, getCallerName: async (...a) => { const r = await lib.getCallerName(...a); const h = armedName; armedName = null; if (h) await h(); return r; } },
+    namedExports: { ...lib, resolveCaller: async (...a) => { const r = await lib.resolveCaller(...a); const h = armedName; armedName = null; if (h) await h(); return r; } },
 });
 mock.module(new URL('../../netlify/functions/_links.mjs', import.meta.url).href, {
     namedExports: { ...links, checkLinks: async (...a) => { const r = await links.checkLinks(...a); const h = armedLinks; armedLinks = null; if (h) await h(); return r; } },

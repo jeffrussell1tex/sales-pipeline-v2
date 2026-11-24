@@ -27,7 +27,8 @@ export async function getUnassignedDealsVisible(orgId) {
 // What dealVisibleTo needs to know about the caller. The two reads happen only for
 // a caller whose scope is their own rows; a whole-org reader needs neither. A
 // caller with no roster row resolves to null and owns nothing — the fail-closed
-// direction mayMutate() takes for writes.
+// direction mayMutate() takes for writes; a read that failed throws to the caller's
+// 500, as the switch's does (state §0.292).
 export async function dealReadContext(auth) {
     const own = crmReadScope(auth.userRole) === 'own';
     return {

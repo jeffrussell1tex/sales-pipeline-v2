@@ -53,19 +53,17 @@ const cleanWebsite = (w) => {
 // assignment altogether — every CSV-imported account landed unassigned while an
 // identical account created through the UI got a territory, which reads as the
 // rules being broken rather than as an import gap.
+//
+// A read that failed throws (state §0.292): taken for no rules, it stored the account
+// with no territory, and nothing applies them later.
 async function loadTerritoryRules(orgId) {
-    try {
-        const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
-        if (!rows.length) return null;
-        const rules = rows[0].extra?.assignmentRules;
-        if (!Array.isArray(rules) || rules.length === 0) return null;
-        const featureFlags = rows[0].extra?.featureFlags || {};
-        if (featureFlags['territory-rules'] === false) return null;
-        return rules;
-    } catch (e) {
-        console.error('loadTerritoryRules error:', e.message);
-        return null;
-    }
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    if (!rows.length) return null;
+    const rules = rows[0].extra?.assignmentRules;
+    if (!Array.isArray(rules) || rules.length === 0) return null;
+    const featureFlags = rows[0].extra?.featureFlags || {};
+    if (featureFlags['territory-rules'] === false) return null;
+    return rules;
 }
 
 function applyTerritoryRules(rules, account) {
@@ -214,7 +212,8 @@ export const handler = async (event) => {
                 // never the display name — two users sharing a name saw each
                 // other's records, and renaming one detached theirs (18b22).
                 //
-                // A caller that cannot be resolved stays null and sees only
+                // A caller with no roster row stays null (a failed read is a 500,
+                // state §0.292) and sees only
                 // unassigned rows, matching mayMutate()'s direction on writes.
                 const callerId = await getCallerId(userId, orgId);
                 results = results.filter(r => !r.ownerId || r.ownerId === callerId);

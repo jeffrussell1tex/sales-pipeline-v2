@@ -168,7 +168,7 @@ test("§0.275 the review: the deals bulk import's stage moves are the rows writt
 test("§0.276 THE GUARD: a SPIFF claim's save writes only what it names; a rep's only while the claim is still pending and still theirs, in the write's own WHERE; a missed write read again and answered in the check's words", () => {
     const src = read('netlify/functions/spiff-claims.mjs');
     const put = between(src, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {");
-    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? await getCallerName(auth.userId, orgId) : null;'), 'the rep named once — the name the check and the write both read');
+    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? (await resolveCaller(auth.userId, orgId)).name : null;'), 'the rep named once — the name the check and the write both read');
     assert.ok(put.includes('if (!sameName(existing.repName, me)) {'), 'the check reads that name');
     assert.ok(put.includes('const named = Object.fromEntries(Object.entries(updateData).filter(([k]) => Object.hasOwn(changes, k)));'), 'the keys the save names, as sanitize stores them');
     assert.ok(put.includes('db.update(spiffClaims).set({ ...named, updatedAt: new Date() })') && !put.includes('set({ ...updateData'), 'never the whole row as read');

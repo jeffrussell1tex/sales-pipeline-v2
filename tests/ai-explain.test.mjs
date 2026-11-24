@@ -61,7 +61,9 @@ test('reports gain Win chance — the deal\'s kept score, a percent; "health sco
 test('ai-score.mjs explains the win chance as it stands: worked out first, a closed deal refused before anything is sent, only an explanation answers from the cache', () => {
     const s = code(read('netlify/functions/ai-score.mjs'));
     const closedAt = s.indexOf("if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return { statusCode: 400");
-    const winAt = s.indexOf('const win = (await rescoreDeals(orgId, [opportunityId]))[opportunityId] || opp.dealScore || null;');
+    // Worked out or not (moved pin, §0.292): never the stored score in place of one that could not be.
+    const winAt = s.indexOf('const win = scores[opportunityId] || null;');
+    assert.ok(s.includes('const scores = await rescoreDeals(orgId, [opportunityId], { orThrow: true }).catch(() => ({}));') && !s.includes('opp.dealScore'));
     const cacheAt = s.indexOf('if (!forceRefresh && isExplanation(cached) && cached?.scoredAt) {');
     const askAt = s.indexOf('const attempts = [{ model, outcome: await ask(model) }];');
     assert.ok(closedAt > -1 && winAt > closedAt && cacheAt > winAt && askAt > cacheAt, 'closed refused, the number worked out, the cache, then Claude');

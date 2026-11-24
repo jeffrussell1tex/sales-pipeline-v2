@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { quotes, opportunities, auditLog, users, settings as settingsTable, accounts, dispatchCustomers } from '../../db/schema.js';
 import { eq, ne, asc, and, desc, sql, inArray, gte, getTableColumns } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId, ownerWriteFilter, ownerClaim, claimRefused, rowAsRead } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId, resolveCaller, ownerWriteFilter, ownerClaim, claimRefused, rowAsRead } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 // A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
 // quote is who may read or change the deal — the deals list's own rule, imported
@@ -179,13 +179,13 @@ async function dealCustomerExempt(orgId, opportunityId) {
 
 // ── Approval tiers: the org's (Settings → Quoting → Approval tiers), else the
 // defaults the rules module carries. Exported for quote-email.mjs, which applies
-// the same "needs approval before it is sent" rule.
+// the same "needs approval before it is sent" rule. The defaults are an org that
+// stored none: a read that failed throws (state §0.292) — by the defaults a quote the
+// org's own rules hold was sent without its approval, and any approving role decided it.
 export async function getApprovalTiers(orgId) {
-    try {
-        const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
-        const extra = rows[0]?.extra;
-        if (extra?.approvalTiers?.length) return extra.approvalTiers;
-    } catch(e) { /* fallback */ }
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    const extra = rows[0]?.extra;
+    if (extra?.approvalTiers?.length) return extra.approvalTiers;
     return DEFAULT_QUOTE_APPROVAL_TIERS;
 }
 
@@ -593,6 +593,16 @@ export const handler = async (event) => {
                 ...stamps,
                 updatedAt: new Date(),
             };
+            // Who hears of it (Jeff, 2 Oct — §0.158): a submission tells the tier's
+            // approver(s); an approval or a send-back tells the person who submitted
+            // it — instant, by each person's own switch. WHO did it is read before the
+            // write (state §0.292): a read that fails refuses the save whole, never a
+            // save that lands with nobody told.
+            const notice = sendBack ? 'sentBack'
+                : moved && to === 'Approved' ? 'approved'
+                : moved && to === 'Pending Approval' ? 'submitted' : null;
+            const actor = notice ? await resolveCaller(auth.userId, orgId) : null;
+
             // One batch, all or nothing (state §0.277): the quote as read (its move and terms were decided on that read), its
             // deal still the caller's or nobody's, the accepted value to the deal — the STORED deal, never the body's — and
             // the quote. A deal handed to another rep, or a quote another save changed, since the checks: nothing written.
@@ -621,19 +631,13 @@ export const handler = async (event) => {
                 action, entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
                 detail: `${updated.quoteNumber} v${updated.version} · ${moved ? `${from} → ${to}` : (updated.status || 'Draft')}${edit.approvalCleared ? ' · an edit cleared the approval' : ''}${stamps.approvalTier ? ' · ' + stamps.approvalTier : ''}${sendBack ? SENT_BACK_MARK + stamps.approvalNote : ''}`,
             });
-            // Who hears of it (Jeff, 2 Oct — §0.158): a submission tells the tier's
-            // approver(s); an approval or a send-back tells the person who submitted
-            // it — instant, by each person's own switch. After the save and its audit
-            // row: a failed send never undoes the change it reports.
-            const notice = sendBack ? 'sentBack'
-                : moved && to === 'Approved' ? 'approved'
-                : moved && to === 'Pending Approval' ? 'submitted' : null;
+            // After the save and its audit row: a failed send never undoes the change it reports.
             if (notice) {
                 try {
                     await sendApprovalNotices({
                         orgId, kind: notice, quote: updated,
                         tier: approvalTierFor(quoteDiscountPct(lineItems, merged.dealDiscount), tiers),
-                        actorId: await getCallerId(auth.userId, orgId), actorName: await getCallerName(auth.userId, orgId),
+                        actorId: actor.id, actorName: actor.name,
                         note: sendBack ? stamps.approvalNote : null,
                     });
                 } catch (e) {

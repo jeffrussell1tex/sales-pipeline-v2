@@ -101,7 +101,7 @@ export function useModalState() {
     const [dismissedReminders, setDismissedReminders] = useOrgBoundState(remembered, []);
     const [snoozedReminders, setSnoozedReminders] = useOrgBoundState(remembered, {}); // { [taskId]: re-alert-at timestamp (ms) } — back through App's checker (§0.200)
     const [taskReminderQueue, setTaskReminderQueue] = useOrgBoundState(remembered, []); // reminders come due, waiting their turn behind the one open (§0.200)
-    const [pressNotices, setPressNotices] = useOrgBoundState(remembered, []);   // a task completion's notices, one per press whose rail moved on (§0.199)
+    const [pressNotices, setPressNotices] = useOrgBoundState(remembered, []);   // the press notices (src/utils/pressNotice.js): a task completion's, one per press whose rail moved on (§0.199), and others
 
     return {
         resetOnOrgSwitch: resetAllOf([...resets, ...remembered]),

@@ -15,11 +15,12 @@ import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
+// The default rules are an org that stored none. A read that failed throws, to the
+// request's 500 (state §0.292): by the defaults it stored a score the org's own rules
+// never gave — one to an org that turned scoring off. So with a lead's activities.
 async function getLeadScoring(orgId) {
-    try {
-        const [row] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
-        return row?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
-    } catch (e) { return DEFAULT_LEAD_SCORING; }
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    return row?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
 }
 
 // Read-side policy: may reps see unassigned leads? Admin-set, org-wide,
@@ -27,11 +28,9 @@ async function getLeadScoring(orgId) {
 // standing policy (unassigned visible to everyone), so flipping this on deploy
 // changes nothing for any existing org.
 //
-// Deliberately NOT the getLeadScoring shape. That helper swallows errors and
-// returns a default, which is fine for scoring — a failed read costs a stale
-// score. This flag decides what a rep is SHOWN, so a failed read must not
-// silently pick a fail direction in either sense; it throws to the handler's
-// outer catch and the request 500s instead of guessing.
+// This flag decides what a rep is SHOWN, so a failed read must not silently pick
+// a fail direction in either sense; it throws to the handler's outer catch and the
+// request 500s instead of guessing.
 async function getUnassignedLeadsVisible(orgId) {
     const [row] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
     return row?.extra?.unassignedLeadsVisibleToReps ?? true;
@@ -40,10 +39,8 @@ async function getUnassignedLeadsVisible(orgId) {
 async function scoreColumns(orgId, lead, cfg) {
     let events = [];
     if (lead.id) {
-        try {
-            const acts = await db.select().from(activitiesTable).where(and(eq(activitiesTable.orgId, orgId), eq(activitiesTable.leadId, lead.id)));
-            events = acts.map(a => ({ type: a.type, at: a.date || a.createdAt }));
-        } catch (e) { /* no events */ }
+        const acts = await db.select().from(activitiesTable).where(and(eq(activitiesTable.orgId, orgId), eq(activitiesTable.leadId, lead.id)));
+        events = acts.map(a => ({ type: a.type, at: a.date || a.createdAt }));
     }
     const sc = scoreLead(lead, cfg, Date.now(), events);
     return sc ? { ...sc, scoreUpdatedAt: new Date() } : {};
@@ -98,7 +95,8 @@ export const handler = async (event) => {
                 // write path used, so a renamed user disappeared from their own
                 // list and two users sharing a name saw each other's records.
                 //
-                // A caller who cannot be resolved stays null and sees only
+                // A caller with no roster row stays null (a failed read is a 500,
+                // state §0.292) and sees only
                 // unassigned rows — the same fail-closed direction mayMutate()
                 // takes on writes.
                 const callerId = await getCallerId(userId, orgId);

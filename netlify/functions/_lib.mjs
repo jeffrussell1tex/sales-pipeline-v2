@@ -120,7 +120,12 @@ export async function auditAs(orgId, clerkUserId, fields) {
 //    scoping mandatory rather than merely correct.
 //
 // Cached briefly per warm container since it runs on every rep-role mutation.
-// Returns nulls on miss/error -- callers treat a null name as "owns nothing".
+// A MISS -- no roster row in this org -- is nulls: the caller owns nothing. A read
+// that FAILED is no miss (state §0.292): it throws, to the handler's own 500, with
+// nothing written. It answered nulls too, so a create made in that moment was stored
+// with no owner -- any writer's to change -- a rep's list came back short, and their
+// own record read "not yours". Neither a miss nor a failure is ever taken for the
+// other; a failure is not cached. getCallerName alone answers none on a failure.
 const callerCache = new Map();
 const CALLER_NAME_TTL_MS = 30_000;
 
@@ -130,30 +135,26 @@ export async function resolveCaller(clerkUserId, orgId) {
     const key = `${orgId}::${clerkUserId}`;
     const cached = callerCache.get(key);
     if (cached && Date.now() - cached.ts < CALLER_NAME_TTL_MS) return cached.caller;
-    try {
-        const [row] = await db
-            .select({ id: users.id, name: users.name })
-            .from(users)
-            .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
-        const caller = { id: row?.id || null, name: row?.name || null };
-        callerCache.set(key, { caller, ts: Date.now() });
-        if (callerCache.size > 500) callerCache.delete(callerCache.keys().next().value);
-        return caller;
-    } catch (e) {
-        console.warn('resolveCaller error:', e.message);
-        return empty;
-    }
+    const [row] = await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
+    const caller = { id: row?.id || null, name: row?.name || null };
+    callerCache.set(key, { caller, ts: Date.now() });
+    if (callerCache.size > 500) callerCache.delete(callerCache.keys().next().value);
+    return caller;
 }
 
-// Display-name half. FOR RENDERING, AUDIT AND EXPORT — with one exception.
+// Display-name half. FOR RENDERING, AUDIT AND EXPORT — nothing decides on it.
 //
 // Ownership compares ids (see getCallerId below and mayMutate in
-// _ownership.mjs). The one thing that authorizes on this is a rep's edit of a
-// SPIFF claim (spiff-claims.mjs, state §0.169): spiff_claims names its rep and
-// holds no owner id, so a rep's own claim is the one whose name is theirs —
-// until the table carries an owner id. It is kept because audit rows, email
-// templates and the visibility filters still render a human-readable name, and
-// because a name is what a CSV carries.
+// _ownership.mjs). Two tables name their rep and hold no owner id — a rep's SPIFF
+// claims (spiff-claims.mjs, state §0.169) and their recommendation log
+// (recommendation-log.mjs, state §0.191) — so a rep's own row there is the one whose
+// name is theirs: those two decide on a name, and read it from resolveCaller, which
+// throws on a failed read. This is a label: many of its reads come after the write
+// they name, so a failed read is none here, warned, and never undoes or refuses what
+// it labels (Jeff, 16 Nov: "A" — a maker is shown, never checked; state §0.292).
 //
 // orgId is REQUIRED and throws when absent rather than defaulting to an
 // unscoped query. Guide 18b19: where a lookup feeds a decision, absence must be
@@ -166,14 +167,19 @@ export async function getCallerName(clerkUserId, orgId) {
             'an unscoped caller lookup can resolve a name from a different tenant.'
         );
     }
-    const { name } = await resolveCaller(clerkUserId, orgId);
-    return name;
+    try {
+        return (await resolveCaller(clerkUserId, orgId)).name;
+    } catch (e) {
+        console.warn('getCallerName: the caller could not be read:', e.message);
+        return null;
+    }
 }
 
 // The id half — THIS is what authorization compares.
 //
 // Returns the caller's `users.id` (`usr_<uuid>`), or null when they have no
-// roster row in this org. Null fails CLOSED in mayMutate(): a caller who owns
+// roster row in this org; a read that failed throws (resolveCaller, state §0.292).
+// Null fails CLOSED in mayMutate(): a caller who owns
 // nothing is refused every owned record. That is the safe direction, but only
 // because the lookup itself is right -- resolveCaller matches on clerkUserId and
 // scopes to orgId, and getting either wrong presents as "every rep is refused
@@ -359,8 +365,9 @@ export async function stampOwnerId(row, entity, { clerkUserId, orgId }) {
     // display-name column null) — "Assigned Rep" blank in the rail, and hidden
     // from a Manager whose scoping keys on that name (isRepVisible). The owner
     // id and the display name are stamped together from ONE roster row, so the
-    // two columns cannot disagree at creation. An unresolvable caller stamps
-    // null for both — unassigned, as before.
+    // two columns cannot disagree at creation. A caller with no roster row stamps
+    // null for both — unassigned, as before; one whose row could not be read stores
+    // nothing: resolveCaller throws (state §0.292).
     const caller = await resolveCaller(clerkUserId, orgId);
     return { ...row, ownerId: caller.id, [nameKey]: caller.name || null };
 }
@@ -710,8 +717,9 @@ export const claimRefused = (e) => String(e?.cause?.code || e?.code || '') === '
 // this org, is returned untouched — LINKING a pending (invited) row to a Clerk
 // identity stays users.mjs's job. A row by email linked to another identity is
 // that member's: null, and no new row (state §0.173). `clerkUser` may be handed in by a caller that has
-// already fetched it; otherwise it is fetched. Never throws; null when Clerk
-// cannot be read.
+// already fetched it; otherwise it is fetched. Null when Clerk cannot be read; a
+// roster read or write that fails throws (state §0.292) — null there told the caller
+// they have no profile, and what they then made was nobody's.
 export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole } = {}) {
     if (!clerkUserId || !orgId) return null;
     try {
@@ -719,8 +727,13 @@ export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole }
         if (byId) return byId;
         let cu = clerkUser;
         if (!cu) {
-            const { createClerkClient } = await import('@clerk/backend');
-            cu = await createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY }).users.getUser(clerkUserId);
+            try {
+                const { createClerkClient } = await import('@clerk/backend');
+                cu = await createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY }).users.getUser(clerkUserId);
+            } catch (e) {
+                console.warn('_lib.ensureRosterRow: Clerk could not be read:', e.message);
+                return null;
+            }
         }
         const email = String(cu?.emailAddresses?.[0]?.emailAddress || cu?.primaryEmailAddress?.emailAddress || '').trim().toLowerCase();
         if (email) {
@@ -752,6 +765,6 @@ export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole }
         return raced || null;
     } catch (e) {
         console.warn('_lib.ensureRosterRow:', e.message);
-        return null;
+        throw e;
     }
 }

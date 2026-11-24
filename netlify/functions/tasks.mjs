@@ -79,7 +79,8 @@ export const handler = async (event) => {
                 // never the display name — two users sharing a name saw each
                 // other's records, and renaming one detached theirs (18b22).
                 //
-                // A caller that cannot be resolved stays null and sees only
+                // A caller with no roster row stays null (a failed read is a 500,
+                // state §0.292) and sees only
                 // unassigned rows, matching mayMutate()'s direction on writes.
                 const callerId = await getCallerId(userId, orgId);
                 results = results.filter(r => !r.ownerId || r.ownerId === callerId);

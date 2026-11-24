@@ -25,7 +25,7 @@ const chain = (op) => new Proxy(function () {}, { get: (_, k) => {
     if (k === 'then') return (ok, no) => run().then(ok, no);
     if (k === 'catch') return (no) => run().catch(no);
     if (k === 'finally') return (f) => run().finally(f);
-    return (...a) => { if (k === 'from' && !op.table) op.table = nameOf(a[0]); if (k === 'returning' && a[0]) op.fields = a[0]; return chain(op); };
+    return (...a) => { if (k === 'from' && !op.table) op.table = nameOf(a[0]); if (k === 'returning' && a[0]) op.fields = a[0]; if (k === 'values' || k === 'set') op.given = a[0]; return chain(op); };
 } });
 const start = (kind) => (t) => { const op = { kind, table: kind === 'select' ? '' : nameOf(t), fields: kind === 'select' ? t : null }; G.ops.push(op); return chain(op); };
 export const db = {
@@ -48,6 +48,7 @@ const READS = /^(get|list)/;
 const call = (path) => new Proxy(function () {}, { get: (_, k) => (k === 'then' ? undefined : call([...path, k])), apply: (_, __, [a]) => {
     const name = String(path.at(-1));
     G.ops.push({ kind: READS.test(name) ? 'clerk-read' : 'clerk', table: name });
+    if (name === 'getUser' && G.clerkUser) return Promise.resolve(G.clerkUser);   // who signs in, when a suite names them
     const orgs = name === 'getOrganizationMembershipList' && a?.userId ? (G.clerk || {})[a.userId] || [] : [];
     return Promise.resolve({ data: orgs.map((id) => ({ organization: { id }, role: 'org:member' })), totalCount: orgs.length });
 } });

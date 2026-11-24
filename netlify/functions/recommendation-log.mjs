@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
 import { eq, and, desc, gte, lte, notLike } from 'drizzle-orm';
 import { verifyAuth, requireWrite, canSeeAll } from './auth.mjs';
-import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';
 // A next step's window, an alert's wait, a stage day within a window (AI scoring batch 3 — src/utils/nextSteps.js).
 import { NEXT_STEP_DAYS, ALERT_WAIT_DAYS, stageMovedWithin } from '../../src/utils/nextSteps.js';
 
@@ -24,12 +24,14 @@ const headers = {
 // none (fail closed, guide 18b19).
 async function repScopeOf(auth, requested) {
     if (canSeeAll(auth.userRole)) return { repName: requested || null };
-    const own = await getCallerName(auth.userId, auth.orgId);
+    const { name: own } = await resolveCaller(auth.userId, auth.orgId);   // decided on: a failed read throws (state §0.292)
     return own ? { repName: own } : { none: true };
 }
 
 // ── Resolution check per action type ─────────────────────────────────────────
-// Returns true if the underlying signal has been resolved since dismissedAt
+// Returns true if the underlying signal has been resolved since dismissedAt. A read that failed throws (state §0.292):
+// its row stays pending, to be judged by the next pass (judgePending settles each row on its own) — false there kept
+// 'ignored' for good.
 async function checkResolved(log, orgId) {
     const since = log.dismissedAt;
     const oppId = log.opportunityId;
@@ -119,7 +121,7 @@ async function checkResolved(log, orgId) {
         }
     } catch (err) {
         console.error('checkResolved error:', err.message);
-        return false;
+        throw err;
     }
 }
 
@@ -136,7 +138,8 @@ export async function verdictOf(log, orgId, now = new Date()) {
 }
 
 // Judge the org's pending rows of the last 30 days — one rep's, or every rep's — and keep each verdict. The renewal
-// ledger's rows are not recommendations (the GET leaves them out) and are left as they are. → [{ id, outcome }]
+// ledger's rows are not recommendations (the GET leaves them out) and are left as they are. Each row settles on its own;
+// one that could not be judged stays pending and is said once the rest are kept (state §0.292). → [{ id, outcome }]
 export async function judgePending(orgId, repName = null, now = new Date()) {
     const pending = await db.select().from(recommendationLog).where(and(
         eq(recommendationLog.orgId, orgId),
@@ -155,7 +158,9 @@ export async function judgePending(orgId, repName = null, now = new Date()) {
             .where(and(eq(recommendationLog.id, log.id), eq(recommendationLog.orgId, orgId)));
         return { id: log.id, outcome };
     }));
-    return updates.filter((r) => r.status === 'fulfilled' && r.value).map((r) => r.value);
+    const failed = updates.filter((r) => r.status === 'rejected');
+    if (failed.length) throw new Error(`${failed.length} of ${pending.length} recommendations could not be judged: ${failed[0].reason?.message}`);
+    return updates.filter((r) => r.value).map((r) => r.value);
 }
 
 export const handler = async (event) => {

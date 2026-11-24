@@ -4,6 +4,8 @@ import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, Organ
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
 import { readRefusal, failureWords, maybeSaid } from './utils/refusalWords.js';
+import { pressNoticeOf } from './utils/pressNotice.js';
+import { readMyProfile } from './utils/myProfileLoad.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { todayLocal, daysSince, calendarDays, inDaysWords } from './utils/dateLocal';
@@ -52,6 +54,7 @@ import MeetingPrepPanel from './components/layout/MeetingPrepPanel';
 import { layersAbove, topLayer } from './utils/escapeOrder.js';
 import { pushLayer, removeLayer, onTopOfPlace, placesOpen, samePlaces } from './utils/tabLayers.js';
 import { T } from './tokens.js';
+const ME_NOTICE = 'press_me';   // the one notice a failed profile load shows (state §0.292)
 
 
 function App() {
@@ -72,6 +75,8 @@ function App() {
     const clerkUser = isSignedIn ? rawClerkUser : null;
     const { organization, isLoaded: orgLoaded } = useOrganization();
     const prevOrgIdRef = React.useRef(null);
+    const meLoadRef = React.useRef(0);      // the profile load on screen
+    const meHeldRef = React.useRef(null);   // the org whose profile is held
     const listsOrgRef  = React.useRef(null);   // the org whose lists are on screen (state §0.173)
     const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({
         userMemberships: { infinite: true },
@@ -157,6 +162,8 @@ function App() {
         uiState.resetOnOrgSwitch();
         calState.resetOnOrgSwitch();
     }, [activeOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // A switch empties the profile (useOrgBoundState): none is held until this org's load lands (state §0.292).
+    useEffect(() => { meHeldRef.current = null; }, [activeOrgId]);
     // The org whose lists a checker or the bell may read (state §0.200): the active org,
     // its switch run — uiOrgRef moves in the switch's own effects, a switch to no org too —
     // and its list effect run for it (listsOrgRef, which a switch to no org leaves on the
@@ -555,19 +562,20 @@ loadSettings(clerkUser, orgSwitched, organization?.id || null);
 // caller's role in THIS org (state §0.163). An answer for an org the user has
 // since switched away from is dropped, not shown as this org's (§18b55).
 const meOrgId = organization?.id || null;
-dbFetch('/.netlify/functions/users?me=true')
-    .then(async r => {
-        if (r.ok) return r.json();
-        // Deactivated in this org (§0.164): every request here is refused.
-        const body = r.status === 403 ? await r.json().catch(() => null) : null;
-        return body?.code === 'deactivated' ? { deactivated: true } : null;
-    })
+// Each load is its own (state §0.292): one the user's next load overtook says and sets nothing.
+const meLoad = ++meLoadRef.current;
+const meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === meOrgId;
+readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
     .then(data => {
         if (prevOrgIdRef.current !== meOrgId) return;
+        if (meLoadRef.current !== meLoad) return;
+        // Deactivated in this org (§0.164): every request here is refused.
         setAccessRevokedOrg(data?.deactivated ? meOrgId : null);
         if (data?.user) {
             setMyProfile(data.user);
             setMyProfileOrgId(meOrgId);
+            meHeldRef.current = meOrgId;
+            setPressNotices(list => list.filter(n => n.id !== ME_NOTICE));
             setProfileForm({
                 firstName: data.user.firstName || '',
                 lastName:  data.user.lastName  || '',
@@ -582,7 +590,13 @@ dbFetch('/.netlify/functions/users?me=true')
             });
         }
     })
-    .catch(() => {});
+    // Not read, twice (state §0.292): said — until it is read this session has no name, no records of its own and a Sales
+    // Rep's screens.
+    .catch(err => {
+        console.error('Failed to load your profile:', err);
+        // Not while this org's profile is held from an earlier load; one notice, not one a load.
+        if (meStill() && meHeldRef.current !== meOrgId) setPressNotices(list => [...list.filter(n => n.id !== ME_NOTICE), { ...pressNoticeOf('Your profile could not be loaded', `${failureWords(err)} Reload the page to try again.`), id: ME_NOTICE }]);
+    });
     };
     loadData();
 }, [clerkUser, organization]);

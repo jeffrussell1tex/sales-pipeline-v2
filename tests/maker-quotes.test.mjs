@@ -146,7 +146,7 @@ test('the API page: createdBy is set by the server, and the create\'s example se
     assert.ok(object.includes('A value sent in a request is ignored.'));
     assert.ok(!object.includes('Rep display name who created the quote.'), 'the old words');
     // null is any create getCallerName names no one for: no roster row, a row with no name, or a lookup that failed
-    // (_lib.mjs resolveCaller answers none then).
+    // (getCallerName, a label, answers none then — resolveCaller throws, §0.292).
     assert.ok(object.includes('or <code>null</code> when no member name was found for the creator: they have no member name in the organization, or the name lookup failed when the quote was made.'), 'what null means');
     const post = between(docs, '<div class="endpoint" id="quote-post">', '<div class="endpoint" id="quote-put">');
     assert.ok(post.includes('"opportunityId": "opp_abc123",'), 'the example');

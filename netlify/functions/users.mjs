@@ -399,7 +399,15 @@ export const handler = async (event) => {
                         invalidateRoster(orgId);
                         console.log(`users.mjs: linked roster row ${row.id} → clerk ${userId} (${clerkEmail})`);
                     } catch (linkErr) {
+                        // Linked meanwhile — the roster sync, or another first load, made this
+                        // identity's row — theirs is that one. Else the link did not land, and
+                        // it is said (state §0.292): the row answered unlinked gave the screen a
+                        // profile the server saw none of, and what they made was nobody's.
                         console.warn('users.mjs: link update failed:', linkErr.message);
+                        const [theirs] = await db.select().from(users)
+                            .where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId)));
+                        if (!theirs) throw linkErr;
+                        row = theirs;
                     }
                 }
                 // Nothing matched: a member of this org with NO roster row — the first

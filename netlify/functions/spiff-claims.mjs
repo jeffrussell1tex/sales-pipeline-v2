@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
+import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { checkLinks } from './_links.mjs';
 
@@ -95,7 +95,7 @@ export const handler = async (event) => {
             // own deal. A manager files for the deal's rep, as sent.
             let claim = sanitize(data);
             if (!isAdmin && !isManager) {
-                const me = await getCallerName(auth.userId, orgId);
+                const { name: me } = await resolveCaller(auth.userId, orgId);   // decided on: a failed read throws (state §0.292)
                 if (!me) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your account is not on this organization\'s team list.' }) };
                 claim = { ...claim, repName: me, status: 'pending', approvedAt: null, approvedBy: null, paidAt: null };
             }
@@ -145,7 +145,7 @@ export const handler = async (event) => {
             if (Object.hasOwn(data, 'fromStatus') && typeof data.fromStatus !== 'string') return { statusCode: 400, headers, body: JSON.stringify({ error: 'fromStatus is the status the claim was seen in.', field: 'fromStatus' }) };
             let changes = data;
             const isRep = !isAdmin && !isManager;
-            const me = isRep ? await getCallerName(auth.userId, orgId) : null;   // the rep's roster name, asked once
+            const me = isRep ? (await resolveCaller(auth.userId, orgId)).name : null;   // the rep's roster name, asked once — a failed read throws (state §0.292)
             if (isRep) {
                 // A rep edits their own claim, while it is pending; its approval and
                 // payment are a manager's (state §0.169) — a rep could edit any rep's

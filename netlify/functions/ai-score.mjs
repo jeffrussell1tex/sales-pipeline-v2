@@ -114,7 +114,9 @@ export const handler = async (event) => {
         // ── The win chance Claude explains (2B): the deal's, as it stands now ─────────────────────────────────────────
         // A closed deal has none — nothing is sent. One that could not be worked out is said so, nothing sent.
         if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return { statusCode: 400, headers, body: JSON.stringify({ error: 'A closed deal has no win chance to explain.', code: 'closed' }) };
-        const win = (await rescoreDeals(orgId, [opportunityId]))[opportunityId] || opp.dealScore || null;
+        // A failure is that too (state §0.292) — never last night's score, explained and kept as the one that stands.
+        const scores = await rescoreDeals(orgId, [opportunityId], { orThrow: true }).catch(() => ({}));
+        const win = scores[opportunityId] || null;
         if (!win || !Number.isFinite(Number(win.score))) return { statusCode: 503, headers, body: JSON.stringify({ error: 'The deal\'s win chance could not be worked out just now — try again in a minute.', code: 'no_win_chance' }) };
 
         // ── Return the cached explanation if fresh (< 24h) and not forcing refresh ──────

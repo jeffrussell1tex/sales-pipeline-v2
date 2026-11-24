@@ -53,21 +53,21 @@ test('score-leads-batch.mjs: the per-org pass is one exported function the night
     assert.ok(s.includes('export async function scoreOrg(orgId, { force = false, beforeWrite = null } = {}) {'));
     // The model written as the rules alone, only as this run read them, with a new token (state §0.224 — J-B9): a change
     // saved while it trained is never put back, nothing is trained, and the leads are scored on the rules as they stand.
-    assert.ok(s.includes("const r = await db.select({ id: settingsTable.id, extra: settingsTable.extra, asRead: sql`${settingsTable.extra}::text` })"), 'the rules read as text, to compare');
+    assert.ok(s.includes("const [srow] = await db.select({ id: settingsTable.id, extra: settingsTable.extra, asRead: sql`${settingsTable.extra}::text` })"), 'the rules read as text, to compare');
     assert.ok(s.includes("const landed = srow ? await db.update(settingsTable).set({ extra: extraPatched({ leadScoring: trained }, newRevs), updatedAt: new Date() })"), 'REGRESSION: the whole extra written back from the read made before training');
     assert.ok(s.includes("sql`(${settingsTable.extra}->'leadScoring') is not distinct from ((${srow.asRead}::jsonb)->'leadScoring')`))"), 'REGRESSION: rules saved during training are overwritten');
     assert.ok(s.includes('.where(and(eq(settingsTable.orgId, orgId), sql`jsonb_typeof(${settingsTable.extra}) = \'object\'`,'), 'in this org');
     assert.ok(s.includes('if (landed.length) { cfg = trained; modelTrained = true; revs = newRevs; }'), 'trained only when written');
     assert.ok(s.includes(".returning({ id: settingsTable.id }) : [];"), 'REGRESSION: a write that cannot say it landed — every Train now refused');
     // Both reads in this org (the review, 2 Nov): another org's rules would score this org's leads.
-    assert.ok(s.includes('            .from(settingsTable).where(eq(settingsTable.orgId, orgId));'), 'REGRESSION: the rules read from any org');
-    assert.ok(s.includes('const [now] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId));'), 'REGRESSION: the rules re-read from any org');
-    assert.ok(s.includes("reason = 'config-changed';") && s.includes('cfg = now?.extra?.leadScoring || DEFAULT_LEAD_SCORING;'), 'refused: scored on the rules as they stand');
+    assert.ok(s.includes('        .from(settingsTable).where(eq(settingsTable.orgId, orgId));'), 'REGRESSION: the rules read from any org');
+    assert.ok(s.includes('const [moved] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId));'), 'REGRESSION: the rules re-read from any org');
+    assert.ok(s.includes("reason = 'config-changed';") && s.includes('cfg = moved?.extra?.leadScoring || DEFAULT_LEAD_SCORING;'), 'refused: scored on the rules as they stand');
     assert.ok(!/\.\.\.\(srow\?\.extra/.test(s), 'REGRESSION: the whole extra spread from the read');
     assert.ok(s.includes("    if (!predCfg || !predCfg.enabled)                       reason = 'predictive-off';"));
     assert.ok(s.includes("    else if (decided.length < MODEL_MIN_ROWS)                reason = 'below-engine-floor';"), 'the floor is checked BEFORE force is consulted');
     assert.ok(s.includes("    else if (!force && decided.length < threshold)           reason = 'below-threshold';"), 'force sets the org threshold aside');
-    assert.ok(s.includes('            const r = await scoreOrg(orgId);'), 'the nightly run calls it without force');
+    assert.ok(s.includes('                const r = await scoreOrg(orgId);'), 'the nightly run calls it without force');
     assert.ok(!s.includes('scoreOrg(orgId, { force: true })'), 'the batch never forces');
     assert.ok(s.includes("    if (cfg.enabled === false) return { skipped: 'disabled' };"));
     assert.ok(s.includes('    return { leadsUpdated, decided: decided.length, threshold, modelTrained, reason, leadScoring: cfg, revs };'));

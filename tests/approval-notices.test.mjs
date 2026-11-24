@@ -100,7 +100,10 @@ test('quotes.mjs: a submission, an approval or a send-back sends its notice — 
     assert.ok(put.includes("const notice = sendBack ? 'sentBack'") && put.includes(": moved && to === 'Approved' ? 'approved'") && put.includes(": moved && to === 'Pending Approval' ? 'submitted' : null;"));
     assert.ok(put.includes('await auditAs(orgId, auth.userId, {') && put.indexOf('await auditAs(orgId, auth.userId, {') < put.indexOf('await sendApprovalNotices({'), 'after the record');
     assert.ok(put.includes("console.error('quotes: approval notices failed —', e.message);"), 'a failed send is logged, and the save stands');
-    assert.ok(put.includes('actorId: await getCallerId(auth.userId, orgId), actorName: await getCallerName(auth.userId, orgId),'));
+    // Who did it, read before the save (moved pin, §0.292): a read that fails refuses the save, never tells nobody of one that landed.
+    assert.ok(put.includes('actorId: actor.id, actorName: actor.name,'));
+    const actorRead = 'const actor = notice ? await resolveCaller(auth.userId, orgId) : null;';
+    assert.ok(put.includes(actorRead) && put.includes('wrote = await db.batch([') && put.indexOf(actorRead) < put.indexOf('wrote = await db.batch(['), 'REGRESSION (§0.292): the actor read after the save');
 });
 
 test('_approvalMail.mjs: this org\'s roster, the submitter from the record by Clerk id in this org, each reader\'s switch, never the actor', () => {

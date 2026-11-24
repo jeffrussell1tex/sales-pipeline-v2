@@ -143,7 +143,7 @@ test('RECLOG: a caller who cannot see the whole org reads, writes and sweeps onl
     const s = read('netlify/functions/recommendation-log.mjs');
     const scope = between(s, 'async function repScopeOf(auth, requested) {', '\n}\n');
     assert.ok(scope.includes('if (canSeeAll(auth.userRole)) return { repName: requested || null };'), 'Admin / Manager: any rep, or the org');
-    assert.ok(scope.includes('const own = await getCallerName(auth.userId, auth.orgId);\n    return own ? { repName: own } : { none: true };'), 'everyone else: their own name, or nothing');
+    assert.ok(/const \{ name: own \} = await resolveCaller\(auth\.userId, auth\.orgId\);[^\n]*\n    return own \? \{ repName: own \} : \{ none: true \};/.test(scope), 'everyone else: their own name, or nothing');
     const get = between(s, "if (event.httpMethod === 'GET') {", "if (event.httpMethod === 'POST') {");
     assert.ok(get.includes('const scope   = await repScopeOf(auth, event.queryStringParameters?.rep);\n            const repName = scope.repName;'));
     assert.ok(get.includes('const logs = scope.none ? [] : await query;'), 'no roster name: no rows');

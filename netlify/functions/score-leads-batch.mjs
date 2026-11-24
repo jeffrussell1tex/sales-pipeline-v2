@@ -42,13 +42,12 @@ export const MODEL_MIN_ROWS = 20;
  *   revs: the rules' new revision token when the model was written (the Train now screen takes it), else {}.
  */
 export async function scoreOrg(orgId, { force = false, beforeWrite = null } = {}) {
-    let cfg = DEFAULT_LEAD_SCORING, srow = null, revs = {};
-    try {
-        const r = await db.select({ id: settingsTable.id, extra: settingsTable.extra, asRead: sql`${settingsTable.extra}::text` })
-            .from(settingsTable).where(eq(settingsTable.orgId, orgId));
-        srow = r[0];
-        cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
-    } catch (e) { /* fall back to defaults */ }
+    let revs = {};
+    // The default rules are an org that stored none: a read that failed throws (state §0.292) — by the defaults every lead
+    // of the org was scored by rules not its own, its trained model set aside, an org that turned scoring off scored.
+    const [srow] = await db.select({ id: settingsTable.id, extra: settingsTable.extra, asRead: sql`${settingsTable.extra}::text` })
+        .from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    let cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
     if (cfg.enabled === false) return { skipped: 'disabled' };
 
     const rows = await db.select().from(leads).where(eq(leads.orgId, orgId));
@@ -84,13 +83,14 @@ export async function scoreOrg(orgId, { force = false, beforeWrite = null } = {}
                         sql`(${settingsTable.extra}->'leadScoring') is not distinct from ((${srow.asRead}::jsonb)->'leadScoring')`))
                     .returning({ id: settingsTable.id }) : [];
                 if (landed.length) { cfg = trained; modelTrained = true; revs = newRevs; }
-                else {
-                    reason = 'config-changed';
-                    const [now] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId));
-                    cfg = now?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
-                }
+                else reason = 'config-changed';
             } else reason = 'below-engine-floor';
         } catch (e) { console.warn('lead model training failed for org', orgId, e.message); reason = 'training-failed'; }
+    }
+    // Outside the training's own catch (state §0.292): rules that moved and cannot be read again are never the replaced ones.
+    if (reason === 'config-changed') {
+        const [moved] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        cfg = moved?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
     }
 
     let leadsUpdated = 0;
@@ -119,18 +119,24 @@ export async function scoreOrg(orgId, { force = false, beforeWrite = null } = {}
 // The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
 const run = async () => {
     const started = Date.now();
-    let orgsProcessed = 0, leadsUpdated = 0, modelsTrained = 0;
+    let orgsProcessed = 0, leadsUpdated = 0, modelsTrained = 0, orgsFailed = 0;
     try {
         const orgRows = await db.selectDistinct({ orgId: leads.orgId }).from(leads);
         for (const { orgId } of orgRows) {
-            const r = await scoreOrg(orgId);
-            if (r.skipped) continue;
-            orgsProcessed++;
-            leadsUpdated += r.leadsUpdated;
-            if (r.modelTrained) modelsTrained++;
+            // One org that cannot be read never stops the next (as score-deals-batch; state §0.292).
+            try {
+                const r = await scoreOrg(orgId);
+                if (r.skipped) continue;
+                orgsProcessed++;
+                leadsUpdated += r.leadsUpdated;
+                if (r.modelTrained) modelsTrained++;
+            } catch (e) {
+                orgsFailed++;
+                console.error('score-leads-batch: org', orgId, 'failed —', e.message);
+            }
         }
-        console.log(`score-leads-batch: ${orgsProcessed} orgs, ${leadsUpdated} leads, ${modelsTrained} models trained in ${Date.now() - started}ms`);
-        return { statusCode: 200, body: JSON.stringify({ ok: true, orgsProcessed, leadsUpdated, modelsTrained }) };
+        console.log(`score-leads-batch: ${orgsProcessed} orgs, ${leadsUpdated} leads, ${modelsTrained} models trained, ${orgsFailed} failed in ${Date.now() - started}ms`);
+        return { statusCode: orgsFailed ? 500 : 200, body: JSON.stringify({ ok: !orgsFailed, orgsProcessed, leadsUpdated, modelsTrained, orgsFailed }) };
     } catch (err) {
         console.error('score-leads-batch error:', err.message);
         return { statusCode: 500, body: JSON.stringify({ error: 'batch failed' }) };

@@ -141,10 +141,10 @@ test('a Technician reads their own time off — the clause is added before any t
 
 test('SPIFF POST: a rep’s claim is filed in their roster name, pending, nothing approved or paid', () => {
     const s = code(read('netlify/functions/spiff-claims.mjs'));
-    assert.ok(s.includes("import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';"));
+    assert.ok(s.includes("import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';"));
     const post = between(s, "if (event.httpMethod === 'POST') {", '.returning();');
     const rep = between(post, 'if (!isAdmin && !isManager) {', "claim = { ...claim, repName: me, status: 'pending', approvedAt: null, approvedBy: null, paidAt: null };");
-    assert.ok(rep.includes('const me = await getCallerName(auth.userId, orgId);'));
+    assert.ok(rep.includes('const { name: me } = await resolveCaller(auth.userId, orgId);'));
     assert.ok(rep.includes('if (!me) return { statusCode: 403,'), 'no roster row, no claim');
     assert.ok(post.includes('.values({ ...claim, orgId })'), 'the stamped claim is the one written');
     assert.ok(!post.includes('.values({ ...sanitize(data), orgId })'), 'never the body as sent');
@@ -160,7 +160,7 @@ test('SPIFF PUT: over the stored claim; a rep edits their own, while pending, an
     // claim is read, before the rep's block — a manager's save of an unknown id created a claim.
     before(put, '.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));', "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'after the stored claim is read');
     before(put, "if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };", 'if (isRep) {', "every role's 404, before the rep's block");
-    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? await getCallerName(auth.userId, orgId) : null;'));
+    assert.ok(put.includes('const isRep = !isAdmin && !isManager;') && put.includes('const me = isRep ? (await resolveCaller(auth.userId, orgId)).name : null;'));
     assert.ok(!rep.includes('if (!existing)'), "not the rep's alone");
     assert.ok(rep.includes('if (!sameName(existing.repName, me)) {'), 'their own claim');
     assert.ok(rep.includes("if ((existing.status || 'pending') !== 'pending') {"), 'while pending');
@@ -180,9 +180,10 @@ test('SPIFF: a claim is a rep’s by name — trimmed, any case, never an empty 
     const fn = between(s, 'const sameName = (a, b) => {', '};');
     assert.ok(fn.includes("const x = String(a ?? '').trim().toLowerCase();"));
     assert.ok(fn.includes("return !!x && x === String(b ?? '').trim().toLowerCase();"), 'an empty name matches nothing');
-    // The one exception to "nothing authorizes on a name" is written where the rule is.
+    // The two that decide on a name read it from resolveCaller — a failed read throws (moved pin, §0.292) — written where the rule is.
     const lib = read('netlify/functions/_lib.mjs');
-    assert.ok(lib.includes("The one thing that authorizes on this is a rep's edit of a"), 'getCallerName’s note names the exception');
+    assert.ok(lib.includes('FOR RENDERING, AUDIT AND EXPORT — nothing decides on it.') && lib.includes('those two decide on a name, and read it from resolveCaller'), 'getCallerName’s note names the two');
+    assert.ok(!/getCallerName/.test(s), 'REGRESSION (§0.292): a rep’s claim decided on a label — a failed read their claim refused');
 });
 
 // ── 3. Export ────────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
 
-test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for a fresh org\'s first Admin, the sync\'s profile shape, idempotent by Clerk id then email, never throws', () => {
+test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for a fresh org\'s first Admin, the sync\'s profile shape, idempotent by Clerk id then email; null when Clerk cannot be read, a failed roster read thrown (reversed by design, §0.292)', () => {
     const s = code(read('netlify/functions/_lib.mjs'));
     assert.ok(s.includes('export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole } = {}) {'));
     assert.ok(s.includes('        if (byId) return byId;'), 'an existing row by Clerk id is returned untouched');
@@ -32,7 +32,8 @@ test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for
     assert.ok(s.includes("            active: true, profile: { status: 'Active', userType: role }, updatedAt: new Date(),"), 'the shape users-sync.mjs creates');
     assert.ok(s.includes('        }).onConflictDoNothing().returning();'), 'a race on the per-org unique index is not an error');
     assert.ok(s.includes('        invalidateRoster(orgId);'), 'the 30 s "no roster row" answer in the caller cache is dropped');
-    assert.ok(s.includes("        console.warn('_lib.ensureRosterRow:', e.message);"), 'never throws');
+    assert.ok(s.includes("        console.warn('_lib.ensureRosterRow:', e.message);\n        throw e;\n"), 'REGRESSION (§0.292): a failed roster read is a caller with no profile');
+    assert.ok(s.includes("                console.warn('_lib.ensureRosterRow: Clerk could not be read:', e.message);\n                return null;"), 'Clerk unreadable: no row made of nothing read');
 });
 
 test('the self-profile GET provisions when nothing matched; the request function provisions an unrostered requester', () => {

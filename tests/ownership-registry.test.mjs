@@ -237,7 +237,7 @@ test('REGRESSION — no endpoint matches users.id against a Clerk user id', () =
     for (const name of ENDPOINTS) {
         const code = codeOnly(endpointSrc(name));
         if (/eq\(\s*users\.id\s*,\s*userId\s*\)/.test(code)) {
-            offenders.push(`${name}: matches users.id against the Clerk id — use getCallerName(userId, orgId)`);
+            offenders.push(`${name}: matches users.id against the Clerk id — use getCallerId(userId, orgId) or resolveCaller`);
         }
     }
     assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
@@ -402,7 +402,7 @@ test('policy — unassigned records are mutable, including blank and whitespace 
 });
 
 test('policy — FAIL CLOSED when the CALLER cannot be identified', () => {
-    // getCallerId returns null on a missing roster row or a database error. A
+    // getCallerId returns null on a missing roster row (a database error throws, §0.292). A
     // caller with no roster row owns nothing, so an owned record must be refused
     // — never treated as "no owner, allow".
     assert.equal(mayMutate({ ownerId: KAREN, callerId: null }), false);
