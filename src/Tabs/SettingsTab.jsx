@@ -7,20 +7,12 @@ import { AdminView } from './AdminView.jsx';
 // §0.162). A panel copies the settings it is handed when it opens, and its Save
 // writes with the active org's token — so no panel opens on anything else: not
 // the previous org's settings after the header's switcher changes the org, not
-// the defaults after a failed load. A failed load says its words — the server's with their ref, else "The server
-// returned N.", or "The server could not be reached." — kept until a load lands (§0.249, the review's round 2: App's
-// toast said them, and the next toast replaced it, leaving "did not load" alone here).
-function SettingsNotLoaded({ error }) {
+// the defaults after a failed load. App draws no tab before they were read, and says why they were not, with Try again
+// (state §0.296: listLoads.js ORG_LOADS); this holds the panels whatever draws the tab.
+function SettingsNotLoaded() {
     return (
         <div style={{ padding:'20px 22px', border:`1px solid ${T.border}`, borderRadius:T.rLg, background:T.surface, fontFamily:T.sans }}>
-            <div style={{ fontSize:13, fontWeight:600, color:T.ink, overflowWrap:'anywhere' }}>
-                {error ? `This organization's settings did not load — ${error}` : "Loading this organization's settings…"}
-            </div>
-            {error && (
-                <div style={{ fontSize:12, color:T.inkMuted, marginTop:4 }}>
-                    Nothing here can be changed until they load. Reload the page to try again.
-                </div>
-            )}
+            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Loading this organization's settings…</div>
         </div>
     );
 }
@@ -34,7 +26,7 @@ export default function SettingsTab() {
         setSettingsDirty = () => {}, settingsSaveRef = { current: null },
         settingsOpenPanel = null, setSettingsOpenPanel = () => {},
         activeOrgId = null,
-        settingsOrgId = null, settingsLoadError = '',
+        settingsOrgId = null,
     } = useApp();
     // Open only on the active org's own settings; rebuilt from scratch for each
     // org (the key), so no panel, form or open item carries across a switch.
@@ -64,7 +56,7 @@ export default function SettingsTab() {
             {loaded
                 ? <AdminView key={activeOrgId} activeOrgId={activeOrgId} settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}
                     openPanelId={settingsOpenPanel} onOpenedPanel={() => setSettingsOpenPanel(null)}/>
-                : <SettingsNotLoaded error={settingsLoadError}/>}
+                : <SettingsNotLoaded/>}
         </div>
     );
 }

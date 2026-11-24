@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS, LIST_NAMES } from './utils/listLoads.js';
+import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS, ORG_LOADS, LIST_NAMES } from './utils/listLoads.js';
 import { useListLoads } from './hooks/useListLoads.js';
 import ListsGate from './components/ui/ListsGate.jsx';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { dbWrite } from './utils/storage';   // a lead marked Converted once its deal lands (state §0.253)
 import { readRefusal, failureWords, maybeSaid } from './utils/refusalWords.js';
-import { pressNoticeOf } from './utils/pressNotice.js';
 import { readMyProfile } from './utils/myProfileLoad.js';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
@@ -56,7 +55,6 @@ import MeetingPrepPanel from './components/layout/MeetingPrepPanel';
 import { layersAbove, topLayer } from './utils/escapeOrder.js';
 import { pushLayer, removeLayer, onTopOfPlace, placesOpen, samePlaces } from './utils/tabLayers.js';
 import { T } from './tokens.js';
-const ME_NOTICE = 'press_me';   // the one notice a failed profile load shows (state §0.292)
 
 
 function App() {
@@ -78,7 +76,6 @@ function App() {
     const { organization, isLoaded: orgLoaded } = useOrganization();
     const prevOrgIdRef = React.useRef(null);
     const meLoadRef = React.useRef(0);      // the profile load on screen
-    const meHeldRef = React.useRef(null);   // the org whose profile is held
     const listsOrgRef  = React.useRef(null);   // the org whose lists are on screen (state §0.173)
     const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({
         userMemberships: { infinite: true },
@@ -165,9 +162,10 @@ function App() {
         modalState.resetOnOrgSwitch();
         uiState.resetOnOrgSwitch();
         calState.resetOnOrgSwitch();
+        // Nothing is read of what was just put back (state §0.296): the profile is empty now — a switch to none too, as signing
+        // out is, and the next person to sign in may be another.
+        resetLoads(activeOrgId);
     }, [activeOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
-    // A switch empties the profile (useOrgBoundState): none is held until this org's load lands (state §0.292).
-    useEffect(() => { meHeldRef.current = null; }, [activeOrgId]);
     // The org whose lists a checker or the bell may read (state §0.200): the active org,
     // its switch run — uiOrgRef moves in the switch's own effects, a switch to no org too —
     // and its list effect run for it (listsOrgRef, which a switch to no org leaves on the
@@ -231,8 +229,9 @@ function App() {
     // every org. Read only while the profile is THIS org's: the switch puts the
     // profile back (useUIState — org-bound), so only the switch's own render still
     // holds the last org's row, and myProfileOrgId names the last org until the
-    // new org's answer lands (guide §18b55); until then a rep's screens, which
-    // open nothing the server would not refuse.
+    // new org's answer lands (guide §18b55); until then a rep's, which opens nothing
+    // the server would not refuse — and no tab, and none of the windows that wait (ORG_LOADS,
+    // state §0.296), is drawn.
     const [myProfileOrgId, setMyProfileOrgId] = React.useState(null);
     // Deactivated in the active org (state §0.164): users?me=true answers 403
     // 'deactivated' — the server refuses every request in that org — and the app
@@ -316,18 +315,8 @@ function App() {
     // the keys it owns, so there is no background save to report on here.
     const {
         settings, setSettings,
-        loadSettings, loadRoster, settingsOrgId, settingsLoadError,
+        loadSettings, loadRoster, readSettings, settingsOrgId,
     } = useSettings({ reportLoad });
-
-    // A failed settings load leaves the defaults on screen, and nothing saves
-    // settings until a load succeeds (state §0.162) — say so, or every pipeline,
-    // stage and switch looks reset with no explanation.
-    useEffect(() => {
-        if (!settingsLoadError) return;
-        // The load's words after a dash, never in parentheses (§0.249, the review's round 2: "(… (ref r1))"); the
-        // Settings screen says them too, kept until a load lands — this toast is replaced by the next one.
-        setUndoToast({ error: `Settings did not load — ${settingsLoadError}${/[.!?]$/.test(settingsLoadError) ? '' : '.'} Nothing in Settings can be saved until they do. Reload the page to try again.` });
-    }, [settingsLoadError]);
 
     // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
     const _addAuditRef    = useRef(null);
@@ -549,6 +538,9 @@ function App() {
     const loadData = async () => {
         // Wait for Clerk token to be available before firing any DB calls
         await waitForToken();
+        // Switched while it waited (state §0.296): the switch's own load reads its org. Run now, the settings and the profile would be read
+        // for that org with this one's id on them — its settings taken as this org's, and its loads' state let go.
+        if (!stillOrg(organization.id)) return;
 
         // ── Data loading delegated to hooks ──────────────────────────────
         loadOpportunities();
@@ -566,49 +558,7 @@ const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organizatio
 prevOrgIdRef.current = organization?.id || null;
 loadSettings(clerkUser, orgSwitched, organization?.id || null);
 
-// Load current user's own profile (notification prefs, etc.) — and with it the
-// caller's role in THIS org (state §0.163). An answer for an org the user has
-// since switched away from is dropped, not shown as this org's (§18b55).
-const meOrgId = organization?.id || null;
-// Each load is its own (state §0.292): one the user's next load overtook says and sets nothing.
-const meLoad = ++meLoadRef.current;
-const meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === meOrgId;
-readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
-    .then(data => {
-        if (prevOrgIdRef.current !== meOrgId) return;
-        // Their row here was linked, made or saved just now (state §0.295; users.mjs says so): what was asked beside it may
-        // have been answered for no member of this org — short, or empty, or a rep's — and read as read. All of it is read again, whichever load this was: the
-        // later load's lists may have been asked before the link too.
-        if (data?.joined) readAllAgain(meOrgId);
-        if (meLoadRef.current !== meLoad) return;
-        // Deactivated in this org (§0.164): every request here is refused.
-        setAccessRevokedOrg(data?.deactivated ? meOrgId : null);
-        if (data?.user) {
-            setMyProfile(data.user);
-            setMyProfileOrgId(meOrgId);
-            meHeldRef.current = meOrgId;
-            setPressNotices(list => list.filter(n => n.id !== ME_NOTICE));
-            setProfileForm({
-                firstName: data.user.firstName || '',
-                lastName:  data.user.lastName  || '',
-                email:     data.user.email     || '',
-                phone:     data.user.phone     || '',
-                // `mobile` was missing here while the Save Profile button sends it —
-                // so the field rendered blank and every profile save wiped a stored
-                // mobile number. Same trap the signature would have hit.
-                mobile:    data.user.mobile    || '',
-                title:     data.user.title     || '',
-                emailSignature: data.user.emailSignature || '',
-            });
-        }
-    })
-    // Not read, twice (state §0.292): said — until it is read this session has no name, no records of its own and a Sales
-    // Rep's screens.
-    .catch(err => {
-        console.error('Failed to load your profile:', err);
-        // Not while this org's profile is held from an earlier load; one notice, not one a load.
-        if (meStill() && meHeldRef.current !== meOrgId) setPressNotices(list => [...list.filter(n => n.id !== ME_NOTICE), { ...pressNoticeOf('Your profile could not be loaded', `${failureWords(err)} Reload the page to try again.`), id: ME_NOTICE }]);
-    });
+loadMyProfile(organization?.id || null);
     };
     loadData();
 }, [clerkUser, organization]);
@@ -1005,13 +955,60 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useQuotes(_deps);
 
-    // Try again (state §0.294): the lists named, each read again by its own loader — never the whole of loadData, which
-    // would read the settings, the roster and the profile again too.
+    // Load the current user's own profile (notification prefs, etc.) — and with it the
+    // caller's role in THIS org (state §0.163). An answer for an org the user has
+    // since switched away from is dropped, not shown as this org's (§18b55) — asked as a list's
+    // load asks it (stillOrg), so one that lands while there is no org fills nothing either (state §0.296).
+    const loadMyProfile = (meOrgId) => {
+        // Each load is its own (state §0.292): one the user's next load overtook says and sets nothing. It is tracked as the
+        // lists' are (state §0.296): until it is read this session has Clerk's name and no id, no records of its own and a Sales Rep's
+        // role, so no tab, and none of the windows that wait, is drawn from it (the header and the nav are).
+        const meLoad = ++meLoadRef.current;
+        const meStill = () => meLoadRef.current === meLoad && stillOrg(meOrgId);
+        const say = (ev) => reportLoad({ org: meOrgId, name: 'profile', ...ev });
+        say({ type: 'begin' });
+        return readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
+            .then(data => {
+                if (!stillOrg(meOrgId)) return;
+                // Their row here was linked, made or saved just now (state §0.295; users.mjs says so): what was asked beside it may
+                // have been answered for no member of this org — short, or empty, or a rep's — and read as read. All of it is read again, whichever load this was: the
+                // later load's lists may have been asked before the link too.
+                if (data?.joined) readAllAgain(meOrgId);
+                if (meLoadRef.current !== meLoad) return;
+                // Deactivated in this org (§0.164): every request here is refused.
+                setAccessRevokedOrg(data?.deactivated ? meOrgId : null);
+                if (data?.user) {
+                    setMyProfile(data.user);
+                    setMyProfileOrgId(meOrgId);
+                    setProfileForm({
+                        firstName: data.user.firstName || '',
+                        lastName:  data.user.lastName  || '',
+                        email:     data.user.email     || '',
+                        phone:     data.user.phone     || '',
+                        // `mobile` was missing here while the Save Profile button sends it —
+                        // so the field rendered blank and every profile save wiped a stored
+                        // mobile number. Same trap the signature would have hit.
+                        mobile:    data.user.mobile    || '',
+                        title:     data.user.title     || '',
+                        emailSignature: data.user.emailSignature || '',
+                    });
+                }
+                say({ type: 'ok' });
+            })
+            // Not read, twice (state §0.292): said by the banner, with Try again, and by what waits for it.
+            .catch(err => {
+                console.error('Failed to load your profile:', err);
+                if (meStill()) say({ type: 'failed', words: failureWords(err), auth: !!err?.auth });
+            });
+    };
+    // Try again (state §0.294): the loads named, each read again by its own loader — never the whole of loadData.
+    // (The settings here are the settings alone: loadSettings, with the org, brings the team too.)
     const retryLoads = (names) => {
         const loaders = {
             opportunities: loadOpportunities, accounts: loadAccounts, contacts: loadContacts, tasks: loadTasks, activities: loadActivities,
             leads: loadLeads, documents: documentsHook.loadDocuments, quotes: loadQuotes, products: () => loadProducts(),
             users: () => loadRoster(), spiffClaims: loadSpiffClaims,
+            settings: () => readSettings(organization?.id || null), profile: () => loadMyProfile(organization?.id || null),
         };
         for (const n of names) loaders[n]?.();
     };
@@ -1025,6 +1022,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
     // A tab, once the lists it draws from were read.
     const gate = { loads, onRetry: retryLoads };
     const listsOf = (tab) => tabLists(tab, { technician: isTechnician(userRole) });
+    const orgRead = areRead(loads, ORG_LOADS);   // whose session this is, and their org's settings (state §0.296)
     const recordsRead = areRead(loads, RECORD_LISTS);   // meeting prep and the quick log wait with the record windows
 
     // A message's link into the app (state §0.237; src/utils/appLinks.js — Jeff's Q1-Q4): a deal opens its window,
@@ -1839,7 +1837,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
         settings, setSettings,
         activeOrgId,   // the signed-in org, or null — a mount-time load keys on it (§0.125; the Settings feed and counts since §0.148)
         settingsDirty, setSettingsDirty, settingsSaveRef,
-        settingsOrgId, settingsLoadError,   // whose settings are in state; why not (§0.162)
+        settingsOrgId,   // whose settings are in state (§0.162)
         opportunities, setOpportunities,
         accounts, setAccounts,
         contacts, setContacts,
@@ -2197,6 +2195,11 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
                 last — Reports' saved list and Leads' requests loaded once and kept
                 the last org's rows. */}
             <React.Fragment key={activeOrgId || 'no-org'}>
+            {/* Whose session this is and their org's settings first (state §0.296): until both were read the tabs, their roles
+                and their switches would be the product's defaults and a Sales Rep's. */}
+            {!orgRead ? (
+                <ErrorBoundary tabName="This page"><ListsGate {...gate} lists={ORG_LOADS} /></ErrorBoundary>
+            ) : (<>
             {activeTab === 'home' && (
                 <ErrorBoundary tabName="Home">
                     <ListsGate {...gate} lists={listsOf('home')}><HomeTab /></ListsGate>
@@ -2273,6 +2276,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
                     <SettingsTab />
                 </ErrorBoundary>
             )}
+            </>)}
             </React.Fragment>
 
 

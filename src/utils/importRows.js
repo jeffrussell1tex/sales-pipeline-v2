@@ -115,7 +115,7 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
     // A blank Sales Rep is the importer's, by id (state §0.216; Jeff, 29 Oct, Q11: "Importer, by id"): their app id
     // goes as `ownerId` with no name, and the server stamps the member's name with it (_lib.mjs importerOwners)
     // — the importer's NAME, resolved by name, left the deal unowned where another member shared it.
-    // Before the profile is known there is no id: the name, as before.
+    // A member with no row here has no id (the import waits for the profile, §0.296): the name, as before.
     const byImporter = !merged.salesRep && !!currentUserId;
     merged.salesRep        = merged.salesRep        || (byImporter ? '' : currentUser);
     merged.stage           = merged.stage           || 'Qualification';
@@ -144,7 +144,7 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
 /**
  * A new contact the CSV import makes is the importer's, by id (state §0.217; Jeff, 30 Oct: "Imported contacts become
  * the owners"), as a deal's blank Sales Rep is (Q11): their app id goes as `ownerId` with no name, and the server
- * stamps the member's name with it (_lib.mjs importerOwners). A row naming a rep keeps it; before the profile is known
+ * stamps the member's name with it (_lib.mjs importerOwners). A row naming a rep keeps it; with no row here
  * there is no id, and the contact is saved with no owner, as before. An overwrite never comes here: it keeps its owner.
  * @param {Object} row               a contact the import sends new
  * @param {string} [currentUserId]   the importer's app id (users.id)

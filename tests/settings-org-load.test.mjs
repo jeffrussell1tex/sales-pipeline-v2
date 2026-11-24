@@ -26,7 +26,7 @@ const codeOnly = (src) =>
 // globalThis.__s162[world], so nothing one test leaves pending can reach a
 // later test's world. Timers are node:test's mock timers: the hook's zero-delay
 // timers (the ready flag, the roster's first-load delay) fire on each flush,
-// the 500 ms roster delay after a switch never does, and nothing sleeps.
+// the 500 ms roster delay after a switch only where a test ticks it by hand, and nothing sleeps.
 const dataUrl = (src) => 'data:text/javascript,' + encodeURIComponent(src);
 const hookSrc = readFileSync(new URL('../src/hooks/useSettings.js', import.meta.url), 'utf8');
 const swap = (src, from, to) => {
@@ -53,12 +53,10 @@ export const waitForToken = ()     => ${w}.waitForToken();
 `);
     // The defaults module is real (pure) — a data: URL module resolves it by its file URL.
     const defaults = new URL('../src/utils/settingsDefaults.js', import.meta.url).href;
-    // The words module likewise (§0.249, the review's fixes L: the load says readRefusal's / failureWords' words).
-    const words = new URL('../src/utils/refusalWords.js', import.meta.url).href;
-    // The one loader too (§0.295: the team's read) — over the org on screen, which `activate` sets as App does.
+    // The one loader too (§0.295: the team's read; §0.296: the settings') — over the org on screen, which `activate` sets as App does.
     const loads = new URL('../src/utils/listLoads.js', import.meta.url).href;
-    const wired = swap(swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
-        "from '../utils/settingsDefaults.js';", `from "${defaults}";`), "from '../utils/refusalWords.js';", `from "${words}";`)
+    const wired = swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
+        "from '../utils/settingsDefaults.js';", `from "${defaults}";`)
         .replace("from '../utils/listLoads.js';", `from "${loads}";`);
     return (await import(dataUrl(wired))).useSettings;
 }
@@ -141,6 +139,7 @@ async function setup(t, { stored = {} } = {}) {
         local: new Map(Object.entries(stored)),
         holdWrites: false,
         held: [],
+        reports: [],              // what the loads reported (state §0.296)
     };
     env.releaseWrites = () => { env.held.splice(0).forEach((resolve) => resolve({ ok: true, status: 200, error: null })); };
     const store = {
@@ -174,8 +173,10 @@ async function setup(t, { stored = {} } = {}) {
         env,
         get api() { return host.api; },
         // An org becomes active: its token first (App's getter effect runs
-        // before its load effect), then the render that hands the hook the org.
-        activate(org) { env.tokenOrg = org; setRequestOrg(org); return host.render(org); },
+        // before its load effect), then the render that hands the hook its reportLoad.
+        activate(org) { env.tokenOrg = org; setRequestOrg(org); return host.render({ reportLoad: (ev) => env.reports.push(ev) }); },
+        // The settings' load as it stands: what it reported last, and for which org.
+        get said() { const s = env.reports.filter((e) => e.name === 'settings'); const { org, type, words, auth } = s[s.length - 1] || {}; return [org, type, words, auth]; },
         answer(url, org, body) { take(url, org).resolve({ ok: true, status: 200, json: async () => body }); },
         fail(url, org, status) { take(url, org).resolve({ ok: false, status, json: async () => ({}) }); },
         // Promise chains and renders settle, then the timers due by now fire —
@@ -202,8 +203,9 @@ test('a failed first load records no org, keeps the reason, and saves nothing', 
     w.answer(USERS, A, { users: [{ id: 'u1', name: 'Rep One' }] });
     await w.flush();
     assert.equal(w.api.settingsOrgId, null, 'no org may be recorded for settings that never arrived');
-    // Moved in §0.249 (review fixes, L): the words are readRefusal's — it said "HTTP 500".
-    assert.equal(w.api.settingsLoadError, 'The server returned 500.', 'the reason must reach App and the Settings view');
+    // Moved in §0.296: the reason is reported, as a list's load is — the banner, the gate and what waits say it (list-loads).
+    assert.deepEqual(w.said, [A, 'failed', 'The server returned 500.', false], 'the reason must reach what waits for it');
+    assert.deepEqual(w.env.reports.filter((e) => e.name === 'settings').map((e) => e.type), ['begin', 'failed']);
     w.api.setSettings((prev) => ({ ...prev, pipelines: [{ id: 'x', name: 'Typed after the failure' }] }));
     await w.flush();
     assert.deepEqual(w.env.writes, [], "an edit over the defaults must not PUT them over the org's real settings");
@@ -218,7 +220,7 @@ test("a successful load records its org — and a change to the app's copy write
     w.answer(USERS, A, { users: [{ id: 'u1', name: 'Rep One' }] });
     await w.flush();
     assert.equal(w.api.settingsOrgId, A);
-    assert.equal(w.api.settingsLoadError, '');
+    assert.deepEqual(w.said, [A, 'ok', undefined, undefined]);
     assert.deepEqual(w.api.settings.pipelines, pipelinesOf(A));
     assert.deepEqual(w.env.writes, [], 'the load and the roster are not changes');
     w.api.setSettings((prev) => ({ ...prev, pipelines: [...prev.pipelines, { id: 'p2', name: 'Renewals' }] }));
@@ -226,7 +228,7 @@ test("a successful load records its org — and a change to the app's copy write
     assert.deepEqual(w.env.writes, [],
         'the screen that changed it saves its own keys; the hook PUT the whole object, every key as it was at sign-in, over newer saves');
     assert.deepEqual(w.api.settings.pipelines.map((p) => p.name), ['org_A pipeline', 'Renewals'], 'the copy still changes');
-    assert.deepEqual(Object.keys(w.api).sort(), ['loadRoster', 'loadSettings', 'setSettings', 'settings', 'settingsLoadError', 'settingsOrgId'],
+    assert.deepEqual(Object.keys(w.api).sort(), ['loadRoster', 'loadSettings', 'readSettings', 'setSettings', 'settings', 'settingsOrgId'],
         'no save error, ready flag or unused handlers — nothing here saves');
 });
 
@@ -250,6 +252,7 @@ test("after a switch, the left org's late answers are dropped and nothing saves 
     w.answer(SETTINGS, A, settingsOf(A));                  // A's answers arrive late
     w.answer(USERS, A, { users: [{ id: 'ua', name: 'A Rep' }] });
     await w.flush();
+    assert.deepEqual(w.said, [B, 'begin', undefined, undefined], "A's late answer is not B's settings read");
     assert.equal(w.api.settingsOrgId, null, "A's late answer must not be recorded as anyone's");
     assert.notDeepEqual(w.api.settings.pipelines, pipelinesOf(A), "A's pipelines must not land in B");
     assert.deepEqual(w.api.settings.users, [], "A's roster must not land in B");
@@ -314,8 +317,83 @@ test('a reload of the same org that fails keeps the loaded copy', async (t) => {
     w.fail(SETTINGS, A, 503);
     await w.flush();
     assert.equal(w.api.settingsOrgId, A, "the copy in state is still this org's own");
-    assert.equal(w.api.settingsLoadError, '');
+    // Reversed in §0.296 (by design): a failed reload was said nowhere. It is the banner's now — "could not be read again",
+    // as a list's is — and what is drawn stays.
+    assert.deepEqual(w.said, [A, 'failed', 'The server returned 503.', false]);
     assert.deepEqual(w.api.settings.pipelines, pipelinesOf(A), 'the copy stays — Settings stays open');
+});
+
+test('a workspace that saved none is answered null — the defaults, read; an answer with no settings in it, or one that cannot be read, is a failure, never the defaults (state §0.296)', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const go = async (body) => {
+        const w = await setup(t);
+        w.activate(A);
+        w.api.loadSettings(USER, false, A);
+        await w.flush();
+        w.answer(SETTINGS, A, body);
+        await w.flush();
+        const out = [w.said[1], w.said[2], w.api.settingsOrgId];
+        t.mock.timers.reset();
+        return out;
+    };
+    assert.deepEqual(await go({ settings: null }), ['ok', undefined, A]);
+    for (const body of [{}, null, { settings: 'x' }, { error: 'x' }]) assert.deepEqual(await go(body), ['failed', 'Its answer could not be read.', null], `REGRESSION: ${JSON.stringify(body)} — the product's defaults, as this org's own`);
+});
+
+test('a switch empties the org on record and what it held before its load answers, and a failed one leaves the defaults, said (state §0.296)', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const { DEFAULT_SETTINGS } = await import(new URL('../src/utils/settingsDefaults.js', import.meta.url).href);
+    const w = await setup(t);
+    w.activate(A);
+    w.api.loadSettings(USER, false, A);
+    await w.flush();
+    w.answer(SETTINGS, A, settingsOf(A));
+    w.answer(USERS, A, { users: [{ id: 'ua', name: 'A Rep' }] });
+    await w.flush();
+    assert.deepEqual(w.api.settings.users.map((u) => u.id), ['ua']);
+    w.activate(B);
+    w.api.loadSettings(USER, true, B);
+    await w.flush();
+    assert.deepEqual([w.api.settingsOrgId, w.api.settings], [null, DEFAULT_SETTINGS], 'REGRESSION: the last org, or its team, under the new one');
+    w.fail(SETTINGS, B, 401);
+    await w.flush();
+    assert.deepEqual([w.said, w.api.settingsOrgId, w.api.settings], [[B, 'failed', 'The server returned 401.', true], null, DEFAULT_SETTINGS], 'a refused sign-in is said as one');
+    // Try again: the same org, nothing switched.
+    t.mock.timers.tick(500); await w.flush();   // the switch's 500 ms: the team's read goes out
+    w.answer(USERS, B, { users: [{ id: 'ub', name: 'B Rep' }] });
+    await w.flush();
+    const asked = w.env.pending.filter((p) => p.url === USERS).length;
+    w.api.readSettings(B);
+    await w.flush();
+    assert.equal(w.env.pending.filter((p) => p.url === USERS).length, asked, 'the settings alone');
+    w.answer(SETTINGS, B, settingsOf(B));
+    await w.flush();
+    assert.deepEqual([w.said[1], w.api.settingsOrgId, w.api.settings.pipelines, w.api.settings.users.map((u) => u.id)], ['ok', B, pipelinesOf(B), ['ub']], 'the team, read already, stays with them');
+});
+
+test('two loads of one org out at once: the later one\'s answer stands, whichever lands last (state §0.296)', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const w = await setup(t);
+    w.activate(A);
+    w.api.readSettings(A);
+    w.api.readSettings(A);
+    await w.flush();
+    assert.equal(w.env.pending.filter((p) => p.url === SETTINGS).length, 2);
+    const [older] = w.env.pending.splice(0, 1);
+    w.answer(SETTINGS, A, settingsOf(A));
+    await w.flush();
+    older.resolve({ ok: true, status: 200, json: async () => ({ settings: { pipelines: pipelinesOf('old') } }) });
+    await w.flush();
+    assert.deepEqual([w.api.settings.pipelines, w.said[1]], [pipelinesOf(A), 'ok'], 'REGRESSION: an older answer over the newer one');
+    // And its failure says nothing.
+    w.api.readSettings(A); w.api.readSettings(A);
+    await w.flush();
+    const [late] = w.env.pending.splice(0, 1);
+    w.answer(SETTINGS, A, settingsOf(A));
+    await w.flush();
+    late.resolve({ ok: false, status: 500, json: async () => ({}) });
+    await w.flush();
+    assert.equal(w.said[1], 'ok');
 });
 
 test('switching away and back, a failed load is reported even for an org loaded before', async (t) => {
@@ -335,7 +413,7 @@ test('switching away and back, a failed load is reported even for an org loaded 
     w.fail(SETTINGS, A, 500);
     await w.flush();
     assert.equal(w.api.settingsOrgId, null);
-    assert.equal(w.api.settingsLoadError, 'The server returned 500.', 'Settings must say the load failed, not wait forever');
+    assert.deepEqual(w.said, [A, 'failed', 'The server returned 500.', false], 'the load that failed is said, not waited for forever');
     assert.notDeepEqual(w.api.settings.pipelines, pipelinesOf(B));
 });
 
@@ -350,8 +428,8 @@ test("Settings opens only on the active org's own settings, rebuilt for each org
         'a panel copies what it is handed when it opens: the previous org\'s settings, or the defaults after a failed load');
     assert.ok(/\{loaded\s*\?\s*<AdminView key=\{activeOrgId\} /.test(tabSrc),
         'without the key one AdminView, its open panel and its forms carry across a switch');
-    // Moved in §0.249 (the review's round 2): the view is handed the load's words, and draws them, not only "did not load".
-    assert.ok(tabSrc.includes(': <SettingsNotLoaded error={settingsLoadError}/>}'));
+    // Moved in §0.296: App's gate says why, with Try again, before any tab is drawn (list-loads).
+    assert.ok(tabSrc.includes(': <SettingsNotLoaded/>}'));
 });
 
 test('App loads the active org, and ends unsaved Settings edits on a switch', () => {
@@ -360,7 +438,7 @@ test('App loads the active org, and ends unsaved Settings edits on a switch', ()
         'a load without its org loads nothing');
     assert.ok(/useEffect\(\(\) => \{\s*setSettingsDirty\(false\);\s*settingsSaveRef\.current = null;\s*\}, \[activeOrgId\]\);/.test(appSrc),
         "the leave guard's Save must not run the previous org's panel save after a switch");
-    assert.ok(appSrc.includes('settingsOrgId, settingsLoadError,'), 'the context carries both to Settings and Sales Manager');
+    assert.ok(/\n        settingsOrgId,\s/.test(appSrc.slice(appSrc.indexOf('const appContextValue'))), 'the context carries it to Settings and Sales Manager');
 });
 
 test("the Sales Manager tiers and SPIFFs save only over the loaded org's settings", () => {

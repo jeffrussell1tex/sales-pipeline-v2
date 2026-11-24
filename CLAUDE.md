@@ -541,7 +541,8 @@ One commit per verified batch; doc patch in the same commit.
   claims since §0.295) load through `readList`
   (src/utils/listLoads.js), a tab is drawn once the lists it draws from were read (`TAB_LISTS`), a record's window once
   `RECORD_LISTS` were — one asked for before waits — and the banner stands until they are; ask `areRead` /
-  `unreadWords`, never a length; a first sign-in (`joined`) reads everything again, and a caller with no row is never
+  `unreadWords`, never a length; the org's settings and the caller's profile are tracked too (§0.296, `ORG_LOADS`): one
+  gate over every tab, and the waits of the windows that wait, until both were read — none drawn or saved from the defaults; a first sign-in (`joined`) reads everything again, and a caller with no row is never
   cached (THE GUARD, tests/list-loads.test.mjs, tests/first-sign-in.test.mjs; guide §18b139). One claim for a deal
   and a SPIFF is the server's (§0.295; 409 `claimed`, tests/integration/spiff-double.itest.mjs).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with

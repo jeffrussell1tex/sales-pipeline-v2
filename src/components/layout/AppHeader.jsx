@@ -85,7 +85,7 @@ export default function AppHeader({
         anyLayerOpen,
     } = useApp();
 
-    const bellUnread = unreadWords(loads, ['opportunities', 'tasks', 'activities']);   // the lists its entries are worked out from (state §0.294)
+    const bellUnread = unreadWords(loads, ['profile', 'opportunities', 'tasks', 'activities']);   // what its entries are worked out from (state §0.294; whose they are, §0.296)
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';

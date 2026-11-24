@@ -176,6 +176,7 @@ test('App: the reset runs on a switch only — from one org to another or to non
         'modalState.resetOnOrgSwitch();',
         'uiState.resetOnOrgSwitch();',
         'calState.resetOnOrgSwitch();',
+        'resetLoads(activeOrgId);',   // §0.296: nothing is read of what was put back
         '}, [activeOrgId]);',
     ], 'the ref moves before the check (or the first load never arms it); the first load and a re-render keep what is open');
     assert.equal(app.split('resetOnOrgSwitch()').length - 1, 3, 'called from this effect only — a layer\'s crash closes the layers alone (closeLayersAfterCrash, §0.185)');

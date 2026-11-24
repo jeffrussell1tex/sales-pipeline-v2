@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
 import { DEFAULT_SETTINGS, settingsAsLoaded } from '../utils/settingsDefaults.js';
-import { readRefusal, failureWords } from '../utils/refusalWords.js';
 import { readList } from '../utils/listLoads.js';
 
 // The app's copy of the active org's settings. This hook LOADS them and never
@@ -27,17 +26,15 @@ export function useSettings(deps = {}) {
     // a slow answer for the org the user just left never lands in the new one.
     // The org is recorded only when its load SUCCEEDS; until then the Settings
     // view does not open (SettingsTab compares it with the active org), and the
-    // Sales Manager's incentive saves refuse. This hook used to start from an
+    // Sales Manager's incentive saves refuse — and no tab, and none of the windows that wait,
+    // is drawn (state §0.296: the load reports as a list's does, listLoads.js ORG_LOADS). This hook used to start from an
     // UNSCOPED localStorage copy, mark itself ready whether the load succeeded or
     // not, and PUT the next change an Admin made — the defaults, or an earlier
     // build's cached copy, possibly another org's — over the org's real
     // pipelines, stages and KPIs.
     const loadGenRef     = useRef(0);
     const loadOrgRef     = useRef(null);   // the org the latest load is for
-    const settingsOrgRef = useRef(null);   // the org whose settings are in state
     const [settingsOrgId, setSettingsOrgId] = useState(null);
-    // Non-empty when the active org's settings did not load.
-    const [loadError, setLoadError] = useState('');
 
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
@@ -53,14 +50,28 @@ export function useSettings(deps = {}) {
         wait: async () => { await waitForToken(); await new Promise(resolve => setTimeout(resolve, delay)); },
     });
 
+    // The settings themselves, through the one loader too (state §0.296). A failed read leaves what is in state: on a first
+    // load or after a switch the defaults, which no tab and none of the windows that wait draws from; on a reload this org's own copy. A workspace that has
+    // saved none is answered `settings: null`; an answer with no settings in it is a failure, never the defaults.
+    const readSettings = (orgId) => readList('settings', {
+        read: () => dbFetch('/.netlify/functions/settings'),
+        pick: (data) => (data && typeof data.settings === 'object' ? data.settings : undefined),
+        take: (stored) => {
+            // The defaults under what the org stored, the roster kept — one
+            // rule with a stale save's read of the latest (settingsDefaults.js).
+            setSettings(prev => settingsAsLoaded(prev, stored));
+            // This org's settings are in state: the Settings view may use
+            // them from here.
+            setSettingsOrgId(orgId);
+        },
+        gen: loadGenRef, report: deps.reportLoad,
+    });
+
     // Load the org's settings and roster from the DB. App calls this for the
     // active org each time its main load runs — at sign-in, and on every switch.
     const loadSettings = (clerkUser, clearFirst = false, orgId = null) => {
         if (!clerkUser || !orgId) return;
 
-        // Each load is for ONE org and takes the next number; only the latest
-        // load's answers are applied.
-        const gen = ++loadGenRef.current;
         const prevOrgId = loadOrgRef.current;
         loadOrgRef.current = orgId;
         const switched = clearFirst || (prevOrgId && prevOrgId !== orgId);
@@ -68,9 +79,7 @@ export function useSettings(deps = {}) {
         // Reset state when switching orgs to prevent bleed-through — no org's
         // settings are in state until this load succeeds.
         if (switched) {
-            settingsOrgRef.current = null;
             setSettingsOrgId(null);
-            setLoadError('');
             setSettings(DEFAULT_SETTINGS);
         }
         // Purge what nothing reads any more — the users cache (users are
@@ -93,31 +102,7 @@ export function useSettings(deps = {}) {
         // On org switch, delay users fetch 500ms to ensure Clerk JWT has rotated.
         const usersDelay = switched ? 500 : 0;
 
-        // Ok first (§0.249, docs/design/refusal-sweep Part 12): a refusal throws the server's words with their ref, else
-        // "The server returned N." — it threw "HTTP N".
-        dbFetch('/.netlify/functions/settings')
-            .then(async r => { if (!r.ok) throw new Error(await readRefusal(r)); return r.json(); })
-            .then(data => {
-                if (gen !== loadGenRef.current) return;   // a newer load owns the state
-                // The defaults under what the org stored, the roster kept — one
-                // rule with a stale save's read of the latest (settingsDefaults.js).
-                setSettings(prev => settingsAsLoaded(prev, data.settings ?? null));
-                // This org's settings are in state: the Settings view may use
-                // them from here.
-                settingsOrgRef.current = orgId;
-                setSettingsOrgId(orgId);
-                setLoadError('');
-            })
-            .catch(err => {
-                console.error('Failed to load settings:', err);
-                if (gen !== loadGenRef.current) return;
-                // A reload of the org already in state keeps that copy: it is
-                // this org's. A first load or a switch that failed has nothing
-                // in state — Settings stays closed, and says why.
-                // A refusal in its words, a thrown failure in plain words (failureWords) — never "Failed to fetch".
-                if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));
-            });
-
+        readSettings(orgId);
         loadRoster(usersDelay);
     };
 
@@ -125,7 +110,6 @@ export function useSettings(deps = {}) {
         settings,
         setSettings,
         settingsOrgId,
-        settingsLoadError: loadError,
-        loadSettings, loadRoster,
+        loadSettings, loadRoster, readSettings,
     };
 }

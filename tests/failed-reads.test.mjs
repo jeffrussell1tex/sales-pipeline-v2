@@ -406,13 +406,11 @@ test("the app's profile load: asked once more after a failure, then said — nev
     assert.deepEqual(await go(answer(403, { error: 'x', code: 'deactivated' })), [{ deactivated: true }, 1]);
     assert.deepEqual(await go(answer(403, { error: 'Not a member.' }), answer(403, { error: 'Not a member.' })), ['Not a member.', 2]);
     const app = readFileSync(new URL('src/App.jsx', ROOT), 'utf8').split('\r\n').join('\n');
-    const at = app.indexOf("const meLoad = ++meLoadRef.current;\nconst meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === meOrgId;\nreadMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)\n    .then(data => {\n        if (prevOrgIdRef.current !== meOrgId) return;\n        // Their row here was linked, made or saved");
-    assert.ok(at > 0);
-    const load = app.slice(at, app.indexOf('    loadData();', at));
-    const emptied = '    useEffect(() => { meHeldRef.current = null; }, [activeOrgId]);';
-    assert.ok(app.includes(emptied) && app.indexOf(emptied) < at, 'held for its org only until a switch, before the load that follows it');
-    assert.ok(load.includes("            meHeldRef.current = meOrgId;\n            setPressNotices(list => list.filter(n => n.id !== ME_NOTICE));\n"), 'a load that lands takes the notice back');
-    assert.ok(load.includes("        if (meStill() && meHeldRef.current !== meOrgId) setPressNotices(list => [...list.filter(n => n.id !== ME_NOTICE), { ...pressNoticeOf('Your profile could not be loaded', `${failureWords(err)} Reload the page to try again.`), id: ME_NOTICE }]);\n    });"), 'said once, by the load on screen, unless the profile is held');
+    // Reversed in §0.296: no notice of its own — the load reports as a list's does, and the banner and what waits say it
+    // (tests/list-loads.test.mjs RUNS it: its count, its org, its words).
+    assert.ok(app.includes("return readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)\n            .then(data => {\n                if (!stillOrg(meOrgId)) return;\n"));
+    const auth = async (a) => readMyProfile(async () => a).catch((e) => !!e.auth);
+    assert.deepEqual([await auth(answer(401, {})), await auth(answer(403, { error: 'x' })), await auth(answer(500, {}))], [true, true, false], 'a refused sign-in is said as one');
 });
 
 test("the web form: an org that cannot be read is 'something went wrong', never a form turned off", async () => {

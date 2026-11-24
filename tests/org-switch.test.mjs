@@ -88,7 +88,7 @@ test('a switch empties the lists before the new org\'s answers; leads and the ca
 });
 
 test('every shared list loader takes the asking org, and drops an answer for another at each step before it sets anything', () => {
-    // Moved in §0.294: the list loads (eleven since §0.295) are one loader, which checks when the response arrives, when a refusal's body or the
+    // Moved in §0.294: the list loads (eleven since §0.295; the settings' since §0.296) are one loader, which checks when the response arrives, when a refusal's body or the
     // rows are read, and when it fails (tests/list-loads.test.mjs RUNS each step); coaching notes' own has its own count since §0.295.
     const rl = code(read('src/utils/listLoads.js'));
     const body = between(rl, 'export async function readList(', '\n}\n');
@@ -96,7 +96,7 @@ test('every shared list loader takes the asking org, and drops an answer for ano
     before(body, 'const current = () =>', 'take(rows);', 'the rows only for the org that asked');
     assert.equal(count(body, 'if (!current()) return { current: false, error: null };'), 4, '4 checks — a step without one lets another org\'s answer through');
     for (const [file, calls] of [['src/hooks/useOpportunities.js', 1], ['src/hooks/useAccounts.js', 1], ['src/hooks/useContacts.js', 1], ['src/hooks/useTasks.js', 1], ['src/hooks/useActivities.js', 1],
-        ['src/hooks/useDocuments.js', 1], ['src/hooks/useQuotes.js', 2], ['src/hooks/useSettings.js', 1], ['src/App.jsx', 2]]) assert.equal(count(code(read(file)), 'readList('), calls, `${file}: its loads are the one loader's`);
+        ['src/hooks/useDocuments.js', 1], ['src/hooks/useQuotes.js', 2], ['src/hooks/useSettings.js', 2], ['src/App.jsx', 2]]) assert.equal(count(code(read(file)), 'readList('), calls, `${file}: its loads are the one loader's`);
     const s = code(read('src/hooks/useCoachingNotes.js'));
     assert.ok(/import \{[^}]*\brequestOrg\b[^}]*\bstillOrg\b[^}]*\} from '\.\.\/utils\/storage(\.js)?';/.test(s), 'imports the rule');
     const notes = between(s, 'const reload = useCallback(async () => {', '}, []);');

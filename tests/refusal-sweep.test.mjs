@@ -9984,38 +9984,8 @@ test('Part 12 fixes (L): the outage banner — a load the server answered with a
     assert.equal(p12fxLStatus({ ok: true, status: 200 }), false);
 });
 
-// useSettings' load chain, extracted and run: the first load of an org, a reload of the org in state, a newer load.
-const p12fxLSettingsLoad = (() => {
-    let built = null;
-    return async ({ answer, held = false, newer = false }) => {
-        if (!built) {
-            const s = code(read(P12FXL_SETTINGS));
-            const chain = between(s, "        dbFetch('/.netlify/functions/settings')", '\n\n        loadRoster(usersDelay);');
-            built = new Function('dbFetch', 'readRefusal', 'failureWords', 'loadGenRef', 'gen', 'settingsAsLoaded', 'setSettings', 'settingsOrgRef',
-                'orgId', 'setSettingsOrgId', 'setLoadError', 'console', `return ${chain.trim()}`);
-        }
-        const did = { errors: [], orgIds: [], settings: [] };
-        const loadGenRef = { current: 1 };
-        const settingsOrgRef = { current: held ? 'org_a' : null };
-        const fetch = async () => { if (newer) loadGenRef.current = 2; if (answer instanceof Error) throw answer; return answer; };
-        await built(fetch, readRefusal, failureWords, loadGenRef, 1, (prev, stored) => ({ ...prev, ...stored }), (u) => did.settings.push(u({})),
-            settingsOrgRef, 'org_a', (v) => did.orgIds.push(v), (v) => did.errors.push(v), quiet);
-        return did;
-    };
-})();
-
-test('Part 12 fixes (L): the Settings load — a refusal in readRefusal\'s words, a failure in failureWords\', never "HTTP N" or "Failed to fetch"; the generation and the org in state kept — RUN', async () => {
-    for (const [answer, words] of [...P12A_REFUSED(), [P11_UNREADABLE(), 'Its answer could not be read.'], [onceOf(200, null), 'Its answer could not be read.']]) {
-        const did = await p12fxLSettingsLoad({ answer });
-        assert.deepEqual([did.errors, did.orgIds, did.settings], [[words], [], []], `REGRESSION: ${words} — said "HTTP N" or a raw message`);
-        assert.doesNotMatch(did.errors[0], P12A_OLD);
-    }
-    // A reload of the org already in state keeps that copy and says nothing (§0.162); a newer load owns the state.
-    for (const answer of [onceOf(500, { error: 'x' }), UNSENT()]) assert.deepEqual((await p12fxLSettingsLoad({ answer, held: true })).errors, []);
-    assert.deepEqual((await p12fxLSettingsLoad({ answer: onceOf(500, { error: 'x' }), newer: true })).errors, [], 'a newer load owns the state');
-    const landed = await p12fxLSettingsLoad({ answer: onceOf(200, { settings: { pipelines: [] } }) });
-    assert.deepEqual([landed.errors, landed.orgIds, landed.settings], [[''], ['org_a'], [{ pipelines: [] }]]);
-});
+// useSettings' own load: through the one loader since §0.296 — its words, its generation and the org in state are RUN in
+// tests/settings-org-load.test.mjs, over the real hook and loader (it said "HTTP N" or "Failed to fetch" through its own chain).
 
 test('Part 12 fixes (L): the bulk importer — a refused chunk says refusalWords\' words, the ref kept, else "The server returned N."; never "Bulk import failed (N)." — RUN', async () => {
     const rows = Array.from({ length: 3 }, (_, i) => ({ id: `r${i}` }));
@@ -10034,9 +10004,9 @@ test('Part 12 fixes (L): the bulk importer — a refused chunk says refusalWords
 
 test('Part 12 fixes (L): WIRING — the Settings load and the bulk importer say the house words', () => {
     const st = code(read(P12FXL_SETTINGS));
-    assert.ok(st.includes("import { readRefusal, failureWords } from '../utils/refusalWords.js';"));
-    assert.ok(st.includes('.then(async r => { if (!r.ok) throw new Error(await readRefusal(r)); return r.json(); })'), 'ok first, the refusal\'s words');
-    assert.ok(st.includes('if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));'));
+    // Moved in §0.296: the one loader's words (readRefusal's, failureWords' — tests/list-loads.test.mjs L1).
+    assert.ok(st.includes("const readSettings = (orgId) => readList('settings', {") && st.includes("read: () => dbFetch('/.netlify/functions/settings'),"));
+    assert.equal(count(st, 'dbFetch('), 2, 'no load of its own');
     assert.ok(!/'HTTP '|err\?\.message|the request failed/.test(st), 'REGRESSION: "HTTP N" or a raw message');
     const bk = code(read(P12FXL_BULK));
     // Moved in §0.261 (the unknown-save rule): a refused chunk whose answer proved nothing counts its rows unsure, never failed.
@@ -11032,8 +11002,8 @@ test('Part 12 fixes, round 2 (S2): WIRING — saveUser takes its org, reads a re
 // — over a request already filed, nothing said. myRequestOf reads the list with its failure: over an unread list a rep is
 // offered neither Request nor Cancel, and Triage's rail and the Cockpit say the read's words. [L2] The Settings load's
 // words reached the member only through the one-slot toast ("Settings did not load (Internal server error (ref r1)) —
-// …"); the Settings screen said "did not load" alone. It says the words, kept until a load lands, and the toast says
-// "Settings did not load — <words>." [L3] The lead import threw the words alone after earlier chunks landed: the modal
+// …"); the Settings screen said "did not load" alone. Until §0.296 it said the words, kept until a load landed, and the toast
+// "Settings did not load — <words>."; since, the banner and the gate do. [L3] The lead import threw the words alone after earlier chunks landed: the modal
 // said "Import failed: …", stayed on Preview, and a second Import re-sent the leads that had landed. It ends on the
 // receipt the other three importers do: the Results say how many were saved, in describeReceipt's words, with no Import.
 const P12FXL2_LEADS = 'src/Tabs/LeadsTab.jsx';
@@ -11108,28 +11078,8 @@ test('Part 12 fixes, round 2 (L2): WIRING — a rep\'s Triage and Cockpit say a 
     assert.ok(between(main, '<CockpitView', '/>').includes('requestsError={requestsError}'), 'REGRESSION: the Cockpit never told the read failed');
 });
 
-test('Part 12 fixes, round 2 (L2): the Settings load\'s words — the toast says "Settings did not load — <words>." with no nested parentheses; the Settings screen says them too, kept until a load lands — RUN', () => {
-    const effect = new Function('settingsLoadError', 'setUndoToast',
-        between(code(read('src/App.jsx')), '        if (!settingsLoadError) return;', '\n    }, [settingsLoadError]);'));
-    const toastOf = (words) => { const out = []; effect(words, (t) => out.push(t)); return out; };
-    const tail = ' Nothing in Settings can be saved until they do. Reload the page to try again.';
-    assert.deepEqual(toastOf('Internal server error (ref r1)'), [{ error: `Settings did not load — Internal server error (ref r1).${tail}` }],
-        'REGRESSION: "Settings did not load (Internal server error (ref r1)) — …"');
-    assert.deepEqual(toastOf('The server returned 500.'), [{ error: `Settings did not load — The server returned 500.${tail}` }], 'one full stop');
-    assert.deepEqual(toastOf('The server could not be reached.'), [{ error: `Settings did not load — The server could not be reached.${tail}` }]);
-    assert.deepEqual(toastOf(''), [], 'a load that landed says nothing');
-    assert.doesNotMatch(toastOf('Internal server error (ref r1)')[0].error, /did not load \(|\)\)/);
-    // The screen: the load's words in its title, from the error it is handed.
-    const t = code(read('src/Tabs/SettingsTab.jsx'));
-    const tpl = between(t, '                {error ? ', ' : "Loading this').slice('                {error ? '.length);
-    const title = new Function('error', `return ${tpl};`);
-    assert.equal(title('Internal server error (ref r1)'), "This organization's settings did not load — Internal server error (ref r1)",
-        'REGRESSION: "did not load" alone, the words and their ref lost with the toast');
-    assert.equal(title('The server could not be reached.'), "This organization's settings did not load — The server could not be reached.");
-    assert.ok(t.includes('function SettingsNotLoaded({ error }) {'));
-    assert.ok(t.includes(': <SettingsNotLoaded error={settingsLoadError}/>}'), 'REGRESSION: the screen handed a flag, not the words');
-    assert.ok(t.includes('            {error && (\n                <div style={{ fontSize:12, color:T.inkMuted, marginTop:4 }}>\n                    Nothing here can be changed until they load.'));
-});
+// The Settings load's words: the toast, and the Settings screen's own, went in §0.296 — the banner, the gate and what waits
+// say the load's words, kept until it lands (tests/list-loads.test.mjs).
 
 // The lead import: ModalLayer's handler and settle, and the modal's doImport, extracted and run over the real bulk client.
 const p12fxL2Settle = () => new Function('isClean', 'ImportError',
@@ -12980,12 +12930,12 @@ const p12fxG4Floor = (s, needle) => {
     return Number(/^\d+/.exec(s.slice(i + needle.length))[0]);
 };
 
-test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts measured after round 4: (iii) 192 body reads over 242 sources, (iv) 188 catch clauses over 54 files, the list held, (i) 126 error states', () => {
+test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts measured: (iii) body reads over 242 sources, (iv) catch clauses over its files, the list held, (i) error states', () => {
     const s = read('tests/refusals-said.test.mjs');
     const iii = between(s, "test('(iii) under src/,", "test('(iii) self-test (§0.248)");
     // Moved in §0.287: 192 -> 228, 187 -> 188 — refusals-said's floors raised to the counts measured 23 Nov (a floor with room
     // to spare passes a deletion: the scoped run's survivor).
-    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 217, 'REGRESSION: scan (iii)\'s floor below the 217 body reads measured 24 Nov (§0.295; 220 in §0.294: the nine list loads read through the one loader)');
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 216, 'REGRESSION: scan (iii)\'s floor below the 216 body reads measured 24 Nov (§0.296: the settings\' load is the one loader\'s; 217 in §0.295; 220 in §0.294: the nine list loads read through the one loader)');
     assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
@@ -12995,7 +12945,7 @@ test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts
     assert.ok(iv.includes("assert.equal(new Set(CLEANED).size, CLEANED.length, 'CLEANED names each file once');"), 'REGRESSION: a file named twice pads the list');
     order(iv, 'assert.ok(MESSAGE_SCANNED.length >= ', 'for (const f of MESSAGE_SCANNED) {', 'assert.ok(catches >= ');
     const i = between(s, "test('(i) every error state under src/ is read", "test('(i) self-test");
-    assert.ok(p12fxG4Floor(i, 'assert.ok(states >= ') >= 126, 'REGRESSION: scan (i)\'s floor below the 126 error states measured after round 4');
+    assert.ok(p12fxG4Floor(i, 'assert.ok(states >= ') >= 125, 'REGRESSION: scan (i)\'s floor below the 125 error states measured 24 Nov (§0.296: useSettings\' own went; 126 after round 4)');
     order(i, 'unreadStatesIn(', 'assert.ok(states >= ');
 });
 
@@ -13597,7 +13547,7 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
 // operand logged; nothing written), and set to the count: only the number moved. A floor written `>` holds one under
 // the count (`files.length > 241` holds the 242 sources under src/; `> 347` the 348 under src/ and netlify/functions/);
 // a floor inside a loop holds the least of its rounds (app-links' templates 11 of 21/11/12; audit-close's tables, the
-// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188; (iii) 217 since §0.295) and this file's (242, 242, 6)
+// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188; (i) 125 and (iii) 216 since §0.296) and this file's (242, 242, 6)
 // were re-measured after this pass and already stood at their counts (G4 holds them). This test holds every floor this
 // pass raised: lowered, it fails here — say the new count, and why, in both places.
 const P12FXG5_FLOORS = [

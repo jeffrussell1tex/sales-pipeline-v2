@@ -119,7 +119,7 @@ test('App.jsx: the role is the profile\'s, only while the profile is this org\'s
     assert.ok(s.includes('    const [myProfileOrgId, setMyProfileOrgId] = React.useState(null);'));
     assert.ok(s.includes('    const roleKnown = !!myProfile && !!activeOrgId && myProfileOrgId === activeOrgId;'), 'REGRESSION: the last org\'s role on screen in the next org after a switch');
     assert.ok(s.includes("    const userRole  = (roleKnown && myProfile.role) || 'User';"));
-    assert.ok(s.includes('        if (prevOrgIdRef.current !== meOrgId) return;'), 'an answer for an org the user has left is dropped');
+    assert.ok(s.includes('                if (!stillOrg(meOrgId)) return;'), 'an answer for an org the user has left is dropped');
     assert.ok(s.includes('            setMyProfileOrgId(meOrgId);'));
     assert.ok(s.includes('    const managedReps = new Set((roleKnown && myProfile.managedReps) || []);'));
     assert.ok(!/clerkUser\??\.publicMetadata/.test(s), 'REGRESSION: the client reads Clerk\'s user-level metadata for a role again');

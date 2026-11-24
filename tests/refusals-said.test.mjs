@@ -257,7 +257,7 @@ const keysReadIn = (src) => new Set(readsIn(ast(src).program)
     .filter((r) => !r.passed && r.boundBy && r.boundBy.by === 'destructure').map((r) => r.boundBy.key));
 // (i) over a set of sources ({ file: src }): the states nothing reads — { file, name, line, handedOut, keys } — and how
 // many states were seen. A hook's handed-out state is read when another file reads, as taken from elsewhere, one of the
-// KEYS it is handed out under (useSettings' loadError is handed out as settingsLoadError: App.jsx's settingsLoadError,
+// KEYS it is handed out under (useSettings' loadError was handed out as settingsLoadError until §0.296: App.jsx's settingsLoadError,
 // destructured from the hook, reads it; another file's own `loadError` — or its own `settingsLoadError` — does not).
 function unreadStatesIn(sources) {
     const files = Object.keys(sources);
@@ -398,8 +398,9 @@ test('(i) every error state under src/ is read — in its own function, outside 
     // Moved floor (§0.249, the review's fixes, round 2: G2): 126 error states over every source under src/, measured after
     // round 2 (it was 100 since §0.243 — the scan could lose a fifth of the states it reads and stay green). Fewer means
     // the scan lost its shape, or a change took states out: say so here. Re-measured after every round 3 fix (§0.249,
-    // G3): still 126. Re-measured after every round 4 fix (§0.249, G4): still 126.
-    assert.ok(states >= 126, `the scan sees the error states (${states}) — fewer means it lost its shape`);
+    // G3): still 126. Re-measured after every round 4 fix (§0.249, G4): still 126. 125 since §0.296: useSettings' own error
+    // state is the tracker's (useListLoads) — its load says nothing itself.
+    assert.ok(states >= 125, `the scan sees the error states (${states}) — fewer means it lost its shape`);
     const named = (x) => UNREAD_STATES.some((u) => u.file === x.file && u.name === x.name);
     const unnamed = found.filter((x) => !named(x));
     assert.deepEqual(unnamed, [], `an error state nothing draws — draw it, or name it in UNREAD_STATES with its reason:\n${unnamed.map((x) => `  ${x.file}:${x.line} ${x.name}${x.handedOut ? ` (handed out by its hook as ${x.keys.join(', ')}, read by no other file)` : ''}`).join('\n')}`);
@@ -437,7 +438,7 @@ test('(i) self-test: the scan catches a state read nowhere, one read only inside
 });
 
 test('(i) self-test: a hook\'s state handed out under another key is read by that KEY elsewhere, never by its local name', () => {
-    // useSettings' shape: loadError handed out as settingsLoadError. It passed only because other files have a
+    // useSettings' shape until §0.296: loadError handed out as settingsLoadError. It passed only because other files have a
     // loadError of their own — the probe: nothing reads settingsLoadError → caught.
     const hook = `export function useS() { const [loadError, setLoadError] = useState(''); const load = () => setLoadError('x'); return { settingsLoadError: loadError, load }; }`;
     const [st] = errorStatesOf(hook);
@@ -705,8 +706,8 @@ test('(iii) under src/, no body is read before its response\'s ok check, unless 
     // 228 since §0.287 (23 Nov): re-measured — the body reads the batches since §0.249 added. At 192 the floor had 36 to
     // spare, and a floor with room passes a deletion (the scoped run's survivor passed owner-writes' at one to spare).
     // 220 since §0.294: the nine list loads' reads are the one loader's (listLoads.js readList).
-    // 217 since §0.295: the team's and the SPIFF claims' loads likewise.
-    assert.ok(reads >= 217, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
+    // 217 since §0.295: the team's and the SPIFF claims' loads likewise. 216 since §0.296: the settings'.
+    assert.ok(reads >= 216, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
     for (const b of BODY_FIRST) assert.equal(lineCount[`${b.file} ${b.text}`], 1, `${b.file}: the named text "${b.text}" is one line of its file — a second would pass under its name`);
     const named = (x) => BODY_FIRST.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));

@@ -2501,12 +2501,23 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Fixed in §0.294 (BUILT 24 Nov; guide §18b139).** **A failed load of the record lists and the price book draws an empty list** (§0.248, 12 Nov — Part 10's builder and the review's rule lens; read in code; older): useAccounts', useActivities', useContacts' and useTasks' loads, and useOpportunities' deals load, throw `'HTTP ' + r.status` into a console-only catch — the member sees dbStatusOf's banner on a refusal, and nothing on a request that never left or a 200 that cannot be read, the list left empty; useQuotes' `loadProducts` returns silently on a refusal (`if (!res.ok || !stillOrg(askedOrg)) return;`), so a failed read of the price book draws "No products yet. Click "+ Add product" …" (QuotesTab.jsx) and the builder "No products in the price book yet.", and `loadQuotes`' catch is console-only too. Against the house rule that a read that failed is never "none" (§0.247). Outside Parts 10-11's design; a batch of its own — each load's error said where its list is drawn. Medium.
 - **The Sales Manager's commission and SPIFF saves judge a refusal on words rebuilt from a string** (§0.249, 13 Nov — the last pass's verifier (F4); read in code; contrived bodies): `saveExtra` reads `writeSettings`' answer, whose words `refusalOf` (src/utils/storage.js) has already composed — it tests `body?.error` for truthiness and appends ` (ref <requestId>)` without checking that the error is a string — and `saidOf` (SalesManagerTab.jsx) turns them back into a body for `ownRefusal`. So a 4xx whose error is blank or not a string but which carries a `requestId` reads as the server's own refusal and says "Not saved — …" (400 `{ error: '   ', requestId: 'r1' }` the blank and the ref; 422 `{ error: { message: 'x' }, requestId: 'r1' }` "[object Object] (ref r1)"), where the maybe sentence is the rule. settings.mjs's own 4xx carry no `requestId`, so no answer seen has the shape. Recommended: `refusalOf` takes only a non-blank string error, or `writeSettings` hands back the body as well as the words. Low.
 - **A quiet activity save's thrown failure answers nothing** (§0.249, 13 Nov — Part 12c's builder; read in code; older): useActivities' `saveActivity` (src/hooks/useActivities.js) answers a refusal `{ ok: false, status, error, field }`, but its edit's and create's catches answer `undefined` after `setActivityModalError(failureWords(err))` — and a quiet save (the task rail's completion notes, `QUIET_RAIL`) drops that setter, so the caller has no words of the failure: TaskRail's `said()` falls back to Q4's "The server could not be reached." whatever threw. Recommended: the catches answer `{ ok: false, status: 0, error: failureWords(err) }`. Low.
+- **Left by §0.296** (24 Nov; its map and reviews; read in code; none fixed):
+  (a) **a new deal ignores the Pipeline picked in its window** (older; useOpportunities' create and its Lost path send `activePipeline.id` over the form's `pipelineId`): the deal is made in the pipeline on screen (Medium);
+  (b) the server takes any `pipelineId` on a deal (opportunities.mjs), a pipeline of no org's too (Low; beside (a));
+  (c) **a question for Jeff**: a member whose address is on another login's row has no row here (`users?me` answers `user: null`, by design since §0.173) — they use the app as a Sales Rep of nobody, and what they make has no owner; a page that says so, as the turned-off one does, would stop them (Low; none known);
+  (d) after a switch to an org where they may not, an Admin on Settings or a Manager on Sales Manager stays on a blank page (no redirect for the two), and 6, 7 or a quote's link opens a blank page where Leads or Quotes are off (Low);
+  (e) the two navs are drawn from the defaults until the settings and the role land; the phone's has no Technician branch at all; a Technician in an org with Dispatch off has a blank page (Low);
+  (f) a Dispatcher's or a Technician's Home is drawn for one moment before Dispatch, and a Dispatcher following a link to Tasks or Pipeline can land on Dispatch (Low);
+  (g) the profile panel opened before the profile lands shows a Sales Rep's badge and default notification choices (its saves are refused), and a profile read again by Try again writes over what is typed in it (Low);
+  (h) the avatar's click fills the profile form without the email signature — a stored one reads blank (AppHeader; older; Low);
+  (i) the deals' load writes a quarter worked out with the fiscal start in state into the app's copy of a deal with none — read by nothing today (useOpportunities; Low);
+  (j) another member signing in to the same org in the same page, with no moment of no org between, keeps the last one's reads (not seen to happen; Low).
 - **Left by §0.295** (24 Nov; its reviews; read in code; none fixed):
   (a) the roster cache behind names (`_lib.mjs` orgRoster, 30 s a warm function) does not know a member whose row another function just made: what they make naming themselves in that moment can be stored with no owner, an import refused (Low; older);
   (b) a row another tab, or an Admin's sync, made between the lists and users?me is a join for two minutes by the row's last write — one written longer before is not (Low);
   (c) a PUT's refusal for a pair moved since says the claim's status changed; its pair did (Low; no screen moves a pair);
   (d) **a question for Jeff**: a rejected claim still holds its deal's SPIFF, as the claim window always showed — a rep files again only once a Manager deletes it (Low).
-- **Left by §0.294** (24 Nov; its map and reviews; read in code; (a), (b) and (c) fixed in §0.295, BUILT 24 Nov):
+- **Left by §0.294** (24 Nov; its map and reviews; read in code; (a), (b) and (c) fixed in §0.295, (d) in §0.296, BUILT 24 Nov):
   (a) **the team roster is not one of the tracked lists** (useSettings' users read answers a refusal or a throw in silence): with it unread, deleting a team or a territory clears no member, renaming a territory leaves them on the old name (a territory is held by name), the team import and Invite meet no member (an invitation sent again), Export members writes an empty file, a new lead goes to nobody (Medium);
   (b) **SPIFF claims load in silence** (App.jsx, `r.ok ? json : null`): unread, a deal already claimed is offered again and the server has no check per deal, SPIFF and rep — a second pending claim (Medium);
   (c) **an invited member's first sign-in reads short lists that count as read**: the lists are asked beside users?me, before it links their row, and nothing reads them again (Medium);
@@ -4081,17 +4092,6 @@ to add meetings. Nothing in the app adds a meeting to Google:
     then the app's copy (guide §18b63.3).
   - "Client `managedReps` narrowing is the only Manager scoping": the server
     narrows a Manager's deals too (`dealVisibleTo`, §0.155).
-- **A late users?me answer from the last org can set the profile after a
-  switch to no org** (across orgs; §0.200's review, read in code; §18b55).
-  The answer is checked against `prevOrgIdRef`, which the list effect moves
-  only with an org active (it returns first with none) and only after
-  `waitForToken`; an answer from org A landing then sets A's row as the
-  profile, and a switch from no org to B runs no reset — A's row stands
-  until B's answer lands (its role is not read: `myProfileOrgId` names A). The
-  alerts stay safe: an id of org A matches no row of another org (`alertsMe`).
-  A sign-in ends in a page load (clerk-js, as recorded), so a second member
-  never inherits it. Recommended: drop an answer when
-  `uiOrgRef.current !== meOrgId`.
 - **The public API's `limit` and `page` let a non-number through, and
   `?limit=abc` answers every row** (§0.210's review, 23 Oct; read in
   code, not run): `parsePagination` (public-api.mjs:51-55, since

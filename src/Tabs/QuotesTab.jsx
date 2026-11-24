@@ -60,7 +60,7 @@ const relDate = (iso) => {
 function genQuoteId() { return 'q_' + crypto.randomUUID(); }
 
 // ─── Approval tiers ───────────────────────────────────────────
-// Fallback used before settings load or when not configured
+// For an org that has configured none
 const DEFAULT_APPROVAL_TIERS = [
     { maxDiscount: 0.10, approver: null,            label: 'Rep authority', color: T.ok      },
     { maxDiscount: 0.20, approver: 'Sales Manager', label: 'Mgr approval',  color: T.warn    },

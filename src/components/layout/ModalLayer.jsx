@@ -152,7 +152,7 @@ export default function ModalLayer() {
 
     // A record's window is drawn once the lists it reads were read (state §0.294; listLoads.js RECORD_LISTS, LEAD_LISTS, TEAM_LISTS): one
     // asked for before that waits (ListsWait), and opens by itself when they are. Read once, they stay read — no open window
-    // is ever taken down. The team import waits for the team alone.
+    // is ever taken down. The team import waits for no list but the team. All wait for whose session this is and the settings (ORG_LOADS, state §0.296).
     const recordsRead = areRead(loads, RECORD_LISTS);
     const leadsRead = areRead(loads, LEAD_LISTS);
     const teamRead = areRead(loads, TEAM_LISTS);

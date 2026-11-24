@@ -13,7 +13,7 @@ import { buildSync } from 'esbuild';
 import { parse } from '@babel/parser';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { LIST_NAMES, TAB_LISTS, RECORD_LISTS, LEAD_LISTS, TEAM_LISTS, PANEL_LISTS, REPORT_LISTS, NO_LOADS, tabLists, loadsReducer, loadsOf, areRead, unreadOf, failedOf,
+import { LIST_NAMES, LOAD_NAMES, ORG_LOADS, TAB_LISTS, RECORD_LISTS, LEAD_LISTS, TEAM_LISTS, PANEL_LISTS, REPORT_LISTS, NO_LOADS, tabLists, loadsReducer, loadsOf, areRead, unreadOf, failedOf,
     unreadWords, loadsBanner, waitsFor, readList } from '../src/utils/listLoads.js';
 import { SIGN_IN_WORDS } from '../src/utils/fetchStatus.js';
 import { setRequestOrg } from '../src/utils/storage.js';
@@ -40,7 +40,7 @@ const ok = (name, rows = []) => ({ ok: true, status: 200, json: async () => ({ [
 const refused = (status, body = null) => ({ ok: false, status, json: async () => { if (body === null) throw new SyntaxError('not JSON'); return body; } });
 const READ = { read: true, out: false, error: null, auth: false };
 const FAILED = (error, more = {}) => ({ read: false, out: false, error, auth: false, ...more });
-const allRead = () => Object.fromEntries(Object.keys(LIST_NAMES).map((n) => [n, READ]));
+const allRead = () => Object.fromEntries(Object.keys(LOAD_NAMES).map((n) => [n, READ]));
 
 test('L1 — the loader: rows land and are read; each failure is the list\'s, in the house words; an answer with no list is no answer of none — RUN', async () => {
     const one = async (answer, { wait = null } = {}) => {
@@ -231,15 +231,15 @@ test('L7 — a window asked for before its lists were read waits: why, Try again
     const wait = (loads) => inApp({ loads, retryLoads: () => {}, escapeBlocked: () => false }, createElement(UI.ListsWait, { lists: RECORD_LISTS, onClose: () => {} }));
     const failed = wait({ ...allRead(), accounts: FAILED('X.') });
     assert.ok(failed.includes('Accounts could not be loaded — X.') && failed.includes('>Try again</button>') && failed.includes('>Close</button>') && failed.includes('role="dialog"'), failed);
-    assert.ok(wait({}).includes('Loading deals, accounts, contacts, tasks and activities…') && wait({}).includes('>Close</button>') && !wait({}).includes('Try again'));
+    assert.ok(wait({}).includes('Loading settings, your profile, deals, accounts, contacts, tasks and activities…') && wait({}).includes('>Close</button>') && !wait({}).includes('Try again'));
     const src = code('src/components/ui/ListsWait.jsx');
     assert.ok(src.includes("useEscapeLayer(true, onClose, escapeBlocked('recordWait'));") && src.includes('zIndex: 11105') && src.includes('onClick={e => e.stopPropagation()}') && src.includes('<div onClick={onClose} style={{ position: \'fixed\', inset: 0,'));
 });
 
 test('L8 — the record windows: drawn only once the lists they read were read, never taken down after; what is asked for waits, and Close takes back each — pinned, and the wait RUN', () => {
-    assert.deepEqual(RECORD_LISTS, ['opportunities', 'accounts', 'contacts', 'tasks', 'activities']);
-    assert.deepEqual(LEAD_LISTS, ['leads', 'contacts', 'users']);
-    assert.deepEqual(TEAM_LISTS, ['users']);
+    assert.deepEqual(RECORD_LISTS, ['settings', 'profile', 'opportunities', 'accounts', 'contacts', 'tasks', 'activities']);
+    assert.deepEqual(LEAD_LISTS, ['settings', 'profile', 'leads', 'contacts', 'users']);
+    assert.deepEqual(TEAM_LISTS, ['settings', 'profile', 'users']);
     // The harm the wait is for: over a list that was not read a file meets no duplicate.
     assert.deepEqual([planAccountImport([{ name: 'Shell' }], [2], []).conflicts.length, planAccountImport([{ name: 'Shell' }], [2], [{ id: 'a', name: 'Shell' }]).conflicts.length], [0, 1]);
     const m = code('src/components/layout/ModalLayer.jsx');
@@ -257,7 +257,7 @@ test('L8 — the record windows: drawn only once the lists they read were read, 
         for (const l of RECORD_LISTS) assert.deepEqual(waitsFor({ ...allRead(), [l]: FAILED('X.') }, o), RECORD_LISTS, `REGRESSION: ${JSON.stringify(o)} — asked for over ${l} that was not read, and nothing says why it does not open`);
         assert.deepEqual(waitsFor(allRead(), o), [], 'read: it opens');
     }
-    for (const o of [{ showLeadModal: true }, { showLeadImportModal: true }]) assert.deepEqual([...LEAD_LISTS.map((l) => waitsFor({ ...allRead(), [l]: FAILED('X.') }, o)), waitsFor(UNREAD, o)], [LEAD_LISTS, LEAD_LISTS, LEAD_LISTS, []], 'a lead window waits for its own lists alone');
+    for (const o of [{ showLeadModal: true }, { showLeadImportModal: true }]) assert.deepEqual([...LEAD_LISTS.map((l) => waitsFor({ ...allRead(), [l]: FAILED('X.') }, o)), waitsFor(UNREAD, o)], [LEAD_LISTS, LEAD_LISTS, LEAD_LISTS, LEAD_LISTS, LEAD_LISTS, []], 'a lead window waits for its own lists alone');
     assert.deepEqual(waitsFor({}, { showModal: true, showLeadModal: true }), [...RECORD_LISTS, 'leads', 'users'], 'two asked for: each list once');
     const TEAM = { showCsvImportModal: true, csvImportType: 'users' };
     for (const o of [{ documentRailId: 'doc_1' }, { showUploadRail: true }]) assert.deepEqual([waitsFor({ ...allRead(), users: FAILED('X.') }, o), waitsFor(UNREAD, o)], [TEAM_LISTS, []], 'whom a document is shared with');
@@ -303,7 +303,7 @@ const NO_GATE = {
     'pipeline accounts': 'taken from the context and read nowhere',
     'pipeline contacts': 'taken from the context and read nowhere',
 };
-const UNGATED = { documents: 'says its own failed read (docsError, refusals-said 5d)', settings: 'must open whatever failed; its panels that count a list, or write to the team, wait (L9)' };
+const UNGATED = { documents: 'says its own failed read (docsError, refusals-said 5d)', settings: 'opens whatever list failed, once the settings and the profile were read (the gate over every tab); its panels that count a list, or write to the team, wait (L9)' };
 const takenLists = (path) => {
     const ast = parse(read(path), { sourceType: 'module', plugins: ['jsx'] });
     const got = new Set();
@@ -352,6 +352,8 @@ test('THE GUARD — every tab that draws from the app\'s lists is drawn through 
     const retry = app.slice(app.indexOf('const retryLoads = (names) => {'), app.indexOf('const loadBanner ='));
     const files = { opportunities: 'src/hooks/useOpportunities.js', accounts: 'src/hooks/useAccounts.js', contacts: 'src/hooks/useContacts.js', tasks: 'src/hooks/useTasks.js', activities: 'src/hooks/useActivities.js', leads: 'src/App.jsx', documents: 'src/hooks/useDocuments.js', quotes: 'src/hooks/useQuotes.js', products: 'src/hooks/useQuotes.js', users: 'src/hooks/useSettings.js', spiffClaims: 'src/App.jsx' };
     const main = app.slice(app.indexOf('const loadData = async () => {'), app.indexOf('loadSettings(clerkUser, orgSwitched'));
+    assert.ok(/\nloadSettings\(clerkUser, orgSwitched, organization\?\.id \|\| null\);\s+loadMyProfile\(organization\?\.id \|\| null\);\s+\};\s+loadData\(\);/.test(app), 'the settings and the profile with the org (state §0.296)');
+    assert.ok(/await waitForToken\(\);\s+if \(!stillOrg\(organization\.id\)\) return;\s+loadOpportunities\(\);/.test(main), 'REGRESSION: a load that waited through a switch reads the new org as the old one');
     for (const l of Object.keys(LIST_NAMES)) {
         const loader = l === 'documents' ? 'documentsHook.loadDocuments' : l === 'users' ? '() => loadRoster()' : `load${l[0].toUpperCase()}${l.slice(1)}`;
         const body = code(files[l]); const i = body.indexOf(`readList('${l}', {`);
@@ -366,15 +368,106 @@ test('THE GUARD — every tab that draws from the app\'s lists is drawn through 
     await quietly(async () => { new Function('retryLoads', 'LIST_NAMES', 'loadSettings', 'clerkUser', 'reloadCoachingNotes', `${again}\nreadAllAgain('org_a');`)((n) => did.push(n), LIST_NAMES, (...a) => did.push(a), 'me', () => { did.push('notes'); }); });
     assert.deepEqual(did, [Object.keys(LIST_NAMES).filter((n) => n !== 'users'), ['me', false, 'org_a'], 'notes'], 'RUN: every list, the settings with the team, and the notes — nothing switched');
     assert.equal(count(code('src/hooks/useSettings.js'), '        loadRoster(usersDelay);'), 1, 'the team read with the org\'s settings');
-    assert.ok(app.includes('        if (data?.joined) readAllAgain(meOrgId);\n        if (meLoadRef.current !== meLoad) return;\n') && app.includes('        if (prevOrgIdRef.current !== meOrgId) return;\n        if (data?.joined)'), 'REGRESSION: a first sign-in keeps the lists it was answered as no member');
-    const ran = []; const retryFn = new Function('loadOpportunities', 'loadAccounts', 'loadContacts', 'loadTasks', 'loadActivities', 'loadLeads', 'documentsHook', 'loadQuotes', 'loadProducts', 'loadRoster', 'loadSpiffClaims', `${retry}\nreturn retryLoads;`)(
-        ...['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads'].map((n) => () => ran.push(n)), { loadDocuments: () => ran.push('documents') }, () => ran.push('quotes'), (...a) => ran.push(`products${a.length}`), (...a) => ran.push(`users${a.length}`), () => ran.push('spiffClaims'));
+    assert.ok(app.includes('                if (data?.joined) readAllAgain(meOrgId);\n                if (meLoadRef.current !== meLoad) return;\n') && app.includes('                if (!stillOrg(meOrgId)) return;\n                if (data?.joined)'), 'REGRESSION: a first sign-in keeps the lists it was answered as no member');
+    const ran = []; const retryFn = new Function('loadOpportunities', 'loadAccounts', 'loadContacts', 'loadTasks', 'loadActivities', 'loadLeads', 'documentsHook', 'loadQuotes', 'loadProducts', 'loadRoster', 'loadSpiffClaims', 'readSettings', 'loadMyProfile', 'organization', `${retry}\nreturn retryLoads;`)(
+        ...['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads'].map((n) => () => ran.push(n)), { loadDocuments: () => ran.push('documents') }, () => ran.push('quotes'), (...a) => ran.push(`products${a.length}`), (...a) => ran.push(`users${a.length}`), () => ran.push('spiffClaims'),
+        (...a) => ran.push(['settings', ...a]), (...a) => ran.push(['profile', ...a]), { id: 'org_a' });
+    retryFn(ORG_LOADS);
+    assert.deepEqual(ran.splice(0), [['settings', 'org_a'], ['profile', 'org_a']], 'RUN: Try again reads the settings alone, and the profile');
     retryFn(Object.keys(LIST_NAMES)); retryFn(['no such list']);
     assert.deepEqual(ran.sort(), ['accounts', 'activities', 'contacts', 'documents', 'leads', 'opportunities', 'products0', 'quotes', 'spiffClaims', 'tasks', 'users0'], 'RUN: each list by its own loader, the price book the active products alone');
     // The banner: no ✕ — what it says stands until it is read.
     const banner = app.slice(app.indexOf('{loadBanner && ('), app.indexOf('<nav className="nav-tabs">'));
     assert.ok(banner.includes('onClick={() => retryLoads(loadBanner.failed)} disabled={loadBanner.trying}') && count(banner, '<button') === 1 && !banner.includes('✕'));
     assert.ok(app.includes('        recordWait, loads, retryLoads,'), 'the context hands them on');
+});
+
+test('the profile load reports as a list does: begun, landed — with no row too — or failed and why; one another load overtook, or for another org, says nothing — RUN as App has it (state §0.296)', async () => {
+    const app = code('src/App.jsx');
+    const body = app.slice(app.indexOf('    const loadMyProfile = (meOrgId) => {'), app.indexOf('    const retryLoads = (names) => {'));
+    const { readMyProfile } = await import(new URL('src/utils/myProfileLoad.js', ROOT).href);
+    const { failureWords } = await import(new URL('src/utils/refusalWords.js', ROOT).href);
+    const make = (ask, { org = 'org_a' } = {}) => {
+        const did = { said: [], profile: [], profileOrg: [], revoked: [], forms: [], again: [] };
+        const refs = { meLoadRef: { current: 0 }, org };
+        const names = ['meLoadRef', 'stillOrg', 'reportLoad', 'readMyProfile', 'dbFetch', 'readAllAgain', 'setAccessRevokedOrg', 'setMyProfile', 'setMyProfileOrgId', 'setProfileForm', 'failureWords', 'console'];
+        const load = new Function(...names, `${body}\nreturn loadMyProfile;`)(refs.meLoadRef, (o) => refs.org === o, (ev) => did.said.push(ev), readMyProfile, ask, (o) => did.again.push(o), (v) => did.revoked.push(v), (v) => did.profile.push(v), (v) => did.profileOrg.push(v), (v) => did.forms.push(v), failureWords, { error() {} });
+        return { did, refs, load };
+    };
+    const answer = (status, b) => ({ ok: status < 400, status, json: async () => b });
+    const ev = (o) => ({ org: 'org_a', name: 'profile', ...o });
+    // Landed: the profile, its org, the form; then read.
+    const form = { firstName: 'Pat', lastName: 'Lee', email: 'p@x.invalid', phone: '1', mobile: '2', title: 'Rep', emailSignature: 'Best,' };
+    const user = { id: 'usr_me', ...form };
+    let m = make(async () => answer(200, { user }));
+    await m.load('org_a');
+    assert.deepEqual([m.did.said, m.did.profile, m.did.profileOrg, m.did.revoked, m.did.forms, m.did.again], [[ev({ type: 'begin' }), ev({ type: 'ok' })], [user], ['org_a'], [null], [form], []], 'the form whole: a field left blank is wiped by the next save');
+    m = make(async () => answer(200, { user: { id: 'usr_me', phone: null } })); await m.load('org_a');
+    assert.deepEqual(m.did.forms, [Object.fromEntries(Object.keys(form).map((k) => [k, '']))], 'none is blank, never null in a field');
+    // A member with no row here is an answer: read, nobody by name (the server makes none for an address another holds).
+    m = make(async () => answer(200, { user: null }));
+    await m.load('org_a');
+    assert.deepEqual([m.did.said.map((e) => e.type), m.did.profile, m.did.forms], [['begin', 'ok'], [], []], 'REGRESSION: a member with no row waits for good');
+    // Turned off: read, the page that says so.
+    m = make(async () => answer(403, { error: 'x', code: 'deactivated' }));
+    await m.load('org_a');
+    assert.deepEqual([m.did.said.map((e) => e.type), m.did.revoked], [['begin', 'ok'], ['org_a']]);
+    // Failed, twice: why, and a refused sign-in as one.
+    for (const [a, words, auth] of [[answer(500, { error: 'Internal server error', requestId: 'r1' }), 'Internal server error (ref r1)', false], [answer(401, { error: 'Sign in.' }), 'Sign in.', true], [answer(403, { error: 'Not a member.' }), 'Not a member.', true]]) {
+        m = make(async () => a); await m.load('org_a');
+        assert.deepEqual([m.did.said, m.did.profile], [[ev({ type: 'begin' }), ev({ type: 'failed', words, auth })], []]);
+    }
+    m = make(async () => { throw new TypeError('Failed to fetch'); }); await m.load('org_a');
+    assert.deepEqual(m.did.said[1], ev({ type: 'failed', words: 'The server could not be reached.', auth: false }));
+    // Joined: everything read again, whichever load it was.
+    m = make(async () => answer(200, { user: { id: 'usr_me' }, joined: true })); await m.load('org_a');
+    assert.deepEqual(m.did.again, ['org_a']);
+    // Overtaken as it answers, and as it fails: it says nothing more and sets nothing.
+    for (const a of [answer(200, { user: { id: 'old' } }), answer(500, {})]) {
+        m = make(async () => { m.refs.meLoadRef.current = 9; return a; }); await m.load('org_a');
+        assert.deepEqual([m.did.said, m.did.profile, m.did.revoked], [[ev({ type: 'begin' })], [], []], 'REGRESSION: an overtaken load says this one is read');
+        m = make(async () => { m.refs.org = 'org_b'; return a; }); await m.load('org_a');
+        assert.deepEqual([m.did.said, m.did.profile, m.did.revoked], [[ev({ type: 'begin' })], [], []], "REGRESSION: another org's load");
+        m = make(async () => { m.refs.org = null; return a; }); await m.load('org_a');
+        assert.deepEqual([m.did.said, m.did.profile], [[ev({ type: 'begin' })], []], 'REGRESSION: landed while there is no org — held when the next one opens');
+    }
+    // Two loads of one org out at once: the later one's answer stands, whichever lands last, and the earlier one's failure says nothing.
+    for (const late of [answer(200, { user: { id: 'old' } }), answer(500, {})]) {
+        const h = [held(), held()]; let k = 0; m = make(() => h[k++].read());
+        const q = [m.load('org_a'), m.load('org_a')]; await settle();
+        h[1].land(answer(200, { user: { id: 'new' } })); await settle(); h[0].land(late); await Promise.all(q);
+        assert.deepEqual([m.did.profile, m.did.said.map((e) => e.type)], [[{ id: 'new' }], ['begin', 'begin', 'ok']], 'REGRESSION: an older answer over the newer one');
+    }
+});
+
+test('no tab is drawn from the defaults: none before the settings and the profile were read — the gate over them all — and nothing read of what a switch, or signing out, put back (state §0.296)', () => {
+    assert.deepEqual(ORG_LOADS, ['settings', 'profile']);
+    assert.deepEqual(Object.keys(LOAD_NAMES), [...ORG_LOADS, ...Object.keys(LIST_NAMES)], 'said first');
+    const app = code('src/App.jsx');
+    const open = app.indexOf("<React.Fragment key={activeOrgId || 'no-org'}>\n"), close = app.indexOf('</React.Fragment>', open);
+    const keyed = app.slice(open, close).replace(/\{\/\*[\s\S]*?\*\/\}\s*/g, '');
+    assert.ok(/^<React\.Fragment key=\{activeOrgId \|\| 'no-org'\}>\s*\{!orgRead \? \(\s*<ErrorBoundary tabName="This page"><ListsGate \{\.\.\.gate\} lists=\{ORG_LOADS\} \/><\/ErrorBoundary>\s*\) : \(<>\s*\{activeTab === 'home' && \(/.test(keyed) && /<\/>\)\}\s*$/.test(keyed), 'REGRESSION: a tab drawn before the settings and the profile');
+    const TAB_RE = /\{activeTab === '\w+' && /g;
+    assert.deepEqual([[...app.matchAll(TAB_RE)].length, [...keyed.matchAll(TAB_RE)].length], [12, 12], 'every tab is inside it');
+    assert.equal(count(app, 'const orgRead = areRead(loads, ORG_LOADS);'), 1);
+    // What the gate says.
+    const gate = (loads) => renderToStaticMarkup(createElement(UI.ListsGate, { loads, lists: ORG_LOADS, onRetry: () => {} }));
+    assert.ok(gate({}).includes('Loading settings and your profile…') && !gate({}).includes('Try again'));
+    assert.ok(gate({ settings: FAILED('X.'), profile: READ }).includes('Settings could not be loaded — X.') && gate({ settings: FAILED('X.'), profile: READ }).includes('>Try again</button>'));
+    assert.ok(gate({ settings: READ, profile: FAILED('Y') }).includes('Your profile could not be loaded — Y.'));
+    assert.equal(gate({ settings: READ, profile: READ }), '');
+    // The banner: each by its own next load; one read before keeps what is drawn.
+    assert.equal(loadsBanner({ settings: FAILED('X.'), profile: FAILED('X.'), accounts: READ }).text, 'Settings and your profile could not be loaded. X. Nothing is missing from the server.');
+    assert.equal(loadsBanner({ settings: { read: true, out: false, error: 'X.', auth: false }, profile: READ }).text, 'Settings could not be read again — what is shown may be out of date. X.');
+    assert.deepEqual(loadsBanner({ settings: FAILED('X.'), profile: FAILED('Y.') }).failed, ORG_LOADS, 'what Try again asks for');
+    // A switch, and one to none (signing out): the profile is put back, so nothing is read.
+    const put = app.slice(app.indexOf('        uiOrgRef.current = activeOrgId;'), app.indexOf('    }, [activeOrgId]);', app.indexOf('        uiOrgRef.current = activeOrgId;')));
+    assert.ok(put.includes('        if (!was || was === activeOrgId) return;\n') && put.trimEnd().endsWith('resetLoads(activeOrgId);'), 'REGRESSION: signed out and in again as another, the last one\'s reads stand for theirs');
+    assert.deepEqual(loadsReducer({ org: 'org_a', lists: { settings: READ } }, { type: 'reset', org: null }), { org: null, lists: {} });
+    // A member whose read profile is no row here is told so at Reports' Pin — never "has not loaded yet", drawn only once it has.
+    assert.ok(code('src/Tabs/ReportsTab.jsx').includes("        if (!myProfile?.id) { setLibError('You are not on this organization\\'s team, so nothing can be pinned — ask an Admin to add you.'); return; }"));
+    // Nothing else says the same failure beside the banner.
+    for (const gone of ['ME_NOTICE', 'meHeldRef', 'settingsLoadError', 'did not load']) assert.ok(!app.includes(gone), gone);
 });
 
 // THE GUARD's other half: every file under src/ that takes a list through useApp() — the lists it takes are read before it
@@ -577,7 +670,7 @@ test('a technician\'s Dispatch; a saved report\'s lists are named for each sourc
 test('what is drawn beside the gates — the header\'s search and bell, a deal\'s quotes, a record\'s documents — reads its list first', () => {
     for (const [file, ...lines] of [
         ['src/components/modals/OpportunityModal.jsx', "const quotesUnread = unreadWords(loads, ['quotes']);", "{quotesUnread || 'No quotes yet'}", "{oppQuotes.length === 0 && !quotesUnread ? 'Build First Quote' : 'Open in Quote Builder'}"],
-        ['src/components/layout/AppHeader.jsx', "const unread = unreadWords(loads, ['accounts', 'contacts', 'opportunities']);", 'if (noHits && unread) return', '{unread && <div role="status"', "const bellUnread = unreadWords(loads, ['opportunities', 'tasks', 'activities']);", '{bellUnread && notifications.length > 0 && <div role="status"', "{bellUnread || 'No notifications'}"],
+        ['src/components/layout/AppHeader.jsx', "const unread = unreadWords(loads, ['accounts', 'contacts', 'opportunities']);", 'if (noHits && unread) return', '{unread && <div role="status"', "const bellUnread = unreadWords(loads, ['profile', 'opportunities', 'tasks', 'activities']);", '{bellUnread && notifications.length > 0 && <div role="status"', "{bellUnread || 'No notifications'}"],
         ['src/components/documents/RecordDocuments.jsx', "const docsUnread = unreadWords(loads, ['documents']);", '{docsUnread && docs.length > 0 && <div role="status"', "{docsUnread || 'No documents linked yet.'}", "{docsUnread ? '' :"],
         ['src/components/documents/AttachmentsStrip.jsx', "const docsUnread = unreadWords(loads, ['documents']);", '{docsUnread && docs.length > 0 && <div role="status"', "{docsUnread || 'No attachments.'}"],
         ['src/components/documents/DocumentPicker.jsx', "const docsUnread = unreadWords(loads, ['documents']);", '{docsUnread && rows.length > 0 && <div role="status"', "{docsUnread || 'No other documents available.'}"],

@@ -2583,7 +2583,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     // The pin list is MINE: it rides my own profile row through the self-service
     // allowlist (§18b34), written before the state moves (the persistent-data rule).
     const togglePin = async (r) => {
-        if (!myProfile?.id) { setLibError('Your profile has not loaded yet — try again in a moment.'); return; }
+        if (!myProfile?.id) { setLibError('You are not on this organization\'s team, so nothing can be pinned — ask an Admin to add you.'); return; }   // read, and no row here (state §0.296)
         // After an org switch the answer changes nothing (state §0.175): it is the
         // caller's row in the org that asked — its role and id merged into the new
         // org's profile made the client's role the last org's.

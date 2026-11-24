@@ -54,9 +54,8 @@ const srcFiles = () => {
 const isFn = (n) => n && /^(ArrowFunctionExpression|FunctionExpression|FunctionDeclaration|ObjectMethod|ClassMethod)$/.test(n.type);
 const isLoop = (n) => n && /^(ForStatement|ForOfStatement|ForInStatement|WhileStatement|DoWhileStatement)$/.test(n.type);
 const ASYNC_CB = /^(then|catch|finally)$/;
-// The org checks in use: stillOrg (§0.173), the profile load's org ref (§0.163) and
-// useSettings' load generation — a newer load owns the state (§0.162).
-const CHECK = /stillOrg\(|prevOrgIdRef\.current !== |gen !== loadGenRef\.current/;
+// The org check in use: stillOrg (§0.173). The profile load's own (§0.163) and useSettings' (§0.162) are it too since §0.296.
+const CHECK = /stillOrg\(/;
 const WRITE_METHOD = /^(POST|PUT|PATCH|DELETE)$/;
 
 // A callback a component calls after an await: what the parent does with it — set
